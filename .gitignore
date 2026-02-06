@@ -1,0 +1,36 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# App runtime
+logs/
+
+# Local caches / large files
+.codex/
+
+# SQLite / local databases
+*.db
+*.db-journal
+
+# Data + models (exclude from repo)
+/data/
+/models/
+
+# Trade logs
+/data/trade_log.json
+
+# Misc local files
+\#
+nano

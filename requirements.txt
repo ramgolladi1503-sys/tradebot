@@ -1,0 +1,11 @@
+python-dotenv
+pytest
+hypothesis
+streamlit
+kiteconnect
+tensorflow
+gymnasium
+flask
+openpyxl
+stable-baselines3
+requests
