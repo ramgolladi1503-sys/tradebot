@@ -219,4 +219,32 @@ class KiteClient:
         time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
         return self.kite.trades()
 
+    def historical_data(self, instrument_token, from_dt, to_dt, interval="minute"):
+        self._ensure()
+        if not self.kite:
+            return []
+        time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
+        return self.kite.historical_data(instrument_token, from_dt, to_dt, interval)
+
+    def resolve_index_token(self, symbol):
+        sym = (symbol or "").upper()
+        exchange = "BSE" if sym == "SENSEX" else "NSE"
+        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
+        if not data:
+            return None
+        name_map = {
+            "NIFTY": ["NIFTY 50", "NIFTY"],
+            "BANKNIFTY": ["NIFTY BANK", "BANKNIFTY"],
+            "SENSEX": ["SENSEX"],
+        }
+        targets = set(name_map.get(sym, [sym]))
+        for inst in data:
+            ts = inst.get("tradingsymbol")
+            nm = inst.get("name")
+            seg = inst.get("segment", "")
+            if ts in targets or nm in targets:
+                if "INDICES" in str(seg) or exchange in str(inst.get("exchange", "")):
+                    return inst.get("instrument_token")
+        return None
+
 kite_client = KiteClient()

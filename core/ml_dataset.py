@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from config import config as cfg
 from core.feature_builder import add_indicators
 
 def build_dataset_from_ohlc(csv_path, horizon=5, threshold=0.001):
@@ -29,8 +30,29 @@ def build_dataset_from_ohlc(csv_path, horizon=5, threshold=0.001):
             "moneyness": 0.0,
             "vwap_slope": row.get("vwap_slope", 0),
             "rsi_mom": row.get("rsi_mom", 0),
-            "vol_z": row.get("vol_z", 0)
+            "vol_z": row.get("vol_z", 0),
+            "fx_ret_5m": 0.0,
+            "vix_z": 0.0,
+            "crude_ret_15m": 0.0,
+            "corr_fx_nifty": 0.0,
         }
+        try:
+            for key in getattr(cfg, "CROSS_ASSET_SYMBOLS", {}).keys():
+                prefix = f"x_{key.lower()}"
+                base[f"{prefix}_ret1"] = 0.0
+                base[f"{prefix}_ret5"] = 0.0
+                base[f"{prefix}_z"] = 0.0
+                base[f"{prefix}_corr"] = 0.0
+                base[f"{prefix}_lead"] = 0.0
+                base[f"{prefix}_volspill"] = 0.0
+                base[f"{prefix}_align"] = 0.0
+            base["x_regime_align"] = 0.0
+            base["x_vol_spillover"] = 0.0
+            base["x_lead_lag"] = 0.0
+            base["x_index_ret1"] = 0.0
+            base["x_index_ret5"] = 0.0
+        except Exception:
+            pass
 
         # Call sample
         label_call = 1 if future_return >= threshold else 0

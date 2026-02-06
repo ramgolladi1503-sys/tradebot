@@ -7,6 +7,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from config import config as cfg
 from core.option_chain import fetch_option_chain as fetch_option_chain_impl
+from core.regime_prob_model import RegimeProbModel
+from core.news_shock_encoder import NewsShockEncoder
+from core.news_encoder import NewsEncoder
+from core.news_calendar import NewsCalendar
+from core.cross_asset import CrossAsset
+from core.ohlc_buffer import ohlc_buffer
+from core.indicators_live import compute_indicators
 from core.filters import get_bias
 
 from core.kite_client import kite_client
@@ -29,6 +36,14 @@ _DAYTYPE_ALERT_TS = {}
 _DAYTYPE_LAST_LOG = {}
 _OPEN_RANGE = {}
 _LAST_GOOD_LTP = {}
+_REGIME_LAST_PRIMARY = {}
+_REGIME_TRANSITIONS = {}
+
+_REGIME_MODEL = None
+_NEWS_ENCODER = None
+_NEWS_CAL = None
+_NEWS_TEXT = None
+_CROSS_ASSET = None
 
 # -------------------------------
 # Market Data Functions
@@ -56,6 +71,7 @@ def get_ltp(symbol: str):
     """
     Fetch latest market price from Kite or fallback.
     """
+    live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
     if cfg.KITE_USE_API:
         kite_client.ensure()
         if not kite_client.kite and getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
@@ -116,8 +132,8 @@ def get_ltp(symbol: str):
                     pass
                 pass
 
-    # Fallback to cached LTP if allowed
-    if getattr(cfg, "ALLOW_STALE_LTP", True):
+    # Fallback to cached LTP if allowed (disabled in LIVE)
+    if (not live_mode) and getattr(cfg, "ALLOW_STALE_LTP", True):
         cached = _cached_ltp(symbol)
         if cached:
             _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "cache"
@@ -126,7 +142,7 @@ def get_ltp(symbol: str):
     # Fallback
     if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
         _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "none"
-        if getattr(cfg, "ALLOW_CLOSE_FALLBACK", True):
+        if (not live_mode) and getattr(cfg, "ALLOW_CLOSE_FALLBACK", True):
             close_map = getattr(cfg, "PREMARKET_INDICES_CLOSE", {})
             _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "fallback"
             return close_map.get(symbol.split(":")[-1], 0)
@@ -188,12 +204,74 @@ def fetch_live_market_data():
     Each snapshot includes LTP, VWAP, ATR, and option chain.
     """
     symbols = list(getattr(cfg, "SYMBOLS", []))
-    data_dir = os.path.join(os.getcwd(), "data")
     results = []
+    global _REGIME_MODEL
+    global _NEWS_ENCODER
+    global _NEWS_CAL
+    global _NEWS_TEXT
+    global _CROSS_ASSET
+    if _REGIME_MODEL is None:
+        try:
+            model_path = getattr(cfg, "REGIME_MODEL_PATH", "models/regime_model.json")
+            _REGIME_MODEL = RegimeProbModel(model_path=model_path)
+        except Exception:
+            _REGIME_MODEL = RegimeProbModel()
+    if _NEWS_ENCODER is None:
+        _NEWS_ENCODER = NewsShockEncoder()
+    if _NEWS_CAL is None:
+        _NEWS_CAL = NewsCalendar()
+    if _NEWS_TEXT is None:
+        _NEWS_TEXT = NewsEncoder()
+    if _CROSS_ASSET is None:
+        _CROSS_ASSET = CrossAsset()
+    shock = {}
+    cal_shock = {}
+    text_shock = {}
+    try:
+        cal_shock = _NEWS_CAL.get_shock()
+    except Exception:
+        cal_shock = {}
+    try:
+        text_shock = _NEWS_TEXT.encode()
+    except Exception:
+        text_shock = {}
+    # fallback legacy encoder if both empty
+    if not cal_shock and not text_shock:
+        try:
+            shock = _NEWS_ENCODER.encode()
+        except Exception:
+            shock = {}
+    else:
+        # merge: choose higher shock score, prefer calendar metadata when stronger
+        c_score = float(cal_shock.get("shock_score") or 0.0)
+        t_score = float(text_shock.get("shock_score") or 0.0)
+        if c_score >= t_score:
+            shock = {**text_shock, **cal_shock}
+        else:
+            shock = {**cal_shock, **text_shock}
 
     for symbol in symbols:
         ltp = get_ltp(symbol)
+        try:
+            if ltp and ltp > 0:
+                ohlc_buffer.update_tick(symbol, ltp, volume=0, ts=datetime.now())
+        except Exception:
+            pass
         vwap = ltp
+        cross_feat = {}
+        cross_quality = {}
+        try:
+            cross_payload = _CROSS_ASSET.update(symbol, ltp) or {}
+            cross_feat = cross_payload.get("features", {}) or {}
+            cross_quality = cross_payload.get("data_quality", {}) or {}
+        except Exception:
+            cross_feat = {}
+            cross_quality = {}
+
+        fx_ret_5m = cross_feat.get("x_usdinr_ret5") or cross_feat.get("x_fx_ret5")
+        vix_z = cross_feat.get("x_india_vix_z") or cross_feat.get("x_vix_z")
+        crude_ret_15m = cross_feat.get("x_crude_ret15") or cross_feat.get("x_crudeoil_ret15")
+        corr_fx_nifty = cross_feat.get("x_usdinr_corr_nifty")
         atr = max(1.0, ltp * 0.002)
         # minutes since open (used for ORB bias + day-type)
         try:
@@ -227,72 +305,58 @@ def fetch_live_market_data():
         ltp_change_window = 0.0
         ltp_change_5m = 0.0
         ltp_change_10m = 0.0
+        ltp_acceleration = 0.0
 
-        # If historical CSV exists, use it for indicators
+        # Compute indicators from rolling OHLC buffer (no CSV dependency)
+        indicators_ok = False
+        indicators_age_sec = None
         try:
-            csv_candidates = [f for f in os.listdir(data_dir) if f.startswith(symbol + "_") and f.endswith(".csv")]
-            if csv_candidates:
-                csv_path = os.path.join(data_dir, sorted(csv_candidates)[-1])
-                cached = _DATA_CACHE.get(symbol)
-                if not cached or cached.get("path") != csv_path:
-                    import pandas as pd
-                    df = pd.read_csv(csv_path)
-                    _DATA_CACHE.setdefault(symbol, {})
-                    _DATA_CACHE[symbol]["path"] = csv_path
-                    _DATA_CACHE[symbol]["df"] = df
-                else:
-                    df = cached.get("df")
-                # Ensure indicators are present (fallback compute)
+            bars = ohlc_buffer.get_bars(symbol)
+            if len(bars) < getattr(cfg, "OHLC_MIN_BARS", 30) and cfg.KITE_USE_API:
                 try:
-                    from core.feature_builder import add_indicators
-                    needed = {"vwap", "vwap_slope", "rsi_mom", "vol_z", "adx_14", "atr_14"}
-                    if not needed.issubset(set(df.columns)):
-                        df = add_indicators(df)
-                        _DATA_CACHE[symbol]["df"] = df
+                    token = kite_client.resolve_index_token(symbol)
+                    if token:
+                        from_dt = datetime.now() - timedelta(minutes=120)
+                        to_dt = datetime.now()
+                        hist = kite_client.historical_data(token, from_dt, to_dt, interval="minute")
+                        if hist:
+                            ohlc_buffer.seed_bars(symbol, hist)
+                            bars = ohlc_buffer.get_bars(symbol)
                 except Exception:
                     pass
-                # If live LTP is missing or fallback, use last close from CSV
-                try:
-                    if (ltp == 0 or _DATA_CACHE.get(symbol, {}).get("ltp_source") in ("none", "fallback")) and "close" in df.columns:
-                        ltp = float(df["close"].iloc[-1])
-                        _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "csv"
-                        _save_cached_ltp(symbol, ltp)
-                except Exception:
-                    pass
-                if "vwap" in df.columns:
-                    vwap = float(df["vwap"].iloc[-1])
-                elif "close" in df.columns and "volume" in df.columns and calculate_vwap:
-                    vwap = calculate_vwap(df)
-                if "atr_14" in df.columns:
-                    atr = float(df["atr_14"].iloc[-1])
-                elif {"high", "low", "close"}.issubset(df.columns) and calculate_atr:
-                    atr = float(calculate_atr(df))
-                if {"high", "low"}.issubset(df.columns) and calculate_orb:
-                    orb_high, orb_low = calculate_orb(df)
-                if "volume" in df.columns:
-                    volume = int(df["volume"].iloc[-1])
-                # extra features if present
-                if "vwap_slope" in df.columns:
-                    vwap_slope = float(df["vwap_slope"].iloc[-1])
-                else:
-                    vwap_slope = 0
-                if "rsi_mom" in df.columns:
-                    rsi_mom = float(df["rsi_mom"].iloc[-1])
-                else:
-                    rsi_mom = 0
-                if "vol_z" in df.columns:
-                    vol_z = float(df["vol_z"].iloc[-1])
-                else:
-                    vol_z = 0
-                if "adx_14" in df.columns:
-                    adx_14 = float(df["adx_14"].iloc[-1])
-                else:
-                    adx_14 = 0
-            else:
-                vwap_slope = 0
-                rsi_mom = 0
-                vol_z = 0
-                adx_14 = 0
+            ind = compute_indicators(
+                bars,
+                vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
+                atr_period=getattr(cfg, "ATR_PERIOD", 14),
+                adx_period=getattr(cfg, "ADX_PERIOD", 14),
+                vol_window=getattr(cfg, "VOL_WINDOW", 30),
+                slope_window=getattr(cfg, "VWAP_SLOPE_WINDOW", 10),
+            )
+            if ind.get("vwap") is not None:
+                vwap = ind["vwap"]
+            if ind.get("atr") is not None:
+                atr = ind["atr"]
+            if ind.get("adx") is not None:
+                adx_14 = ind["adx"]
+            if ind.get("vol_z") is not None:
+                vol_z = ind["vol_z"]
+            if ind.get("vwap_slope") is not None:
+                vwap_slope = ind["vwap_slope"]
+            last_ts = ind.get("last_ts")
+            if last_ts:
+                indicators_age_sec = (datetime.now() - last_ts).total_seconds()
+            indicators_ok = bool(ind.get("ok")) and (indicators_age_sec is None or indicators_age_sec <= getattr(cfg, "INDICATOR_STALE_SEC", 120))
+            if _DATA_CACHE.get(symbol, {}).get("ltp_source") != "live":
+                indicators_ok = False
+            if not ltp or ltp <= 0:
+                indicators_ok = False
+        except Exception:
+            indicators_ok = False
+
+        # Cross-asset data quality fail-safe
+        try:
+            if cross_quality.get("any_stale"):
+                indicators_ok = False
         except Exception:
             pass
 
@@ -326,12 +390,43 @@ def fetch_live_market_data():
                 if now_ts - ts >= win_10m:
                     ltp_change_10m = float(ltp - price)
                     break
+            # simple acceleration from last 3 points
+            if len(hist) >= 3:
+                p0 = hist[-1][1]
+                p1 = hist[-2][1]
+                p2 = hist[-3][1]
+                ltp_acceleration = float(p0 - 2 * p1 + p2)
         except Exception:
             pass
 
-        # Basic synthetic bid/ask when not available
-        bid = round(ltp * 0.999, 2) if ltp else 0
-        ask = round(ltp * 1.001, 2) if ltp else 0
+        # No synthetic bid/ask — require real quotes for trading
+        bid = None
+        ask = None
+        bid_qty = None
+        ask_qty = None
+        quote_ok = False
+        quote_ts = None
+        spread_pct = None
+        try:
+            if cfg.KITE_USE_API and kite_client.kite:
+                ksym = getattr(cfg, "PREMARKET_INDICES_LTP", {}).get(symbol)
+                if not ksym:
+                    ksym = f"NSE:{symbol}" if symbol != "SENSEX" else f"BSE:{symbol}"
+                q = kite_client.quote([ksym]).get(ksym, {}) if ksym else {}
+                depth = q.get("depth") or {}
+                bid = depth.get("buy", [{}])[0].get("price")
+                ask = depth.get("sell", [{}])[0].get("price")
+                bid_qty = depth.get("buy", [{}])[0].get("quantity")
+                ask_qty = depth.get("sell", [{}])[0].get("quantity")
+                quote_ts = q.get("timestamp") or q.get("last_trade_time")
+                if hasattr(quote_ts, "isoformat"):
+                    quote_ts = quote_ts.isoformat()
+                if bid and ask:
+                    quote_ok = True
+                    if ltp:
+                        spread_pct = (ask - bid) / ltp
+        except Exception:
+            quote_ok = False
 
         # Open-range tracking for bias lock
         orb_lock_min = getattr(cfg, "ORB_LOCK_MIN", 15)
@@ -365,7 +460,7 @@ def fetch_live_market_data():
 
         option_chain = fetch_option_chain(symbol, ltp, force_synthetic=False)
         chain_source = "live"
-        if not option_chain and getattr(cfg, "FORCE_SYNTH_CHAIN_ON_FAIL", True):
+        if not option_chain and getattr(cfg, "FORCE_SYNTH_CHAIN_ON_FAIL", True) and str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() != "LIVE":
             option_chain = fetch_option_chain(symbol, ltp, force_synthetic=True)
             chain_source = "synthetic"
         # Option chain health validation (live NFO/BFO)
@@ -384,26 +479,104 @@ def fetch_live_market_data():
         except Exception:
             health = None
 
-        # Regime detection based on available indicators
-        regime = "NEUTRAL"
-        if adx_14 >= getattr(cfg, "TREND_ADX", 22) and abs(vwap_slope) > 0:
-            regime = "TREND"
-        elif adx_14 < getattr(cfg, "RANGE_ADX", 18):
-            regime = "RANGE"
-
-        # Event regime override based on vol/IV
+        # Regime model (probabilistic)
+        atr_pct = (atr / ltp) if ltp else 0
         try:
-            atr_pct = (atr / ltp) if ltp else 0
             iv_vals = [c.get("iv") for c in option_chain if c.get("iv") is not None]
             iv_mean = sum(iv_vals) / len(iv_vals) if iv_vals else 0
-            if vol_z >= getattr(cfg, "EVENT_VOL_Z", 1.0) or atr_pct >= getattr(cfg, "EVENT_ATR_PCT", 0.004) or iv_mean >= getattr(cfg, "EVENT_IV_MEAN", 0.35):
-                regime = "EVENT"
-            # Range volatile: choppy + elevated vol or IV
-            if regime == "RANGE":
-                if vol_z >= getattr(cfg, "RANGE_VOL_Z", 0.6) or atr_pct >= getattr(cfg, "RANGE_ATR_PCT", 0.003) or iv_mean >= getattr(cfg, "RANGE_IV_MEAN", 0.3):
-                    regime = "RANGE_VOLATILE"
+        except Exception:
+            iv_mean = 0
+        # option chain skew (call iv - put iv)
+        try:
+            call_ivs = [c.get("iv") for c in option_chain if c.get("iv") is not None and c.get("type") == "CE"]
+            put_ivs = [c.get("iv") for c in option_chain if c.get("iv") is not None and c.get("type") == "PE"]
+            call_mean = sum(call_ivs) / len(call_ivs) if call_ivs else 0
+            put_mean = sum(put_ivs) / len(put_ivs) if put_ivs else 0
+            option_chain_skew = (call_mean - put_mean)
+        except Exception:
+            option_chain_skew = 0
+        # OI delta (calls - puts)
+        try:
+            call_oi = sum([c.get("oi_change", 0) or 0 for c in option_chain if c.get("type") == "CE"])
+            put_oi = sum([c.get("oi_change", 0) or 0 for c in option_chain if c.get("type") == "PE"])
+            oi_delta = float(call_oi - put_oi)
+        except Exception:
+            oi_delta = 0.0
+        # Depth imbalance from option chain quotes
+        try:
+            bid_qty_sum = sum([c.get("bid_qty", 0) or 0 for c in option_chain])
+            ask_qty_sum = sum([c.get("ask_qty", 0) or 0 for c in option_chain])
+            denom = max(bid_qty_sum + ask_qty_sum, 1)
+            depth_imbalance = (bid_qty_sum - ask_qty_sum) / denom
+        except Exception:
+            depth_imbalance = 0.0
+
+        # regime transition rate (per hour)
+        try:
+            trans = _REGIME_TRANSITIONS.get(symbol)
+            if trans is None:
+                trans = deque(maxlen=2000)
+                _REGIME_TRANSITIONS[symbol] = trans
+        except Exception:
+            trans = None
+
+        features = {
+            "adx": adx_14,
+            "vwap_slope": vwap_slope,
+            "vol_z": vol_z,
+            "atr_pct": atr_pct,
+            "iv_mean": iv_mean,
+            "ltp_acceleration": ltp_acceleration,
+            "option_chain_skew": option_chain_skew,
+            "oi_delta": oi_delta,
+            "depth_imbalance": depth_imbalance,
+            "regime_transition_rate": 0.0,
+            "shock_score": shock.get("shock_score"),
+            "uncertainty_index": shock.get("uncertainty_index"),
+            "macro_direction_bias": shock.get("macro_direction_bias"),
+            "x_regime_align": cross_feat.get("x_regime_align"),
+            "x_vol_spillover": cross_feat.get("x_vol_spillover"),
+            "x_lead_lag": cross_feat.get("x_lead_lag"),
+            "x_index_ret1": cross_feat.get("x_index_ret1"),
+            "x_index_ret5": cross_feat.get("x_index_ret5"),
+        }
+        model_out = _REGIME_MODEL.predict(features)
+        regime_probs = model_out.get("regime_probs", {})
+        primary_regime = model_out.get("primary_regime", "NEUTRAL")
+        regime_entropy = model_out.get("regime_entropy", 0.0)
+        unstable_regime_flag = model_out.get("unstable_regime_flag", False)
+
+        # Update transition rate
+        try:
+            last_primary = _REGIME_LAST_PRIMARY.get(symbol)
+            if last_primary and primary_regime != last_primary and trans is not None:
+                trans.append(time.time())
+            if primary_regime:
+                _REGIME_LAST_PRIMARY[symbol] = primary_regime
+            if trans is not None:
+                now = time.time()
+                window = 3600
+                trans = deque([t for t in trans if now - t <= window], maxlen=2000)
+                _REGIME_TRANSITIONS[symbol] = trans
+                regime_transition_rate = len(trans) / (window / 3600.0)
+            else:
+                regime_transition_rate = 0.0
+        except Exception:
+            regime_transition_rate = 0.0
+
+        features["regime_transition_rate"] = regime_transition_rate
+        try:
+            # Mark unstable if entropy or transition rate high or low confidence
+            ent_thr = float(getattr(cfg, "REGIME_ENTROPY_UNSTABLE", 1.5))
+            trans_thr = float(getattr(cfg, "REGIME_TRANSITION_RATE_MAX", 6.0))
+            min_prob = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
+            max_prob = max(regime_probs.values()) if regime_probs else 0.0
+            if regime_entropy > ent_thr or regime_transition_rate > trans_thr or max_prob < min_prob:
+                unstable_regime_flag = True
         except Exception:
             pass
+
+        regime = primary_regime
 
         # time to expiry (hours)
         time_to_expiry_hrs = None
@@ -423,6 +596,13 @@ def fetch_live_market_data():
         if isinstance(force, str) and force.strip():
             regime = force.strip().upper()
 
+        if not indicators_ok:
+            regime = "NEUTRAL"
+            primary_regime = "NEUTRAL"
+            regime_probs = {}
+            regime_entropy = 0.0
+            unstable_regime_flag = True
+
         # Day-type classifier (first 30–60 min decisive)
         day_type = "UNKNOWN"
         day_conf = 0.0
@@ -431,61 +611,65 @@ def fetch_live_market_data():
         except Exception:
             minutes_since_open = 0
         try:
-            atr_pct = (atr / ltp) if ltp else 0
-            vwap_dist = (ltp - vwap) / vwap if vwap else 0
-            # Expiry day heuristic
-            exp_from_chain = None
-            if option_chain:
-                try:
-                    exp_from_chain = option_chain[0].get("expiry")
-                except Exception:
-                    exp_from_chain = None
-            if exp_from_chain:
-                try:
-                    exp_dt = datetime.fromisoformat(str(exp_from_chain)).date()
-                    if is_market_open and exp_dt == today_local:
+            if not indicators_ok:
+                day_type = "UNKNOWN"
+                day_conf = 0.0
+            else:
+                atr_pct = (atr / ltp) if ltp else 0
+                vwap_dist = (ltp - vwap) / vwap if vwap else 0
+                # Expiry day heuristic
+                exp_from_chain = None
+                if option_chain:
+                    try:
+                        exp_from_chain = option_chain[0].get("expiry")
+                    except Exception:
+                        exp_from_chain = None
+                if exp_from_chain:
+                    try:
+                        exp_dt = datetime.fromisoformat(str(exp_from_chain)).date()
+                        if is_market_open and exp_dt == today_local:
+                            day_type = "EXPIRY_DAY"
+                    except Exception:
+                        pass
+                if day_type == "UNKNOWN":
+                    weekday = today_local.weekday()
+                    exp_map = getattr(cfg, "EXPIRY_WEEKDAY_BY_SYMBOL", {})
+                    exp_day = exp_map.get(symbol.upper())
+                    if exp_day is not None and weekday == exp_day and is_market_open:
                         day_type = "EXPIRY_DAY"
-                except Exception:
-                    pass
-            if day_type == "UNKNOWN":
-                weekday = today_local.weekday()
-                exp_map = getattr(cfg, "EXPIRY_WEEKDAY_BY_SYMBOL", {})
-                exp_day = exp_map.get(symbol.upper())
-                if exp_day is not None and weekday == exp_day and is_market_open:
-                    day_type = "EXPIRY_DAY"
-            if day_type == "UNKNOWN":
-                # Panic / liquidation
-                if vol_z >= 2.0 and atr_pct >= 0.008 and ltp_change_window < -atr * 0.5:
-                    day_type = "PANIC_DAY"
-                    day_conf = 0.9
-                # Event day
-                elif regime == "EVENT":
-                    day_type = "EVENT_DAY"
-                    day_conf = 0.8
-                # Trend day
-                elif adx_14 >= getattr(cfg, "TREND_ADX", 22) and abs(vwap_slope) > 0 and abs(vwap_dist) > getattr(cfg, "DAYTYPE_VWAP_DIST", 0.002):
-                    day_type = "TREND_DAY"
-                    day_conf = 0.7
-                # Range day
-                elif adx_14 < getattr(cfg, "RANGE_ADX", 18) and abs(vwap_dist) < getattr(cfg, "DAYTYPE_VWAP_DIST", 0.002):
-                    day_type = "RANGE_DAY"
-                    day_conf = 0.7
-                # Fake breakout (reversal in 5–10m)
-                elif (ltp_change_10m != 0) and (ltp_change_5m != 0) and (ltp_change_5m * ltp_change_10m < 0) and abs(ltp_change_10m) > atr * 0.2:
-                    day_type = "FAKE_BREAKOUT_DAY"
-                    day_conf = 0.6
-                # Trend → Range (morning move, afternoon flat)
-                elif minutes_since_open > 90 and abs(ltp_change_10m) > atr * 0.3 and abs(ltp_change_5m) < atr * 0.05:
-                    day_type = "TREND_RANGE_DAY"
-                    day_conf = 0.6
-                # Range → Trend (late breakout)
-                elif minutes_since_open > 120 and abs(ltp_change_10m) < atr * 0.15 and abs(ltp_change_5m) > atr * 0.25:
-                    day_type = "RANGE_TREND_DAY"
-                    day_conf = 0.6
-                # Range volatile
-                elif regime == "RANGE_VOLATILE":
-                    day_type = "RANGE_VOLATILE"
-                    day_conf = 0.55
+                if day_type == "UNKNOWN":
+                    # Panic / liquidation
+                    if vol_z >= 2.0 and atr_pct >= 0.008 and ltp_change_window < -atr * 0.5:
+                        day_type = "PANIC_DAY"
+                        day_conf = 0.9
+                    # Event day
+                    elif regime == "EVENT":
+                        day_type = "EVENT_DAY"
+                        day_conf = 0.8
+                    # Trend day
+                    elif adx_14 >= getattr(cfg, "TREND_ADX", 22) and abs(vwap_slope) > 0 and abs(vwap_dist) > getattr(cfg, "DAYTYPE_VWAP_DIST", 0.002):
+                        day_type = "TREND_DAY"
+                        day_conf = 0.7
+                    # Range day
+                    elif adx_14 < getattr(cfg, "RANGE_ADX", 18) and abs(vwap_dist) < getattr(cfg, "DAYTYPE_VWAP_DIST", 0.002):
+                        day_type = "RANGE_DAY"
+                        day_conf = 0.7
+                    # Fake breakout (reversal in 5–10m)
+                    elif (ltp_change_10m != 0) and (ltp_change_5m != 0) and (ltp_change_5m * ltp_change_10m < 0) and abs(ltp_change_10m) > atr * 0.2:
+                        day_type = "FAKE_BREAKOUT_DAY"
+                        day_conf = 0.6
+                    # Trend → Range (morning move, afternoon flat)
+                    elif minutes_since_open > 90 and abs(ltp_change_10m) > atr * 0.3 and abs(ltp_change_5m) < atr * 0.05:
+                        day_type = "TREND_RANGE_DAY"
+                        day_conf = 0.6
+                    # Range → Trend (late breakout)
+                    elif minutes_since_open > 120 and abs(ltp_change_10m) < atr * 0.15 and abs(ltp_change_5m) > atr * 0.25:
+                        day_type = "RANGE_TREND_DAY"
+                        day_conf = 0.6
+                    # Range volatile
+                    elif regime == "RANGE_VOLATILE":
+                        day_type = "RANGE_VOLATILE"
+                        day_conf = 0.55
         except Exception:
             day_type = "UNKNOWN"
             day_conf = 0.0
@@ -576,42 +760,10 @@ def fetch_live_market_data():
         except Exception:
             pass
 
+        # Live-only: no CSV-based features or synthetic bid/ask
         seq_buffer = None
         htf_trend = 0
         htf_dir = "FLAT"
-        try:
-            csv_candidates = [f for f in os.listdir(data_dir) if f.startswith(symbol + "_") and f.endswith(".csv")]
-            if csv_candidates:
-                csv_path = os.path.join(data_dir, sorted(csv_candidates)[-1])
-                import pandas as pd
-                df = pd.read_csv(csv_path).dropna()
-                if len(df) >= getattr(cfg, "DEEP_SEQUENCE_LEN", 20):
-                    from core.feature_builder import add_indicators
-                    df = add_indicators(df)
-                    cols = ["ltp","bid","ask","spread_pct","volume","atr","vwap_dist","moneyness","is_call","vwap_slope","rsi_mom","vol_z"]
-                    # create pseudo feature window
-                    feat = df.tail(getattr(cfg, "DEEP_SEQUENCE_LEN", 20))
-                    # fallback: map close to ltp
-                    feat = feat.assign(
-                        ltp=feat["close"],
-                        bid=feat["close"]*0.999,
-                        ask=feat["close"]*1.001,
-                        spread_pct=0.002,
-                        moneyness=0,
-                        is_call=1
-                    )
-                    seq_buffer = feat[cols].values.tolist()
-                # higher timeframe trend (simple slope on last HTF_BARS)
-                htf_bars = getattr(cfg, "HTF_BARS", 60)
-                if len(df) >= htf_bars:
-                    closes = df["close"].tail(htf_bars)
-                    htf_trend = closes.iloc[-1] - closes.iloc[0]
-                    htf_dir = "UP" if htf_trend > 0 else "DOWN" if htf_trend < 0 else "FLAT"
-                else:
-                    htf_trend = 0
-                    htf_dir = "FLAT"
-        except Exception:
-            pass
 
         # Confidence history for sparkline
         try:
@@ -631,10 +783,31 @@ def fetch_live_market_data():
             "vwap": vwap,
             "bias": get_bias(ltp, vwap),
             "regime": regime,
+            "primary_regime": primary_regime,
+            "regime_probs": regime_probs,
+            "regime_entropy": regime_entropy,
+            "unstable_regime_flag": unstable_regime_flag,
+            "regime_transition_rate": regime_transition_rate,
+            "shock_score": shock.get("shock_score"),
+            "macro_direction_bias": shock.get("macro_direction_bias"),
+            "uncertainty_index": shock.get("uncertainty_index"),
+            "event_name": shock.get("event_name"),
+            "minutes_to_event": shock.get("minutes_to_event"),
+            "event_category": shock.get("event_category"),
+            "event_importance": shock.get("event_importance"),
+            "fx_ret_5m": fx_ret_5m or 0.0,
+            "vix_z": vix_z or 0.0,
+            "crude_ret_15m": crude_ret_15m or 0.0,
+            "corr_fx_nifty": corr_fx_nifty or 0.0,
+            "cross_asset_ok": not bool(cross_quality.get("any_stale")),
+            "cross_asset_quality": cross_quality,
+            **cross_feat,
             "regime_day": regime,
             "day_type": day_type,
             "day_confidence": round(day_conf, 3),
             "day_conf_history": conf_hist,
+            "indicators_ok": indicators_ok,
+            "indicators_age_sec": indicators_age_sec,
             "time_to_expiry_hrs": time_to_expiry_hrs,
             "orb_bias": orb_bias,
             "orb_lock_min": orb_lock_min,
@@ -644,11 +817,22 @@ def fetch_live_market_data():
             "rsi_mom": rsi_mom,
             "vol_z": vol_z,
             "adx_14": adx_14,
+            "atr_pct": atr_pct,
+            "iv_mean": iv_mean,
+            "ltp_acceleration": ltp_acceleration,
+            "option_chain_skew": option_chain_skew,
+            "oi_delta": oi_delta,
+            "depth_imbalance": depth_imbalance,
             "orb_high": orb_high,
             "orb_low": orb_low,
             "volume": volume,
             "bid": bid,
             "ask": ask,
+            "bid_qty": bid_qty,
+            "ask_qty": ask_qty,
+            "quote_ok": quote_ok,
+            "quote_ts": quote_ts,
+            "spread_pct": spread_pct,
             "timestamp": datetime.now().timestamp(),
             "option_chain": option_chain,
             "chain_source": chain_source,
@@ -670,16 +854,46 @@ def fetch_live_market_data():
                 "vwap": vwap,
                 "bias": get_bias(ltp, vwap),
                 "regime": regime,
-                "regime_day": regime,
+                "primary_regime": primary_regime,
+                "regime_probs": regime_probs,
+                "regime_entropy": regime_entropy,
+                "unstable_regime_flag": unstable_regime_flag,
+            "regime_transition_rate": regime_transition_rate,
+            "shock_score": shock.get("shock_score"),
+            "macro_direction_bias": shock.get("macro_direction_bias"),
+            "uncertainty_index": shock.get("uncertainty_index"),
+            "event_name": shock.get("event_name"),
+            "minutes_to_event": shock.get("minutes_to_event"),
+            "event_category": shock.get("event_category"),
+            "event_importance": shock.get("event_importance"),
+            "fx_ret_5m": fx_ret_5m or 0.0,
+            "vix_z": vix_z or 0.0,
+            "crude_ret_15m": crude_ret_15m or 0.0,
+            "corr_fx_nifty": corr_fx_nifty or 0.0,
+            "cross_asset_ok": not bool(cross_quality.get("any_stale")),
+            "cross_asset_quality": cross_quality,
+            **cross_feat,
+            "regime_day": regime,
                 "atr": atr,
                 "vwap_slope": vwap_slope,
                 "rsi_mom": rsi_mom,
                 "vol_z": vol_z,
+                "atr_pct": atr_pct,
+                "iv_mean": iv_mean,
+                "ltp_acceleration": ltp_acceleration,
+                "option_chain_skew": option_chain_skew,
+                "oi_delta": oi_delta,
+                "depth_imbalance": depth_imbalance,
                 "orb_high": orb_high,
                 "orb_low": orb_low,
                 "volume": volume,
                 "bid": bid,
                 "ask": ask,
+                "bid_qty": bid_qty,
+                "ask_qty": ask_qty,
+                "quote_ok": quote_ok,
+                "quote_ts": quote_ts,
+                "spread_pct": spread_pct,
                 "timestamp": datetime.now().timestamp(),
                 "option_chain": [],
                 "instrument": "FUT",
@@ -696,16 +910,46 @@ def fetch_live_market_data():
                 "vwap": vwap,
                 "bias": get_bias(ltp, vwap),
                 "regime": regime,
-                "regime_day": regime,
+                "primary_regime": primary_regime,
+                "regime_probs": regime_probs,
+                "regime_entropy": regime_entropy,
+                "unstable_regime_flag": unstable_regime_flag,
+            "regime_transition_rate": regime_transition_rate,
+            "shock_score": shock.get("shock_score"),
+            "macro_direction_bias": shock.get("macro_direction_bias"),
+            "uncertainty_index": shock.get("uncertainty_index"),
+            "event_name": shock.get("event_name"),
+            "minutes_to_event": shock.get("minutes_to_event"),
+            "event_category": shock.get("event_category"),
+            "event_importance": shock.get("event_importance"),
+            "fx_ret_5m": fx_ret_5m or 0.0,
+            "vix_z": vix_z or 0.0,
+            "crude_ret_15m": crude_ret_15m or 0.0,
+            "corr_fx_nifty": corr_fx_nifty or 0.0,
+            "cross_asset_ok": not bool(cross_quality.get("any_stale")),
+            "cross_asset_quality": cross_quality,
+            **cross_feat,
+            "regime_day": regime,
                 "atr": atr,
                 "vwap_slope": vwap_slope,
                 "rsi_mom": rsi_mom,
                 "vol_z": vol_z,
+                "atr_pct": atr_pct,
+                "iv_mean": iv_mean,
+                "ltp_acceleration": ltp_acceleration,
+                "option_chain_skew": option_chain_skew,
+                "oi_delta": oi_delta,
+                "depth_imbalance": depth_imbalance,
                 "orb_high": orb_high,
                 "orb_low": orb_low,
                 "volume": volume,
                 "bid": bid,
                 "ask": ask,
+                "bid_qty": bid_qty,
+                "ask_qty": ask_qty,
+                "quote_ok": quote_ok,
+                "quote_ts": quote_ts,
+                "spread_pct": spread_pct,
                 "timestamp": datetime.now().timestamp(),
                 "option_chain": [],
                 "instrument": "EQ",

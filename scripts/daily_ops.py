@@ -20,3 +20,5 @@ if __name__ == "__main__":
     run(["scripts/sla_check.py"])
     run(["scripts/daily_rollup.py"])
     run(["scripts/reconcile_fills.py"])
+    run(["scripts/run_decay_daily.py"])
+    run(["scripts/run_daily_audit.py"])

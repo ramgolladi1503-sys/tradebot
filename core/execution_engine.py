@@ -1,4 +1,5 @@
 import time
+import random
 from config import config as cfg
 
 class ExecutionEngine:
@@ -87,19 +88,24 @@ class ExecutionEngine:
         Simulated limit order placement with retry logic.
         Replace with broker API call for live execution.
         """
-        retries = getattr(cfg, "ORDER_RETRIES", 3)
-        sleep_sec = getattr(cfg, "RETRY_SLEEP_SEC", 2)
-        for _ in range(retries):
-            limit_price = self.build_limit_price(trade.side, bid, ask)
-            # Simulated fill condition
-            if trade.side == "BUY" and limit_price >= ask:
-                return True, limit_price
-            if trade.side == "SELL" and limit_price <= bid:
-                return True, limit_price
-            time.sleep(sleep_sec)
-
-        self.register_failure()
-        return False, None
+        limit_price = self.build_limit_price(trade.side, bid, ask)
+        def snapshot_fn():
+            return {"bid": bid, "ask": ask, "ts": time.time()}
+        filled, price, _ = self.simulate_limit_fill(
+            trade,
+            limit_price,
+            snapshot_fn,
+            timeout_sec=getattr(cfg, "EXEC_SIM_TIMEOUT_SEC", 3.0),
+            poll_sec=getattr(cfg, "EXEC_SIM_POLL_SEC", 0.25),
+            max_chase_pct=getattr(cfg, "EXEC_MAX_CHASE_PCT", 0.002),
+            spread_widen_pct=getattr(cfg, "EXEC_SPREAD_WIDEN_PCT", 0.5),
+            max_spread_pct=getattr(cfg, "EXEC_MAX_SPREAD_PCT", getattr(cfg, "MAX_SPREAD_PCT", 0.015)),
+            fill_prob=getattr(cfg, "EXEC_FILL_PROB", 0.85),
+        )
+        if not filled:
+            self.register_failure()
+            return False, None
+        return True, price
 
     def simulate_order_slicing(self, trade, bid, ask, volume, depth=None):
         """
@@ -138,3 +144,137 @@ class ExecutionEngine:
             return False, None
         avg_price = round(fill_price / filled_qty, 2)
         return True, avg_price
+
+    # -----------------------------
+    # Queue position estimator (depth-based)
+    # -----------------------------
+    def estimate_queue_position(self, depth, side, limit_price=None, qty=1):
+        if not depth:
+            return None
+        try:
+            book = depth.get("buy") if side == "BUY" else depth.get("sell")
+            if not book:
+                return None
+            top = book[0]
+            top_qty = float(top.get("quantity", 0) or 0)
+            top_price = float(top.get("price", 0) or 0)
+            if limit_price is not None and top_price:
+                if side == "BUY" and limit_price > top_price:
+                    return 0.0
+                if side == "SELL" and limit_price < top_price:
+                    return 0.0
+            denom = max(top_qty + max(qty, 1), 1.0)
+            return round(top_qty / denom, 4)
+        except Exception:
+            return None
+
+    # -----------------------------
+    # Quote-driven limit simulation
+    # -----------------------------
+    def simulate_limit_fill(
+        self,
+        trade,
+        limit_price,
+        snapshot_fn,
+        timeout_sec,
+        poll_sec,
+        max_chase_pct,
+        spread_widen_pct,
+        max_spread_pct,
+        fill_prob,
+    ):
+        """
+        Simulate a limit order using sequential quote snapshots.
+        Buy fills ONLY if limit >= ask on a later snapshot.
+        Sell fills ONLY if limit <= bid on a later snapshot.
+        """
+        def _mid_spread(bid, ask):
+            mid = (bid + ask) / 2.0 if bid and ask else 0.0
+            spread = max(ask - bid, 0.0) if bid and ask else 0.0
+            return mid, spread
+
+        decision = snapshot_fn()
+        if not decision:
+            return False, None, {
+                "decision_mid": None,
+                "decision_spread": None,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": "no_quote",
+            }
+        bid0 = decision.get("bid", 0) or 0
+        ask0 = decision.get("ask", 0) or 0
+        decision_mid, decision_spread = _mid_spread(bid0, ask0)
+        if decision_mid <= 0 or decision_spread <= 0:
+            return False, None, {
+                "decision_mid": decision_mid or None,
+                "decision_spread": decision_spread or None,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": "bad_initial_quote",
+            }
+
+        start = time.time()
+        current_limit = limit_price
+        reason = "timeout"
+
+        while time.time() - start <= timeout_sec:
+            snap = snapshot_fn()
+            if not snap:
+                reason = "no_quote"
+                break
+            bid = snap.get("bid", 0) or 0
+            ask = snap.get("ask", 0) or 0
+            if bid <= 0 or ask <= 0:
+                time.sleep(poll_sec)
+                continue
+
+            mid, spread = _mid_spread(bid, ask)
+            if max_spread_pct and mid > 0 and (spread / mid) > max_spread_pct:
+                reason = "spread_too_wide"
+                break
+            if spread_widen_pct and decision_spread > 0 and spread > decision_spread * (1 + spread_widen_pct):
+                reason = "spread_widened"
+                break
+
+            # Optional chase (bounded)
+            if max_chase_pct and max_chase_pct > 0:
+                if trade.side == "BUY":
+                    max_limit = decision_mid * (1 + max_chase_pct)
+                    if ask > current_limit and ask <= max_limit:
+                        current_limit = ask
+                    elif ask > max_limit:
+                        reason = "max_chase_exceeded"
+                        break
+                else:
+                    min_limit = decision_mid * (1 - max_chase_pct)
+                    if bid < current_limit and bid >= min_limit:
+                        current_limit = bid
+                    elif bid < min_limit:
+                        reason = "max_chase_exceeded"
+                        break
+
+            can_fill = (trade.side == "BUY" and current_limit >= ask) or (trade.side == "SELL" and current_limit <= bid)
+            if can_fill:
+                if fill_prob < 1.0 and random.random() > fill_prob:
+                    time.sleep(poll_sec)
+                    continue
+                fill_price = ask if trade.side == "BUY" else bid
+                slippage = (fill_price - decision_mid) if trade.side == "BUY" else (decision_mid - fill_price)
+                return True, round(fill_price, 2), {
+                    "decision_mid": round(decision_mid, 2),
+                    "decision_spread": round(decision_spread, 2),
+                    "fill_price": round(fill_price, 2),
+                    "slippage": round(slippage, 4),
+                    "reason_if_aborted": None,
+                }
+
+            time.sleep(poll_sec)
+
+        return False, None, {
+            "decision_mid": round(decision_mid, 2),
+            "decision_spread": round(decision_spread, 2),
+            "fill_price": None,
+            "slippage": None,
+            "reason_if_aborted": reason,
+        }

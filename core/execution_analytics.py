@@ -44,6 +44,7 @@ def compute_execution_analytics():
     trades = _read_trades_db()
     exec_stats = _read_execution_stats()
     broker_fills = _read_broker_fills()
+    fill_quality = _read_fill_quality_daily()
 
     summary = {
         "timestamp": datetime.now().isoformat(),
@@ -51,6 +52,7 @@ def compute_execution_analytics():
         "avg_latency_ms": None,
         "avg_slippage": None,
         "instrument": {},
+        "execution_quality": {},
     }
 
     # Guard: no broker fills available
@@ -87,7 +89,25 @@ def compute_execution_analytics():
         ).reset_index()
         daily = daily_df.to_dict(orient="records")
 
+    # attach execution quality summary (from fill_quality)
+    try:
+        if fill_quality:
+            latest_day = sorted(fill_quality.keys())[-1]
+            summary["execution_quality"] = fill_quality.get(latest_day, {})
+    except Exception:
+        pass
+
     return summary, daily
+
+
+def _read_fill_quality_daily():
+    path = Path("logs/fill_quality_daily.json")
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
 
 def write_execution_analytics(json_path="logs/execution_analytics.json", csv_path="logs/execution_analytics_daily.csv"):
     summary, daily = compute_execution_analytics()

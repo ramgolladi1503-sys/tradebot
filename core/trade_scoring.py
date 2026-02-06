@@ -45,6 +45,9 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
     atr_pct = (atr / ltp) if ltp else 0
     day_type = (market_data.get("day_type") or "").upper()
     regime = (market_data.get("regime") or "").upper()
+    shock_score = float(market_data.get("shock_score") or 0.0)
+    uncertainty = float(market_data.get("uncertainty_index") or 0.0)
+    macro_bias = float(market_data.get("macro_direction_bias") or 0.0)
 
     opt_ltp = opt.get("ltp") or 0
     bid = opt.get("bid") or 0
@@ -170,7 +173,25 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
         event_score = 100
     components["event"] = event_score
 
-    # 9) Greeks sanity
+    # 9) News shock / macro bias
+    news_score = 100.0
+    news_score -= min(80.0, shock_score * 80.0)
+    news_score -= min(30.0, uncertainty * 30.0)
+    if shock_score >= getattr(cfg, "NEWS_SHOCK_EVENT_THRESHOLD", 0.4):
+        issues.append("News shock elevated")
+    if shock_score >= getattr(cfg, "NEWS_SHOCK_BLOCK_THRESHOLD", 0.7):
+        news_score = 0.0
+        issues.append("News shock extreme")
+    bias_penalty = getattr(cfg, "NEWS_SHOCK_BIAS_PENALTY", 15)
+    if macro_bias >= 0.2 and direction == "BUY_PUT":
+        news_score -= bias_penalty
+        issues.append("Macro bias bullish")
+    if macro_bias <= -0.2 and direction == "BUY_CALL":
+        news_score -= bias_penalty
+        issues.append("Macro bias bearish")
+    components["news_shock"] = max(0.0, min(100.0, news_score))
+
+    # 10) Greeks sanity
     if delta is not None and (abs(delta) < getattr(cfg, "DELTA_MIN", 0.25) or abs(delta) > getattr(cfg, "DELTA_MAX", 0.7)):
         components["greeks"] = 40
         issues.append("Delta out of band")
@@ -179,14 +200,15 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
 
     # Weighted score
     w = {
-        "trend": 0.25,
+        "trend": 0.24,
         "regime": 0.15,
         "oi_flow": 0.15,
         "volatility": 0.10,
         "liquidity": 0.10,
         "rr": 0.10,
-        "mtf": 0.10,
-        "event": 0.05,
+        "mtf": 0.08,
+        "event": 0.03,
+        "news_shock": 0.05,
     }
     score = 0.0
     for k, weight in w.items():
@@ -206,4 +228,3 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
         "day_type": day_type,
         "regime": regime,
     }
-

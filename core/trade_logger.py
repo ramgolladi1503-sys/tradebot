@@ -75,6 +75,7 @@ def update_trade_outcome(trade_id, exit_price, actual):
                         strategy = e.get("strategy")
                         symbol = e.get("symbol")
                         qty = e.get("qty", 1)
+                        paper_aux = e.get("paper_aux", False)
                         risk = abs(entry_price - stop) if stop else 0
                         r_mult = 0
                         if risk > 0:
@@ -93,7 +94,7 @@ def update_trade_outcome(trade_id, exit_price, actual):
         except Exception:
             pass
         try:
-            if entry_price is not None and qty is not None:
+            if entry_price is not None and qty is not None and not paper_aux:
                 pnl = (exit_price - entry_price) * qty
                 if side == "SELL":
                     pnl *= -1
@@ -124,6 +125,7 @@ def update_trade_outcome(trade_id, exit_price, actual):
                 side = entry.get("side", "BUY")
                 qty = entry.get("qty", 1)
                 stop = entry.get("stop_loss", 0)
+                paper_aux = entry.get("paper_aux", False)
                 risk = abs(entry_price - stop) if stop else 0
                 r_mult = 0
                 if risk > 0:
@@ -146,7 +148,7 @@ def update_trade_outcome(trade_id, exit_price, actual):
         except Exception:
             pass
         try:
-            if entry_price is not None and qty is not None:
+            if entry_price is not None and qty is not None and not paper_aux:
                 pnl = (exit_price - entry_price) * qty
                 if side == "SELL":
                     pnl *= -1

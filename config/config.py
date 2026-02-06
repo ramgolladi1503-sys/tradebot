@@ -4,6 +4,7 @@
 # Env loader (optional)
 # -------------------------------
 import os
+import json
 try:
     from dotenv import load_dotenv  # type: ignore
     load_dotenv()
@@ -35,6 +36,47 @@ MAX_TRADES_PER_DAY = 5
 MAX_RISK_PER_TRADE_EQ = 0.02
 MAX_RISK_PER_TRADE_FUT = 0.03
 MAX_RISK_PER_TRADE_OPT = 0.03
+
+# Portfolio allocator
+PORTFOLIO_ALLOCATOR_ENABLE = True
+PORTFOLIO_MAX_DELTA_PCT = float(os.getenv("PORTFOLIO_MAX_DELTA_PCT", "0.25"))
+PORTFOLIO_MAX_GAMMA_PCT = float(os.getenv("PORTFOLIO_MAX_GAMMA_PCT", "0.10"))
+PORTFOLIO_MAX_VEGA_PCT = float(os.getenv("PORTFOLIO_MAX_VEGA_PCT", "0.12"))
+CORR_PENALTY = float(os.getenv("CORR_PENALTY", "0.2"))
+STRESS_MOVE_PCT = float(os.getenv("STRESS_MOVE_PCT", "0.02"))
+STRESS_VOL_PCT = float(os.getenv("STRESS_VOL_PCT", "0.3"))
+MAX_STRESS_LOSS_PCT = float(os.getenv("MAX_STRESS_LOSS_PCT", "0.03"))
+
+# Correlation map for symbol pairs (ordered tuple)
+SYMBOL_CORRELATIONS = {
+    tuple(sorted(("NIFTY", "BANKNIFTY"))): 0.85,
+    tuple(sorted(("NIFTY", "SENSEX"))): 0.90,
+    tuple(sorted(("BANKNIFTY", "SENSEX"))): 0.80,
+}
+
+# Regime-aware exposure multipliers
+REGIME_EXPOSURE_MULT = {
+    "TREND": {"delta": 1.1, "gamma": 0.9, "vega": 0.9},
+    "RANGE": {"delta": 0.9, "gamma": 1.0, "vega": 1.0},
+    "RANGE_VOLATILE": {"delta": 0.8, "gamma": 0.8, "vega": 0.8},
+    "EVENT": {"delta": 0.5, "gamma": 0.4, "vega": 0.4},
+    "PANIC": {"delta": 0.4, "gamma": 0.4, "vega": 0.4},
+    "NEUTRAL": {"delta": 0.0, "gamma": 0.0, "vega": 0.0},
+}
+
+# Risk profiles (override defaults when selected)
+RISK_PROFILE = os.getenv("RISK_PROFILE", "CONSERVATIVE").upper()
+RISK_PROFILES = {
+    "CONSERVATIVE": {
+        "max_daily_loss": 0.02,
+        "risk_per_trade": 0.004,
+        "max_trades": 3,
+    },
+    "AGGRESSIVE": {
+        "max_daily_loss": 0.04,
+        "risk_per_trade": 0.0075,
+    },
+}
 
 # -------------------------------
 # Symbols to monitor
@@ -142,6 +184,49 @@ MIN_VOLUME_FILTER = 500
 MAX_SPREAD_PCT = 0.03
 MAX_SPREAD_PCT_QUICK = float(os.getenv("MAX_SPREAD_PCT_QUICK", "0.04"))
 QUOTE_FALLBACK_SPREAD_PCT = float(os.getenv("QUOTE_FALLBACK_SPREAD_PCT", "0.002"))
+NEWS_HALF_LIFE_HOURS = float(os.getenv("NEWS_HALF_LIFE_HOURS", "6.0"))
+NEWS_SHOCK_EVENT_THRESHOLD = float(os.getenv("NEWS_SHOCK_EVENT_THRESHOLD", "0.4"))
+NEWS_SHOCK_BLOCK_THRESHOLD = float(os.getenv("NEWS_SHOCK_BLOCK_THRESHOLD", "0.7"))
+NEWS_SHOCK_BIAS_PENALTY = float(os.getenv("NEWS_SHOCK_BIAS_PENALTY", "15"))
+NEWS_RSS_SOURCES = [s.strip() for s in os.getenv("NEWS_RSS_SOURCES", "").split(",") if s.strip()]
+NEWS_SOURCE_WEIGHTS = json.loads(os.getenv("NEWS_SOURCE_WEIGHTS", "{}")) if os.getenv("NEWS_SOURCE_WEIGHTS") else {}
+NEWS_API_PROVIDERS = json.loads(os.getenv("NEWS_API_PROVIDERS", "[]")) if os.getenv("NEWS_API_PROVIDERS") else []
+NEWS_SHOCK_DECAY_MINUTES = float(os.getenv("NEWS_SHOCK_DECAY_MINUTES", "180"))
+NEWS_SHOCK_TOPK = int(os.getenv("NEWS_SHOCK_TOPK", "5"))
+NEWS_PRE_DECAY_MINUTES = float(os.getenv("NEWS_PRE_DECAY_MINUTES", "180"))
+NEWS_POST_DECAY_MINUTES = float(os.getenv("NEWS_POST_DECAY_MINUTES", "120"))
+NEWS_CLASSIFIER_PATH = os.getenv("NEWS_CLASSIFIER_PATH", "models/news_shock_model.pkl")
+NEWS_VECTOR_PATH = os.getenv("NEWS_VECTOR_PATH", "models/news_vectorizer.pkl")
+CROSS_ASSET_SYMBOLS = json.loads(os.getenv("CROSS_ASSET_SYMBOLS", "{}")) if os.getenv("CROSS_ASSET_SYMBOLS") else {}
+CROSS_ASSET_REFRESH_SEC = int(os.getenv("CROSS_ASSET_REFRESH_SEC", "30"))
+CROSS_ASSET_STALE_SEC = int(os.getenv("CROSS_ASSET_STALE_SEC", "120"))
+CROSS_ASSET_MAXLEN = int(os.getenv("CROSS_ASSET_MAXLEN", "600"))
+
+# -------------------------------
+# Alpha Ensemble (multi-model fusion)
+# -------------------------------
+ALPHA_ENSEMBLE_ENABLE = os.getenv("ALPHA_ENSEMBLE_ENABLE", "true").lower() == "true"
+ALPHA_METHOD = os.getenv("ALPHA_METHOD", "AUTO")  # AUTO | STACKING | BAYES
+ALPHA_STACKING_MODEL_PATH = os.getenv("ALPHA_STACKING_MODEL_PATH", "models/alpha_stack.pkl")
+ALPHA_BASE_WEIGHTS = {
+    "xgb": float(os.getenv("ALPHA_W_XGB", "0.45")),
+    "deep": float(os.getenv("ALPHA_W_DEEP", "0.35")),
+    "micro": float(os.getenv("ALPHA_W_MICRO", "0.20")),
+}
+ALPHA_REGIME_WEIGHTS = {
+    "TREND": {"xgb": 0.35, "deep": 0.5, "micro": 0.15},
+    "RANGE": {"xgb": 0.45, "deep": 0.25, "micro": 0.30},
+    "RANGE_VOLATILE": {"xgb": 0.40, "deep": 0.30, "micro": 0.30},
+    "EVENT": {"xgb": 0.30, "deep": 0.30, "micro": 0.40},
+    "PANIC": {"xgb": 0.25, "deep": 0.35, "micro": 0.40},
+}
+ALPHA_UNCERTAINTY_VETO = float(os.getenv("ALPHA_UNCERTAINTY_VETO", "0.78"))
+ALPHA_UNCERTAINTY_DOWNSIZE = float(os.getenv("ALPHA_UNCERTAINTY_DOWNSIZE", "0.55"))
+ALPHA_UNCERTAINTY_MIN_SIZE_MULT = float(os.getenv("ALPHA_UNCERTAINTY_MIN_SIZE_MULT", "0.5"))
+ALPHA_UNCERT_W_DISAGREE = float(os.getenv("ALPHA_UNCERT_W_DISAGREE", "0.45"))
+ALPHA_UNCERT_W_REGIME = float(os.getenv("ALPHA_UNCERT_W_REGIME", "0.25"))
+ALPHA_UNCERT_W_SHOCK = float(os.getenv("ALPHA_UNCERT_W_SHOCK", "0.20"))
+ALPHA_UNCERT_W_VOLSPILL = float(os.getenv("ALPHA_UNCERT_W_VOLSPILL", "0.10"))
 
 # Model risk management
 RETRAIN_MIN_TRADES = 50
@@ -177,6 +262,7 @@ EXECUTION_MODE = "SIM"  # SIM only for now
 EXECUTION_MODE_PAPER = True
 EXECUTION_MODE_LIVE = False
 ALLOW_LIVE_PLACEMENT = False
+PAPER_STRICT_MODE = os.getenv("PAPER_STRICT_MODE", "true").lower() == "true"
 ORDER_SLICES = 3
 SLICE_INTERVAL_SEC = 1
 ORDER_SLICES_OPT = 3
@@ -196,13 +282,15 @@ DEBUG_TRADE_MODE = os.getenv("DEBUG_TRADE_MODE", "false").lower() == "true"
 DEBUG_TRADE_TOP_N = int(os.getenv("DEBUG_TRADE_TOP_N", "5"))
 QUICK_MIN_PROBA = float(os.getenv("QUICK_MIN_PROBA", "0.35"))
 QUICK_USE_SIGNAL_SCORE = os.getenv("QUICK_USE_SIGNAL_SCORE", "true").lower() == "true"
+ALLOW_AUX_TRADES_LIVE = os.getenv("ALLOW_AUX_TRADES_LIVE", "false").lower() == "true"
+ALLOW_BASELINE_SIGNAL = os.getenv("ALLOW_BASELINE_SIGNAL", "true").lower() == "true"
+RELAX_BLOCK_REASON = os.getenv("RELAX_BLOCK_REASON", "")
 MIN_RR = float(os.getenv("MIN_RR", "1.5"))
 MIN_RR_QUICK = float(os.getenv("MIN_RR_QUICK", "1.2"))
 OPT_STOP_ATR_MAIN = float(os.getenv("OPT_STOP_ATR_MAIN", "1.0"))
 OPT_TARGET_ATR_MAIN = float(os.getenv("OPT_TARGET_ATR_MAIN", "1.8"))
 OPT_STOP_ATR_QUICK = float(os.getenv("OPT_STOP_ATR_QUICK", "0.8"))
 OPT_TARGET_ATR_QUICK = float(os.getenv("OPT_TARGET_ATR_QUICK", "1.5"))
-REQUIRE_LIVE_OPTION_QUOTES = os.getenv("REQUIRE_LIVE_OPTION_QUOTES", "false").lower() == "true"
 TRADE_SCORE_MIN = float(os.getenv("TRADE_SCORE_MIN", "75"))
 QUICK_TRADE_SCORE_MIN = float(os.getenv("QUICK_TRADE_SCORE_MIN", "60"))
 TRADE_SCORE_MIN_BY_DAYTYPE = {
@@ -215,7 +303,15 @@ TRADE_SCORE_MIN_BY_DAYTYPE = {
 AUTO_TUNE_ENABLE = os.getenv("AUTO_TUNE_ENABLE", "true").lower() == "true"
 AUTO_TUNE_WINDOW = int(os.getenv("AUTO_TUNE_WINDOW", "30"))
 AUTO_TUNE_EVERY_SEC = int(os.getenv("AUTO_TUNE_EVERY_SEC", "600"))
-RELAX_BLOCK_REASON = os.getenv("RELAX_BLOCK_REASON", "")
+
+# Harden live mode: no baseline/quick/relax
+if str(EXECUTION_MODE).upper() == "LIVE":
+    ALLOW_BASELINE_SIGNAL = False
+    RELAX_BLOCK_REASON = ""
+    QUICK_TRADE_MODE = False
+    ALLOW_STALE_LTP = False
+    ALLOW_CLOSE_FALLBACK = False
+    RISK_PROFILE = "CONSERVATIVE"
 BLOCKED_TRACK_ENABLE = os.getenv("BLOCKED_TRACK_ENABLE", "true").lower() == "true"
 BLOCKED_TRACK_SECONDS = int(os.getenv("BLOCKED_TRACK_SECONDS", "3600"))
 BLOCKED_TRACK_POLL_SEC = int(os.getenv("BLOCKED_TRACK_POLL_SEC", "15"))
@@ -224,7 +320,6 @@ BLOCKED_TRAIN_ENABLE = os.getenv("BLOCKED_TRAIN_ENABLE", "true").lower() == "tru
 BLOCKED_TRAIN_WEIGHT = float(os.getenv("BLOCKED_TRAIN_WEIGHT", "0.5"))
 BLOCKED_ML_MODEL_PATH = os.getenv("BLOCKED_ML_MODEL_PATH", "models/xgb_blocked_model.pkl")
 LTP_MOM_ATR_MULT = 0.2
-ALLOW_BASELINE_SIGNAL = True
 BASELINE_SIGNAL_SCORE = 0.62
 LTP_CHANGE_WINDOW_SEC = 30
 BASELINE_LTP_ATR_MULT = 0.01
@@ -256,6 +351,25 @@ REGIME_PROBA_MULT = {
     "RANGE_VOLATILE": 1.05,
     "NEUTRAL": 1.0,
 }
+
+# Probabilistic regime gating
+REGIME_MODEL_PATH = os.getenv("REGIME_MODEL_PATH", "models/regime_model.json")
+REGIME_PROB_MIN = float(os.getenv("REGIME_PROB_MIN", "0.45"))
+REGIME_PROB_TREND = float(os.getenv("REGIME_PROB_TREND", "0.45"))
+REGIME_PROB_RANGE = float(os.getenv("REGIME_PROB_RANGE", "0.45"))
+REGIME_PROB_EVENT = float(os.getenv("REGIME_PROB_EVENT", "0.40"))
+REGIME_PROB_PANIC = float(os.getenv("REGIME_PROB_PANIC", "0.40"))
+REGIME_ENTROPY_MAX = float(os.getenv("REGIME_ENTROPY_MAX", "1.3"))
+REGIME_ENTROPY_UNSTABLE = float(os.getenv("REGIME_ENTROPY_UNSTABLE", "1.5"))
+REGIME_TRANSITION_RATE_MAX = float(os.getenv("REGIME_TRANSITION_RATE_MAX", "6.0"))
+
+# Research pipeline degradation thresholds
+RESEARCH_DEGRADE_SHARPE_MIN = float(os.getenv("RESEARCH_DEGRADE_SHARPE_MIN", "0.2"))
+RESEARCH_DEGRADE_EXPECTANCY_MIN = float(os.getenv("RESEARCH_DEGRADE_EXPECTANCY_MIN", "0.0"))
+RESEARCH_DEGRADE_TAIL_CVAR_MAX = float(os.getenv("RESEARCH_DEGRADE_TAIL_CVAR_MAX", "-5.0"))
+
+# Hard regime gate settings
+EVENT_ALLOW_DEFINED_RISK = os.getenv("EVENT_ALLOW_DEFINED_RISK", "true").lower() == "true"
 
 # Micro-pattern (5m impulse + 5m pullback) for RANGE regime
 MICRO_5M_SEC = 300
@@ -318,6 +432,33 @@ SCALP_TARGET_ATR = 0.6
 SCALP_STOP_ATR = 0.3
 SCALP_MAX_HOLD_MINUTES = 3
 ML_MODEL_PATH = "models/xgb_live_model.pkl"
+ML_CHALLENGER_MODEL_PATH = os.getenv("ML_CHALLENGER_MODEL_PATH", "models/xgb_live_model_challenger.pkl")
+ML_TRAIN_DATA_PATH = os.getenv("ML_TRAIN_DATA_PATH", "data/ml_features.csv")
+ML_TRAIN_TARGET_COL = os.getenv("ML_TRAIN_TARGET_COL", "target")
+ML_HOLDOUT_FRAC = float(os.getenv("ML_HOLDOUT_FRAC", "0.2"))
+ML_SEGMENT_MIN_SAMPLES = int(os.getenv("ML_SEGMENT_MIN_SAMPLES", "200"))
+ML_DRIFT_WINDOW = int(os.getenv("ML_DRIFT_WINDOW", "200"))
+ML_PSI_THRESHOLD = float(os.getenv("ML_PSI_THRESHOLD", "0.2"))
+ML_KS_THRESHOLD = float(os.getenv("ML_KS_THRESHOLD", "0.2"))
+ML_REGIME_SHIFT_PSI = float(os.getenv("ML_REGIME_SHIFT_PSI", "0.2"))
+ML_CALIBRATION_DELTA = float(os.getenv("ML_CALIBRATION_DELTA", "0.05"))
+ML_CALIBRATION_BINS = int(os.getenv("ML_CALIBRATION_BINS", "10"))
+ML_SHARPE_DROP = float(os.getenv("ML_SHARPE_DROP", "0.3"))
+ML_CHALLENGER_MIN_DIFF = float(os.getenv("ML_CHALLENGER_MIN_DIFF", "0.01"))
+ML_PROMOTE_PVALUE = float(os.getenv("ML_PROMOTE_PVALUE", "0.1"))
+ML_PROMOTE_BOOTSTRAP = int(os.getenv("ML_PROMOTE_BOOTSTRAP", "500"))
+ML_DRIFT_BASELINE_PATH = os.getenv("ML_DRIFT_BASELINE_PATH", "logs/drift_baseline.json")
+ML_MODEL_DECISIONS_PATH = os.getenv("ML_MODEL_DECISIONS_PATH", "logs/model_decisions.jsonl")
+ML_EXEC_QUALITY_MIN = float(os.getenv("ML_EXEC_QUALITY_MIN", "55"))
+ML_GOV_ENABLE = os.getenv("ML_GOV_ENABLE", "true").lower() == "true"
+ML_AB_ENABLE = os.getenv("ML_AB_ENABLE", "true").lower() == "true"
+ML_AB_MIN_TRADES = int(os.getenv("ML_AB_MIN_TRADES", "50"))
+ML_ROLLBACK_ENABLE = os.getenv("ML_ROLLBACK_ENABLE", "true").lower() == "true"
+ML_ROLLBACK_PSI = float(os.getenv("ML_ROLLBACK_PSI", "0.4"))
+ML_ROLLBACK_KS = float(os.getenv("ML_ROLLBACK_KS", "0.4"))
+ML_ROLLBACK_SHARPE_DROP = float(os.getenv("ML_ROLLBACK_SHARPE_DROP", "0.6"))
+REGIME_TREND_VWAP_SLOPE = float(os.getenv("REGIME_TREND_VWAP_SLOPE", "0.002"))
+REGIME_VOL_Z_RANGE_VOL = float(os.getenv("REGIME_VOL_Z_RANGE_VOL", "1.0"))
 USE_DEEP_MODEL = os.getenv("USE_DEEP_MODEL", "false").lower() == "true"
 DEEP_MODEL_PATH = "models/lstm_options_model.h5"
 DEEP_SEQUENCE_LEN = 20
@@ -325,6 +466,40 @@ USE_MICRO_MODEL = os.getenv("USE_MICRO_MODEL", "false").lower() == "true"
 MICRO_MODEL_PATH = "models/microstructure_model.h5"
 ML_MIN_TRAIN_TRADES = 200
 ML_USE_ONLY_WITH_HISTORY = True
+
+# Strategy decay meta-model
+DECAY_WINDOW_TRADES = int(os.getenv("DECAY_WINDOW_TRADES", "50"))
+DECAY_PROB_THRESHOLD = float(os.getenv("DECAY_PROB_THRESHOLD", "0.7"))
+DECAY_DOWNSIZE_THRESHOLD = float(os.getenv("DECAY_DOWNSIZE_THRESHOLD", "0.5"))
+DECAY_DOWNSIZE_MULT = float(os.getenv("DECAY_DOWNSIZE_MULT", "0.6"))
+DECAY_SOFT_THRESHOLD = float(os.getenv("DECAY_SOFT_THRESHOLD", str(DECAY_DOWNSIZE_THRESHOLD)))
+DECAY_HARD_THRESHOLD = float(os.getenv("DECAY_HARD_THRESHOLD", str(DECAY_PROB_THRESHOLD)))
+DECAY_PERSIST_WINDOWS = int(os.getenv("DECAY_PERSIST_WINDOWS", "3"))
+DECAY_MODEL_PATH = os.getenv("DECAY_MODEL_PATH", "models/decay_model.pkl")
+DECAY_CALIBRATION_METHOD = os.getenv("DECAY_CALIBRATION_METHOD", "isotonic")
+DECAY_WEIGHTS = {
+    "exp": -0.6,
+    "sharpe_decay": 0.8,
+    "hit_drift": -0.5,
+    "fill_decay": 0.6,
+    "slippage_trend": 0.4,
+    "regime_shift": 0.6,
+    "psi": 0.7,
+    "ks": 0.4,
+    "importance_instability": 0.3,
+}
+
+# RL sizing agent
+RL_ENABLED = os.getenv("RL_ENABLED", os.getenv("RL_SIZE_ENABLE", "true")).lower() == "true"
+RL_ACTIONS = [0.0, 0.25, 0.5, 0.75, 1.0]
+RL_REWARD_MODE = os.getenv("RL_REWARD_MODE", "CRO_SAFE")
+RL_SHADOW_ONLY = os.getenv("RL_SHADOW_ONLY", os.getenv("RL_SIZE_SHADOW_MODE", "true")).lower() == "true"
+RL_SIZE_ENABLE = RL_ENABLED
+RL_SIZE_SHADOW_MODE = RL_SHADOW_ONLY
+RL_SIZE_MODEL_PATH = os.getenv("RL_SIZE_MODEL_PATH", "models/rl_size_agent.json")
+RL_SIZE_CHALLENGER_PATH = os.getenv("RL_SIZE_CHALLENGER_PATH", "models/rl_size_agent_challenger.json")
+RL_SIZE_EVAL_PATH = os.getenv("RL_SIZE_EVAL_PATH", "logs/rl_size_eval.json")
+RL_SIZE_PROMOTE_DIFF = float(os.getenv("RL_SIZE_PROMOTE_DIFF", "0.02"))
 
 # Manual approval
 MANUAL_APPROVAL = os.getenv("MANUAL_APPROVAL", "true").lower() == "true"
@@ -410,6 +585,9 @@ SCAN_INTERVAL = 60  # check for trades every 60 seconds
 # -------------------------------
 KITE_USE_API = os.getenv("KITE_USE_API", "true").lower() == "true"
 REQUIRE_LIVE_QUOTES = os.getenv("REQUIRE_LIVE_QUOTES", "true").lower() == "true"
+REQUIRE_LIVE_OPTION_QUOTES = os.getenv("REQUIRE_LIVE_OPTION_QUOTES", "true").lower() == "true"
+REQUIRE_DEPTH_QUOTES_FOR_TRADE = os.getenv("REQUIRE_DEPTH_QUOTES_FOR_TRADE", "true").lower() == "true"
+REQUIRE_VOLUME_FOR_TRADE = os.getenv("REQUIRE_VOLUME_FOR_TRADE", "true").lower() == "true"
 LIVE_QUOTE_ERROR_TTL_SEC = int(os.getenv("LIVE_QUOTE_ERROR_TTL_SEC", "300"))
 ALLOW_STALE_LTP = os.getenv("ALLOW_STALE_LTP", "true").lower() == "true"
 LTP_CACHE_TTL_SEC = int(os.getenv("LTP_CACHE_TTL_SEC", "300"))
@@ -417,11 +595,70 @@ FORCE_SYNTH_CHAIN_ON_FAIL = os.getenv("FORCE_SYNTH_CHAIN_ON_FAIL", "true").lower
 ALLOW_CLOSE_FALLBACK = os.getenv("ALLOW_CLOSE_FALLBACK", "true").lower() == "true"
 QUEUE_ROW_MAX_AGE_MIN = int(os.getenv("QUEUE_ROW_MAX_AGE_MIN", "120"))
 ENTRY_MISMATCH_PCT = float(os.getenv("ENTRY_MISMATCH_PCT", "0.25"))
+INDICATOR_STALE_SEC = int(os.getenv("INDICATOR_STALE_SEC", "120"))
+OHLC_BUFFER_MAX_BARS = int(os.getenv("OHLC_BUFFER_MAX_BARS", "500"))
+OHLC_MIN_BARS = int(os.getenv("OHLC_MIN_BARS", "30"))
+VWAP_WINDOW = int(os.getenv("VWAP_WINDOW", "20"))
+VWAP_SLOPE_WINDOW = int(os.getenv("VWAP_SLOPE_WINDOW", "10"))
+ATR_PERIOD = int(os.getenv("ATR_PERIOD", "14"))
+ADX_PERIOD = int(os.getenv("ADX_PERIOD", "14"))
+VOL_WINDOW = int(os.getenv("VOL_WINDOW", "30"))
 KITE_RATE_LIMIT_SLEEP = float(os.getenv("KITE_RATE_LIMIT_SLEEP", "0.35"))
 KITE_TRADES_SYNC = os.getenv("KITE_TRADES_SYNC", "true").lower() == "true"
 KITE_INSTRUMENTS_TTL = int(os.getenv("KITE_INSTRUMENTS_TTL", "3600"))
 KITE_USE_DEPTH = os.getenv("KITE_USE_DEPTH", "true").lower() == "true"
 KITE_STORE_TICKS = os.getenv("KITE_STORE_TICKS", "true").lower() == "true"
+
+# -------------------------------
+# Cross-asset features
+# -------------------------------
+CROSS_ASSET_SYMBOLS = {
+    "USDINR_SPOT": os.getenv("CROSS_USDINR_SPOT", "CDS:USDINR"),
+    "USDINR_FUT": os.getenv("CROSS_USDINR_FUT", "CDS:USDINR"),
+    "CRUDEOIL": os.getenv("CROSS_CRUDEOIL", "MCX:CRUDEOIL"),
+    "GIFT_NIFTY": os.getenv("CROSS_GIFT_NIFTY", ""),
+    "INDIA_VIX": os.getenv("CROSS_INDIA_VIX", "NSE:INDIAVIX"),
+    "BOND10Y": os.getenv("CROSS_BOND10Y", ""),
+}
+# +1 means risk-off when asset rises, -1 means risk-on
+CROSS_ASSET_RISK_SIGN = {
+    "USDINR_SPOT": 1,
+    "USDINR_FUT": 1,
+    "CRUDEOIL": 1,
+    "GIFT_NIFTY": -1,
+    "INDIA_VIX": 1,
+    "BOND10Y": 1,
+}
+CROSS_ASSET_REFRESH_SEC = int(os.getenv("CROSS_ASSET_REFRESH_SEC", "30"))
+CROSS_ASSET_MAXLEN = int(os.getenv("CROSS_ASSET_MAXLEN", "600"))
+
+# -------------------------------
+# Synthetic stress generator
+# -------------------------------
+STRESS_TEST_ENABLE = os.getenv("STRESS_TEST_ENABLE", "false").lower() == "true"
+STRESS_PATHS = int(os.getenv("STRESS_PATHS", "250"))
+STRESS_STEPS = int(os.getenv("STRESS_STEPS", "240"))
+STRESS_BLOCK_SIZE = int(os.getenv("STRESS_BLOCK_SIZE", "20"))
+STRESS_VOL_SCALE = float(os.getenv("STRESS_VOL_SCALE", "1.8"))
+STRESS_JUMP_LAMBDA = float(os.getenv("STRESS_JUMP_LAMBDA", "0.03"))
+STRESS_JUMP_SIGMA = float(os.getenv("STRESS_JUMP_SIGMA", "0.03"))
+STRESS_GAP_PROB = float(os.getenv("STRESS_GAP_PROB", "0.02"))
+STRESS_GAP_SIGMA = float(os.getenv("STRESS_GAP_SIGMA", "0.05"))
+STRESS_SPREAD_WIDEN_PCT = float(os.getenv("STRESS_SPREAD_WIDEN_PCT", "0.5"))
+STRESS_IV_SPIKE = float(os.getenv("STRESS_IV_SPIKE", "0.35"))
+STRESS_OB_THIN_FACTOR = float(os.getenv("STRESS_OB_THIN_FACTOR", "0.6"))
+
+# -------------------------------
+# Execution simulation controls
+# -------------------------------
+EXEC_SIM_TIMEOUT_SEC = float(os.getenv("EXEC_SIM_TIMEOUT_SEC", "3.0"))
+EXEC_SIM_POLL_SEC = float(os.getenv("EXEC_SIM_POLL_SEC", "0.25"))
+EXEC_MAX_CHASE_PCT = float(os.getenv("EXEC_MAX_CHASE_PCT", "0.002"))
+EXEC_MAX_REPLACE = int(os.getenv("EXEC_MAX_REPLACE", "2"))
+EXEC_REPRICE_PCT = float(os.getenv("EXEC_REPRICE_PCT", "0.002"))
+EXEC_SPREAD_WIDEN_PCT = float(os.getenv("EXEC_SPREAD_WIDEN_PCT", "0.5"))
+EXEC_MAX_SPREAD_PCT = float(os.getenv("EXEC_MAX_SPREAD_PCT", "0.015"))
+EXEC_FILL_PROB = float(os.getenv("EXEC_FILL_PROB", "0.85"))
 
 # -------------------------------
 # Greeks / Pricing

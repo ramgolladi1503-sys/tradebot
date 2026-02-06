@@ -1,15 +1,35 @@
 from config import config as cfg
 
 class RiskEngine:
-    def __init__(self):
+    def __init__(self, risk_state=None):
+        self.risk_state = risk_state
         self.max_daily_loss = getattr(cfg, "MAX_DAILY_LOSS", 0.15)
         self.max_trades = getattr(cfg, "MAX_TRADES_PER_DAY", 5)
         self.max_risk_per_trade = getattr(cfg, "MAX_RISK_PER_TRADE", 0.03)
         self.max_risk_eq = getattr(cfg, "MAX_RISK_PER_TRADE_EQ", 0.02)
         self.max_risk_fut = getattr(cfg, "MAX_RISK_PER_TRADE_FUT", 0.03)
         self.max_risk_opt = getattr(cfg, "MAX_RISK_PER_TRADE_OPT", 0.03)
+        # Apply risk profile overrides (if any)
+        try:
+            profile = getattr(cfg, "RISK_PROFILE", "").upper()
+            profs = getattr(cfg, "RISK_PROFILES", {})
+            if profile in profs:
+                p = profs[profile]
+                if "max_daily_loss" in p:
+                    self.max_daily_loss = p["max_daily_loss"]
+                if "max_trades" in p:
+                    self.max_trades = p["max_trades"]
+                if "risk_per_trade" in p:
+                    self.max_risk_per_trade = p["risk_per_trade"]
+                    self.max_risk_eq = p["risk_per_trade"]
+                    self.max_risk_fut = p["risk_per_trade"]
+                    self.max_risk_opt = p["risk_per_trade"]
+        except Exception:
+            pass
 
     def allow_trade(self, portfolio):
+        if self.risk_state and self.risk_state.mode == "HARD_HALT":
+            return False, "RiskState hard halt"
         # Daily profit lock
         try:
             if portfolio.get("daily_profit", 0) >= getattr(cfg, "DAILY_PROFIT_LOCK", 0.012):
@@ -66,6 +86,15 @@ class RiskEngine:
             risk_budget *= max(0.5, min(1.5, scale))
         if loss_streak >= getattr(cfg, "LOSS_STREAK_CAP", 3):
             risk_budget *= getattr(cfg, "LOSS_STREAK_RISK_MULT", 0.6)
+        # Optional size multiplier from alpha ensemble / policy layer
+        try:
+            size_mult = getattr(trade, "size_mult", None)
+            if size_mult is None and isinstance(trade, dict):
+                size_mult = trade.get("size_mult")
+            if size_mult:
+                risk_budget *= float(size_mult)
+        except Exception:
+            pass
         per_lot_risk = max(trade.entry_price - trade.stop_loss, 0.01) * lot_size
         if per_lot_risk <= 0:
             return 1

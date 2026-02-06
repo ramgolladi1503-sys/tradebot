@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from collections import defaultdict, deque
 from config import config as cfg
 
@@ -6,7 +7,99 @@ class StrategyTracker:
     def __init__(self, max_len=200):
         self.results = defaultdict(lambda: deque(maxlen=max_len))
         self.pnl_history = defaultdict(lambda: deque(maxlen=max_len))
+        self.exec_history = defaultdict(lambda: deque(maxlen=max_len))
         self.stats = defaultdict(lambda: {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0})
+        self.degraded = {}
+        self.decay_probs = {}
+        self.decay_state = {}
+        self.soft_disabled = {}
+        self._load_degraded()
+        self._load_decay_state()
+
+    def _load_degraded(self):
+        try:
+            path = Path("logs/strategy_degradation.json")
+            if path.exists():
+                self.degraded = json.loads(path.read_text()).get("degraded", {})
+        except Exception:
+            self.degraded = {}
+
+    def _load_decay_state(self):
+        try:
+            path = Path("logs/strategy_decay_state.json")
+            if path.exists():
+                raw = json.loads(path.read_text())
+                self.decay_state = raw.get("decay_state", {})
+                self.soft_disabled = raw.get("soft_disabled", {})
+        except Exception:
+            self.decay_state = {}
+            self.soft_disabled = {}
+
+    def set_degraded(self, degraded: dict):
+        self.degraded = degraded or {}
+        try:
+            Path("logs").mkdir(exist_ok=True)
+            Path("logs/strategy_degradation.json").write_text(json.dumps({"degraded": self.degraded}, indent=2))
+        except Exception:
+            pass
+
+    def set_decay(self, decay_probs: dict):
+        self.decay_probs = decay_probs or {}
+        try:
+            Path("logs").mkdir(exist_ok=True)
+            Path("logs/strategy_decay_probs.json").write_text(json.dumps(self.decay_probs, indent=2))
+        except Exception:
+            pass
+
+    def apply_decay_probs(self, decay_probs: dict):
+        """
+        Apply decay probabilities with persistence for quarantine and soft-disable.
+        """
+        self.set_decay(decay_probs)
+        soft_thr = float(getattr(cfg, "DECAY_SOFT_THRESHOLD", 0.5))
+        hard_thr = float(getattr(cfg, "DECAY_HARD_THRESHOLD", 0.75))
+        persist_n = int(getattr(cfg, "DECAY_PERSIST_WINDOWS", 3))
+        for strat, prob in (decay_probs or {}).items():
+            try:
+                prob = float(prob)
+            except Exception:
+                continue
+            # soft disable
+            if prob >= soft_thr:
+                self.soft_disabled[strat] = prob
+            else:
+                self.soft_disabled.pop(strat, None)
+            # persistence for quarantine
+            if prob >= hard_thr:
+                self.decay_state[strat] = self.decay_state.get(strat, 0) + 1
+            else:
+                self.decay_state[strat] = 0
+            if self.decay_state.get(strat, 0) >= persist_n:
+                self.degraded[strat] = {"reason": "decay_probability", "value": prob}
+        # persist degraded list
+        try:
+            self.set_degraded(self.degraded)
+        except Exception:
+            pass
+        # persist state
+        try:
+            Path("logs").mkdir(exist_ok=True)
+            Path("logs/strategy_decay_state.json").write_text(json.dumps({
+                "decay_state": self.decay_state,
+                "soft_disabled": self.soft_disabled,
+            }, indent=2))
+        except Exception:
+            pass
+
+    def decay_action(self, strategy_name):
+        prob = self.decay_probs.get(strategy_name)
+        if isinstance(prob, dict):
+            prob = prob.get("decay_probability")
+        if strategy_name in self.degraded:
+            return "hard", prob
+        if strategy_name in self.soft_disabled:
+            return "soft", self.soft_disabled.get(strategy_name)
+        return "ok", prob
 
     def record(self, strategy_name, pnl):
         if not strategy_name:
@@ -30,6 +123,17 @@ class StrategyTracker:
         st["utility"] = self._utility(strategy_name)
         st["rolling"] = self._rolling_stats(strategy_name, window=getattr(cfg, "BANDIT_WINDOW", 50))
 
+    def record_execution_quality(self, strategy_name, score):
+        if not strategy_name or score is None:
+            return
+        try:
+            score = float(score)
+        except Exception:
+            return
+        self.exec_history[strategy_name].append(score)
+        st = self.stats[strategy_name]
+        st["exec_quality_avg"] = self._exec_quality_avg(strategy_name)
+
     def win_rate(self, strategy_name):
         data = self.results.get(strategy_name, [])
         if not data:
@@ -38,6 +142,9 @@ class StrategyTracker:
 
     def is_disabled(self, strategy_name, min_trades=30, threshold=0.45):
         data = self.results.get(strategy_name, [])
+        if strategy_name in self.degraded:
+            return True
+        # Hard disable already handled via degraded
         # If live drift auto-disable is enabled, use WF thresholds too
         wf_min_trades = getattr(cfg, "WF_MIN_TRADES", min_trades)
         min_trades_eff = max(min_trades, wf_min_trades) if getattr(cfg, "LIVE_WF_DRIFT_DISABLE", True) else min_trades
@@ -74,7 +181,11 @@ class StrategyTracker:
         return {
             "results": {k: list(v) for k, v in self.results.items()},
             "pnl_history": {k: list(v) for k, v in self.pnl_history.items()},
-            "stats": self.stats
+            "exec_history": {k: list(v) for k, v in self.exec_history.items()},
+            "stats": self.stats,
+            "decay_probs": self.decay_probs,
+            "decay_state": self.decay_state,
+            "soft_disabled": self.soft_disabled,
         }
 
     def load(self, path):
@@ -88,8 +199,12 @@ class StrategyTracker:
                 for k, v in raw.get("pnl_history", {}).items():
                     dq = deque(v, maxlen=len(v))
                     self.pnl_history[k] = dq
+                for k, v in raw.get("exec_history", {}).items():
+                    dq = deque(v, maxlen=len(v))
+                    self.exec_history[k] = dq
                 for k, v in raw.get("stats", {}).items():
                     self.stats[k] = v
+                self.decay_probs = raw.get("decay_probs", {})
             else:
                 for k, v in raw.items():
                     dq = deque(v, maxlen=len(v))
@@ -169,6 +284,12 @@ class StrategyTracker:
         pnl = self.stats.get(strategy_name, {}).get("pnl", 0.0)
         dd = abs(self._max_drawdown(strategy_name))
         return round(pnl / (1 + dd), 3)
+
+    def _exec_quality_avg(self, strategy_name):
+        data = list(self.exec_history.get(strategy_name, []))
+        if not data:
+            return None
+        return round(sum(data) / max(len(data), 1), 2)
 
     def _rolling_sharpe(self, strategy_name, window=30):
         pnl_list = list(self.pnl_history.get(strategy_name, []))

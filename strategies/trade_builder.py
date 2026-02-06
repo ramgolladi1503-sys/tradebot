@@ -6,6 +6,7 @@ import sys
 import pandas as pd
 from config import config as cfg
 from core.execution_engine import ExecutionEngine
+from core.alpha_ensemble import AlphaEnsemble
 from core.trade_schema import Trade
 from typing import Optional
 from strategies.ensemble import ensemble_signal, equity_signal, futures_signal, mean_reversion_signal, event_breakout_signal, micro_pattern_signal
@@ -66,6 +67,7 @@ class TradeBuilder:
         self.deep_predictor: Optional[object] = None
         self.micro_predictor: Optional[object] = None
         self.execution = execution or ExecutionEngine()
+        self.alpha_ensemble = AlphaEnsemble() if getattr(cfg, "ALPHA_ENSEMBLE_ENABLE", True) else None
         self._ml_history_cache = {"ts": 0, "count": 0}
         self._expiry_zero_hero_count = 0
         self._expiry_zero_hero_by_symbol = {}
@@ -73,6 +75,35 @@ class TradeBuilder:
         self._expiry_zero_hero_disabled_until = {}
         self._expiry_zero_hero_pnl = {}
         self._reject_ctx = {}
+
+    def _apply_alpha_ensemble(
+        self,
+        base_conf: float,
+        xgb_conf: Optional[float],
+        deep_conf: Optional[float],
+        micro_conf: Optional[float],
+        market_data: dict,
+        quick_mode: bool = False,
+    ):
+        if not self.alpha_ensemble or not getattr(cfg, "ALPHA_ENSEMBLE_ENABLE", True):
+            return base_conf, None, None, 1.0
+        if xgb_conf is None and deep_conf is None and micro_conf is None and getattr(self.alpha_ensemble, "meta_model", None) is None:
+            return base_conf, None, None, 1.0
+        alpha = self.alpha_ensemble.combine(
+            xgb_conf=xgb_conf,
+            deep_conf=deep_conf,
+            micro_conf=micro_conf,
+            regime_probs=market_data.get("regime_probs") or {},
+            shock_score=market_data.get("shock_score") or 0.0,
+            cross=market_data,
+        )
+        alpha_conf = alpha.get("final_prob")
+        alpha_unc = alpha.get("uncertainty")
+        size_mult = alpha.get("size_mult", 1.0)
+        veto_th = getattr(cfg, "ALPHA_UNCERTAINTY_VETO", 0.78)
+        if alpha_unc is not None and alpha_unc >= veto_th and not quick_mode:
+            return None, alpha_conf, alpha_unc, size_mult
+        return float(alpha_conf), alpha_conf, alpha_unc, size_mult
 
     def _ml_history_count(self):
         try:
@@ -137,11 +168,14 @@ class TradeBuilder:
         except Exception:
             return entry_price, None, entry_price
 
-    def _signal_for_symbol(self, market_data):
+    def _signal_for_symbol(self, market_data, force_family: str | None = None):
         instrument = market_data.get("instrument", "OPT")
         regime_day = market_data.get("regime_day") or market_data.get("regime")
         day_type = market_data.get("day_type") or "UNKNOWN"
         minutes_since_open = market_data.get("minutes_since_open", 0) or 0
+        regime_probs = market_data.get("regime_probs") or {}
+        regime_entropy = market_data.get("regime_entropy", 0.0) or 0.0
+        unstable_regime = bool(market_data.get("unstable_regime_flag", False))
         # Time-of-day schedule buckets (open/mid/close)
         time_bucket = "MID"
         try:
@@ -166,6 +200,42 @@ class TradeBuilder:
         if instrument in ("EQ", "FUT"):
             return None
         else:
+            # Probabilistic regime gating
+            if regime_probs:
+                if unstable_regime or regime_entropy > getattr(cfg, "REGIME_ENTROPY_MAX", 1.3):
+                    return None
+                trend_p = float(regime_probs.get("TREND", 0.0))
+                range_p = max(float(regime_probs.get("RANGE", 0.0)), float(regime_probs.get("RANGE_VOLATILE", 0.0)))
+                event_p = float(regime_probs.get("EVENT", 0.0))
+                panic_p = float(regime_probs.get("PANIC", 0.0))
+                if event_p >= getattr(cfg, "REGIME_PROB_EVENT", 0.4):
+                    sig = event_breakout_signal(
+                        market_data.get("ltp", 0),
+                        market_data.get("atr", 0),
+                        market_data.get("ltp_change_window", 0),
+                    )
+                    if sig:
+                        sig.score = float(sig.score) * max(event_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))
+                        return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": "EVENT"}
+                if panic_p >= getattr(cfg, "REGIME_PROB_PANIC", 0.4):
+                    sig = ensemble_signal(market_data)
+                    if sig:
+                        sig.score = float(sig.score) * max(panic_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))
+                        return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": "PANIC"}
+                if trend_p >= getattr(cfg, "REGIME_PROB_TREND", 0.45):
+                    sig = ensemble_signal(market_data)
+                    if sig:
+                        sig.score = float(sig.score) * max(trend_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))
+                        return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": "TREND"}
+                if range_p >= getattr(cfg, "REGIME_PROB_RANGE", 0.45):
+                    sig = mean_reversion_signal(
+                        market_data.get("ltp", 0),
+                        market_data.get("vwap", 0),
+                        market_data.get("rsi_mom", 0),
+                    )
+                    if sig:
+                        sig.score = float(sig.score) * max(range_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))
+                        return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": "RANGE"}
             # Day-type gating: choose allowed strategies
             # Confidence threshold to allow switching strategies
             day_conf = market_data.get("day_confidence", 0) or 0
@@ -173,7 +243,17 @@ class TradeBuilder:
             if day_conf < conf_min:
                 day_type = "UNKNOWN"
 
-            if day_type in ("TREND_DAY", "PANIC_DAY", "EVENT_DAY"):
+            if force_family == "DEFINED_RISK":
+                return None
+            if force_family == "TREND":
+                sig = ensemble_signal(market_data)
+            elif force_family == "MEAN_REVERT":
+                sig = mean_reversion_signal(
+                    market_data.get("ltp", 0),
+                    market_data.get("vwap", 0),
+                    market_data.get("rsi_mom", 0),
+                )
+            elif day_type in ("TREND_DAY", "PANIC_DAY", "EVENT_DAY"):
                 if noon_fade:
                     sig = mean_reversion_signal(
                         market_data.get("ltp", 0),
@@ -258,7 +338,7 @@ class TradeBuilder:
             target = entry_price + base_atr * 1.5
             return stop_loss, target
 
-    def build(self, market_data, quick_mode=False, debug_reasons=False):
+    def build(self, market_data, quick_mode=False, debug_reasons=False, force_family: str | None = None, allow_fallbacks: bool = True, allow_baseline: bool = True):
         """
         Build a single best Trade candidate from market snapshot.
         Returns Trade or None.
@@ -266,17 +346,34 @@ class TradeBuilder:
         debug_mode = getattr(cfg, "DEBUG_TRADE_MODE", False)
         if debug_mode:
             debug_reasons = True
+        exec_mode = getattr(cfg, "EXECUTION_MODE", "SIM").upper()
+        # Hard disable quick/baseline paths in LIVE mode
+        if exec_mode == "LIVE":
+            if quick_mode:
+                return None
+            allow_fallbacks = False
+            allow_baseline = False
+        # Paper strict mode: disable baseline and relax reasons
+        if exec_mode == "PAPER" and getattr(cfg, "PAPER_STRICT_MODE", False):
+            allow_baseline = False
+            allow_fallbacks = False
         symbol = market_data["symbol"]
         ltp = market_data.get("ltp", 0)
         vwap = market_data.get("vwap", ltp)
         bias = market_data.get("bias", "Bullish")
         instrument = market_data.get("instrument", "OPT")
+        if market_data.get("quote_ok") is False:
+            if debug_reasons:
+                print(f"[TradeBuilder] Reject {symbol}: missing index bid/ask")
+            return None
 
-        signal = self._signal_for_symbol(market_data)
-        relax_reason = getattr(cfg, "RELAX_BLOCK_REASON", "") or ""
+        signal = self._signal_for_symbol(market_data, force_family=force_family)
+        relax_reason = "" if exec_mode == "LIVE" else (getattr(cfg, "RELAX_BLOCK_REASON", "") or "")
+        if exec_mode == "PAPER" and getattr(cfg, "PAPER_STRICT_MODE", False):
+            relax_reason = ""
         def _relax(reason: str) -> bool:
             return bool(relax_reason) and reason == relax_reason
-        if not signal and quick_mode:
+        if not signal and quick_mode and allow_fallbacks:
             # quick fallback signal based on simple bias / short-term move
             bias = market_data.get("bias", "NEUTRAL")
             ltp_change = market_data.get("ltp_change", 0)
@@ -293,7 +390,7 @@ class TradeBuilder:
                         signal = {"direction": "BUY_PUT", "reason": "Quick neutral fallback", "score": 0.52}
                 except Exception:
                     pass
-        if not signal and getattr(cfg, "ALLOW_BASELINE_SIGNAL", True):
+        if not signal and allow_baseline and getattr(cfg, "ALLOW_BASELINE_SIGNAL", True):
             try:
                 atr = market_data.get("atr", max(1.0, ltp * 0.002))
                 ltp_change = market_data.get("ltp_change", 0) or 0
@@ -419,14 +516,40 @@ class TradeBuilder:
         for opt in market_data.get("option_chain", []):
             if opt["type"] != opt_type:
                 continue
-            # Skip synthetic quotes (no live price)
-            if not opt.get("quote_ok", True):
+            # Hard reject missing bid/ask
+            if opt.get("quote_ok") is False:
                 if debug_reasons:
                     rejected.append(self._reject_record(symbol, opt, opt_type, "no_quote", atr=atr))
+                continue
+            # Skip synthetic quotes (no live price)
+            if not opt.get("quote_ok", True) or (getattr(cfg, "REQUIRE_LIVE_OPTION_QUOTES", False) and not opt.get("quote_live", True)):
+                if debug_reasons:
+                    rejected.append(self._reject_record(symbol, opt, opt_type, "no_quote", atr=atr))
+                continue
+            if getattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", False) and not opt.get("depth_ok", False):
+                if debug_reasons:
+                    rejected.append(self._reject_record(symbol, opt, opt_type, "no_depth", atr=atr))
+                continue
+            if opt.get("bid") is None or opt.get("ask") is None:
+                if debug_reasons:
+                    rejected.append(self._reject_record(symbol, opt, opt_type, "no_bid_ask", atr=atr))
+                continue
+            if getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False) and not opt.get("volume", 0):
+                if debug_reasons:
+                    rejected.append(self._reject_record(symbol, opt, opt_type, "no_volume", atr=atr))
                 continue
             # Liquidity guard
             spread_pct = (opt["ask"] - opt["bid"]) / opt["ltp"] if opt["ltp"] else 1
             max_spread = getattr(cfg, "MAX_SPREAD_PCT_QUICK", getattr(cfg, "MAX_SPREAD_PCT", 0.015)) if quick_mode else getattr(cfg, "MAX_SPREAD_PCT", 0.015)
+            if exec_mode == "PAPER" and getattr(cfg, "PAPER_STRICT_MODE", False):
+                if not opt.get("quote_ok", False):
+                    if debug_reasons:
+                        rejected.append(self._reject_record(symbol, opt, opt_type, "no_quote", atr=atr))
+                    continue
+                if spread_pct > max_spread:
+                    if debug_reasons:
+                        rejected.append(self._reject_record(symbol, opt, opt_type, "spread_pct", atr=atr))
+                    continue
             if not quick_mode:
                 vol = opt.get("volume", 0)
                 if vol and vol < getattr(cfg, "MIN_VOLUME_FILTER", 500) and not _relax("low_volume"):
@@ -581,24 +704,62 @@ class TradeBuilder:
             use_ml = True
             if getattr(cfg, "ML_USE_ONLY_WITH_HISTORY", True):
                 use_ml = self._ml_history_count() >= getattr(cfg, "ML_MIN_TRAIN_TRADES", 200)
+            model_type = "xgb"
+            model_version = getattr(self.predictor, "model_version", None)
+            shadow_version = getattr(self.predictor, "shadow_version", None)
+            shadow_confidence = None
+            alpha_conf = None
+            alpha_unc = None
+            size_mult = 1.0
+            xgb_conf = None
+            deep_conf = None
+            micro_conf = None
             if use_ml:
+                xgb_conf = self.predictor.predict_confidence(feats)
+                if getattr(cfg, "ML_AB_ENABLE", False):
+                    shadow_confidence = self.predictor.predict_confidence_shadow(feats)
                 if cfg.USE_DEEP_MODEL and seq_buffer is not None:
-                    confidence = self._get_deep_predictor().predict_confidence(seq_buffer)
-                else:
-                    confidence = self.predictor.predict_confidence(feats)
+                    deep_pred = self._get_deep_predictor()
+                    deep_conf = deep_pred.predict_confidence(seq_buffer)
+                    model_type = "deep"
+                    model_version = getattr(deep_pred, "model_version", model_version)
+                confidence = deep_conf if deep_conf is not None else xgb_conf
                 # Microstructure overlay
                 if cfg.USE_MICRO_MODEL:
                     micro_features = [
                         float(opt.get("spread_pct", (opt["ask"] - opt["bid"]) / opt["ltp"] if opt["ltp"] else 0)),
                         float(opt.get("volume", 0)),
-                        float(opt.get("oi_change", 0))
+                        float(opt.get("oi_change", 0)),
+                        float(market_data.get("fx_ret_5m", 0.0) or market_data.get("x_usdinr_ret5") or 0.0),
+                        float(market_data.get("vix_z", 0.0) or market_data.get("x_india_vix_z") or 0.0),
+                        float(market_data.get("crude_ret_15m", 0.0) or market_data.get("x_crude_ret15") or 0.0),
+                        float(market_data.get("corr_fx_nifty", 0.0) or market_data.get("x_usdinr_corr_nifty") or 0.0),
                     ]
                     micro_conf = self._get_micro_predictor().predict_confidence(micro_features)
                     opt["micro_pred"] = micro_conf
-                    confidence = (confidence + micro_conf) / 2.0
+                    if confidence is None:
+                        confidence = micro_conf
+                    else:
+                        confidence = (confidence + micro_conf) / 2.0
+                if confidence is None:
+                    confidence = 0.5
             else:
                 # Pure price/volume logic: use signal score as confidence proxy
                 confidence = max(0.5, min(1.0, signal.get("score", 0.5)))
+
+            # Alpha ensemble fusion
+            adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
+                confidence, xgb_conf, deep_conf, micro_conf, market_data, quick_mode=quick_mode
+            )
+            if adj_conf is None and not _relax("confidence"):
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "alpha_uncertainty", atr=atr)
+                    rec["confidence"] = round(confidence, 3)
+                    rec["alpha_uncertainty"] = alpha_unc
+                    debug_candidates.append(rec)
+                    rejected.append(rec)
+                continue
+            confidence = adj_conf
 
             # Latency penalty
             confidence *= self.execution.latency_penalty(opt.get("timestamp", datetime.now().timestamp()))
@@ -723,6 +884,13 @@ class TradeBuilder:
                 trade_score=round(score, 2),
                 trade_alignment=round(score_pack.get("alignment", 0), 2),
                 trade_score_detail=score_pack,
+                model_type=model_type,
+                model_version=model_version,
+                shadow_model_version=shadow_version,
+                shadow_confidence=shadow_confidence,
+                alpha_confidence=alpha_conf,
+                alpha_uncertainty=alpha_unc,
+                size_mult=size_mult,
             )
             candidates.append(trade)
 
@@ -740,6 +908,8 @@ class TradeBuilder:
                 print(f"[TradeBuilder] Top candidate {symbol} {rec.get('strike')} {rec.get('type')} rejected by {rec.get('reason')} (ltp={rec.get('ltp')})")
 
         if not candidates:
+            if not allow_fallbacks:
+                return None
             # Quick fallback: synthesize ATM option if chain is empty
             if quick_mode and market_data.get("ltp", 0):
                 try:
@@ -784,6 +954,9 @@ class TradeBuilder:
                         day_type=market_data.get("day_type", "UNKNOWN"),
                         entry_condition=entry_condition,
                         entry_ref_price=entry_ref_price,
+                        alpha_confidence=None,
+                        alpha_uncertainty=None,
+                        size_mult=1.0,
                     )
                     return trade
                 except Exception:
@@ -817,6 +990,9 @@ class TradeBuilder:
                     regime=market_data.get("regime", "NEUTRAL"),
                     tier="MAIN",
                     day_type=market_data.get("day_type", "UNKNOWN"),
+                    alpha_confidence=None,
+                    alpha_uncertainty=None,
+                    size_mult=1.0,
                 )
                 if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
                     return trade
@@ -876,8 +1052,20 @@ class TradeBuilder:
             use_ml = True
             if getattr(cfg, "ML_USE_ONLY_WITH_HISTORY", True):
                 use_ml = self._ml_history_count() >= getattr(cfg, "ML_MIN_TRAIN_TRADES", 200)
+            model_type = "xgb"
+            model_version = getattr(self.predictor, "model_version", None)
+            shadow_version = getattr(self.predictor, "shadow_version", None)
+            shadow_confidence = None
+            alpha_conf = None
+            alpha_unc = None
+            size_mult = 1.0
+            xgb_conf = None
+            micro_conf = None
             if use_ml:
-                confidence = self.predictor.predict_confidence(feats)
+                xgb_conf = self.predictor.predict_confidence(feats)
+                confidence = xgb_conf
+                if getattr(cfg, "ML_AB_ENABLE", False):
+                    shadow_confidence = self.predictor.predict_confidence_shadow(feats)
             else:
                 confidence = max(0.55, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))
             if cfg.USE_MICRO_MODEL:
@@ -888,6 +1076,12 @@ class TradeBuilder:
                 ]
                 micro_conf = self._get_micro_predictor().predict_confidence(micro_features)
                 confidence = (confidence + micro_conf) / 2.0
+            # Alpha ensemble fusion (exploratory: downsize but don't veto)
+            adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
+                confidence, xgb_conf, None, micro_conf, market_data, quick_mode=True
+            )
+            if adj_conf is not None:
+                confidence = adj_conf
             if confidence < getattr(cfg, "ZERO_HERO_MIN_PROBA", 0.6):
                 continue
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
@@ -927,6 +1121,13 @@ class TradeBuilder:
                 opt_bid=opt.get("bid"),
                 opt_ask=opt.get("ask"),
                 quote_ok=opt.get("quote_ok", True),
+                model_type=model_type,
+                model_version=model_version,
+                shadow_model_version=shadow_version,
+                shadow_confidence=shadow_confidence,
+                alpha_confidence=alpha_conf,
+                alpha_uncertainty=alpha_unc,
+                size_mult=size_mult,
             )
             candidates.append(trade)
         if not candidates:
@@ -1017,6 +1218,14 @@ class TradeBuilder:
             stop_loss = max(entry_price - max(3, (tgt_points * delta) * 0.5), entry_price * 0.2)
 
             confidence = max(0.6, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))
+            alpha_conf = None
+            alpha_unc = None
+            size_mult = 1.0
+            adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
+                confidence, None, None, None, market_data, quick_mode=True
+            )
+            if adj_conf is not None:
+                confidence = adj_conf
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-ZEROEXP-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
                 timestamp=datetime.now(),
@@ -1043,6 +1252,9 @@ class TradeBuilder:
                 opt_bid=opt.get("bid"),
                 opt_ask=opt.get("ask"),
                 quote_ok=opt.get("quote_ok", True),
+                alpha_confidence=alpha_conf,
+                alpha_uncertainty=alpha_unc,
+                size_mult=size_mult,
             )
             candidates.append(trade)
         if not candidates:
@@ -1343,8 +1555,20 @@ class TradeBuilder:
             use_ml = True
             if getattr(cfg, "ML_USE_ONLY_WITH_HISTORY", True):
                 use_ml = self._ml_history_count() >= getattr(cfg, "ML_MIN_TRAIN_TRADES", 200)
+            model_type = "xgb"
+            model_version = getattr(self.predictor, "model_version", None)
+            shadow_version = getattr(self.predictor, "shadow_version", None)
+            shadow_confidence = None
+            alpha_conf = None
+            alpha_unc = None
+            size_mult = 1.0
+            xgb_conf = None
+            micro_conf = None
             if use_ml:
-                confidence = self.predictor.predict_confidence(feats)
+                xgb_conf = self.predictor.predict_confidence(feats)
+                confidence = xgb_conf
+                if getattr(cfg, "ML_AB_ENABLE", False):
+                    shadow_confidence = self.predictor.predict_confidence_shadow(feats)
             else:
                 confidence = max(0.5, min(1.0, 0.6 + (atr / max(ltp, 1)) * 10))
             if cfg.USE_MICRO_MODEL:
@@ -1355,6 +1579,12 @@ class TradeBuilder:
                 ]
                 micro_conf = self._get_micro_predictor().predict_confidence(micro_features)
                 confidence = (confidence + micro_conf) / 2.0
+            # Alpha ensemble fusion (exploratory: downsize but don't veto)
+            adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
+                confidence, xgb_conf, None, micro_conf, market_data, quick_mode=True
+            )
+            if adj_conf is not None:
+                confidence = adj_conf
             if confidence < getattr(cfg, "SCALP_MIN_PROBA", 0.58):
                 continue
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
@@ -1394,6 +1624,13 @@ class TradeBuilder:
                 opt_bid=opt.get("bid"),
                 opt_ask=opt.get("ask"),
                 quote_ok=opt.get("quote_ok", True),
+                model_type=model_type,
+                model_version=model_version,
+                shadow_model_version=shadow_version,
+                shadow_confidence=shadow_confidence,
+                alpha_confidence=alpha_conf,
+                alpha_uncertainty=alpha_unc,
+                size_mult=size_mult,
             )
             candidates.append(trade)
         if not candidates:

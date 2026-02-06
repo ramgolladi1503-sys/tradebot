@@ -26,9 +26,14 @@ def init_db():
             fill_price REAL,
             latency_ms REAL,
             slippage REAL,
-            micro_pred REAL
+            micro_pred REAL,
+            execution_quality REAL
         )
         """)
+        try:
+            conn.execute("ALTER TABLE trades ADD COLUMN execution_quality REAL")
+        except Exception:
+            pass
         conn.execute("""
         CREATE TABLE IF NOT EXISTS outcomes (
             trade_id TEXT,
@@ -86,14 +91,14 @@ def insert_trade(entry):
         conn.execute("""
         INSERT OR REPLACE INTO trades
         (trade_id, timestamp, symbol, instrument, instrument_token, side, entry, stop_loss, target, qty,
-         confidence, strategy, regime, fill_price, latency_ms, slippage, micro_pred)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         confidence, strategy, regime, fill_price, latency_ms, slippage, micro_pred, execution_quality)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             entry.get("trade_id"), entry.get("timestamp"), entry.get("symbol"), entry.get("instrument"),
             entry.get("instrument_token"), entry.get("side"), entry.get("entry"), entry.get("stop_loss"),
             entry.get("target"), entry.get("qty"), entry.get("confidence"), entry.get("strategy"),
             entry.get("regime"), entry.get("fill_price"), entry.get("latency_ms"), entry.get("slippage"),
-            entry.get("micro_pred")
+            entry.get("micro_pred"), entry.get("execution_quality_score") or entry.get("execution_quality")
         ))
 
 def insert_outcome(outcome):

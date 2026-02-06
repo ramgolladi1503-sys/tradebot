@@ -1,4 +1,6 @@
 import pandas as pd
+from datetime import datetime
+
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -43,8 +45,8 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # ADX proxy
     df["adx_14"] = _adx(df)
 
-    # Clean NaNs
     return df
+
 
 def _adx(df, period=14):
     high = df["high"]
@@ -65,6 +67,45 @@ def _adx(df, period=14):
     dx = (abs(plus_di - minus_di) / (plus_di + minus_di)).replace([pd.NA, pd.NaT], 0) * 100
     return dx.rolling(period).mean()
 
+
+def _time_bucket(ts):
+    try:
+        h = ts.hour
+    except Exception:
+        h = datetime.now().hour
+    if h < 11:
+        return "OPEN"
+    if h < 14:
+        return "MID"
+    return "CLOSE"
+
+
+def _regime_label(regime):
+    r = str(regime or "").upper()
+    mapping = {
+        "TREND": "TREND",
+        "RANGE": "RANGE",
+        "RANGE_VOLATILE": "RANGE_VOLATILE",
+        "EVENT": "EVENT",
+        "PANIC": "PANIC",
+    }
+    return mapping.get(r, "NEUTRAL")
+
+
+def _vol_quartile(vol_z):
+    try:
+        v = float(vol_z)
+    except Exception:
+        return 2
+    if v <= -0.5:
+        return 1
+    if v <= 0.5:
+        return 2
+    if v <= 1.5:
+        return 3
+    return 4
+
+
 def build_trade_features(market_data, opt):
     """
     Build a feature dict for ML scoring.
@@ -78,7 +119,27 @@ def build_trade_features(market_data, opt):
     moneyness = (ltp - opt["strike"]) / ltp if ltp else 0
     vwap_dist = (ltp - vwap) / vwap if vwap else 0
 
-    return {
+    regime = market_data.get("primary_regime") or market_data.get("regime")
+    time_bucket = market_data.get("time_bucket") or _time_bucket(market_data.get("timestamp", datetime.now()))
+    is_expiry = market_data.get("day_type") in ("EXPIRY_DAY",)
+    vol_q = market_data.get("vol_quartile")
+    if vol_q is None:
+        vol_q = _vol_quartile(market_data.get("vol_z", 0))
+
+    fx_ret_5m = market_data.get("fx_ret_5m")
+    if fx_ret_5m is None:
+        fx_ret_5m = market_data.get("x_usdinr_ret5") or market_data.get("x_fx_ret5")
+    vix_z = market_data.get("vix_z")
+    if vix_z is None:
+        vix_z = market_data.get("x_india_vix_z") or market_data.get("x_vix_z")
+    crude_ret_15m = market_data.get("crude_ret_15m")
+    if crude_ret_15m is None:
+        crude_ret_15m = market_data.get("x_crude_ret15") or market_data.get("x_crudeoil_ret15")
+    corr_fx_nifty = market_data.get("corr_fx_nifty")
+    if corr_fx_nifty is None:
+        corr_fx_nifty = market_data.get("x_usdinr_corr_nifty") or market_data.get("x_fx_corr_nifty")
+
+    feats = {
         "ltp": opt["ltp"],
         "bid": opt["bid"],
         "ask": opt["ask"],
@@ -90,5 +151,20 @@ def build_trade_features(market_data, opt):
         "is_call": 1 if opt["type"] == "CE" else 0,
         "vwap_slope": market_data.get("vwap_slope", 0),
         "rsi_mom": market_data.get("rsi_mom", 0),
-        "vol_z": market_data.get("vol_z", 0)
+        "vol_z": market_data.get("vol_z", 0),
+        "fx_ret_5m": 0.0 if fx_ret_5m is None else fx_ret_5m,
+        "vix_z": 0.0 if vix_z is None else vix_z,
+        "crude_ret_15m": 0.0 if crude_ret_15m is None else crude_ret_15m,
+        "corr_fx_nifty": 0.0 if corr_fx_nifty is None else corr_fx_nifty,
+        "seg_regime": _regime_label(regime),
+        "seg_bucket": str(time_bucket).upper(),
+        "seg_expiry": 1 if is_expiry else 0,
+        "seg_vol_q": int(vol_q),
     }
+    try:
+        for k, v in (market_data or {}).items():
+            if isinstance(k, str) and k.startswith("x_"):
+                feats[k] = 0.0 if v is None else v
+    except Exception:
+        pass
+    return feats

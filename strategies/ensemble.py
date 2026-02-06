@@ -111,6 +111,8 @@ def ensemble_signal(market_data):
         # fallback: short-term momentum when indicators missing
         try:
             from config import config as cfg
+            if not getattr(cfg, "ALLOW_BASELINE_SIGNAL", True):
+                return None
             atr = atr or 0
             if atr > 0 and abs(ltp_change) > atr * getattr(cfg, "LTP_MOM_ATR_MULT", 0.2):
                 direction = "BUY_CALL" if ltp_change > 0 else "BUY_PUT"

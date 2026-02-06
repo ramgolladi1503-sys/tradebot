@@ -5,8 +5,9 @@ class StrategyAllocator:
     """
     Bandit-style allocator: epsilon-greedy and weights by Sharpe (fallback to profit factor).
     """
-    def __init__(self, tracker):
+    def __init__(self, tracker, risk_state=None):
         self.tracker = tracker
+        self.risk_state = risk_state
         self._wf_cache = {"ts": 0, "allowed": None}
 
     def _load_wf_allowed(self):
@@ -47,13 +48,46 @@ class StrategyAllocator:
             weight = float(util)
         else:
             weight = max(0.1, float(sharpe) + 1.0)
+        # Execution quality penalty (0-100 scaled)
+        exec_q = stats.get("exec_quality_avg", None)
+        if exec_q is not None:
+            try:
+                weight *= max(0.5, min(1.2, float(exec_q) / 100.0 + 0.5))
+            except Exception:
+                pass
+        # Decay probability downsize
+        try:
+            dp = self.tracker.decay_probs.get(strategy_name, {}).get("decay_probability")
+            if dp is not None:
+                if dp >= float(getattr(cfg, "DECAY_DOWNSIZE_THRESHOLD", 0.5)):
+                    weight *= float(getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6))
+        except Exception:
+            pass
         return max(cfg.STRATEGY_MIN_WEIGHT, min(cfg.STRATEGY_MAX_WEIGHT, weight))
 
     def should_trade(self, strategy_name):
+        if self.risk_state:
+            if self.risk_state.mode == "HARD_HALT":
+                return False
+            if strategy_name in self.risk_state.quarantined:
+                return False
+            if self.risk_state.mode == "RECOVERY_MODE":
+                if "SPREAD" not in str(strategy_name):
+                    return False
+            if self.risk_state.mode == "SOFT_HALT":
+                if strategy_name in ("SCALP", "ZERO_HERO", "ZERO_HERO_EXPIRY") or str(strategy_name).startswith("QUICK"):
+                    return False
         if getattr(cfg, "STRATEGY_WF_LOCK_ENABLE", False):
             allowed = self._load_wf_allowed()
             if allowed is not None and strategy_name not in allowed:
                 return False
+        # Decay probability hard block
+        try:
+            dp = self.tracker.decay_probs.get(strategy_name, {}).get("decay_probability")
+            if dp is not None and dp >= float(getattr(cfg, "DECAY_PROB_THRESHOLD", 0.7)):
+                return False
+        except Exception:
+            pass
         window = getattr(cfg, "BANDIT_WINDOW", 50)
         if cfg.BANDIT_MODE == "BAYES":
             stats = self.tracker.stats.get(strategy_name, {})

@@ -31,3 +31,10 @@ class Trade:
     trade_score: float | None = None
     trade_alignment: float | None = None
     trade_score_detail: dict | None = None
+    model_type: str | None = None
+    model_version: str | None = None
+    shadow_model_version: str | None = None
+    shadow_confidence: float | None = None
+    alpha_confidence: float | None = None
+    alpha_uncertainty: float | None = None
+    size_mult: float = 1.0

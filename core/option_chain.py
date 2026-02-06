@@ -147,6 +147,9 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
     This is a placeholder until live option chain is wired from broker API.
     """
     try:
+        # No synthetic chains in LIVE mode
+        if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE" and force_synthetic:
+            return []
         step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {})
         step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))
         if strikes_around is None:
@@ -221,35 +224,42 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 ts = f"{exchange}:{inst['tradingsymbol']}"
                 q = quotes.get(ts, {})
                 ltp_opt = q.get("last_price", 0) or 0
-                quote_ok = ltp_opt > 0
                 quote_source = "live"
                 quote_live = True
-                if not quote_ok:
-                    # fallback premium proxy if quote missing (flagged as synthetic)
-                    base = max(min_prem, min(max_prem, (ltp * 0.004)))
-                    ltp_opt = max(min_prem, min(max_prem, base))
-                    quote_source = "synthetic"
+                if not ltp_opt:
+                    quote_source = "missing"
                     quote_live = False
+                    if getattr(cfg, "REQUIRE_LIVE_OPTION_QUOTES", False):
+                        continue
                 depth = q.get("depth") or {}
                 bid = depth.get("buy", [{}])[0].get("price")
                 ask = depth.get("sell", [{}])[0].get("price")
                 depth_ok = bool(bid) and bool(ask)
-                if not depth_ok:
-                    # fallback: synthesize a narrow spread around LTP
-                    spread_pct = getattr(cfg, "QUOTE_FALLBACK_SPREAD_PCT", 0.002)
-                    bid = round(ltp_opt * (1 - spread_pct), 2)
-                    ask = round(ltp_opt * (1 + spread_pct), 2)
-                    if quote_source == "live":
-                        quote_source = "no_depth"
-                # consider quote OK if LTP is present (depth optional)
-                quote_ok = bool(ltp_opt > 0)
+                if not depth_ok and quote_source == "live":
+                    quote_source = "no_depth"
+                if getattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", False) and not depth_ok:
+                    if getattr(cfg, "REQUIRE_LIVE_OPTION_QUOTES", False):
+                        continue
+                quote_ts = q.get("timestamp") or q.get("last_trade_time")
+                if hasattr(quote_ts, "isoformat"):
+                    quote_ts = quote_ts.isoformat()
+                # quote_ok requires bid/ask
+                quote_ok = bool(ltp_opt > 0 and bid and ask)
+                spread_pct = None
+                if bid and ask:
+                    base = ltp_opt or ((bid + ask) / 2.0)
+                    if base:
+                        spread_pct = (ask - bid) / base
                 volume = q.get("volume", 0)
                 oi = q.get("oi", 0)
                 dte = max((expiry_date - date.today()).days, 1)
                 t = dte / 365.0
                 is_call = inst.get("instrument_type") == "CE"
-                vol = implied_vol(ltp_opt, ltp, inst["strike"], t, is_call=is_call)
-                g = greeks(ltp, inst["strike"], t, vol, is_call=is_call)
+                vol = None
+                g = {}
+                if ltp_opt and ltp_opt > 0:
+                    vol = implied_vol(ltp_opt, ltp, inst["strike"], t, is_call=is_call)
+                    g = greeks(ltp, inst["strike"], t, vol, is_call=is_call)
                 moneyness = 0
                 if ltp and inst["strike"]:
                     moneyness = (ltp - inst["strike"]) / ltp
@@ -260,11 +270,16 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     "ltp": ltp_opt,
                     "bid": bid,
                     "ask": ask,
+                    "bid_qty": depth.get("buy", [{}])[0].get("quantity") if depth else None,
+                    "ask_qty": depth.get("sell", [{}])[0].get("quantity") if depth else None,
                     "volume": volume,
                     "oi": oi,
                     "quote_ok": quote_ok,
                     "quote_source": quote_source,
                     "quote_live": quote_live,
+                    "quote_ts": quote_ts,
+                    "spread_pct": spread_pct,
+                    "depth_ok": depth_ok,
                     "instrument_token": inst.get("instrument_token"),
                     "iv": vol,
                     "moneyness": moneyness,
@@ -330,6 +345,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True) and not force_synthetic:
                 return []
             # fallback to synthetic chain when live chain is unavailable
+            if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE":
+                return []
             step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {})
             step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))
             atm = _infer_atm_strike(ltp, step)

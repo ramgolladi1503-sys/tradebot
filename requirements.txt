@@ -9,3 +9,6 @@ flask
 openpyxl
 stable-baselines3
 requests
+xgboost
+scikit-learn
+pyarrow
