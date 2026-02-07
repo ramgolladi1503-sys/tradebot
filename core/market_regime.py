@@ -1,49 +1,22 @@
 # core/market_regime.py
+# LEGACY WRAPPER; DO NOT ADD LOGIC
 
-from core.market_data import get_nifty_ltp, get_index_vwap
+from core.market_data import get_current_regime
+
 
 def detect_market_regime():
     """
-    Returns:
-        dict:
-            regime (str)
-            confidence (int 0–100)
-            reason (str)
+    Legacy API wrapper. Returns canonical regime output plus legacy fields.
     """
-
-    ltp = get_nifty_ltp()
-    vwap = get_index_vwap("NIFTY")
-
-    if not ltp or not vwap:
-        return {
-            "regime": "UNKNOWN",
-            "confidence": 0,
-            "reason": "Market data unavailable"
-        }
-
-    distance_pct = abs(ltp - vwap) / vwap * 100
-
-    # -------- TREND DAY --------
-    if distance_pct >= 0.35:
-        direction = "UP" if ltp > vwap else "DOWN"
-        return {
-            "regime": "TREND_DAY",
-            "confidence": 75,
-            "reason": f"Price trending {direction} away from VWAP ({round(distance_pct,2)}%)"
-        }
-
-    # -------- BREAKOUT ATTEMPT --------
-    if 0.20 <= distance_pct < 0.35:
-        return {
-            "regime": "BREAKOUT_ATTEMPT",
-            "confidence": 60,
-            "reason": f"VWAP expansion attempt ({round(distance_pct,2)}%)"
-        }
-
-    # -------- RANGE DAY (default) --------
+    snap = get_current_regime("NIFTY")
+    probs = snap.get("regime_probs") or {}
+    max_prob = max(probs.values()) if probs else 0.0
     return {
-        "regime": "RANGE_DAY",
-        "confidence": 65,
-        "reason": "Price oscillating near VWAP"
+        "regime": snap.get("primary_regime", "NEUTRAL"),
+        "confidence": int(round(max_prob * 100)),
+        "reason": "LEGACY WRAPPER; DO NOT ADD LOGIC",
+        "regime_probs": snap.get("regime_probs"),
+        "regime_entropy": snap.get("regime_entropy"),
+        "unstable_regime_flag": snap.get("unstable_regime_flag"),
+        "regime_ts": snap.get("regime_ts"),
     }
-

@@ -45,5 +45,6 @@ if __name__ == "__main__":
         OUT_PATH.parent.mkdir(exist_ok=True)
         OUT_PATH.write_text(json.dumps(payload, indent=2))
         print(payload)
-        if latest["pnl"] <= -abs(getattr(cfg, "DAILY_LOSS_LIMIT", cfg.CAPITAL * cfg.MAX_DAILY_LOSS)):
-            send_telegram_message(f"Risk monitor alert: daily PnL {latest['pnl']:.2f} breached limit.")
+        pnl_pct = (latest["pnl"] / max(1.0, getattr(cfg, "CAPITAL", 1.0)))
+        if pnl_pct <= -abs(getattr(cfg, "MAX_DAILY_LOSS_PCT", cfg.MAX_DAILY_LOSS)):
+            send_telegram_message(f"Risk monitor alert: daily PnL {latest['pnl']:.2f} ({pnl_pct:.2%}) breached limit.")

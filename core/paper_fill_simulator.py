@@ -25,7 +25,8 @@ class PaperFillSimulator:
         self.timeout_sec = timeout_sec
         self.poll_sec = poll_sec
 
-    def simulate(self, trade, limit_price, snapshot_stream, max_replaces=2, reprice_pct=0.002, max_chase_pct=0.002):
+    def simulate(self, trade, limit_price, snapshot_stream, max_replaces=2, reprice_pct=0.002, max_chase_pct=0.002,
+                 max_quote_age_sec=None, max_spread_pct=None, spread_widen_pct=None):
         if snapshot_stream is None:
             return False, None, {
                 "decision_mid": None,
@@ -59,6 +60,7 @@ class PaperFillSimulator:
         vwap_n = 0
         replaces = 0
         current_limit = limit_price
+        attempts = []
 
         while time.time() - start <= self.timeout_sec:
             snap = _next_snapshot()
@@ -68,6 +70,7 @@ class PaperFillSimulator:
 
             bid = snap.get("bid") or 0
             ask = snap.get("ask") or 0
+            ts = snap.get("ts")
             if bid <= 0 or ask <= 0:
                 time.sleep(self.poll_sec)
                 continue
@@ -85,6 +88,49 @@ class PaperFillSimulator:
             last_mid = mid
             vwap_sum += mid
             vwap_n += 1
+            spread = max(ask - bid, 0.0)
+            attempts.append({
+                "ts": ts,
+                "bid": bid,
+                "ask": ask,
+                "spread": round(spread, 6),
+            })
+            if ts is None:
+                return False, None, {
+                    "decision_mid": round(decision_mid, 2) if decision_mid is not None else None,
+                    "decision_spread": round(decision_spread, 4) if decision_spread is not None else None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "missing_quote_ts",
+                    "attempts": attempts,
+                }
+            if max_quote_age_sec is not None and (time.time() - ts) > max_quote_age_sec:
+                return False, None, {
+                    "decision_mid": round(decision_mid, 2) if decision_mid is not None else None,
+                    "decision_spread": round(decision_spread, 4) if decision_spread is not None else None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "stale_quote",
+                    "attempts": attempts,
+                }
+            if max_spread_pct is not None and decision_mid and (spread / decision_mid) > max_spread_pct:
+                return False, None, {
+                    "decision_mid": round(decision_mid, 2) if decision_mid is not None else None,
+                    "decision_spread": round(decision_spread, 4) if decision_spread is not None else None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "spread_too_wide",
+                    "attempts": attempts,
+                }
+            if spread_widen_pct and decision_spread is not None and spread > decision_spread * (1 + spread_widen_pct):
+                return False, None, {
+                    "decision_mid": round(decision_mid, 2) if decision_mid is not None else None,
+                    "decision_spread": round(decision_spread, 4) if decision_spread is not None else None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "spread_widened",
+                    "attempts": attempts,
+                }
 
             # cancel/replace logic
             if reprice_pct and replaces < max_replaces:
@@ -121,6 +167,7 @@ class PaperFillSimulator:
                     "slippage": round(fill_price - decision_mid, 4) if decision_mid is not None else None,
                     "time_to_fill": round(time_to_fill, 4),
                     "reason_if_aborted": None,
+                    "attempts": attempts,
                     "queue_position": queue.get("queue_position"),
                     "queue_priority": queue.get("queue_priority"),
                     "urgency": urgency,
@@ -164,6 +211,7 @@ class PaperFillSimulator:
                     "slippage": round(decision_mid - fill_price, 4) if decision_mid is not None else None,
                     "time_to_fill": round(time_to_fill, 4),
                     "reason_if_aborted": None,
+                    "attempts": attempts,
                     "queue_position": queue.get("queue_position"),
                     "queue_priority": queue.get("queue_priority"),
                     "urgency": urgency,
@@ -202,6 +250,7 @@ class PaperFillSimulator:
             "fill_price": None,
             "slippage": None,
             "reason_if_aborted": "timeout",
+            "attempts": attempts,
             "queue_position": queue.get("queue_position"),
             "queue_priority": queue.get("queue_priority"),
             "urgency": urgency,

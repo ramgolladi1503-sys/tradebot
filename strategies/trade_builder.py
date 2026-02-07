@@ -12,6 +12,7 @@ from typing import Optional
 from strategies.ensemble import ensemble_signal, equity_signal, futures_signal, mean_reversion_signal, event_breakout_signal, micro_pattern_signal
 from core.feature_builder import build_trade_features
 from core.trade_scoring import compute_trade_score
+from core.strategy_tracker import StrategyTracker
 import time as _time
 import time
 
@@ -50,7 +51,7 @@ def _log_signal_event(kind, symbol, payload=None):
         pass
 
 class TradeBuilder:
-    def __init__(self, predictor=None, execution=None):
+    def __init__(self, predictor=None, execution=None, strategy_tracker=None):
         self._ml_disabled = (
             os.getenv("DISABLE_ML", "false").lower() == "true"
             or bool(os.getenv("PYTEST_CURRENT_TEST"))
@@ -68,6 +69,7 @@ class TradeBuilder:
         self.micro_predictor: Optional[object] = None
         self.execution = execution or ExecutionEngine()
         self.alpha_ensemble = AlphaEnsemble() if getattr(cfg, "ALPHA_ENSEMBLE_ENABLE", True) else None
+        self.strategy_tracker = strategy_tracker or StrategyTracker()
         self._ml_history_cache = {"ts": 0, "count": 0}
         self._expiry_zero_hero_count = 0
         self._expiry_zero_hero_by_symbol = {}
@@ -75,6 +77,22 @@ class TradeBuilder:
         self._expiry_zero_hero_disabled_until = {}
         self._expiry_zero_hero_pnl = {}
         self._reject_ctx = {}
+
+    def _apply_decay_gate(self, strategy_name, base_score=None, size_mult=1.0):
+        if not strategy_name or not self.strategy_tracker:
+            return True, base_score, size_mult, None
+        if self.strategy_tracker.is_quarantined(strategy_name):
+            prob = self.strategy_tracker.decay_prob(strategy_name)
+            self._reject_ctx = {"strategy": strategy_name, "reason": "strategy_quarantined", "decay_prob": prob}
+            return False, base_score, size_mult, "strategy_quarantined"
+        if self.strategy_tracker.is_decaying(strategy_name):
+            prob = self.strategy_tracker.decay_prob(strategy_name)
+            penalty = float(getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6))
+            new_score = base_score * penalty if base_score is not None else None
+            new_mult = min(size_mult, penalty)
+            self._reject_ctx = {"strategy": strategy_name, "reason": "strategy_decaying", "decay_prob": prob}
+            return True, new_score, new_mult, "strategy_decaying"
+        return True, base_score, size_mult, None
 
     def _apply_alpha_ensemble(
         self,
@@ -343,6 +361,7 @@ class TradeBuilder:
         Build a single best Trade candidate from market snapshot.
         Returns Trade or None.
         """
+        self._reject_ctx = {}
         debug_mode = getattr(cfg, "DEBUG_TRADE_MODE", False)
         if debug_mode:
             debug_reasons = True
@@ -417,6 +436,15 @@ class TradeBuilder:
             if debug_reasons:
                 print(f"[TradeBuilder] No signal for {symbol} | ltp={ltp} vwap={vwap} atr={market_data.get('atr')} ltp_change={market_data.get('ltp_change')} ltp_change_window={market_data.get('ltp_change_window')}")
             return None
+        strategy_tag = "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"
+        decay_size_mult = 1.0
+        allowed, adj_score, decay_size_mult, _decay_reason = self._apply_decay_gate(strategy_tag, signal.get("score"), decay_size_mult)
+        if not allowed:
+            if debug_reasons:
+                print(f"[TradeBuilder] Reject {symbol}: strategy_quarantined ({strategy_tag})")
+            return None
+        if adj_score is not None:
+            signal["score"] = adj_score
         min_score = getattr(cfg, "STRICT_STRATEGY_SCORE", 0.7)
         regime_day = market_data.get("regime_day") or market_data.get("regime") or "NEUTRAL"
         score_mult = getattr(cfg, "REGIME_SCORE_MULT", {}).get(regime_day, 1.0)
@@ -760,6 +788,7 @@ class TradeBuilder:
                     rejected.append(rec)
                 continue
             confidence = adj_conf
+            size_mult = min(size_mult, decay_size_mult)
 
             # Latency penalty
             confidence *= self.execution.latency_penalty(opt.get("timestamp", datetime.now().timestamp()))
@@ -966,6 +995,14 @@ class TradeBuilder:
                 atr = market_data.get("atr", max(1.0, ltp * 0.002))
                 vwap_dist = (ltp - vwap) / vwap if vwap else 0
                 base_conf = min(0.8, max(0.5, 0.5 + abs(vwap_dist) * 10))
+                strat_name = "FUT_TREND" if instrument == "FUT" else "EQ_TREND"
+                allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate(strat_name, base_conf, 1.0)
+                if not allowed:
+                    if debug_reasons:
+                        print(f"[TradeBuilder] Reject {symbol}: strategy_quarantined ({strat_name})")
+                    return None
+                if adj_score is not None:
+                    base_conf = adj_score
                 side = "BUY" if direction == "BUY_CALL" else "SELL"
                 stop_loss = ltp - atr if side == "BUY" else ltp + atr
                 target = ltp + atr * 1.5 if side == "BUY" else ltp - atr * 1.5
@@ -986,13 +1023,13 @@ class TradeBuilder:
                     capital_at_risk=round(abs(ltp - stop_loss), 2),
                     expected_slippage=0.0,
                     confidence=round(base_conf, 3),
-                    strategy="FUT_TREND" if instrument == "FUT" else "EQ_TREND",
+                    strategy=strat_name,
                     regime=market_data.get("regime", "NEUTRAL"),
                     tier="MAIN",
                     day_type=market_data.get("day_type", "UNKNOWN"),
                     alpha_confidence=None,
                     alpha_uncertainty=None,
-                    size_mult=1.0,
+                    size_mult=decay_size_mult,
                 )
                 if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
                     return trade
@@ -1082,6 +1119,15 @@ class TradeBuilder:
             )
             if adj_conf is not None:
                 confidence = adj_conf
+            # Decay gating for ZERO_HERO
+            allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate("ZERO_HERO", confidence, size_mult)
+            if not allowed:
+                if debug_reasons:
+                    print(f"[ZeroHero] Reject {symbol}: strategy_quarantined (ZERO_HERO)")
+                return None
+            if adj_score is not None:
+                confidence = adj_score
+            size_mult = min(size_mult, decay_size_mult)
             if confidence < getattr(cfg, "ZERO_HERO_MIN_PROBA", 0.6):
                 continue
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
@@ -1585,6 +1631,14 @@ class TradeBuilder:
             )
             if adj_conf is not None:
                 confidence = adj_conf
+            allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate("SCALP", confidence, size_mult)
+            if not allowed:
+                if debug_reasons:
+                    print(f"[Scalp] Reject {symbol}: strategy_quarantined (SCALP)")
+                return None
+            if adj_score is not None:
+                confidence = adj_score
+            size_mult = min(size_mult, decay_size_mult)
             if confidence < getattr(cfg, "SCALP_MIN_PROBA", 0.58):
                 continue
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))

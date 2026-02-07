@@ -24,6 +24,25 @@ class ExecutionRouter:
         if cfg.EXECUTION_MODE == "SIM":
             # record intent even in SIM mode
             self._record_intent(trade, bid, ask, volume, depth=depth, note="sim intent")
+            if snapshot_fn is None or not callable(snapshot_fn):
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "no_quote_fn",
+                }
+            first = snapshot_fn()
+            if not first:
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "no_quote",
+                }
+            bid = first.get("bid", bid)
+            ask = first.get("ask", ask)
             limit_price = trade.entry_price or self.engine.build_limit_price(trade.side, bid, ask)
             start_ts = time.time()
             filled, price, report = self._simulate_limit(
@@ -43,19 +62,37 @@ class ExecutionRouter:
             return filled, price, report
         if cfg.EXECUTION_MODE == "PAPER":
             self._record_intent(trade, bid, ask, volume, depth=depth, note="paper intent")
+            if snapshot_fn is None or not callable(snapshot_fn):
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "no_quote_fn",
+                }
+            first = snapshot_fn()
+            if not first:
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "no_quote",
+                }
+            bid = first.get("bid", bid)
+            ask = first.get("ask", ask)
             limit_price = trade.entry_price or self.engine.build_limit_price(trade.side, bid, ask)
             start_ts = time.time()
-            if snapshot_fn is None:
-                snapshots = [{"bid": bid, "ask": ask, "ts": time.time()}]
-            else:
-                snapshots = snapshot_fn
             filled, price, report = self.paper_sim.simulate(
                 trade,
                 limit_price,
-                snapshots,
+                snapshot_fn,
                 max_replaces=getattr(cfg, "EXEC_MAX_REPLACE", 2),
                 reprice_pct=getattr(cfg, "EXEC_REPRICE_PCT", 0.002),
                 max_chase_pct=getattr(cfg, "EXEC_MAX_CHASE_PCT", 0.002),
+                max_quote_age_sec=getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0),
+                max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.015),
+                spread_widen_pct=getattr(cfg, "EXEC_SPREAD_WIDEN_PCT", 0.5),
             )
             try:
                 insert_execution_stat({
@@ -98,17 +135,24 @@ class ExecutionRouter:
         }
 
     def _simulate_limit(self, trade, bid, ask, limit_price, snapshot_fn=None):
-        if snapshot_fn is None:
-            def snapshot_fn():
-                return {"bid": bid, "ask": ask, "ts": time.time()}
-        snapshots = snapshot_fn
+        if snapshot_fn is None or not callable(snapshot_fn):
+            return False, None, {
+                "decision_mid": None,
+                "decision_spread": None,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": "no_quote_fn",
+            }
         return self.paper_sim.simulate(
             trade,
             limit_price,
-            snapshots,
+            snapshot_fn,
             max_replaces=getattr(cfg, "EXEC_MAX_REPLACE", 2),
             reprice_pct=getattr(cfg, "EXEC_REPRICE_PCT", 0.002),
             max_chase_pct=getattr(cfg, "EXEC_MAX_CHASE_PCT", 0.002),
+            max_quote_age_sec=getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0),
+            max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.015),
+            spread_widen_pct=getattr(cfg, "EXEC_SPREAD_WIDEN_PCT", 0.5),
         )
 
     def _record_fill_quality(self, trade, bid, ask, limit_price, start_ts, filled, fill_price, report):

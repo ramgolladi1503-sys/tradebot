@@ -33,6 +33,7 @@ from core.kite_depth_ws import start_depth_ws
 from core.auto_tune import maybe_auto_tune
 from core import risk_halt
 from core.decision_logger import log_decision, update_execution, update_outcome
+from core.risk_utils import to_pct
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30):
@@ -50,7 +51,7 @@ class Orchestrator:
         self.execution_engine = ExecutionEngine()
         self.execution_router = ExecutionRouter()
         self.gatekeeper = StrategyGatekeeper()
-        self.trade_builder = TradeBuilder(self.predictor, self.execution_engine)
+        self.trade_builder = None
 
         # Phase B: Risk and execution
         self.risk_engine = RiskEngine(risk_state=self.risk_state)
@@ -60,6 +61,7 @@ class Orchestrator:
         # Phase F: Strategy tracking + Auto-retraining
         self.strategy_tracker = StrategyTracker()
         self.strategy_tracker.load("logs/strategy_perf.json")
+        self.trade_builder = TradeBuilder(self.predictor, self.execution_engine, strategy_tracker=self.strategy_tracker)
         self.retrainer = AutoRetrain(self.predictor, risk_state=self.risk_state, strategy_tracker=self.strategy_tracker)
         self.strategy_allocator = StrategyAllocator(self.strategy_tracker, risk_state=self.risk_state)
         self.open_trades = {}
@@ -141,6 +143,18 @@ class Orchestrator:
             pass
         return total
 
+    def _update_risk_pct_fields(self):
+        try:
+            equity_high = self.portfolio.get("equity_high", self.portfolio.get("capital", 0.0))
+            daily_pnl = self.portfolio.get("daily_profit", 0.0) + self.portfolio.get("daily_loss", 0.0)
+            self.portfolio["daily_pnl"] = daily_pnl
+            self.portfolio["daily_pnl_pct"] = to_pct(daily_pnl, equity_high)
+            open_risk = self._open_risk()
+            self.portfolio["open_risk"] = open_risk
+            self.portfolio["open_risk_pct"] = to_pct(open_risk, equity_high)
+        except Exception:
+            pass
+
     def _build_decision_event(self, trade, market_data: dict, gatekeeper_allowed: bool, veto_reasons=None):
         now = datetime.now().isoformat()
         veto_reasons = veto_reasons or []
@@ -185,10 +199,14 @@ class Orchestrator:
                 "depth_imbalance": depth_imb,
                 "fill_prob_est": getattr(cfg, "EXEC_FILL_PROB", None),
                 "portfolio_equity": self.portfolio.get("capital"),
-                "daily_pnl": self.portfolio.get("daily_profit", 0.0) + self.portfolio.get("daily_loss", 0.0),
+                "equity": self.portfolio.get("capital"),
+                "equity_high": self.portfolio.get("equity_high"),
+                "daily_pnl": self.portfolio.get("daily_pnl", self.portfolio.get("daily_profit", 0.0) + self.portfolio.get("daily_loss", 0.0)),
+                "daily_pnl_pct": self.portfolio.get("daily_pnl_pct"),
                 "drawdown_pct": self.risk_state.daily_max_drawdown if hasattr(self.risk_state, "daily_max_drawdown") else None,
                 "loss_streak": self.loss_streak.get(trade.symbol, 0),
-                "open_risk": self._open_risk(),
+                "open_risk": self.portfolio.get("open_risk", self._open_risk()),
+                "open_risk_pct": self.portfolio.get("open_risk_pct"),
                 "delta_exposure": None,
                 "gamma_exposure": None,
                 "vega_exposure": None,
@@ -236,10 +254,14 @@ class Orchestrator:
             "depth_imbalance": market_data.get("depth_imbalance"),
             "fill_prob_est": getattr(cfg, "EXEC_FILL_PROB", None),
             "portfolio_equity": self.portfolio.get("capital"),
-            "daily_pnl": self.portfolio.get("daily_profit", 0.0) + self.portfolio.get("daily_loss", 0.0),
+            "equity": self.portfolio.get("capital"),
+            "equity_high": self.portfolio.get("equity_high"),
+            "daily_pnl": self.portfolio.get("daily_pnl", self.portfolio.get("daily_profit", 0.0) + self.portfolio.get("daily_loss", 0.0)),
+            "daily_pnl_pct": self.portfolio.get("daily_pnl_pct"),
             "drawdown_pct": self.risk_state.daily_max_drawdown if hasattr(self.risk_state, "daily_max_drawdown") else None,
             "loss_streak": self.loss_streak.get(sym, 0),
-            "open_risk": self._open_risk(),
+            "open_risk": self.portfolio.get("open_risk", self._open_risk()),
+            "open_risk_pct": self.portfolio.get("open_risk_pct"),
             "delta_exposure": None,
             "gamma_exposure": None,
             "vega_exposure": None,
@@ -299,6 +321,10 @@ class Orchestrator:
                 self._evaluate_suggestions(market_data_list)
                 try:
                     self.risk_state.update_portfolio(self.portfolio)
+                except Exception:
+                    pass
+                try:
+                    self._update_risk_pct_fields()
                 except Exception:
                     pass
                 try:
@@ -391,7 +417,13 @@ class Orchestrator:
                         pass
                     if not trade:
                         try:
-                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=True, veto_reasons=["no_trade_generated"])
+                            reason = None
+                            try:
+                                reason = (self.trade_builder._reject_ctx or {}).get("reason")
+                            except Exception:
+                                reason = None
+                            veto = [reason] if reason else ["no_trade_generated"]
+                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=True, veto_reasons=veto)
                             log_decision(event)
                         except Exception:
                             pass
@@ -599,28 +631,40 @@ class Orchestrator:
                         print("[PortfolioAllocator] Trade blocked: qty<=0 after allocation")
                         continue
                     # RL sizing agent (shadow or live)
-                    if self.rl_size_agent and getattr(cfg, "RL_ENABLED", False):
+                    if getattr(cfg, "RL_ENABLED", False):
+                        mult = 1.0
+                        feats = None
+                        if self.rl_size_agent:
+                            try:
+                                feats = build_features(trade, market_data, self.risk_state, self.portfolio, self.last_md_by_symbol)
+                                mult = self.rl_size_agent.select_multiplier(feats, explore=False)
+                            except Exception:
+                                mult = 1.0
+                                feats = None
                         try:
-                            feats = build_features(trade, market_data, self.risk_state, self.portfolio, self.last_md_by_symbol)
-                            mult = self.rl_size_agent.select_multiplier(feats, explore=False)
                             update_execution(trade.trade_id, {"action_size_multiplier": mult})
-                            if getattr(cfg, "RL_SHADOW_ONLY", True):
-                                # log shadow decision, no sizing change
+                        except Exception:
+                            pass
+                        if getattr(cfg, "RL_SHADOW_ONLY", True):
+                            # log shadow decision, no sizing change
+                            try:
                                 with open("logs/rl_size_shadow.jsonl", "a") as f:
                                     f.write(json.dumps({
                                         "timestamp": time.time(),
                                         "trade_id": trade.trade_id,
                                         "symbol": trade.symbol,
+                                        "baseline_qty": final_qty,
+                                        "suggested_qty": int(round(final_qty * mult)),
                                         "multiplier": mult,
                                         "features": feats
                                     }) + "\n")
-                            else:
-                                final_qty = int(round(final_qty * mult))
-                                if final_qty <= 0:
-                                    print("[RLSize] Trade blocked: qty<=0 after RL sizing")
-                                    continue
-                        except Exception:
-                            pass
+                            except Exception:
+                                pass
+                        else:
+                            final_qty = int(round(final_qty * mult))
+                            if final_qty <= 0:
+                                print("[RLSize] Trade blocked: qty<=0 after RL sizing")
+                                continue
                     trade = replace(trade, qty=final_qty, capital_at_risk=round((trade.entry_price - trade.stop_loss) * final_qty * lot_size, 2))
                     # Phase B: Execution guard (after sizing)
                     approved, reason = self.execution_guard.validate(trade, self.portfolio, trade.regime)
@@ -1155,7 +1199,7 @@ class Orchestrator:
             if self.portfolio["capital"] > self.portfolio.get("equity_high", self.portfolio["capital"]):
                 self.portfolio["equity_high"] = self.portfolio["capital"]
             dd = (self.portfolio["capital"] - self.portfolio["equity_high"]) / max(1.0, self.portfolio["equity_high"])
-            if dd <= getattr(cfg, "PORTFOLIO_MAX_DRAWDOWN", -0.2):
+            if dd <= getattr(cfg, "MAX_DRAWDOWN_PCT", getattr(cfg, "PORTFOLIO_MAX_DRAWDOWN", -0.2)):
                 risk_halt.set_halt("Max drawdown breach", {"drawdown": dd})
                 send_telegram_message(f"Auto-halt: drawdown breach {dd:.2%}")
             # Skip aux trades in PAPER_STRICT_MODE from main perf stats

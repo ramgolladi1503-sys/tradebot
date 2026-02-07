@@ -76,9 +76,24 @@ class AutoRetrain:
             self._log_decision("skip", {"reason": "cooldown", "cooldown_sec": cooldown})
             return
 
-        should_retrain, reasons = self._should_retrain(live_df, drift)
-        if not should_retrain:
-            self._log_decision("skip", {"reason": "no_trigger", "metrics": drift})
+        # Train challenger
+        train_df = self._load_training_dataset()
+        if train_df is None or train_df.empty:
+            self._log_decision("skip", {"reason": "no_train_data"})
+            return
+
+        train_df = self._add_segments_train(train_df)
+        baseline = self._load_or_init_baseline(live_df)
+        drift_ok, drift_reasons = self._should_retrain(live_df, drift)
+        expect_ok, expect_detail = self._expectancy_below_baseline(live_df, baseline)
+        seg_ok, seg_detail = self._segments_ok(train_df)
+        if not (drift_ok and expect_ok and seg_ok):
+            self._log_decision("skip", {
+                "reason": "gates_not_met",
+                "drift": drift_reasons,
+                "expectancy": expect_detail,
+                "segments": seg_detail,
+            })
             try:
                 self.research.run(tracker=self.strategy_tracker, retrainer=self, risk_state=self.risk_state)
             except Exception:
@@ -93,14 +108,6 @@ class AutoRetrain:
             except Exception:
                 pass
             return
-
-        # Train challenger
-        train_df = self._load_training_dataset()
-        if train_df is None or train_df.empty:
-            self._log_decision("skip", {"reason": "no_train_data"})
-            return
-
-        train_df = self._add_segments_train(train_df)
 
         # Split holdout
         holdout_frac = float(getattr(cfg, "ML_HOLDOUT_FRAC", 0.2))
@@ -127,8 +134,8 @@ class AutoRetrain:
             target_col=getattr(cfg, "ML_TRAIN_TARGET_COL", "target"),
             segment_cols=self.segment_cols,
         )
-        champ_metrics = _metrics_from_preds(y, champ_preds)
-        chall_metrics = _metrics_from_preds(y, chall_preds)
+        champ_metrics = _metrics_from_preds(y, champ_preds, pnl=holdout_df.get("pnl"))
+        chall_metrics = _metrics_from_preds(y, chall_preds, pnl=holdout_df.get("pnl"))
         stat = ml_governance.bootstrap_pvalue(
             y,
             champ_preds,
@@ -136,14 +143,34 @@ class AutoRetrain:
             metric="brier",
             n=int(getattr(cfg, "ML_PROMOTE_BOOTSTRAP", 500)),
         )
+        shadow_df = self._shadow_eval_df(train_df)
+        champ_shadow = None
+        chall_shadow = None
+        if shadow_df is not None and not shadow_df.empty:
+            y_s, champ_s = self._predict_on_df(
+                self.predictor,
+                shadow_df,
+                target_col=getattr(cfg, "ML_TRAIN_TARGET_COL", "target"),
+                segment_cols=self.segment_cols,
+            )
+            _, chall_s = self._predict_on_df(
+                challenger,
+                shadow_df,
+                target_col=getattr(cfg, "ML_TRAIN_TARGET_COL", "target"),
+                segment_cols=self.segment_cols,
+            )
+            champ_shadow = _metrics_from_preds(y_s, champ_s, pnl=shadow_df.get("pnl"))
+            chall_shadow = _metrics_from_preds(y_s, chall_s, pnl=shadow_df.get("pnl"))
 
-        promote, reason = self._should_promote(champ_metrics, chall_metrics, stat)
+        promote, reason = self._should_promote(champ_metrics, chall_metrics, stat, champ_shadow, chall_shadow)
         decision = {
             "timestamp": datetime.now().isoformat(),
-            "retrain_reasons": reasons,
+            "retrain_reasons": drift_reasons,
             "champion": champ_metrics,
             "challenger": chall_metrics,
             "stat_test": stat,
+            "shadow_champion": champ_shadow,
+            "shadow_challenger": chall_shadow,
             "promote": promote,
             "reason": reason,
         }
@@ -177,10 +204,18 @@ class AutoRetrain:
             model_registry.register_model("xgb", self.model_path, metrics=chall_metrics, governance=champ_gov, status="active")
             model_registry.activate_model("xgb", self.model_path, metrics=chall_metrics, governance=champ_gov)
             try:
+                model_registry.prune_history("xgb", keep_n=int(getattr(cfg, "ML_ROLLBACK_KEEP_N", 3)))
+            except Exception:
+                pass
+            try:
                 active_entry = model_registry.get_active_entry("xgb")
                 if active_entry:
                     self.predictor.model_version = active_entry.get("hash")
                     self.predictor.model_governance = active_entry.get("governance") or {}
+            except Exception:
+                pass
+            try:
+                self._write_model_metadata(self.model_path, champ_gov, extra={"metrics": chall_metrics, "shadow_eval": chall_shadow})
             except Exception:
                 pass
             self._log_decision("promote", decision)
@@ -199,6 +234,10 @@ class AutoRetrain:
                     self.predictor.shadow_path = shadow_entry.get("path")
                     if self.predictor.shadow_path and Path(self.predictor.shadow_path).exists():
                         self.predictor._load_shadow(self.predictor.shadow_path)
+            except Exception:
+                pass
+            try:
+                self._write_model_metadata(self.challenger_path, chall_gov, extra={"metrics": chall_metrics, "shadow_eval": chall_shadow})
             except Exception:
                 pass
             self._log_decision("shadow", decision)
@@ -469,18 +508,12 @@ class AutoRetrain:
         triggers = {}
         psi_thr = float(getattr(cfg, "ML_PSI_THRESHOLD", 0.2))
         ks_thr = float(getattr(cfg, "ML_KS_THRESHOLD", 0.2))
-        reg_thr = float(getattr(cfg, "ML_REGIME_SHIFT_PSI", 0.2))
         cal_delta = float(getattr(cfg, "ML_CALIBRATION_DELTA", 0.05))
-        sharpe_drop = float(getattr(cfg, "ML_SHARPE_DROP", 0.3))
-        exec_q_min = float(getattr(cfg, "ML_EXEC_QUALITY_MIN", 55.0))
 
         if drift.get("psi_max") is not None and drift.get("psi_max") > psi_thr:
             triggers["psi"] = drift.get("psi_max")
         if drift.get("ks_max") is not None and drift.get("ks_max") > ks_thr:
             triggers["ks"] = drift.get("ks_max")
-        if drift.get("regime_shift_psi") is not None and drift.get("regime_shift_psi") > reg_thr:
-            triggers["regime_shift"] = drift.get("regime_shift_psi")
-
         # calibration error delta
         try:
             if drift.get("calibration_error") is not None and drift.get("calibration_baseline") is not None:
@@ -488,30 +521,6 @@ class AutoRetrain:
                     triggers["calibration"] = drift["calibration_error"]
         except Exception:
             pass
-
-        # sharpe drop
-        try:
-            if drift.get("sharpe_live") is not None and drift.get("sharpe_baseline") is not None:
-                if (drift["sharpe_baseline"] - drift["sharpe_live"]) > sharpe_drop:
-                    triggers["sharpe_drop"] = drift["sharpe_live"]
-        except Exception:
-            pass
-
-        # execution quality degradation
-        try:
-            if drift.get("execution_quality_avg") is not None and drift.get("execution_quality_avg") < exec_q_min:
-                triggers["exec_quality"] = drift.get("execution_quality_avg")
-        except Exception:
-            pass
-
-        # Model health accuracy check (fallback)
-        try:
-            if "predicted" in live_df.columns and "actual" in live_df.columns:
-                if self.health_checker.check_model_performance(live_df):
-                    triggers["health_accuracy"] = True
-        except Exception:
-            pass
-
         return (len(triggers) > 0), triggers
 
     def _load_or_init_baseline(self, df: pd.DataFrame):
@@ -550,6 +559,7 @@ class AutoRetrain:
         brier = float(np.mean((conf - actual) ** 2)) if len(df) else None
         pnl = df["pnl"].dropna().values
         sharpe = _sharpe(pnl) if len(pnl) >= 5 else None
+        expectancy = float(np.mean(pnl)) if len(pnl) else None
         regime_dist = df["seg_regime"].value_counts(normalize=True).to_dict() if "seg_regime" in df.columns else {}
         return {
             "timestamp": datetime.now().isoformat(),
@@ -557,16 +567,102 @@ class AutoRetrain:
             "target_rate": float(df["actual"].mean()) if not df.empty else None,
             "calibration": brier,
             "sharpe": sharpe,
+            "expectancy": expectancy,
             "regime_dist": regime_dist,
         }
 
-    def _should_promote(self, champ_metrics, chall_metrics, stat=None):
+    def _segments_ok(self, df: pd.DataFrame):
+        if df is None or df.empty:
+            return False, {"reason": "empty_train"}
+        for col in self.segment_cols:
+            if col not in df.columns:
+                return False, {"reason": "missing_segment_cols", "missing": col}
+        min_samples = int(getattr(cfg, "ML_SEGMENT_MIN_SAMPLES", 200))
+        counts = df.groupby(self.segment_cols).size().reset_index(name="count")
+        low = counts[counts["count"] < min_samples]
+        if not low.empty:
+            return False, {
+                "reason": "segment_under_min",
+                "min_samples": min_samples,
+                "segments": low.to_dict(orient="records"),
+            }
+        return True, {"min_samples": min_samples, "segments": int(len(counts))}
+
+    def _expectancy_below_baseline(self, live_df: pd.DataFrame, baseline: dict):
+        baseline_exp = baseline.get("expectancy")
+        if baseline_exp is None:
+            return False, {"reason": "baseline_missing"}
+        if live_df is None or live_df.empty or "pnl" not in live_df.columns:
+            return False, {"reason": "no_live_pnl"}
+        pnl = live_df["pnl"].dropna().values
+        window = int(getattr(cfg, "ML_EXPECTANCY_WINDOW", 50))
+        min_windows = int(getattr(cfg, "ML_EXPECTANCY_MIN_WINDOWS", 3))
+        if window <= 0 or min_windows <= 0:
+            return False, {"reason": "invalid_window"}
+        if len(pnl) < window * min_windows:
+            return False, {"reason": "insufficient_samples", "needed": window * min_windows, "got": int(len(pnl))}
+        usable = pnl[-(window * (len(pnl) // window)):]
+        wins = 0
+        for i in range(0, len(usable), window):
+            avg = float(np.mean(usable[i:i + window]))
+            if avg < baseline_exp:
+                wins += 1
+        ok = wins >= min_windows
+        return ok, {"windows_below": wins, "min_windows": min_windows, "baseline_expectancy": baseline_exp}
+
+    def _shadow_eval_df(self, train_df: pd.DataFrame):
+        if train_df is None or train_df.empty or "timestamp" not in train_df.columns:
+            return None
+        days = int(getattr(cfg, "ML_SHADOW_EVAL_DAYS", 5))
+        if days <= 0:
+            return None
+        try:
+            ts = pd.to_datetime(train_df["timestamp"], errors="coerce")
+            max_ts = ts.max()
+            if pd.isna(max_ts):
+                return None
+            cutoff = max_ts - pd.Timedelta(days=days)
+            mask = ts >= cutoff
+            return train_df.loc[mask].copy()
+        except Exception:
+            return None
+
+    def _write_model_metadata(self, model_path: str, governance: dict, extra: dict | None = None):
+        meta = {
+            "model_path": str(model_path),
+            "written_at": datetime.now().isoformat(),
+            "governance": governance or {},
+        }
+        if extra:
+            meta.update(extra)
+        out_path = Path(model_path).with_suffix(Path(model_path).suffix + ".meta.json")
+        out_path.write_text(json.dumps(meta, indent=2))
+
+    def _should_promote(self, champ_metrics, chall_metrics, stat=None, champ_shadow=None, chall_shadow=None):
         min_diff = float(getattr(cfg, "ML_CHALLENGER_MIN_DIFF", 0.01))
         p_thr = float(getattr(cfg, "ML_PROMOTE_PVALUE", 0.1))
         champ_acc = champ_metrics.get("acc")
         chall_acc = chall_metrics.get("acc")
         champ_brier = champ_metrics.get("brier")
         chall_brier = chall_metrics.get("brier")
+
+        # Require shadow eval
+        if not champ_shadow or not chall_shadow:
+            return False, "no_shadow_eval"
+        if champ_shadow.get("brier") is None or chall_shadow.get("brier") is None:
+            return False, "shadow_brier_missing"
+        if champ_shadow.get("tail_loss") is None or chall_shadow.get("tail_loss") is None:
+            return False, "shadow_tail_missing"
+
+        # Must improve Brier on shadow AND not worsen tail loss
+        if chall_shadow["brier"] >= champ_shadow["brier"]:
+            return False, "shadow_brier_not_improved"
+        if chall_shadow["tail_loss"] < champ_shadow["tail_loss"]:
+            return False, "shadow_tail_worse"
+
+        # Require holdout Brier improvement if available
+        if champ_brier is not None and chall_brier is not None and chall_brier >= champ_brier:
+            return False, "holdout_brier_not_improved"
 
         if champ_acc is None and chall_acc is not None:
             return True, "no_champion_acc"
@@ -650,14 +746,24 @@ class AutoRetrain:
             self._log_decision("rollback", {"reason": "drift", "drift": drift, "to": prev})
 
 
-def _metrics_from_preds(y, preds):
+def _metrics_from_preds(y, preds, pnl=None):
     if y is None or len(y) == 0:
-        return {"acc": None, "brier": None}
+        return {"acc": None, "brier": None, "tail_loss": None}
     y = np.asarray(y, dtype=float)
     preds = np.asarray(preds, dtype=float)
     acc = float(np.mean((preds >= 0.5) == y))
     brier = float(np.mean((preds - y) ** 2))
-    return {"acc": acc, "brier": brier}
+    tail_loss = None
+    if pnl is not None:
+        try:
+            arr = np.asarray(pnl, dtype=float)
+            arr = arr[~np.isnan(arr)]
+            if arr.size >= 5:
+                q = float(getattr(cfg, "ML_TAIL_LOSS_Q", 0.05))
+                tail_loss = float(np.quantile(arr, q))
+        except Exception:
+            tail_loss = None
+    return {"acc": acc, "brier": brier, "tail_loss": tail_loss}
 
 
 def _psi(expected, actual, bins=10):

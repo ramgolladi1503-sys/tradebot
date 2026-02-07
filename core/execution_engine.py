@@ -83,23 +83,31 @@ class ExecutionEngine:
         self.slippage_bps = max(1, min(25, int(self.slippage_bps * 0.9 + slippage * 10 * 0.1)))
         self.instrument_slippage[instrument] = self.slippage_bps
 
-    def place_limit_order(self, trade, bid, ask):
+    def place_limit_order(self, trade, quote_fn):
         """
         Simulated limit order placement with retry logic.
         Replace with broker API call for live execution.
         """
+        if quote_fn is None or not callable(quote_fn):
+            return False, None
+        decision = quote_fn()
+        if not decision:
+            return False, None
+        bid = decision.get("bid", 0) or 0
+        ask = decision.get("ask", 0) or 0
+        if bid <= 0 or ask <= 0:
+            return False, None
         limit_price = self.build_limit_price(trade.side, bid, ask)
-        def snapshot_fn():
-            return {"bid": bid, "ask": ask, "ts": time.time()}
         filled, price, _ = self.simulate_limit_fill(
             trade,
             limit_price,
-            snapshot_fn,
+            quote_fn,
             timeout_sec=getattr(cfg, "EXEC_SIM_TIMEOUT_SEC", 3.0),
             poll_sec=getattr(cfg, "EXEC_SIM_POLL_SEC", 0.25),
             max_chase_pct=getattr(cfg, "EXEC_MAX_CHASE_PCT", 0.002),
             spread_widen_pct=getattr(cfg, "EXEC_SPREAD_WIDEN_PCT", 0.5),
-            max_spread_pct=getattr(cfg, "EXEC_MAX_SPREAD_PCT", getattr(cfg, "MAX_SPREAD_PCT", 0.015)),
+            max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.015),
+            max_quote_age_sec=getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0),
             fill_prob=getattr(cfg, "EXEC_FILL_PROB", 0.85),
         )
         if not filled:
@@ -175,12 +183,13 @@ class ExecutionEngine:
         self,
         trade,
         limit_price,
-        snapshot_fn,
+        quote_fn,
         timeout_sec,
         poll_sec,
         max_chase_pct,
         spread_widen_pct,
         max_spread_pct,
+        max_quote_age_sec,
         fill_prob,
     ):
         """
@@ -193,7 +202,7 @@ class ExecutionEngine:
             spread = max(ask - bid, 0.0) if bid and ask else 0.0
             return mid, spread
 
-        decision = snapshot_fn()
+        decision = quote_fn()
         if not decision:
             return False, None, {
                 "decision_mid": None,
@@ -204,6 +213,7 @@ class ExecutionEngine:
             }
         bid0 = decision.get("bid", 0) or 0
         ask0 = decision.get("ask", 0) or 0
+        ts0 = decision.get("ts")
         decision_mid, decision_spread = _mid_spread(bid0, ask0)
         if decision_mid <= 0 or decision_spread <= 0:
             return False, None, {
@@ -213,23 +223,58 @@ class ExecutionEngine:
                 "slippage": None,
                 "reason_if_aborted": "bad_initial_quote",
             }
+        if ts0 is None:
+            return False, None, {
+                "decision_mid": decision_mid,
+                "decision_spread": decision_spread,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": "missing_quote_ts",
+            }
+        if max_quote_age_sec is not None and (time.time() - ts0) > max_quote_age_sec:
+            return False, None, {
+                "decision_mid": decision_mid,
+                "decision_spread": decision_spread,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": "stale_quote",
+            }
 
         start = time.time()
         current_limit = limit_price
         reason = "timeout"
+        attempts = [{
+            "ts": ts0,
+            "bid": bid0,
+            "ask": ask0,
+            "spread": round(decision_spread, 6),
+        }]
 
         while time.time() - start <= timeout_sec:
-            snap = snapshot_fn()
+            snap = quote_fn()
             if not snap:
                 reason = "no_quote"
                 break
             bid = snap.get("bid", 0) or 0
             ask = snap.get("ask", 0) or 0
+            ts = snap.get("ts")
             if bid <= 0 or ask <= 0:
                 time.sleep(poll_sec)
                 continue
 
             mid, spread = _mid_spread(bid, ask)
+            attempts.append({
+                "ts": ts,
+                "bid": bid,
+                "ask": ask,
+                "spread": round(spread, 6),
+            })
+            if ts is None:
+                reason = "missing_quote_ts"
+                break
+            if max_quote_age_sec is not None and (time.time() - ts) > max_quote_age_sec:
+                reason = "stale_quote"
+                break
             if max_spread_pct and mid > 0 and (spread / mid) > max_spread_pct:
                 reason = "spread_too_wide"
                 break
@@ -267,6 +312,7 @@ class ExecutionEngine:
                     "fill_price": round(fill_price, 2),
                     "slippage": round(slippage, 4),
                     "reason_if_aborted": None,
+                    "attempts": attempts,
                 }
 
             time.sleep(poll_sec)
@@ -277,4 +323,5 @@ class ExecutionEngine:
             "fill_price": None,
             "slippage": None,
             "reason_if_aborted": reason,
+            "attempts": attempts,
         }

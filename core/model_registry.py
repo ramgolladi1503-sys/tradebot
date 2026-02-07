@@ -126,6 +126,18 @@ def rollback_model(model_type, steps=1):
     return new_path
 
 
+def prune_history(model_type, keep_n=3):
+    data = _load()
+    history = data.get("history", {}).get(model_type, [])
+    if keep_n is None or keep_n <= 0:
+        return history
+    if len(history) <= keep_n:
+        return history
+    data["history"][model_type] = history[-keep_n:]
+    _save(data)
+    return data["history"][model_type]
+
+
 def get_active(model_type):
     data = _load()
     return data.get("active", {}).get(model_type)

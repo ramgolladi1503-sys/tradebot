@@ -1,33 +1,23 @@
 from typing import Dict
+from core.market_data import get_current_regime
+
 
 class RegimeDetector:
     """
-    Simple multi-factor regime detection.
+    LEGACY WRAPPER; DO NOT ADD LOGIC.
     """
 
     def __init__(self, vwap_period=20, atr_period=14):
         self.vwap_period = vwap_period
         self.atr_period = atr_period
 
-    def detect(self, symbol_data: Dict) -> str:
+    def detect(self, symbol_data: Dict) -> Dict:
         """
-        Returns one of:
-        'TRENDING_BULL', 'TRENDING_BEAR', 'CHOPPY', 'VOLATILE'
+        Returns canonical regime snapshot dict.
         """
-        # crude placeholder logic — replace with real indicators
-        close = symbol_data['close']
-        atr = symbol_data['atr']
-
-        if close[-1] > sum(close[-self.vwap_period:])/self.vwap_period:
-            trend = 'BULL'
-        else:
-            trend = 'BEAR'
-
-        if atr[-1] > max(atr[-self.atr_period:]):
-            return 'VOLATILE'
-
-        if max(close[-5:]) - min(close[-5:]) < atr[-1]:
-            return 'CHOPPY'
-
-        return f"TRENDING_{trend}"
-
+        symbol = symbol_data.get("symbol") if isinstance(symbol_data, dict) else None
+        snap = get_current_regime(symbol)
+        return {
+            "regime": snap.get("primary_regime", "NEUTRAL"),
+            **snap,
+        }

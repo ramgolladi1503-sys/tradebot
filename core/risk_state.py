@@ -2,6 +2,7 @@ import time
 from collections import deque
 from datetime import date
 from config import config as cfg
+from core.risk_utils import safe_div
 
 
 class RiskState:
@@ -24,6 +25,7 @@ class RiskState:
         self.all_time_equity_high = float(start_capital)
         self.daily_max_drawdown = 0.0
         self.all_time_max_drawdown = 0.0
+        self.daily_pnl_pct = 0.0
 
         self.vol_shock_index = 0.0
         self.regime_last = {}
@@ -52,6 +54,13 @@ class RiskState:
         # Note: capital reflects reserved risk; treat as realized PnL proxy
         self.realized_pnl = capital - self.start_capital
         self.equity = capital + self.unrealized_pnl
+        try:
+            daily_pnl = portfolio.get("daily_pnl")
+            if daily_pnl is None:
+                daily_pnl = portfolio.get("daily_profit", 0.0) + portfolio.get("daily_loss", 0.0)
+            self.daily_pnl_pct = safe_div(daily_pnl, self.daily_equity_high or self.equity or 1.0, default=0.0)
+        except Exception:
+            self.daily_pnl_pct = 0.0
         self._update_drawdown()
         self._evaluate_halts()
 
@@ -162,8 +171,8 @@ class RiskState:
             self.all_time_equity_high = self.equity
         if self.equity > self.daily_equity_high:
             self.daily_equity_high = self.equity
-        dd_all = (self.equity - self.all_time_equity_high) / max(self.all_time_equity_high, 1.0)
-        dd_day = (self.equity - self.daily_equity_high) / max(self.daily_equity_high, 1.0)
+        dd_all = safe_div(self.equity - self.all_time_equity_high, self.all_time_equity_high, default=0.0)
+        dd_day = safe_div(self.equity - self.daily_equity_high, self.daily_equity_high, default=0.0)
         self.all_time_max_drawdown = min(self.all_time_max_drawdown, dd_all)
         self.daily_max_drawdown = min(self.daily_max_drawdown, dd_day)
 
@@ -208,6 +217,7 @@ class RiskState:
             "realized_pnl": self.realized_pnl,
             "unrealized_pnl": self.unrealized_pnl,
             "equity": self.equity,
+            "daily_pnl_pct": self.daily_pnl_pct,
             "daily_max_drawdown": self.daily_max_drawdown,
             "all_time_max_drawdown": self.all_time_max_drawdown,
             "vol_shock_index": self.vol_shock_index,

@@ -1,11 +1,12 @@
 from config import config as cfg
+from core.risk_utils import to_pct
 
 class RiskEngine:
     def __init__(self, risk_state=None):
         self.risk_state = risk_state
-        self.max_daily_loss = getattr(cfg, "MAX_DAILY_LOSS", 0.15)
+        self.max_daily_loss_pct = getattr(cfg, "MAX_DAILY_LOSS_PCT", getattr(cfg, "MAX_DAILY_LOSS", 0.15))
         self.max_trades = getattr(cfg, "MAX_TRADES_PER_DAY", 5)
-        self.max_risk_per_trade = getattr(cfg, "MAX_RISK_PER_TRADE", 0.03)
+        self.max_risk_per_trade = getattr(cfg, "MAX_RISK_PER_TRADE_PCT", getattr(cfg, "MAX_RISK_PER_TRADE", 0.03))
         self.max_risk_eq = getattr(cfg, "MAX_RISK_PER_TRADE_EQ", 0.02)
         self.max_risk_fut = getattr(cfg, "MAX_RISK_PER_TRADE_FUT", 0.03)
         self.max_risk_opt = getattr(cfg, "MAX_RISK_PER_TRADE_OPT", 0.03)
@@ -16,7 +17,7 @@ class RiskEngine:
             if profile in profs:
                 p = profs[profile]
                 if "max_daily_loss" in p:
-                    self.max_daily_loss = p["max_daily_loss"]
+                    self.max_daily_loss_pct = p["max_daily_loss"]
                 if "max_trades" in p:
                     self.max_trades = p["max_trades"]
                 if "risk_per_trade" in p:
@@ -32,17 +33,27 @@ class RiskEngine:
             return False, "RiskState hard halt"
         # Daily profit lock
         try:
-            if portfolio.get("daily_profit", 0) >= getattr(cfg, "DAILY_PROFIT_LOCK", 0.012):
+            equity_high = portfolio.get("equity_high", portfolio.get("capital", 0))
+            daily_profit_pct = to_pct(portfolio.get("daily_profit", 0.0), equity_high)
+            if daily_profit_pct >= getattr(cfg, "DAILY_PROFIT_LOCK", 0.012):
                 return False, "Daily profit lock hit"
         except Exception:
             pass
-        if portfolio.get("daily_loss", 0) <= -abs(self.max_daily_loss):
-            return False, "Daily loss limit hit"
+        try:
+            equity_high = portfolio.get("equity_high", portfolio.get("capital", 0))
+            daily_pnl = portfolio.get("daily_profit", 0.0) + portfolio.get("daily_loss", 0.0)
+            daily_pnl_pct = portfolio.get("daily_pnl_pct", to_pct(daily_pnl, equity_high))
+            if daily_pnl_pct <= -abs(self.max_daily_loss_pct):
+                return False, "Daily loss limit hit"
+        except Exception:
+            pass
         # Per-symbol daily profit lock
         try:
             symbol_profits = portfolio.get("symbol_profit", {})
             for sym, pnl in symbol_profits.items():
-                if pnl >= getattr(cfg, "SYMBOL_DAILY_PROFIT_LOCK", 0.006):
+                equity_high = portfolio.get("equity_high", portfolio.get("capital", 0))
+                pnl_pct = to_pct(pnl, equity_high)
+                if pnl_pct >= getattr(cfg, "SYMBOL_DAILY_PROFIT_LOCK", 0.006):
                     return False, f"Symbol profit lock hit for {sym}"
         except Exception:
             pass

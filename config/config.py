@@ -30,12 +30,17 @@ TELEGRAM_ONLY_TRADES = os.getenv("TELEGRAM_ONLY_TRADES", "true").lower() == "tru
 # Capital & Risk Configuration
 # -------------------------------
 CAPITAL = 100000
-MAX_RISK_PER_TRADE = 0.03   # 3% default (adjust 2-5% as desired)
-MAX_DAILY_LOSS = 0.15       # 15% daily loss cap
+# Canonical risk limits (percent as decimal)
+MAX_RISK_PER_TRADE_PCT = float(os.getenv("MAX_RISK_PER_TRADE_PCT", "0.03"))   # 3%
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.15"))          # 15%
+MAX_DRAWDOWN_PCT = float(os.getenv("MAX_DRAWDOWN_PCT", "-0.20"))             # -20% drawdown
+# Backward-compatible aliases (deprecated)
+MAX_RISK_PER_TRADE = MAX_RISK_PER_TRADE_PCT
+MAX_DAILY_LOSS = MAX_DAILY_LOSS_PCT
 MAX_TRADES_PER_DAY = 5
-MAX_RISK_PER_TRADE_EQ = 0.02
-MAX_RISK_PER_TRADE_FUT = 0.03
-MAX_RISK_PER_TRADE_OPT = 0.03
+MAX_RISK_PER_TRADE_EQ = float(os.getenv("MAX_RISK_PER_TRADE_EQ", "0.02"))
+MAX_RISK_PER_TRADE_FUT = float(os.getenv("MAX_RISK_PER_TRADE_FUT", "0.03"))
+MAX_RISK_PER_TRADE_OPT = float(os.getenv("MAX_RISK_PER_TRADE_OPT", "0.03"))
 
 # Portfolio allocator
 PORTFOLIO_ALLOCATOR_ENABLE = True
@@ -68,13 +73,13 @@ REGIME_EXPOSURE_MULT = {
 RISK_PROFILE = os.getenv("RISK_PROFILE", "CONSERVATIVE").upper()
 RISK_PROFILES = {
     "CONSERVATIVE": {
-        "max_daily_loss": 0.02,
-        "risk_per_trade": 0.004,
+        "max_daily_loss": 0.02,   # pct
+        "risk_per_trade": 0.004,  # pct
         "max_trades": 3,
     },
     "AGGRESSIVE": {
-        "max_daily_loss": 0.04,
-        "risk_per_trade": 0.0075,
+        "max_daily_loss": 0.04,   # pct
+        "risk_per_trade": 0.0075, # pct
     },
 }
 
@@ -444,6 +449,11 @@ ML_REGIME_SHIFT_PSI = float(os.getenv("ML_REGIME_SHIFT_PSI", "0.2"))
 ML_CALIBRATION_DELTA = float(os.getenv("ML_CALIBRATION_DELTA", "0.05"))
 ML_CALIBRATION_BINS = int(os.getenv("ML_CALIBRATION_BINS", "10"))
 ML_SHARPE_DROP = float(os.getenv("ML_SHARPE_DROP", "0.3"))
+ML_EXPECTANCY_WINDOW = int(os.getenv("ML_EXPECTANCY_WINDOW", "50"))
+ML_EXPECTANCY_MIN_WINDOWS = int(os.getenv("ML_EXPECTANCY_MIN_WINDOWS", "3"))
+ML_SHADOW_EVAL_DAYS = int(os.getenv("ML_SHADOW_EVAL_DAYS", "5"))
+ML_TAIL_LOSS_Q = float(os.getenv("ML_TAIL_LOSS_Q", "0.05"))
+ML_ROLLBACK_KEEP_N = int(os.getenv("ML_ROLLBACK_KEEP_N", "3"))
 ML_CHALLENGER_MIN_DIFF = float(os.getenv("ML_CHALLENGER_MIN_DIFF", "0.01"))
 ML_PROMOTE_PVALUE = float(os.getenv("ML_PROMOTE_PVALUE", "0.1"))
 ML_PROMOTE_BOOTSTRAP = int(os.getenv("ML_PROMOTE_BOOTSTRAP", "500"))
@@ -494,6 +504,8 @@ RL_ENABLED = os.getenv("RL_ENABLED", os.getenv("RL_SIZE_ENABLE", "true")).lower(
 RL_ACTIONS = [0.0, 0.25, 0.5, 0.75, 1.0]
 RL_REWARD_MODE = os.getenv("RL_REWARD_MODE", "CRO_SAFE")
 RL_SHADOW_ONLY = os.getenv("RL_SHADOW_ONLY", os.getenv("RL_SIZE_SHADOW_MODE", "true")).lower() == "true"
+RL_MIN_DAYS_SHADOW = int(os.getenv("RL_MIN_DAYS_SHADOW", "7"))
+RL_PROMOTION_RULES = os.getenv("RL_PROMOTION_RULES", "brier_improve_and_tail_ok")
 RL_SIZE_ENABLE = RL_ENABLED
 RL_SIZE_SHADOW_MODE = RL_SHADOW_ONLY
 RL_SIZE_MODEL_PATH = os.getenv("RL_SIZE_MODEL_PATH", "models/rl_size_agent.json")
@@ -508,8 +520,8 @@ MANUAL_APPROVAL = os.getenv("MANUAL_APPROVAL", "true").lower() == "true"
 TRADE_DB_PATH = "data/trades.db"
 
 # Risk governance / scorecard
-DAILY_LOSS_LIMIT = CAPITAL * MAX_DAILY_LOSS
-PORTFOLIO_MAX_DRAWDOWN = -0.2
+DAILY_LOSS_LIMIT = CAPITAL * MAX_DAILY_LOSS_PCT
+PORTFOLIO_MAX_DRAWDOWN = MAX_DRAWDOWN_PCT
 RISK_HALT_FILE = "logs/risk_halt.json"
 LOG_LOCK_FILE = "logs/trade_log.lock"
 APPEND_ONLY_LOG = True
@@ -653,6 +665,7 @@ STRESS_OB_THIN_FACTOR = float(os.getenv("STRESS_OB_THIN_FACTOR", "0.6"))
 # -------------------------------
 EXEC_SIM_TIMEOUT_SEC = float(os.getenv("EXEC_SIM_TIMEOUT_SEC", "3.0"))
 EXEC_SIM_POLL_SEC = float(os.getenv("EXEC_SIM_POLL_SEC", "0.25"))
+MAX_QUOTE_AGE_SEC = float(os.getenv("MAX_QUOTE_AGE_SEC", "2.0"))
 EXEC_MAX_CHASE_PCT = float(os.getenv("EXEC_MAX_CHASE_PCT", "0.002"))
 EXEC_MAX_REPLACE = int(os.getenv("EXEC_MAX_REPLACE", "2"))
 EXEC_REPRICE_PCT = float(os.getenv("EXEC_REPRICE_PCT", "0.002"))

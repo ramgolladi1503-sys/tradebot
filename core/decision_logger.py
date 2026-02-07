@@ -46,10 +46,14 @@ def _init_db():
             depth_imbalance REAL,
             fill_prob_est REAL,
             portfolio_equity REAL,
+            equity REAL,
+            equity_high REAL,
             daily_pnl REAL,
+            daily_pnl_pct REAL,
             drawdown_pct REAL,
             loss_streak REAL,
             open_risk REAL,
+            open_risk_pct REAL,
             delta_exposure REAL,
             gamma_exposure REAL,
             vega_exposure REAL,
@@ -69,6 +73,21 @@ def _init_db():
         )
         """
         )
+        # Add missing columns for backward-compatible schema upgrades
+        try:
+            cur = conn.execute("PRAGMA table_info(decision_events)")
+            existing = {row[1] for row in cur.fetchall()}
+            desired = {
+                "equity": "REAL",
+                "equity_high": "REAL",
+                "daily_pnl_pct": "REAL",
+                "open_risk_pct": "REAL",
+            }
+            for col, col_type in desired.items():
+                if col not in existing:
+                    conn.execute(f"ALTER TABLE decision_events ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass
 
 
 def log_decision(event: Dict[str, Any]):
@@ -113,10 +132,14 @@ def log_decision(event: Dict[str, Any]):
         "depth_imbalance",
         "fill_prob_est",
         "portfolio_equity",
+        "equity",
+        "equity_high",
         "daily_pnl",
+        "daily_pnl_pct",
         "drawdown_pct",
         "loss_streak",
         "open_risk",
+        "open_risk_pct",
         "delta_exposure",
         "gamma_exposure",
         "vega_exposure",

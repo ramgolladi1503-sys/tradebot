@@ -101,6 +101,26 @@ class StrategyTracker:
             return "soft", self.soft_disabled.get(strategy_name)
         return "ok", prob
 
+    def decay_prob(self, strategy_name):
+        if strategy_name in self.decay_probs:
+            prob = self.decay_probs.get(strategy_name)
+            if isinstance(prob, dict):
+                return prob.get("decay_probability")
+            return prob
+        if strategy_name in self.soft_disabled:
+            return self.soft_disabled.get(strategy_name)
+        if strategy_name in self.degraded:
+            val = self.degraded.get(strategy_name)
+            if isinstance(val, dict):
+                return val.get("value")
+        return None
+
+    def is_quarantined(self, strategy_name):
+        return strategy_name in self.degraded
+
+    def is_decaying(self, strategy_name):
+        return strategy_name in self.soft_disabled
+
     def record(self, strategy_name, pnl):
         if not strategy_name:
             return

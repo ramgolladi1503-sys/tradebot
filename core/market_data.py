@@ -38,6 +38,7 @@ _OPEN_RANGE = {}
 _LAST_GOOD_LTP = {}
 _REGIME_LAST_PRIMARY = {}
 _REGIME_TRANSITIONS = {}
+_LAST_REGIME_SNAPSHOT = {}
 
 _REGIME_MODEL = None
 _NEWS_ENCODER = None
@@ -48,6 +49,27 @@ _CROSS_ASSET = None
 # -------------------------------
 # Market Data Functions
 # -------------------------------
+
+def get_current_regime(symbol: str | None = None):
+    """
+    Canonical regime provider. Returns latest cached regime output from RegimeProbModel.
+    If missing, returns NEUTRAL with empty probabilities.
+    """
+    if symbol:
+        key = str(symbol).upper()
+        snap = _LAST_REGIME_SNAPSHOT.get(key)
+        if snap is None:
+            snap = _LAST_REGIME_SNAPSHOT.get(str(symbol))
+        if snap is None:
+            return {
+                "primary_regime": "NEUTRAL",
+                "regime_probs": {},
+                "regime_entropy": 0.0,
+                "unstable_regime_flag": True,
+                "regime_ts": None,
+            }
+        return dict(snap)
+    return {k: dict(v) for k, v in _LAST_REGIME_SNAPSHOT.items()}
 
 def _cached_ltp(symbol: str):
     try:
@@ -776,6 +798,18 @@ def fetch_live_market_data():
         except Exception:
             conf_hist = []
 
+        regime_ts = datetime.now().isoformat()
+        try:
+            _LAST_REGIME_SNAPSHOT[str(symbol).upper()] = {
+                "primary_regime": primary_regime,
+                "regime_probs": regime_probs,
+                "regime_entropy": regime_entropy,
+                "unstable_regime_flag": unstable_regime_flag,
+                "regime_ts": regime_ts,
+            }
+        except Exception:
+            pass
+
         results.append({
             "symbol": symbol,
             "ltp": ltp,
@@ -788,6 +822,7 @@ def fetch_live_market_data():
             "regime_entropy": regime_entropy,
             "unstable_regime_flag": unstable_regime_flag,
             "regime_transition_rate": regime_transition_rate,
+            "regime_ts": regime_ts,
             "shock_score": shock.get("shock_score"),
             "macro_direction_bias": shock.get("macro_direction_bias"),
             "uncertainty_index": shock.get("uncertainty_index"),
@@ -859,6 +894,7 @@ def fetch_live_market_data():
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
             "regime_transition_rate": regime_transition_rate,
+                "regime_ts": regime_ts,
             "shock_score": shock.get("shock_score"),
             "macro_direction_bias": shock.get("macro_direction_bias"),
             "uncertainty_index": shock.get("uncertainty_index"),
@@ -915,6 +951,7 @@ def fetch_live_market_data():
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
             "regime_transition_rate": regime_transition_rate,
+                "regime_ts": regime_ts,
             "shock_score": shock.get("shock_score"),
             "macro_direction_bias": shock.get("macro_direction_bias"),
             "uncertainty_index": shock.get("uncertainty_index"),
