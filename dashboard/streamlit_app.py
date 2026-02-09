@@ -33,6 +33,7 @@ from core.trade_store import fetch_recent_trades, fetch_recent_outcomes, fetch_p
 from core.scorecard import compute_scorecard
 from core.gpt_advisor import get_trade_advice, save_advice, get_day_summary
 from core.market_data import fetch_live_market_data
+from core.time_utils import is_today_local, age_minutes_local, now_local, parse_ts_local
 import time
 
 try:
@@ -1008,18 +1009,14 @@ def _add_entry_mismatch(df, threshold=None):
 
 def _filter_rows_today(rows, ts_key="timestamp"):
     try:
-        today = datetime.now().date()
+        now = now_local()
         filtered = []
         for r in rows:
             ts = r.get(ts_key)
             if not ts:
                 continue
-            try:
-                dt = pd.to_datetime(ts)
-                if dt.date() == today:
-                    filtered.append(r)
-            except Exception:
-                continue
+            if is_today_local(ts, now=now):
+                filtered.append(r)
         return filtered
     except Exception:
         return rows
@@ -1349,7 +1346,7 @@ if nav == "Home":
                     q_df = _hydrate_option_quotes(q_df, chain_map)
                     q_df = _add_entry_mismatch(q_df)
                 q_display = q_df.drop(columns=["trade_id"], errors="ignore")
-                display_cols = [c for c in ["timestamp", "symbol", "strike", "type", "expiry", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "qty", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
+                display_cols = [c for c in ["timestamp", "symbol", "instrument_id", "expiry", "strike", "type", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "qty", "qty_lots", "qty_units", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
                 if show_quotes:
                     display_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q_df.columns]
                     display_cols += [c for c in ["quote_note"] if c in q_df.columns]
@@ -1366,7 +1363,7 @@ if nav == "Home":
                     q_df = pd.DataFrame(q)
                     q_rows = []
                 st.subheader("Suggested Trades (Latest)")
-                show_cols = [c for c in ["timestamp", "symbol", "strike", "type", "expiry", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "qty", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
+                show_cols = [c for c in ["timestamp", "symbol", "instrument_id", "expiry", "strike", "type", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "qty", "qty_lots", "qty_units", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
                 if show_quotes:
                     show_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q_df.columns]
                     show_cols += [c for c in ["quote_note"] if c in q_df.columns]
@@ -1404,7 +1401,12 @@ if nav == "Home":
                         if expiry_val in (None, "", "None") and row.get("instrument_token"):
                             meta = meta_map.get(row.get("instrument_token"), {})
                             expiry_val = meta.get("expiry")
-                        label = f"{row.get('symbol')} {strike_val} {type_val}".strip()
+                        instrument_id = row.get("instrument_id")
+                        if not instrument_id:
+                            label = f"{row.get('symbol')} {strike_val} {type_val}".strip()
+                            label = f"INVALID (missing contract) | {label}"
+                        else:
+                            label = f"{row.get('symbol')} {instrument_id}"
                         if expiry_val not in (None, "", "None"):
                             label = f"{label} | {expiry_val}"
                         entry_val = row.get("entry")
@@ -1496,7 +1498,7 @@ if nav == "Home":
                     q2_df = _hydrate_option_quotes(q2_df, chain_map)
                     q2_df = _add_entry_mismatch(q2_df)
                 q2_display = q2_df.drop(columns=["trade_id"], errors="ignore")
-                show_cols = [c for c in ["symbol", "strike", "type", "expiry", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "confidence", "lot", "regime", "tier", "timestamp"] if c in q2_df.columns]
+                show_cols = [c for c in ["symbol", "instrument_id", "expiry", "strike", "type", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "confidence", "lot", "regime", "tier", "timestamp"] if c in q2_df.columns]
                 if show_quotes_q:
                     show_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q2_df.columns]
                     show_cols += [c for c in ["quote_note"] if c in q2_df.columns]
@@ -1851,9 +1853,9 @@ if nav == "Home":
             if rows:
                 df_rej = pd.DataFrame(rows)
                 if "timestamp" in df_rej.columns:
-                    df_rej["timestamp"] = pd.to_datetime(df_rej["timestamp"], errors="coerce")
-                    today = datetime.now().date()
-                    df_rej = df_rej[df_rej["timestamp"].dt.date == today]
+                    now = now_local()
+                    df_rej["ts_local"] = df_rej["timestamp"].apply(lambda v: parse_ts_local(v))
+                    df_rej = df_rej[df_rej["ts_local"].apply(lambda v: v is not None and v.date() == now.date())]
                 if not df_rej.empty and "reason" in df_rej.columns:
                     summary = df_rej["reason"].value_counts().head(8).reset_index()
                     summary.columns = ["reason", "count"]
@@ -2354,10 +2356,9 @@ if nav == "Gemini":
         # Compute row age + stale flag
         stale_count = 0
         if "timestamp" in df.columns:
-            ts = pd.to_datetime(df["timestamp"], errors="coerce")
-            age_min = (pd.Timestamp.now() - ts).dt.total_seconds() / 60.0
-            df["row_age_min"] = age_min.round(2)
-            df["row_is_stale"] = age_min > max_age_min
+            now = now_local()
+            df["row_age_min"] = df["timestamp"].apply(lambda v: age_minutes_local(v, now=now))
+            df["row_is_stale"] = df["row_age_min"].apply(lambda v: (v is None) or (v > max_age_min))
             stale_count = int(df["row_is_stale"].sum())
             if hide_stale:
                 df = df[~df["row_is_stale"]]

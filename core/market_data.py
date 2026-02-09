@@ -3,8 +3,8 @@
 import os
 import json
 import time
+from datetime import timezone
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 from config import config as cfg
 from core.option_chain import fetch_option_chain as fetch_option_chain_impl
 from core.regime_prob_model import RegimeProbModel
@@ -15,6 +15,8 @@ from core.cross_asset import CrossAsset
 from core.ohlc_buffer import ohlc_buffer
 from core.indicators_live import compute_indicators
 from core.filters import get_bias
+from core.depth_store import depth_store
+from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
 
 from core.kite_client import kite_client
 
@@ -98,7 +100,7 @@ def get_ltp(symbol: str):
         kite_client.ensure()
         if not kite_client.kite and getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
             try:
-                err = {"symbol": symbol, "error": "kite_not_initialized", "timestamp": datetime.now().isoformat()}
+                err = {"symbol": symbol, "error": "kite_not_initialized", "timestamp": now_ist().isoformat()}
                 p = Path("logs/live_quote_errors.jsonl")
                 p.parent.mkdir(exist_ok=True)
                 with p.open("a") as f:
@@ -118,7 +120,7 @@ def get_ltp(symbol: str):
         except Exception as e:
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
                 try:
-                    err = {"symbol": symbol, "error": "ltp_fetch_failed", "detail": str(e), "timestamp": datetime.now().isoformat()}
+                    err = {"symbol": symbol, "error": "ltp_fetch_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
                     p = Path("logs/live_quote_errors.jsonl")
                     p.parent.mkdir(exist_ok=True)
                     with p.open("a") as f:
@@ -145,7 +147,7 @@ def get_ltp(symbol: str):
                 try:
                     from pathlib import Path
                     import json
-                    err = {"symbol": symbol, "error": "ltp_alias_failed", "detail": str(e), "timestamp": datetime.now().isoformat()}
+                    err = {"symbol": symbol, "error": "ltp_alias_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
                     p = Path("logs/live_quote_errors.jsonl")
                     p.parent.mkdir(exist_ok=True)
                     with p.open("a") as f:
@@ -196,7 +198,7 @@ def _option_chain_health(symbol: str, chain: list, ltp: float):
             "strike_max": None,
             "ltp": ltp,
             "note": "No live option chain" if getattr(cfg, "REQUIRE_LIVE_QUOTES", True) else "Empty chain",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_ist().isoformat(),
         }
     missing_iv = sum(1 for c in chain if c.get("iv") is None)
     missing_quote = sum(1 for c in chain if not c.get("quote_ok", True))
@@ -217,7 +219,7 @@ def _option_chain_health(symbol: str, chain: list, ltp: float):
         "strike_min": strike_min,
         "strike_max": strike_max,
         "ltp": ltp,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now_ist().isoformat(),
     }
 
 def fetch_live_market_data():
@@ -276,7 +278,7 @@ def fetch_live_market_data():
         ltp = get_ltp(symbol)
         try:
             if ltp and ltp > 0:
-                ohlc_buffer.update_tick(symbol, ltp, volume=0, ts=datetime.now())
+                ohlc_buffer.update_tick(symbol, ltp, volume=0, ts=now_ist())
         except Exception:
             pass
         vwap = ltp
@@ -286,9 +288,9 @@ def fetch_live_market_data():
             cross_payload = _CROSS_ASSET.update(symbol, ltp) or {}
             cross_feat = cross_payload.get("features", {}) or {}
             cross_quality = cross_payload.get("data_quality", {}) or {}
-        except Exception:
+        except Exception as e:
             cross_feat = {}
-            cross_quality = {}
+            cross_quality = {"any_stale": True, "disabled": True, "disabled_reason": "cross_asset_exception", "errors": {"error": str(e)}}
 
         fx_ret_5m = cross_feat.get("x_usdinr_ret5") or cross_feat.get("x_fx_ret5")
         vix_z = cross_feat.get("x_india_vix_z") or cross_feat.get("x_vix_z")
@@ -297,17 +299,16 @@ def fetch_live_market_data():
         atr = max(1.0, ltp * 0.002)
         # minutes since open (used for ORB bias + day-type)
         try:
-            tz = ZoneInfo("Asia/Kolkata")
-            now = datetime.now(tz)
-            market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
-            market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+            now = now_ist()
+            market_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
+            market_close = now.replace(hour=17, minute=0, second=0, microsecond=0)
             minutes_since_open = max(0, int((now - market_open).total_seconds() / 60))
-            is_market_open = market_open <= now <= market_close
+            is_market_open = is_market_open_ist(now=now)
             today_local = now.date()
         except Exception:
             minutes_since_open = 0
             is_market_open = True
-            today_local = datetime.now().date()
+            today_local = now_ist().date()
         try:
             last_day = _DAYTYPE_LAST_DAY.get(symbol)
             if last_day != today_local:
@@ -338,8 +339,8 @@ def fetch_live_market_data():
                 try:
                     token = kite_client.resolve_index_token(symbol)
                     if token:
-                        from_dt = datetime.now() - timedelta(minutes=120)
-                        to_dt = datetime.now()
+                        from_dt = now_ist() - timedelta(minutes=120)
+                        to_dt = now_ist()
                         hist = kite_client.historical_data(token, from_dt, to_dt, interval="minute")
                         if hist:
                             ohlc_buffer.seed_bars(symbol, hist)
@@ -366,7 +367,7 @@ def fetch_live_market_data():
                 vwap_slope = ind["vwap_slope"]
             last_ts = ind.get("last_ts")
             if last_ts:
-                indicators_age_sec = (datetime.now() - last_ts).total_seconds()
+                indicators_age_sec = (now_ist() - last_ts).total_seconds()
             indicators_ok = bool(ind.get("ok")) and (indicators_age_sec is None or indicators_age_sec <= getattr(cfg, "INDICATOR_STALE_SEC", 120))
             if _DATA_CACHE.get(symbol, {}).get("ltp_source") != "live":
                 indicators_ok = False
@@ -375,10 +376,20 @@ def fetch_live_market_data():
         except Exception:
             indicators_ok = False
 
-        # Cross-asset data quality fail-safe
+        # Cross-asset data quality fail-safe (only in LIVE when required)
         try:
-            if cross_quality.get("any_stale"):
-                indicators_ok = False
+            live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+            require_x = bool(getattr(cfg, "REQUIRE_CROSS_ASSET", True))
+            if getattr(cfg, "REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE", True):
+                require_x = require_x and live_mode
+            if require_x:
+                required_stale = set(cross_quality.get("required_stale", []) or [])
+                missing = set((cross_quality.get("missing") or {}).keys())
+                required = set(getattr(cfg, "CROSS_REQUIRED_FEEDS", []) or [])
+                if not required_stale and required:
+                    required_stale = (missing & required)
+                if required_stale:
+                    indicators_ok = False
         except Exception:
             pass
 
@@ -397,7 +408,7 @@ def fetch_live_market_data():
             if hist is None:
                 hist = deque(maxlen=300)
                 _LTP_HISTORY[symbol] = hist
-            now_ts = datetime.now().timestamp()
+            now_ts = now_utc_epoch()
             hist.append((now_ts, ltp))
             # find oldest within window
             for ts, price in list(hist):
@@ -428,6 +439,8 @@ def fetch_live_market_data():
         ask_qty = None
         quote_ok = False
         quote_ts = None
+        quote_ts_epoch = None
+        quote_age_sec = None
         spread_pct = None
         try:
             if cfg.KITE_USE_API and kite_client.kite:
@@ -441,8 +454,21 @@ def fetch_live_market_data():
                 bid_qty = depth.get("buy", [{}])[0].get("quantity")
                 ask_qty = depth.get("sell", [{}])[0].get("quantity")
                 quote_ts = q.get("timestamp") or q.get("last_trade_time")
-                if hasattr(quote_ts, "isoformat"):
-                    quote_ts = quote_ts.isoformat()
+                if hasattr(quote_ts, "timestamp"):
+                    quote_ts_epoch = float(quote_ts.timestamp())
+                elif isinstance(quote_ts, (int, float)):
+                    quote_ts_epoch = float(quote_ts)
+                elif quote_ts:
+                    try:
+                        quote_ts_epoch = float(quote_ts)
+                    except Exception:
+                        try:
+                            quote_ts_epoch = datetime.fromisoformat(str(quote_ts)).timestamp()
+                        except Exception:
+                            quote_ts_epoch = None
+                if quote_ts_epoch is not None:
+                    quote_ts = datetime.utcfromtimestamp(quote_ts_epoch).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+                    quote_age_sec = max(0.0, now_utc_epoch() - quote_ts_epoch)
                 if bid and ask:
                     quote_ok = True
                     if ltp:
@@ -500,6 +526,23 @@ def fetch_live_market_data():
             health_path.write_text(json.dumps(existing, indent=2))
         except Exception:
             health = None
+
+        # Depth age (use latest depth snapshot for option tokens if available)
+        depth_age_sec = None
+        try:
+            latest_depth_ts = None
+            for opt in option_chain:
+                token = opt.get("instrument_token")
+                if token is None:
+                    continue
+                book = depth_store.get(token) or {}
+                ts_epoch = book.get("ts_epoch") or book.get("ts")
+                if ts_epoch is not None:
+                    latest_depth_ts = ts_epoch if latest_depth_ts is None else max(latest_depth_ts, float(ts_epoch))
+            if latest_depth_ts is not None:
+                depth_age_sec = max(0.0, now_utc_epoch() - float(latest_depth_ts))
+        except Exception:
+            depth_age_sec = None
 
         # Regime model (probabilistic)
         atr_pct = (atr / ltp) if ltp else 0
@@ -609,7 +652,7 @@ def fetch_live_market_data():
             if expiry:
                 from datetime import datetime as dt
                 exp_dt = dt.fromisoformat(str(expiry))
-                time_to_expiry_hrs = max(0.0, (exp_dt - datetime.now()).total_seconds() / 3600.0)
+                time_to_expiry_hrs = max(0.0, (exp_dt - now_ist()).total_seconds() / 3600.0)
         except Exception:
             time_to_expiry_hrs = None
 
@@ -718,7 +761,8 @@ def fetch_live_market_data():
                     Path("logs").mkdir(exist_ok=True)
                     with open("logs/day_type_events.jsonl", "a") as f:
                         f.write(json.dumps({
-                            "ts": datetime.now().isoformat(),
+                            "ts_epoch": now_utc_epoch(),
+                            "ts_ist": now_ist().isoformat(),
                             "symbol": symbol,
                             "event": "LOCK",
                             "day_type": day_type,
@@ -736,7 +780,8 @@ def fetch_live_market_data():
                 Path("logs").mkdir(exist_ok=True)
                 with open("logs/day_type_events.jsonl", "a") as f:
                     f.write(json.dumps({
-                        "ts": datetime.now().isoformat(),
+                        "ts_epoch": now_utc_epoch(),
+                        "ts_ist": now_ist().isoformat(),
                         "symbol": symbol,
                         "event": "CHANGE",
                         "day_type": day_type,
@@ -756,7 +801,8 @@ def fetch_live_market_data():
                 Path("logs").mkdir(exist_ok=True)
                 with open("logs/day_type_events.jsonl", "a") as f:
                     f.write(json.dumps({
-                        "ts": datetime.now().isoformat(),
+                        "ts_epoch": now_utc_epoch(),
+                        "ts_ist": now_ist().isoformat(),
                         "symbol": symbol,
                         "event": "TICK",
                         "day_type": day_type,
@@ -798,7 +844,7 @@ def fetch_live_market_data():
         except Exception:
             conf_hist = []
 
-        regime_ts = datetime.now().isoformat()
+        regime_ts = now_ist().isoformat()
         try:
             _LAST_REGIME_SNAPSHOT[str(symbol).upper()] = {
                 "primary_regime": primary_regime,
@@ -867,8 +913,12 @@ def fetch_live_market_data():
             "ask_qty": ask_qty,
             "quote_ok": quote_ok,
             "quote_ts": quote_ts,
+            "quote_ts_epoch": quote_ts_epoch,
+            "quote_age_sec": quote_age_sec,
+            "depth_age_sec": depth_age_sec,
             "spread_pct": spread_pct,
-            "timestamp": datetime.now().timestamp(),
+            "timestamp": now_utc_epoch(),
+            "timestamp_ist": now_ist().isoformat(),
             "option_chain": option_chain,
             "chain_source": chain_source,
             "option_chain_health": health,
@@ -929,8 +979,12 @@ def fetch_live_market_data():
                 "ask_qty": ask_qty,
                 "quote_ok": quote_ok,
                 "quote_ts": quote_ts,
+                "quote_ts_epoch": quote_ts_epoch,
+                "quote_age_sec": quote_age_sec,
+                "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,
-                "timestamp": datetime.now().timestamp(),
+                "timestamp": now_utc_epoch(),
+                "timestamp_ist": now_ist().isoformat(),
                 "option_chain": [],
                 "instrument": "FUT",
                 "ltp_change": ltp_change,
@@ -986,8 +1040,12 @@ def fetch_live_market_data():
                 "ask_qty": ask_qty,
                 "quote_ok": quote_ok,
                 "quote_ts": quote_ts,
+                "quote_ts_epoch": quote_ts_epoch,
+                "quote_age_sec": quote_age_sec,
+                "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,
-                "timestamp": datetime.now().timestamp(),
+                "timestamp": now_utc_epoch(),
+                "timestamp_ist": now_ist().isoformat(),
                 "option_chain": [],
                 "instrument": "EQ",
                 "ltp_change": ltp_change,
@@ -1014,7 +1072,7 @@ def get_next_expiry(expiry_type="WEEKLY", symbol: str | None = None):
         from core.market_calendar import next_expiry_by_type
         return next_expiry_by_type(expiry_type=expiry_type, symbol=symbol)
     except Exception:
-        today = datetime.now()
+        today = now_ist()
         if expiry_type.upper() == "WEEKLY":
             offset = (1 - today.weekday()) % 7  # 0=Monday, 1=Tuesday
             next_expiry = today + timedelta(days=offset)

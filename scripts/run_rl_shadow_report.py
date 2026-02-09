@@ -9,7 +9,7 @@ if str(ROOT) not in sys.path:
 
 from config import config as cfg
 
-DECISION_JSONL = ROOT / "logs" / "decision_events.jsonl"
+DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", str(ROOT / "logs" / "decision_events.jsonl")))
 REPORT_PATH = ROOT / "logs" / "rl_shadow_report.json"
 
 

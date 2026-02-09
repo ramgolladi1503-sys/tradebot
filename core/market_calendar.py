@@ -1,8 +1,9 @@
 from datetime import date, timedelta
 import holidays
 from config import config as cfg
+from core.time_utils import now_ist
 
-IN_HOLIDAYS = holidays.India(years=date.today().year)
+IN_HOLIDAYS = holidays.India(years=now_ist().date().year)
 
 def _weekly_expiry_weekday(symbol: str | None):
     sym = (symbol or "NIFTY").upper()
@@ -16,7 +17,7 @@ def next_expiry(symbol: str | None = None):
     """
     Next weekly expiry for a symbol (per config), skipping holidays.
     """
-    today = date.today()
+    today = now_ist().date()
     weekday = _weekly_expiry_weekday(symbol)
     for i in range(1, 15):
         candidate = today + timedelta(days=i)
@@ -28,7 +29,7 @@ def next_monthly_expiry():
     """
     Last Thursday of current or next month, skipping holidays.
     """
-    today = date.today()
+    today = now_ist().date()
     year = today.year
     month = today.month
     for _ in range(2):

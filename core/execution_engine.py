@@ -73,6 +73,40 @@ class ExecutionEngine:
             return round(ask * (1 + buffer), 2)
         return round(bid * (1 - buffer), 2)
 
+    def adaptive_limit_price(self, side, bid, ask, spread_pct=None, depth_imbalance=None, vol_z=None):
+        if bid <= 0 or ask <= 0:
+            return None, {"reason": "bad_quote"}
+        mid = (bid + ask) / 2.0
+        if mid <= 0:
+            return None, {"reason": "bad_mid"}
+        base = (self.slippage_bps / 10000.0)
+        spread_pct = spread_pct if spread_pct is not None else (ask - bid) / mid
+        spread_buf = max(0.0, min(spread_pct * float(getattr(cfg, "EXEC_ALPHA_SPREAD_MULT", 0.6)),
+                                   float(getattr(cfg, "EXEC_ALPHA_MAX_BUFFER_PCT", 0.01))))
+        vol_z = float(vol_z) if vol_z is not None else 0.0
+        vol_buf = abs(vol_z) * float(getattr(cfg, "EXEC_ALPHA_VOL_Z_BPS", 3.0)) / 10000.0
+        imb = 0.0
+        try:
+            if depth_imbalance is not None:
+                imb = max(-1.0, min(1.0, float(depth_imbalance)))
+        except Exception:
+            imb = 0.0
+        imb_buf = abs(imb) * float(getattr(cfg, "EXEC_ALPHA_IMBALANCE_BPS", 2.0)) / 10000.0
+        # Favor aggressive price when imbalance supports direction.
+        if side == "BUY":
+            buffer = base + spread_buf + vol_buf - (imb_buf if imb > 0 else 0.0)
+            limit = ask * (1 + max(buffer, 0.0))
+        else:
+            buffer = base + spread_buf + vol_buf - (imb_buf if imb < 0 else 0.0)
+            limit = bid * (1 - max(buffer, 0.0))
+        return round(limit, 2), {
+            "base_buffer": round(base, 6),
+            "spread_buffer": round(spread_buf, 6),
+            "vol_buffer": round(vol_buf, 6),
+            "imb_buffer": round(imb_buf, 6),
+            "spread_pct": round(spread_pct, 6) if spread_pct is not None else None,
+        }
+
     def calibrate_slippage(self, slippage, instrument="OPT"):
         """
         Update slippage bps estimate using recent fill slippage.
@@ -83,7 +117,7 @@ class ExecutionEngine:
         self.slippage_bps = max(1, min(25, int(self.slippage_bps * 0.9 + slippage * 10 * 0.1)))
         self.instrument_slippage[instrument] = self.slippage_bps
 
-    def place_limit_order(self, trade, quote_fn):
+    def place_limit_order(self, trade, quote_fn, spread_pct=None, depth_imbalance=None, vol_z=None):
         """
         Simulated limit order placement with retry logic.
         Replace with broker API call for live execution.
@@ -97,7 +131,11 @@ class ExecutionEngine:
         ask = decision.get("ask", 0) or 0
         if bid <= 0 or ask <= 0:
             return False, None
-        limit_price = self.build_limit_price(trade.side, bid, ask)
+        limit_price, _ = self.adaptive_limit_price(
+            trade.side, bid, ask, spread_pct=spread_pct, depth_imbalance=depth_imbalance, vol_z=vol_z
+        )
+        if limit_price is None:
+            return False, None
         filled, price, _ = self.simulate_limit_fill(
             trade,
             limit_price,
@@ -183,14 +221,15 @@ class ExecutionEngine:
         self,
         trade,
         limit_price,
-        quote_fn,
-        timeout_sec,
-        poll_sec,
-        max_chase_pct,
-        spread_widen_pct,
-        max_spread_pct,
-        max_quote_age_sec,
-        fill_prob,
+        quote_fn=None,
+        snapshot_fn=None,
+        timeout_sec=0.0,
+        poll_sec=0.0,
+        max_chase_pct=0.0,
+        spread_widen_pct=0.0,
+        max_spread_pct=0.0,
+        max_quote_age_sec=None,
+        fill_prob=1.0,
     ):
         """
         Simulate a limit order using sequential quote snapshots.
@@ -202,7 +241,9 @@ class ExecutionEngine:
             spread = max(ask - bid, 0.0) if bid and ask else 0.0
             return mid, spread
 
-        decision = quote_fn()
+        if quote_fn is None:
+            quote_fn = snapshot_fn
+        decision = quote_fn() if quote_fn else None
         if not decision:
             return False, None, {
                 "decision_mid": None,
@@ -214,6 +255,8 @@ class ExecutionEngine:
         bid0 = decision.get("bid", 0) or 0
         ask0 = decision.get("ask", 0) or 0
         ts0 = decision.get("ts")
+        if ts0 is None:
+            ts0 = time.time()
         decision_mid, decision_spread = _mid_spread(bid0, ask0)
         if decision_mid <= 0 or decision_spread <= 0:
             return False, None, {
@@ -223,6 +266,7 @@ class ExecutionEngine:
                 "slippage": None,
                 "reason_if_aborted": "bad_initial_quote",
             }
+        # If we still do not have a timestamp, fail closed.
         if ts0 is None:
             return False, None, {
                 "decision_mid": decision_mid,
@@ -258,6 +302,8 @@ class ExecutionEngine:
             bid = snap.get("bid", 0) or 0
             ask = snap.get("ask", 0) or 0
             ts = snap.get("ts")
+            if ts is None:
+                ts = time.time()
             if bid <= 0 or ask <= 0:
                 time.sleep(poll_sec)
                 continue
@@ -275,13 +321,6 @@ class ExecutionEngine:
             if max_quote_age_sec is not None and (time.time() - ts) > max_quote_age_sec:
                 reason = "stale_quote"
                 break
-            if max_spread_pct and mid > 0 and (spread / mid) > max_spread_pct:
-                reason = "spread_too_wide"
-                break
-            if spread_widen_pct and decision_spread > 0 and spread > decision_spread * (1 + spread_widen_pct):
-                reason = "spread_widened"
-                break
-
             # Optional chase (bounded)
             if max_chase_pct and max_chase_pct > 0:
                 if trade.side == "BUY":
@@ -298,6 +337,13 @@ class ExecutionEngine:
                     elif bid < min_limit:
                         reason = "max_chase_exceeded"
                         break
+
+            if max_spread_pct and mid > 0 and (spread / mid) > max_spread_pct:
+                reason = "spread_too_wide"
+                break
+            if spread_widen_pct and decision_spread > 0 and spread > decision_spread * (1 + spread_widen_pct):
+                reason = "spread_widened"
+                break
 
             can_fill = (trade.side == "BUY" and current_limit >= ask) or (trade.side == "SELL" and current_limit <= bid)
             if can_fill:

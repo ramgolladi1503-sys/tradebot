@@ -5,6 +5,8 @@ import random
 from dataclasses import dataclass
 from typing import List, Dict, Any
 
+import pandas as pd
+
 from config import config as cfg
 from core.risk_state import RiskState
 
@@ -204,3 +206,100 @@ class SyntheticStressGenerator:
             "kill_switch_frequency": round(kill_freq, 4),
             "paths": len(pnl_paths),
         }
+
+
+def _window_index(df: pd.DataFrame, duration: int) -> pd.Index:
+    if duration <= 0 or df.empty:
+        return df.index[:0]
+    end = min(len(df), duration)
+    return df.index[:end]
+
+
+def spread_widen(df: pd.DataFrame, multiplier: float, duration: int) -> pd.DataFrame:
+    """
+    Widen spreads by a multiplier for a deterministic window.
+    """
+    out = df.copy()
+    idx = _window_index(out, duration)
+    if "spread_pct" in out:
+        out.loc[idx, "spread_pct"] = out.loc[idx, "spread_pct"].astype(float) * float(multiplier)
+    if "bid" in out and "ask" in out:
+        bid = out.loc[idx, "bid"].astype(float)
+        ask = out.loc[idx, "ask"].astype(float)
+        mid = (bid + ask) / 2.0
+        widen = (ask - bid) * float(multiplier)
+        out.loc[idx, "bid"] = (mid - widen / 2.0).clip(lower=0.01)
+        out.loc[idx, "ask"] = (mid + widen / 2.0).clip(lower=0.01)
+    out.loc[idx, "stress_spread_widen"] = True
+    return out
+
+
+def depth_thin(df: pd.DataFrame, multiplier: float, duration: int) -> pd.DataFrame:
+    """
+    Thin depth by reducing bid/ask quantities.
+    """
+    out = df.copy()
+    idx = _window_index(out, duration)
+    for col in ("bid_qty", "ask_qty"):
+        if col in out:
+            out.loc[idx, col] = (out.loc[idx, col].astype(float) * float(multiplier)).clip(lower=0.0)
+    out.loc[idx, "stress_depth_thin"] = True
+    return out
+
+
+def quote_stale_burst(df: pd.DataFrame, duration: int, max_age_sec: float) -> pd.DataFrame:
+    """
+    Force quote_age_sec to exceed max_age_sec for a window.
+    """
+    out = df.copy()
+    idx = _window_index(out, duration)
+    if "quote_age_sec" in out:
+        out.loc[idx, "quote_age_sec"] = float(max_age_sec) + 1.0
+    out.loc[idx, "stress_quote_stale"] = True
+    return out
+
+
+def gap_open(df: pd.DataFrame, size_pct: float, duration: int) -> pd.DataFrame:
+    """
+    Apply a gap move to bid/ask (and ltp if present).
+    """
+    out = df.copy()
+    idx = _window_index(out, duration)
+    mult = 1.0 + float(size_pct)
+    for col in ("bid", "ask", "ltp"):
+        if col in out:
+            out.loc[idx, col] = out.loc[idx, col].astype(float) * mult
+    out.loc[idx, "stress_gap_open"] = True
+    return out
+
+
+def iv_spike(df: pd.DataFrame, multiplier: float, duration: int) -> pd.DataFrame:
+    """
+    Spike IV columns where available.
+    """
+    out = df.copy()
+    idx = _window_index(out, duration)
+    for col in ("iv", "iv_mean", "iv_term"):
+        if col in out:
+            out.loc[idx, col] = out.loc[idx, col].astype(float) * float(multiplier)
+    out.loc[idx, "stress_iv_spike"] = True
+    return out
+
+
+def regime_flip_storm(df: pd.DataFrame, flips_per_window: int, duration: int) -> pd.DataFrame:
+    """
+    Create rapid regime flips and high entropy.
+    """
+    out = df.copy()
+    idx = _window_index(out, duration)
+    if "regime_entropy" in out:
+        out.loc[idx, "regime_entropy"] = out.loc[idx, "regime_entropy"].fillna(0).astype(float).clip(lower=0.0)
+        out.loc[idx, "regime_entropy"] = out.loc[idx, "regime_entropy"].apply(lambda v: max(v, 2.0))
+    if "unstable_regime_flag" in out:
+        out.loc[idx, "unstable_regime_flag"] = True
+    if "primary_regime" in out:
+        regimes = ["TREND", "RANGE", "EVENT", "PANIC", "RANGE_VOLATILE"]
+        for i, row_idx in enumerate(idx):
+            out.at[row_idx, "primary_regime"] = regimes[(i * max(1, flips_per_window)) % len(regimes)]
+    out.loc[idx, "stress_regime_flip"] = True
+    return out

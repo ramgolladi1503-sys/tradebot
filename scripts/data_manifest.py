@@ -1,4 +1,6 @@
 from pathlib import Path
+
+from config import config as cfg
 import runpy
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
@@ -10,7 +12,7 @@ from datetime import datetime
 
 FILES = [
     "data/trade_log.json",
-    "data/trades.db",
+    cfg.TRADE_DB_PATH,
     "data/ml_features.csv",
     "data/tick_features.csv",
 ]

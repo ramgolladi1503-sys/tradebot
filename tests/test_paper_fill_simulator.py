@@ -29,8 +29,8 @@ def test_buy_fill_when_limit_crosses():
     sim = PaperFillSimulator(timeout_sec=0.05, poll_sec=0)
     trade = _trade("BUY")
     snapshots = [
-        {"bid": 98, "ask": 102},
-        {"bid": 99, "ask": 100},
+        {"bid": 98, "ask": 102, "ts": datetime.now().timestamp()},
+        {"bid": 99, "ask": 100, "ts": datetime.now().timestamp()},
     ]
     filled, price, report = sim.simulate(trade, limit_price=100, snapshot_stream=snapshots)
     assert filled is True
@@ -42,8 +42,8 @@ def test_sell_fill_when_limit_crosses():
     sim = PaperFillSimulator(timeout_sec=0.05, poll_sec=0)
     trade = _trade("SELL")
     snapshots = [
-        {"bid": 98, "ask": 101},
-        {"bid": 101, "ask": 103},
+        {"bid": 98, "ask": 101, "ts": datetime.now().timestamp()},
+        {"bid": 101, "ask": 103, "ts": datetime.now().timestamp()},
     ]
     filled, price, report = sim.simulate(trade, limit_price=100, snapshot_stream=snapshots)
     assert filled is True
@@ -55,8 +55,8 @@ def test_timeout_when_never_crosses():
     sim = PaperFillSimulator(timeout_sec=0.01, poll_sec=0)
     trade = _trade("BUY")
     snapshots = [
-        {"bid": 98, "ask": 105},
-        {"bid": 98, "ask": 104},
+        {"bid": 98, "ask": 105, "ts": datetime.now().timestamp()},
+        {"bid": 98, "ask": 104, "ts": datetime.now().timestamp()},
     ]
     filled, price, report = sim.simulate(trade, limit_price=100, snapshot_stream=snapshots)
     assert filled is False

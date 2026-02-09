@@ -5,6 +5,8 @@
 # -------------------------------
 import os
 import json
+import csv
+from pathlib import Path
 try:
     from dotenv import load_dotenv  # type: ignore
     load_dotenv()
@@ -25,15 +27,18 @@ ENABLE_TELEGRAM = os.getenv("ENABLE_TELEGRAM", "true").lower() == "true"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_ONLY_TRADES = os.getenv("TELEGRAM_ONLY_TRADES", "true").lower() == "true"
+TELEGRAM_ALLOW_NON_TRADE_ALERTS = os.getenv("TELEGRAM_ALLOW_NON_TRADE_ALERTS", "false").lower() == "true"
+TELEGRAM_TRADE_VALIDITY_SEC = int(os.getenv("TELEGRAM_TRADE_VALIDITY_SEC", "180"))
 
 # -------------------------------
 # Capital & Risk Configuration
 # -------------------------------
 CAPITAL = 100000
 # Canonical risk limits (percent as decimal)
-MAX_RISK_PER_TRADE_PCT = float(os.getenv("MAX_RISK_PER_TRADE_PCT", "0.03"))   # 3%
-MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.15"))          # 15%
-MAX_DRAWDOWN_PCT = float(os.getenv("MAX_DRAWDOWN_PCT", "-0.20"))             # -20% drawdown
+MAX_RISK_PER_TRADE_PCT = float(os.getenv("MAX_RISK_PER_TRADE_PCT", "0.004"))
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))
+MAX_DRAWDOWN_PCT = float(os.getenv("MAX_DRAWDOWN_PCT", "-0.06"))
+MAX_OPEN_RISK_PCT = float(os.getenv("MAX_OPEN_RISK_PCT", "0.02"))
 # Backward-compatible aliases (deprecated)
 MAX_RISK_PER_TRADE = MAX_RISK_PER_TRADE_PCT
 MAX_DAILY_LOSS = MAX_DAILY_LOSS_PCT
@@ -70,18 +75,85 @@ REGIME_EXPOSURE_MULT = {
 }
 
 # Risk profiles (override defaults when selected)
-RISK_PROFILE = os.getenv("RISK_PROFILE", "CONSERVATIVE").upper()
-RISK_PROFILES = {
-    "CONSERVATIVE": {
-        "max_daily_loss": 0.02,   # pct
-        "risk_per_trade": 0.004,  # pct
-        "max_trades": 3,
+RISK_PROFILE = os.getenv("RISK_PROFILE", "PILOT").upper()
+RISK_PROFILE_LIMITS = {
+    "PILOT": {
+        "MAX_DAILY_LOSS_PCT": float(os.getenv("PILOT_MAX_DAILY_LOSS_PCT", "0.015")),
+        "MAX_DRAWDOWN_PCT": float(os.getenv("PILOT_MAX_DRAWDOWN_PCT", "-0.04")),
+        "MAX_RISK_PER_TRADE_PCT": float(os.getenv("PILOT_MAX_RISK_PER_TRADE_PCT", "0.0035")),
+        "MAX_OPEN_RISK_PCT": float(os.getenv("PILOT_MAX_OPEN_RISK_PCT", "0.015")),
+        "MAX_TRADES_PER_DAY": int(os.getenv("PILOT_MAX_TRADES_PER_DAY", "2")),
+        "LOSS_STREAK_DOWNSIZE": int(os.getenv("PILOT_LOSS_STREAK_DOWNSIZE", "3")),
+        "EVENT_REGIME_RISK_MULT": float(os.getenv("PILOT_EVENT_REGIME_RISK_MULT", "0.5")),
+        "HIGH_ENTROPY_RISK_MULT": float(os.getenv("PILOT_HIGH_ENTROPY_RISK_MULT", "0.6")),
+        "RECOVERY_MODE_MULT": float(os.getenv("PILOT_RECOVERY_MODE_MULT", "0.4")),
+    },
+    "NORMAL": {
+        "MAX_DAILY_LOSS_PCT": float(os.getenv("NORMAL_MAX_DAILY_LOSS_PCT", "0.025")),
+        "MAX_DRAWDOWN_PCT": float(os.getenv("NORMAL_MAX_DRAWDOWN_PCT", "-0.08")),
+        "MAX_RISK_PER_TRADE_PCT": float(os.getenv("NORMAL_MAX_RISK_PER_TRADE_PCT", "0.005")),
+        "MAX_OPEN_RISK_PCT": float(os.getenv("NORMAL_MAX_OPEN_RISK_PCT", "0.03")),
+        "MAX_TRADES_PER_DAY": int(os.getenv("NORMAL_MAX_TRADES_PER_DAY", "4")),
+        "LOSS_STREAK_DOWNSIZE": int(os.getenv("NORMAL_LOSS_STREAK_DOWNSIZE", "3")),
+        "EVENT_REGIME_RISK_MULT": float(os.getenv("NORMAL_EVENT_REGIME_RISK_MULT", "0.6")),
+        "HIGH_ENTROPY_RISK_MULT": float(os.getenv("NORMAL_HIGH_ENTROPY_RISK_MULT", "0.7")),
+        "RECOVERY_MODE_MULT": float(os.getenv("NORMAL_RECOVERY_MODE_MULT", "0.5")),
     },
     "AGGRESSIVE": {
-        "max_daily_loss": 0.04,   # pct
-        "risk_per_trade": 0.0075, # pct
+        "MAX_DAILY_LOSS_PCT": float(os.getenv("AGGRESSIVE_MAX_DAILY_LOSS_PCT", "0.04")),
+        "MAX_DRAWDOWN_PCT": float(os.getenv("AGGRESSIVE_MAX_DRAWDOWN_PCT", "-0.12")),
+        "MAX_RISK_PER_TRADE_PCT": float(os.getenv("AGGRESSIVE_MAX_RISK_PER_TRADE_PCT", "0.0075")),
+        "MAX_OPEN_RISK_PCT": float(os.getenv("AGGRESSIVE_MAX_OPEN_RISK_PCT", "0.05")),
+        "MAX_TRADES_PER_DAY": int(os.getenv("AGGRESSIVE_MAX_TRADES_PER_DAY", "6")),
+        "LOSS_STREAK_DOWNSIZE": int(os.getenv("AGGRESSIVE_LOSS_STREAK_DOWNSIZE", "4")),
+        "EVENT_REGIME_RISK_MULT": float(os.getenv("AGGRESSIVE_EVENT_REGIME_RISK_MULT", "0.7")),
+        "HIGH_ENTROPY_RISK_MULT": float(os.getenv("AGGRESSIVE_HIGH_ENTROPY_RISK_MULT", "0.75")),
+        "RECOVERY_MODE_MULT": float(os.getenv("AGGRESSIVE_RECOVERY_MODE_MULT", "0.6")),
     },
 }
+if RISK_PROFILE not in RISK_PROFILE_LIMITS:
+    RISK_PROFILE = "PILOT"
+_active_risk_limits = dict(RISK_PROFILE_LIMITS[RISK_PROFILE])
+# Hard guard: pilot must remain conservative regardless of env overrides.
+if _active_risk_limits["MAX_DAILY_LOSS_PCT"] > 0.02:
+    _active_risk_limits["MAX_DAILY_LOSS_PCT"] = 0.02
+MAX_DAILY_LOSS_PCT = float(_active_risk_limits["MAX_DAILY_LOSS_PCT"])
+MAX_DRAWDOWN_PCT = float(_active_risk_limits["MAX_DRAWDOWN_PCT"])
+MAX_RISK_PER_TRADE_PCT = float(_active_risk_limits["MAX_RISK_PER_TRADE_PCT"])
+MAX_OPEN_RISK_PCT = float(_active_risk_limits["MAX_OPEN_RISK_PCT"])
+MAX_TRADES_PER_DAY = int(_active_risk_limits["MAX_TRADES_PER_DAY"])
+LOSS_STREAK_DOWNSIZE = int(_active_risk_limits["LOSS_STREAK_DOWNSIZE"])
+EVENT_REGIME_RISK_MULT = float(_active_risk_limits["EVENT_REGIME_RISK_MULT"])
+HIGH_ENTROPY_RISK_MULT = float(_active_risk_limits["HIGH_ENTROPY_RISK_MULT"])
+RECOVERY_MODE_MULT = float(_active_risk_limits["RECOVERY_MODE_MULT"])
+RISK_SOFT_HALT_FRACTION = float(os.getenv("RISK_SOFT_HALT_FRACTION", "0.7"))
+RISK_SHOCK_SCORE_SOFT = float(os.getenv("RISK_SHOCK_SCORE_SOFT", "0.65"))
+RISK_ENTROPY_SOFT = float(os.getenv("RISK_ENTROPY_SOFT", "1.3"))
+
+# -------------------------------
+# Live Pilot Governance
+# -------------------------------
+LIVE_PILOT_MODE = os.getenv("LIVE_PILOT_MODE", "false").lower() == "true"
+LIVE_STRATEGY_WHITELIST = [s.strip() for s in os.getenv("LIVE_STRATEGY_WHITELIST", "").split(",") if s.strip()]
+LIVE_MAX_LOTS = int(os.getenv("LIVE_MAX_LOTS", "1"))
+LIVE_MAX_TRADES_PER_DAY = int(os.getenv("LIVE_MAX_TRADES_PER_DAY", "2"))
+LIVE_MAX_SPREAD_PCT = float(os.getenv("LIVE_MAX_SPREAD_PCT", "0.02"))
+LIVE_MAX_QUOTE_AGE_SEC = float(os.getenv("LIVE_MAX_QUOTE_AGE_SEC", "2.0"))
+AUDIT_REQUIRED_TO_TRADE = os.getenv("AUDIT_REQUIRED_TO_TRADE", "true").lower() == "true"
+EXEC_DEGRADATION_MAX_MISSED_FILL_RATE = float(os.getenv("EXEC_DEGRADATION_MAX_MISSED_FILL_RATE", "0.5"))
+EXEC_DEGRADATION_MAX_SLIPPAGE_MULT = float(os.getenv("EXEC_DEGRADATION_MAX_SLIPPAGE_MULT", "2.0"))
+# Baseline slippage (price units) for degradation checks. If zero/unknown, pilot mode halts.
+EXEC_BASELINE_SLIPPAGE = float(os.getenv("EXEC_BASELINE_SLIPPAGE", "0.0"))
+
+# -------------------------------
+# Strategy lifecycle governance
+# -------------------------------
+STRATEGY_LIFECYCLE_PATH = os.getenv("STRATEGY_LIFECYCLE_PATH", "logs/strategy_lifecycle.json")
+STRATEGY_LIFECYCLE_DEFAULT_STATE = os.getenv("STRATEGY_LIFECYCLE_DEFAULT_STATE", "PAPER")
+ALLOW_RESEARCH_STRATEGIES = os.getenv("ALLOW_RESEARCH_STRATEGIES", "false").lower() == "true"
+PROMOTION_PILOT_DAYS_REQUIRED = int(os.getenv("PROMOTION_PILOT_DAYS_REQUIRED", "3"))
+PROMOTION_REQUIRE_STRESS = os.getenv("PROMOTION_REQUIRE_STRESS", "true").lower() == "true"
+PROMOTION_REQUIRE_BACKTEST = os.getenv("PROMOTION_REQUIRE_BACKTEST", "true").lower() == "true"
 
 # -------------------------------
 # Symbols to monitor
@@ -161,6 +233,12 @@ BANDIT_MODE = "BAYES"  # BAYES, UCB, or EPS
 BANDIT_WINDOW = 50
 BANDIT_UTILITY_WEIGHT = 0.5
 BANDIT_ALERT_THRESHOLD = 0.2
+META_MODEL_ENABLED = os.getenv("META_MODEL_ENABLED", "true").lower() == "true"
+META_MODEL_SHADOW_ONLY = os.getenv("META_MODEL_SHADOW_ONLY", "true").lower() == "true"
+META_SHADOW_LOG_PATH = os.getenv("META_SHADOW_LOG_PATH", "logs/meta_shadow.jsonl")
+META_EXECQ_MIN = float(os.getenv("META_EXECQ_MIN", "55"))
+META_DECAY_PENALTY_THRESHOLD = float(os.getenv("META_DECAY_PENALTY_THRESHOLD", "0.6"))
+META_DECAY_PENALTY_MULT = float(os.getenv("META_DECAY_PENALTY_MULT", "0.7"))
 STRATEGY_WF_LOCK_ENABLE = os.getenv("STRATEGY_WF_LOCK_ENABLE", "true").lower() == "true"
 STRATEGY_WF_LOCK_TTL = int(os.getenv("STRATEGY_WF_LOCK_TTL", "300"))
 LIVE_WF_DRIFT_DISABLE = os.getenv("LIVE_WF_DRIFT_DISABLE", "true").lower() == "true"
@@ -202,10 +280,6 @@ NEWS_PRE_DECAY_MINUTES = float(os.getenv("NEWS_PRE_DECAY_MINUTES", "180"))
 NEWS_POST_DECAY_MINUTES = float(os.getenv("NEWS_POST_DECAY_MINUTES", "120"))
 NEWS_CLASSIFIER_PATH = os.getenv("NEWS_CLASSIFIER_PATH", "models/news_shock_model.pkl")
 NEWS_VECTOR_PATH = os.getenv("NEWS_VECTOR_PATH", "models/news_vectorizer.pkl")
-CROSS_ASSET_SYMBOLS = json.loads(os.getenv("CROSS_ASSET_SYMBOLS", "{}")) if os.getenv("CROSS_ASSET_SYMBOLS") else {}
-CROSS_ASSET_REFRESH_SEC = int(os.getenv("CROSS_ASSET_REFRESH_SEC", "30"))
-CROSS_ASSET_STALE_SEC = int(os.getenv("CROSS_ASSET_STALE_SEC", "120"))
-CROSS_ASSET_MAXLEN = int(os.getenv("CROSS_ASSET_MAXLEN", "600"))
 
 # -------------------------------
 # Alpha Ensemble (multi-model fusion)
@@ -316,7 +390,7 @@ if str(EXECUTION_MODE).upper() == "LIVE":
     QUICK_TRADE_MODE = False
     ALLOW_STALE_LTP = False
     ALLOW_CLOSE_FALLBACK = False
-    RISK_PROFILE = "CONSERVATIVE"
+    RISK_PROFILE = "PILOT"
 BLOCKED_TRACK_ENABLE = os.getenv("BLOCKED_TRACK_ENABLE", "true").lower() == "true"
 BLOCKED_TRACK_SECONDS = int(os.getenv("BLOCKED_TRACK_SECONDS", "3600"))
 BLOCKED_TRACK_POLL_SEC = int(os.getenv("BLOCKED_TRACK_POLL_SEC", "15"))
@@ -467,6 +541,14 @@ ML_ROLLBACK_ENABLE = os.getenv("ML_ROLLBACK_ENABLE", "true").lower() == "true"
 ML_ROLLBACK_PSI = float(os.getenv("ML_ROLLBACK_PSI", "0.4"))
 ML_ROLLBACK_KS = float(os.getenv("ML_ROLLBACK_KS", "0.4"))
 ML_ROLLBACK_SHARPE_DROP = float(os.getenv("ML_ROLLBACK_SHARPE_DROP", "0.6"))
+PROMOTION_MIN_DAYS = int(os.getenv("PROMOTION_MIN_DAYS", "7"))
+PROMOTION_MIN_ROWS = int(os.getenv("PROMOTION_MIN_ROWS", "100"))
+PROMOTION_ECE_MAX_DELTA = float(os.getenv("PROMOTION_ECE_MAX_DELTA", "0.01"))
+PROMOTION_TAIL_WORST_K = int(os.getenv("PROMOTION_TAIL_WORST_K", "20"))
+PROMOTION_PSI_MAX = float(os.getenv("PROMOTION_PSI_MAX", "0.2"))
+PROMOTION_KS_MAX = float(os.getenv("PROMOTION_KS_MAX", "0.2"))
+PROMOTION_SEGMENT_MAX_BRIER_WORSEN = float(os.getenv("PROMOTION_SEGMENT_MAX_BRIER_WORSEN", "0.02"))
+PROMOTION_EVENT_MAX_BRIER_WORSEN = float(os.getenv("PROMOTION_EVENT_MAX_BRIER_WORSEN", "0.01"))
 REGIME_TREND_VWAP_SLOPE = float(os.getenv("REGIME_TREND_VWAP_SLOPE", "0.002"))
 REGIME_VOL_Z_RANGE_VOL = float(os.getenv("REGIME_VOL_Z_RANGE_VOL", "1.0"))
 USE_DEEP_MODEL = os.getenv("USE_DEEP_MODEL", "false").lower() == "true"
@@ -515,9 +597,50 @@ RL_SIZE_PROMOTE_DIFF = float(os.getenv("RL_SIZE_PROMOTE_DIFF", "0.02"))
 
 # Manual approval
 MANUAL_APPROVAL = os.getenv("MANUAL_APPROVAL", "true").lower() == "true"
+KILL_SWITCH = os.getenv("KILL_SWITCH", "false").lower() == "true"
+HALT_SYMBOLS = [s.strip().upper() for s in os.getenv("HALT_SYMBOLS", "").split(",") if s.strip()]
+HALT_STRATEGIES = [s.strip().upper() for s in os.getenv("HALT_STRATEGIES", "").split(",") if s.strip()]
+
+# Experiment flags
+EXPERIMENT_ID = os.getenv("EXPERIMENT_ID", "")
+
+# Desk capital allocation
+GLOBAL_CAPITAL = float(os.getenv("GLOBAL_CAPITAL", str(CAPITAL)))
+DESK_MIN_TRADES = int(os.getenv("DESK_MIN_TRADES", "10"))
+DESK_MIN_DAYS = int(os.getenv("DESK_MIN_DAYS", "5"))
+DESK_MAX_CORR = float(os.getenv("DESK_MAX_CORR", "0.8"))
+DESK_CORR_PENALTY = float(os.getenv("DESK_CORR_PENALTY", "0.3"))
+DESK_MIN_CORR_DAYS = int(os.getenv("DESK_MIN_CORR_DAYS", "5"))
+DESK_MAX_BUDGET_PCT = float(os.getenv("DESK_MAX_BUDGET_PCT", "0.6"))
+DESK_MIN_BUDGET_PCT = float(os.getenv("DESK_MIN_BUDGET_PCT", "0.0"))
+DESK_MAX_GROSS_PCT = float(os.getenv("DESK_MAX_GROSS_PCT", "0.6"))
+DESK_MAX_SYMBOL_PCT = float(os.getenv("DESK_MAX_SYMBOL_PCT", "0.3"))
+
+# Paper tournament
+TOURNAMENT_MIN_TRADES = int(os.getenv("TOURNAMENT_MIN_TRADES", "20"))
+TOURNAMENT_PROMOTE_SCORE = float(os.getenv("TOURNAMENT_PROMOTE_SCORE", "0.15"))
+TOURNAMENT_QUARANTINE_DD = float(os.getenv("TOURNAMENT_QUARANTINE_DD", "-5.0"))
+TOURNAMENT_MIN_WINRATE = float(os.getenv("TOURNAMENT_MIN_WINRATE", "0.4"))
 
 # Storage
-TRADE_DB_PATH = "data/trades.db"
+DESK_ID = os.getenv("DESK_ID", "DEFAULT")
+DESK_DATA_DIR = os.getenv("DESK_DATA_DIR", f"data/desks/{DESK_ID}")
+DESK_LOG_DIR = os.getenv("DESK_LOG_DIR", f"logs/desks/{DESK_ID}")
+TRADE_DB_PATH = os.getenv("TRADE_DB_PATH", f"{DESK_DATA_DIR}/trades.db")
+DECISION_LOG_PATH = os.getenv("DECISION_LOG_PATH", f"{DESK_LOG_DIR}/decision_events.jsonl")
+DECISION_ERROR_LOG_PATH = os.getenv("DECISION_ERROR_LOG_PATH", f"{DESK_LOG_DIR}/decision_event_errors.jsonl")
+DECISION_SQLITE_PATH = os.getenv("DECISION_SQLITE_PATH", f"{DESK_LOG_DIR}/decision_events.sqlite")
+AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", f"{DESK_LOG_DIR}/audit_log.jsonl")
+INCIDENTS_LOG_PATH = os.getenv("INCIDENTS_LOG_PATH", f"{DESK_LOG_DIR}/incidents.jsonl")
+FEATURE_FLAGS_OVERRIDE_PATH = os.getenv("FEATURE_FLAGS_OVERRIDE_PATH", f"{DESK_LOG_DIR}/feature_flags_override.json")
+FEATURE_FLAGS_SNAPSHOT_PATH = os.getenv("FEATURE_FLAGS_SNAPSHOT_PATH", f"{DESK_LOG_DIR}/feature_flags_snapshot.json")
+
+# Readiness gate
+READINESS_MIN_FREE_GB = float(os.getenv("READINESS_MIN_FREE_GB", "2.0"))
+READINESS_REQUIRE_KITE_AUTH = os.getenv("READINESS_REQUIRE_KITE_AUTH", "true").lower() == "true"
+READINESS_REQUIRE_FEED_HEALTH = os.getenv("READINESS_REQUIRE_FEED_HEALTH", "true").lower() == "true"
+READINESS_REQUIRE_AUDIT_CHAIN = os.getenv("READINESS_REQUIRE_AUDIT_CHAIN", "true").lower() == "true"
+READINESS_REQUIRE_RISK_HALT_CLEAR = os.getenv("READINESS_REQUIRE_RISK_HALT_CLEAR", "true").lower() == "true"
 
 # Risk governance / scorecard
 DAILY_LOSS_LIMIT = CAPITAL * MAX_DAILY_LOSS_PCT
@@ -532,6 +655,7 @@ SLA_MAX_TICK_LAG_SEC = 120
 SLA_MAX_DEPTH_LAG_SEC = 120
 SLA_MIN_TICKS_PER_HOUR = 1000
 SLA_MIN_DEPTH_PER_HOUR = 200
+FEED_STALE_INCIDENT_COOLDOWN_SEC = int(os.getenv("FEED_STALE_INCIDENT_COOLDOWN_SEC", "300"))
 CHAIN_MAX_MISSING_IV_PCT = float(os.getenv("CHAIN_MAX_MISSING_IV_PCT", "0.2"))
 CHAIN_MAX_MISSING_QUOTE_PCT = float(os.getenv("CHAIN_MAX_MISSING_QUOTE_PCT", "0.2"))
 
@@ -620,11 +744,16 @@ KITE_TRADES_SYNC = os.getenv("KITE_TRADES_SYNC", "true").lower() == "true"
 KITE_INSTRUMENTS_TTL = int(os.getenv("KITE_INSTRUMENTS_TTL", "3600"))
 KITE_USE_DEPTH = os.getenv("KITE_USE_DEPTH", "true").lower() == "true"
 KITE_STORE_TICKS = os.getenv("KITE_STORE_TICKS", "true").lower() == "true"
+MAX_CLOCK_SKEW_SEC = float(os.getenv("MAX_CLOCK_SKEW_SEC", "5.0"))
+FEED_RECONNECT_COOLDOWN_SEC = float(os.getenv("FEED_RECONNECT_COOLDOWN_SEC", "30"))
 
 # -------------------------------
 # Cross-asset features
 # -------------------------------
 CROSS_ASSET_SYMBOLS = {
+    "NIFTY_INDEX": os.getenv("CROSS_NIFTY_INDEX", "NSE:NIFTY 50"),
+    "BANKNIFTY_INDEX": os.getenv("CROSS_BANKNIFTY_INDEX", "NSE:NIFTY BANK"),
+    "SENSEX_INDEX": os.getenv("CROSS_SENSEX_INDEX", "BSE:SENSEX"),
     "USDINR_SPOT": os.getenv("CROSS_USDINR_SPOT", "CDS:USDINR"),
     "USDINR_FUT": os.getenv("CROSS_USDINR_FUT", "CDS:USDINR"),
     "CRUDEOIL": os.getenv("CROSS_CRUDEOIL", "MCX:CRUDEOIL"),
@@ -634,6 +763,9 @@ CROSS_ASSET_SYMBOLS = {
 }
 # +1 means risk-off when asset rises, -1 means risk-on
 CROSS_ASSET_RISK_SIGN = {
+    "NIFTY_INDEX": -1,
+    "BANKNIFTY_INDEX": -1,
+    "SENSEX_INDEX": -1,
     "USDINR_SPOT": 1,
     "USDINR_FUT": 1,
     "CRUDEOIL": 1,
@@ -643,6 +775,102 @@ CROSS_ASSET_RISK_SIGN = {
 }
 CROSS_ASSET_REFRESH_SEC = int(os.getenv("CROSS_ASSET_REFRESH_SEC", "30"))
 CROSS_ASSET_MAXLEN = int(os.getenv("CROSS_ASSET_MAXLEN", "600"))
+CROSS_ASSET_STALE_SEC = int(os.getenv("CROSS_ASSET_STALE_SEC", "120"))
+CROSS_ASSET_OPTIONAL_SCORE_PENALTY = float(os.getenv("CROSS_ASSET_OPTIONAL_SCORE_PENALTY", "8"))
+CROSS_ASSET_OPTIONAL_SIZE_MULT = float(os.getenv("CROSS_ASSET_OPTIONAL_SIZE_MULT", "0.85"))
+REQUIRE_CROSS_ASSET = os.getenv("REQUIRE_CROSS_ASSET", "true").lower() == "true"
+REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE = os.getenv("REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE", "true").lower() == "true"
+
+def _load_instrument_symbols():
+    path = Path("data/kite_instruments.csv")
+    if not path.exists():
+        return set()
+    symbols = set()
+    try:
+        with path.open() as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                exch = (row.get("exchange") or "").strip()
+                ts = (row.get("tradingsymbol") or "").strip()
+                if exch and ts:
+                    symbols.add(f"{exch}:{ts}")
+    except Exception:
+        return set()
+    return symbols
+
+
+_INSTRUMENT_SYMBOLS = _load_instrument_symbols()
+
+
+_CROSS_INDEX_SYMBOLS = set(
+    s
+    for s in [
+        CROSS_ASSET_SYMBOLS.get("NIFTY_INDEX"),
+        CROSS_ASSET_SYMBOLS.get("BANKNIFTY_INDEX"),
+        CROSS_ASSET_SYMBOLS.get("SENSEX_INDEX"),
+    ]
+    if s
+)
+
+
+def _is_supported_symbol(sym: str):
+    if not _INSTRUMENT_SYMBOLS:
+        return None
+    return sym in _INSTRUMENT_SYMBOLS
+
+
+_required_default = os.getenv("CROSS_REQUIRED_FEEDS", "NIFTY_INDEX")
+_optional_default = os.getenv(
+    "CROSS_OPTIONAL_FEEDS",
+    "BANKNIFTY_INDEX,SENSEX_INDEX,CRUDEOIL,USDINR_SPOT,USDINR_FUT,INDIA_VIX,GIFT_NIFTY,BOND10Y",
+)
+_req_list = [s.strip() for s in _required_default.split(",") if s.strip()]
+_opt_list = [s.strip() for s in _optional_default.split(",") if s.strip()]
+
+CROSS_FEED_STATUS = {}
+
+def _set_feed_status(feed_key: str, status: str, reason: str | None = None):
+    CROSS_FEED_STATUS[feed_key] = {"status": status, "reason": reason}
+
+def _classify_feed(feed_key: str, preferred: str):
+    sym = CROSS_ASSET_SYMBOLS.get(feed_key)
+    if not sym:
+        _set_feed_status(feed_key, "disabled", "no_symbol")
+        return
+    # Explicitly downgrade unsupported or unreliable feeds to optional.
+    if feed_key in {"GIFT_NIFTY", "BOND10Y", "INDIA_VIX"}:
+        if preferred == "required":
+            _set_feed_status(feed_key, "optional", "unsupported_default_optional")
+        else:
+            _set_feed_status(feed_key, "optional", "unsupported_default_optional")
+        return
+    supported = _is_supported_symbol(sym)
+    if supported is True:
+        _set_feed_status(feed_key, preferred, None)
+        return
+    if supported is False:
+        if preferred == "required":
+            _set_feed_status(feed_key, "optional", "unsupported_required_downgraded")
+        else:
+            _set_feed_status(feed_key, "disabled", "unsupported")
+        return
+    if preferred == "required":
+        _set_feed_status(feed_key, "optional", "instrument_cache_missing_downgraded")
+    else:
+        _set_feed_status(feed_key, "optional", "instrument_cache_missing")
+
+for _f in _req_list:
+    _classify_feed(_f, "required")
+for _f in _opt_list:
+    if _f not in CROSS_FEED_STATUS:
+        _classify_feed(_f, "optional")
+for _f in CROSS_ASSET_SYMBOLS.keys():
+    if _f not in CROSS_FEED_STATUS:
+        _classify_feed(_f, "optional")
+
+CROSS_REQUIRED_FEEDS = [k for k, v in CROSS_FEED_STATUS.items() if v.get("status") == "required"]
+CROSS_OPTIONAL_FEEDS = [k for k, v in CROSS_FEED_STATUS.items() if v.get("status") == "optional"]
+CROSS_DISABLED_FEEDS = {k: v.get("reason") for k, v in CROSS_FEED_STATUS.items() if v.get("status") == "disabled"}
 
 # -------------------------------
 # Synthetic stress generator
@@ -651,6 +879,7 @@ STRESS_TEST_ENABLE = os.getenv("STRESS_TEST_ENABLE", "false").lower() == "true"
 STRESS_PATHS = int(os.getenv("STRESS_PATHS", "250"))
 STRESS_STEPS = int(os.getenv("STRESS_STEPS", "240"))
 STRESS_BLOCK_SIZE = int(os.getenv("STRESS_BLOCK_SIZE", "20"))
+STRESS_MIN_VALID_ROWS = int(os.getenv("STRESS_MIN_VALID_ROWS", "1"))
 STRESS_VOL_SCALE = float(os.getenv("STRESS_VOL_SCALE", "1.8"))
 STRESS_JUMP_LAMBDA = float(os.getenv("STRESS_JUMP_LAMBDA", "0.03"))
 STRESS_JUMP_SIGMA = float(os.getenv("STRESS_JUMP_SIGMA", "0.03"))
@@ -666,12 +895,20 @@ STRESS_OB_THIN_FACTOR = float(os.getenv("STRESS_OB_THIN_FACTOR", "0.6"))
 EXEC_SIM_TIMEOUT_SEC = float(os.getenv("EXEC_SIM_TIMEOUT_SEC", "3.0"))
 EXEC_SIM_POLL_SEC = float(os.getenv("EXEC_SIM_POLL_SEC", "0.25"))
 MAX_QUOTE_AGE_SEC = float(os.getenv("MAX_QUOTE_AGE_SEC", "2.0"))
+MAX_DEPTH_AGE_SEC = float(os.getenv("MAX_DEPTH_AGE_SEC", str(MAX_QUOTE_AGE_SEC)))
 EXEC_MAX_CHASE_PCT = float(os.getenv("EXEC_MAX_CHASE_PCT", "0.002"))
 EXEC_MAX_REPLACE = int(os.getenv("EXEC_MAX_REPLACE", "2"))
 EXEC_REPRICE_PCT = float(os.getenv("EXEC_REPRICE_PCT", "0.002"))
 EXEC_SPREAD_WIDEN_PCT = float(os.getenv("EXEC_SPREAD_WIDEN_PCT", "0.5"))
 EXEC_MAX_SPREAD_PCT = float(os.getenv("EXEC_MAX_SPREAD_PCT", "0.015"))
 EXEC_FILL_PROB = float(os.getenv("EXEC_FILL_PROB", "0.85"))
+EXEC_ALPHA_SPREAD_MULT = float(os.getenv("EXEC_ALPHA_SPREAD_MULT", "0.6"))
+EXEC_ALPHA_VOL_Z_BPS = float(os.getenv("EXEC_ALPHA_VOL_Z_BPS", "3.0"))
+EXEC_ALPHA_IMBALANCE_BPS = float(os.getenv("EXEC_ALPHA_IMBALANCE_BPS", "2.0"))
+EXEC_ALPHA_MAX_BUFFER_PCT = float(os.getenv("EXEC_ALPHA_MAX_BUFFER_PCT", "0.01"))
+EXEC_QUALITY_MIN = float(os.getenv("EXEC_QUALITY_MIN", "55"))
+EXEC_QUALITY_BLOCK_BELOW = float(os.getenv("EXEC_QUALITY_BLOCK_BELOW", "35"))
+EXEC_QUALITY_PENALTY = float(os.getenv("EXEC_QUALITY_PENALTY", "10"))
 
 # -------------------------------
 # Greeks / Pricing

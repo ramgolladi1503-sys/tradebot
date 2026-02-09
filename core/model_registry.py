@@ -35,7 +35,9 @@ def _load():
 
 def _save(data):
     REG_PATH.parent.mkdir(exist_ok=True)
-    REG_PATH.write_text(json.dumps(data, indent=2))
+    tmp_path = REG_PATH.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(data, indent=2))
+    tmp_path.replace(REG_PATH)
 
 
 def _find_entry(data, model_type, path):

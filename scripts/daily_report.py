@@ -7,7 +7,7 @@ runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 import sys
 import json
 import pandas as pd
-from datetime import datetime
+from core.time_utils import now_ist
 from pathlib import Path
 import smtplib
 from email.mime.text import MIMEText
@@ -44,7 +44,7 @@ df["date"] = df["timestamp"].dt.date
 df["pnl"] = (df["exit_price"].fillna(df["entry"]) - df["entry"]) * df["qty"]
 df.loc[df["side"] == "SELL", "pnl"] *= -1
 
-today = datetime.now().date()
+today = now_ist().date()
 daily = df[df["date"] == today]
 
 report = {

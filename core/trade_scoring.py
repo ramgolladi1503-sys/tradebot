@@ -5,6 +5,14 @@ import json
 from config import config as cfg
 
 
+def _latest_exec_quality():
+    try:
+        from core.fill_quality import get_latest_exec_quality
+        return get_latest_exec_quality()
+    except Exception:
+        return None
+
+
 def _adaptive_multiplier(strategy_name: str | None) -> float:
     if not strategy_name:
         return 1.0
@@ -213,6 +221,37 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
     score = 0.0
     for k, weight in w.items():
         score += weight * components.get(k, 0)
+
+    # Optional cross-asset penalty (do not block)
+    try:
+        cross_q = market_data.get("cross_asset_quality", {}) or {}
+        optional = set(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or [])
+        stale = set(cross_q.get("stale_feeds", []) or [])
+        missing_map = cross_q.get("missing") or {}
+        missing = set(k for k, v in missing_map.items() if not str(v).startswith("disabled"))
+        bad_optional = (stale | missing) & optional
+        if bad_optional:
+            penalty = float(getattr(cfg, "CROSS_ASSET_OPTIONAL_SCORE_PENALTY", 8))
+            score = max(0.0, score - penalty)
+            issues.append("cross_asset_optional_stale")
+    except Exception:
+        pass
+
+    # Execution quality influence
+    try:
+        exec_q = market_data.get("execution_quality_score")
+        if exec_q is None:
+            exec_q = _latest_exec_quality()
+        if exec_q is not None:
+            if float(exec_q) < float(getattr(cfg, "EXEC_QUALITY_BLOCK_BELOW", 35)):
+                issues.append("exec_quality_block")
+                score = 0.0
+            elif float(exec_q) < float(getattr(cfg, "EXEC_QUALITY_MIN", 55)):
+                penalty = float(getattr(cfg, "EXEC_QUALITY_PENALTY", 10))
+                score = max(0.0, score - penalty)
+                issues.append("exec_quality_low")
+    except Exception:
+        pass
 
     # Adaptive weighting (recent strategy performance)
     score *= _adaptive_multiplier(strategy_name)

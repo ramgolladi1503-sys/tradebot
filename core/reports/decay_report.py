@@ -1,15 +1,30 @@
-from __future__ import annotations
-
 import json
-from datetime import datetime
 from pathlib import Path
 
-from ml.strategy_decay_predictor import generate_decay_report
 
+def build_decay_report(day: str, out_path: Path) -> Path:
+    state_path = Path("logs/strategy_decay_state.json")
+    prob_path = Path("logs/strategy_decay_probs.json")
 
-def run_decay_report(output_path: str = "logs/decay_report.json") -> dict:
-    report = generate_decay_report()
-    report["generated_at"] = datetime.now().isoformat()
-    Path(output_path).parent.mkdir(exist_ok=True)
-    Path(output_path).write_text(json.dumps(report, indent=2))
-    return report
+    decay_state = {}
+    decay_prob = {}
+    if state_path.exists():
+        try:
+            obj = json.loads(state_path.read_text())
+            decay_state = obj.get("decay_state", {}) or {}
+        except Exception:
+            decay_state = {}
+    if prob_path.exists():
+        try:
+            decay_prob = json.loads(prob_path.read_text()) or {}
+        except Exception:
+            decay_prob = {}
+
+    out = {
+        "date": day,
+        "decay_state": decay_state,
+        "decay_prob": decay_prob,
+    }
+    out_path.parent.mkdir(exist_ok=True)
+    out_path.write_text(json.dumps(out, indent=2, default=str))
+    return out_path

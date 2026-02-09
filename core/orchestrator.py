@@ -1,14 +1,17 @@
 import time
 import json
+from pathlib import Path
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import replace
 from strategies.trade_builder import TradeBuilder
 from core.market_data import fetch_live_market_data
 from core.risk_engine import RiskEngine
 from core.execution_guard import ExecutionGuard
 from core.trade_logger import log_trade, update_trade_outcome, update_trade_fill
-from core.telegram_alerts import send_telegram_message
+from core.telegram_alerts import send_telegram_message, send_trade_ticket
+from core.trade_ticket import TradeTicket
+from core.trade_schema import build_instrument_id, validate_trade_identity
 from core.auto_retrain import AutoRetrain
 from ml.trade_predictor import TradePredictor
 from core.execution_engine import ExecutionEngine
@@ -18,12 +21,16 @@ from core.risk_state import RiskState
 from core.strategy_gatekeeper import StrategyGatekeeper
 from core.portfolio_risk_allocator import PortfolioRiskAllocator
 from core.governance import record_governance
+from core.audit_log import append_event as audit_append, verify_chain as verify_audit_chain
+from core.feed_health import check_and_trigger as check_feed_health
+from core.incidents import create_incident, trigger_audit_chain_fail
 from core.ml_governance import log_ab_trial
 from rl.size_agent import SizeRLAgent, build_features
 from config import config as cfg
 from core.strategy_tracker import StrategyTracker
 from ml.strategy_decay_predictor import generate_decay_report, telegram_summary
 from core.kite_client import kite_client
+from core import model_registry
 from core.strategy_allocator import StrategyAllocator
 from core.review_queue import add_to_queue, is_approved, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH
 from core.blocked_tracker import BlockedTradeTracker
@@ -34,6 +41,8 @@ from core.auto_tune import maybe_auto_tune
 from core import risk_halt
 from core.decision_logger import log_decision, update_execution, update_outcome
 from core.risk_utils import to_pct
+from core.time_utils import now_ist, now_utc_epoch
+from core.meta_model import MetaModel
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30):
@@ -64,6 +73,7 @@ class Orchestrator:
         self.trade_builder = TradeBuilder(self.predictor, self.execution_engine, strategy_tracker=self.strategy_tracker)
         self.retrainer = AutoRetrain(self.predictor, risk_state=self.risk_state, strategy_tracker=self.strategy_tracker)
         self.strategy_allocator = StrategyAllocator(self.strategy_tracker, risk_state=self.risk_state)
+        self.meta_model = MetaModel() if getattr(cfg, "META_MODEL_ENABLED", False) else None
         self.open_trades = {}
         self.trade_meta = {}
         self.last_trade_sync = 0
@@ -72,6 +82,7 @@ class Orchestrator:
         self.best_trade_logged = False
         self.best_trade_by_regime = {}
         self._last_decay_date = None
+        self._pilot_check_cache = {"ts": 0, "ok": True, "reasons": []}
 
         # Portfolio tracking
         self.portfolio = {
@@ -87,6 +98,19 @@ class Orchestrator:
         self.symbol_epsilon = {}
         self._load_symbol_eps()
         self.loss_streak = {}
+        self._audit_chain_ok = True
+        self._audit_chain_status = None
+        try:
+            ok, status, _ = verify_audit_chain()
+            self._audit_chain_ok = ok
+            self._audit_chain_status = status
+            if not ok:
+                try:
+                    trigger_audit_chain_fail({"status": status})
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self._start_depth_ws()
         self.eps_history = []
         self._load_suggestion_eval()
@@ -131,7 +155,7 @@ class Orchestrator:
                 exp = datetime.strptime(expiry, "%Y-%m-%d")
             except Exception:
                 return None
-        return max((exp.date() - datetime.now().date()).days, 0)
+        return max((exp.date() - now_ist().date()).days, 0)
 
     def _open_risk(self):
         total = 0.0
@@ -155,76 +179,402 @@ class Orchestrator:
         except Exception:
             pass
 
-    def _build_decision_event(self, trade, market_data: dict, gatekeeper_allowed: bool, veto_reasons=None):
-        now = datetime.now().isoformat()
-        veto_reasons = veto_reasons or []
-        if trade:
-            opt = self._match_option_snapshot(trade, market_data)
-            bid = (opt or {}).get("bid") if opt else market_data.get("bid")
-            ask = (opt or {}).get("ask") if opt else market_data.get("ask")
-            spread_pct = None
-            if bid and ask:
+    def _quote_age_sec(self, quote_ts):
+        if not quote_ts:
+            return None
+        try:
+            if isinstance(quote_ts, (int, float)):
+                ts = float(quote_ts)
+            else:
+                s = str(quote_ts)
                 try:
-                    spread_pct = (ask - bid) / max((opt or {}).get("ltp") or market_data.get("ltp") or 1, 1)
+                    ts = float(s)
                 except Exception:
-                    spread_pct = None
-            bid_qty = (opt or {}).get("bid_qty") or (opt or {}).get("bidQty")
-            ask_qty = (opt or {}).get("ask_qty") or (opt or {}).get("askQty")
-            depth_imb = market_data.get("depth_imbalance")
-            if depth_imb is None and opt:
-                depth_imb = opt.get("depth_imbalance")
-            event = {
-                "trade_id": trade.trade_id,
-                "ts": now,
-                "symbol": trade.symbol,
-                "strategy_id": trade.strategy,
-                "regime": market_data.get("regime") or trade.regime,
-                "regime_probs": market_data.get("regime_probs"),
-                "shock_score": market_data.get("shock_score"),
-                "side": trade.side,
-                "instrument": trade.instrument,
-                "dte": self._calc_dte(getattr(trade, "expiry", None)),
-                "expiry_bucket": market_data.get("expiry_type") or market_data.get("expiry_bucket"),
-                "score_0_100": getattr(trade, "trade_score", None),
-                "xgb_proba": trade.confidence if getattr(trade, "model_type", None) == "xgb" else None,
-                "deep_proba": trade.confidence if getattr(trade, "model_type", None) == "deep" else None,
-                "micro_proba": (opt or {}).get("micro_pred"),
-                "ensemble_proba": getattr(trade, "alpha_confidence", None),
-                "ensemble_uncertainty": getattr(trade, "alpha_uncertainty", None),
-                "bid": bid,
-                "ask": ask,
-                "spread_pct": spread_pct,
-                "bid_qty": bid_qty,
-                "ask_qty": ask_qty,
-                "depth_imbalance": depth_imb,
-                "fill_prob_est": getattr(cfg, "EXEC_FILL_PROB", None),
-                "portfolio_equity": self.portfolio.get("capital"),
-                "equity": self.portfolio.get("capital"),
-                "equity_high": self.portfolio.get("equity_high"),
-                "daily_pnl": self.portfolio.get("daily_pnl", self.portfolio.get("daily_profit", 0.0) + self.portfolio.get("daily_loss", 0.0)),
-                "daily_pnl_pct": self.portfolio.get("daily_pnl_pct"),
-                "drawdown_pct": self.risk_state.daily_max_drawdown if hasattr(self.risk_state, "daily_max_drawdown") else None,
-                "loss_streak": self.loss_streak.get(trade.symbol, 0),
-                "open_risk": self.portfolio.get("open_risk", self._open_risk()),
-                "open_risk_pct": self.portfolio.get("open_risk_pct"),
-                "delta_exposure": None,
-                "gamma_exposure": None,
-                "vega_exposure": None,
-                "gatekeeper_allowed": 1 if gatekeeper_allowed else 0,
-                "veto_reasons": veto_reasons,
-                "risk_allowed": None,
-                "exec_guard_allowed": None,
-                "action_size_multiplier": None,
-                "filled_bool": None,
-                "fill_price": None,
-                "time_to_fill": None,
-                "slippage_vs_mid": None,
-                "pnl_horizon_5m": None,
-                "pnl_horizon_15m": None,
-                "mae_15m": None,
-                "mfe_15m": None,
+                    ts = datetime.fromisoformat(s).timestamp()
+            return max(0.0, now_utc_epoch() - ts)
+        except Exception:
+            return None
+
+    def _quote_ts_epoch(self, quote_ts):
+        if not quote_ts:
+            return None
+        if isinstance(quote_ts, (int, float)):
+            return float(quote_ts)
+        try:
+            return float(quote_ts)
+        except Exception:
+            pass
+        try:
+            s = str(quote_ts)
+            if s.endswith("Z"):
+                s = s.replace("Z", "+00:00")
+            return datetime.fromisoformat(s).timestamp()
+        except Exception:
+            return None
+
+    def _pilot_audit_ok(self):
+        if not getattr(cfg, "AUDIT_REQUIRED_TO_TRADE", True):
+            return True, []
+        day = (now_ist() - timedelta(days=1)).date().isoformat()
+        audit_path = Path(f"logs/daily_audit_{day}.json")
+        exec_path = Path(f"logs/execution_report_{day}.json")
+        missing = []
+        if not audit_path.exists():
+            missing.append(audit_path.name)
+        if not exec_path.exists():
+            missing.append(exec_path.name)
+        if missing:
+            return False, [f"audit_missing:{','.join(missing)}"]
+        return True, []
+
+    def _pilot_models_ok(self):
+        active = {
+            "xgb": model_registry.get_active("xgb"),
+            "deep": model_registry.get_active("deep"),
+            "micro": model_registry.get_active("micro"),
+            "ensemble": model_registry.get_active("ensemble"),
+        }
+        if not any(active.values()):
+            return False, ["model_registry_empty"]
+        return True, []
+
+    def _pilot_feed_ok(self):
+        sla_path = Path("logs/sla_check.json")
+        if not sla_path.exists():
+            return False, ["sla_check_missing"]
+        try:
+            data = json.loads(sla_path.read_text())
+        except Exception:
+            return False, ["sla_check_unreadable"]
+        max_age = float(getattr(cfg, "LIVE_MAX_QUOTE_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
+        depth_lag = data.get("depth_lag_sec")
+        tick_lag = data.get("tick_lag_sec")
+        if depth_lag is None or depth_lag > max_age:
+            return False, ["depth_feed_stale"]
+        if tick_lag is not None and tick_lag > max_age:
+            return False, ["tick_feed_stale"]
+        return True, []
+
+    def _pilot_checks(self):
+        if not getattr(cfg, "LIVE_PILOT_MODE", False):
+            return True, []
+        now = time.time()
+        if now - self._pilot_check_cache.get("ts", 0) < 60:
+            return self._pilot_check_cache["ok"], list(self._pilot_check_cache["reasons"])
+        reasons = []
+        if getattr(cfg, "RISK_PROFILE", "PILOT") != "PILOT":
+            reasons.append("risk_profile_not_pilot")
+        if not getattr(cfg, "LIVE_STRATEGY_WHITELIST", []):
+            reasons.append("strategy_whitelist_empty")
+        ok, r = self._pilot_audit_ok()
+        if not ok:
+            reasons.extend(r)
+        ok, r = self._pilot_models_ok()
+        if not ok:
+            reasons.extend(r)
+        ok, r = self._pilot_feed_ok()
+        if not ok:
+            reasons.extend(r)
+        ok = len(reasons) == 0
+        self._pilot_check_cache = {"ts": now, "ok": ok, "reasons": reasons}
+        return ok, reasons
+
+    def _pilot_exec_degradation(self):
+        if not getattr(cfg, "LIVE_PILOT_MODE", False):
+            return
+        path = Path("logs/fill_quality_daily.json")
+        if not path.exists():
+            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_missing")
+            return
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_unreadable")
+            return
+        day = now_ist().date().isoformat()
+        row = data.get(day)
+        if not row:
+            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_empty")
+            return
+        fill_rate = row.get("fill_rate")
+        max_miss = float(getattr(cfg, "EXEC_DEGRADATION_MAX_MISSED_FILL_RATE", 0.5))
+        if fill_rate is not None:
+            missed_rate = 1.0 - float(fill_rate)
+            if missed_rate > max_miss:
+                self.risk_state.set_mode("HARD_HALT", "pilot_missed_fill_rate")
+                return
+        baseline = float(getattr(cfg, "EXEC_BASELINE_SLIPPAGE", 0.0))
+        if baseline <= 0:
+            self.risk_state.set_mode("HARD_HALT", "pilot_slippage_baseline_missing")
+            return
+        slippage = row.get("avg_slippage_vs_mid")
+        if slippage is not None:
+            max_mult = float(getattr(cfg, "EXEC_DEGRADATION_MAX_SLIPPAGE_MULT", 2.0))
+            if float(slippage) > baseline * max_mult:
+                self.risk_state.set_mode("HARD_HALT", "pilot_slippage_degradation")
+                return
+
+    def _pilot_trade_gate(self, trade, market_data):
+        if not getattr(cfg, "LIVE_PILOT_MODE", False):
+            return True, []
+        reasons = []
+        whitelist = getattr(cfg, "LIVE_STRATEGY_WHITELIST", [])
+        if whitelist and trade.strategy not in whitelist:
+            reasons.append("pilot_strategy_not_whitelisted")
+        # Quote freshness + spread checks
+        opt = self._match_option_snapshot(trade, market_data)
+        quote_ts = (opt or {}).get("quote_ts") or market_data.get("quote_ts")
+        quote_age = self._quote_age_sec(quote_ts)
+        max_age = float(getattr(cfg, "LIVE_MAX_QUOTE_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
+        if quote_age is None or quote_age > max_age:
+            reasons.append("pilot_quote_stale")
+        bid = (opt or {}).get("bid") or trade.opt_bid
+        ask = (opt or {}).get("ask") or trade.opt_ask
+        spread_pct = None
+        if bid and ask:
+            base = (opt or {}).get("ltp") or trade.opt_ltp or ((bid + ask) / 2.0)
+            if base:
+                spread_pct = (ask - bid) / base
+        max_spread = float(getattr(cfg, "LIVE_MAX_SPREAD_PCT", getattr(cfg, "MAX_SPREAD_PCT", 0.03)))
+        if spread_pct is None or spread_pct > max_spread:
+            reasons.append("pilot_spread_too_wide")
+        if reasons:
+            return False, reasons
+        return True, []
+
+    def _build_decision_event(self, trade, market_data: dict, gatekeeper_allowed: bool, veto_reasons=None, pilot_allowed=None, pilot_reasons=None):
+        now = now_ist().isoformat()
+        veto_reasons = veto_reasons or []
+        pilot_reasons = pilot_reasons or []
+        opt = self._match_option_snapshot(trade, market_data) if trade else None
+        bid = (opt or {}).get("bid") if opt else market_data.get("bid")
+        ask = (opt or {}).get("ask") if opt else market_data.get("ask")
+        spread_pct = None
+        if bid and ask:
+            try:
+                spread_pct = (ask - bid) / max((opt or {}).get("ltp") or market_data.get("ltp") or 1, 1)
+            except Exception:
+                spread_pct = None
+        quote_ts = (opt or {}).get("quote_ts") if opt else None
+        if quote_ts is None:
+            quote_ts = market_data.get("quote_ts")
+        quote_age_sec = self._quote_age_sec(quote_ts)
+        if quote_age_sec is None:
+            quote_age_sec = market_data.get("quote_age_sec")
+        quote_ts_epoch = self._quote_ts_epoch(quote_ts)
+        if quote_ts_epoch is None:
+            quote_ts_epoch = market_data.get("quote_ts_epoch")
+        bid_qty = (opt or {}).get("bid_qty") or (opt or {}).get("bidQty")
+        ask_qty = (opt or {}).get("ask_qty") or (opt or {}).get("askQty")
+        depth_imb = market_data.get("depth_imbalance")
+        if depth_imb is None and opt:
+            depth_imb = opt.get("depth_imbalance")
+        lineage = market_data.get("model_lineage", {}) or {}
+        instrument_type = None
+        right = None
+        expiry = None
+        strike = None
+        if trade:
+            instrument_type = getattr(trade, "instrument_type", None) or getattr(trade, "instrument", None)
+            right = getattr(trade, "right", None) or getattr(trade, "option_type", None)
+            expiry = getattr(trade, "expiry", None)
+            strike = getattr(trade, "strike", None)
+        instrument_id = None
+        if trade and instrument_type:
+            instrument_id = build_instrument_id(trade.symbol, instrument_type, expiry, strike, right)
+        event = {
+            "trade_id": trade.trade_id if trade else None,
+            "ts": now,
+            "symbol": (trade.symbol if trade else market_data.get("symbol")),
+            "strategy_id": trade.strategy if trade else None,
+            "regime": market_data.get("regime") or (trade.regime if trade else None),
+            "regime_probs": market_data.get("regime_probs"),
+            "shock_score": market_data.get("shock_score"),
+            "side": trade.side if trade else None,
+            "instrument": trade.instrument if trade else None,
+            "instrument_id": instrument_id,
+            "strike": strike,
+            "expiry": expiry,
+            "option_type": getattr(trade, "option_type", None) if trade else None,
+            "right": right,
+            "instrument_type": instrument_type,
+            "underlying": trade.symbol if trade else None,
+            "qty_lots": getattr(trade, "qty_lots", None) if trade else None,
+            "qty_units": getattr(trade, "qty_units", None) if trade else None,
+            "validity_sec": getattr(trade, "validity_sec", None) if trade else None,
+            "dte": self._calc_dte(getattr(trade, "expiry", None)) if trade else None,
+            "expiry_bucket": market_data.get("expiry_type") or market_data.get("expiry_bucket"),
+            "score_0_100": getattr(trade, "trade_score", None) if trade else None,
+            "xgb_proba": trade.confidence if trade and getattr(trade, "model_type", None) == "xgb" else None,
+            "deep_proba": trade.confidence if trade and getattr(trade, "model_type", None) == "deep" else None,
+            "micro_proba": (opt or {}).get("micro_pred"),
+            "ensemble_proba": getattr(trade, "alpha_confidence", None) if trade else None,
+            "ensemble_uncertainty": getattr(trade, "alpha_uncertainty", None) if trade else None,
+            "champion_proba": getattr(trade, "confidence", None) if trade else None,
+            "challenger_proba": getattr(trade, "shadow_confidence", None) if trade else None,
+            "champion_model_id": getattr(trade, "model_version", None) if trade else None,
+            "challenger_model_id": getattr(trade, "shadow_model_version", None) if trade else None,
+            "model_id": lineage.get("model_id") or (getattr(trade, "model_version", None) if trade else None),
+            "dataset_hash": lineage.get("dataset_hash"),
+            "feature_hash": lineage.get("feature_hash"),
+            "bid": bid,
+            "ask": ask,
+            "spread_pct": spread_pct,
+            "bid_qty": bid_qty,
+            "ask_qty": ask_qty,
+            "depth_imbalance": depth_imb,
+            "quote_age_sec": quote_age_sec,
+            "quote_ts_epoch": quote_ts_epoch,
+            "depth_age_sec": market_data.get("depth_age_sec"),
+            "fill_prob_est": getattr(cfg, "EXEC_FILL_PROB", None),
+            "portfolio_equity": self.portfolio.get("capital"),
+            "equity": self.portfolio.get("capital"),
+            "equity_high": self.portfolio.get("equity_high"),
+            "daily_pnl": self.portfolio.get("daily_pnl", self.portfolio.get("daily_profit", 0.0) + self.portfolio.get("daily_loss", 0.0)),
+            "daily_pnl_pct": self.portfolio.get("daily_pnl_pct"),
+            "drawdown_pct": self.risk_state.daily_max_drawdown if hasattr(self.risk_state, "daily_max_drawdown") else None,
+            "loss_streak": self.loss_streak.get(trade.symbol, 0) if trade else 0,
+            "open_risk": self.portfolio.get("open_risk", self._open_risk()),
+            "open_risk_pct": self.portfolio.get("open_risk_pct"),
+            "delta_exposure": None,
+            "gamma_exposure": None,
+            "vega_exposure": None,
+            "gatekeeper_allowed": 1 if gatekeeper_allowed else 0,
+            "veto_reasons": veto_reasons,
+            "risk_allowed": None,
+            "exec_guard_allowed": None,
+            "pilot_allowed": pilot_allowed,
+            "pilot_reasons": pilot_reasons,
+            "action_size_multiplier": None,
+            "filled_bool": None,
+            "fill_price": None,
+            "time_to_fill": None,
+            "slippage_vs_mid": None,
+            "pnl_horizon_5m": None,
+            "pnl_horizon_15m": None,
+            "mae_15m": None,
+            "mfe_15m": None,
+        }
+        if event.get("instrument_id") is None and trade:
+            ok, reason = validate_trade_identity(
+                trade.symbol,
+                instrument_type,
+                expiry,
+                strike,
+                right,
+            )
+            if not ok:
+                veto_reasons.append("missing_contract_fields")
+                event["veto_reasons"] = veto_reasons
+            event["instrument_id"] = None
+        if event.get("quote_age_sec") is None:
+            event["quote_age_sec"] = market_data.get("quote_age_sec")
+        if event.get("quote_age_sec") is None:
+            event["quote_age_sec"] = -1.0
+            if "epoch_missing" not in veto_reasons:
+                veto_reasons.append("epoch_missing")
+            event["veto_reasons"] = veto_reasons
+        return event
+
+    def _log_identity_error(self, trade, extra: dict | None = None) -> None:
+        try:
+            path = Path("logs/trade_identity_errors.jsonl")
+            path.parent.mkdir(exist_ok=True)
+            def _get(obj, key):
+                if isinstance(obj, dict):
+                    return obj.get(key)
+                return getattr(obj, key, None)
+            payload = {
+                "ts_epoch": now_utc_epoch(),
+                "trade_id": _get(trade, "trade_id"),
+                "symbol": _get(trade, "symbol"),
+                "instrument_type": _get(trade, "instrument_type") or _get(trade, "instrument"),
+                "expiry": _get(trade, "expiry"),
+                "strike": _get(trade, "strike"),
+                "right": _get(trade, "right") or _get(trade, "option_type"),
             }
-            return event
+            if extra:
+                payload.update(extra)
+            with path.open("a") as f:
+                f.write(json.dumps(payload, default=str) + "\n")
+        except Exception:
+            pass
+
+    def _log_decision_safe(self, event: dict, trade=None):
+        if event.get("instrument_id") is None:
+            self._log_identity_error(trade or event, {"reason": "missing_contract_fields"})
+            return None
+        return log_decision(event)
+
+    def _instrument_id(self, trade):
+        if not trade:
+            return None
+        try:
+            instrument_type = getattr(trade, "instrument_type", None) or getattr(trade, "instrument", None)
+            right = getattr(trade, "right", None) or getattr(trade, "option_type", None)
+            expiry = getattr(trade, "expiry", None)
+            strike = getattr(trade, "strike", None)
+            return build_instrument_id(trade.symbol, instrument_type, expiry, strike, right)
+        except Exception:
+            return None
+
+    def _build_trade_ticket(self, trade, market_data: dict) -> TradeTicket:
+        validity = int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180))
+        reason_codes = []
+        if getattr(trade, "regime", None):
+            reason_codes.append(f"regime:{trade.regime}")
+        if getattr(trade, "strategy", None):
+            reason_codes.append(f"strategy:{trade.strategy}")
+        guardrails = []
+        max_spread = float(getattr(cfg, "MAX_SPREAD_PCT", 0.03))
+        guardrails.append(f"spread>{max_spread:.2%}")
+        max_age = float(getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))
+        guardrails.append(f"quote_age>{max_age:.1f}s")
+        return TradeTicket.from_trade(
+            trade,
+            validity_sec=validity,
+            reason_codes=reason_codes,
+            guardrails=guardrails,
+            desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+        )
+
+    def _log_meta_shadow(self, trade, market_data):
+        if not self.meta_model:
+            return
+        try:
+            stats = dict(self.strategy_tracker.stats.get(trade.strategy, {}) or {})
+            decay = self.strategy_tracker.decay_probs.get(trade.strategy, {})
+            if decay:
+                stats.update(decay)
+            try:
+                baseline_weight = float(self.strategy_allocator._weight(trade.strategy))
+            except Exception:
+                baseline_weight = 1.0
+            suggestion = self.meta_model.suggest(
+                trade.strategy,
+                getattr(trade, "model_type", None),
+                market_data,
+                stats,
+            )
+            payload = {
+                "ts_epoch": now_utc_epoch(),
+                "symbol": trade.symbol,
+                "strategy": trade.strategy,
+                "trade_id": trade.trade_id,
+                "baseline_weight": baseline_weight,
+                "suggested_weight": suggestion.get("suggested_weight"),
+                "weight_delta": (suggestion.get("suggested_weight") or 0) - baseline_weight,
+                "baseline_predictor": suggestion.get("baseline_predictor"),
+                "suggested_predictor": suggestion.get("suggested_predictor"),
+                "primary_regime": suggestion.get("primary_regime"),
+                "regime_probs": suggestion.get("regime_probs"),
+                "decay_prob": suggestion.get("decay_prob"),
+                "exec_quality": suggestion.get("exec_quality"),
+                "shadow_only": bool(getattr(cfg, "META_MODEL_SHADOW_ONLY", True)),
+            }
+            self.meta_model.log_shadow(payload)
+        except Exception:
+            pass
         # gatekeeper/no-trade event
         sym = market_data.get("symbol")
         decision_id = f"{sym}-DECISION-{int(time.time()*1000)}"
@@ -246,12 +596,19 @@ class Orchestrator:
             "micro_proba": None,
             "ensemble_proba": None,
             "ensemble_uncertainty": None,
+            "champion_proba": None,
+            "challenger_proba": None,
+            "champion_model_id": None,
+            "challenger_model_id": None,
             "bid": market_data.get("bid"),
             "ask": market_data.get("ask"),
             "spread_pct": None,
             "bid_qty": None,
             "ask_qty": None,
             "depth_imbalance": market_data.get("depth_imbalance"),
+            "quote_age_sec": self._quote_age_sec(market_data.get("quote_ts")) or market_data.get("quote_age_sec"),
+            "quote_ts_epoch": market_data.get("quote_ts_epoch"),
+            "depth_age_sec": market_data.get("depth_age_sec"),
             "fill_prob_est": getattr(cfg, "EXEC_FILL_PROB", None),
             "portfolio_equity": self.portfolio.get("capital"),
             "equity": self.portfolio.get("capital"),
@@ -269,6 +626,8 @@ class Orchestrator:
             "veto_reasons": veto_reasons,
             "risk_allowed": None,
             "exec_guard_allowed": None,
+            "pilot_allowed": pilot_allowed,
+            "pilot_reasons": pilot_reasons,
             "action_size_multiplier": None,
             "filled_bool": None,
             "fill_price": None,
@@ -282,7 +641,7 @@ class Orchestrator:
 
     def _refresh_decay_report(self):
         try:
-            today = datetime.now().date()
+            today = now_ist().date()
             if self._last_decay_date == today:
                 return
             report = generate_decay_report()
@@ -312,14 +671,38 @@ class Orchestrator:
                     importlib.reload(cfg)
                 except Exception:
                     pass
+                if getattr(cfg, "KILL_SWITCH", False):
+                    try:
+                        self._log_decision_safe(self._build_decision_event(None, {"symbol": "GLOBAL"}, gatekeeper_allowed=False, veto_reasons=["kill_switch"]))
+                        audit_append({"event": "KILL_SWITCH", "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
+                        create_incident("SEV1", "KILL_SWITCH", {"desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
+                    except Exception:
+                        pass
+                    time.sleep(self.poll_interval)
+                    continue
                 if risk_halt.is_halted():
                     time.sleep(self.poll_interval)
                     continue
+                # Feed health check (block pilot/live on stale feeds)
+                try:
+                    feed_health = check_feed_health()
+                    live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+                    pilot_mode = bool(getattr(cfg, "LIVE_PILOT_MODE", False))
+                    if (live_mode or pilot_mode) and not feed_health.get("ok", True):
+                        time.sleep(self.poll_interval)
+                        continue
+                except Exception:
+                    pass
                 # Daily decay report / strategy gating
                 self._refresh_decay_report()
                 market_data_list = fetch_live_market_data()  # List of dicts for multiple symbols
                 self._evaluate_suggestions(market_data_list)
                 try:
+                    # Update consolidated loss streak (max across symbols)
+                    try:
+                        self.portfolio["loss_streak"] = max(self.loss_streak.values()) if self.loss_streak else 0
+                    except Exception:
+                        self.portfolio["loss_streak"] = self.portfolio.get("loss_streak", 0)
                     self.risk_state.update_portfolio(self.portfolio)
                 except Exception:
                     pass
@@ -331,10 +714,14 @@ class Orchestrator:
                     maybe_auto_tune()
                 except Exception:
                     pass
+                try:
+                    self._pilot_exec_degradation()
+                except Exception:
+                    pass
 
                 # Reset daily flags at new day
                 try:
-                    today = datetime.now().date()
+                    today = now_ist().date()
                     if not hasattr(self, "_last_day"):
                         self._last_day = today
                     if today != self._last_day:
@@ -355,13 +742,49 @@ class Orchestrator:
                 except Exception:
                     pass
 
+                max_trades_day = getattr(cfg, "MAX_TRADES_PER_DAY", 0)
+                if getattr(cfg, "LIVE_PILOT_MODE", False):
+                    max_trades_day = min(max_trades_day, int(getattr(cfg, "LIVE_MAX_TRADES_PER_DAY", 2)))
+
                 for market_data in market_data_list:
                     try:
                         self.risk_state.update_market(market_data.get("symbol"), market_data)
                     except Exception:
                         pass
+                    if self.risk_state.mode == "HARD_HALT":
+                        try:
+                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=["hard_halt"])
+                            self._log_decision_safe(event)
+                            audit_append({"event": "HARD_HALT", "symbol": market_data.get("symbol"), "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
+                            create_incident("SEV1", "HARD_HALT", {"symbol": market_data.get("symbol")})
+                        except Exception:
+                            pass
+                        continue
+                    if self.portfolio.get("trades_today", 0) >= max_trades_day:
+                        try:
+                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=["max_trades_per_day"])
+                            self._log_decision_safe(event)
+                        except Exception:
+                            pass
+                        continue
+                    if getattr(cfg, "LIVE_PILOT_MODE", False):
+                        ok, reasons = self._pilot_checks()
+                        if not ok:
+                            try:
+                                event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=["pilot_precheck"], pilot_allowed=0, pilot_reasons=reasons)
+                                self._log_decision_safe(event)
+                            except Exception:
+                                pass
+                            continue
                     self._sync_trades()
                     sym = market_data.get("symbol")
+                    if sym and sym.upper() in getattr(cfg, "HALT_SYMBOLS", []):
+                        try:
+                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=["halt_symbol"])
+                            self._log_decision_safe(event)
+                        except Exception:
+                            pass
+                        continue
                     if sym:
                         self.last_md_by_symbol[sym] = market_data
                     # Check exits for any open trades on this symbol/instrument
@@ -381,7 +804,7 @@ class Orchestrator:
                         try:
                             veto = "indicators_missing" if not indicators_ok else "indicators_stale"
                             event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=[veto])
-                            log_decision(event)
+                            self._log_decision_safe(event)
                         except Exception:
                             pass
                         continue
@@ -394,7 +817,8 @@ class Orchestrator:
                                 print(f"[Gatekeeper] Blocked {sym}: {','.join(gate.reasons)}")
                             try:
                                 event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=gate.reasons)
-                                log_decision(event)
+                                self._log_decision_safe(event)
+                                audit_append({"event": "GATEKEEPER_BLOCK", "symbol": sym, "reasons": gate.reasons, "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
                             except Exception:
                                 pass
                             continue
@@ -406,6 +830,26 @@ class Orchestrator:
                             allow_fallbacks=False,
                             allow_baseline=False,
                         )
+                    if trade is None:
+                        continue
+                    if str(trade.strategy).upper() in getattr(cfg, "HALT_STRATEGIES", []):
+                        try:
+                            update_execution(trade.trade_id, {"veto_reasons": ["halt_strategy"]})
+                        except Exception:
+                            pass
+                        continue
+                    # Optional cross-asset staleness: downsize but do not block.
+                    try:
+                        cross_q = market_data.get("cross_asset_quality", {}) or {}
+                        optional = set(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or [])
+                        stale = set(cross_q.get("stale_feeds", []) or [])
+                        missing = set((cross_q.get("missing") or {}).keys())
+                        if (stale | missing) & optional:
+                            mult = float(getattr(cfg, "CROSS_ASSET_OPTIONAL_SIZE_MULT", 0.85))
+                            current = float(getattr(trade, "size_mult", 1.0) or 1.0)
+                            trade = replace(trade, size_mult=min(current, mult))
+                    except Exception:
+                        pass
                     # Spread suggestions (advisory only; defined-risk)
                     try:
                         gate_for_spread = self.gatekeeper.evaluate(market_data, mode="SPREAD")
@@ -424,7 +868,7 @@ class Orchestrator:
                                 reason = None
                             veto = [reason] if reason else ["no_trade_generated"]
                             event = self._build_decision_event(None, market_data, gatekeeper_allowed=True, veto_reasons=veto)
-                            log_decision(event)
+                            self._log_decision_safe(event)
                         except Exception:
                             pass
                         # Track blocked candidates for paper outcome evaluation
@@ -459,7 +903,19 @@ class Orchestrator:
                     decision_id = None
                     try:
                         event = self._build_decision_event(trade, market_data, gatekeeper_allowed=True, veto_reasons=[])
-                        decision_id = log_decision(event)
+                        if event.get("instrument_id") is None:
+                            veto = event.get("veto_reasons") or []
+                            if "missing_contract_fields" not in veto:
+                                veto.append("missing_contract_fields")
+                            event["veto_reasons"] = veto
+                            self._log_identity_error(trade, event)
+                            try:
+                                self._log_decision_safe(event, trade)
+                            except Exception:
+                                pass
+                            continue
+                        decision_id = self._log_decision_safe(event, trade)
+                        self._log_meta_shadow(trade, market_data)
                     except Exception:
                         decision_id = trade.trade_id
                     try:
@@ -540,7 +996,7 @@ class Orchestrator:
                             log_ab_trial(
                                 trade.trade_id,
                                 trade.symbol,
-                                datetime.now().isoformat(),
+                                now_ist().isoformat(),
                                 trade.confidence,
                                 trade.shadow_confidence,
                                 getattr(trade, "model_version", None),
@@ -549,7 +1005,21 @@ class Orchestrator:
                                 extra={"strategy": trade.strategy, "regime": trade.regime},
                             )
                     except Exception:
-                        pass
+                            pass
+
+                    # Pilot gating (strategy whitelist + quote/spread strictness)
+                    if getattr(cfg, "LIVE_PILOT_MODE", False):
+                        pilot_allowed, pilot_reasons = self._pilot_trade_gate(trade, market_data)
+                        if not pilot_allowed:
+                            try:
+                                update_execution(trade.trade_id, {"pilot_allowed": 0, "pilot_reasons": pilot_reasons, "veto_reasons": pilot_reasons})
+                            except Exception:
+                                pass
+                            continue
+                        try:
+                            update_execution(trade.trade_id, {"pilot_allowed": 1})
+                        except Exception:
+                            pass
 
                     # Manual approval gate (strong trades)
                     if cfg.MANUAL_APPROVAL and not is_approved(trade.trade_id):
@@ -627,6 +1097,8 @@ class Orchestrator:
                     streak = self.loss_streak.get(trade.symbol, 0)
                     sized_qty = self.risk_engine.size_trade(trade, self.portfolio["capital"], lot_size, current_vol=current_vol, loss_streak=streak)
                     final_qty = min(sized_qty, alloc.max_qty) if alloc.max_qty else sized_qty
+                    if getattr(cfg, "LIVE_PILOT_MODE", False):
+                        final_qty = min(final_qty, int(getattr(cfg, "LIVE_MAX_LOTS", 1)))
                     if final_qty <= 0:
                         print("[PortfolioAllocator] Trade blocked: qty<=0 after allocation")
                         continue
@@ -764,7 +1236,15 @@ class Orchestrator:
                         return {"bid": bid0, "ask": ask0, "ts": time.time(), "depth": depth}
 
                     filled, fill_price, fill_report = self.execution_router.execute(
-                        trade, bid, ask, volume, depth=depth, snapshot_fn=_snapshot
+                        trade,
+                        bid,
+                        ask,
+                        volume,
+                        depth=depth,
+                        snapshot_fn=_snapshot,
+                        spread_pct=market_data.get("spread_pct"),
+                        depth_imbalance=market_data.get("depth_imbalance"),
+                        vol_z=market_data.get("vol_z"),
                     )
                     try:
                         self.risk_state.record_fill(filled)
@@ -848,12 +1328,16 @@ class Orchestrator:
                     log_trade(trade, extra=extra)
                     self._track_open_trade(trade, market_data)
 
-                    # Telegram alert
-                    send_telegram_message(
-                        f"Trade executed: {trade.symbol} | {trade.side} | "
-                        f"LTP: {trade.entry_price} | Confidence: {getattr(trade, 'confidence', 0):.2f} | "
-                        f"Regime: {getattr(trade, 'regime', 'N/A')}"
-                    )
+                    # Telegram alert (actionable trades only)
+                    try:
+                        ticket = self._build_trade_ticket(trade, market_data)
+                        actionable, reason = ticket.is_actionable()
+                        if not actionable:
+                            self._log_identity_error(trade, {"reason": reason})
+                        else:
+                            send_trade_ticket(ticket)
+                    except Exception:
+                        pass
 
                 # Phase F: Check and retrain model if needed
                 self.retrainer.update_model("data/trade_log.json")

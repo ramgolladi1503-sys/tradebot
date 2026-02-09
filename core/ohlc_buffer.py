@@ -1,6 +1,7 @@
 from collections import defaultdict, deque
 from datetime import datetime
 from config import config as cfg
+from core.time_utils import IST_TZ, now_ist
 
 
 class OhlcBuffer:
@@ -11,9 +12,11 @@ class OhlcBuffer:
         if price is None:
             return
         try:
-            ts = ts or datetime.now()
+            ts = ts or now_ist()
             if isinstance(ts, (int, float)):
-                ts = datetime.fromtimestamp(ts)
+                ts = datetime.fromtimestamp(ts, tz=IST_TZ)
+            if isinstance(ts, datetime) and ts.tzinfo is None:
+                ts = ts.replace(tzinfo=IST_TZ)
             bucket = ts.replace(second=0, microsecond=0)
             bars = self._bars[symbol]
             if bars and bars[-1]["ts"] == bucket:
@@ -56,6 +59,8 @@ class OhlcBuffer:
                         ts = datetime.fromisoformat(str(ts))
                     except Exception:
                         continue
+                if isinstance(ts, datetime) and ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=IST_TZ)
                 q.append({
                     "ts": ts.replace(second=0, microsecond=0),
                     "open": b.get("open"),

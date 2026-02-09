@@ -4,18 +4,19 @@ import runpy
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 import json
-from datetime import datetime
 from pathlib import Path
 import sys
 
 from core.market_data import fetch_live_market_data
 from core.telegram_alerts import send_telegram_message
+from core.time_utils import now_ist, now_utc_epoch
 
 
 def build_plan():
     data = fetch_live_market_data()
     plan = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp_epoch": now_utc_epoch(),
+        "timestamp_ist": now_ist().isoformat(),
         "symbols": []
     }
     for m in data:

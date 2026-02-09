@@ -32,7 +32,9 @@ def _snapshot_seq(quotes):
         if i >= len(quotes):
             return quotes[-1]
         idx["i"] += 1
-        return quotes[i]
+        snap = dict(quotes[i])
+        snap.setdefault("ts", datetime.now().timestamp())
+        return snap
     return _fn
 
 

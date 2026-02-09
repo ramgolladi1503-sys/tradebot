@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from collections import defaultdict, deque
 from config import config as cfg
+from core.strategy_lifecycle import StrategyLifecycle
 
 class StrategyTracker:
     def __init__(self, max_len=200):
@@ -13,6 +14,7 @@ class StrategyTracker:
         self.decay_probs = {}
         self.decay_state = {}
         self.soft_disabled = {}
+        self.lifecycle = StrategyLifecycle()
         self._load_degraded()
         self._load_decay_state()
 
@@ -76,6 +78,15 @@ class StrategyTracker:
                 self.decay_state[strat] = 0
             if self.decay_state.get(strat, 0) >= persist_n:
                 self.degraded[strat] = {"reason": "decay_probability", "value": prob}
+                try:
+                    self.lifecycle.set_state(
+                        strat,
+                        "QUARANTINE",
+                        reason="decay_probability",
+                        meta={"decay_prob": prob},
+                    )
+                except Exception:
+                    pass
         # persist degraded list
         try:
             self.set_degraded(self.degraded)

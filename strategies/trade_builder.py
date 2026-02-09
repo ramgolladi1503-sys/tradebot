@@ -7,12 +7,13 @@ import pandas as pd
 from config import config as cfg
 from core.execution_engine import ExecutionEngine
 from core.alpha_ensemble import AlphaEnsemble
-from core.trade_schema import Trade
+from core.trade_schema import Trade, build_instrument_id, validate_trade_identity
 from typing import Optional
 from strategies.ensemble import ensemble_signal, equity_signal, futures_signal, mean_reversion_signal, event_breakout_signal, micro_pattern_signal
 from core.feature_builder import build_trade_features
 from core.trade_scoring import compute_trade_score
 from core.strategy_tracker import StrategyTracker
+from core.strategy_lifecycle import StrategyLifecycle
 import time as _time
 import time
 
@@ -70,6 +71,7 @@ class TradeBuilder:
         self.execution = execution or ExecutionEngine()
         self.alpha_ensemble = AlphaEnsemble() if getattr(cfg, "ALPHA_ENSEMBLE_ENABLE", True) else None
         self.strategy_tracker = strategy_tracker or StrategyTracker()
+        self.lifecycle = StrategyLifecycle()
         self._ml_history_cache = {"ts": 0, "count": 0}
         self._expiry_zero_hero_count = 0
         self._expiry_zero_hero_by_symbol = {}
@@ -77,6 +79,38 @@ class TradeBuilder:
         self._expiry_zero_hero_disabled_until = {}
         self._expiry_zero_hero_pnl = {}
         self._reject_ctx = {}
+
+    def _identity_fields(self, symbol, instrument, expiry, strike, right, qty_lots):
+        instrument_type = instrument
+        if instrument_type == "EQ":
+            instrument_type = "INDEX"
+        instrument_type = instrument_type.upper() if instrument_type else None
+        ok, reason = validate_trade_identity(symbol, instrument_type, expiry, strike, right)
+        if not ok:
+            self._reject_ctx = {
+                "symbol": symbol,
+                "reason": "missing_contract_fields",
+                "detail": reason,
+                "instrument_type": instrument_type,
+                "expiry": expiry,
+                "strike": strike,
+                "right": right,
+            }
+            return None, None, None, reason
+        instrument_id = build_instrument_id(symbol, instrument_type, expiry, strike, right)
+        if not instrument_id:
+            self._reject_ctx = {
+                "symbol": symbol,
+                "reason": "missing_instrument_id",
+                "instrument_type": instrument_type,
+                "expiry": expiry,
+                "strike": strike,
+                "right": right,
+            }
+            return None, None, None, "missing_instrument_id"
+        lot_size = int(getattr(cfg, "LOT_SIZE", {}).get(symbol, 1))
+        qty_units = int(qty_lots) * (lot_size if instrument_type == "OPT" else 1)
+        return instrument_type, instrument_id, qty_units, None
 
     def _apply_decay_gate(self, strategy_name, base_score=None, size_mult=1.0):
         if not strategy_name or not self.strategy_tracker:
@@ -93,6 +127,20 @@ class TradeBuilder:
             self._reject_ctx = {"strategy": strategy_name, "reason": "strategy_decaying", "decay_prob": prob}
             return True, new_score, new_mult, "strategy_decaying"
         return True, base_score, size_mult, None
+
+    def _apply_lifecycle_gate(self, strategy_name, mode="MAIN"):
+        try:
+            allowed, reason = self.lifecycle.can_allocate(strategy_name, mode=mode)
+            if not allowed:
+                self._reject_ctx = {
+                    "strategy": strategy_name,
+                    "reason": reason,
+                    "lifecycle_state": self.lifecycle.get_state(strategy_name),
+                }
+            return allowed, reason
+        except Exception:
+            self._reject_ctx = {"strategy": strategy_name, "reason": "lifecycle_error"}
+            return False, "lifecycle_error"
 
     def _apply_alpha_ensemble(
         self,
@@ -437,6 +485,11 @@ class TradeBuilder:
                 print(f"[TradeBuilder] No signal for {symbol} | ltp={ltp} vwap={vwap} atr={market_data.get('atr')} ltp_change={market_data.get('ltp_change')} ltp_change_window={market_data.get('ltp_change_window')}")
             return None
         strategy_tag = "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"
+        allowed_life, _ = self._apply_lifecycle_gate(strategy_tag, mode="MAIN" if not quick_mode else "QUICK")
+        if not allowed_life:
+            if debug_reasons:
+                print(f"[TradeBuilder] Reject {symbol}: lifecycle_gate ({strategy_tag})")
+            return None
         decay_size_mult = 1.0
         allowed, adj_score, decay_size_mult, _decay_reason = self._apply_decay_gate(strategy_tag, signal.get("score"), decay_size_mult)
         if not allowed:
@@ -862,6 +915,18 @@ class TradeBuilder:
                 strategy_name=strategy_tag,
             )
             score = score_pack.get("score", 0)
+            # Optional cross-asset penalties (do not block)
+            try:
+                cross_q = market_data.get("cross_asset_quality", {}) or {}
+                optional = set(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or [])
+                stale = set(cross_q.get("stale_feeds", []) or [])
+                missing_map = cross_q.get("missing") or {}
+                missing = set(k for k, v in missing_map.items() if not str(v).startswith("disabled"))
+                bad_optional = (stale | missing) & optional
+                if bad_optional:
+                    size_mult = min(size_mult, float(getattr(cfg, "CROSS_ASSET_OPTIONAL_SIZE_MULT", 0.85)))
+            except Exception:
+                pass
             min_score = getattr(cfg, "QUICK_TRADE_SCORE_MIN", 60) if quick_mode else getattr(cfg, "TRADE_SCORE_MIN", 75)
             # Day-type overrides for score threshold
             try:
@@ -884,19 +949,39 @@ class TradeBuilder:
                 continue
 
             tier = "EXPLORATION" if quick_mode else "MAIN"
+            instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                symbol,
+                "OPT",
+                str(opt.get("expiry", "")),
+                opt.get("strike"),
+                opt.get("type"),
+                1,
+            )
+            if ident_err:
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rejected.append(rec)
+                continue
             trade = Trade(
                 trade_id=f"{symbol}-{opt['strike']}-{opt['type']}-{int(datetime.now().timestamp())}",
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
+                instrument_type=instrument_type,
+                right=opt.get("type"),
+                instrument_id=instrument_id,
                 instrument_token=opt.get("instrument_token"),
                 strike=opt["strike"],
                 expiry=str(opt.get("expiry", "")),
+                option_type=opt.get("type"),
                 side="BUY",
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),
                 target=round(target, 2),
                 qty=1,
+                qty_lots=1,
+                qty_units=qty_units,
+                validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                 capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                 expected_slippage=round(slippage, 2),
                 confidence=round(confidence, 3),
@@ -961,19 +1046,39 @@ class TradeBuilder:
                     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {})
                     step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))
                     atm_strike = int(round(ltp / step) * step) if step else 0
+                    instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                        symbol,
+                        "OPT",
+                        str(market_data.get("expiry", "")),
+                        atm_strike,
+                        opt_type,
+                        1,
+                    )
+                    if ident_err:
+                        if debug_reasons:
+                            rec = self._reject_record(symbol, {"strike": atm_strike}, opt_type, "missing_contract_fields", atr=atr)
+                            rejected.append(rec)
+                        return None
                     trade = Trade(
                         trade_id=f"{symbol}-{opt_type}-ATM-QK-{ts}",
                         timestamp=datetime.now(),
                         symbol=symbol,
                         instrument="OPT",
+                        instrument_type=instrument_type,
+                        right=opt_type,
+                        instrument_id=instrument_id,
                         instrument_token=None,
                         strike=atm_strike,
                         expiry=str(market_data.get("expiry", "")),
+                        option_type=opt_type,
                         side="BUY",
                         entry_price=round(entry_price, 2),
                         stop_loss=round(stop_loss, 2),
                         target=round(target, 2),
                         qty=1,
+                        qty_lots=1,
+                        qty_units=qty_units,
+                        validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                         capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                         expected_slippage=round(slippage, 2),
                         confidence=round(max(0.5, getattr(cfg, "ML_MIN_PROBA", 0.5)), 3),
@@ -1007,19 +1112,36 @@ class TradeBuilder:
                 stop_loss = ltp - atr if side == "BUY" else ltp + atr
                 target = ltp + atr * 1.5 if side == "BUY" else ltp - atr * 1.5
 
+                instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                    symbol,
+                    instrument,
+                    getattr(cfg, "FUT_EXPIRY", ""),
+                    None,
+                    None,
+                    1,
+                )
+                if ident_err:
+                    if debug_reasons:
+                        print(f"[TradeBuilder] Reject {symbol} {instrument}: {ident_err}")
+                    return None
                 trade = Trade(
                     trade_id=f"{symbol}-FUT-{int(datetime.now().timestamp())}",
                     timestamp=datetime.now(),
                     symbol=symbol,
                     instrument=instrument,
+                    instrument_type=instrument_type,
+                    instrument_id=instrument_id,
                     instrument_token=None,
                     strike=0,
-                    expiry="",
+                    expiry=str(getattr(cfg, "FUT_EXPIRY", "")),
                     side=side,
                     entry_price=round(ltp, 2),
                     stop_loss=round(stop_loss, 2),
                     target=round(target, 2),
                     qty=1,
+                    qty_lots=1,
+                    qty_units=qty_units,
+                    validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                     capital_at_risk=round(abs(ltp - stop_loss), 2),
                     expected_slippage=0.0,
                     confidence=round(base_conf, 3),
@@ -1119,6 +1241,11 @@ class TradeBuilder:
             )
             if adj_conf is not None:
                 confidence = adj_conf
+            allowed_life, _ = self._apply_lifecycle_gate("ZERO_HERO", mode="QUICK")
+            if not allowed_life:
+                if debug_reasons:
+                    print(f"[ZeroHero] Reject {symbol}: lifecycle_gate (ZERO_HERO)")
+                return None
             # Decay gating for ZERO_HERO
             allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate("ZERO_HERO", confidence, size_mult)
             if not allowed:
@@ -1141,19 +1268,39 @@ class TradeBuilder:
                 target_mult=getattr(cfg, "ZERO_HERO_TARGET_ATR", 2.0),
             )
             ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                symbol,
+                "OPT",
+                str(opt.get("expiry", "")),
+                opt.get("strike"),
+                opt.get("type"),
+                1,
+            )
+            if ident_err:
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rejected.append(rec)
+                continue
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-ZERO-{ts}",
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
+                instrument_type=instrument_type,
+                right=opt.get("type"),
+                instrument_id=instrument_id,
                 instrument_token=opt.get("instrument_token"),
                 strike=opt["strike"],
                 expiry=str(opt.get("expiry", "")),
+                option_type=opt.get("type"),
                 side="BUY",
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),
                 target=round(target, 2),
                 qty=1,
+                qty_lots=1,
+                qty_units=qty_units,
+                validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                 capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                 expected_slippage=round(slippage, 2),
                 confidence=round(confidence, 3),
@@ -1272,19 +1419,44 @@ class TradeBuilder:
             )
             if adj_conf is not None:
                 confidence = adj_conf
+            allowed_life, _ = self._apply_lifecycle_gate("ZERO_HERO_EXPIRY", mode="QUICK")
+            if not allowed_life:
+                if debug_reasons:
+                    print(f"[ZeroHeroExpiry] Reject {symbol}: lifecycle_gate (ZERO_HERO_EXPIRY)")
+                return None
+            instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                symbol,
+                "OPT",
+                str(opt.get("expiry", "")),
+                opt.get("strike"),
+                opt.get("type"),
+                1,
+            )
+            if ident_err:
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rejected.append(rec)
+                continue
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-ZEROEXP-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
+                instrument_type=instrument_type,
+                right=opt.get("type"),
+                instrument_id=instrument_id,
                 instrument_token=opt.get("instrument_token"),
                 strike=opt["strike"],
                 expiry=str(opt.get("expiry", "")),
+                option_type=opt.get("type"),
                 side="BUY",
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),
                 target=round(target, 2),
                 qty=1,
+                qty_lots=1,
+                qty_units=qty_units,
+                validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                 capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                 expected_slippage=round(slippage, 2),
                 confidence=round(confidence, 3),
@@ -1631,6 +1803,11 @@ class TradeBuilder:
             )
             if adj_conf is not None:
                 confidence = adj_conf
+            allowed_life, _ = self._apply_lifecycle_gate("SCALP", mode="QUICK")
+            if not allowed_life:
+                if debug_reasons:
+                    print(f"[Scalp] Reject {symbol}: lifecycle_gate (SCALP)")
+                return None
             allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate("SCALP", confidence, size_mult)
             if not allowed:
                 if debug_reasons:
@@ -1652,19 +1829,39 @@ class TradeBuilder:
                 target_mult=getattr(cfg, "SCALP_TARGET_ATR", 0.6),
             )
             ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                symbol,
+                "OPT",
+                str(opt.get("expiry", "")),
+                opt.get("strike"),
+                opt.get("type"),
+                1,
+            )
+            if ident_err:
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rejected.append(rec)
+                continue
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-SCALP-{ts}",
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
+                instrument_type=instrument_type,
+                right=opt.get("type"),
+                instrument_id=instrument_id,
                 instrument_token=opt.get("instrument_token"),
                 strike=opt["strike"],
                 expiry=str(opt.get("expiry", "")),
+                option_type=opt.get("type"),
                 side="BUY",
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),
                 target=round(target, 2),
                 qty=1,
+                qty_lots=1,
+                qty_units=qty_units,
+                validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                 capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                 expected_slippage=round(slippage, 2),
                 confidence=round(confidence, 3),

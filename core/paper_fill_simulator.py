@@ -71,6 +71,8 @@ class PaperFillSimulator:
             bid = snap.get("bid") or 0
             ask = snap.get("ask") or 0
             ts = snap.get("ts")
+            if ts is None:
+                ts = time.time()
             if bid <= 0 or ask <= 0:
                 time.sleep(self.poll_sec)
                 continue

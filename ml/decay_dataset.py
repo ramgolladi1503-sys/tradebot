@@ -12,7 +12,7 @@ import pandas as pd
 from config import config as cfg
 
 
-DECISION_JSONL = Path("logs/decision_events.jsonl")
+DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"))
 DEFAULT_WINDOW = int(getattr(cfg, "DECAY_WINDOW_TRADES", 50))
 DEFAULT_DRAWNDOWN_THRESHOLD = float(getattr(cfg, "DECAY_DRAWDOWN_THRESHOLD", -100.0))
 
@@ -188,7 +188,9 @@ def build_decay_dataset(
             prev = sdf.iloc[i - 2 * window + 1:i - window + 1] if i + 1 >= 2 * window else sdf.iloc[0:0]
 
             executed = win[win["filled_bool"] == 1]
-            pnls = executed["pnl_horizon_15m"].fillna(executed["pnl_horizon_5m"]).dropna().astype(float)
+            pnl15 = executed["pnl_horizon_15m"] if "pnl_horizon_15m" in executed.columns else pd.Series(dtype=float)
+            pnl5 = executed["pnl_horizon_5m"] if "pnl_horizon_5m" in executed.columns else pd.Series(dtype=float)
+            pnls = pnl15.fillna(pnl5).dropna().astype(float)
             expectancy = float(pnls.mean()) if not pnls.empty else 0.0
             win_rate = float((pnls > 0).mean()) if not pnls.empty else 0.0
             sharpe_proxy = _sharpe_proxy(pnls.tolist())
@@ -234,7 +236,9 @@ def build_decay_dataset(
             brier_cur = _brier(cur_proba, cur_y[:len(cur_proba)])
             if not prev.empty:
                 prev_exec = prev[prev["filled_bool"] == 1]
-                prev_pnls = prev_exec["pnl_horizon_15m"].fillna(prev_exec["pnl_horizon_5m"]).dropna().astype(float)
+                prev_pnl15 = prev_exec["pnl_horizon_15m"] if "pnl_horizon_15m" in prev_exec.columns else pd.Series(dtype=float)
+                prev_pnl5 = prev_exec["pnl_horizon_5m"] if "pnl_horizon_5m" in prev_exec.columns else pd.Series(dtype=float)
+                prev_pnls = prev_pnl15.fillna(prev_pnl5).dropna().astype(float)
                 prev_y = (prev_pnls > 0).astype(int) if not prev_pnls.empty else pd.Series(dtype=int)
                 prev_proba = prev_exec[proba_col].dropna() if proba_col in prev_exec.columns else pd.Series(dtype=float)
                 brier_prev = _brier(prev_proba, prev_y[:len(prev_proba)])
@@ -249,7 +253,9 @@ def build_decay_dataset(
             if i + window < len(sdf):
                 next_win = sdf.iloc[i + 1:i + 1 + window]
                 next_exec = next_win[next_win["filled_bool"] == 1]
-                next_pnls = next_exec["pnl_horizon_15m"].fillna(next_exec["pnl_horizon_5m"]).dropna().astype(float)
+                next_pnl15 = next_exec["pnl_horizon_15m"] if "pnl_horizon_15m" in next_exec.columns else pd.Series(dtype=float)
+                next_pnl5 = next_exec["pnl_horizon_5m"] if "pnl_horizon_5m" in next_exec.columns else pd.Series(dtype=float)
+                next_pnls = next_pnl15.fillna(next_pnl5).dropna().astype(float)
                 next_exp = float(next_pnls.mean()) if not next_pnls.empty else 0.0
                 next_dd = _drawdown(next_pnls.tolist())
                 decayed = 1 if (next_exp < 0 and next_dd > drawdown_threshold) else 0

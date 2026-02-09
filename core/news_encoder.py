@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from config import config as cfg
-from core.news_ingestor import ingest_headlines
+from core import news_ingestor
 
 
 MODEL_PATH = Path(getattr(cfg, "NEWS_CLASSIFIER_PATH", "models/news_shock_model.pkl"))
@@ -68,7 +68,7 @@ class NewsEncoder:
         return 0.0
 
     def encode(self) -> dict:
-        headlines = ingest_headlines()
+        headlines = news_ingestor.ingest_headlines()
         if not headlines:
             payload = {
                 "shock_score": 0.0,
@@ -76,11 +76,11 @@ class NewsEncoder:
                 "uncertainty_index": 0.0,
                 "top_headlines": [],
             }
-            _atomic_write(OUT_PATH, {"timestamp": datetime.utcnow().isoformat(), **payload})
+            _atomic_write(OUT_PATH, {"timestamp": datetime.now(timezone.utc).isoformat(), **payload})
             return payload
 
         decay_min = float(getattr(cfg, "NEWS_SHOCK_DECAY_MINUTES", 180))
-        now = datetime.utcnow().replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
         scored = []
         for h in headlines:
             title = h.get("title", "")
@@ -121,6 +121,5 @@ class NewsEncoder:
             "uncertainty_index": uncertainty,
             "top_headlines": top,
         }
-        _atomic_write(OUT_PATH, {"timestamp": datetime.utcnow().isoformat(), **payload})
+        _atomic_write(OUT_PATH, {"timestamp": datetime.now(timezone.utc).isoformat(), **payload})
         return payload
-

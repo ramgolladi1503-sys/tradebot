@@ -30,6 +30,10 @@ def test_decision_logger_roundtrip(tmp_path, monkeypatch):
         "micro_proba": None,
         "ensemble_proba": 0.6,
         "ensemble_uncertainty": 0.2,
+        "champion_proba": 0.62,
+        "challenger_proba": 0.58,
+        "champion_model_id": "champ_v1",
+        "challenger_model_id": "chall_v1",
         "bid": 100,
         "ask": 102,
         "spread_pct": 0.02,
@@ -69,7 +73,13 @@ def test_decision_logger_roundtrip(tmp_path, monkeypatch):
     decision_logger.update_outcome("T1", {"pnl_horizon_5m": 1.2})
 
     conn = sqlite3.connect(str(db_path))
-    row = conn.execute("SELECT trade_id, risk_allowed, exec_guard_allowed, pnl_horizon_5m FROM decision_events WHERE trade_id='T1'").fetchone()
+    row = conn.execute(
+        """
+        SELECT trade_id, risk_allowed, exec_guard_allowed, pnl_horizon_5m,
+               champion_proba, challenger_proba, champion_model_id, challenger_model_id
+        FROM decision_events WHERE trade_id='T1'
+        """
+    ).fetchone()
     conn.close()
 
-    assert row == ("T1", 1, 1, 1.2)
+    assert row == ("T1", 1, 1, 1.2, 0.62, 0.58, "champ_v1", "chall_v1")

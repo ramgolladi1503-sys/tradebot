@@ -1,6 +1,7 @@
 # core/no_trade_engine.py
 
-from datetime import datetime, time
+from datetime import time
+from core.time_utils import now_ist
 from core.market_data import get_nifty_ltp, get_index_vwap
 
 def check_no_trade_conditions():
@@ -11,7 +12,7 @@ def check_no_trade_conditions():
             reason (str)
     """
 
-    now = datetime.now().time()
+    now = now_ist().time()
 
     # -------- Rule 1: Early market noise --------
     if now < time(10, 15):
@@ -50,4 +51,3 @@ def check_no_trade_conditions():
         "allowed": True,
         "reason": "Trade allowed"
     }
-

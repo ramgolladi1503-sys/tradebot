@@ -1,6 +1,6 @@
 # core/probability_engine.py
 
-from datetime import datetime
+from core.time_utils import now_ist
 from core.market_data import get_nifty_ltp, get_index_vwap
 
 def calculate_trade_probability(trade, regime_info):
@@ -39,7 +39,7 @@ def calculate_trade_probability(trade, regime_info):
     # ----------------------------
     # 3. Time-of-day edge (0–15)
     # ----------------------------
-    now = datetime.now().time()
+    now = now_ist().time()
 
     if now.hour in [10, 14, 15]:
         score += 15
@@ -85,4 +85,3 @@ def calculate_trade_probability(trade, regime_info):
         "score": min(score, 100),
         "reasons": reasons
     }
-

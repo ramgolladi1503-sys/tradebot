@@ -24,6 +24,17 @@ def _save_daily(data):
         pass
 
 
+def get_latest_exec_quality():
+    data = _load_daily()
+    if not data:
+        return None
+    try:
+        day = sorted(data.keys())[-1]
+        return data.get(day, {}).get("avg_exec_quality")
+    except Exception:
+        return None
+
+
 def log_fill_quality(payload):
     try:
         FILL_LOG_PATH.parent.mkdir(exist_ok=True)

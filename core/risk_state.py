@@ -1,6 +1,7 @@
 import time
 from collections import deque
 from datetime import date
+
 from config import config as cfg
 from core.risk_utils import safe_div
 
@@ -8,14 +9,19 @@ from core.risk_utils import safe_div
 class RiskState:
     """
     Unified risk state for live trading decisions.
-    Tracks drawdown, PnL, volatility shock, regime flip frequency,
-    fill ratio decay, model drift, strategy heat, and CVaR.
+    Modes:
+    - NORMAL
+    - SOFT_HALT
+    - HARD_HALT
+    - RECOVERY_MODE
     """
+
     def __init__(self, start_capital=0.0):
         self.start_capital = float(start_capital)
-        self.mode = "NORMAL"  # NORMAL | SOFT_HALT | HARD_HALT | RECOVERY_MODE
+        self.mode = "NORMAL"
         self.last_mode_reason = ""
         self.quarantined = set()
+        self.hard_halt_day = None
 
         self.realized_pnl = 0.0
         self.unrealized_pnl = 0.0
@@ -26,7 +32,12 @@ class RiskState:
         self.daily_max_drawdown = 0.0
         self.all_time_max_drawdown = 0.0
         self.daily_pnl_pct = 0.0
+        self.open_risk_pct = 0.0
+        self.loss_streak = 0
 
+        self.current_regime = "NEUTRAL"
+        self.current_regime_entropy = 0.0
+        self.current_shock_score = 0.0
         self.vol_shock_index = 0.0
         self.regime_last = {}
         self.regime_flip_ts = deque(maxlen=2000)
@@ -45,13 +56,9 @@ class RiskState:
         self.trade_pnls = deque(maxlen=int(getattr(cfg, "RISK_CVAR_WINDOW", 200)))
         self.cvar = 0.0
 
-    # -------------------------
-    # State updates
-    # -------------------------
     def update_portfolio(self, portfolio):
         self._reset_daily_if_needed()
         capital = float(portfolio.get("capital", self.equity))
-        # Note: capital reflects reserved risk; treat as realized PnL proxy
         self.realized_pnl = capital - self.start_capital
         self.equity = capital + self.unrealized_pnl
         try:
@@ -61,6 +68,14 @@ class RiskState:
             self.daily_pnl_pct = safe_div(daily_pnl, self.daily_equity_high or self.equity or 1.0, default=0.0)
         except Exception:
             self.daily_pnl_pct = 0.0
+        try:
+            self.open_risk_pct = float(portfolio.get("open_risk_pct", 0.0) or 0.0)
+        except Exception:
+            self.open_risk_pct = 0.0
+        try:
+            self.loss_streak = int(portfolio.get("loss_streak", self.loss_streak) or 0)
+        except Exception:
+            self.loss_streak = 0
         self._update_drawdown()
         self._evaluate_halts()
 
@@ -72,6 +87,10 @@ class RiskState:
         self._evaluate_halts()
 
     def update_market(self, symbol, market_data):
+        self.current_regime = (market_data.get("primary_regime") or market_data.get("regime") or "NEUTRAL")
+        self.current_regime_entropy = float(market_data.get("regime_entropy") or 0.0)
+        self.current_shock_score = float(market_data.get("shock_score") or 0.0)
+
         vol_z = market_data.get("vol_z")
         atr = market_data.get("atr", 0) or 0
         ltp = market_data.get("ltp", 0) or 0
@@ -86,6 +105,7 @@ class RiskState:
         if regime:
             self.regime_last[symbol] = regime
         self._compute_regime_flip_freq()
+        self._evaluate_halts()
 
     def record_trade_attempt(self, trade):
         strategy = getattr(trade, "strategy", None)
@@ -118,16 +138,12 @@ class RiskState:
 
     def update_model_drift(self, metrics: dict | None):
         self.model_drift_metrics = metrics or {}
-        # Soft halt on model drift if configured
         drift_threshold = float(getattr(cfg, "MODEL_DRIFT_THRESHOLD", 0.0))
         if drift_threshold:
             acc = self.model_drift_metrics.get("accuracy")
             if acc is not None and acc < drift_threshold:
                 self.set_mode("SOFT_HALT", "model_drift")
 
-    # -------------------------
-    # Approvals & modes
-    # -------------------------
     def approve(self, trade):
         if self.mode == "HARD_HALT":
             return False, "hard_halt"
@@ -156,15 +172,29 @@ class RiskState:
         self.mode = mode
         self.last_mode_reason = reason or self.last_mode_reason
 
-    # -------------------------
-    # Internal helpers
-    # -------------------------
+    def risk_budget_multiplier(self):
+        mult = 1.0
+        if self.current_regime == "EVENT" or self.current_shock_score >= float(getattr(cfg, "RISK_SHOCK_SCORE_SOFT", 0.65)):
+            mult *= float(getattr(cfg, "EVENT_REGIME_RISK_MULT", 0.5))
+        if self.current_regime_entropy >= float(getattr(cfg, "RISK_ENTROPY_SOFT", 1.3)):
+            mult *= float(getattr(cfg, "HIGH_ENTROPY_RISK_MULT", 0.6))
+        if self.mode == "SOFT_HALT":
+            mult *= 0.5
+        if self.mode == "RECOVERY_MODE":
+            mult *= float(getattr(cfg, "RECOVERY_MODE_MULT", 0.4))
+        if self.loss_streak >= int(getattr(cfg, "LOSS_STREAK_DOWNSIZE", 3)):
+            mult *= float(getattr(cfg, "LOSS_STREAK_RISK_MULT", 0.6))
+        return max(0.0, min(mult, 1.0))
+
     def _reset_daily_if_needed(self):
         today = date.today()
         if today != self._current_day:
             self._current_day = today
             self.daily_equity_high = self.equity
             self.daily_max_drawdown = 0.0
+            if self.mode == "HARD_HALT":
+                self.mode = "RECOVERY_MODE"
+                self.last_mode_reason = "recovery_after_hard_halt"
 
     def _update_drawdown(self):
         if self.equity > self.all_time_equity_high:
@@ -192,23 +222,45 @@ class RiskState:
         self.cvar = round(sum(tail) / len(tail), 6)
 
     def _evaluate_halts(self):
-        hard_dd = float(getattr(cfg, "RISK_HARD_DD", -0.05))
-        soft_dd = float(getattr(cfg, "RISK_SOFT_DD", -0.02))
+        max_daily_loss_pct = float(getattr(cfg, "MAX_DAILY_LOSS_PCT", 0.02))
+        max_drawdown_pct = abs(float(getattr(cfg, "MAX_DRAWDOWN_PCT", -0.06)))
+        soft_fraction = float(getattr(cfg, "RISK_SOFT_HALT_FRACTION", 0.7))
         cvar_limit = float(getattr(cfg, "RISK_CVAR_LIMIT", -0.02))
         fill_min = float(getattr(cfg, "RISK_MIN_FILL_RATIO", 0.5))
         vol_shock = float(getattr(cfg, "RISK_VOL_SHOCK", 2.0))
+        shock_soft = float(getattr(cfg, "RISK_SHOCK_SCORE_SOFT", 0.65))
+        entropy_soft = float(getattr(cfg, "RISK_ENTROPY_SOFT", 1.3))
 
-        if self.all_time_max_drawdown <= hard_dd or self.cvar <= cvar_limit:
-            self.set_mode("HARD_HALT", "drawdown_or_cvar")
+        drawdown_pct = min(self.daily_max_drawdown, self.all_time_max_drawdown)
+        if self.daily_pnl_pct <= -max_daily_loss_pct or drawdown_pct <= -max_drawdown_pct or self.cvar <= cvar_limit:
+            self.hard_halt_day = self._current_day
+            self.set_mode("HARD_HALT", "hard_limit_breach")
             return
 
-        if self.daily_max_drawdown <= soft_dd:
-            self.set_mode("SOFT_HALT", "daily_drawdown")
+        near_daily = self.daily_pnl_pct <= -(max_daily_loss_pct * soft_fraction)
+        near_dd = drawdown_pct <= -(max_drawdown_pct * soft_fraction)
+        if near_daily or near_dd:
+            self.set_mode("SOFT_HALT", "near_limit")
             return
 
         if self.fill_ratio_ewma is not None and self.fill_ratio_ewma < fill_min:
             self.set_mode("SOFT_HALT", "fill_ratio_decay")
             return
+
+        if self.vol_shock_index >= vol_shock:
+            self.set_mode("SOFT_HALT", "vol_shock")
+            return
+
+        if self.current_shock_score >= shock_soft:
+            self.set_mode("SOFT_HALT", "shock_score")
+            return
+
+        if self.current_regime_entropy >= entropy_soft:
+            self.set_mode("SOFT_HALT", "high_regime_entropy")
+            return
+
+        if self.mode == "SOFT_HALT":
+            self.set_mode("NORMAL", "recovered")
 
     def to_dict(self):
         return {
@@ -220,6 +272,8 @@ class RiskState:
             "daily_pnl_pct": self.daily_pnl_pct,
             "daily_max_drawdown": self.daily_max_drawdown,
             "all_time_max_drawdown": self.all_time_max_drawdown,
+            "open_risk_pct": self.open_risk_pct,
+            "loss_streak": self.loss_streak,
             "vol_shock_index": self.vol_shock_index,
             "regime_flip_freq": self.regime_flip_freq,
             "fill_ratio_ewma": self.fill_ratio_ewma,
@@ -227,11 +281,5 @@ class RiskState:
             "strategy_heat": self.strategy_heat,
             "cvar": self.cvar,
             "quarantined": list(self.quarantined),
+            "risk_budget_multiplier": self.risk_budget_multiplier(),
         }
-
-        if self.vol_shock_index >= vol_shock:
-            self.set_mode("SOFT_HALT", "vol_shock")
-            return
-
-        if self.mode in ("SOFT_HALT", "HARD_HALT"):
-            self.set_mode("NORMAL", "recovered")

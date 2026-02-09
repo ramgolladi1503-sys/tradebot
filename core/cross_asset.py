@@ -11,6 +11,16 @@ from config import config as cfg
 from core.kite_client import kite_client
 
 
+def _log_error(payload: dict) -> None:
+    try:
+        err_path = Path("logs/cross_asset_errors.jsonl")
+        err_path.parent.mkdir(exist_ok=True)
+        with err_path.open("a") as f:
+            f.write(json.dumps(payload, default=str) + "\n")
+    except Exception as exc:
+        print(f"[CROSS_ASSET_LOG_ERROR] {exc}")
+
+
 def _safe_float(v):
     try:
         return float(v)
@@ -71,20 +81,40 @@ class CrossAsset:
         h = self._index_hist(symbol)
         h.append((time.time(), float(price)))
 
-    def _fetch_prices(self):
-        symbols = getattr(cfg, "CROSS_ASSET_SYMBOLS", {})
-        kite_symbols = [v for v in symbols.values() if v]
+    def _fetch_prices(self, symbols_cfg):
+        kite_symbols = [v for v in symbols_cfg.values() if v]
         if not kite_symbols or not kite_client.kite:
-            return {}
+            reason = "kite_unavailable" if not kite_client.kite else "no_symbols_configured"
+            _log_error({
+                "ts": time.time(),
+                "error": reason,
+                "symbols": list(symbols_cfg.values()),
+            })
+            return {}, {"error": reason}
         data = {}
+        errors = {}
         try:
             quotes = kite_client.ltp(kite_symbols) or {}
-            for key, kite_sym in symbols.items():
+            for key, kite_sym in symbols_cfg.items():
                 px = quotes.get(kite_sym, {}).get("last_price")
+                if px is None:
+                    errors[key] = "missing_last_price"
                 data[key] = _safe_float(px)
-        except Exception:
-            return {}
-        return data
+        except Exception as e:
+            _log_error({
+                "ts": time.time(),
+                "error": "fetch_exception",
+                "detail": str(e),
+                "symbols": list(symbols_cfg.values()),
+            })
+            return {}, {"error": "fetch_exception", "detail": str(e)}
+        if errors:
+            _log_error({
+                "ts": time.time(),
+                "error": "fetch_missing_prices",
+                "missing": errors,
+            })
+        return data, errors
 
     def _returns_from_hist(self, hist, window_sec: int):
         if not hist or len(hist) < 2:
@@ -128,26 +158,121 @@ class CrossAsset:
             return self.cache
         self.last_fetch_ts = now
 
-        prices = self._fetch_prices()
+        symbols_cfg_all = getattr(cfg, "CROSS_ASSET_SYMBOLS", {}) or {}
+        disabled_feeds = getattr(cfg, "CROSS_DISABLED_FEEDS", {}) or {}
+        symbols_cfg = {k: v for k, v in symbols_cfg_all.items() if v and k not in disabled_feeds}
+        valid_symbols = [v for v in symbols_cfg.values() if v]
+        prices, fetch_errors = self._fetch_prices(symbols_cfg)
         stale_sec = float(getattr(cfg, "CROSS_ASSET_STALE_SEC", 120))
-        data_quality = {"any_stale": False, "stale_feeds": [], "age_sec": {}, "last_ts": {}}
+        required = set(getattr(cfg, "CROSS_REQUIRED_FEEDS", []) or [])
+        optional = set(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or [])
+        feed_status = getattr(cfg, "CROSS_FEED_STATUS", {}) or {}
+        data_quality = {
+            "any_stale": False,
+            "stale_feeds": [],
+            "required_stale": [],
+            "optional_stale": [],
+            "age_sec": {},
+            "last_ts": {},
+            "disabled": False,
+            "disabled_reason": None,
+            "missing": {},
+            "errors": fetch_errors or {},
+            "disabled_feeds": disabled_feeds,
+            "feed_status": feed_status,
+        }
+
+        if fetch_errors and fetch_errors.get("error"):
+            data_quality["disabled"] = True
+            data_quality["disabled_reason"] = "fetch_error"
+
+        if not valid_symbols or not kite_client.kite:
+            data_quality["disabled"] = True
+            data_quality["disabled_reason"] = "no_symbols_configured" if not valid_symbols else "kite_unavailable"
+            data_quality["any_stale"] = False
+            if not valid_symbols:
+                data_quality["errors"]["error"] = "no_symbols_configured"
+            if not kite_client.kite:
+                data_quality["errors"]["error"] = "kite_unavailable"
+            _log_error({
+                "ts": now,
+                "error": "cross_asset_disabled",
+                "reason": data_quality["disabled_reason"],
+                "symbols": list(symbols_cfg_all.values()),
+            })
 
         for key, price in prices.items():
             if price is None:
+                data_quality["missing"][key] = "missing_last_price"
                 continue
             h = self._hist(key)
             h.append((now, price))
             self.last_price_ts[key] = now
 
         # staleness check
-        for key in getattr(cfg, "CROSS_ASSET_SYMBOLS", {}).keys():
+        for key in symbols_cfg_all.keys():
+            status_meta = feed_status.get(key) or {}
+            status = status_meta.get("status")
+            status_reason = status_meta.get("reason")
             last_ts = self.last_price_ts.get(key)
-            age = (now - last_ts) if last_ts else None
+            age = (now - last_ts) if last_ts is not None else None
+            if last_ts is not None:
+                try:
+                    age = max(0.0, float(age))
+                except Exception:
+                    age = 0.0
             data_quality["age_sec"][key] = age
             data_quality["last_ts"][key] = last_ts
+            if status == "disabled" or key in disabled_feeds:
+                reason = status_reason or disabled_feeds.get(key) or "disabled"
+                data_quality["missing"][key] = f"disabled:{reason}"
+                continue
+            if data_quality["disabled"]:
+                data_quality["missing"][key] = f"disabled:{data_quality['disabled_reason']}"
+                continue
             if last_ts is None or (age is not None and age > stale_sec):
                 data_quality["any_stale"] = True
                 data_quality["stale_feeds"].append(key)
+                data_quality["missing"].setdefault(key, "stale_or_missing")
+            if key in (fetch_errors or {}):
+                data_quality["missing"][key] = fetch_errors.get(key)
+        # If a global fetch error occurred, mark all feeds missing explicitly
+        try:
+            if fetch_errors and fetch_errors.get("error"):
+                for key in symbols_cfg.keys():
+                    if key not in data_quality["missing"]:
+                        data_quality["missing"][key] = fetch_errors.get("error")
+        except Exception as e:
+            _log_error({"ts": now, "error": "missing_map_error", "detail": str(e)})
+
+        # classify required/optional staleness
+        missing_keys = set(data_quality.get("missing", {}).keys())
+        stale_keys = set(data_quality.get("stale_feeds", []) or [])
+        if data_quality["disabled"]:
+            # Fail closed for required feeds when cross-asset is unavailable.
+            if data_quality.get("disabled_reason") in ("kite_unavailable", "fetch_error", "no_symbols_configured"):
+                data_quality["required_stale"] = sorted(required)
+                data_quality["optional_stale"] = sorted(optional)
+                for key in symbols_cfg_all.keys():
+                    data_quality["missing"].setdefault(key, data_quality.get("disabled_reason"))
+            else:
+                data_quality["required_stale"] = []
+                data_quality["optional_stale"] = []
+        else:
+            data_quality["required_stale"] = sorted((missing_keys | stale_keys) & required)
+            data_quality["optional_stale"] = sorted((missing_keys | stale_keys) & optional)
+
+        # log fetch errors explicitly
+        try:
+            if fetch_errors or data_quality.get("missing"):
+                _log_error({
+                    "ts": now,
+                    "error": "fetch_or_missing",
+                    "errors": fetch_errors,
+                    "missing": data_quality.get("missing", {}),
+                })
+        except Exception as e:
+            _log_error({"ts": now, "error": "error_log_write_failed", "detail": str(e)})
 
         if data_quality["any_stale"]:
             features = self._neutral_features()
@@ -168,6 +293,8 @@ class CrossAsset:
 
             volspill_vals = []
             for key in getattr(cfg, "CROSS_ASSET_SYMBOLS", {}).keys():
+                if key in disabled_feeds:
+                    continue
                 hist = self._hist(key)
                 ret1 = self._returns_from_hist(hist, 60)
                 ret5 = self._returns_from_hist(hist, 300)
@@ -206,6 +333,12 @@ class CrossAsset:
             "timestamp": now,
             "features": features,
             "data_quality": data_quality,
+            "prices": prices,
+            "feed_status": {
+                "required": list(getattr(cfg, "CROSS_REQUIRED_FEEDS", []) or []),
+                "optional": list(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or []),
+                "disabled": getattr(cfg, "CROSS_DISABLED_FEEDS", {}) or {},
+            },
         }
         self.cache = payload
         try:
@@ -213,7 +346,6 @@ class CrossAsset:
             Path("data/cross_asset.json").write_text(json.dumps(payload, indent=2))
             Path("logs").mkdir(exist_ok=True)
             Path("logs/cross_asset_features.json").write_text(json.dumps(features, indent=2))
-        except Exception:
-            pass
+        except Exception as e:
+            _log_error({"ts": now, "error": "write_failed", "detail": str(e)})
         return payload
-

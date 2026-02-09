@@ -1,48 +1,42 @@
-from __future__ import annotations
-
 import json
-from datetime import datetime, date
 from pathlib import Path
-from typing import Optional
-
 import pandas as pd
 
 
-def _load_jsonl(path: str) -> pd.DataFrame:
-    p = Path(path)
-    if not p.exists():
-        return pd.DataFrame()
-    rows = []
-    for line in p.read_text().splitlines():
-        if not line.strip():
-            continue
-        try:
-            rows.append(json.loads(line))
-        except Exception:
-            continue
-    return pd.DataFrame(rows)
-
-
-def run_execution_report(output_path: str = "logs/execution_report.json", report_date: Optional[date] = None) -> dict:
-    df = _load_jsonl("logs/fill_quality.jsonl")
+def build_execution_report(df: pd.DataFrame, day: str, out_path: Path) -> Path:
+    if df is None or df.empty:
+        raise ValueError("Truth dataset is empty.")
+    df = df.copy()
+    df["ts_dt"] = pd.to_datetime(df["ts"], errors="coerce")
+    df = df[df["ts_dt"].dt.date.astype(str) == day]
     if df.empty:
-        report = {"generated_at": datetime.now().isoformat(), "status": "no_data"}
-        Path(output_path).write_text(json.dumps(report, indent=2))
-        return report
+        raise ValueError(f"No decisions found for date {day}.")
 
-    df["ts"] = pd.to_datetime(df.get("ts"), unit="s", errors="coerce")
-    if report_date:
-        df = df[df["ts"].dt.date == report_date]
+    filled = df[df["filled_bool"] == 1]
+    total = len(df)
+    fill_rate = float(len(filled) / total) if total else 0.0
 
-    report = {
-        "generated_at": datetime.now().isoformat(),
-        "fills": int(df.get("fill_price").notna().sum()),
-        "fill_ratio": float(df.get("fill_price").notna().mean() if len(df) else 0),
-        "avg_slippage": float(pd.to_numeric(df.get("slippage_vs_mid"), errors="coerce").mean() or 0),
-        "avg_time_to_fill": float(pd.to_numeric(df.get("time_to_fill"), errors="coerce").mean() or 0),
-        "avg_execution_quality": float(pd.to_numeric(df.get("execution_quality_score"), errors="coerce").mean() or 0),
+    time_to_fill = filled["time_to_fill_sec"].dropna()
+    slippage = filled["slippage_vs_mid"].dropna()
+    spread = df["spread_pct"].dropna() if "spread_pct" in df.columns else pd.Series(dtype=float)
+    missed_reasons = df["missed_fill_reason"].value_counts(dropna=True).to_dict() if "missed_fill_reason" in df.columns else {}
+
+    out = {
+        "date": day,
+        "fill_rate": fill_rate,
+        "avg_time_to_fill": float(time_to_fill.mean()) if not time_to_fill.empty else None,
+        "slippage_percentiles": {
+            "p50": float(slippage.quantile(0.5)) if not slippage.empty else None,
+            "p90": float(slippage.quantile(0.9)) if not slippage.empty else None,
+            "p99": float(slippage.quantile(0.99)) if not slippage.empty else None,
+        },
+        "spread_percentiles": {
+            "p50": float(spread.quantile(0.5)) if not spread.empty else None,
+            "p90": float(spread.quantile(0.9)) if not spread.empty else None,
+            "p99": float(spread.quantile(0.99)) if not spread.empty else None,
+        },
+        "missed_fill_reasons": missed_reasons,
     }
-
-    Path(output_path).parent.mkdir(exist_ok=True)
-    Path(output_path).write_text(json.dumps(report, indent=2))
-    return report
+    out_path.parent.mkdir(exist_ok=True)
+    out_path.write_text(json.dumps(out, indent=2, default=str))
+    return out_path

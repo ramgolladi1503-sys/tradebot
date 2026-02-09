@@ -7,26 +7,10 @@ class RiskEngine:
         self.max_daily_loss_pct = getattr(cfg, "MAX_DAILY_LOSS_PCT", getattr(cfg, "MAX_DAILY_LOSS", 0.15))
         self.max_trades = getattr(cfg, "MAX_TRADES_PER_DAY", 5)
         self.max_risk_per_trade = getattr(cfg, "MAX_RISK_PER_TRADE_PCT", getattr(cfg, "MAX_RISK_PER_TRADE", 0.03))
+        self.max_open_risk_pct = getattr(cfg, "MAX_OPEN_RISK_PCT", 0.02)
         self.max_risk_eq = getattr(cfg, "MAX_RISK_PER_TRADE_EQ", 0.02)
         self.max_risk_fut = getattr(cfg, "MAX_RISK_PER_TRADE_FUT", 0.03)
         self.max_risk_opt = getattr(cfg, "MAX_RISK_PER_TRADE_OPT", 0.03)
-        # Apply risk profile overrides (if any)
-        try:
-            profile = getattr(cfg, "RISK_PROFILE", "").upper()
-            profs = getattr(cfg, "RISK_PROFILES", {})
-            if profile in profs:
-                p = profs[profile]
-                if "max_daily_loss" in p:
-                    self.max_daily_loss_pct = p["max_daily_loss"]
-                if "max_trades" in p:
-                    self.max_trades = p["max_trades"]
-                if "risk_per_trade" in p:
-                    self.max_risk_per_trade = p["risk_per_trade"]
-                    self.max_risk_eq = p["risk_per_trade"]
-                    self.max_risk_fut = p["risk_per_trade"]
-                    self.max_risk_opt = p["risk_per_trade"]
-        except Exception:
-            pass
 
     def allow_trade(self, portfolio):
         if self.risk_state and self.risk_state.mode == "HARD_HALT":
@@ -68,6 +52,12 @@ class RiskEngine:
 
         if portfolio.get("trades_today", 0) >= self.max_trades:
             return False, "Trade count exceeded"
+        try:
+            open_risk_pct = float(portfolio.get("open_risk_pct", 0.0) or 0.0)
+            if open_risk_pct >= self.max_open_risk_pct:
+                return False, "Open risk limit hit"
+        except Exception:
+            return False, "Open risk unavailable"
 
         return True, "OK"
 
@@ -87,6 +77,9 @@ class RiskEngine:
             risk_budget = capital * self.max_risk_fut
         else:
             risk_budget = capital * self.max_risk_opt
+        # Regime-aware risk multiplier from RiskState
+        if self.risk_state:
+            risk_budget *= float(self.risk_state.risk_budget_multiplier())
         # Day-type risk multiplier
         day_type = getattr(trade, "day_type", "UNKNOWN")
         mult = getattr(cfg, "DAYTYPE_RISK_MULT", {}).get(day_type, 1.0)

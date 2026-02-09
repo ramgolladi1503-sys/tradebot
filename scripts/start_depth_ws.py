@@ -60,3 +60,10 @@ if __name__ == "__main__":
         print("No NFO tokens resolved. Check SYMBOLS and Kite instruments access.")
     else:
         start_depth_ws(tokens)
+        # Keep process alive so websocket continues running
+        try:
+            import time
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass

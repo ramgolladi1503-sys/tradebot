@@ -243,6 +243,22 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 quote_ts = q.get("timestamp") or q.get("last_trade_time")
                 if hasattr(quote_ts, "isoformat"):
                     quote_ts = quote_ts.isoformat()
+                quote_ts_epoch = None
+                try:
+                    if hasattr(quote_ts, "timestamp"):
+                        quote_ts_epoch = float(quote_ts.timestamp())
+                    elif isinstance(quote_ts, (int, float)):
+                        quote_ts_epoch = float(quote_ts)
+                    elif quote_ts:
+                        try:
+                            quote_ts_epoch = float(quote_ts)
+                        except Exception:
+                            quote_ts_epoch = datetime.fromisoformat(str(quote_ts)).timestamp()
+                except Exception:
+                    quote_ts_epoch = None
+                quote_age_sec = None
+                if quote_ts_epoch is not None:
+                    quote_age_sec = max(0.0, (datetime.utcnow().timestamp() - float(quote_ts_epoch)))
                 # quote_ok requires bid/ask
                 quote_ok = bool(ltp_opt > 0 and bid and ask)
                 spread_pct = None
@@ -278,6 +294,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     "quote_source": quote_source,
                     "quote_live": quote_live,
                     "quote_ts": quote_ts,
+                    "quote_ts_epoch": quote_ts_epoch,
+                    "quote_age_sec": quote_age_sec,
                     "spread_pct": spread_pct,
                     "depth_ok": depth_ok,
                     "instrument_token": inst.get("instrument_token"),

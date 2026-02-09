@@ -32,12 +32,55 @@ class StrategyGatekeeper:
             reasons.append("indicators_missing_or_stale")
             return GateResult(False, None, reasons)
         # cross-asset data quality gating
+        required = set(getattr(cfg, "CROSS_REQUIRED_FEEDS", []) or [])
+        optional = set(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or [])
+        require_x = bool(getattr(cfg, "REQUIRE_CROSS_ASSET", True))
+        if getattr(cfg, "REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE", True):
+            live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+            require_x = require_x and live_mode
         try:
-            if market_data.get("cross_asset_quality", {}).get("any_stale"):
-                reasons.append("cross_asset_stale")
+            cross_q = market_data.get("cross_asset_quality")
+            if not cross_q:
+                if require_x and required:
+                    reasons.append("cross_asset_required_missing")
+                    return GateResult(False, None, reasons)
+                cross_q = {}
+            feed_status = cross_q.get("feed_status") or {}
+            disabled_required = {
+                k for k, v in feed_status.items()
+                if (v or {}).get("status") == "disabled" and k in required
+            }
+            if disabled_required and require_x:
+                reasons.append("cross_asset_required_missing")
                 return GateResult(False, None, reasons)
-        except Exception:
-            pass
+            if cross_q.get("disabled"):
+                stale_required = set(cross_q.get("required_stale", []) or []) & required
+                if not stale_required:
+                    stale = set(cross_q.get("stale_feeds", []) or [])
+                    missing = set((cross_q.get("missing") or {}).keys())
+                    stale_required = (stale | missing) & required
+                if stale_required and require_x:
+                    reasons.append("cross_asset_required_stale")
+                    return GateResult(False, None, reasons)
+                reasons.append(f"cross_asset_disabled:{cross_q.get('disabled_reason')}")
+            stale_required = set(cross_q.get("required_stale", []) or []) & required
+            stale_optional = set(cross_q.get("optional_stale", []) or []) & optional
+            if not stale_required and not stale_optional:
+                # fallback if older payload
+                stale = set(cross_q.get("stale_feeds", []) or [])
+                missing = set((cross_q.get("missing") or {}).keys())
+                stale_required = (stale | missing) & required
+                stale_optional = (stale | missing) & optional
+            if stale_required and require_x:
+                reasons.append("cross_asset_required_stale")
+                return GateResult(False, None, reasons)
+            if stale_optional:
+                reasons.append("cross_asset_optional_stale")
+        except Exception as exc:
+            print(f"[GATEKEEPER_ERROR] cross_asset_check_failed err={exc}")
+            reasons.append("cross_asset_check_error")
+            if require_x and required:
+                return GateResult(False, None, reasons)
 
         shock_score = float(market_data.get("shock_score") or 0.0)
         uncertainty = float(market_data.get("uncertainty_index") or 0.0)

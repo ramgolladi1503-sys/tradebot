@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import datetime
+from core.time_utils import now_ist
 
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -72,7 +72,7 @@ def _time_bucket(ts):
     try:
         h = ts.hour
     except Exception:
-        h = datetime.now().hour
+        h = now_ist().hour
     if h < 11:
         return "OPEN"
     if h < 14:
@@ -120,7 +120,7 @@ def build_trade_features(market_data, opt):
     vwap_dist = (ltp - vwap) / vwap if vwap else 0
 
     regime = market_data.get("primary_regime") or market_data.get("regime")
-    time_bucket = market_data.get("time_bucket") or _time_bucket(market_data.get("timestamp", datetime.now()))
+    time_bucket = market_data.get("time_bucket") or _time_bucket(market_data.get("timestamp", now_ist()))
     is_expiry = market_data.get("day_type") in ("EXPIRY_DAY",)
     vol_q = market_data.get("vol_quartile")
     if vol_q is None:

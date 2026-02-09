@@ -3,18 +3,53 @@ from datetime import datetime
 from core.trade_store import insert_trade, insert_outcome, update_trade_fill_db
 from config import config as cfg
 from core import log_lock
+from pathlib import Path
+from core.trade_schema import build_instrument_id, validate_trade_identity
+import time
 
 def log_trade(trade, extra=None):
+    instrument_type = getattr(trade, "instrument_type", None) or getattr(trade, "instrument", None)
+    right = getattr(trade, "right", None) or getattr(trade, "option_type", None)
+    underlying = getattr(trade, "symbol", None)
+    expiry = getattr(trade, "expiry", None)
+    strike = getattr(trade, "strike", None)
+    ok, reason = validate_trade_identity(underlying, instrument_type, expiry, strike, right)
+    instrument_id = build_instrument_id(underlying, instrument_type, expiry, strike, right)
+    if not ok or not instrument_id:
+        _log_error({
+            "error": "missing_contract_fields",
+            "reason": reason,
+            "trade_id": getattr(trade, "trade_id", None),
+            "symbol": underlying,
+            "instrument_type": instrument_type,
+            "expiry": expiry,
+            "strike": strike,
+            "right": right,
+        })
+        return
+    lot_size = int(getattr(cfg, "LOT_SIZE", {}).get(underlying, 1))
+    qty_lots = int(getattr(trade, "qty", 0) or 0)
+    qty_units = qty_lots * (lot_size if instrument_type == "OPT" else 1)
     log_entry = {
         "trade_id": trade.trade_id,
         "timestamp": str(datetime.now()),
         "symbol": trade.symbol,
+        "underlying": underlying,
         "instrument": trade.instrument,
+        "instrument_type": instrument_type,
         "instrument_token": trade.instrument_token,
+        "strike": getattr(trade, "strike", None),
+        "expiry": getattr(trade, "expiry", None),
+        "option_type": getattr(trade, "option_type", None),
+        "right": right,
+        "instrument_id": instrument_id,
         "side": trade.side,
         "entry": trade.entry_price,
         "target": trade.target,
         "qty": trade.qty,
+        "qty_lots": qty_lots,
+        "qty_units": qty_units,
+        "validity_sec": getattr(trade, "validity_sec", None),
         "confidence": trade.confidence,
         "stop_loss": trade.stop_loss,
         "capital_at_risk": trade.capital_at_risk,
@@ -34,12 +69,24 @@ def log_trade(trade, extra=None):
         f.write(json.dumps(log_entry) + "\n")
     try:
         insert_trade(log_entry)
-    except Exception:
-        pass
+    except Exception as exc:
+        _log_error({"error": "insert_trade_failed", "detail": str(exc), "trade_id": trade.trade_id})
 
 def _append_update(update_entry):
     with open("data/trade_updates.json", "a") as f:
         f.write(json.dumps(update_entry) + "\n")
+
+
+def _log_error(payload: dict) -> None:
+    try:
+        path = Path("logs/trade_logger_errors.jsonl")
+        path.parent.mkdir(exist_ok=True)
+        payload = dict(payload)
+        payload.setdefault("ts", time.time())
+        with path.open("a") as f:
+            f.write(json.dumps(payload, default=str) + "\n")
+    except Exception:
+        print("[TRADE_LOGGER_ERROR] failed to write error log")
 
 def update_trade_outcome(trade_id, exit_price, actual):
     path = "data/trade_log.json"

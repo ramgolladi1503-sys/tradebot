@@ -20,7 +20,7 @@ class ExecutionRouter:
             poll_sec=getattr(cfg, "EXEC_SIM_POLL_SEC", 0.25),
         )
 
-    def execute(self, trade, bid, ask, volume, depth=None, snapshot_fn=None):
+    def execute(self, trade, bid, ask, volume, depth=None, snapshot_fn=None, spread_pct=None, depth_imbalance=None, vol_z=None):
         if cfg.EXECUTION_MODE == "SIM":
             # record intent even in SIM mode
             self._record_intent(trade, bid, ask, volume, depth=depth, note="sim intent")
@@ -43,7 +43,19 @@ class ExecutionRouter:
                 }
             bid = first.get("bid", bid)
             ask = first.get("ask", ask)
-            limit_price = trade.entry_price or self.engine.build_limit_price(trade.side, bid, ask)
+            limit_price = trade.entry_price
+            if limit_price is None:
+                limit_price, _ = self.engine.adaptive_limit_price(
+                    trade.side, bid, ask, spread_pct=spread_pct, depth_imbalance=depth_imbalance, vol_z=vol_z
+                )
+            if limit_price is None:
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "invalid_limit_price",
+                }
             start_ts = time.time()
             filled, price, report = self._simulate_limit(
                 trade, bid, ask, limit_price, snapshot_fn=snapshot_fn
@@ -56,9 +68,11 @@ class ExecutionRouter:
                     "latency_ms": 0,
                     "fill_ratio": 1.0 if filled else 0.0,
                 })
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[EXECUTION_STAT_ERROR] {exc}")
             self._record_fill_quality(trade, bid, ask, limit_price, start_ts, filled, price, report)
+            if filled and report:
+                self.engine.calibrate_slippage(report.get("slippage"), instrument=getattr(trade, "instrument", "OPT"))
             return filled, price, report
         if cfg.EXECUTION_MODE == "PAPER":
             self._record_intent(trade, bid, ask, volume, depth=depth, note="paper intent")
@@ -81,7 +95,19 @@ class ExecutionRouter:
                 }
             bid = first.get("bid", bid)
             ask = first.get("ask", ask)
-            limit_price = trade.entry_price or self.engine.build_limit_price(trade.side, bid, ask)
+            limit_price = trade.entry_price
+            if limit_price is None:
+                limit_price, _ = self.engine.adaptive_limit_price(
+                    trade.side, bid, ask, spread_pct=spread_pct, depth_imbalance=depth_imbalance, vol_z=vol_z
+                )
+            if limit_price is None:
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": "invalid_limit_price",
+                }
             start_ts = time.time()
             filled, price, report = self.paper_sim.simulate(
                 trade,
@@ -102,9 +128,11 @@ class ExecutionRouter:
                     "latency_ms": 0,
                     "fill_ratio": 1.0 if filled else 0.0,
                 })
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[EXECUTION_STAT_ERROR] {exc}")
             self._record_fill_quality(trade, bid, ask, limit_price, start_ts, filled, price, report)
+            if filled and report:
+                self.engine.calibrate_slippage(report.get("slippage"), instrument=getattr(trade, "instrument", "OPT"))
             return filled, price, report
         if cfg.EXECUTION_MODE == "LIVE":
             # Live placement guarded by config (manual approval / safety)
@@ -231,5 +259,5 @@ class ExecutionRouter:
             path.parent.mkdir(exist_ok=True)
             with open(path, "a") as f:
                 f.write(json.dumps(payload) + "\n")
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[EXECUTION_INTENT_ERROR] {exc}")

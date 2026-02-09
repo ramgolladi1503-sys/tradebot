@@ -21,30 +21,38 @@ def _market_data():
         "vwap": 99.0,
         "vwap_slope": 0.01,
         "atr": 1.0,
+        "htf_dir": "UP",
         "rsi_mom": 0.0,
-        "vol_z": 1.0,
+        "vol_z": 0.2,
         "ltp_change": 1.0,
         "ltp_change_window": 1.0,
         "regime_probs": {"TREND": 0.9},
+        "trade_score": 80,
+        "oi_build": "LONG",
         "regime_entropy": 0.1,
         "unstable_regime_flag": False,
         "instrument": "OPT",
         "quote_ok": True,
         "chain_source": "live",
-        "day_type": "RANGE_DAY",
+        "day_type": "TREND_DAY",
         "regime": "TREND",
+        "orb_bias": "UP",
         "option_chain": [
             {
                 "type": "CE",
                 "strike": 100,
-                "bid": 10.0,
-                "ask": 11.0,
-                "ltp": 10.5,
-                "volume": 2000,
+                "bid": 49.7,
+                "ask": 50.3,
+                "ltp": 50.0,
+                "volume": 60000,
                 "oi": 5000,
-                "oi_change": 200,
+                "oi_change": 400,
                 "quote_ok": True,
+                "depth_ok": True,
                 "expiry": "2026-02-27",
+                "oi_build": "LONG",
+                "iv_z": -0.6,
+                "iv": 0.2,
             }
         ],
     }
@@ -59,7 +67,10 @@ def test_quarantined_strategy_blocks_trade():
     assert tb._reject_ctx.get("reason") == "strategy_quarantined"
 
 
-def test_decaying_strategy_downsizes():
+def test_decaying_strategy_downsizes(monkeypatch):
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_SCORE_MIN", 50, raising=False)
+    monkeypatch.setattr(cfg, "ML_USE_ONLY_WITH_HISTORY", False, raising=False)
     tracker = StrategyTracker()
     tracker.apply_decay_probs({"ENSEMBLE_OPT": float(getattr(cfg, "DECAY_SOFT_THRESHOLD", 0.5)) + 0.05})
     tb = TradeBuilder(predictor=StubPredictor(), strategy_tracker=tracker)

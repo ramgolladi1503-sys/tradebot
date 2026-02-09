@@ -98,7 +98,7 @@ def compute_scorecard():
     data_ok = ticks_ok and depth_ok and Path("logs/data_audit.json").exists()
 
     exec_live = bool(getattr(cfg, "EXECUTION_MODE_LIVE", False)) or getattr(cfg, "EXECUTION_MODE", "SIM") == "LIVE"
-    exec_stats = Path("logs/execution_stats.csv").exists() or Path("data/trades.db").exists()
+    exec_stats = Path("logs/execution_stats.csv").exists() or Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db")).exists()
     exec_status = "NEEDS"
     if exec_stats:
         exec_status = "PARTIAL"

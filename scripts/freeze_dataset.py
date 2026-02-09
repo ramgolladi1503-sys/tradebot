@@ -9,9 +9,11 @@ import hashlib
 from pathlib import Path
 from datetime import datetime
 
+from config import config as cfg
+
 SRC = {
     "trade_log": Path("data/trade_log.json"),
-    "trades_db": Path("data/trades.db"),
+    "trades_db": Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db")),
 }
 
 def _hash_file(path):
