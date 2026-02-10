@@ -21,6 +21,15 @@ class ExecutionRouter:
         )
 
     def execute(self, trade, bid, ask, volume, depth=None, snapshot_fn=None, spread_pct=None, depth_imbalance=None, vol_z=None):
+        if getattr(trade, "tradable", True) is False:
+            reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
+            return False, None, {
+                "decision_mid": None,
+                "decision_spread": None,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": "non_tradable" if not reasons else f"non_tradable:{'|'.join(reasons)}",
+            }
         if cfg.EXECUTION_MODE == "SIM":
             # record intent even in SIM mode
             self._record_intent(trade, bid, ask, volume, depth=depth, note="sim intent")
@@ -60,13 +69,19 @@ class ExecutionRouter:
             filled, price, report = self._simulate_limit(
                 trade, bid, ask, limit_price, snapshot_fn=snapshot_fn
             )
+            fill_ratio = 1.0 if filled else 0.0
+            if report:
+                req = report.get("requested_qty") or getattr(trade, "qty", 1)
+                got = report.get("fill_qty")
+                if req and got is not None:
+                    fill_ratio = max(0.0, min(float(got) / max(float(req), 1.0), 1.0))
             try:
                 insert_execution_stat({
                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "instrument": trade.instrument,
                     "slippage_bps": self.engine.slippage_bps,
                     "latency_ms": 0,
-                    "fill_ratio": 1.0 if filled else 0.0,
+                    "fill_ratio": fill_ratio,
                 })
             except Exception as exc:
                 print(f"[EXECUTION_STAT_ERROR] {exc}")
@@ -120,13 +135,19 @@ class ExecutionRouter:
                 max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.015),
                 spread_widen_pct=getattr(cfg, "EXEC_SPREAD_WIDEN_PCT", 0.5),
             )
+            fill_ratio = 1.0 if filled else 0.0
+            if report:
+                req = report.get("requested_qty") or getattr(trade, "qty", 1)
+                got = report.get("fill_qty")
+                if req and got is not None:
+                    fill_ratio = max(0.0, min(float(got) / max(float(req), 1.0), 1.0))
             try:
                 insert_execution_stat({
                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "instrument": trade.instrument,
                     "slippage_bps": self.engine.slippage_bps,
                     "latency_ms": 0,
-                    "fill_ratio": 1.0 if filled else 0.0,
+                    "fill_ratio": fill_ratio,
                 })
             except Exception as exc:
                 print(f"[EXECUTION_STAT_ERROR] {exc}")
@@ -227,6 +248,11 @@ class ExecutionRouter:
                 "implementation_shortfall": report.get("implementation_shortfall"),
                 "opportunity_cost": report.get("opportunity_cost"),
                 "execution_quality_score": report.get("execution_quality_score"),
+                "fill_status": report.get("fill_status"),
+                "fill_qty": report.get("fill_qty"),
+                "requested_qty": report.get("requested_qty"),
+                "latency_ms": report.get("latency_ms"),
+                "slippage_bp": report.get("slippage_bp"),
             })
         if payload.get("execution_quality_score") is None:
             payload["execution_quality_score"] = execution_quality_score(payload)

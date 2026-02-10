@@ -17,6 +17,8 @@ from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
 from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
+from core.session_calendar import minutes_since_open, is_open
+from core.time_sanity import check_market_data_time_sanity
 
 from core.kite_client import kite_client
 
@@ -115,7 +117,9 @@ def get_ltp(symbol: str):
             price = data.get(ksym, {}).get("last_price", 0)
             if price:
                 _save_cached_ltp(symbol, price)
-                _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "live"
+                cache = _DATA_CACHE.setdefault(symbol, {})
+                cache["ltp_source"] = "live"
+                cache["ltp_ts_epoch"] = now_utc_epoch()
                 return price
         except Exception as e:
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
@@ -140,7 +144,9 @@ def get_ltp(symbol: str):
                 price = data.get(ksym, {}).get("last_price", 0)
                 if price:
                     _save_cached_ltp(symbol, price)
-                    _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "live"
+                    cache = _DATA_CACHE.setdefault(symbol, {})
+                    cache["ltp_source"] = "live"
+                    cache["ltp_ts_epoch"] = now_utc_epoch()
                     return price
         except Exception as e:
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
@@ -164,8 +170,12 @@ def get_ltp(symbol: str):
             return cached
 
     # Fallback
+    segment = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+    market_open = bool(is_market_open_ist(segment=segment))
     if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
         _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "none"
+        if market_open:
+            return None
         if (not live_mode) and getattr(cfg, "ALLOW_CLOSE_FALLBACK", True):
             close_map = getattr(cfg, "PREMARKET_INDICES_CLOSE", {})
             _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "fallback"
@@ -275,7 +285,38 @@ def fetch_live_market_data():
             shock = {**cal_shock, **text_shock}
 
     for symbol in symbols:
+        segment = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        market_open_for_segment = bool(is_open(now_dt=now_ist(), segment=segment))
         ltp = get_ltp(symbol)
+        ltp_source = _DATA_CACHE.get(symbol, {}).get("ltp_source", "none")
+        ltp_ts_epoch = _DATA_CACHE.get(symbol, {}).get("ltp_ts_epoch")
+        if bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True)) and market_open_for_segment and (ltp is None or float(ltp) <= 0):
+            results.append(
+                {
+                    "symbol": symbol,
+                    "segment": segment,
+                    "ltp": ltp,
+                    "ltp_source": ltp_source,
+                    "ltp_ts_epoch": ltp_ts_epoch,
+                    "valid": False,
+                    "invalid_reason": "invalid_ltp",
+                    "invalid_reason_codes": ["invalid_ltp"],
+                    "timestamp": now_utc_epoch(),
+                    "timestamp_ist": now_ist().isoformat(),
+                    "instrument": "OPT",
+                    "feed_health": {
+                        "time_sanity": {
+                            "ok": False,
+                            "reasons": ["invalid_ltp"],
+                            "ltp_ts_epoch": ltp_ts_epoch,
+                            "candle_ts_epoch": None,
+                            "market_open": market_open_for_segment,
+                            "require_live_quotes": bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True)),
+                        }
+                    },
+                }
+            )
+            continue
         try:
             if ltp and ltp > 0:
                 ohlc_buffer.update_tick(symbol, ltp, volume=0, ts=now_ist())
@@ -300,10 +341,8 @@ def fetch_live_market_data():
         # minutes since open (used for ORB bias + day-type)
         try:
             now = now_ist()
-            market_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
-            market_close = now.replace(hour=17, minute=0, second=0, microsecond=0)
-            minutes_since_open = max(0, int((now - market_open).total_seconds() / 60))
-            is_market_open = is_market_open_ist(now=now)
+            minutes_since_open = minutes_since_open(now_dt=now, segment=segment)
+            is_market_open = is_open(now_dt=now, segment=segment)
             today_local = now.date()
         except Exception:
             minutes_since_open = 0
@@ -333,6 +372,7 @@ def fetch_live_market_data():
         # Compute indicators from rolling OHLC buffer (no CSV dependency)
         indicators_ok = False
         indicators_age_sec = None
+        candle_ts_epoch = None
         try:
             bars = ohlc_buffer.get_bars(symbol)
             if len(bars) < getattr(cfg, "OHLC_MIN_BARS", 30) and cfg.KITE_USE_API:
@@ -368,6 +408,10 @@ def fetch_live_market_data():
             last_ts = ind.get("last_ts")
             if last_ts:
                 indicators_age_sec = (now_ist() - last_ts).total_seconds()
+                try:
+                    candle_ts_epoch = float(last_ts.timestamp())
+                except Exception:
+                    candle_ts_epoch = None
             indicators_ok = bool(ind.get("ok")) and (indicators_age_sec is None or indicators_age_sec <= getattr(cfg, "INDICATOR_STALE_SEC", 120))
             if _DATA_CACHE.get(symbol, {}).get("ltp_source") != "live":
                 indicators_ok = False
@@ -469,12 +513,48 @@ def fetch_live_market_data():
                 if quote_ts_epoch is not None:
                     quote_ts = datetime.utcfromtimestamp(quote_ts_epoch).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                     quote_age_sec = max(0.0, now_utc_epoch() - quote_ts_epoch)
+                    if ltp_source == "live":
+                        ltp_ts_epoch = quote_ts_epoch
                 if bid and ask:
                     quote_ok = True
                     if ltp:
                         spread_pct = (ask - bid) / ltp
         except Exception:
             quote_ok = False
+
+        time_sanity = check_market_data_time_sanity(
+            ltp_ts_epoch=ltp_ts_epoch,
+            candle_ts_epoch=candle_ts_epoch,
+            market_open=market_open_for_segment,
+            require_live_quotes=bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True)),
+            max_ltp_age_sec=getattr(cfg, "MAX_LTP_AGE_SEC", 8),
+            max_candle_age_sec=getattr(cfg, "MAX_CANDLE_AGE_SEC", 120),
+            now_epoch=now_utc_epoch(),
+        )
+        if not time_sanity.get("ok", True):
+            reasons = list(time_sanity.get("reasons", []) or [])
+            invalid_reason = "|".join(reasons) if reasons else "timestamp_stale"
+            results.append(
+                {
+                    "symbol": symbol,
+                    "segment": segment,
+                    "ltp": ltp,
+                    "ltp_source": ltp_source,
+                    "ltp_ts_epoch": ltp_ts_epoch,
+                    "valid": False,
+                    "invalid_reason": invalid_reason,
+                    "invalid_reason_codes": reasons,
+                    "quote_ts": quote_ts,
+                    "quote_ts_epoch": quote_ts_epoch,
+                    "quote_age_sec": quote_age_sec,
+                    "candle_ts_epoch": candle_ts_epoch,
+                    "timestamp": now_utc_epoch(),
+                    "timestamp_ist": now_ist().isoformat(),
+                    "instrument": "OPT",
+                    "feed_health": {"time_sanity": time_sanity},
+                }
+            )
+            continue
 
         # Open-range tracking for bias lock
         orb_lock_min = getattr(cfg, "ORB_LOCK_MIN", 15)
@@ -507,10 +587,10 @@ def fetch_live_market_data():
             orb_bias = "NEUTRAL"
 
         option_chain = fetch_option_chain(symbol, ltp, force_synthetic=False)
-        chain_source = "live"
-        if not option_chain and getattr(cfg, "FORCE_SYNTH_CHAIN_ON_FAIL", True) and str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() != "LIVE":
+        chain_source = "live" if option_chain else "empty"
+        if not option_chain and getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False) and str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() != "LIVE":
             option_chain = fetch_option_chain(symbol, ltp, force_synthetic=True)
-            chain_source = "synthetic"
+            chain_source = "synthetic" if option_chain else "empty"
         # Option chain health validation (live NFO/BFO)
         try:
             health = _option_chain_health(symbol, option_chain, ltp)
@@ -859,7 +939,11 @@ def fetch_live_market_data():
         results.append({
             "symbol": symbol,
             "ltp": ltp,
-            "ltp_source": _DATA_CACHE.get(symbol, {}).get("ltp_source", "none"),
+            "ltp_source": ltp_source,
+            "ltp_ts_epoch": ltp_ts_epoch,
+            "valid": True,
+            "invalid_reason": None,
+            "segment": segment,
             "vwap": vwap,
             "bias": get_bias(ltp, vwap),
             "regime": regime,
@@ -915,8 +999,11 @@ def fetch_live_market_data():
             "quote_ts": quote_ts,
             "quote_ts_epoch": quote_ts_epoch,
             "quote_age_sec": quote_age_sec,
+            "candle_ts_epoch": candle_ts_epoch,
             "depth_age_sec": depth_age_sec,
             "spread_pct": spread_pct,
+            "feed_health": {"time_sanity": time_sanity},
+            "time_sanity": time_sanity,
             "timestamp": now_utc_epoch(),
             "timestamp_ist": now_ist().isoformat(),
             "option_chain": option_chain,
@@ -936,6 +1023,11 @@ def fetch_live_market_data():
             results.append({
                 "symbol": symbol,
                 "ltp": ltp,
+                "ltp_source": ltp_source,
+                "ltp_ts_epoch": ltp_ts_epoch,
+                "valid": True,
+                "invalid_reason": None,
+                "segment": segment,
                 "vwap": vwap,
                 "bias": get_bias(ltp, vwap),
                 "regime": regime,
@@ -981,8 +1073,11 @@ def fetch_live_market_data():
                 "quote_ts": quote_ts,
                 "quote_ts_epoch": quote_ts_epoch,
                 "quote_age_sec": quote_age_sec,
+                "candle_ts_epoch": candle_ts_epoch,
                 "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,
+                "feed_health": {"time_sanity": time_sanity},
+                "time_sanity": time_sanity,
                 "timestamp": now_utc_epoch(),
                 "timestamp_ist": now_ist().isoformat(),
                 "option_chain": [],
@@ -997,6 +1092,10 @@ def fetch_live_market_data():
             results.append({
                 "symbol": symbol,
                 "ltp": ltp,
+                "ltp_source": ltp_source,
+                "ltp_ts_epoch": ltp_ts_epoch,
+                "valid": True,
+                "invalid_reason": None,
                 "vwap": vwap,
                 "bias": get_bias(ltp, vwap),
                 "regime": regime,
@@ -1042,8 +1141,11 @@ def fetch_live_market_data():
                 "quote_ts": quote_ts,
                 "quote_ts_epoch": quote_ts_epoch,
                 "quote_age_sec": quote_age_sec,
+                "candle_ts_epoch": candle_ts_epoch,
                 "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,
+                "feed_health": {"time_sanity": time_sanity},
+                "time_sanity": time_sanity,
                 "timestamp": now_utc_epoch(),
                 "timestamp_ist": now_ist().isoformat(),
                 "option_chain": [],

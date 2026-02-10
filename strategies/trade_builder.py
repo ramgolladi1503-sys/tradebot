@@ -7,13 +7,16 @@ import pandas as pd
 from config import config as cfg
 from core.execution_engine import ExecutionEngine
 from core.alpha_ensemble import AlphaEnsemble
+from core.decision_trace import build_trade_decision_trace
 from core.trade_schema import Trade, build_instrument_id, validate_trade_identity
 from typing import Optional
 from strategies.ensemble import ensemble_signal, equity_signal, futures_signal, mean_reversion_signal, event_breakout_signal, micro_pattern_signal
-from core.feature_builder import build_trade_features
+from core.feature_builder import build_trade_features, validate_trade_features
 from core.trade_scoring import compute_trade_score
 from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
+from core.time_utils import is_market_open_ist
+from core.regime import RegimeClassifier, normalize_regime
 import time as _time
 import time
 
@@ -72,6 +75,7 @@ class TradeBuilder:
         self.alpha_ensemble = AlphaEnsemble() if getattr(cfg, "ALPHA_ENSEMBLE_ENABLE", True) else None
         self.strategy_tracker = strategy_tracker or StrategyTracker()
         self.lifecycle = StrategyLifecycle()
+        self.regime_classifier = RegimeClassifier()
         self._ml_history_cache = {"ts": 0, "count": 0}
         self._expiry_zero_hero_count = 0
         self._expiry_zero_hero_by_symbol = {}
@@ -111,6 +115,78 @@ class TradeBuilder:
         lot_size = int(getattr(cfg, "LOT_SIZE", {}).get(symbol, 1))
         qty_units = int(qty_lots) * (lot_size if instrument_type == "OPT" else 1)
         return instrument_type, instrument_id, qty_units, None
+
+    def trade_intent_flags(
+        self,
+        market_data: dict,
+        opt: dict | None = None,
+        risk_guard_passed: bool | None = None,
+        additional_blockers: list[str] | None = None,
+    ) -> dict:
+        segment = market_data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        market_open = bool(is_market_open_ist(segment=segment))
+        chain_source = market_data.get("chain_source", "empty")
+        require_live_quotes = bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
+        quote_ok = market_data.get("quote_ok", True)
+        quote_age_sec = market_data.get("quote_age_sec")
+        if opt is not None:
+            quote_ok = opt.get("quote_ok", quote_ok)
+            quote_age_sec = opt.get("quote_age_sec", quote_age_sec)
+        ltp = market_data.get("ltp", 0)
+        ltp_source = market_data.get("ltp_source", "none")
+        reasons: list[str] = []
+        if market_data.get("valid") is False:
+            reasons.append(str(market_data.get("invalid_reason") or "invalid_snapshot"))
+        if not market_open:
+            reasons.append("market_closed")
+        if chain_source != "live":
+            reasons.append("chain_not_live")
+        if quote_ok is not True:
+            reasons.append("quote_not_ok")
+        max_quote_age = float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8))
+        if quote_age_sec is None:
+            reasons.append("quote_age_missing")
+        elif float(quote_age_sec) > max_quote_age:
+            reasons.append("stale_option_quote")
+        if ltp_source != "live":
+            reasons.append("ltp_not_live")
+        if ltp is None or float(ltp) <= 0:
+            reasons.append("invalid_ltp")
+        if risk_guard_passed is False:
+            reasons.append("risk_guard_failed")
+        for blocker in additional_blockers or []:
+            if blocker and blocker not in reasons:
+                reasons.append(str(blocker))
+        return {
+            "tradable": len(reasons) == 0,
+            "tradable_reasons_blocking": reasons,
+            "source_flags": {
+                "chain_source": chain_source,
+                "quote_ok": bool(quote_ok),
+                "quote_age_sec": quote_age_sec,
+                "market_open": market_open,
+                "require_live_quotes": require_live_quotes,
+                "ltp_source": ltp_source,
+                "snapshot_valid": bool(market_data.get("valid", True)),
+                "risk_guard_passed": risk_guard_passed,
+            },
+        }
+
+    def _feature_contract(self):
+        try:
+            getter = getattr(self.predictor, "get_feature_contract", None)
+            if callable(getter):
+                return getter()
+        except Exception:
+            pass
+        return None
+
+    def _validate_ml_features(self, feats: pd.DataFrame):
+        contract = self._feature_contract()
+        if contract is None:
+            return True, "ok"
+        ok, reason = validate_trade_features(feats, required_features=contract.required_features)
+        return ok, reason
 
     def _apply_decay_gate(self, strategy_name, base_score=None, size_mult=1.0):
         if not strategy_name or not self.strategy_tracker:
@@ -234,9 +310,40 @@ class TradeBuilder:
         except Exception:
             return entry_price, None, entry_price
 
+    def allowed_strategy_families(self, regime: str) -> list[str]:
+        regime_norm = normalize_regime(regime)
+        if regime_norm == "TREND":
+            return ["TREND"]
+        if regime_norm == "RANGE":
+            return ["MEAN_REVERT"]
+        if regime_norm == "EVENT":
+            if getattr(cfg, "REGIME_EVENT_ROUTE_ALLOW", True) and getattr(cfg, "EVENT_ALLOW_DEFINED_RISK", True):
+                return ["DEFINED_RISK"]
+            return []
+        return []
+
+    def _resolve_regime(self, market_data: dict) -> str:
+        raw = (
+            market_data.get("regime_day")
+            or market_data.get("primary_regime")
+            or market_data.get("regime")
+        )
+        normalized = normalize_regime(raw)
+        if normalized != "NEUTRAL":
+            return normalized
+        if not getattr(cfg, "REGIME_CLASSIFIER_ENABLE", True):
+            return normalized
+        return self.regime_classifier.classify(market_data or {})
+
+    def _regime_route_family(self, regime: str) -> str | None:
+        families = self.allowed_strategy_families(regime)
+        if not families:
+            return None
+        return families[0]
+
     def _signal_for_symbol(self, market_data, force_family: str | None = None):
         instrument = market_data.get("instrument", "OPT")
-        regime_day = market_data.get("regime_day") or market_data.get("regime")
+        regime_day = self._resolve_regime(market_data)
         day_type = market_data.get("day_type") or "UNKNOWN"
         minutes_since_open = market_data.get("minutes_since_open", 0) or 0
         regime_probs = market_data.get("regime_probs") or {}
@@ -263,11 +370,21 @@ class TradeBuilder:
             noon_fade = (now.hour == 12) or (now.hour == 13 and now.minute <= 30)
         except Exception:
             noon_fade = False
+        if force_family is None and getattr(cfg, "REGIME_ROUTER_ENABLE", True):
+            route_family = self._regime_route_family(regime_day)
+            if route_family is None:
+                self._reject_ctx = {
+                    "symbol": market_data.get("symbol"),
+                    "reason": "unsupported_regime_route",
+                    "regime": regime_day,
+                }
+                return None
+            force_family = route_family
         if instrument in ("EQ", "FUT"):
             return None
         else:
             # Probabilistic regime gating
-            if regime_probs:
+            if regime_probs and force_family is None:
                 if unstable_regime or regime_entropy > getattr(cfg, "REGIME_ENTROPY_MAX", 1.3):
                     return None
                 trend_p = float(regime_probs.get("TREND", 0.0))
@@ -310,7 +427,16 @@ class TradeBuilder:
                 day_type = "UNKNOWN"
 
             if force_family == "DEFINED_RISK":
-                return None
+                if not (getattr(cfg, "REGIME_EVENT_ROUTE_ALLOW", True) and getattr(cfg, "EVENT_ALLOW_DEFINED_RISK", True)):
+                    return None
+                sig = event_breakout_signal(
+                    market_data.get("ltp", 0),
+                    market_data.get("atr", 0),
+                    market_data.get("ltp_change_window", 0),
+                )
+                if not sig:
+                    return None
+                return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": "EVENT"}
             if force_family == "TREND":
                 sig = ensemble_signal(market_data)
             elif force_family == "MEAN_REVERT":
@@ -384,7 +510,7 @@ class TradeBuilder:
                 sig = ensemble_signal(market_data)
         if not sig:
             return None
-        return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": regime_day}
+        return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": normalize_regime(regime_day)}
 
     def _opt_risk_levels(self, entry_price, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5):
         """
@@ -425,6 +551,11 @@ class TradeBuilder:
             allow_baseline = False
             allow_fallbacks = False
         symbol = market_data["symbol"]
+        if market_data.get("valid") is False:
+            self._reject_ctx = {"symbol": symbol, "reason": market_data.get("invalid_reason") or "invalid_snapshot"}
+            if debug_reasons:
+                print(f"[TradeBuilder] Reject {symbol}: {self._reject_ctx['reason']}")
+            return None
         ltp = market_data.get("ltp", 0)
         vwap = market_data.get("vwap", ltp)
         bias = market_data.get("bias", "Bullish")
@@ -499,7 +630,7 @@ class TradeBuilder:
         if adj_score is not None:
             signal["score"] = adj_score
         min_score = getattr(cfg, "STRICT_STRATEGY_SCORE", 0.7)
-        regime_day = market_data.get("regime_day") or market_data.get("regime") or "NEUTRAL"
+        regime_day = signal.get("regime_day") or market_data.get("regime_day") or market_data.get("regime") or "NEUTRAL"
         score_mult = getattr(cfg, "REGIME_SCORE_MULT", {}).get(regime_day, 1.0)
         min_score = min_score * score_mult
         if quick_mode:
@@ -534,13 +665,12 @@ class TradeBuilder:
             return None
 
         direction = signal["direction"]
-        # Require live option quotes for MAIN trades if configured
+        # Require live option chain by default (no synthetic trades)
         try:
-            if (not quick_mode) and getattr(cfg, "REQUIRE_LIVE_OPTION_QUOTES", False):
-                if market_data.get("chain_source") != "live":
-                    if debug_reasons:
-                        print(f"[TradeBuilder] Reject {symbol}: non-live option chain")
-                    return None
+            if market_data.get("chain_source") != "live":
+                if debug_reasons:
+                    print(f"[TradeBuilder] Reject {symbol}: non-live option chain")
+                return None
         except Exception:
             pass
         # reject context for debug reports
@@ -597,6 +727,21 @@ class TradeBuilder:
         for opt in market_data.get("option_chain", []):
             if opt["type"] != opt_type:
                 continue
+            # Hard reject stale quotes before any scoring
+            quote_age = opt.get("quote_age_sec")
+            quote_ts_epoch = opt.get("quote_ts_epoch")
+            strict_quotes = getattr(cfg, "STRICT_LIVE_QUOTES", True)
+            if exec_mode == "PAPER" and not getattr(cfg, "PAPER_STRICT_QUOTES", True):
+                strict_quotes = False
+            if strict_quotes:
+                if quote_ts_epoch is None:
+                    if debug_reasons:
+                        rejected.append(self._reject_record(symbol, opt, opt_type, "stale_option_quote", atr=atr))
+                    continue
+                if quote_age is None or quote_age > getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8):
+                    if debug_reasons:
+                        rejected.append(self._reject_record(symbol, opt, opt_type, "stale_option_quote", atr=atr))
+                    continue
             # Hard reject missing bid/ask
             if opt.get("quote_ok") is False:
                 if debug_reasons:
@@ -796,6 +941,70 @@ class TradeBuilder:
             deep_conf = None
             micro_conf = None
             if use_ml:
+                ok_features, feature_reason = self._validate_ml_features(feats)
+                if not ok_features:
+                    self._reject_ctx = {
+                        "symbol": symbol,
+                        "reason": feature_reason,
+                        "feature_contract_failed": True,
+                    }
+                    intent = self.trade_intent_flags(
+                        market_data,
+                        opt=opt,
+                        risk_guard_passed=False,
+                        additional_blockers=[feature_reason],
+                    )
+                    instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                        symbol,
+                        "OPT",
+                        str(opt.get("expiry", "")),
+                        opt.get("strike"),
+                        opt.get("type"),
+                        1,
+                    )
+                    if ident_err:
+                        if debug_reasons:
+                            rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                            rejected.append(rec)
+                        continue
+                    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    blocked_trade = Trade(
+                        trade_id=f"{symbol}-{opt['strike']}-{opt['type']}-BLOCKED-{ts}",
+                        timestamp=datetime.now(),
+                        symbol=symbol,
+                        instrument="OPT",
+                        instrument_type=instrument_type,
+                        right=opt.get("type"),
+                        instrument_id=instrument_id,
+                        instrument_token=opt.get("instrument_token"),
+                        strike=opt["strike"],
+                        expiry=str(opt.get("expiry", "")),
+                        option_type=opt.get("type"),
+                        side="BUY",
+                        entry_price=round(opt.get("ask") or opt.get("ltp") or 0.0, 2),
+                        stop_loss=round(max((opt.get("bid") or 0.0) * 0.95, 0.01), 2),
+                        target=round((opt.get("ask") or opt.get("ltp") or 0.0) * 1.05, 2),
+                        qty=1,
+                        qty_lots=1,
+                        qty_units=qty_units,
+                        validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
+                        capital_at_risk=0.01,
+                        expected_slippage=0.0,
+                        confidence=0.0,
+                        strategy=strategy_tag,
+                        regime=market_data.get("regime", "NEUTRAL"),
+                        tier="MAIN",
+                        day_type=market_data.get("day_type", "UNKNOWN"),
+                        quote_ok=opt.get("quote_ok", True),
+                        tradable=False,
+                        tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                        source_flags=dict(intent["source_flags"]),
+                    )
+                    candidates.append(blocked_trade)
+                    if debug_reasons:
+                        rec = self._reject_record(symbol, opt, opt_type, feature_reason, atr=atr)
+                        rejected.append(rec)
+                    continue
                 xgb_conf = self.predictor.predict_confidence(feats)
                 if getattr(cfg, "ML_AB_ENABLE", False):
                     shadow_confidence = self.predictor.predict_confidence_shadow(feats)
@@ -883,6 +1092,21 @@ class TradeBuilder:
             if quick_mode:
                 stop_mult = getattr(cfg, "OPT_STOP_ATR_QUICK", stop_mult)
                 target_mult = getattr(cfg, "OPT_TARGET_ATR_QUICK", target_mult)
+            if regime_day == "TREND":
+                stop_mult = stop_mult * float(getattr(cfg, "REGIME_TREND_STOP_MULT", 1.2))
+                target_mult = target_mult * float(getattr(cfg, "REGIME_TREND_TARGET_MULT", 2.0))
+            elif regime_day in ("RANGE", "RANGE_VOLATILE"):
+                stop_mult = stop_mult * float(getattr(cfg, "REGIME_RANGE_STOP_MULT", 0.8))
+                target_mult = target_mult * float(getattr(cfg, "REGIME_RANGE_TARGET_MULT", 1.3))
+            elif regime_day == "EVENT":
+                if not (getattr(cfg, "REGIME_EVENT_ROUTE_ALLOW", True) and getattr(cfg, "EVENT_ALLOW_DEFINED_RISK", True)):
+                    if debug_reasons:
+                        rec = self._reject_record(symbol, opt, opt_type, "event_regime_blocked", atr=atr)
+                        rejected.append(rec)
+                    continue
+                stop_mult = stop_mult * float(getattr(cfg, "REGIME_EVENT_STOP_MULT", 1.1))
+                target_mult = target_mult * float(getattr(cfg, "REGIME_EVENT_TARGET_MULT", 1.4))
+                size_mult = size_mult * float(getattr(cfg, "REGIME_EVENT_SIZE_MULT", 0.6))
             stop_loss, target = self._opt_risk_levels(
                 entry_price, opt.get("bid", 0), opt.get("ask", 0), atr, stop_mult=stop_mult, target_mult=target_mult
             )
@@ -962,6 +1186,7 @@ class TradeBuilder:
                     rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
                     rejected.append(rec)
                 continue
+            intent = self.trade_intent_flags(market_data, opt=opt)
             trade = Trade(
                 trade_id=f"{symbol}-{opt['strike']}-{opt['type']}-{int(datetime.now().timestamp())}",
                 timestamp=datetime.now(),
@@ -1005,6 +1230,9 @@ class TradeBuilder:
                 alpha_confidence=alpha_conf,
                 alpha_uncertainty=alpha_unc,
                 size_mult=size_mult,
+                tradable=bool(intent["tradable"]),
+                tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
 
@@ -1026,6 +1254,8 @@ class TradeBuilder:
                 return None
             # Quick fallback: synthesize ATM option if chain is empty
             if quick_mode and market_data.get("ltp", 0):
+                if market_data.get("chain_source") != "live":
+                    return None
                 try:
                     band_map = getattr(cfg, "PREMIUM_BANDS", {})
                     band = band_map.get(symbol, (getattr(cfg, "MIN_PREMIUM", 40), getattr(cfg, "MAX_PREMIUM", 150)))
@@ -1059,6 +1289,13 @@ class TradeBuilder:
                             rec = self._reject_record(symbol, {"strike": atm_strike}, opt_type, "missing_contract_fields", atr=atr)
                             rejected.append(rec)
                         return None
+                    intent = self.trade_intent_flags(
+                        market_data,
+                        opt={
+                            "quote_ok": True,
+                            "quote_age_sec": 10**9,
+                        },
+                    )
                     trade = Trade(
                         trade_id=f"{symbol}-{opt_type}-ATM-QK-{ts}",
                         timestamp=datetime.now(),
@@ -1091,6 +1328,9 @@ class TradeBuilder:
                         alpha_confidence=None,
                         alpha_uncertainty=None,
                         size_mult=1.0,
+                        tradable=bool(intent["tradable"]),
+                        tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                        source_flags=dict(intent["source_flags"]),
                     )
                     return trade
                 except Exception:
@@ -1124,6 +1364,13 @@ class TradeBuilder:
                     if debug_reasons:
                         print(f"[TradeBuilder] Reject {symbol} {instrument}: {ident_err}")
                     return None
+                intent = self.trade_intent_flags(
+                    market_data,
+                    opt={
+                        "quote_ok": bool(market_data.get("quote_ok", True)),
+                        "quote_age_sec": market_data.get("quote_age_sec"),
+                    },
+                )
                 trade = Trade(
                     trade_id=f"{symbol}-FUT-{int(datetime.now().timestamp())}",
                     timestamp=datetime.now(),
@@ -1152,6 +1399,9 @@ class TradeBuilder:
                     alpha_confidence=None,
                     alpha_uncertainty=None,
                     size_mult=decay_size_mult,
+                    tradable=bool(intent["tradable"]),
+                    tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                    source_flags=dict(intent["source_flags"]),
                 )
                 if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
                     return trade
@@ -1161,7 +1411,32 @@ class TradeBuilder:
             return None
 
         # Choose highest-confidence candidate
-        return sorted(candidates, key=lambda t: t.confidence, reverse=True)[0]
+        return sorted(candidates, key=lambda t: (1 if getattr(t, "tradable", True) else 0, t.confidence), reverse=True)[0]
+
+    def build_with_trace(
+        self,
+        market_data,
+        quick_mode=False,
+        debug_reasons=False,
+        force_family: str | None = None,
+        allow_fallbacks: bool = True,
+        allow_baseline: bool = True,
+    ):
+        trade = self.build(
+            market_data,
+            quick_mode=quick_mode,
+            debug_reasons=debug_reasons,
+            force_family=force_family,
+            allow_fallbacks=allow_fallbacks,
+            allow_baseline=allow_baseline,
+        )
+        trace = build_trade_decision_trace(
+            market_data=market_data or {},
+            trade=trade,
+            reject_ctx=dict(self._reject_ctx or {}),
+            run_id=(market_data or {}).get("run_id"),
+        )
+        return trade, trace
 
     def build_zero_hero(self, market_data, debug_reasons=False):
         """
@@ -1195,6 +1470,7 @@ class TradeBuilder:
         max_p = getattr(cfg, "ZERO_HERO_MAX_PREMIUM", 60)
 
         candidates = []
+        rejected = []
         for opt in market_data.get("option_chain", []):
             if opt.get("type") != opt_type:
                 continue
@@ -1221,6 +1497,17 @@ class TradeBuilder:
             xgb_conf = None
             micro_conf = None
             if use_ml:
+                ok_features, feature_reason = self._validate_ml_features(feats)
+                if not ok_features:
+                    self._reject_ctx = {
+                        "symbol": symbol,
+                        "reason": feature_reason,
+                        "feature_contract_failed": True,
+                    }
+                    if debug_reasons:
+                        rec = self._reject_record(symbol, opt, opt_type, feature_reason, atr=atr)
+                        rejected.append(rec)
+                    continue
                 xgb_conf = self.predictor.predict_confidence(feats)
                 confidence = xgb_conf
                 if getattr(cfg, "ML_AB_ENABLE", False):
@@ -1281,6 +1568,7 @@ class TradeBuilder:
                     rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
                     rejected.append(rec)
                 continue
+            intent = self.trade_intent_flags(market_data, opt=opt)
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-ZERO-{ts}",
                 timestamp=datetime.now(),
@@ -1321,11 +1609,14 @@ class TradeBuilder:
                 alpha_confidence=alpha_conf,
                 alpha_uncertainty=alpha_unc,
                 size_mult=size_mult,
+                tradable=bool(intent["tradable"]),
+                tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
         if not candidates:
             return None
-        return sorted(candidates, key=lambda t: t.confidence, reverse=True)[0]
+        return sorted(candidates, key=lambda t: (1 if getattr(t, "tradable", True) else 0, t.confidence), reverse=True)[0]
 
     def _build_zero_hero_expiry(self, market_data, debug_reasons=False):
         """
@@ -1437,6 +1728,7 @@ class TradeBuilder:
                     rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
                     rejected.append(rec)
                 continue
+            intent = self.trade_intent_flags(market_data, opt=opt)
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-ZEROEXP-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
                 timestamp=datetime.now(),
@@ -1473,6 +1765,9 @@ class TradeBuilder:
                 alpha_confidence=alpha_conf,
                 alpha_uncertainty=alpha_unc,
                 size_mult=size_mult,
+                tradable=bool(intent["tradable"]),
+                tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
         if not candidates:
@@ -1762,6 +2057,7 @@ class TradeBuilder:
         min_p = getattr(cfg, "SCALP_MIN_PREMIUM", 20)
         max_p = getattr(cfg, "SCALP_MAX_PREMIUM", 180)
         candidates = []
+        rejected = []
         for opt in market_data.get("option_chain", []):
             if opt.get("type") != opt_type:
                 continue
@@ -1783,6 +2079,17 @@ class TradeBuilder:
             xgb_conf = None
             micro_conf = None
             if use_ml:
+                ok_features, feature_reason = self._validate_ml_features(feats)
+                if not ok_features:
+                    self._reject_ctx = {
+                        "symbol": symbol,
+                        "reason": feature_reason,
+                        "feature_contract_failed": True,
+                    }
+                    if debug_reasons:
+                        rec = self._reject_record(symbol, opt, opt_type, feature_reason, atr=atr)
+                        rejected.append(rec)
+                    continue
                 xgb_conf = self.predictor.predict_confidence(feats)
                 confidence = xgb_conf
                 if getattr(cfg, "ML_AB_ENABLE", False):
@@ -1842,6 +2149,7 @@ class TradeBuilder:
                     rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
                     rejected.append(rec)
                 continue
+            intent = self.trade_intent_flags(market_data, opt=opt)
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-SCALP-{ts}",
                 timestamp=datetime.now(),
@@ -1882,11 +2190,14 @@ class TradeBuilder:
                 alpha_confidence=alpha_conf,
                 alpha_uncertainty=alpha_unc,
                 size_mult=size_mult,
+                tradable=bool(intent["tradable"]),
+                tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
         if not candidates:
             return None
-        return sorted(candidates, key=lambda t: t.confidence, reverse=True)[0]
+        return sorted(candidates, key=lambda t: (1 if getattr(t, "tradable", True) else 0, t.confidence), reverse=True)[0]
 
     def _reject_record(self, symbol, opt, opt_type, reason, atr=None):
         try:

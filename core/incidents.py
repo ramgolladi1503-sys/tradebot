@@ -23,7 +23,7 @@ def create_incident(sev: str, code: str, context: Dict) -> str:
         "context": context,
         "ts_epoch": time.time(),
     }
-    INCIDENTS_PATH.parent.mkdir(exist_ok=True)
+    INCIDENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with INCIDENTS_PATH.open("a") as f:
         f.write(json.dumps(record) + "\n")
     append_event({"event": "INCIDENT", "sev": sev, "code": code, "context": context})
@@ -36,7 +36,7 @@ def close_incident(incident_id: str, resolution: str):
         "resolution": resolution,
         "ts_epoch": time.time(),
     }
-    INCIDENTS_PATH.parent.mkdir(exist_ok=True)
+    INCIDENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with INCIDENTS_PATH.open("a") as f:
         f.write(json.dumps(record) + "\n")
     append_event({"event": "INCIDENT_CLOSED", "incident_id": incident_id, "resolution": resolution})

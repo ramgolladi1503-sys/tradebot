@@ -49,6 +49,7 @@ def compute_execution_analytics():
     summary = {
         "timestamp": datetime.now().isoformat(),
         "fill_ratio": None,
+        "partial_fill_rate": None,
         "avg_latency_ms": None,
         "avg_slippage": None,
         "instrument": {},
@@ -97,6 +98,16 @@ def compute_execution_analytics():
     except Exception:
         pass
 
+    # Optional: derive partial fill rate from fill quality event log if present.
+    try:
+        fq_events = _read_fill_quality_events()
+        if fq_events:
+            total = len(fq_events)
+            partial = sum(1 for ev in fq_events if str(ev.get("fill_status", "")).upper() == "PARTIAL")
+            summary["partial_fill_rate"] = round(partial / max(total, 1), 4)
+    except Exception:
+        pass
+
     return summary, daily
 
 
@@ -108,6 +119,28 @@ def _read_fill_quality_daily():
         return json.loads(path.read_text())
     except Exception:
         return {}
+
+
+def _read_fill_quality_events(max_rows=5000):
+    path = Path("logs/fill_quality.jsonl")
+    if not path.exists():
+        return []
+    rows = []
+    try:
+        with open(path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+        if max_rows and len(rows) > max_rows:
+            return rows[-max_rows:]
+        return rows
+    except Exception:
+        return []
 
 def write_execution_analytics(json_path="logs/execution_analytics.json", csv_path="logs/execution_analytics_daily.csv"):
     summary, daily = compute_execution_analytics()

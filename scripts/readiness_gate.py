@@ -1,5 +1,10 @@
 #!/usr/bin/env python
+from pathlib import Path
+import runpy
 import sys
+
+runpy.run_path(Path(__file__).with_name("bootstrap.py"))
+
 from core.readiness_gate import run_readiness_check
 
 

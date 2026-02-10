@@ -1,6 +1,7 @@
 import time
-import random
+import hashlib
 from config import config as cfg
+from core.fill_model import FillModel
 
 class ExecutionEngine:
     def __init__(self):
@@ -8,23 +9,42 @@ class ExecutionEngine:
         self.MAX_FAILED_EXECUTIONS = 3
         self.slippage_bps = getattr(cfg, "SLIPPAGE_BPS", 8)
         self.instrument_slippage = {}
+        self.fill_model = FillModel()
 
     # -----------------------------
     # Slippage estimation
     # -----------------------------
-    def estimate_slippage(self, bid, ask, volume):
+    def estimate_slippage(self, bid, ask, volume, qty=1, vol_z=0.0):
         spread = ask - bid
 
         if spread <= 0:
             return 0
+        mid = (bid + ask) / 2.0 if (bid and ask) else 0.0
+        if mid <= 0:
+            return 0
 
-        # Liquidity-based slippage
-        if volume < 5000:
-            return spread * 0.8
-        elif volume < 15000:
-            return spread * 0.5
-        else:
-            return spread * 0.3
+        # Deterministic slippage model:
+        # base spread component + volatility premium + size impact curve.
+        spread_proxy = spread / mid
+        vol_term = max(0.0, min(abs(float(vol_z or 0.0)), 5.0))
+        size_ratio = max(float(qty or 1.0), 1.0) / max(float(volume or 0.0), 1.0)
+        size_impact = (size_ratio ** 0.5)
+        liq_term = min(1.0, 5000.0 / max(float(volume or 0.0), 1.0))
+
+        base_mult = float(getattr(cfg, "EXEC_DET_BASE_SPREAD_MULT", 0.35))
+        vol_mult = float(getattr(cfg, "EXEC_DET_VOL_MULT", 0.08))
+        size_mult = float(getattr(cfg, "EXEC_DET_SIZE_MULT", 0.60))
+        liq_mult = float(getattr(cfg, "EXEC_DET_LIQ_MULT", 0.25))
+        proxy_mult = float(getattr(cfg, "EXEC_DET_PROXY_MULT", 0.10))
+
+        slippage = (
+            spread * base_mult
+            + spread * vol_term * vol_mult
+            + spread * size_impact * size_mult
+            + spread * liq_term * liq_mult
+            + mid * spread_proxy * proxy_mult
+        )
+        return max(0.0, slippage)
 
     # -----------------------------
     # Spread guard
@@ -230,6 +250,7 @@ class ExecutionEngine:
         max_spread_pct=0.0,
         max_quote_age_sec=None,
         fill_prob=1.0,
+        run_id=None,
     ):
         """
         Simulate a limit order using sequential quote snapshots.
@@ -240,6 +261,38 @@ class ExecutionEngine:
             mid = (bid + ask) / 2.0 if bid and ask else 0.0
             spread = max(ask - bid, 0.0) if bid and ask else 0.0
             return mid, spread
+
+        def _resolve_run_id():
+            if run_id is not None:
+                return str(run_id)
+            trade_run_id = getattr(trade, "run_id", None)
+            if trade_run_id is not None:
+                return str(trade_run_id)
+            cfg_run_id = getattr(cfg, "RUN_ID", None)
+            if cfg_run_id is not None:
+                return str(cfg_run_id)
+            cfg_exec_run_id = getattr(cfg, "EXEC_RUN_ID", None)
+            if cfg_exec_run_id is not None:
+                return str(cfg_exec_run_id)
+            return "default"
+
+        def _deterministic_uniform(attempt_idx, bid, ask, current_limit, prob):
+            trade_id = getattr(trade, "trade_id", "NO_TRADE_ID")
+            key = "|".join(
+                [
+                    _resolve_run_id(),
+                    str(trade_id),
+                    str(getattr(trade, "symbol", "NO_SYMBOL")),
+                    str(getattr(trade, "side", "NA")),
+                    str(attempt_idx),
+                    f"{float(bid):.6f}",
+                    f"{float(ask):.6f}",
+                    f"{float(current_limit):.6f}",
+                    f"{float(prob):.6f}",
+                ]
+            )
+            digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+            return int(digest[:16], 16) / float(16 ** 16)
 
         if quote_fn is None:
             quote_fn = snapshot_fn
@@ -252,6 +305,7 @@ class ExecutionEngine:
                 "slippage": None,
                 "reason_if_aborted": "no_quote",
             }
+
         bid0 = decision.get("bid", 0) or 0
         ask0 = decision.get("ask", 0) or 0
         ts0 = decision.get("ts")
@@ -266,7 +320,6 @@ class ExecutionEngine:
                 "slippage": None,
                 "reason_if_aborted": "bad_initial_quote",
             }
-        # If we still do not have a timestamp, fail closed.
         if ts0 is None:
             return False, None, {
                 "decision_mid": decision_mid,
@@ -284,15 +337,19 @@ class ExecutionEngine:
                 "reason_if_aborted": "stale_quote",
             }
 
+        requested_qty = int(max(getattr(trade, "qty", 1) or 1, 1))
         start = time.time()
         current_limit = limit_price
         reason = "timeout"
-        attempts = [{
-            "ts": ts0,
-            "bid": bid0,
-            "ask": ask0,
-            "spread": round(decision_spread, 6),
-        }]
+        attempts = [
+            {
+                "ts": ts0,
+                "bid": bid0,
+                "ask": ask0,
+                "spread": round(decision_spread, 6),
+            }
+        ]
+        attempt_idx = 0
 
         while time.time() - start <= timeout_sec:
             snap = quote_fn()
@@ -309,19 +366,23 @@ class ExecutionEngine:
                 continue
 
             mid, spread = _mid_spread(bid, ask)
-            attempts.append({
-                "ts": ts,
-                "bid": bid,
-                "ask": ask,
-                "spread": round(spread, 6),
-            })
+            attempts.append(
+                {
+                    "ts": ts,
+                    "bid": bid,
+                    "ask": ask,
+                    "spread": round(spread, 6),
+                }
+            )
+            attempt_idx += 1
+
             if ts is None:
                 reason = "missing_quote_ts"
                 break
             if max_quote_age_sec is not None and (time.time() - ts) > max_quote_age_sec:
                 reason = "stale_quote"
                 break
-            # Optional chase (bounded)
+
             if max_chase_pct and max_chase_pct > 0:
                 if trade.side == "BUY":
                     max_limit = decision_mid * (1 + max_chase_pct)
@@ -345,18 +406,38 @@ class ExecutionEngine:
                 reason = "spread_widened"
                 break
 
-            can_fill = (trade.side == "BUY" and current_limit >= ask) or (trade.side == "SELL" and current_limit <= bid)
-            if can_fill:
-                if fill_prob < 1.0 and random.random() > fill_prob:
+            sim = self.fill_model.simulate(
+                order={
+                    "side": getattr(trade, "side", ""),
+                    "symbol": getattr(trade, "symbol", "UNKNOWN"),
+                    "qty": requested_qty,
+                    "limit_price": current_limit,
+                },
+                market_snapshot=snap,
+                run_id=_resolve_run_id(),
+            )
+
+            if sim.get("status") in ("FILLED", "PARTIAL") and int(sim.get("fill_qty", 0) or 0) > 0:
+                if fill_prob <= 0.0:
                     time.sleep(poll_sec)
                     continue
-                fill_price = ask if trade.side == "BUY" else bid
+                if fill_prob < 1.0:
+                    draw = _deterministic_uniform(attempt_idx, bid, ask, current_limit, fill_prob)
+                    if draw > fill_prob:
+                        time.sleep(poll_sec)
+                        continue
+                fill_price = float(sim.get("fill_price"))
                 slippage = (fill_price - decision_mid) if trade.side == "BUY" else (decision_mid - fill_price)
                 return True, round(fill_price, 2), {
                     "decision_mid": round(decision_mid, 2),
                     "decision_spread": round(decision_spread, 2),
                     "fill_price": round(fill_price, 2),
                     "slippage": round(slippage, 4),
+                    "slippage_bp": sim.get("slippage_bp"),
+                    "latency_ms": sim.get("latency_ms"),
+                    "fill_qty": int(sim.get("fill_qty", 0) or 0),
+                    "requested_qty": requested_qty,
+                    "fill_status": sim.get("status"),
                     "reason_if_aborted": None,
                     "attempts": attempts,
                 }
@@ -368,6 +449,11 @@ class ExecutionEngine:
             "decision_spread": round(decision_spread, 2),
             "fill_price": None,
             "slippage": None,
+            "slippage_bp": None,
+            "latency_ms": None,
+            "fill_qty": 0,
+            "requested_qty": requested_qty,
+            "fill_status": "NOFILL",
             "reason_if_aborted": reason,
             "attempts": attempts,
         }

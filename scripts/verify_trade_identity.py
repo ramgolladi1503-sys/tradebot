@@ -1,17 +1,32 @@
+from pathlib import Path
+import runpy
 import sqlite3
 import sys
-from pathlib import Path
+
+runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 from config import config as cfg
+from core.trade_store import init_db
 
 
 def main():
     db_path = Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
     if not db_path.exists():
-        print("verify_trade_identity: FAIL missing trades DB")
+        init_db()
+    if not db_path.exists():
+        print("verify_trade_identity: FAIL missing trades DB. Generate trades via paper/live run.")
         return 2
     con = sqlite3.connect(str(db_path))
     cur = con.cursor()
+    cur.execute("PRAGMA table_info(trades)")
+    cols = {row[1] for row in cur.fetchall()}
+    required = {"trade_id", "symbol", "instrument_type", "expiry", "strike", "right", "instrument_id"}
+    missing_cols = sorted(required - cols)
+    if missing_cols:
+        con.close()
+        print(f"verify_trade_identity: FAIL missing required columns in trades table: {', '.join(missing_cols)}")
+        print("NEXT ACTION: run migrations (trade_store.init_db) and regenerate recent trades in current desk DB.")
+        return 2
     cur.execute(
         """
         SELECT trade_id, symbol, instrument_type, expiry, strike, right, instrument_id
@@ -22,13 +37,19 @@ def main():
         """
     )
     rows = cur.fetchall()
+    cur.execute("SELECT COUNT(1) FROM trades")
+    total = int(cur.fetchone()[0] or 0)
     con.close()
+    if total == 0:
+        print("verify_trade_identity: FAIL no trade rows.")
+        print("NEXT ACTION: run paper/live cycle to generate trade rows with contract identity.")
+        return 2
     if rows:
-        print("verify_trade_identity: FAIL missing identity fields")
+        print(f"verify_trade_identity: FAIL missing identity fields (sample of {len(rows)} rows, total={total})")
         for row in rows:
             print(row)
         return 1
-    print("verify_trade_identity: OK")
+    print(f"verify_trade_identity: OK total_rows={total}")
     return 0
 
 

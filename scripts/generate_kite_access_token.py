@@ -5,11 +5,12 @@ ROOT = Path(__file__).resolve().parents[1]
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 import sys
-from pathlib import Path
+import os
 
 from config import config as cfg
 from core.kite_client import KiteConnect
 from core.kite_client import kite_client
+from core.security_guard import write_local_kite_access_token
 import getpass
 
 def mask(val, keep=4):
@@ -17,23 +18,8 @@ def mask(val, keep=4):
         return "MISSING"
     return val[:keep] + ("*" * (max(0, len(val) - keep)))
 
-def _update_env(access_token):
-    env_path = ROOT / ".env"
-    if not env_path.exists():
-        env_path.write_text(f"KITE_ACCESS_TOKEN={access_token}\n")
-        return
-    lines = env_path.read_text().splitlines()
-    updated = False
-    out = []
-    for line in lines:
-        if line.startswith("KITE_ACCESS_TOKEN="):
-            out.append(f"KITE_ACCESS_TOKEN={access_token}")
-            updated = True
-        else:
-            out.append(line)
-    if not updated:
-        out.append(f"KITE_ACCESS_TOKEN={access_token}")
-    env_path.write_text("\n".join(out) + "\n")
+def _persist_local_token(access_token):
+    return write_local_kite_access_token(access_token)
 
 if __name__ == "__main__":
     if not KiteConnect:
@@ -65,8 +51,9 @@ if __name__ == "__main__":
 
     auto_update = "--update-env" in sys.argv
     if auto_update:
-        _update_env(access_token)
-        print("Updated .env with new KITE_ACCESS_TOKEN")
+        token_path = _persist_local_token(access_token)
+        os.environ["KITE_ACCESS_TOKEN"] = access_token
+        print(f"Updated local token store: {token_path}")
         try:
             # refresh in-memory session
             if kite_client.kite:
@@ -78,15 +65,16 @@ if __name__ == "__main__":
                 profile = kite_client.kite.profile()
                 user_id = profile.get("user_id", "")
                 print(f"Profile OK for user: {mask(user_id, keep=2)}")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Profile check skipped: {e}")
             try:
                 inst = kite_client.instruments("NFO")
                 print(f"NFO instruments: {len(inst)}")
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                print(f"Instruments check skipped: {e}")
+        except Exception as e:
+            print(f"Session refresh warning: {e}")
     print(f"Generated access token: {mask(access_token)}")
     if not auto_update:
-        print("Update your .env with KITE_ACCESS_TOKEN=<token>")
+        print("Export with: export KITE_ACCESS_TOKEN=<token>")
+        print("Or run with --update-env to store under ~/.trading_bot/")

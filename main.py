@@ -2,7 +2,9 @@ from core.orchestrator import Orchestrator
 from core.readiness_gate import run_readiness_check
 from core.audit_log import append_event as audit_append
 from core import risk_halt
+from core.security_guard import enforce_startup_security
 from config import config as cfg
+from pathlib import Path
 
 def _check_env():
     missing = []
@@ -19,6 +21,14 @@ def _check_env():
         print("[Config Warning] Missing env vars: " + ", ".join(missing))
 
 def main():
+    repo_root = Path(__file__).resolve().parent
+    try:
+        token = enforce_startup_security(repo_root=repo_root, require_token=True)
+    except RuntimeError as exc:
+        print(str(exc))
+        return
+    if token:
+        cfg.KITE_ACCESS_TOKEN = token
     _check_env()
     exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     live_mode = exec_mode == "LIVE"

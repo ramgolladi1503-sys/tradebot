@@ -40,6 +40,8 @@ def test_decision_logger_roundtrip(tmp_path, monkeypatch):
         "bid_qty": 100,
         "ask_qty": 120,
         "depth_imbalance": 0.1,
+        "quote_age_sec": 1.0,
+        "instrument_id": "NIFTY|2026-02-27|100|CE",
         "fill_prob_est": 0.7,
         "portfolio_equity": 100000,
         "equity": 100000,

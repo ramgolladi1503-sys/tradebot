@@ -28,10 +28,22 @@ class TradeTicket:
     qty_lots: int
     qty_units: int
     validity_sec: int
+    tradable: bool = True
+    tradable_reasons_blocking: List[str] = field(default_factory=list)
+    source_flags: dict = field(default_factory=dict)
     reason_codes: List[str] = field(default_factory=list)
     guardrails: List[str] = field(default_factory=list)
+    trailing_enabled: bool = False
+    trailing_method: str | None = None
+    trailing_atr_mult: float | None = None
+    trail_stop_init: float | None = None
+    trail_stop_last: float | None = None
+    trail_updates: int = 0
+    exit_reason: str | None = None
 
     def is_actionable(self) -> Tuple[bool, str]:
+        if self.tradable is False:
+            return False, "non_tradable"
         if not self.trace_id:
             return False, "missing_trace_id"
         if not self.desk_id:
@@ -95,14 +107,33 @@ class TradeTicket:
         guard = ", ".join(self.guardrails) if self.guardrails else "none"
         reasons = ", ".join(self.reason_codes) if self.reason_codes else "none"
         contract = self.instrument_id or "MISSING"
+        trailing_line = ""
+        if self.trailing_enabled:
+            trailing_line = (
+                f"\nInitial SL {self.sl_price} | Trailing SL {self.trail_stop_last or self.sl_price}"
+                f" | Trail updates {int(self.trail_updates or 0)}"
+            )
         return (
             f"TRADE TICKET | {ist_ts}\n"
             f"{self.underlying} {contract}\n"
             f"{self.side} {self.entry_type} @ {self.entry_price}\n"
             f"SL {self.sl_price} | TGT {self.tgt_price}\n"
             f"LOTS {self.qty_lots} | QTY {self.qty_units} | VALID {validity_min}m\n"
+            f"{trailing_line}\n"
             f"REASON {reasons}\n"
-            f"DO NOT TRADE IF: {guard}"
+            f"DO NOT TRADE IF: {guard}\n"
+            f"NOTE: trailing stops are paper-simulated only (no broker-side SL modify)."
+        )
+
+    def format_market_note(self) -> str:
+        ist_ts = self.timestamp_ist or now_ist().isoformat()
+        contract = self.instrument_id or "MISSING_CONTRACT"
+        reasons = self.tradable_reasons_blocking or ["blocked_by_unknown_reason"]
+        reason_lines = "\n".join([f"- {reason}" for reason in reasons])
+        return (
+            f"MARKET NOTE | {ist_ts}\n"
+            f"{self.underlying} {contract}\n"
+            f"Not tradable due to:\n{reason_lines}"
         )
 
     @classmethod
@@ -137,6 +168,16 @@ class TradeTicket:
             qty_lots=int(getattr(trade, "qty_lots", None) or getattr(trade, "qty", 0) or 0),
             qty_units=int(getattr(trade, "qty_units", None) or 0),
             validity_sec=int(validity_sec),
+            tradable=bool(getattr(trade, "tradable", True)),
+            tradable_reasons_blocking=list(getattr(trade, "tradable_reasons_blocking", []) or []),
+            source_flags=dict(getattr(trade, "source_flags", {}) or {}),
             reason_codes=reason_codes,
             guardrails=guardrails,
+            trailing_enabled=bool(getattr(trade, "trailing_enabled", False)),
+            trailing_method=getattr(trade, "trailing_method", None),
+            trailing_atr_mult=getattr(trade, "trailing_atr_mult", None),
+            trail_stop_init=getattr(trade, "trail_stop_init", None),
+            trail_stop_last=getattr(trade, "trail_stop_last", None),
+            trail_updates=int(getattr(trade, "trail_updates", 0) or 0),
+            exit_reason=getattr(trade, "exit_reason", None),
         )

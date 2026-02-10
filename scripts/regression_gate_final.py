@@ -5,6 +5,9 @@ import sys
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+import runpy
+
+runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 from config import config as cfg
 from core.time_utils import is_market_open_ist, to_ist
@@ -26,6 +29,10 @@ def _guess_next_action(cmd: list[str], output: str) -> str:
         "regression_gate_12_14.py": "NEXT ACTION: run scripts/regression_gate_12_14.py directly",
         "verify_audit_chain.py": "NEXT ACTION: check logs/audit_log.jsonl for tampering",
         "verify_decision_chain.py": "NEXT ACTION: check logs/decision_events.jsonl for tampering",
+        "verify_trade_identity.py": "NEXT ACTION: inspect core/trade_schema.py + core/trade_store.py identity writes",
+        "verify_outcome_labels.py": "NEXT ACTION: inspect core/trade_logger.py close path and outcomes table",
+        "verify_trailing_fields.py": "NEXT ACTION: inspect core/orchestrator.py trail update path + core/trade_store.py",
+        "partial_profit_smoketest.py": "NEXT ACTION: inspect partial TP settings and exit leg accounting",
         "verify_risk_units.py": "NEXT ACTION: inspect core/risk_engine.py and core/risk_state.py",
         "verify_desk_paths.py": "NEXT ACTION: inspect config DESK_* paths",
         "verify_feed_sla.py": "NEXT ACTION: run scripts/sla_check.py and validate feeds",
@@ -96,7 +103,20 @@ def main():
     ]
 
     if args.quick:
-        commands.append(["python", "-m", "pytest", "-q", "tests/test_decision_logger_schema.py", "tests/test_regime_wrappers.py"])
+        commands.append(
+            [
+                "python",
+                "-m",
+                "pytest",
+                "-q",
+                "tests/test_decision_logger_schema.py",
+                "tests/test_regime_wrappers.py",
+                "tests/test_trade_identity_complete.py",
+                "tests/test_outcome_classification.py",
+                "tests/test_trailing_stop_persistence.py",
+                "tests/test_partial_profit_logic.py",
+            ]
+        )
     else:
         commands.append(["python", "-m", "pytest", "-q"])
 
@@ -106,6 +126,10 @@ def main():
     commands += [
         ["python", "scripts/verify_audit_chain.py"],
         ["python", "scripts/verify_decision_chain.py"],
+        ["python", "scripts/verify_trade_identity.py"],
+        ["python", "scripts/verify_outcome_labels.py"],
+        ["python", "scripts/verify_trailing_fields.py"],
+        ["python", "scripts/partial_profit_smoketest.py"],
         ["python", "scripts/verify_risk_units.py"],
         ["python", "scripts/verify_desk_paths.py"],
         ["python", "scripts/verify_feed_sla.py"] + (["--market-open"] if market_open else []),

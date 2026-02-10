@@ -9,6 +9,12 @@ class ExecutionGuard:
         return min_conf * mult
 
     def validate(self, trade, portfolio, regime):
+        if getattr(trade, "tradable", True) is False:
+            reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
+            msg = "non_tradable"
+            if reasons:
+                msg = f"non_tradable:{'|'.join(reasons)}"
+            return False, msg
         if self.risk_state:
             ok, reason = self.risk_state.approve(trade)
             if not ok:

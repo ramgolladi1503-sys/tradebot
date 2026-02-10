@@ -29,6 +29,9 @@ def test_trade_store_writes_identity_fields(tmp_path, monkeypatch):
         "qty_lots": 1,
         "qty_units": 50,
         "validity_sec": 120,
+        "tradable": True,
+        "tradable_reasons_blocking": "[]",
+        "source_flags_json": "{\"chain_source\":\"live\"}",
         "confidence": 0.8,
         "strategy": "SCALP",
         "regime": "TREND",
@@ -37,6 +40,17 @@ def test_trade_store_writes_identity_fields(tmp_path, monkeypatch):
     trade_store.insert_trade(entry)
     assert db_path.exists()
     con = sqlite3.connect(db_path)
-    row = con.execute("SELECT strike, expiry, option_type, right, instrument_id FROM trades WHERE trade_id='T-1'").fetchone()
+    row = con.execute(
+        "SELECT strike, expiry, option_type, right, instrument_id, tradable, tradable_reasons_blocking, source_flags_json FROM trades WHERE trade_id='T-1'"
+    ).fetchone()
     con.close()
-    assert row == (22000, "2026-02-14", "CE", "CE", "NIFTY|2026-02-14|22000|CE")
+    assert row == (
+        22000,
+        "2026-02-14",
+        "CE",
+        "CE",
+        "NIFTY|2026-02-14|22000|CE",
+        1,
+        "[]",
+        "{\"chain_source\":\"live\"}",
+    )

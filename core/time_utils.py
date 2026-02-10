@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone, time as dt_time
 from zoneinfo import ZoneInfo
 from typing import Any, Optional
 
+from core.session_calendar import is_open, get_session
+
 IST_TZ = ZoneInfo("Asia/Kolkata")
 
 
@@ -83,24 +85,29 @@ def is_market_open_ist(
     now: Optional[datetime] = None,
     open_time: dt_time | None = None,
     close_time: dt_time | None = None,
+    segment: str | None = None,
 ) -> bool:
     now = now or now_ist()
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=IST_TZ)
-    if now.weekday() >= 5:
-        return False
-    open_time = open_time or dt_time(9, 0)
-    close_time = close_time or dt_time(17, 0)
-    open_dt = now.replace(hour=open_time.hour, minute=open_time.minute, second=0, microsecond=0)
-    close_dt = now.replace(hour=close_time.hour, minute=close_time.minute, second=0, microsecond=0)
-    return open_dt <= now <= close_dt
+    if open_time or close_time:
+        # Backward-compatible override, but prefer session calendar.
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=IST_TZ)
+        if now.weekday() >= 5:
+            return False
+        open_time = open_time or dt_time(9, 15)
+        close_time = close_time or dt_time(15, 30)
+        open_dt = now.replace(hour=open_time.hour, minute=open_time.minute, second=0, microsecond=0)
+        close_dt = now.replace(hour=close_time.hour, minute=close_time.minute, second=0, microsecond=0)
+        return open_dt <= now <= close_dt
+    return is_open(now, segment=segment or get_session().segment)
 
 
 def next_market_open_ist(now: Optional[datetime] = None) -> datetime:
     now = now or now_ist()
     if now.tzinfo is None:
         now = now.replace(tzinfo=IST_TZ)
-    open_time = dt_time(9, 0)
+    sess = get_session()
+    open_time = sess.open_time
     candidate = now.replace(hour=open_time.hour, minute=open_time.minute, second=0, microsecond=0)
     if is_market_open_ist(now=now):
         return candidate

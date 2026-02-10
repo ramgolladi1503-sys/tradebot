@@ -1346,7 +1346,7 @@ if nav == "Home":
                     q_df = _hydrate_option_quotes(q_df, chain_map)
                     q_df = _add_entry_mismatch(q_df)
                 q_display = q_df.drop(columns=["trade_id"], errors="ignore")
-                display_cols = [c for c in ["timestamp", "symbol", "instrument_id", "expiry", "strike", "type", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "qty", "qty_lots", "qty_units", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
+                display_cols = [c for c in ["timestamp", "symbol", "instrument_id", "expiry", "strike", "type", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "trail_stop_last", "trail_updates", "exit_reason", "qty", "qty_lots", "qty_units", "tradable", "tradable_reasons_blocking", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
                 if show_quotes:
                     display_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q_df.columns]
                     display_cols += [c for c in ["quote_note"] if c in q_df.columns]
@@ -1363,7 +1363,7 @@ if nav == "Home":
                     q_df = pd.DataFrame(q)
                     q_rows = []
                 st.subheader("Suggested Trades (Latest)")
-                show_cols = [c for c in ["timestamp", "symbol", "instrument_id", "expiry", "strike", "type", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "qty", "qty_lots", "qty_units", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
+                show_cols = [c for c in ["timestamp", "symbol", "instrument_id", "expiry", "strike", "type", "instrument", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "trail_stop_last", "trail_updates", "exit_reason", "qty", "qty_lots", "qty_units", "tradable", "tradable_reasons_blocking", "confidence", "strategy", "regime", "tier", "trade_score", "trade_alignment", "max_profit_label", "max_loss_label", "breakeven_low", "breakeven_high", "est_pnl_at_ltp", "legs"] if c in q_df.columns]
                 if show_quotes:
                     show_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q_df.columns]
                     show_cols += [c for c in ["quote_note"] if c in q_df.columns]
@@ -1498,7 +1498,7 @@ if nav == "Home":
                     q2_df = _hydrate_option_quotes(q2_df, chain_map)
                     q2_df = _add_entry_mismatch(q2_df)
                 q2_display = q2_df.drop(columns=["trade_id"], errors="ignore")
-                show_cols = [c for c in ["symbol", "instrument_id", "expiry", "strike", "type", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "confidence", "lot", "regime", "tier", "timestamp"] if c in q2_df.columns]
+                show_cols = [c for c in ["symbol", "instrument_id", "expiry", "strike", "type", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "trail_stop_last", "trail_updates", "exit_reason", "tradable", "tradable_reasons_blocking", "confidence", "lot", "regime", "tier", "timestamp"] if c in q2_df.columns]
                 if show_quotes_q:
                     show_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q2_df.columns]
                     show_cols += [c for c in ["quote_note"] if c in q2_df.columns]

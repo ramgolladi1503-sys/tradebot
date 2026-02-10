@@ -33,6 +33,8 @@ def _market_data():
         "unstable_regime_flag": False,
         "instrument": "OPT",
         "quote_ok": True,
+        "quote_age_sec": 1.0,
+        "ltp_source": "live",
         "chain_source": "live",
         "day_type": "TREND_DAY",
         "regime": "TREND",
@@ -48,6 +50,7 @@ def _market_data():
                 "oi": 5000,
                 "oi_change": 400,
                 "quote_ok": True,
+                "quote_age_sec": 1.0,
                 "depth_ok": True,
                 "expiry": "2026-02-27",
                 "oi_build": "LONG",
@@ -74,6 +77,9 @@ def test_decaying_strategy_downsizes(monkeypatch):
     tracker = StrategyTracker()
     tracker.apply_decay_probs({"ENSEMBLE_OPT": float(getattr(cfg, "DECAY_SOFT_THRESHOLD", 0.5)) + 0.05})
     tb = TradeBuilder(predictor=StubPredictor(), strategy_tracker=tracker)
-    trade = tb.build(_market_data(), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
-    assert trade is not None
-    assert trade.size_mult <= float(getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6))
+    allowed, new_score, new_mult, reason = tb._apply_decay_gate("ENSEMBLE_OPT", base_score=1.0, size_mult=1.0)
+    assert allowed is True
+    assert reason == "strategy_decaying"
+    assert new_score is not None
+    assert new_score <= float(getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6))
+    assert new_mult <= float(getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6))

@@ -22,8 +22,73 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Run tests
+      - name: Resolve marker expression
+        id: markers
+        env:
+          DISABLE_ML: "true"
+        shell: bash
+        run: |
+<<<<<<< HEAD
+          pytest -q
+=======
+          set -euo pipefail
+          MARK_EXPR=""
+
+          if rg -n "@pytest\.mark\.slow|pytestmark\s*=\s*pytest\.mark\.slow" tests testing/tests >/dev/null 2>&1; then
+            MARK_EXPR="not slow"
+          fi
+
+          if [ "${DISABLE_ML}" = "true" ] && rg -n "@pytest\.mark\.ml|pytestmark\s*=\s*pytest\.mark\.ml" tests testing/tests >/dev/null 2>&1; then
+            if [ -n "$MARK_EXPR" ]; then
+              MARK_EXPR="$MARK_EXPR and not ml"
+            else
+              MARK_EXPR="not ml"
+            fi
+          fi
+
+          echo "mark_expr=$MARK_EXPR" >> "$GITHUB_OUTPUT"
+          if [ -n "$MARK_EXPR" ]; then
+            echo "Using marker expression: $MARK_EXPR"
+          else
+            echo "No slow/ml markers detected; running full suites."
+          fi
+
+      - name: Validate ML marker policy
+        env:
+          DISABLE_ML: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${DISABLE_ML}" != "true" ]; then
+            exit 0
+          fi
+          if rg -n "import (tensorflow|torch|xgboost|lightgbm|sklearn)|from (tensorflow|torch|xgboost|lightgbm|sklearn)" tests testing/tests >/dev/null 2>&1; then
+            if ! rg -n "@pytest\.mark\.ml|pytestmark\s*=\s*pytest\.mark\.ml" tests testing/tests >/dev/null 2>&1; then
+              echo "DISABLE_ML=true but ML-style tests are not marked with @pytest.mark.ml."
+              echo "Mark ML-dependent tests so CI skips them explicitly with markers."
+              exit 1
+            fi
+          fi
+
+      - name: Run tests suite (tests)
         env:
           DISABLE_ML: "true"
         run: |
-          pytest -q
+          set -euo pipefail
+          if [ -n "${{ steps.markers.outputs.mark_expr }}" ]; then
+            pytest -q -m "${{ steps.markers.outputs.mark_expr }}" tests
+          else
+            pytest -q tests
+          fi
+
+      - name: Run tests suite (testing/tests)
+        env:
+          DISABLE_ML: "true"
+        run: |
+          set -euo pipefail
+          if [ -n "${{ steps.markers.outputs.mark_expr }}" ]; then
+            pytest -q -m "${{ steps.markers.outputs.mark_expr }}" testing/tests
+          else
+            pytest -q testing/tests
+          fi
+>>>>>>> f2c710a (Add Decision modules and tests)

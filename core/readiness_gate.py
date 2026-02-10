@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sqlite3
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -12,6 +13,7 @@ from core.feed_health import get_feed_health
 from core.kite_client import kite_client
 from core.time_utils import now_ist, is_market_open_ist
 from core.market_calendar import IN_HOLIDAYS
+from core.trade_store import init_db
 
 
 def _disk_free_gb(path: str = ".") -> float:
@@ -32,6 +34,44 @@ def _check_kite_auth() -> Tuple[bool, str]:
             return False, f"kite_profile_error:{exc}"
     except Exception as exc:
         return False, f"kite_init_error:{exc}"
+    return True, "ok"
+
+
+def _check_trade_identity_schema() -> Tuple[bool, str]:
+    try:
+        init_db()
+    except Exception as exc:
+        return False, f"trade_schema_init_error:{exc}"
+    db_path = Path(getattr(cfg, "TRADE_DB_PATH", "data/desks/DEFAULT/trades.db"))
+    if not db_path.exists():
+        return False, "trade_db_missing"
+    try:
+        con = sqlite3.connect(str(db_path))
+        cur = con.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='trades'")
+        if not cur.fetchone():
+            con.close()
+            return False, "trades_table_missing"
+        cur.execute("PRAGMA table_info(trades)")
+        cols = {row[1] for row in cur.fetchall()}
+        con.close()
+    except Exception as exc:
+        return False, f"trade_schema_query_error:{exc}"
+    required_cols = {
+        "instrument_id",
+        "underlying",
+        "instrument_type",
+        "expiry",
+        "strike",
+        "right",
+        "qty_lots",
+        "qty_units",
+        "validity_sec",
+        "timestamp_epoch",
+    }
+    missing = sorted(required_cols - cols)
+    if missing:
+        return False, f"trade_schema_missing:{','.join(missing)}"
     return True, "ok"
 
 
@@ -76,6 +116,15 @@ def run_readiness_check(write_log: bool = True) -> Dict[str, object]:
         if not kite_ok:
             reasons.append(kite_reason)
     checks["kite_auth"] = {"ok": kite_ok, "reason": kite_reason}
+
+    # Trade schema readiness
+    schema_ok = True
+    schema_reason = "ok"
+    if getattr(cfg, "READINESS_REQUIRE_TRADE_SCHEMA", True):
+        schema_ok, schema_reason = _check_trade_identity_schema()
+        if not schema_ok:
+            reasons.append(schema_reason)
+    checks["trade_identity_schema"] = {"ok": schema_ok, "reason": schema_reason}
 
     # Feed health
     feed_ok = True

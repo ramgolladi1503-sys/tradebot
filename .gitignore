@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+models/*token*.pkl
+models/kite_access_token.pkl
 
 # OS / editor
 .DS_Store
@@ -34,3 +36,6 @@ logs/
 # Misc local files
 \#
 nano
+
+# Local test caches
+.hypothesis/

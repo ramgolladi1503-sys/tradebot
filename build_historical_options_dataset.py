@@ -2,15 +2,20 @@ from kiteconnect import KiteConnect
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import pickle
+from pathlib import Path
+import sys
 from credentials import API_KEY
+
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.security_guard import resolve_kite_access_token
 
 # -----------------------------
 # Kite Connect Setup
 # -----------------------------
 kite = KiteConnect(api_key=API_KEY)
-with open("kite_access_token.pkl","rb") as f:
-    kite.set_access_token(pickle.load(f))
+kite.set_access_token(resolve_kite_access_token(repo_root=ROOT, require_token=True))
 
 # -----------------------------
 # Parameters
@@ -106,4 +111,3 @@ def build_dataset():
 # -----------------------------
 if __name__=="__main__":
     build_dataset()
-

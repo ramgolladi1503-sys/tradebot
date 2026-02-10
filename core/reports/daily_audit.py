@@ -18,15 +18,78 @@ def _time_bucket(ts: pd.Timestamp) -> str:
     return "CLOSE"
 
 
-def build_daily_audit(df: pd.DataFrame, day: str, out_path: Path) -> Path:
+def write_daily_audit_placeholder(
+    day: str,
+    out_path: Path,
+    reason: str,
+    decision_traces: list | None = None,
+    config_snapshot: dict | None = None,
+) -> Path:
+    out = {
+        "date": day,
+        "reason": reason,
+        "counts": {
+            "total_decisions": 0,
+            "executed": 0,
+            "rejected": 0,
+            "filled": 0,
+            "missed": 0,
+        },
+        "veto_breakdown": {},
+        "pnl_by_strategy": {},
+        "pnl_by_regime": {},
+        "pnl_by_time_bucket": {},
+        "worst_trades": [],
+        "best_trades": [],
+        "data_quality": {
+            "stale_quotes": None,
+            "missing_cross_asset": None,
+            "high_entropy": None,
+        },
+        "model_usage": {},
+        "config_snapshot": dict(config_snapshot or {}),
+        "decision_traces": list(decision_traces or []),
+    }
+    out_path.parent.mkdir(exist_ok=True)
+    out_path.write_text(json.dumps(out, indent=2, default=str))
+    return out_path
+
+
+def build_daily_audit(
+    df: pd.DataFrame,
+    day: str,
+    out_path: Path,
+    decision_traces: list | None = None,
+    config_snapshot: dict | None = None,
+) -> Path:
     if df is None or df.empty:
-        raise ValueError("Truth dataset is empty.")
+        return write_daily_audit_placeholder(
+            day,
+            out_path,
+            "truth_dataset_empty",
+            decision_traces=decision_traces,
+            config_snapshot=config_snapshot,
+        )
 
     df = df.copy()
+    if "ts" not in df.columns:
+        return write_daily_audit_placeholder(
+            day,
+            out_path,
+            "missing_column:ts",
+            decision_traces=decision_traces,
+            config_snapshot=config_snapshot,
+        )
     df["ts_dt"] = pd.to_datetime(df["ts"], errors="coerce")
     df = df[df["ts_dt"].dt.date.astype(str) == day]
     if df.empty:
-        raise ValueError(f"No decisions found for date {day}.")
+        return write_daily_audit_placeholder(
+            day,
+            out_path,
+            "no_decisions_for_day",
+            decision_traces=decision_traces,
+            config_snapshot=config_snapshot,
+        )
 
     executed = int(((df["gatekeeper_allowed"] == 1) & (df["risk_allowed"] == 1)).sum()) if "gatekeeper_allowed" in df.columns else 0
     rejected = int(len(df) - executed)
@@ -56,8 +119,9 @@ def build_daily_audit(df: pd.DataFrame, day: str, out_path: Path) -> Path:
     worst_trades = []
     best_trades = []
     if pnl_col in df.columns:
-        worst_trades = df.sort_values(pnl_col, ascending=True).head(5)[["decision_id", "symbol", "strategy_id", pnl_col]].to_dict(orient="records")
-        best_trades = df.sort_values(pnl_col, ascending=False).head(5)[["decision_id", "symbol", "strategy_id", pnl_col]].to_dict(orient="records")
+        trade_cols = [col for col in ["decision_id", "symbol", "strategy_id", pnl_col] if col in df.columns]
+        worst_trades = df.sort_values(pnl_col, ascending=True).head(5)[trade_cols].to_dict(orient="records")
+        best_trades = df.sort_values(pnl_col, ascending=False).head(5)[trade_cols].to_dict(orient="records")
 
     max_age = float(getattr(cfg, "MAX_QUOTE_AGE_SEC", 120))
     data_quality = {
@@ -87,6 +151,8 @@ def build_daily_audit(df: pd.DataFrame, day: str, out_path: Path) -> Path:
         "best_trades": best_trades,
         "data_quality": data_quality,
         "model_usage": model_usage,
+        "config_snapshot": dict(config_snapshot or {}),
+        "decision_traces": list(decision_traces or []),
     }
 
     out_path.parent.mkdir(exist_ok=True)

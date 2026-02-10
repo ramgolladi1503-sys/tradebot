@@ -12,6 +12,7 @@ from core.research_pipeline import ResearchPipeline
 from core import model_registry
 from core import ml_governance
 from core.strategy_decay import compute_decay
+from core.retrain_manager import RetrainManager
 
 
 class AutoRetrain:
@@ -26,6 +27,7 @@ class AutoRetrain:
         self.strategy_tracker = strategy_tracker
         self.research = ResearchPipeline()
         self.segment_cols = ["seg_regime", "seg_bucket", "seg_expiry", "seg_vol_q"]
+        self.retrain_manager = RetrainManager()
 
     def update_model(self, trade_log_path="data/trade_log.json"):
         live_df = self._load_trade_log(trade_log_path)
@@ -62,6 +64,18 @@ class AutoRetrain:
             self._maybe_rollback(drift)
         except Exception:
             pass
+        trigger = self.retrain_manager.evaluate_retrain_trigger(live_df)
+        if not trigger.retrain_required:
+            self._log_decision(
+                "skip",
+                {
+                    "reason": "retrain_not_required",
+                    "retrain_required": False,
+                    "retrain_reasons": trigger.reason_codes,
+                    "rolling_metrics": trigger.metrics,
+                },
+            )
+            return
 
         # cooldown guard
         cooldown = getattr(cfg, "RETRAIN_COOLDOWN_MIN", 180) * 60
@@ -90,6 +104,9 @@ class AutoRetrain:
         if not (drift_ok and expect_ok and seg_ok):
             self._log_decision("skip", {
                 "reason": "gates_not_met",
+                "retrain_required": True,
+                "trigger_reasons": trigger.reason_codes,
+                "rolling_metrics": trigger.metrics,
                 "drift": drift_reasons,
                 "expectancy": expect_detail,
                 "segments": seg_detail,
@@ -163,8 +180,25 @@ class AutoRetrain:
             chall_shadow = _metrics_from_preds(y_s, chall_s, pnl=shadow_df.get("pnl"))
 
         promote, reason = self._should_promote(champ_metrics, chall_metrics, stat, champ_shadow, chall_shadow)
+        promotion_gate = self.retrain_manager.evaluate_promotion_gate(
+            champion_metrics=champ_metrics,
+            challenger_metrics=chall_metrics,
+        )
+        if promote and not promotion_gate.allowed:
+            promote = False
+            reason = promotion_gate.reason_code
+        elif promote and promotion_gate.allowed:
+            reason = promotion_gate.reason_code
+        elif not promote and promotion_gate.allowed:
+            # Keep conservative gate behavior: core gate must pass first.
+            reason = f"MODEL_PROMOTE_REJECT:CORE_GATE:{reason}"
+        elif not promote and not promotion_gate.allowed and not str(reason).startswith("MODEL_PROMOTE_REJECT:"):
+            reason = promotion_gate.reason_code
         decision = {
             "timestamp": datetime.now().isoformat(),
+            "retrain_required": True,
+            "trigger_reasons": trigger.reason_codes,
+            "rolling_metrics": trigger.metrics,
             "retrain_reasons": drift_reasons,
             "champion": champ_metrics,
             "challenger": chall_metrics,
@@ -173,6 +207,7 @@ class AutoRetrain:
             "shadow_challenger": chall_shadow,
             "promote": promote,
             "reason": reason,
+            "promotion_gate": promotion_gate.details,
         }
 
         # Governance metadata

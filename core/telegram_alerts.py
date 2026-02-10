@@ -25,11 +25,21 @@ def send_trade_ticket(ticket: TradeTicket) -> bool:
     if not cfg.TELEGRAM_BOT_TOKEN or not cfg.TELEGRAM_CHAT_ID:
         _log_blocked("missing_telegram_credentials")
         return False
-    actionable, reason = ticket.is_actionable()
-    if not actionable:
-        _log_blocked("missing_contract_fields", {"detail": reason, "trace_id": ticket.trace_id})
-        return False
-    message = ticket.format_message()
+    if getattr(ticket, "tradable", True) is False:
+        message = ticket.format_market_note()
+        _log_blocked(
+            "non_tradable_market_note",
+            {
+                "trace_id": ticket.trace_id,
+                "reasons": list(getattr(ticket, "tradable_reasons_blocking", []) or []),
+            },
+        )
+    else:
+        actionable, reason = ticket.is_actionable()
+        if not actionable:
+            _log_blocked("missing_contract", {"detail": reason, "trace_id": ticket.trace_id})
+            return False
+        message = ticket.format_message()
     url = f"https://api.telegram.org/bot{cfg.TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": cfg.TELEGRAM_CHAT_ID, "text": message}
     try:

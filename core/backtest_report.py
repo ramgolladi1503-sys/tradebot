@@ -1,5 +1,6 @@
 import pandas as pd
 from config import config as cfg
+import math
 
 def analyze_results(results_df: pd.DataFrame):
     if results_df is None or results_df.empty:
@@ -73,3 +74,60 @@ def risk_summary(results_df: pd.DataFrame):
                 "passed": passed,
             })
     return {"overall": overall, "strategies": strategies}
+
+
+def compute_window_metrics(results_df: pd.DataFrame, starting_capital: float = 100000.0):
+    """
+    Standard per-window metrics for walk-forward reports.
+    """
+    if results_df is None or results_df.empty:
+        return {
+            "return": 0.0,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "avg_r": 0.0,
+            "trade_count": 0,
+            "sharpe_proxy": 0.0,
+        }
+
+    df = results_df.copy()
+    trade_count = int(len(df))
+    if "capital" in df.columns and df["capital"].notna().any():
+        ending_capital = float(df["capital"].dropna().iloc[-1])
+        total_return = (ending_capital - float(starting_capital)) / max(float(starting_capital), 1e-9)
+        equity = df["capital"].astype(float)
+    else:
+        total_pnl = float(df.get("pl", pd.Series(dtype=float)).fillna(0.0).sum())
+        ending_capital = float(starting_capital) + total_pnl
+        total_return = (ending_capital - float(starting_capital)) / max(float(starting_capital), 1e-9)
+        equity = pd.Series([float(starting_capital), ending_capital], dtype=float)
+
+    peak = equity.cummax()
+    dd = (equity - peak) / peak.replace(0, pd.NA)
+    max_drawdown = float(dd.min()) if not dd.empty else 0.0
+    if pd.isna(max_drawdown):
+        max_drawdown = 0.0
+
+    pl_series = df.get("pl", pd.Series(dtype=float)).fillna(0.0).astype(float)
+    win_rate = float((pl_series > 0).mean()) if trade_count else 0.0
+
+    if "rr" in df.columns:
+        avg_r = float(df["rr"].fillna(0.0).astype(float).mean())
+    else:
+        # Fallback to pnl sign-proxy if rr isn't available.
+        avg_r = float(pl_series.mean())
+
+    pl_std = float(pl_series.std(ddof=0)) if not pl_series.empty else 0.0
+    if pl_std <= 0:
+        sharpe_proxy = 0.0
+    else:
+        sharpe_proxy = float((pl_series.mean() / pl_std) * math.sqrt(max(trade_count, 1)))
+
+    return {
+        "return": round(total_return, 6),
+        "max_drawdown": round(max_drawdown, 6),
+        "win_rate": round(win_rate, 6),
+        "avg_r": round(avg_r, 6),
+        "trade_count": trade_count,
+        "sharpe_proxy": round(sharpe_proxy, 6),
+    }

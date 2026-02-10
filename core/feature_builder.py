@@ -1,5 +1,6 @@
 import pandas as pd
 from core.time_utils import now_ist
+from core.feature_contract import FeatureContract
 
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -64,8 +65,10 @@ def _adx(df, period=14):
     atr = tr.rolling(period).mean()
     plus_di = 100 * (plus_dm.rolling(period).mean() / atr)
     minus_di = 100 * (minus_dm.rolling(period).mean() / atr)
-    dx = (abs(plus_di - minus_di) / (plus_di + minus_di)).replace([pd.NA, pd.NaT], 0) * 100
-    return dx.rolling(period).mean()
+    denom = (plus_di + minus_di).replace(0, 1e-9)
+    dx = (abs(plus_di - minus_di) / denom) * 100
+    dx = dx.replace([float("inf"), float("-inf")], 0).fillna(0)
+    return dx.rolling(period).mean().fillna(0)
 
 
 def _time_bucket(ts):
@@ -168,3 +171,11 @@ def build_trade_features(market_data, opt):
     except Exception:
         pass
     return feats
+
+
+def validate_trade_features(features, required_features=None):
+    contract = FeatureContract.from_model_metadata(
+        model_features=required_features,
+        fallback_features=[],
+    )
+    return contract.validate(features)

@@ -35,6 +35,23 @@ def _adaptive_multiplier(strategy_name: str | None) -> float:
         return 1.0
 
 
+def compute_confluence_score(score_pack: dict | None) -> float:
+    """
+    Deterministic confluence score in [0, 1] derived from score+alignment.
+    """
+    pack = score_pack or {}
+    try:
+        score = float(pack.get("score", 0.0) or 0.0)
+    except Exception:
+        score = 0.0
+    try:
+        alignment = float(pack.get("alignment", 0.0) or 0.0)
+    except Exception:
+        alignment = 0.0
+    blended = (0.6 * score) + (0.4 * alignment)
+    return max(0.0, min(1.0, blended / 100.0))
+
+
 def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float | None, strategy_name: str | None = None):
     """
     Multi-factor trade scoring engine.
@@ -259,7 +276,7 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
     # Strategy alignment meter (trend + mtf + regime)
     alignment = (components["trend"] * 0.4) + (components["mtf"] * 0.3) + (components["regime"] * 0.3)
 
-    return {
+    result = {
         "score": max(0.0, min(100.0, score)),
         "alignment": max(0.0, min(100.0, alignment)),
         "components": components,
@@ -267,3 +284,5 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
         "day_type": day_type,
         "regime": regime,
     }
+    result["confluence_score"] = compute_confluence_score(result)
+    return result

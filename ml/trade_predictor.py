@@ -7,6 +7,7 @@ from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from config import config as cfg
+from core.feature_contract import FeatureContract
 from core.model_registry import get_active_entry, get_shadow_entry
 
 _SEGMENT_FIELDS = ["seg_regime", "seg_bucket", "seg_expiry", "seg_vol_q"]
@@ -52,6 +53,7 @@ class TradePredictor:
             self.feature_list = None
             self.meta = {}
             print("[TradePredictor] No model found. Initialized new XGBClassifier.")
+        self.feature_contract = self._build_feature_contract()
 
     def _new_model(self):
         return XGBClassifier(
@@ -77,6 +79,7 @@ class TradePredictor:
             self.models = {"GLOBAL": loaded}
             self.feature_list = None
             self.meta = {}
+        self.feature_contract = self._build_feature_contract()
 
     def _load_shadow(self, path):
         loaded = joblib.load(path)
@@ -92,6 +95,22 @@ class TradePredictor:
             self.shadow_models = {"GLOBAL": loaded}
             self.shadow_feature_list = None
             self.shadow_meta = {}
+
+    def _build_feature_contract(self) -> FeatureContract:
+        fallback = []
+        try:
+            fallback = list(getattr(cfg, "MODEL_REQUIRED_FEATURES", []) or [])
+        except Exception:
+            fallback = []
+        return FeatureContract.from_model_metadata(
+            model_features=list(self.feature_list or []),
+            fallback_features=fallback,
+        )
+
+    def get_feature_contract(self) -> FeatureContract:
+        if not isinstance(getattr(self, "feature_contract", None), FeatureContract):
+            self.feature_contract = self._build_feature_contract()
+        return self.feature_contract
 
     def save(self, path=None):
         out_path = path or self.model_path
@@ -227,6 +246,29 @@ class TradePredictor:
         except Exception:
             return 0.5
 
+    def predict_calibrated_proba(self, features: pd.DataFrame, context=None) -> float:
+        """
+        Canonical calibrated probability used by sizing and gating.
+        Falls back to raw model proba with optional temperature smoothing.
+        """
+        raw = self.predict_confidence(features, context=context)
+        try:
+            p = float(raw)
+        except Exception:
+            p = 0.5
+        p = max(1e-6, min(1.0 - 1e-6, p))
+        try:
+            temperature = float(getattr(cfg, "ML_PROBA_TEMPERATURE", 1.0) or 1.0)
+        except Exception:
+            temperature = 1.0
+        if temperature <= 0:
+            temperature = 1.0
+        if abs(temperature - 1.0) < 1e-9:
+            return float(max(0.0, min(1.0, p)))
+        logit = np.log(p / (1.0 - p))
+        calibrated = 1.0 / (1.0 + np.exp(-(logit / temperature)))
+        return float(max(0.0, min(1.0, calibrated)))
+
     def _select_shadow_model(self, features: pd.DataFrame, context=None):
         if not self.shadow_models:
             return None, None
@@ -322,6 +364,7 @@ class TradePredictor:
 
         self.models = models
         self.meta = meta
+        self.feature_contract = self._build_feature_contract()
         return meta
 
     def evaluate(self, df: pd.DataFrame, target_col="target", segment_cols=None):

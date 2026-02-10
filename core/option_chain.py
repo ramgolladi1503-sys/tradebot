@@ -259,8 +259,13 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 quote_age_sec = None
                 if quote_ts_epoch is not None:
                     quote_age_sec = max(0.0, (datetime.utcnow().timestamp() - float(quote_ts_epoch)))
-                # quote_ok requires bid/ask
+                else:
+                    quote_age_sec = 10**9
+                # quote_ok requires bid/ask and freshness under strict live mode
                 quote_ok = bool(ltp_opt > 0 and bid and ask)
+                if getattr(cfg, "STRICT_LIVE_QUOTES", True) and quote_age_sec is not None:
+                    if quote_age_sec > getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8):
+                        quote_ok = False
                 spread_pct = None
                 if bid and ask:
                     base = ltp_opt or ((bid + ask) / 2.0)
@@ -324,10 +329,13 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     key = (c["strike"], c["type"])
                     if key in next_iv_map:
                         c["iv_term"] = c.get("iv") - next_iv_map[key]
+            for c in chain:
+                c["chain_source"] = "live"
             chain = _annotate_iv_oi(chain)
             _write_chain_snapshot(chain, symbol=symbol)
             return chain
-
+        if not getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
+            return []
         chain = []
         strikes = [atm + i * step for i in range(-strikes_around, strikes_around + 1)]
         for strike in strikes:
@@ -349,6 +357,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "quote_ok": True,
                         "quote_source": "synthetic",
                         "quote_live": False,
+                        "chain_source": "synthetic",
                         "instrument_token": None,
                         "moneyness": 0,
                         "days_to_expiry": 1,
@@ -364,6 +373,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 return []
             # fallback to synthetic chain when live chain is unavailable
             if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE":
+                return []
+            if not getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
                 return []
             step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {})
             step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))
@@ -392,6 +403,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "quote_ok": True,
                         "quote_source": "synthetic",
                         "quote_live": False,
+                        "chain_source": "synthetic",
                         "instrument_token": None,
                         "moneyness": 0,
                         "days_to_expiry": 1,

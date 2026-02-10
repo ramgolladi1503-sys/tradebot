@@ -39,6 +39,14 @@ Start the live bot:
 python main.py
 ```
 
+## Decision Logging
+
+Decision logging can be enabled to persist Decision objects into a SQLite table.
+
+- Enable with: `DECISION_LOG_ENABLED=true`
+- Database path: `DECISION_DB_PATH` (defaults to `TRADE_DB_PATH`)
+- Table: `decision_log` with columns `decision_id, ts_epoch, run_id, symbol, status, decision_json`
+
 Depth websocket (optional):
 ```bash
 python scripts/start_depth_ws.py
