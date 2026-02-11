@@ -4,6 +4,11 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 from core.trade_store import insert_depth_snapshot
+from core.paths import logs_dir
+from core.log_writer import get_jsonl_writer
+
+_ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
+_ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
 
 class DepthStore:
     def __init__(self):
@@ -35,16 +40,16 @@ class DepthStore:
                     send_telegram_message(f"Depth imbalance spike {imbalance:.2f} for token {instrument_token}")
         except Exception as exc:
             try:
-                Path("logs").mkdir(exist_ok=True)
-                with Path("logs/depth_store_errors.jsonl").open("a") as f:
-                    f.write(json.dumps({
-                        "ts_epoch": now_epoch,
-                        "event": "DEPTH_STORE_ERROR",
-                        "instrument_token": instrument_token,
-                        "error": str(exc),
-                    }) + "\n")
-            except Exception:
-                print("[DEPTH_STORE_ERROR] failed to log")
+                ok = _ERROR_LOGGER.write({
+                    "ts_epoch": now_epoch,
+                    "event": "DEPTH_STORE_ERROR",
+                    "instrument_token": instrument_token,
+                    "error": str(exc),
+                })
+                if not ok:
+                    print(f"[DEPTH_STORE_ERROR] failed to log path={_ERROR_LOG_PATH} err=write_failed")
+            except Exception as log_exc:
+                print(f"[DEPTH_STORE_ERROR] failed to log path={_ERROR_LOG_PATH} err={type(log_exc).__name__}:{log_exc}")
 
     def get(self, instrument_token):
         return self.books.get(instrument_token)

@@ -54,18 +54,50 @@ class RunLock:
         except Exception:
             return {}
 
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+            return True
+        except PermissionError:
+            # Conservative: assume alive if we lack permission.
+            return True
+        except Exception:
+            return False
+
     def acquire(self) -> Tuple[bool, str]:
         now = time.time()
         current = self._read()
         if current.get("locked") is True:
-            ts = current.get("timestamp_epoch")
-            try:
-                ts_val = float(ts)
-            except (TypeError, ValueError):
-                ts_val = None
-            if ts_val is not None:
-                age = max(0.0, now - ts_val)
-                if age <= self.max_age_sec:
+            # Allow re-entrant lock acquisition by the same PID.
+            if current.get("pid") == os.getpid():
+                self._last_reason = "RUN_LOCK_REENTRANT"
+                return True, self._last_reason
+            pid = current.get("pid")
+            stale_pid = False
+            if pid is not None:
+                try:
+                    pid_val = int(pid)
+                except (TypeError, ValueError):
+                    pid_val = None
+                if pid_val is not None and not self._pid_alive(pid_val):
+                    stale_pid = True
+            else:
+                stale_pid = True
+
+            if not stale_pid and pid is not None:
+                ts = current.get("timestamp_epoch")
+                try:
+                    ts_val = float(ts)
+                except (TypeError, ValueError):
+                    ts_val = None
+                if ts_val is not None:
+                    age = max(0.0, now - ts_val)
+                    if age <= self.max_age_sec:
+                        self._last_reason = "RUN_LOCK_ACTIVE"
+                        return False, self._last_reason
+                # If timestamp missing/invalid but PID alive, block.
+                if ts is None or ts_val is None:
                     self._last_reason = "RUN_LOCK_ACTIVE"
                     return False, self._last_reason
         payload = {

@@ -62,7 +62,13 @@ start_bg() {
   echo "$name started (pid $!)"
 }
 
-start_bg "depth_ws" "$PYTHON_BIN" "$ROOT/scripts/start_depth_ws.py"
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo "DRY RUN: $PYTHON_BIN $ROOT/scripts/auth_warmup.py"
+else
+  echo "Running auth warmup..."
+  "$PYTHON_BIN" "$ROOT/scripts/auth_warmup.py"
+fi
+
 start_bg "main" "$PYTHON_BIN" "$ROOT/main.py"
 
 if lsof -ti tcp:"$PORT" >/dev/null 2>&1; then

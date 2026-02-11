@@ -1,5 +1,6 @@
 import time
 import json
+import os
 from pathlib import Path
 from config import config as cfg
 
@@ -13,17 +14,58 @@ class KiteClient:
         self.kite = None
         self._instruments_cache = {}
         self._cache_ts = 0
+        self.last_init_error = None
 
     def ensure(self):
         self._ensure()
 
+    @staticmethod
+    def _looks_placeholder_secret(value: str) -> bool:
+        token = str(value or "").strip().lower()
+        if not token:
+            return False
+        if token.startswith("your_") or "placeholder" in token:
+            return True
+        return token in {
+            "your_kiteconnect_api_key",
+            "your_kite_api_key",
+            "your_api_key",
+            "changeme",
+        }
+
     def _ensure(self):
         if self.kite or not KiteConnect:
             return
-        if not cfg.KITE_API_KEY or not cfg.KITE_ACCESS_TOKEN:
+        api_key = (os.getenv("KITE_API_KEY") or str(getattr(cfg, "KITE_API_KEY", "") or "")).strip()
+        if not api_key:
+            self.last_init_error = "missing_api_key:KITE_API_KEY"
             return
-        self.kite = KiteConnect(api_key=cfg.KITE_API_KEY)
-        self.kite.set_access_token(cfg.KITE_ACCESS_TOKEN)
+        if self._looks_placeholder_secret(api_key):
+            self.last_init_error = "invalid_api_key_placeholder:KITE_API_KEY"
+            return
+        token = ""
+        try:
+            from core.security_guard import resolve_kite_access_token
+            repo_root = Path(__file__).resolve().parents[1]
+            # Always resolve via security guard to avoid stale env/config token drift.
+            token = resolve_kite_access_token(repo_root=repo_root, require_token=False).strip()
+            if token:
+                cfg.KITE_ACCESS_TOKEN = token
+        except RuntimeError as exc:
+            print(str(exc))
+            self.last_init_error = str(exc)
+            return
+        if not token:
+            self.last_init_error = "missing_access_token:~/.trading_bot/kite_access_token"
+            return
+        self.kite = KiteConnect(api_key=api_key)
+        self.kite.set_access_token(token)
+        print(
+            f"KITE_REST api_key_tail4={api_key[-4:] if len(api_key) >= 4 else api_key} "
+            f"access_token_tail4={token[-4:] if len(token) >= 4 else token} "
+            f"kite_id={id(self.kite)}"
+        )
+        self.last_init_error = None
 
     def instruments(self, exchange=None):
         self._ensure()
@@ -123,6 +165,35 @@ class KiteClient:
             if inst.get("name") not in symbols:
                 continue
             if inst.get("expiry") != expiry_date:
+                continue
+            tok = inst.get("instrument_token")
+            if tok:
+                tokens.append(tok)
+        return list(set(tokens))
+
+    def resolve_option_tokens_window(self, symbol, expiry_date, atm_strike, strikes_around, step, exchange="NFO"):
+        seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
+        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
+        tokens = []
+        if atm_strike is None or step is None or step <= 0:
+            return []
+        min_strike = atm_strike - (strikes_around * step)
+        max_strike = atm_strike + (strikes_around * step)
+        for inst in data:
+            if inst.get("segment") != seg:
+                continue
+            if inst.get("name") != symbol:
+                continue
+            if inst.get("expiry") != expiry_date:
+                continue
+            strike = inst.get("strike")
+            if strike is None:
+                continue
+            try:
+                strike_val = float(strike)
+            except Exception:
+                continue
+            if strike_val < min_strike or strike_val > max_strike:
                 continue
             tok = inst.get("instrument_token")
             if tok:

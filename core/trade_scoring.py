@@ -243,6 +243,10 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
     try:
         cross_q = market_data.get("cross_asset_quality", {}) or {}
         optional = set(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or [])
+        require_x = bool(getattr(cfg, "REQUIRE_CROSS_ASSET", True))
+        if getattr(cfg, "REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE", True):
+            live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+            require_x = require_x and live_mode
         stale = set(cross_q.get("stale_feeds", []) or [])
         missing_map = cross_q.get("missing") or {}
         missing = set(k for k, v in missing_map.items() if not str(v).startswith("disabled"))
@@ -250,7 +254,7 @@ def compute_trade_score(market_data: dict, opt: dict, direction: str, rr: float 
         if bad_optional:
             penalty = float(getattr(cfg, "CROSS_ASSET_OPTIONAL_SCORE_PENALTY", 8))
             score = max(0.0, score - penalty)
-            issues.append("cross_asset_optional_stale")
+            issues.append("cross_asset_optional_stale" if require_x else "cross_asset_optional_warn")
     except Exception:
         pass
 

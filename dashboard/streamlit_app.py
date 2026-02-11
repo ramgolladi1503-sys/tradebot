@@ -235,6 +235,19 @@ def _is_market_hours():
         now = datetime.now().time()
         return now.hour >= 9 and now.hour < 16
 
+def _should_show_quote_errors(readiness_state: str) -> bool:
+    # Show quote errors only during market-open states, or if user explicitly tested.
+    if st.session_state.get("force_show_quote_errors", False):
+        shown_ts = float(st.session_state.get("force_show_quote_errors_ts", 0.0) or 0.0)
+        ttl_sec = 300.0
+        if shown_ts <= 0:
+            return True
+        if (time.time() - shown_ts) <= ttl_sec:
+            return True
+        st.session_state["force_show_quote_errors"] = False
+        st.session_state["force_show_quote_errors_ts"] = 0.0
+    return readiness_state in ("READY", "DEGRADED", "BLOCKED", "BOOTING")
+
 def _localize_ts(df_in, col="timestamp"):
     df_out = df_in.copy()
     if col not in df_out.columns:
@@ -296,7 +309,6 @@ def _render_market_snapshot():
         from core.kite_client import kite_client
         from config import config as cfg
         from core.market_data import fetch_live_market_data
-        import sqlite3
     except Exception as e:
         st.error(f"Market data error: {e}")
         return
@@ -331,69 +343,29 @@ def _render_market_snapshot():
     except Exception:
         day_map = {}
 
-    # Feed freshness badge (tick lag)
+    # Feed freshness badge (per-instrument SLA) via canonical SLA module
     try:
         from config import config as cfg
-        sla_path = Path("logs/sla_check.json")
-        if sla_path.exists():
-            sla = json.loads(sla_path.read_text())
-            tick_lag = sla.get("tick_lag_sec")
-            depth_lag = sla.get("depth_lag_sec")
-            max_lag = float(getattr(cfg, "SLA_MAX_TICK_LAG_SEC", 120))
-            stale = (tick_lag is None) or (isinstance(tick_lag, (int, float)) and tick_lag > max_lag)
-            if stale:
-                st.error(f"Feeds stale: tick lag {tick_lag}s (max {int(max_lag)}s)")
-            elif isinstance(depth_lag, (int, float)) and depth_lag > max_lag:
-                st.warning(f"Depth feed lag {depth_lag}s (max {int(max_lag)}s)")
-            else:
-                st.success("Feeds healthy")
+        from core.freshness_sla import get_freshness_status
+        freshness = get_freshness_status(force=False)
+        ltp_age = (freshness.get("ltp") or {}).get("age_sec")
+        depth_age = (freshness.get("depth") or {}).get("age_sec")
+        max_ltp = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+        max_depth = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 2.0))
+        market_open = bool(freshness.get("market_open", True))
+        stale = (ltp_age is None) or (isinstance(ltp_age, (int, float)) and ltp_age > max_ltp)
+        if not market_open:
+            st.info(f"Market closed: LTP age {ltp_age}s, depth age {depth_age}s")
+        elif stale:
+            st.error(f"Feeds stale: LTP age {ltp_age}s (max {max_ltp}s)")
+        elif isinstance(depth_age, (int, float)) and depth_age > max_depth:
+            st.warning(f"Depth feed lag {depth_age}s (max {max_depth}s)")
         else:
-            st.info("Feed status unavailable (run scripts/sla_check.py).")
+            st.success("Feeds healthy")
     except Exception:
         pass
 
-    # Per-symbol tick health (live indicator)
-    try:
-        token_path = Path("logs/token_resolution.json")
-        db = Path(cfg.TRADE_DB_PATH)
-        if token_path.exists() and db.exists():
-            resolution = json.loads(token_path.read_text())
-            conn = sqlite3.connect(db)
-            rows = []
-            for item in resolution:
-                sym = item.get("symbol")
-                tokens = item.get("tokens") or []
-                if not sym or not tokens:
-                    continue
-                q_marks = ",".join(["?"] * len(tokens))
-                query = f"SELECT MAX(timestamp) FROM ticks WHERE instrument_token IN ({q_marks})"
-                last_ts = conn.execute(query, tokens).fetchone()[0]
-                if last_ts:
-                    try:
-                        ts = pd.to_datetime(last_ts)
-                        if getattr(ts, "tzinfo", None) is not None:
-                            ts = ts.tz_convert(None)
-                        lag = (datetime.now() - ts).total_seconds()
-                    except Exception:
-                        lag = None
-                else:
-                    lag = None
-                rows.append({"symbol": sym, "last_tick": str(last_ts), "lag_sec": lag})
-            conn.close()
-            if rows:
-                df_t = pd.DataFrame(rows)
-                max_lag = float(getattr(cfg, "SLA_MAX_TICK_LAG_SEC", 120))
-                df_t["status"] = df_t["lag_sec"].apply(
-                    lambda x: "OK" if (isinstance(x, (int, float)) and x <= max_lag) else "STALE"
-                )
-                st.markdown("**Tick Health (per symbol)**")
-                ui.table(df_t, use_container_width=True)
-            else:
-                st.info("Tick health: no tokens resolved yet.")
-        else:
-            st.info("Tick health: run start_depth_ws.py to resolve tokens and start ticks.")
-    except Exception:
-        pass
+    # Per-symbol tick health is intentionally suppressed to avoid non-canonical SLA logic.
 
     # Restart tick feed button
     try:
@@ -1161,6 +1133,40 @@ def _render_gpt_panel(trade_row: dict, market_ctx: dict, key_prefix: str):
 if nav == "Home":
     section_header("Ready To Place Trades")
     try:
+        readiness = {}
+        state = "UNKNOWN"
+        can_trade = False
+        blockers = []
+        warnings = []
+        feed = {}
+        kite = {}
+        breaker_tripped = False
+        auth_health = {}
+        feed_freshness = {}
+        try:
+            from core.readiness_gate import run_readiness_check
+            from core.auth_health import get_kite_auth_health
+            from core.freshness_sla import get_freshness_status
+            readiness = run_readiness_check(write_log=False)
+            state = readiness.get("state", "UNKNOWN")
+            can_trade = bool(readiness.get("can_trade", False))
+            blockers = list(readiness.get("blockers") or [])
+            warnings = list(readiness.get("warnings") or [])
+            checks = readiness.get("checks") or {}
+            feed = checks.get("feed_health") or {}
+            kite = checks.get("kite_auth") or {}
+            breaker_tripped = bool((checks.get("feed_breaker") or {}).get("tripped"))
+            auth_health = get_kite_auth_health(force=False)
+            feed_freshness = get_freshness_status(force=False)
+            if state == "MARKET_CLOSED":
+                shown_ts = float(st.session_state.get("force_show_quote_errors_ts", 0.0) or 0.0)
+                if shown_ts and (time.time() - shown_ts) > 300.0:
+                    st.session_state["force_show_quote_errors"] = False
+                    st.session_state["force_show_quote_errors_ts"] = 0.0
+        except Exception:
+            st.error("Readiness: BLOCKED — readiness check unavailable")
+        if breaker_tripped:
+            st.error("Feed breaker tripped — manual clear required. Run: scripts/clear_feed_breaker.py --yes-i-mean-it")
         # Live quotes status banner
         try:
             quote_err = None
@@ -1190,57 +1196,103 @@ if nav == "Home":
                     chain_health = {}
             status = "OK"
             notes = []
-            if quote_err:
+            auth_ok = bool(auth_health.get("ok", False))
+            auth_reason = auth_health.get("error") or auth_health.get("reason")
+            if not auth_ok:
                 status = "ERROR"
+                notes.append(f"Auth unhealthy: {auth_reason}")
+            feed_ok = bool(feed_freshness.get("ok", True))
+            if bool(feed_freshness.get("market_open", False)) and not feed_ok:
+                status = "ERROR"
+                notes.append("Feed stale (market open)")
+            if quote_err and status == "OK":
+                status = "WARN"
                 notes.append("Live quote fetch failed")
             if chain_health:
                 bad = [k for k, v in chain_health.items() if isinstance(v, dict) and v.get("status") in ("ERROR", "WARN")]
                 if bad:
                     status = "WARN" if status == "OK" else status
                     notes.append(f"Chain health issues: {', '.join(bad)}")
-            market_open = _is_market_hours()
-            if status == "OK":
-                st.success("Live Quotes: OK")
-            elif status == "WARN":
-                st.warning("Live Quotes: WARN — " + "; ".join(notes))
+            show_errors = _should_show_quote_errors(state)
+            if state == "MARKET_CLOSED" and not show_errors:
+                st.info("Market closed — no trading. Live quote errors hidden off-hours.")
             else:
-                # Try to show last error detail + reason classification
-                detail = ""
-                reason = ""
-                try:
-                    if quote_err and quote_err.get("detail"):
-                        detail = str(quote_err.get("detail"))
-                    elif quote_err:
-                        detail = str(quote_err)
-                except Exception:
+                if status == "OK":
+                    st.success("Live Quotes: OK")
+                elif status == "WARN":
+                    st.warning("Live Quotes: WARN — " + "; ".join(notes))
+                else:
+                    # Try to show last error detail + reason classification
                     detail = ""
-                dlow = detail.lower()
-                if "name resolution" in dlow or "failed to resolve" in dlow or "dns" in dlow:
-                    reason = "Network/DNS issue"
-                elif "api_key" in dlow or "access_token" in dlow or "invalid" in dlow:
-                    reason = "Auth/Token issue"
-                elif "429" in dlow or "rate" in dlow:
-                    reason = "Rate limit"
-                if reason:
-                    reason = f" ({reason})"
-                st.error("Live Quotes: ERROR — " + "; ".join(notes) + (f" [{reason.strip()}]" if reason else "") + (f" ({detail})" if detail else ""))
-            if not market_open:
-                st.info("Market closed — showing last available quotes/close. Errors here usually mean network/auth, not market hours.")
+                    reason = ""
+                    try:
+                        if quote_err and quote_err.get("detail"):
+                            detail = str(quote_err.get("detail"))
+                        elif quote_err:
+                            detail = str(quote_err)
+                    except Exception:
+                        detail = ""
+                    dlow = detail.lower()
+                    if "name resolution" in dlow or "failed to resolve" in dlow or "dns" in dlow:
+                        reason = "Network/DNS issue"
+                    elif "api_key" in dlow or "access_token" in dlow or "invalid" in dlow:
+                        reason = "Auth/Token issue"
+                    elif "429" in dlow or "rate" in dlow:
+                        reason = "Rate limit"
+                    if reason:
+                        reason = f" ({reason})"
+                    st.error("Live Quotes: ERROR — " + "; ".join(notes) + (f" [{reason.strip()}]" if reason else "") + (f" ({detail})" if detail else ""))
         except Exception:
             pass
         try:
-            col_q1, col_q2 = st.columns([1, 3])
-            if col_q1.button("Test Live Quotes", key="test_live_quotes"):
-                from core.market_data import get_ltp
-                for sym in ["NIFTY", "BANKNIFTY", "SENSEX"]:
-                    get_ltp(sym)
-                st.success("Triggered live quote fetch.")
-            if col_q2.button("Clear Live Quote Errors", key="clear_live_quote_errors"):
-                try:
-                    Path("logs/live_quote_errors.jsonl").write_text("")
-                    st.success("Cleared live quote error log.")
-                except Exception:
-                    st.warning("Unable to clear live quote error log.")
+            show_errors = _should_show_quote_errors(state)
+            clear_disabled = not show_errors
+            if state == "MARKET_CLOSED":
+                with st.expander("Diagnostics", expanded=False):
+                    col_q1, col_q2 = st.columns([1, 3])
+                    if col_q1.button("Test Live Quotes", key="test_live_quotes"):
+                        st.session_state["force_show_quote_errors"] = True
+                        st.session_state["force_show_quote_errors_ts"] = time.time()
+                        from core.market_data import get_ltp
+                        for sym in ["NIFTY", "BANKNIFTY", "SENSEX"]:
+                            get_ltp(sym)
+                        if hasattr(st, "toast"):
+                            st.toast("Live quote fetch triggered")
+                    if col_q2.button("Clear Live Quote Errors", key="clear_live_quote_errors", disabled=clear_disabled):
+                        try:
+                            Path("logs/live_quote_errors.jsonl").write_text("")
+                            st.success("Cleared live quote error log.")
+                        except Exception:
+                            st.warning("Unable to clear live quote error log.")
+                    try:
+                        auth_ok = bool(auth_health.get("ok", False))
+                        auth_err = auth_health.get("error") or "ok"
+                        st.caption(f"Kite auth: {'OK' if auth_ok else 'ERROR'} — {auth_err}")
+                    except Exception:
+                        pass
+                    try:
+                        sla_state = str(feed_freshness.get("state") or "UNKNOWN")
+                        ltp_age = (feed_freshness.get("ltp") or {}).get("age_sec")
+                        depth_age = (feed_freshness.get("depth") or {}).get("age_sec")
+                        st.caption(f"SLA (hidden off-hours): state={sla_state} ltp_age={ltp_age} depth_age={depth_age}")
+                    except Exception:
+                        pass
+            else:
+                col_q1, col_q2 = st.columns([1, 3])
+                if col_q1.button("Test Live Quotes", key="test_live_quotes"):
+                    st.session_state["force_show_quote_errors"] = True
+                    st.session_state["force_show_quote_errors_ts"] = time.time()
+                    from core.market_data import get_ltp
+                    for sym in ["NIFTY", "BANKNIFTY", "SENSEX"]:
+                        get_ltp(sym)
+                    if hasattr(st, "toast"):
+                        st.toast("Live quote fetch triggered")
+                if col_q2.button("Clear Live Quote Errors", key="clear_live_quote_errors", disabled=clear_disabled):
+                    try:
+                        Path("logs/live_quote_errors.jsonl").write_text("")
+                        st.success("Cleared live quote error log.")
+                    except Exception:
+                        st.warning("Unable to clear live quote error log.")
         except Exception:
             pass
         try:
@@ -1271,8 +1323,51 @@ if nav == "Home":
                 st.info("Auto‑Tune: OFF or insufficient trades")
         except Exception:
             pass
+        try:
+            badge = {
+                "READY": "🟩",
+                "DEGRADED": "🟨",
+                "MARKET_CLOSED": "🟦",
+                "BLOCKED": "🟥",
+                "BOOTING": "⬜",
+            }.get(state, "⬜")
+            reason_tokens = blockers if blockers else warnings
+            reason_line = " | ".join(reason_tokens[:2]) if reason_tokens else "ok"
+            st.markdown(f"**{badge} {state} | {reason_line}**")
+            if state == "READY":
+                st.success("Readiness: READY — can trade")
+            elif state == "DEGRADED":
+                st.warning("Readiness: DEGRADED — do NOT auto-trade")
+            elif state == "MARKET_CLOSED":
+                st.info("Readiness: MARKET_CLOSED — no trading")
+            elif state == "BOOTING":
+                st.info("Readiness: BOOTING — warming up")
+            else:
+                st.error("Readiness: BLOCKED — trading disabled")
+            if blockers:
+                st.error("Blockers: " + ", ".join(blockers))
+            if warnings:
+                st.warning("Warnings: " + ", ".join(warnings))
+        except Exception:
+            st.error("Readiness: BLOCKED — readiness check unavailable")
+        try:
+            market_open = bool(feed_freshness.get("market_open", False))
+            ltp = feed_freshness.get("ltp") or {}
+            depth = feed_freshness.get("depth") or {}
+            ltp_age = ltp.get("age_sec")
+            depth_age = depth.get("age_sec")
+            ltp_max = ltp.get("max_age_sec")
+            depth_max = depth.get("max_age_sec")
+            if market_open:
+                st.caption(
+                    f"SLA: LTP age={ltp_age:.2f}s (max {ltp_max}) | Depth age={depth_age:.2f}s (max {depth_max})"
+                )
+        except Exception:
+            pass
         checklist = []
-        checklist.append(("Live data OK", Path("data/option_chain_latest.json").exists()))
+        checklist.append(("Readiness can_trade", can_trade))
+        checklist.append(("Kite auth OK", bool(kite.get("ok"))))
+        checklist.append(("Feed OK (market-open gating)", bool(feed.get("ok"))))
         checklist.append(("Review queue active", Path("logs/review_queue.json").exists()))
         checklist.append(("Risk monitor running", Path("logs/risk_monitor.json").exists()))
         checklist.append(("Execution analytics", Path("logs/execution_analytics.json").exists()))
@@ -3181,12 +3276,9 @@ if nav == "Data & SLA":
 
     st.subheader("Data SLA Status")
     try:
-        sla_path = Path("logs/sla_check.json")
-        if sla_path.exists():
-            sla = json.loads(sla_path.read_text())
-            ui.table(pd.DataFrame([sla]), use_container_width=True)
-        else:
-            st.info("Run scripts/sla_check.py to generate SLA status.")
+        from core.freshness_sla import get_freshness_status
+        sla = get_freshness_status(force=False)
+        ui.table(pd.DataFrame([sla]), use_container_width=True)
     except Exception as e:
         st.warning(f"SLA status error: {e}")
 
@@ -3468,7 +3560,9 @@ if nav == "Market Depth":
             from core.kite_client import kite_client
             meta_map = _get_instrument_meta_map()
             imb_rows = []
-            for ts, token, dj in rows:
+            for row in rows:
+                # depth_snapshots query can return (timestamp, instrument_token, depth_json, timestamp_epoch)
+                ts, token, dj = row[0], row[1], row[2]
                 try:
                     obj = _json.loads(dj)
                     imb = obj.get("imbalance")

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+*.env
 models/*token*.pkl
 models/kite_access_token.pkl
 
@@ -29,13 +30,17 @@ logs/
 # Data + models (exclude from repo)
 /data/
 /models/
+models/*.pkl
 
 # Trade logs
 /data/trade_log.json
 
 # Misc local files
-\#
-nano
+#*
 
 # Local test caches
 .hypothesis/
+
+# Generated artifacts
+reports/walk_forward/
+reports/*_latest.*

@@ -1,11 +1,108 @@
 import json
+import time
+import hashlib
 from pathlib import Path
+
+from core.orders.order_intent import OrderIntent
 
 QUEUE_PATH = Path("logs/review_queue.json")
 QUICK_QUEUE_PATH = Path("logs/quick_review_queue.json")
 ZERO_HERO_QUEUE_PATH = Path("logs/zero_hero_queue.json")
 SCALP_QUEUE_PATH = Path("logs/scalp_queue.json")
 APPROVED_PATH = Path("logs/approved_trades.json")
+
+
+def _cfg_bool(name, default=False):
+    try:
+        from config import config as cfg
+        return bool(getattr(cfg, name, default))
+    except Exception:
+        return bool(default)
+
+
+def _cfg_int(name, default=0):
+    try:
+        from config import config as cfg
+        return int(getattr(cfg, name, default))
+    except Exception:
+        return int(default)
+
+
+def _read_json(path: Path, default):
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return default
+
+
+def _write_json(path: Path, payload):
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2))
+
+
+def _load_approvals():
+    raw = _read_json(APPROVED_PATH, {"version": 2, "approvals": {}})
+    if isinstance(raw, dict) and isinstance(raw.get("approvals"), dict):
+        return raw
+    # Backward-compat: old format was list[trade_id]. Keep detectable but fail-closed by default.
+    if isinstance(raw, list):
+        legacy = {}
+        for trade_id in raw:
+            legacy[str(trade_id)] = {"legacy": True, "status": "APPROVED"}
+        return {"version": 2, "approvals": legacy}
+    return {"version": 2, "approvals": {}}
+
+
+def canonical_order_payload(trade):
+    try:
+        intent = OrderIntent.from_trade(trade, mode="PAPER")
+        return intent.to_canonical_dict()
+    except Exception:
+        return {}
+
+
+def order_payload_hash(trade):
+    payload = canonical_order_payload(trade)
+    if not payload:
+        return ""
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def approval_status(trade_id, payload_hash=None, now_epoch=None):
+    trade_id = str(trade_id or "")
+    if not trade_id:
+        return False, "approval_missing_trade_id"
+    now_epoch = float(now_epoch if now_epoch is not None else time.time())
+    strict = True
+    if not _cfg_bool("APPROVAL_STRICT_PAYLOAD_HASH", True):
+        return False, "approval_strict_mode_required"
+    store = _load_approvals()
+    record = (store.get("approvals") or {}).get(trade_id)
+    if not record:
+        return False, "approval_missing"
+    if not isinstance(record, dict):
+        return False, "approval_record_invalid"
+    if record.get("status") and str(record.get("status")).upper() != "APPROVED":
+        return False, "approval_not_approved"
+    if record.get("legacy") is True and strict:
+        return False, "approval_legacy_record"
+    expires_epoch = record.get("expires_epoch")
+    try:
+        if expires_epoch is not None and now_epoch > float(expires_epoch):
+            return False, "approval_expired"
+    except Exception:
+        return False, "approval_expiry_invalid"
+    approved_hash = record.get("payload_hash")
+    if strict and not approved_hash:
+        return False, "approval_missing_payload_hash"
+    if payload_hash and approved_hash and payload_hash != approved_hash:
+        return False, "approval_payload_mismatch"
+    if payload_hash and strict and not approved_hash:
+        return False, "approval_missing_payload_hash"
+    return True, "approved"
 
 def add_to_queue(trade, queue_path=None, extra=None):
     try:
@@ -77,20 +174,39 @@ def add_to_queue(trade, queue_path=None, extra=None):
     except Exception:
         pass
 
-def is_approved(trade_id):
-    if not APPROVED_PATH.exists():
-        return False
-    data = json.loads(APPROVED_PATH.read_text())
-    return trade_id in data
+def is_approved(trade_id, payload_hash=None):
+    ok, _reason = approval_status(trade_id, payload_hash=payload_hash)
+    return ok
 
-def approve(trade_id):
-    APPROVED_PATH.parent.mkdir(exist_ok=True)
-    data = []
-    if APPROVED_PATH.exists():
-        data = json.loads(APPROVED_PATH.read_text())
-    if trade_id not in data:
-        data.append(trade_id)
-    APPROVED_PATH.write_text(json.dumps(data, indent=2))
+
+def approve(trade_id, payload_hash=None, ttl_sec=None, approver=None):
+    trade_id = str(trade_id)
+    store = _load_approvals()
+    approvals = store.setdefault("approvals", {})
+    now_epoch = time.time()
+    if ttl_sec is None:
+        ttl_sec = _cfg_int("APPROVAL_TTL_SEC", 600)
+    expires_epoch = now_epoch + max(int(ttl_sec), 0)
+    approvals[trade_id] = {
+        "status": "APPROVED",
+        "payload_hash": payload_hash,
+        "approved_epoch": now_epoch,
+        "expires_epoch": expires_epoch,
+        "approved_by": approver,
+    }
+    _write_json(APPROVED_PATH, store)
+
+
+def get_queue_entry(trade_id, queue_paths=None):
+    queue_paths = queue_paths or [QUEUE_PATH, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH]
+    for path in queue_paths:
+        rows = _read_json(path, [])
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if isinstance(row, dict) and str(row.get("trade_id")) == str(trade_id):
+                return row
+    return None
 
 def remove_from_queue(trade_id):
     if not QUEUE_PATH.exists():

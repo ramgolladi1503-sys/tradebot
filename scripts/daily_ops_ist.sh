@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+echo "[daily_ops] auth warmup"
+python "$ROOT/scripts/auth_warmup.py"
+
 echo "[daily_ops] readiness gate"
 python "$ROOT/scripts/readiness_gate.py"
 

@@ -5,8 +5,13 @@ from pathlib import Path
 from datetime import datetime, timezone
 from collections import deque
 from config import config as cfg
+from core.paths import logs_dir
+from core.log_writer import get_jsonl_writer
 
 _tick_window = deque(maxlen=200000)
+_LAST_TICK_EPOCH = None
+_ERROR_LOG_PATH = logs_dir() / "tick_store_errors.jsonl"
+_ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
 
 def _conn():
     Path(cfg.TRADE_DB_PATH).parent.mkdir(exist_ok=True)
@@ -76,8 +81,19 @@ def _parse_ts_epoch(ts):
         return None
 
 
+def record_tick_epoch(ts_epoch):
+    if ts_epoch is None:
+        return
+    global _LAST_TICK_EPOCH
+    try:
+        ts_val = float(ts_epoch)
+    except Exception:
+        return
+    _LAST_TICK_EPOCH = ts_val
+    _tick_window.append(ts_val)
+
+
 def insert_tick(ts, token, last_price, volume, oi):
-    init_ticks()
     now_epoch = time.time()
     now_iso = datetime.fromtimestamp(now_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
     ts_epoch = _parse_ts_epoch(ts)
@@ -89,8 +105,9 @@ def insert_tick(ts, token, last_price, volume, oi):
         ts_iso = now_iso
         if skew is not None:
             try:
-                Path("logs").mkdir(exist_ok=True)
-                with Path("logs/clock_skew.jsonl").open("a") as f:
+                log_path = logs_dir() / "clock_skew.jsonl"
+                log_path.parent.mkdir(exist_ok=True)
+                with log_path.open("a") as f:
                     f.write(
                         json.dumps(
                             {
@@ -107,15 +124,31 @@ def insert_tick(ts, token, last_price, volume, oi):
                 pass
     else:
         ts_iso = datetime.fromtimestamp(ts_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
-    with _conn() as conn:
-        conn.execute(
-            """
-        INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
-        VALUES (?,?,?,?,?,?,?)
-        """,
-            (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso),
-        )
-    _tick_window.append(ts_epoch)
+    record_tick_epoch(ts_epoch)
+    try:
+        init_ticks()
+        with _conn() as conn:
+            conn.execute(
+                """
+            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+                (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso),
+            )
+    except Exception as exc:
+        try:
+            _ERROR_LOGGER.write(
+                {
+                    "ts_epoch": now_epoch,
+                    "event": "TICK_STORE_ERROR",
+                    "instrument_token": token,
+                    "error": str(exc),
+                }
+            )
+        except Exception:
+            pass
+        return False
+    return True
 
 
 def msgs_last_min() -> int:
@@ -123,3 +156,7 @@ def msgs_last_min() -> int:
     while _tick_window and now - _tick_window[0] > 60:
         _tick_window.popleft()
     return len(_tick_window)
+
+
+def last_tick_epoch():
+    return _LAST_TICK_EPOCH

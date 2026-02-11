@@ -1,39 +1,31 @@
 #!/usr/bin/env python
 import argparse
-import json
-from pathlib import Path
-from datetime import datetime, timezone
 from config import config as cfg
+from core.freshness_sla import get_freshness_status
 from core.time_utils import is_market_open_ist
-
-SLA_PATH = Path("logs/sla_check.json")
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--market-open", action="store_true")
     args = parser.parse_args()
 
-    if not SLA_PATH.exists():
-        raise SystemExit("logs/sla_check.json missing. Run scripts/sla_check.py first.")
-
-    payload = json.loads(SLA_PATH.read_text())
-
-    max_depth = float(getattr(cfg, "SLA_MAX_DEPTH_LAG_SEC", 120))
-    max_tick = float(getattr(cfg, "SLA_MAX_TICK_LAG_SEC", 120))
+    payload = get_freshness_status(force=True)
+    max_depth = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 2.0))
+    max_tick = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
 
     market_open = args.market_open or is_market_open_ist()
     fail = False
-    if payload.get("tick_last_epoch") is None:
+    if (payload.get("ltp") or {}).get("age_sec") is None and market_open:
         print("FAIL: tick epoch missing")
         fail = True
-    if payload.get("depth_last_epoch") is None:
+    if (payload.get("depth") or {}).get("age_sec") is None and market_open:
         print("FAIL: depth epoch missing")
         fail = True
-    if payload.get("depth_lag_sec") is None or payload.get("depth_lag_sec") > max_depth:
+    if (payload.get("depth") or {}).get("age_sec") is None or (payload.get("depth") or {}).get("age_sec") > max_depth:
         msg = "depth feed stale"
         print(("FAIL: " if market_open else "WARN: ") + msg)
         fail = fail or market_open
-    if payload.get("tick_lag_sec") is None or payload.get("tick_lag_sec") > max_tick:
+    if (payload.get("ltp") or {}).get("age_sec") is None or (payload.get("ltp") or {}).get("age_sec") > max_tick:
         msg = "tick feed stale"
         print(("FAIL: " if market_open else "WARN: ") + msg)
         fail = fail or market_open

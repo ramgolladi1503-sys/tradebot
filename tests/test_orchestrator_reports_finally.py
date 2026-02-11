@@ -14,6 +14,8 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     monkeypatch.setattr(orch_mod.Orchestrator, "_start_depth_ws", lambda self: None)
     monkeypatch.setattr(orch_mod, "fetch_live_market_data", lambda: (_ for _ in ()).throw(RuntimeError("forced_cycle_error")))
     monkeypatch.setattr(orch_mod.time, "sleep", lambda _: (_ for _ in ()).throw(StopIteration()))
+    monkeypatch.setattr(orch_mod.RunLock, "acquire", lambda self: (True, "ok"))
+    monkeypatch.setattr(orch_mod.RunLock, "release", lambda self: None)
 
     orch = orch_mod.Orchestrator(total_capital=100000, poll_interval=0)
 

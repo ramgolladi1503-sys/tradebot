@@ -5,16 +5,23 @@ configure_tensorflow()
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.layers import Dense, Dropout, Input
 
 def build_microstructure_model(input_dim):
-    model = Sequential([
-        Dense(64, activation="relu", input_shape=(input_dim,)),
-        Dropout(0.2),
-        Dense(32, activation="relu"),
-        Dense(1, activation="sigmoid")
-    ])
-    model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"], run_eagerly=True)
+    model = Sequential(
+        [
+            Input(shape=(input_dim,)),
+            Dense(64, activation="relu"),
+            Dropout(0.2),
+            Dense(32, activation="relu"),
+            Dense(1, activation="sigmoid"),
+        ]
+    )
+    model.compile(
+        optimizer="adam",
+        loss="binary_crossentropy",
+        metrics=["accuracy"],
+    )
     return model
 
 def prepare_microstructure_features(df, return_names=False):

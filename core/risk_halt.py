@@ -6,6 +6,15 @@ from core.time_utils import now_utc_epoch, now_ist
 def _path():
     return Path(cfg.RISK_HALT_FILE)
 
+def load_halt():
+    path = _path()
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
 def is_halted():
     path = _path()
     if not path.exists():

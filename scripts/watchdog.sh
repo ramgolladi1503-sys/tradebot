@@ -54,7 +54,6 @@ start_if_down() {
 }
 
 while true; do
-  start_if_down "depth_ws" "$PYTHON_BIN" "$ROOT/scripts/start_depth_ws.py" || true
   start_if_down "main" "$PYTHON_BIN" "$ROOT/main.py" || true
   start_if_down "streamlit" "$PYTHON_BIN" -m streamlit run "$ROOT/dashboard/streamlit_app.py" \
     --server.address "${DASH_ADDR:-0.0.0.0}" --server.port "${DASH_PORT:-8501}" --server.headless true || true

@@ -10,11 +10,11 @@ from core.readiness_gate import run_readiness_check
 
 def main():
     payload = run_readiness_check(write_log=True)
-    if payload["ready"]:
-        print("READY")
+    if payload.get("can_trade"):
+        print(f"READY state={payload.get('state')}")
         return 0
-    print("NOT_READY")
-    print("Reasons:", ",".join(payload.get("reasons") or []))
+    print(f"NOT_READY state={payload.get('state')}")
+    print("Reasons:", ",".join(payload.get("blockers") or payload.get("reasons") or []))
     if payload.get("warnings"):
         print("Warnings:", ",".join(payload.get("warnings") or []))
     return 2

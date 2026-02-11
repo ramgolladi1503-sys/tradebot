@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 
 from config import config as cfg
 from core import model_registry
-from core.time_utils import now_ist
+from core.time_utils import now_ist, is_market_open_ist
 
 
 def _check_risk_profile():
@@ -58,28 +58,22 @@ def _check_audit_files():
 
 
 def _check_feed():
-    sla_path = Path("logs/sla_check.json")
-    if not sla_path.exists():
-        return False, ["sla_check_missing"]
-    try:
-        data = json.loads(sla_path.read_text())
-    except Exception:
-        return False, ["sla_check_unreadable"]
-    max_age = float(getattr(cfg, "LIVE_MAX_QUOTE_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
-    max_depth_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", max_age))
-    depth_lag = data.get("depth_lag_sec")
-    tick_lag = data.get("tick_lag_sec")
-    depth_msgs = data.get("depth_msgs_last_min", 0)
-    tick_msgs = data.get("tick_msgs_last_min", 0)
+    from core.freshness_sla import get_freshness_status
+    data = get_freshness_status(force=False)
+    max_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+    max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 2.0))
+    market_open = bool(data.get("market_open", is_market_open_ist()))
+    depth_lag = (data.get("depth") or {}).get("age_sec")
+    tick_lag = (data.get("ltp") or {}).get("age_sec")
+    if not market_open:
+        return True, []
     if depth_lag is None:
-        if depth_msgs <= 0:
-            return False, ["depth_feed_stale"]
-    elif depth_lag > max_depth_age:
+        return False, ["depth_feed_stale"]
+    if depth_lag > max_depth_age:
         return False, ["depth_feed_stale"]
     if tick_lag is None:
-        if tick_msgs <= 0:
-            return False, ["tick_feed_stale"]
-    elif tick_lag > max_age:
+        return False, ["tick_feed_stale"]
+    if tick_lag > max_age:
         return False, ["tick_feed_stale"]
     return True, []
 

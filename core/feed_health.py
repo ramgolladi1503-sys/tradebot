@@ -4,6 +4,7 @@ from pathlib import Path
 
 from config import config as cfg
 from core.time_utils import is_market_open_ist, now_ist
+from core.freshness_sla import get_freshness_status
 from core.incidents import trigger_feed_stale
 
 
@@ -26,40 +27,15 @@ def _save_state(state: dict) -> None:
 
 
 def get_feed_health():
-    if not SLA_PATH.exists():
-        return {"ok": False, "reason": "sla_check_missing"}
-    try:
-        data = json.loads(SLA_PATH.read_text())
-    except Exception:
-        return {"ok": False, "reason": "sla_check_unreadable"}
-    max_tick = float(getattr(cfg, "SLA_MAX_TICK_LAG_SEC", 120))
-    max_depth = float(getattr(cfg, "SLA_MAX_DEPTH_LAG_SEC", 120))
-    tick_lag = data.get("tick_lag_sec")
-    depth_lag = data.get("depth_lag_sec")
-    tick_last_epoch = data.get("tick_last_epoch")
-    depth_last_epoch = data.get("depth_last_epoch")
-    tick_msgs = data.get("tick_msgs_last_min", 0)
-    depth_msgs = data.get("depth_msgs_last_min", 0)
-    reasons = []
-    if tick_last_epoch is None:
-        reasons.append("epoch_missing:tick")
-    if depth_last_epoch is None:
-        reasons.append("epoch_missing:depth")
-    if tick_lag is None and tick_msgs <= 0:
-        reasons.append("tick_feed_stale")
-    elif tick_lag is not None and tick_lag > max_tick:
-        reasons.append("tick_feed_stale")
-    if depth_lag is None and depth_msgs <= 0:
-        reasons.append("depth_feed_stale")
-    elif depth_lag is not None and depth_lag > max_depth:
-        reasons.append("depth_feed_stale")
+    freshness = get_freshness_status(force=False)
     return {
-        "ok": len(reasons) == 0,
-        "reasons": reasons,
-        "tick_lag": tick_lag,
-        "depth_lag": depth_lag,
-        "tick_msgs_last_min": tick_msgs,
-        "depth_msgs_last_min": depth_msgs,
+        "ok": freshness.get("ok"),
+        "reasons": freshness.get("reasons") or [],
+        "market_open": freshness.get("market_open"),
+        "tick_lag": (freshness.get("ltp") or {}).get("age_sec"),
+        "depth_lag": (freshness.get("depth") or {}).get("age_sec"),
+        "tick_msgs_last_min": None,
+        "depth_msgs_last_min": None,
     }
 
 

@@ -2,11 +2,15 @@ import time
 import json
 from pathlib import Path
 from config import config as cfg
+from core.execution.chokepoint import ApprovalMissingOrInvalid, require_approval_or_abort
 from core.execution_engine import ExecutionEngine
 from core.paper_fill_simulator import PaperFillSimulator
 from core.trade_store import insert_execution_stat
 from core.fill_quality import log_fill_quality
 from core.execution_quality import execution_quality_score
+from core.orders.order_intent import OrderIntent
+from core.readiness_gate import run_readiness_check
+from core.freshness_sla import get_freshness_status
 
 class ExecutionRouter:
     """
@@ -30,6 +34,53 @@ class ExecutionRouter:
                 "slippage": None,
                 "reason_if_aborted": "non_tradable" if not reasons else f"non_tradable:{'|'.join(reasons)}",
             }
+        mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+        readiness_enabled = bool(
+            getattr(cfg, "ENFORCE_READINESS_ON_EXECUTION", getattr(cfg, "READINESS_ENFORCE_ON_EXEC", False))
+        )
+        enforce_readiness = readiness_enabled and (
+            mode == "LIVE" or (mode == "PAPER" and bool(getattr(cfg, "READINESS_ENFORCE_PAPER", False)))
+        )
+        if enforce_readiness:
+            readiness = run_readiness_check(write_log=False)
+            can_trade = bool(readiness.get("can_trade", readiness.get("ready", False)))
+            if not can_trade:
+                blockers = list(readiness.get("blockers") or readiness.get("reasons") or [])
+                state = str(readiness.get("state", "BLOCKED"))
+                reason = f"readiness_gate_fail:{state}"
+                if blockers:
+                    reason = f"{reason}:{'|'.join(blockers)}"
+                self._record_intent(trade, bid, ask, volume, depth=depth, note=reason)
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": reason,
+                    "readiness_state": state,
+                    "readiness_blockers": blockers,
+                }
+            freshness = get_freshness_status(force=False)
+            if bool(freshness.get("market_open")) and not bool(freshness.get("ok")):
+                reasons = list(freshness.get("reasons") or [])
+                reason = "freshness_sla_failed" if not reasons else f"freshness_sla_failed:{'|'.join(reasons)}"
+                self._record_intent(trade, bid, ask, volume, depth=depth, note=reason)
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": reason,
+                    "freshness_state": freshness.get("state"),
+                    "freshness_reasons": reasons,
+                }
+        order_intent = OrderIntent.from_trade(
+            trade,
+            mode=mode,
+            default_exchange=str(getattr(trade, "exchange", "NFO") or "NFO"),
+            default_product=str(getattr(trade, "product", "MIS") or "MIS"),
+        )
+        payload_hash = order_intent.order_intent_hash()
         if cfg.EXECUTION_MODE == "SIM":
             # record intent even in SIM mode
             self._record_intent(trade, bid, ask, volume, depth=depth, note="sim intent")
@@ -64,6 +115,24 @@ class ExecutionRouter:
                     "fill_price": None,
                     "slippage": None,
                     "reason_if_aborted": "invalid_limit_price",
+                }
+            try:
+                require_approval_or_abort(
+                    order_intent,
+                    mode=mode,
+                    now=time.time(),
+                    approver=getattr(trade, "approved_by", None),
+                    ttl=int(getattr(cfg, "ORDER_APPROVAL_TTL_SEC", getattr(cfg, "APPROVAL_TTL_SEC", 600))),
+                )
+            except ApprovalMissingOrInvalid as exc:
+                self._record_intent(trade, bid, ask, volume, depth=depth, note=f"manual_approval_blocked:{exc.reason}")
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": exc.reason,
+                    "approval_payload_hash": payload_hash,
                 }
             start_ts = time.time()
             filled, price, report = self._simulate_limit(
@@ -123,6 +192,24 @@ class ExecutionRouter:
                     "slippage": None,
                     "reason_if_aborted": "invalid_limit_price",
                 }
+            try:
+                require_approval_or_abort(
+                    order_intent,
+                    mode=mode,
+                    now=time.time(),
+                    approver=getattr(trade, "approved_by", None),
+                    ttl=int(getattr(cfg, "ORDER_APPROVAL_TTL_SEC", getattr(cfg, "APPROVAL_TTL_SEC", 600))),
+                )
+            except ApprovalMissingOrInvalid as exc:
+                self._record_intent(trade, bid, ask, volume, depth=depth, note=f"manual_approval_blocked:{exc.reason}")
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": exc.reason,
+                    "approval_payload_hash": payload_hash,
+                }
             start_ts = time.time()
             filled, price, report = self.paper_sim.simulate(
                 trade,
@@ -165,6 +252,24 @@ class ExecutionRouter:
                     "fill_price": None,
                     "slippage": None,
                     "reason_if_aborted": "live_placement_disabled",
+                }
+            try:
+                require_approval_or_abort(
+                    order_intent,
+                    mode=mode,
+                    now=time.time(),
+                    approver=getattr(trade, "approved_by", None),
+                    ttl=int(getattr(cfg, "ORDER_APPROVAL_TTL_SEC", getattr(cfg, "APPROVAL_TTL_SEC", 600))),
+                )
+            except ApprovalMissingOrInvalid as exc:
+                self._record_intent(trade, bid, ask, volume, depth=depth, note=f"manual_approval_blocked:{exc.reason}")
+                return False, None, {
+                    "decision_mid": None,
+                    "decision_spread": None,
+                    "fill_price": None,
+                    "slippage": None,
+                    "reason_if_aborted": exc.reason,
+                    "approval_payload_hash": payload_hash,
                 }
             # TODO: integrate actual broker order placement
             self._record_intent(trade, bid, ask, volume, depth=depth, note="live placement requested")

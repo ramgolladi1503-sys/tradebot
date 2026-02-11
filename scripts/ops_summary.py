@@ -8,6 +8,7 @@ import runpy
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 from config import config as cfg
+from core.freshness_sla import get_freshness_status
 
 
 def _read_json(path: Path):
@@ -33,19 +34,21 @@ def _tail_jsonl(path: Path, n: int = 5):
         return []
 
 
-def _last_epoch(conn, table):
-    try:
-        row = conn.execute(f"SELECT MAX(timestamp_epoch) FROM {table}").fetchone()
-        return float(row[0]) if row and row[0] is not None else None
-    except Exception:
-        return None
-
-
 def _count_last_min(conn, table, now_epoch):
     try:
+        cutoff = float(now_epoch) - 60.0
         row = conn.execute(
-            f"SELECT COUNT(*) FROM {table} WHERE timestamp_epoch >= ?",
-            (now_epoch - 60.0,),
+            f"""
+            SELECT COUNT(*) FROM {table}
+            WHERE (
+                CASE
+                    WHEN timestamp_epoch > 1e15 THEN timestamp_epoch / 1000000.0
+                    WHEN timestamp_epoch > 1e12 THEN timestamp_epoch / 1000.0
+                    ELSE timestamp_epoch
+                END
+            ) >= ?
+            """,
+            (cutoff,),
         ).fetchone()
         return int(row[0]) if row else 0
     except Exception:
@@ -58,13 +61,13 @@ def main():
         raise SystemExit("trades.db not found")
     conn = sqlite3.connect(db)
     now_epoch = time.time()
-    tick_last = _last_epoch(conn, "ticks")
-    depth_last = _last_epoch(conn, "depth_snapshots")
-    tick_lag = (now_epoch - tick_last) if tick_last is not None else None
-    depth_lag = (now_epoch - depth_last) if depth_last is not None else None
     tick_msgs = _count_last_min(conn, "ticks", now_epoch)
     depth_msgs = _count_last_min(conn, "depth_snapshots", now_epoch)
     conn.close()
+
+    freshness = get_freshness_status(force=True)
+    tick_lag = (freshness.get("ltp") or {}).get("age_sec")
+    depth_lag = (freshness.get("depth") or {}).get("age_sec")
 
     print("Ops Summary")
     print("Feed Health")

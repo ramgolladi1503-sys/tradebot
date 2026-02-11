@@ -52,8 +52,8 @@ start_bg() {
   echo "$name started (pid $!)"
 }
 
-start_bg "depth_ws" "$PYTHON_BIN" "$ROOT/scripts/start_depth_ws.py"
 start_bg "main" "$PYTHON_BIN" "$ROOT/main.py"
+start_bg "scheduler" "$PYTHON_BIN" "$ROOT/scripts/scheduler.py"
 if lsof -ti tcp:"$PORT" >/dev/null 2>&1; then
   echo "Port $PORT is already in use. Set DASH_PORT to a free port and re-run." >&2
   exit 1

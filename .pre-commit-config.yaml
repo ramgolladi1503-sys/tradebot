@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks-secret-scan
+        entry: gitleaks detect --source . --no-git --redact --exit-code 1
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

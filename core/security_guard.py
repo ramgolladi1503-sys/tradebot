@@ -114,11 +114,23 @@ def enforce_no_repo_token_artifacts(repo_root: Path | str) -> None:
 def resolve_kite_access_token(repo_root: Path | str, require_token: bool = True) -> str:
     enforce_no_repo_token_artifacts(repo_root)
     env_token = os.getenv("KITE_ACCESS_TOKEN", "").strip()
-    if env_token:
-        return env_token
     local_token = read_local_kite_access_token().strip()
+    if env_token and local_token:
+        if env_token != local_token:
+            raise RuntimeError(
+                "[SECURITY_GUARD] kite_token_source_conflict\n"
+                "Both KITE_ACCESS_TOKEN and local token store are set with different values.\n"
+                "Use a single source of truth.\n"
+                "Remediation:\n"
+                f"  1) Preferred: keep local token at {local_token_path()}\n"
+                "  2) Unset shell/env KITE_ACCESS_TOKEN or update it to match local token\n"
+                "  3) Re-run startup"
+            )
+        return local_token
     if local_token:
         return local_token
+    if env_token:
+        return env_token
     if require_token:
         raise RuntimeError(
             "[SECURITY_GUARD] missing_kite_access_token\n"

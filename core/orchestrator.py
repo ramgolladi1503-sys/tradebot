@@ -36,16 +36,16 @@ from ml.strategy_decay_predictor import generate_decay_report, telegram_summary
 from core.kite_client import kite_client
 from core import model_registry
 from core.strategy_allocator import StrategyAllocator
-from core.review_queue import add_to_queue, is_approved, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH
+from core.review_queue import add_to_queue, approval_status, order_payload_hash, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH
 from core.blocked_tracker import BlockedTradeTracker
 from core.trade_store import insert_execution_stat, update_trailing_state, insert_trail_event, insert_trade_leg, update_trade_close
 from core.depth_store import depth_store
-from core.kite_depth_ws import start_depth_ws
+from core.kite_depth_ws import start_depth_ws, restart_depth_ws
 from core.auto_tune import maybe_auto_tune
 from core import risk_halt
 from core.decision_logger import log_decision, update_execution, update_outcome
 from core.risk_utils import to_pct
-from core.time_utils import now_ist, now_utc_epoch
+from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
 from core.meta_model import MetaModel
 from core.decision_trace import decision_config_snapshot
 from core.reports.daily_audit import build_daily_audit, write_daily_audit_placeholder
@@ -54,16 +54,22 @@ from core.orchestrator_parts.cycle import run_live_monitoring
 from core.orchestrator_parts import data as orchestrator_data
 from core.orchestrator_parts import decisions as orchestrator_decisions
 from core.orchestrator_parts import finalize as orchestrator_finalize
+from core.session_guard import auto_clear_risk_halt_if_safe
 from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
 from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
+from core.review_packet import build_review_packet, format_review_packet
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
         """
         Main orchestrator initializing all components
         """
+        try:
+            auto_clear_risk_halt_if_safe()
+        except Exception as exc:
+            print(f"[SessionGuard] startup check error: {exc}")
         self.total_capital = total_capital
         self.poll_interval = poll_interval
 
@@ -253,16 +259,14 @@ class Orchestrator:
         return True, []
 
     def _pilot_feed_ok(self):
-        sla_path = Path("logs/sla_check.json")
-        if not sla_path.exists():
-            return False, ["sla_check_missing"]
-        try:
-            data = json.loads(sla_path.read_text())
-        except Exception:
-            return False, ["sla_check_unreadable"]
-        max_age = float(getattr(cfg, "LIVE_MAX_QUOTE_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
-        depth_lag = data.get("depth_lag_sec")
-        tick_lag = data.get("tick_lag_sec")
+        from core.freshness_sla import get_freshness_status
+        data = get_freshness_status(force=False)
+        max_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+        depth_lag = (data.get("depth") or {}).get("age_sec")
+        tick_lag = (data.get("ltp") or {}).get("age_sec")
+        market_open = bool(data.get("market_open", is_market_open_ist()))
+        if not market_open:
+            return True, []
         if depth_lag is None or depth_lag > max_age:
             return False, ["depth_feed_stale"]
         if tick_lag is not None and tick_lag > max_age:
@@ -463,6 +467,10 @@ class Orchestrator:
                     feed_health = check_feed_health()
                     live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
                     pilot_mode = bool(getattr(cfg, "LIVE_PILOT_MODE", False))
+                    reasons = set(feed_health.get("reasons") or [])
+                    if is_market_open_ist() and (live_mode or pilot_mode):
+                        if "tick_feed_stale" in reasons or "depth_feed_stale" in reasons:
+                            restart_depth_ws(reason="sla:" + ",".join(sorted(reasons)))
                     tripped, cb_reason = self.circuit_breaker.observe_feed_health(bool(feed_health.get("ok", False)))
                     if tripped:
                         cycle_reason = cb_reason or "CB_FEED_UNHEALTHY"
@@ -909,7 +917,9 @@ class Orchestrator:
                             pass
 
                     # Manual approval gate (strong trades)
-                    if cfg.MANUAL_APPROVAL and not is_approved(trade.trade_id):
+                    approval_payload_hash = order_payload_hash(trade)
+                    approved, approval_reason = approval_status(trade.trade_id, payload_hash=approval_payload_hash)
+                    if cfg.MANUAL_APPROVAL and not approved:
                         # Pre-trade validation report
                         rr = None
                         try:
@@ -925,11 +935,44 @@ class Orchestrator:
                             "pretrade_rr": round(rr, 2) if rr is not None else None,
                             "pretrade_rr_ok": rr is not None and rr >= 1.2,
                             "pretrade_time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "approval_payload_hash": approval_payload_hash,
+                            "approval_reason": approval_reason,
                         }
+                        review_packet = build_review_packet(
+                            trade,
+                            market_data=market_data,
+                            risk_policy={
+                                "position_sizing_cap": getattr(cfg, "MAX_QTY", None),
+                                "time_window_validity_sec": getattr(trade, "validity_sec", None),
+                                "allow_reason": "manual_approval_required",
+                            },
+                        )
+                        review_packet_text = format_review_packet(review_packet)
+                        validation["review_packet"] = review_packet
+                        validation["review_packet_text"] = review_packet_text
                         add_to_queue(trade, extra=dict(validation, **{"tier": "MAIN"}))
                         print(f"[ReviewQueue] Trade queued: {trade.trade_id}")
                         try:
-                            update_execution(trade.trade_id, {"veto_reasons": ["manual_approval_pending"]})
+                            send_telegram_message(review_packet_text)
+                        except Exception:
+                            pass
+                        try:
+                            audit_append(
+                                {
+                                    "event": "APPROVAL_REVIEW_PACKET",
+                                    "trade_id": trade.trade_id,
+                                    "symbol": trade.symbol,
+                                    "strategy": trade.strategy,
+                                    "review_packet": review_packet,
+                                    "approval_payload_hash": approval_payload_hash,
+                                    "approval_reason": approval_reason,
+                                    "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                                }
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            update_execution(trade.trade_id, {"veto_reasons": [f"manual_approval_pending:{approval_reason}"]})
                         except Exception:
                             pass
                         continue
@@ -1537,24 +1580,37 @@ class Orchestrator:
             tracker.save("logs/suggestion_strategy_perf.json")
 
     def _start_depth_ws(self):
-        try:
-            if not cfg.KITE_USE_DEPTH:
-                return
-            # Resolve tokens from option chain instruments (preferred)
-            tokens = []
-            md_list = fetch_live_market_data()
-            for md in md_list:
-                for opt in md.get("option_chain", []):
-                    if opt.get("instrument_token"):
-                        tokens.append(opt.get("instrument_token"))
-            tokens = list(set(tokens))
-            if not tokens:
-                tokens = kite_client.resolve_tokens(cfg.SYMBOLS, exchange="NFO")
-            if not tokens:
-                return
-            start_depth_ws(tokens)
-        except Exception:
-            pass
+        if not cfg.KITE_USE_DEPTH:
+            return
+        kite_client.ensure()
+        ws_client = kite_client.kite
+        if not ws_client:
+            detail = getattr(kite_client, "last_init_error", None) or "kite_not_initialized"
+            raise RuntimeError(f"kite_depth_ws_init_failed:{detail}")
+        from core.auth_health import get_kite_auth_health
+        auth_payload = get_kite_auth_health(force=True)
+        if not auth_payload.get("ok"):
+            raise RuntimeError(
+                f"kite_depth_ws_profile_failed:{auth_payload.get('error')} | "
+                "Check: (1) cfg/env api_key present (2) token not expired (3) token generated using same api_key."
+            )
+        user_id = str((auth_payload or {}).get("user_id", "") or "")
+        print(f"[KITE_WS] profile verified user_last4={user_id[-4:] if user_id else 'NONE'}")
+        # Resolve a minimal depth subscription universe (index + ATM window).
+        from core.kite_depth_ws import build_depth_subscription_tokens
+        tokens, _resolution = build_depth_subscription_tokens(list(cfg.SYMBOLS))
+        if not tokens:
+            fallback = []
+            for sym in cfg.SYMBOLS:
+                tok = kite_client.resolve_index_token(sym)
+                if tok:
+                    fallback.append(tok)
+            tokens = list(dict.fromkeys(fallback))
+            if tokens:
+                print(f"[KITE_WS] fallback index tokens={len(tokens)}")
+        if not tokens:
+            raise RuntimeError("kite_depth_ws_init_failed:no_tokens_resolved")
+        start_depth_ws(tokens, profile_verified=True)
 
     def _track_open_trade(self, trade, market_data):
         key = f"{trade.symbol}:{trade.instrument}"

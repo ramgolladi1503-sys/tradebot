@@ -12,6 +12,38 @@ def _infer_atm_strike(ltp, step):
 _PREV_OI = {}
 _PREV_LTP = {}
 
+
+def _coerce_expiry_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    if "T" in text:
+        text = text.split("T", 1)[0]
+    try:
+        return datetime.fromisoformat(text).date()
+    except Exception:
+        return None
+
+
+def _choose_expiry(available_expiries, preferred_expiry):
+    normalized = sorted({exp for exp in (_coerce_expiry_date(x) for x in available_expiries) if exp is not None})
+    preferred = _coerce_expiry_date(preferred_expiry)
+    if not normalized:
+        return None
+    if preferred in normalized:
+        return preferred
+    today = date.today()
+    future = [exp for exp in normalized if exp >= today]
+    if future:
+        return future[0]
+    return normalized[0]
+
 def _write_chain_snapshot(chain, symbol=None):
     try:
         import json
@@ -162,7 +194,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         expiry_type = getattr(cfg, "TERM_STRUCTURE_EXPIRY", "WEEKLY")
         def _exp_str(x):
             try:
-                return str(x)
+                return str(_coerce_expiry_date(x) or x)
             except Exception:
                 return ""
         # Prefer available expiry from instruments (per symbol/exchange)
@@ -170,7 +202,10 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         expiry = kite_client.next_available_expiry(symbol, exchange=exchange)
         if not expiry:
             expiry = next_expiry_by_type(expiry_type, symbol=symbol)
-        next_exp = next_expiry_after(expiry, expiry_type=expiry_type, symbol=symbol) if expiry else None
+        next_exp = None
+        expiry_for_term = _coerce_expiry_date(expiry)
+        if expiry_for_term:
+            next_exp = next_expiry_after(expiry_for_term, expiry_type=expiry_type, symbol=symbol)
         min_prem = getattr(cfg, "MIN_PREMIUM", 40)
         max_prem = getattr(cfg, "MAX_PREMIUM", 150)
 
@@ -181,14 +216,47 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             instruments = kite_client.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
             if not instruments:
                 raise ValueError("No instruments loaded")
-            expiry_date = expiry
+            seg_name = "BFO-OPT" if exchange == "BFO" else "NFO-OPT"
+            symbol_instruments = [
+                inst
+                for inst in instruments
+                if inst.get("name") == symbol and inst.get("segment") == seg_name
+            ]
+            if symbol.upper() == "SENSEX" and not symbol_instruments:
+                print(
+                    "[OPTION_CHAIN_WARN]"
+                    f" symbol={symbol} exchange={exchange} segment={seg_name} instruments=0 -> unsupported, skipping"
+                )
+                return []
+            available_expiries = sorted(
+                {
+                    str(exp)
+                    for exp in (
+                        _coerce_expiry_date(inst.get("expiry"))
+                        for inst in symbol_instruments
+                    )
+                    if exp is not None
+                }
+            )
+            expiry_date = _choose_expiry(
+                [inst.get("expiry") for inst in symbol_instruments],
+                expiry,
+            )
+            if symbol.upper() in {"NIFTY", "BANKNIFTY", "SENSEX"}:
+                print(
+                    "[OPTION_CHAIN_DEBUG]"
+                    f" symbol={symbol}"
+                    f" exchange={exchange}"
+                    f" total_opt_instruments={len(symbol_instruments)}"
+                    f" available_expiries={available_expiries}"
+                    f" chosen_expiry={str(expiry_date) if expiry_date else None}"
+                )
+            if expiry_date is None:
+                raise ValueError(f"No expiry available for {symbol}")
+            next_exp = next_expiry_after(expiry_date, expiry_type=expiry_type, symbol=symbol) if expiry_date else None
             expiry_date_str = _exp_str(expiry_date)
-            candidates = []
-            for inst in instruments:
-                if inst.get("name") != symbol:
-                    continue
-                if inst.get("segment") != ("BFO-OPT" if exchange == "BFO" else "NFO-OPT"):
-                    continue
+            opt_rows = []
+            for inst in symbol_instruments:
                 if _exp_str(inst.get("expiry")) != expiry_date_str:
                     continue
                 strike = inst.get("strike")
@@ -196,17 +264,25 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     continue
                 if abs(strike - atm) > strikes_around * step:
                     continue
-                candidates.append(inst)
+                opt_rows.append(inst)
 
-            tradingsymbols = [f"{exchange}:{c['tradingsymbol']}" for c in candidates]
+            # Fallback: if strict ATM window is empty, choose nearest strikes by distance to ATM.
+            if not opt_rows:
+                expiry_rows = [
+                    inst for inst in symbol_instruments
+                    if _exp_str(inst.get("expiry")) == expiry_date_str and inst.get("strike") is not None
+                ]
+                if expiry_rows:
+                    unique_strikes = sorted({float(inst.get("strike")) for inst in expiry_rows})
+                    nearest = sorted(unique_strikes, key=lambda strike: abs(strike - atm))[: (2 * strikes_around + 1)]
+                    nearest_set = set(nearest)
+                    opt_rows = [inst for inst in expiry_rows if float(inst.get("strike")) in nearest_set]
+
+            tradingsymbols = [f"{exchange}:{c['tradingsymbol']}" for c in opt_rows]
             # For term structure, collect next expiry too
             next_candidates = []
             if cfg.ENABLE_TERM_STRUCTURE and next_exp:
-                for inst in instruments:
-                    if inst.get("name") != symbol:
-                        continue
-                    if inst.get("segment") != ("BFO-OPT" if exchange == "BFO" else "NFO-OPT"):
-                        continue
+                for inst in symbol_instruments:
                     if _exp_str(inst.get("expiry")) != _exp_str(next_exp):
                         continue
                     strike = inst.get("strike")
@@ -217,10 +293,10 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     next_candidates.append(inst)
                 tradingsymbols += [f"{exchange}:{c['tradingsymbol']}" for c in next_candidates]
             quotes = kite_client.quote(tradingsymbols) if tradingsymbols else {}
-            if not candidates or not quotes:
+            if not opt_rows or not quotes:
                 raise ValueError("No option quotes available")
             chain = []
-            for inst in candidates:
+            for inst in opt_rows:
                 ts = f"{exchange}:{inst['tradingsymbol']}"
                 q = quotes.get(ts, {})
                 ltp_opt = q.get("last_price", 0) or 0

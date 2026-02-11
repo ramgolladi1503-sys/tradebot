@@ -13,6 +13,35 @@ def now_utc_epoch() -> float:
     return datetime.now(timezone.utc).timestamp()
 
 
+def normalize_epoch_seconds(value: Any) -> Optional[float]:
+    """
+    Normalize epoch-like values to UTC seconds.
+
+    Accepts:
+    - seconds epoch (float/int)
+    - milliseconds epoch (int/float)
+    - microseconds epoch (int/float)
+    - datetime / ISO-8601 strings (via _coerce_dt_utc)
+    """
+    if value is None:
+        return None
+    dt_utc = _coerce_dt_utc(value)
+    if dt_utc is not None:
+        return dt_utc.timestamp()
+    try:
+        raw = float(value)
+    except Exception:
+        return None
+    if raw <= 0:
+        return None
+    abs_raw = abs(raw)
+    if abs_raw >= 1e15:
+        raw = raw / 1_000_000.0
+    elif abs_raw >= 1e12:
+        raw = raw / 1_000.0
+    return raw
+
+
 def now_ist() -> datetime:
     return datetime.now(timezone.utc).astimezone(IST_TZ)
 
@@ -21,6 +50,31 @@ def to_ist(dt_utc: datetime) -> datetime:
     if dt_utc.tzinfo is None:
         dt_utc = dt_utc.replace(tzinfo=timezone.utc)
     return dt_utc.astimezone(IST_TZ)
+
+
+def ist_date_key(now: Optional[datetime] = None) -> str:
+    now = now or now_ist()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=IST_TZ)
+    return now.date().isoformat()
+
+
+def within_window(
+    now: Optional[datetime] = None,
+    target_hhmm: str = "09:00",
+    grace_minutes: int = 10,
+) -> bool:
+    now = now or now_ist()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=IST_TZ)
+    try:
+        hh, mm = [int(x) for x in target_hhmm.split(":", 1)]
+    except Exception:
+        hh, mm = 9, 0
+    target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if now < target:
+        return False
+    return (now - target).total_seconds() <= max(0, grace_minutes) * 60
 
 
 def _coerce_dt_utc(ts: Any) -> Optional[datetime]:
@@ -138,3 +192,13 @@ def is_today_local(ts: Any, now: Optional[datetime] = None) -> bool:
 
 def age_minutes_local(ts: Any, now: Optional[datetime] = None) -> Optional[float]:
     return age_minutes_ist(ts, now=now)
+
+# Backward-compat alias (some modules import ist_now)
+try:
+    ist_now  # noqa: F401
+except NameError:
+    try:
+        ist_now = now_ist  # type: ignore
+    except NameError:
+        def ist_now() -> datetime:
+            return datetime.now(timezone.utc).astimezone(IST_TZ)

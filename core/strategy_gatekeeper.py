@@ -75,7 +75,10 @@ class StrategyGatekeeper:
                 reasons.append("cross_asset_required_stale")
                 return GateResult(False, None, reasons)
             if stale_optional:
-                reasons.append("cross_asset_optional_stale")
+                if require_x:
+                    reasons.append("cross_asset_optional_stale")
+                else:
+                    reasons.append("cross_asset_optional_warn")
         except Exception as exc:
             print(f"[GATEKEEPER_ERROR] cross_asset_check_failed err={exc}")
             reasons.append("cross_asset_check_error")

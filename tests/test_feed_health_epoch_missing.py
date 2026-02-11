@@ -1,22 +1,22 @@
-import json
-from pathlib import Path
+import sqlite3
 
-import core.feed_health as feed_health
+from config import config as cfg
+from core import freshness_sla
 
 
 def test_feed_health_epoch_missing(tmp_path, monkeypatch):
-    sla_path = tmp_path / "sla_check.json"
-    payload = {
-        "tick_last_epoch": None,
-        "depth_last_epoch": None,
-        "tick_lag_sec": None,
-        "depth_lag_sec": None,
-        "tick_msgs_last_min": 0,
-        "depth_msgs_last_min": 0,
-    }
-    sla_path.write_text(json.dumps(payload))
-    monkeypatch.setattr(feed_health, "SLA_PATH", sla_path)
-    health = feed_health.get_feed_health()
-    assert not health["ok"]
-    assert "epoch_missing:tick" in health["reasons"]
-    assert "epoch_missing:depth" in health["reasons"]
+    db_path = tmp_path / "trades.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE IF NOT EXISTS ticks (instrument_token INTEGER, timestamp_epoch REAL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS depth_snapshots (instrument_token INTEGER, timestamp_epoch REAL)")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
+    monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
+    freshness_sla._reset_cache_for_tests()
+
+    payload = freshness_sla.get_freshness_status(force=True)
+    assert payload["ok"] is False
+    assert "ltp_missing" in payload["reasons"]
+    assert "depth_missing" in payload["reasons"]
