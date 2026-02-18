@@ -41,8 +41,8 @@ models/*.pkl
 # Local test caches
 .hypothesis/
 
-# Generated artifacts
-reports/walk_forward/
+# Generated artifacts (walk forward outputs)
+reports/walk_forward/**
 reports/*_latest.*
 
 # Runtime locks
