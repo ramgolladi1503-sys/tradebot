@@ -47,3 +47,10 @@ reports/*_latest.*
 
 # Runtime locks
 trading_bot_locks/*.lock
+
+# Runtime locks (note leading dot dir)
+.trading_bot_locks/*.lock
+
+# Generated artifacts (walk-forward outputs)
+reports/walk_forward/**
+reports/*_latest.*
