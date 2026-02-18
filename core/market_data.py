@@ -17,7 +17,7 @@ from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
 from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
-from core.session_calendar import minutes_since_open, is_open
+from core.session_calendar import minutes_since_open as session_minutes_since_open, is_open
 from core.time_sanity import check_market_data_time_sanity
 
 from core.kite_client import kite_client
@@ -43,6 +43,8 @@ _LAST_GOOD_LTP = {}
 _REGIME_LAST_PRIMARY = {}
 _REGIME_TRANSITIONS = {}
 _LAST_REGIME_SNAPSHOT = {}
+_INDICATOR_LAST_UPDATE_EPOCH = {}
+_INSUFFICIENT_OHLC_WARNED = set()
 
 _REGIME_MODEL = None
 _NEWS_ENCODER = None
@@ -53,6 +55,254 @@ _CROSS_ASSET = None
 # -------------------------------
 # Market Data Functions
 # -------------------------------
+
+
+def _indicator_freshness_status(
+    required_inputs_ok: bool,
+    last_update_epoch: float | None,
+    stale_sec: float | None = None,
+    now_epoch: float | None = None,
+    never_computed_age_sec: float | None = None,
+):
+    """
+    Indicator freshness is based on last successful indicator update time.
+    """
+    now_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
+    stale_limit = float(stale_sec if stale_sec is not None else getattr(cfg, "INDICATOR_STALE_SEC", 120))
+    never_age = float(
+        never_computed_age_sec
+        if never_computed_age_sec is not None
+        else getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9)
+    )
+    never_computed = not isinstance(last_update_epoch, (int, float))
+    if never_computed:
+        age_sec = max(never_age, stale_limit + 1.0)
+    else:
+        age_sec = max(0.0, now_epoch - float(last_update_epoch))
+    stale = age_sec > stale_limit
+    ok = bool(required_inputs_ok) and (not never_computed) and (not stale)
+    reason = "indicators_never_computed" if never_computed else ("indicators_stale" if stale else None)
+    return {"age_sec": age_sec, "stale": stale, "ok": ok, "never_computed": never_computed, "reason": reason}
+
+
+def _should_require_live_ltp(
+    execution_mode: str | None = None,
+    require_live_quotes: bool | None = None,
+) -> bool:
+    mode = str(execution_mode if execution_mode is not None else getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    require_quotes = bool(
+        getattr(cfg, "REQUIRE_LIVE_QUOTES", True)
+        if require_live_quotes is None
+        else require_live_quotes
+    )
+    return (mode == "LIVE") or require_quotes
+
+
+def _apply_indicator_quote_policy(
+    indicators_ok: bool,
+    ltp,
+    ltp_source: str | None,
+    execution_mode: str | None = None,
+    require_live_quotes: bool | None = None,
+) -> bool:
+    """
+    Final indicator gate policy:
+    - always require indicators_ok from indicator computation/freshness
+    - always require positive LTP
+    - require ltp_source=live only when LIVE mode OR REQUIRE_LIVE_QUOTES=true
+    """
+    if not bool(indicators_ok):
+        return False
+    try:
+        if ltp is None or float(ltp) <= 0.0:
+            return False
+    except Exception:
+        return False
+    require_live_ltp = _should_require_live_ltp(
+        execution_mode=execution_mode,
+        require_live_quotes=require_live_quotes,
+    )
+    if require_live_ltp and str(ltp_source or "").lower() != "live":
+        return False
+    return True
+
+
+def _derive_unstable_reasons(
+    *,
+    regime_probs: dict | None,
+    regime_entropy: float | None,
+    regime_transition_rate: float | None,
+    indicators_ok: bool,
+    ohlc_bars_count: int,
+    min_bars: int,
+    missing_inputs: list[str] | None = None,
+    model_unstable_flag: bool = False,
+):
+    """
+    Build explicit reasons for regime instability.
+    Strong confidence (very high max-probability + very low entropy) clears
+    probabilistic instability reasons, but keeps structural reasons.
+    """
+    reasons = []
+    probs = regime_probs or {}
+    try:
+        max_prob = max(float(v) for v in probs.values()) if probs else 0.0
+    except Exception:
+        max_prob = 0.0
+    try:
+        entropy = float(regime_entropy or 0.0)
+    except Exception:
+        entropy = 0.0
+    try:
+        transition_rate = float(regime_transition_rate or 0.0)
+    except Exception:
+        transition_rate = 0.0
+    try:
+        bars = int(ohlc_bars_count)
+    except Exception:
+        bars = 0
+    try:
+        needed = int(min_bars)
+    except Exception:
+        needed = int(getattr(cfg, "OHLC_MIN_BARS", 30))
+
+    missing = {str(x) for x in (missing_inputs or []) if x}
+    if bars < needed:
+        reasons.append("warmup_incomplete")
+        reasons.append("bars_insufficient")
+    if not bool(indicators_ok):
+        reasons.append("indicators_missing")
+    if "indicators_stale" in missing:
+        reasons.append("indicators_stale")
+    if "indicators_never_computed" in missing:
+        reasons.append("indicators_never_computed")
+
+    entropy_unstable = float(getattr(cfg, "REGIME_ENTROPY_UNSTABLE", 1.5))
+    transition_unstable = float(getattr(cfg, "REGIME_TRANSITION_RATE_MAX", 6.0))
+    prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
+    if entropy > entropy_unstable:
+        reasons.append("entropy_high")
+    if transition_rate > transition_unstable:
+        reasons.append("transition_rate_high")
+    if max_prob < prob_min:
+        reasons.append("regime_low_confidence")
+
+    if bool(model_unstable_flag) and not (entropy > entropy_unstable):
+        reasons.append("model_reported_unstable")
+
+    # Confidence override for clearly stable distributions.
+    strong_prob = float(getattr(cfg, "REGIME_STABLE_PROB_OVERRIDE_MIN", 0.99))
+    strong_entropy = float(getattr(cfg, "REGIME_STABLE_ENTROPY_OVERRIDE_MAX", 0.01))
+    if max_prob >= strong_prob and entropy <= strong_entropy:
+        probabilistic = {"entropy_high", "regime_low_confidence", "model_reported_unstable"}
+        reasons = [r for r in reasons if r not in probabilistic]
+
+    return list(dict.fromkeys(reasons))
+
+
+def _log_insufficient_ohlc_warning(symbol: str, bars_count: int, min_bars: int, reason: str) -> None:
+    """
+    Emit a single warning per symbol/reason per process to avoid log spam.
+    """
+    key = (str(symbol or "").upper(), str(reason))
+    if key in _INSUFFICIENT_OHLC_WARNED:
+        return
+    _INSUFFICIENT_OHLC_WARNED.add(key)
+    payload = {
+        "event": "INSUFFICIENT_OHLC_BARS",
+        "warning": "insufficient OHLC bars",
+        "symbol": symbol,
+        "bars_count": int(bars_count),
+        "min_bars": int(min_bars),
+        "reason": reason,
+        "ts_epoch": now_utc_epoch(),
+        "ts_ist": now_ist().isoformat(),
+    }
+    try:
+        p = Path("logs/market_data_warnings.jsonl")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+
+
+def _warm_seed_windows_minutes() -> list[int]:
+    raw = str(getattr(cfg, "OHLC_WARM_SEED_WINDOWS_MIN", "120,240") or "120,240")
+    out = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            val = int(part)
+        except Exception:
+            continue
+        if val > 0 and val not in out:
+            out.append(val)
+    return out or [120, 240]
+
+
+def _warm_seed_ohlc_from_history(symbol: str, bars: list, min_bars: int):
+    """
+    Warm-seed minute OHLC bars when current buffer is insufficient.
+    Returns (bars, seeded_ok, reason_code).
+    """
+    if len(bars) >= int(min_bars):
+        return bars, True, None
+    try:
+        kite_client.ensure()
+    except Exception:
+        pass
+    kite_available = bool(getattr(kite_client, "kite", None))
+    if not kite_available:
+        _log_insufficient_ohlc_warning(
+            symbol=symbol,
+            bars_count=len(bars),
+            min_bars=min_bars,
+            reason="kite_api_unavailable",
+        )
+        return bars, False, "kite_api_unavailable"
+    try:
+        token = kite_client.resolve_index_token(symbol)
+        if not token:
+            _log_insufficient_ohlc_warning(
+                symbol=symbol,
+                bars_count=len(bars),
+                min_bars=min_bars,
+                reason="missing_index_token",
+            )
+            return bars, False, "missing_index_token"
+        last_reason = "historical_empty"
+        for window_min in _warm_seed_windows_minutes():
+            from_dt = now_ist() - timedelta(minutes=int(window_min))
+            to_dt = now_ist()
+            hist = kite_client.historical_data(token, from_dt, to_dt, interval="minute")
+            if not hist:
+                last_reason = "historical_empty"
+                continue
+            ohlc_buffer.seed_bars(symbol, hist)
+            bars = ohlc_buffer.get_bars(symbol)
+            if len(bars) >= int(min_bars):
+                return bars, True, None
+            last_reason = "seeded_but_still_insufficient"
+        if len(bars) < int(min_bars):
+            _log_insufficient_ohlc_warning(
+                symbol=symbol,
+                bars_count=len(bars),
+                min_bars=min_bars,
+                reason=last_reason,
+            )
+            return bars, False, last_reason
+        return bars, True, None
+    except Exception:
+        _log_insufficient_ohlc_warning(
+            symbol=symbol,
+            bars_count=len(bars),
+            min_bars=min_bars,
+            reason="historical_seed_error",
+        )
+        return bars, False, "historical_seed_error"
 
 def get_current_regime(symbol: str | None = None):
     """
@@ -341,7 +591,7 @@ def fetch_live_market_data():
         # minutes since open (used for ORB bias + day-type)
         try:
             now = now_ist()
-            minutes_since_open = minutes_since_open(now_dt=now, segment=segment)
+            minutes_since_open = session_minutes_since_open(now_dt=now, segment=segment)
             is_market_open = is_open(now_dt=now, segment=segment)
             today_local = now.date()
         except Exception:
@@ -371,22 +621,33 @@ def fetch_live_market_data():
 
         # Compute indicators from rolling OHLC buffer (no CSV dependency)
         indicators_ok = False
-        indicators_age_sec = None
+        indicators_age_sec = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
         candle_ts_epoch = None
+        indicator_last_update_epoch = _INDICATOR_LAST_UPDATE_EPOCH.get(symbol)
+        ohlc_bars_count = 0
+        min_bars = int(getattr(cfg, "OHLC_MIN_BARS", 30))
+        ohlc_last_bar_epoch = None
+        compute_indicators_error = None
+        missing_inputs = []
+        ohlc_seed_reason = None
         try:
             bars = ohlc_buffer.get_bars(symbol)
-            if len(bars) < getattr(cfg, "OHLC_MIN_BARS", 30) and cfg.KITE_USE_API:
+            if len(bars) < min_bars:
+                bars, _seeded_ok, ohlc_seed_reason = _warm_seed_ohlc_from_history(
+                    symbol=symbol,
+                    bars=bars,
+                    min_bars=min_bars,
+                )
+            ohlc_bars_count = len(bars)
+            if bars:
                 try:
-                    token = kite_client.resolve_index_token(symbol)
-                    if token:
-                        from_dt = now_ist() - timedelta(minutes=120)
-                        to_dt = now_ist()
-                        hist = kite_client.historical_data(token, from_dt, to_dt, interval="minute")
-                        if hist:
-                            ohlc_buffer.seed_bars(symbol, hist)
-                            bars = ohlc_buffer.get_bars(symbol)
+                    ohlc_last_bar_epoch = float(bars[-1].get("ts").timestamp())
                 except Exception:
-                    pass
+                    ohlc_last_bar_epoch = None
+            if ohlc_bars_count == 0:
+                missing_inputs.append("ohlc_buffer_empty")
+            elif ohlc_bars_count < min_bars:
+                missing_inputs.append("ohlc_buffer_insufficient")
             ind = compute_indicators(
                 bars,
                 vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
@@ -406,19 +667,59 @@ def fetch_live_market_data():
             if ind.get("vwap_slope") is not None:
                 vwap_slope = ind["vwap_slope"]
             last_ts = ind.get("last_ts")
+            required_inputs_ok = bool(ind.get("ok"))
             if last_ts:
-                indicators_age_sec = (now_ist() - last_ts).total_seconds()
                 try:
                     candle_ts_epoch = float(last_ts.timestamp())
                 except Exception:
                     candle_ts_epoch = None
-            indicators_ok = bool(ind.get("ok")) and (indicators_age_sec is None or indicators_age_sec <= getattr(cfg, "INDICATOR_STALE_SEC", 120))
-            if _DATA_CACHE.get(symbol, {}).get("ltp_source") != "live":
-                indicators_ok = False
-            if not ltp or ltp <= 0:
-                indicators_ok = False
-        except Exception:
+            if required_inputs_ok:
+                # Keep this epoch updated whenever indicators compute successfully.
+                # Prefer indicator timestamp; then last OHLC bar; finally "now" as conservative fallback.
+                indicator_last_update_epoch = (
+                    candle_ts_epoch
+                    if candle_ts_epoch is not None
+                    else (ohlc_last_bar_epoch if ohlc_last_bar_epoch is not None else now_utc_epoch())
+                )
+                _INDICATOR_LAST_UPDATE_EPOCH[symbol] = indicator_last_update_epoch
+            freshness = _indicator_freshness_status(
+                required_inputs_ok=required_inputs_ok,
+                last_update_epoch=indicator_last_update_epoch,
+            )
+            indicators_age_sec = freshness["age_sec"]
+            ltp_source = _DATA_CACHE.get(symbol, {}).get("ltp_source")
+            indicators_ok = _apply_indicator_quote_policy(
+                indicators_ok=freshness["ok"],
+                ltp=ltp,
+                ltp_source=ltp_source,
+                execution_mode=getattr(cfg, "EXECUTION_MODE", "SIM"),
+                require_live_quotes=getattr(cfg, "REQUIRE_LIVE_QUOTES", True),
+            )
+            if not required_inputs_ok:
+                missing_inputs.append("compute_indicators_not_ready")
+            if freshness.get("reason"):
+                missing_inputs.append(str(freshness["reason"]))
+            try:
+                if ltp is None or float(ltp) <= 0.0:
+                    missing_inputs.append("ltp_missing")
+            except Exception:
+                missing_inputs.append("ltp_missing")
+            if _should_require_live_ltp(
+                execution_mode=getattr(cfg, "EXECUTION_MODE", "SIM"),
+                require_live_quotes=getattr(cfg, "REQUIRE_LIVE_QUOTES", True),
+            ) and str(ltp_source or "").lower() != "live":
+                missing_inputs.append("ltp_not_live")
+        except Exception as exc:
             indicators_ok = False
+            indicators_age_sec = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
+            compute_indicators_error = f"{type(exc).__name__}:{exc}"
+            missing_inputs.append("compute_indicators_exception")
+            if indicator_last_update_epoch is None:
+                missing_inputs.append("indicators_never_computed")
+        if ohlc_seed_reason == "kite_api_unavailable" and ohlc_bars_count == 0:
+            # Explicit fail-closed reason when REST warm-start is not available.
+            missing_inputs = ["ohlc_buffer_empty"]
+        missing_inputs = list(dict.fromkeys(str(x) for x in missing_inputs if x))
 
         # Cross-asset data quality fail-safe (only in LIVE when required)
         try:
@@ -689,7 +990,8 @@ def fetch_live_market_data():
         regime_probs = model_out.get("regime_probs", {})
         primary_regime = model_out.get("primary_regime", "NEUTRAL")
         regime_entropy = model_out.get("regime_entropy", 0.0)
-        unstable_regime_flag = model_out.get("unstable_regime_flag", False)
+        model_unstable_flag = bool(model_out.get("unstable_regime_flag", False))
+        unstable_reasons = []
 
         # Update transition rate
         try:
@@ -710,16 +1012,6 @@ def fetch_live_market_data():
             regime_transition_rate = 0.0
 
         features["regime_transition_rate"] = regime_transition_rate
-        try:
-            # Mark unstable if entropy or transition rate high or low confidence
-            ent_thr = float(getattr(cfg, "REGIME_ENTROPY_UNSTABLE", 1.5))
-            trans_thr = float(getattr(cfg, "REGIME_TRANSITION_RATE_MAX", 6.0))
-            min_prob = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
-            max_prob = max(regime_probs.values()) if regime_probs else 0.0
-            if regime_entropy > ent_thr or regime_transition_rate > trans_thr or max_prob < min_prob:
-                unstable_regime_flag = True
-        except Exception:
-            pass
 
         regime = primary_regime
 
@@ -746,7 +1038,17 @@ def fetch_live_market_data():
             primary_regime = "NEUTRAL"
             regime_probs = {}
             regime_entropy = 0.0
-            unstable_regime_flag = True
+        unstable_reasons = _derive_unstable_reasons(
+            regime_probs=regime_probs,
+            regime_entropy=regime_entropy,
+            regime_transition_rate=regime_transition_rate,
+            indicators_ok=indicators_ok,
+            ohlc_bars_count=ohlc_bars_count,
+            min_bars=min_bars,
+            missing_inputs=missing_inputs,
+            model_unstable_flag=model_unstable_flag,
+        )
+        unstable_regime_flag = bool(unstable_reasons)
 
         # Day-type classifier (first 30–60 min decisive)
         day_type = "UNKNOWN"
@@ -931,6 +1233,7 @@ def fetch_live_market_data():
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
+                "unstable_reasons": list(unstable_reasons),
                 "regime_ts": regime_ts,
             }
         except Exception:
@@ -951,6 +1254,7 @@ def fetch_live_market_data():
             "regime_probs": regime_probs,
             "regime_entropy": regime_entropy,
             "unstable_regime_flag": unstable_regime_flag,
+            "unstable_reasons": list(unstable_reasons),
             "regime_transition_rate": regime_transition_rate,
             "regime_ts": regime_ts,
             "shock_score": shock.get("shock_score"),
@@ -973,6 +1277,11 @@ def fetch_live_market_data():
             "day_conf_history": conf_hist,
             "indicators_ok": indicators_ok,
             "indicators_age_sec": indicators_age_sec,
+            "indicator_last_update_epoch": indicator_last_update_epoch,
+            "ohlc_bars_count": ohlc_bars_count,
+            "ohlc_last_bar_epoch": ohlc_last_bar_epoch,
+            "compute_indicators_error": compute_indicators_error,
+            "missing_inputs": missing_inputs,
             "time_to_expiry_hrs": time_to_expiry_hrs,
             "orb_bias": orb_bias,
             "orb_lock_min": orb_lock_min,
@@ -1035,6 +1344,7 @@ def fetch_live_market_data():
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
+                "unstable_reasons": list(unstable_reasons),
             "regime_transition_rate": regime_transition_rate,
                 "regime_ts": regime_ts,
             "shock_score": shock.get("shock_score"),
@@ -1103,6 +1413,7 @@ def fetch_live_market_data():
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
+                "unstable_reasons": list(unstable_reasons),
             "regime_transition_rate": regime_transition_rate,
                 "regime_ts": regime_ts,
             "shock_score": shock.get("shock_score"),

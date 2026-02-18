@@ -54,7 +54,6 @@ class OhlcBuffer:
                 if not ts:
                     continue
                 if not hasattr(ts, "replace"):
-                    from datetime import datetime
                     try:
                         ts = datetime.fromisoformat(str(ts))
                     except Exception:

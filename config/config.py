@@ -180,6 +180,9 @@ EXEC_DEGRADATION_MAX_MISSED_FILL_RATE = float(os.getenv("EXEC_DEGRADATION_MAX_MI
 EXEC_DEGRADATION_MAX_SLIPPAGE_MULT = float(os.getenv("EXEC_DEGRADATION_MAX_SLIPPAGE_MULT", "2.0"))
 # Baseline slippage (price units) for degradation checks. If zero/unknown, pilot mode halts.
 EXEC_BASELINE_SLIPPAGE = float(os.getenv("EXEC_BASELINE_SLIPPAGE", "0.0"))
+PAPER_PILOT_UNLOCK_ENABLE = os.getenv("PAPER_PILOT_UNLOCK_ENABLE", "true").lower() == "true"
+PAPER_PILOT_UNLOCK_CLEAN_CYCLES = int(os.getenv("PAPER_PILOT_UNLOCK_CLEAN_CYCLES", "3"))
+PAPER_PILOT_UNLOCK_MAX_RISK = float(os.getenv("PAPER_PILOT_UNLOCK_MAX_RISK", "150.0"))
 
 # -------------------------------
 # Strategy lifecycle governance
@@ -527,6 +530,14 @@ REGIME_PROB_PANIC = float(os.getenv("REGIME_PROB_PANIC", "0.40"))
 REGIME_ENTROPY_MAX = float(os.getenv("REGIME_ENTROPY_MAX", "1.3"))
 REGIME_ENTROPY_UNSTABLE = float(os.getenv("REGIME_ENTROPY_UNSTABLE", "1.5"))
 REGIME_TRANSITION_RATE_MAX = float(os.getenv("REGIME_TRANSITION_RATE_MAX", "6.0"))
+# Confidence override for clearly stable regime distributions.
+# Used to avoid false "unstable" when max-probability is effectively 1 and entropy is near 0.
+REGIME_STABLE_PROB_OVERRIDE_MIN = float(os.getenv("REGIME_STABLE_PROB_OVERRIDE_MIN", "0.99"))
+REGIME_STABLE_ENTROPY_OVERRIDE_MAX = float(os.getenv("REGIME_STABLE_ENTROPY_OVERRIDE_MAX", "0.01"))
+PAPER_RELAX_GATES = os.getenv("PAPER_RELAX_GATES", "true").lower() == "true"
+PAPER_REGIME_PROB_MIN = float(os.getenv("PAPER_REGIME_PROB_MIN", "0.30"))
+PAPER_REGIME_ENTROPY_MAX = float(os.getenv("PAPER_REGIME_ENTROPY_MAX", "1.8"))
+PAPER_NEUTRAL_FAMILY = os.getenv("PAPER_NEUTRAL_FAMILY", "DEFINED_RISK").upper()
 
 # Research pipeline degradation thresholds
 RESEARCH_DEGRADE_SHARPE_MIN = float(os.getenv("RESEARCH_DEGRADE_SHARPE_MIN", "0.2"))
@@ -883,6 +894,8 @@ ENTRY_MISMATCH_PCT = float(os.getenv("ENTRY_MISMATCH_PCT", "0.25"))
 INDICATOR_STALE_SEC = int(os.getenv("INDICATOR_STALE_SEC", "120"))
 OHLC_BUFFER_MAX_BARS = int(os.getenv("OHLC_BUFFER_MAX_BARS", "500"))
 OHLC_MIN_BARS = int(os.getenv("OHLC_MIN_BARS", "30"))
+OHLC_WARM_SEED_WINDOWS_MIN = os.getenv("OHLC_WARM_SEED_WINDOWS_MIN", "120,240")
+INDICATORS_NEVER_COMPUTED_AGE_SEC = float(os.getenv("INDICATORS_NEVER_COMPUTED_AGE_SEC", "1000000000"))
 VWAP_WINDOW = int(os.getenv("VWAP_WINDOW", "20"))
 VWAP_SLOPE_WINDOW = int(os.getenv("VWAP_SLOPE_WINDOW", "10"))
 ATR_PERIOD = int(os.getenv("ATR_PERIOD", "14"))
@@ -1124,6 +1137,8 @@ IRON_FLY_WIDTH = int(os.getenv("IRON_FLY_WIDTH", "100"))
 SPREAD_MIN_CREDIT = float(os.getenv("SPREAD_MIN_CREDIT", "5"))
 SPREAD_MIN_DEBIT = float(os.getenv("SPREAD_MIN_DEBIT", "5"))
 SPREAD_MIN_IV = float(os.getenv("SPREAD_MIN_IV", "0.15"))
+ENABLE_TARGET_POINTS_SUGGESTIONS = os.getenv("ENABLE_TARGET_POINTS_SUGGESTIONS", "true").lower() == "true"
+TARGET_POINTS_MIN = float(os.getenv("TARGET_POINTS_MIN", "20.0"))
 
 # Entry trigger logic (buy above / sell below)
 ENTRY_TRIGGER_MODE = os.getenv("ENTRY_TRIGGER_MODE", "BREAKOUT").upper()

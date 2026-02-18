@@ -1,6 +1,7 @@
 import time
 import json
 import argparse
+import copy
 from pathlib import Path
 import pandas as pd
 from datetime import datetime, timedelta
@@ -36,7 +37,7 @@ from ml.strategy_decay_predictor import generate_decay_report, telegram_summary
 from core.kite_client import kite_client
 from core import model_registry
 from core.strategy_allocator import StrategyAllocator
-from core.review_queue import add_to_queue, approval_status, order_payload_hash, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH
+from core.review_queue import add_to_queue, approval_status, order_payload_hash, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH, TARGET_POINTS_QUEUE_PATH
 from core.blocked_tracker import BlockedTradeTracker
 from core.trade_store import insert_execution_stat, update_trailing_state, insert_trail_event, insert_trade_leg, update_trade_close
 from core.depth_store import depth_store
@@ -61,6 +62,8 @@ from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
 from core.review_packet import build_review_packet, format_review_packet
 from core.governance_gate import trading_allowed_snapshot, write_trading_allowed_snapshot
+from core.gate_status_log import append_gate_status, build_gate_status_record
+from core.freshness_sla import get_freshness_status
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
@@ -138,6 +141,9 @@ class Orchestrator:
         self.symbol_epsilon = {}
         self._load_symbol_eps()
         self.loss_streak = {}
+        self._pilot_unlock_clean_cycles = 0
+        self._pilot_unlock_day = now_ist().date().isoformat()
+        self._pilot_unlock_used_day = None
         self._audit_chain_ok = True
         self._audit_chain_status = None
         try:
@@ -185,6 +191,250 @@ class Orchestrator:
                     continue
                 return opt
         return None
+
+    def _append_gate_status(self, market_data: dict, gate_allowed, gate_family, gate_reasons, stage: str):
+        try:
+            symbol = str((market_data or {}).get("symbol") or "")
+            seen = getattr(self, "_gate_status_cycle_seen", None)
+            if isinstance(seen, set):
+                key = (symbol, str(stage))
+                if key in seen:
+                    return
+                seen.add(key)
+            record = build_gate_status_record(
+                market_data=market_data,
+                gate_allowed=gate_allowed,
+                gate_family=gate_family,
+                gate_reasons=gate_reasons,
+                stage=stage,
+            )
+            append_gate_status(record, desk_id=getattr(cfg, "DESK_ID", "DEFAULT"))
+        except Exception:
+            pass
+
+    def _build_cycle_market_data(self, market_data_list: list[dict] | None) -> list[dict]:
+        """
+        Build one immutable-like snapshot per symbol per cycle.
+        This prevents conflicting gate logs caused by mutable/reused payloads.
+        """
+        if not isinstance(market_data_list, list):
+            return []
+        per_symbol: dict[str, dict] = {}
+        symbol_order: list[str] = []
+        for raw in market_data_list:
+            if not isinstance(raw, dict):
+                continue
+            if str(raw.get("instrument", "OPT")).upper() != "OPT":
+                continue
+            symbol = str(raw.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            try:
+                snap = copy.deepcopy(raw)
+            except Exception:
+                snap = dict(raw)
+            cycle_id = getattr(self, "_gate_status_cycle_id", None)
+            if cycle_id is not None:
+                snap["cycle_id"] = cycle_id
+            # Keep the latest snapshot for this symbol in the cycle.
+            try:
+                ts_epoch = float(snap.get("timestamp") or 0.0)
+            except Exception:
+                ts_epoch = 0.0
+            prev = per_symbol.get(symbol)
+            if prev is None:
+                per_symbol[symbol] = snap
+                symbol_order.append(symbol)
+                continue
+            try:
+                prev_ts = float(prev.get("timestamp") or 0.0)
+            except Exception:
+                prev_ts = 0.0
+            if ts_epoch >= prev_ts:
+                per_symbol[symbol] = snap
+        return [per_symbol[sym] for sym in symbol_order if sym in per_symbol]
+
+    def _strategy_gate_for_symbol(self, market_data: dict):
+        """
+        Evaluate strategy gate exactly once per symbol per cycle and log once.
+        """
+        symbol = str((market_data or {}).get("symbol") or "").upper()
+        cache = getattr(self, "_gatekeeper_cycle_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self._gatekeeper_cycle_cache = cache
+        if symbol in cache:
+            return cache[symbol]
+        gate = self.gatekeeper.evaluate(market_data, mode="MAIN")
+        cache[symbol] = gate
+        self._append_gate_status(
+            market_data,
+            gate_allowed=bool(gate.allowed),
+            gate_family=gate.family,
+            gate_reasons=gate.reasons,
+            stage="strategy_gate",
+        )
+        return gate
+
+    def _is_live_mode(self):
+        return str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+
+    def _update_pilot_unlock_clean_cycles(self):
+        """
+        Count consecutive fresh-feed cycles for paper pilot unlock.
+        """
+        if self._is_live_mode():
+            self._pilot_unlock_clean_cycles = 0
+            return
+        today = now_ist().date().isoformat()
+        if today != self._pilot_unlock_day:
+            self._pilot_unlock_day = today
+            self._pilot_unlock_clean_cycles = 0
+            self._pilot_unlock_used_day = None
+        try:
+            freshness = get_freshness_status(force=False)
+            ltp_ok = bool((freshness.get("ltp") or {}).get("ok"))
+            depth_ok = bool((freshness.get("depth") or {}).get("ok"))
+            market_open = bool(freshness.get("market_open", True))
+            if market_open and ltp_ok and depth_ok:
+                self._pilot_unlock_clean_cycles += 1
+            else:
+                self._pilot_unlock_clean_cycles = 0
+        except Exception:
+            self._pilot_unlock_clean_cycles = 0
+
+    def _maybe_queue_pilot_unlock(self, market_data: dict, gate_reasons: list[str] | None = None, debug_flag: bool = False):
+        """
+        Paper-only: queue one low-risk pilot idea per day after clean feed cycles.
+        """
+        try:
+            if self._is_live_mode():
+                return None
+            if not bool(getattr(cfg, "PAPER_PILOT_UNLOCK_ENABLE", True)):
+                return None
+            today = now_ist().date().isoformat()
+            if self._pilot_unlock_used_day == today:
+                return None
+            required_cycles = int(getattr(cfg, "PAPER_PILOT_UNLOCK_CLEAN_CYCLES", 3))
+            if self._pilot_unlock_clean_cycles < required_cycles:
+                return None
+            indicators_ok = bool(market_data.get("indicators_ok", False))
+            indicators_age = market_data.get("indicators_age_sec")
+            indicators_stale = (
+                indicators_age is None
+                or float(indicators_age) > float(getattr(cfg, "INDICATOR_STALE_SEC", 120))
+            )
+            if (not indicators_ok) or indicators_stale:
+                return None
+            trade, _trace = self.trade_builder.build_with_trace(
+                market_data,
+                quick_mode=True,
+                debug_reasons=debug_flag,
+                force_family="DEFINED_RISK",
+                allow_fallbacks=True,
+                allow_baseline=True,
+            )
+            if not trade:
+                return None
+            max_risk = float(getattr(cfg, "PAPER_PILOT_UNLOCK_MAX_RISK", 150.0))
+            tiny_lots = max(1, min(int(getattr(trade, "qty", 1) or 1), 1))
+            pilot_trade = replace(
+                trade,
+                qty=tiny_lots,
+                qty_lots=tiny_lots,
+                capital_at_risk=min(float(getattr(trade, "capital_at_risk", max_risk) or max_risk), max_risk),
+                tier="PILOT",
+            )
+            add_to_queue(
+                pilot_trade,
+                extra={
+                    "tier": "PILOT",
+                    "category": "pilot_unlock",
+                    "pilot_unlock": True,
+                    "pilot_unlock_reason": "PILOT_UNLOCK",
+                    "pilot_unlock_clean_cycles": self._pilot_unlock_clean_cycles,
+                    "gate_reasons": list(gate_reasons or []),
+                },
+            )
+            self._pilot_unlock_used_day = today
+            try:
+                audit_append(
+                    {
+                        "event": "PILOT_UNLOCK",
+                        "symbol": market_data.get("symbol"),
+                        "gate_reasons": list(gate_reasons or []),
+                        "clean_cycles": self._pilot_unlock_clean_cycles,
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                    }
+                )
+            except Exception:
+                pass
+            return pilot_trade
+        except Exception:
+            return None
+
+    def _maybe_queue_target_points_idea(self, market_data: dict, debug_flag: bool = False, gate_reasons: list[str] | None = None):
+        """
+        Advisory-only queue for high-upside ideas.
+        This never places orders and is disabled in LIVE mode by default.
+        """
+        try:
+            if not bool(getattr(cfg, "ENABLE_TARGET_POINTS_SUGGESTIONS", True)):
+                return None
+            if self._is_live_mode() and not bool(getattr(cfg, "ALLOW_AUX_TRADES_LIVE", False)):
+                return None
+            reasons = set(gate_reasons or [])
+            quality_blockers = {
+                "indicators_missing_or_stale",
+                "cross_asset_required_missing",
+                "cross_asset_required_stale",
+                "cross_asset_check_error",
+                "news_shock_block",
+            }
+            if reasons & quality_blockers:
+                return None
+            trade, _trace = self.trade_builder.build_with_trace(
+                market_data,
+                quick_mode=True,
+                debug_reasons=debug_flag,
+                allow_fallbacks=True,
+                allow_baseline=True,
+            )
+            if not trade:
+                return None
+            try:
+                target_points = abs(float(getattr(trade, "target", 0.0) or 0.0) - float(getattr(trade, "entry_price", 0.0) or 0.0))
+            except Exception:
+                return None
+            min_points = float(getattr(cfg, "TARGET_POINTS_MIN", 20.0))
+            if target_points < min_points:
+                return None
+            add_to_queue(
+                trade,
+                queue_path=TARGET_POINTS_QUEUE_PATH,
+                extra={
+                    "category": "target_points",
+                    "tier": "OPPORTUNITY",
+                    "target_points": round(target_points, 2),
+                    "target_points_min": min_points,
+                },
+            )
+            try:
+                audit_append(
+                    {
+                        "event": "TARGET_POINTS_IDEA",
+                        "symbol": getattr(trade, "symbol", market_data.get("symbol")),
+                        "trade_id": getattr(trade, "trade_id", None),
+                        "target_points": round(target_points, 2),
+                        "target_points_min": min_points,
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                    }
+                )
+            except Exception:
+                pass
+            return trade
+        except Exception:
+            return None
 
     def _calc_dte(self, expiry: str | None):
         if not expiry:
@@ -437,6 +687,9 @@ class Orchestrator:
         while True:
             cycle_reason = "cycle_complete"
             self._decision_traces = []
+            self._gate_status_cycle_seen = set()
+            self._gatekeeper_cycle_cache = {}
+            self._gate_status_cycle_id = f"{int(now_utc_epoch() * 1000)}"
             try:
                 # Hot-reload config to pick up FORCE_REGIME changes
                 try:
@@ -509,7 +762,8 @@ class Orchestrator:
                     continue
                 # Daily decay report / strategy gating
                 self._refresh_decay_report()
-                market_data_list = fetch_live_market_data()  # List of dicts for multiple symbols
+                market_data_list = self._build_cycle_market_data(fetch_live_market_data())
+                self._update_pilot_unlock_clean_cycles()
                 self._evaluate_suggestions(market_data_list)
                 try:
                     # Update consolidated loss streak (max across symbols)
@@ -566,6 +820,10 @@ class Orchestrator:
                         if halt_cycle:
                             break
                         continue
+                    instrument = str(market_data.get("instrument", "OPT")).upper()
+                    if instrument != "OPT":
+                        # Execution suggestion pipeline is option-centric. Skip non-OPT snapshots.
+                        continue
                     try:
                         self.risk_state.update_market(market_data.get("symbol"), market_data)
                     except Exception:
@@ -615,6 +873,13 @@ class Orchestrator:
                         print(f"[GovernanceGate] snapshot_error:{type(gate_exc).__name__}")
                         permission = None
                     if permission is not None and not permission.allowed:
+                        self._append_gate_status(
+                            market_data,
+                            gate_allowed=False,
+                            gate_family=None,
+                            gate_reasons=list(permission.reasons),
+                            stage="governance_gate",
+                        )
                         try:
                             event = self._build_decision_event(
                                 None,
@@ -631,15 +896,23 @@ class Orchestrator:
                     if last_t and time.time() - last_t < cooldown:
                         continue
                     # Phase C: Build trade suggestion
-                    indicators_ok = market_data.get("indicators_ok", True)
+                    indicators_ok = bool(market_data.get("indicators_ok", False))
                     indicators_age = market_data.get("indicators_age_sec")
-                    if indicators_age is None:
-                        indicators_age = 0
-                    indicators_stale = indicators_age > getattr(cfg, "INDICATOR_STALE_SEC", 120)
+                    indicators_stale = (
+                        indicators_age is None
+                        or float(indicators_age) > float(getattr(cfg, "INDICATOR_STALE_SEC", 120))
+                    )
                     allow_main = indicators_ok and not indicators_stale
                     if not allow_main:
+                        veto = "indicators_missing" if not indicators_ok else "indicators_stale"
+                        self._append_gate_status(
+                            market_data,
+                            gate_allowed=False,
+                            gate_family=None,
+                            gate_reasons=[veto],
+                            stage="indicator_gate",
+                        )
                         try:
-                            veto = "indicators_missing" if not indicators_ok else "indicators_stale"
                             event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=[veto])
                             self._log_decision_safe(event)
                         except Exception:
@@ -648,7 +921,7 @@ class Orchestrator:
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     trade = None
                     if allow_main:
-                        gate = self.gatekeeper.evaluate(market_data, mode="MAIN")
+                        gate = self._strategy_gate_for_symbol(market_data)
                         if not gate.allowed:
                             if debug_flag:
                                 print(f"[Gatekeeper] Blocked {sym}: {','.join(gate.reasons)}")
@@ -658,6 +931,17 @@ class Orchestrator:
                                 audit_append({"event": "GATEKEEPER_BLOCK", "symbol": sym, "reasons": gate.reasons, "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
                             except Exception:
                                 pass
+                            # Advisory-only fallback: queue higher-upside ideas for operator review.
+                            self._maybe_queue_target_points_idea(
+                                market_data,
+                                debug_flag=debug_flag,
+                                gate_reasons=gate.reasons,
+                            )
+                            self._maybe_queue_pilot_unlock(
+                                market_data,
+                                gate_reasons=gate.reasons,
+                                debug_flag=debug_flag,
+                            )
                             continue
                         trade, decision_trace = self.trade_builder.build_with_trace(
                             market_data,
@@ -673,6 +957,11 @@ class Orchestrator:
                             except Exception:
                                 pass
                     if trade is None:
+                        self._maybe_queue_target_points_idea(
+                            market_data,
+                            debug_flag=debug_flag,
+                            gate_reasons=["no_trade_generated"],
+                        )
                         if self.decision_store is not None:
                             try:
                                 decision = build_decision(
@@ -717,8 +1006,7 @@ class Orchestrator:
                         pass
                     # Spread suggestions (advisory only; defined-risk)
                     try:
-                        gate_for_spread = self.gatekeeper.evaluate(market_data, mode="SPREAD")
-                        if gate_for_spread.allowed and gate_for_spread.family in ("DEFINED_RISK",):
+                        if gate.allowed and gate.family in ("DEFINED_RISK",):
                             spreads = self.trade_builder.build_spread_suggestions(market_data)
                             for sp in spreads:
                                 add_to_queue(type("Obj", (), sp))
@@ -746,7 +1034,6 @@ class Orchestrator:
                         try:
                             if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE" and not getattr(cfg, "ALLOW_AUX_TRADES_LIVE", False):
                                 continue
-                            gate = self.gatekeeper.evaluate(market_data, mode="AUX")
                             if gate.allowed and gate.family == "TREND":
                                 zero_trade = self.trade_builder.build_zero_hero(
                                     market_data,

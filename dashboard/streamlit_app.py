@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 import altair as alt
@@ -1182,7 +1182,9 @@ if nav == "Home":
                         ts = quote_err.get("timestamp")
                         if ts:
                             err_dt = datetime.fromisoformat(ts)
-                            age = (datetime.now() - err_dt).total_seconds()
+                            if err_dt.tzinfo is None:
+                                err_dt = err_dt.replace(tzinfo=timezone.utc)
+                            age = (datetime.now(timezone.utc) - err_dt.astimezone(timezone.utc)).total_seconds()
                             if age > getattr(cfg, "LIVE_QUOTE_ERROR_TTL_SEC", 300):
                                 quote_err = None
                     except Exception:
@@ -1402,6 +1404,49 @@ if nav == "Home":
     except Exception as e:
         st.warning(f"Market snapshot error: {e}")
 
+    section_header("Gate Status (Latest)")
+    try:
+        gate_path = Path(f"logs/desks/{getattr(cfg, 'DESK_ID', 'DEFAULT')}/gate_status.jsonl")
+        if gate_path.exists():
+            rows = []
+            with gate_path.open("r", encoding="utf-8") as f:
+                lines = f.readlines()[-40:]
+            for line in lines:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+            if rows:
+                gate_df = pd.DataFrame(rows)
+                cols = [
+                    c
+                    for c in [
+                        "ts_ist",
+                        "symbol",
+                        "stage",
+                        "indicators_ok",
+                        "indicators_age_sec",
+                        "primary_regime",
+                        "regime_prob_max",
+                        "regime_entropy",
+                        "unstable_regime_flag",
+                        "gate_allowed",
+                        "gate_family",
+                        "gate_reasons",
+                    ]
+                    if c in gate_df.columns
+                ]
+                if cols:
+                    ui.table(gate_df[cols].sort_values("ts_ist", ascending=False).head(20), use_container_width=True)
+                else:
+                    ui.table(gate_df.sort_values("ts_ist", ascending=False).head(20), use_container_width=True)
+            else:
+                empty_state("No gate status records yet.")
+        else:
+            empty_state("No gate status file yet.")
+    except Exception as e:
+        st.warning(f"Gate status error: {e}")
+
     section_header("Main Trades (High Accuracy)")
     section_header("Manual Review Queue")
     try:
@@ -1605,6 +1650,69 @@ if nav == "Home":
             empty_state("No quick suggestions yet.")
     except Exception as e:
         st.warning(f"Quick suggestions error: {e}")
+
+    section_header("20-Point Profit Ideas (Advisory)")
+    try:
+        t20_path = Path("logs/target_points_queue.json")
+        if t20_path.exists():
+            t20_all = json.loads(t20_path.read_text())
+            t20 = _filter_rows_today(t20_all)
+            if t20:
+                t20_df = pd.DataFrame(t20)
+                meta_map_t20 = _get_instrument_meta_map()
+                if "trade_id" in t20_df.columns:
+                    inferred = t20_df["trade_id"].apply(_infer_strike_from_id)
+                    if "strike" in t20_df.columns:
+                        t20_df["strike"] = t20_df["strike"].where(t20_df["strike"].notna(), inferred)
+                    else:
+                        t20_df["strike"] = inferred
+                    inferred_type = t20_df["trade_id"].apply(_infer_type_from_id)
+                    if "type" in t20_df.columns:
+                        t20_df["type"] = t20_df["type"].where(t20_df["type"].notna(), inferred_type)
+                    else:
+                        t20_df["type"] = inferred_type
+                t20_df = _fill_strike_from_legs(t20_df)
+                t20_df = _fill_type_from_legs(t20_df)
+                t20_df = _fill_strike_from_meta(t20_df, meta_map_t20)
+                t20_df = _fill_type_from_derived(t20_df, meta_map_t20)
+                if "instrument" in t20_df.columns:
+                    t20_df = t20_df[t20_df["instrument"] == "OPT"]
+                if {"target", "entry"}.issubset(set(t20_df.columns)):
+                    t20_df["target_points"] = (pd.to_numeric(t20_df["target"], errors="coerce") - pd.to_numeric(t20_df["entry"], errors="coerce")).abs().round(2)
+                show_cols = [
+                    c
+                    for c in [
+                        "timestamp",
+                        "symbol",
+                        "instrument_id",
+                        "expiry",
+                        "strike",
+                        "type",
+                        "side",
+                        "entry",
+                        "target",
+                        "target_points",
+                        "target_points_min",
+                        "stop",
+                        "confidence",
+                        "strategy",
+                        "regime",
+                        "tier",
+                        "category",
+                    ]
+                    if c in t20_df.columns
+                ]
+                if show_cols:
+                    ui.table(t20_df.sort_values("timestamp", ascending=False)[show_cols].head(20), use_container_width=True)
+                else:
+                    ui.table(t20_df.sort_values("timestamp", ascending=False).head(20), use_container_width=True)
+                st.caption("Advisory queue only. Trades are still blocked unless readiness and approval gates pass.")
+            else:
+                empty_state("No 20-point ideas yet for today.")
+        else:
+            empty_state("No 20-point ideas generated yet.")
+    except Exception as e:
+        st.warning(f"20-point ideas error: {e}")
 
     section_header("Zero Hero (Cheap Momentum)")
     try:

@@ -21,8 +21,18 @@ class StrategyGatekeeper:
         reasons = []
         regime_probs = market_data.get("regime_probs") or {}
         regime_entropy = market_data.get("regime_entropy", 0.0) or 0.0
-        unstable = bool(market_data.get("unstable_regime_flag", False))
+        if "unstable_reasons" in market_data:
+            unstable_reasons = [str(x) for x in (market_data.get("unstable_reasons") or []) if str(x)]
+        else:
+            unstable_reasons = ["legacy_unstable_flag"] if bool(market_data.get("unstable_regime_flag", False)) else []
         regime = (market_data.get("primary_regime") or market_data.get("regime") or "NEUTRAL").upper()
+        live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+        paper_relax = (not live_mode) and bool(getattr(cfg, "PAPER_RELAX_GATES", True))
+        regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
+        regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
+        if paper_relax:
+            regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
+            regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
         indicators_ok = market_data.get("indicators_ok", True)
         indicators_age = market_data.get("indicators_age_sec")
         if indicators_age is None:
@@ -36,7 +46,6 @@ class StrategyGatekeeper:
         optional = set(getattr(cfg, "CROSS_OPTIONAL_FEEDS", []) or [])
         require_x = bool(getattr(cfg, "REQUIRE_CROSS_ASSET", True))
         if getattr(cfg, "REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE", True):
-            live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
             require_x = require_x and live_mode
         try:
             cross_q = market_data.get("cross_asset_quality")
@@ -98,10 +107,12 @@ class StrategyGatekeeper:
 
         if regime_probs:
             max_prob = max(regime_probs.values()) if regime_probs else 0.0
-            if unstable or regime_entropy > getattr(cfg, "REGIME_ENTROPY_MAX", 1.3):
+            if unstable_reasons or regime_entropy > regime_entropy_max:
                 reasons.append("regime_unstable")
+                if unstable_reasons:
+                    reasons.extend(f"unstable:{r}" for r in unstable_reasons)
                 return GateResult(False, None, reasons)
-            if max_prob < getattr(cfg, "REGIME_PROB_MIN", 0.45):
+            if max_prob < regime_prob_min:
                 reasons.append("regime_low_confidence")
                 return GateResult(False, None, reasons)
 
@@ -115,6 +126,10 @@ class StrategyGatekeeper:
             reasons.append("event_no_trade")
             return GateResult(False, None, reasons)
         if regime == "NEUTRAL":
+            if paper_relax:
+                family = str(getattr(cfg, "PAPER_NEUTRAL_FAMILY", "DEFINED_RISK")).upper()
+                if family in {"DEFINED_RISK", "SCALP_ONLY"}:
+                    return GateResult(True, family, reasons + ["paper_neutral_routed"])
             reasons.append("neutral_no_trade")
             return GateResult(False, None, reasons)
 

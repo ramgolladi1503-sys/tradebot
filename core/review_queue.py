@@ -9,6 +9,7 @@ QUEUE_PATH = Path("logs/review_queue.json")
 QUICK_QUEUE_PATH = Path("logs/quick_review_queue.json")
 ZERO_HERO_QUEUE_PATH = Path("logs/zero_hero_queue.json")
 SCALP_QUEUE_PATH = Path("logs/scalp_queue.json")
+TARGET_POINTS_QUEUE_PATH = Path("logs/target_points_queue.json")
 APPROVED_PATH = Path("logs/approved_trades.json")
 
 
@@ -198,7 +199,7 @@ def approve(trade_id, payload_hash=None, ttl_sec=None, approver=None):
 
 
 def get_queue_entry(trade_id, queue_paths=None):
-    queue_paths = queue_paths or [QUEUE_PATH, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH]
+    queue_paths = queue_paths or [QUEUE_PATH, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH, TARGET_POINTS_QUEUE_PATH]
     for path in queue_paths:
         rows = _read_json(path, [])
         if not isinstance(rows, list):
