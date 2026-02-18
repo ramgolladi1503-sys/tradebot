@@ -44,3 +44,6 @@ models/*.pkl
 # Generated artifacts
 reports/walk_forward/
 reports/*_latest.*
+
+# Runtime locks
+trading_bot_locks/*.lock
