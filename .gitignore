@@ -48,3 +48,7 @@ reports/*_latest.*
 # Runtime locks (dot-dir)
 .trading_bot_locks/*.lock
 reports/walk_forward/**
+
+# FORCE ignore from repo root
+/.trading_bot_locks/
+/reports/walk_forward/
