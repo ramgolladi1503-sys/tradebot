@@ -17,7 +17,7 @@ _CACHE: Dict[str, Any] = {}
 
 
 def _log_event(payload: Dict[str, Any]) -> None:
-    LOG_PATH.parent.mkdir(exist_ok=True)
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
         with LOG_PATH.open("a") as f:
             f.write(json.dumps(payload) + "\n")

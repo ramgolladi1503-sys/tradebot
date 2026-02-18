@@ -5,13 +5,14 @@ from pathlib import Path
 from typing import Tuple
 
 from config import config as cfg
+from core.paths import locks_dir
 
 
 class RunLock:
     def __init__(self, name: str | None = None, max_age_sec: float | None = None, lock_dir: Path | None = None):
         self.name = name or getattr(cfg, "RUN_LOCK_NAME", "live_monitoring.lock")
         self.max_age_sec = float(max_age_sec if max_age_sec is not None else getattr(cfg, "RUN_LOCK_MAX_AGE_SEC", 3600))
-        self.lock_dir = Path(lock_dir) if lock_dir is not None else (Path.home() / ".trading_bot" / "locks")
+        self.lock_dir = Path(lock_dir) if lock_dir is not None else locks_dir()
         self.lock_path = self.lock_dir / self.name
         self._active_lock_path = self.lock_path
         self._last_reason = "UNINITIALIZED"
@@ -23,7 +24,7 @@ class RunLock:
             self._active_lock_path = target_dir / self.name
             return self._active_lock_path
         except PermissionError:
-            fallback_dir = Path.cwd() / ".trading_bot_locks"
+            fallback_dir = locks_dir()
             fallback_dir.mkdir(parents=True, exist_ok=True)
             self._active_lock_path = fallback_dir / self.name
             self._last_reason = "LOCK_DIR_FALLBACK"
@@ -36,7 +37,7 @@ class RunLock:
             tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
             tmp_path.replace(lock_path)
         except PermissionError:
-            fallback_dir = Path.cwd() / ".trading_bot_locks"
+            fallback_dir = locks_dir()
             fallback_dir.mkdir(parents=True, exist_ok=True)
             fallback_lock = fallback_dir / self.name
             fallback_tmp = fallback_lock.with_suffix(fallback_lock.suffix + ".tmp")

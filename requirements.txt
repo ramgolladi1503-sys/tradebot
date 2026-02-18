@@ -12,3 +12,4 @@ requests
 xgboost
 scikit-learn
 pyarrow
+holidays

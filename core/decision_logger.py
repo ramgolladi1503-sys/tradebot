@@ -10,12 +10,15 @@ from typing import Any, Dict, Tuple
 
 from config import config as cfg
 from core.audit_log import append_event as audit_append
+from core.paths import logs_dir
 from core.reason_codes import normalize_reason_codes
 
 
-DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"))
+DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
 DECISION_CHAIN_GENESIS = "GENESIS"
-DECISION_ERROR_LOG = Path(getattr(cfg, "DECISION_ERROR_LOG_PATH", "logs/decision_event_errors.jsonl"))
+DECISION_ERROR_LOG = Path(
+    getattr(cfg, "DECISION_ERROR_LOG_PATH", str(logs_dir() / "decision_event_errors.jsonl"))
+)
 
 REQUIRED_FIELDS = (
     "trace_id",
@@ -133,7 +136,7 @@ def verify_decision_chain(path: Path = DECISION_JSONL) -> Tuple[bool, str, int]:
 
 
 def _conn():
-    Path(cfg.TRADE_DB_PATH).parent.mkdir(exist_ok=True)
+    Path(cfg.TRADE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(cfg.TRADE_DB_PATH)
 
 

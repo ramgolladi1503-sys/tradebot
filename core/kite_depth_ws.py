@@ -4,6 +4,7 @@ import threading
 import json
 import re
 import atexit
+import os
 from pathlib import Path
 from core.kite_client import kite_client
 from core.depth_store import depth_store
@@ -16,6 +17,7 @@ from core import risk_halt
 from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer
 from core.run_lock import RunLock
+from core.security_guard import resolve_kite_access_token
 
 try:
     from kiteconnect import KiteTicker
@@ -38,6 +40,7 @@ _LOG_PATH = logs_dir() / "depth_ws_watchdog.log"
 _LOG_WRITER = get_jsonl_writer(_LOG_PATH)
 _DEPTH_WS_LOCK: RunLock | None = None
 _DEPTH_WS_LOCK_ACQUIRED = False
+_STOP_REQUESTED = False
 
 
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):
@@ -254,8 +257,9 @@ def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED
     with _KITE_TICKER_LOCK:
+        _STOP_REQUESTED = True
         _log_ws("FEED_STOP", {"reason": reason})
         if _WATCHDOG_STOP is not None:
             _WATCHDOG_STOP.set()
@@ -342,7 +346,7 @@ def restart_depth_ws(reason: str = "unknown"):
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False):
-    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING
+    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED
     if not skip_lock:
         if not _ensure_depth_ws_lock():
             return
@@ -377,11 +381,20 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         _log_ws("FEED_AUTH_BLOCKED", {"error": err})
         print(f"Missing/invalid Kite access token: {err}")
         return
-    access_token = str(getattr(cfg, "KITE_ACCESS_TOKEN", "") or "").strip()
+    try:
+        access_token = str(
+            resolve_kite_access_token(repo_root=repo_root(), require_token=True)
+            or ""
+        ).strip()
+    except Exception as exc:
+        _log_ws("FEED_AUTH_BLOCKED", {"error": f"token_resolve_failed:{type(exc).__name__}:{exc}"})
+        print(f"Missing/invalid Kite access token: token_resolve_failed:{exc}")
+        return
     if not access_token:
         _log_ws("FEED_AUTH_BLOCKED", {"error": "missing_access_token:empty"})
         print("Missing/invalid Kite access token: empty")
         return
+    os.environ["KITE_ACCESS_TOKEN"] = access_token
 
     tokens = list(dict.fromkeys(instrument_tokens or []))
     if not tokens:
@@ -390,6 +403,33 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _LAST_TOKENS = list(tokens)
     _STALE_STRIKES = 0
     _WARMUP_PENDING = True
+    _STOP_REQUESTED = False
+
+    computed_profile_verified = False
+    profile_error = ""
+    try:
+        ensure_fn = getattr(kite_client, "_ensure", None) or getattr(kite_client, "ensure", None)
+        if callable(ensure_fn):
+            ensure_fn()
+        rest_client = getattr(kite_client, "kite", None)
+        if rest_client is not None:
+            try:
+                rest_client.set_access_token(access_token)
+            except Exception:
+                pass
+            profile = rest_client.profile() or {}
+            user_id = str(profile.get("user_id") or "").strip()
+            if user_id:
+                computed_profile_verified = True
+                _log_ws("FEED_AUTH_PROFILE_OK", {"user_last4": user_id[-4:]})
+            else:
+                profile_error = "missing_user_id"
+        else:
+            profile_error = "kite_client_unavailable"
+    except Exception as exc:
+        profile_error = f"{type(exc).__name__}:{exc}"
+    if not computed_profile_verified:
+        _log_ws("FEED_AUTH_PROFILE_FAIL", {"error": profile_error or "unknown"})
 
     stats_api = _masked_secret_stats("api_key", cfg.KITE_API_KEY)
     stats_token = _masked_secret_stats("access_token", access_token)
@@ -412,12 +452,19 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             _WATCHDOG_STOP.set()
         _WATCHDOG_STOP = threading.Event()
         kws = KiteTicker(cfg.KITE_API_KEY, access_token, debug=True)
+        if hasattr(kws, "auto_reconnect"):
+            try:
+                kws.auto_reconnect = False
+            except Exception:
+                pass
         print(
             f"KITE_WS api_key_tail4={cfg.KITE_API_KEY[-4:] if len(str(cfg.KITE_API_KEY or '')) >= 4 else cfg.KITE_API_KEY} "
             f"access_token_tail4={access_token[-4:] if len(str(access_token or '')) >= 4 else access_token} "
             f"kite_id={id(kws)}"
         )
         _KITE_TICKER = kws
+
+    handshake_soft_reset_used = False
 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING
@@ -445,10 +492,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             _log_ws("FEED_RECONNECT_ERROR", {"error": str(exc), "attempts": attempts})
 
     def on_error(ws, code, reason):
+        nonlocal handshake_soft_reset_used
         reason_text = str(reason)
-        _log_ws("FEED_ERROR", {"code": code, "reason": reason_text, "profile_verified": bool(profile_verified)})
+        _log_ws("FEED_ERROR", {"code": code, "reason": reason_text, "profile_verified": bool(computed_profile_verified)})
         print(f"[KITE_WS][ERROR] code={code} reason={reason}")
-        if profile_verified and ("403" in reason_text or "Forbidden" in reason_text):
+        if computed_profile_verified and ("403" in reason_text or "Forbidden" in reason_text):
             hint = "Profile auth succeeded but websocket is 403. Check Kite app websocket entitlement/access."
             _log_ws("FEED_ERROR_HINT", {"hint": hint})
             print(f"[KITE_WS][HINT] {hint}")
@@ -467,17 +515,34 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 pass
             stop_depth_ws(reason="ws_403_forbidden")
             return
+        reason_lower = reason_text.lower()
+        handshake_error = (str(code) == "1006" or code == 1006) and "opening handshake" in reason_lower
+        if handshake_error:
+            if not handshake_soft_reset_used:
+                handshake_soft_reset_used = True
+                try:
+                    ws.subscribe(tokens)
+                    ws.set_mode(ws.MODE_FULL, tokens)
+                    _log_ws("FEED_HANDSHAKE_SOFT_RESET", {"code": code, "reason": reason_text})
+                except Exception as exc:
+                    _log_ws("FEED_HANDSHAKE_SOFT_RESET_ERROR", {"code": code, "reason": reason_text, "error": str(exc)})
+            _log_ws("FEED_HANDSHAKE_SUPPRESS_RESTART", {"code": code, "reason": reason_text})
+            return
         fatal = False
         if code in (1006, 1011, 1012):
             fatal = True
-        if "connection" in reason_text.lower() and "closed" in reason_text.lower():
+        if "connection" in reason_lower and "closed" in reason_lower:
             fatal = True
         if "403" in reason_text or "Forbidden" in reason_text:
             fatal = True
-        if fatal and is_market_open_ist():
+        stop_set = bool(_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set())
+        if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
             restart_depth_ws(reason=f"ws_error:{code}")
 
     def on_close(ws, code, reason):
+        if (_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set()) or _STOP_REQUESTED:
+            _log_ws("FEED_CLOSE_STOP_REQUESTED", {"code": code, "reason": str(reason)})
+            return
         _log_ws("FEED_CLOSE", {"code": code, "reason": str(reason)})
         print(f"[KITE_WS][CLOSE] code={code} reason={reason}")
         if is_market_open_ist():

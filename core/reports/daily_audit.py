@@ -50,7 +50,7 @@ def write_daily_audit_placeholder(
         "config_snapshot": dict(config_snapshot or {}),
         "decision_traces": list(decision_traces or []),
     }
-    out_path.parent.mkdir(exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))
     return out_path
 
@@ -155,6 +155,6 @@ def build_daily_audit(
         "decision_traces": list(decision_traces or []),
     }
 
-    out_path.parent.mkdir(exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))
     return out_path

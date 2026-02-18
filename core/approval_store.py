@@ -20,7 +20,7 @@ ORDER_APPROVAL_STATUS = {
 
 
 def _conn(timeout: float = 5.0, isolation_level: Optional[str] = "DEFERRED"):
-    Path(cfg.TRADE_DB_PATH).parent.mkdir(exist_ok=True)
+    Path(cfg.TRADE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(cfg.TRADE_DB_PATH, timeout=timeout, isolation_level=isolation_level)
 
 

@@ -14,6 +14,7 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.mypy_cache/
 .venv/
 venv/
 
@@ -26,10 +27,14 @@ logs/
 # SQLite / local databases
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 # Data + models (exclude from repo)
 /data/
-/models/
+/models/*
+!/models/__init__.py
+!/models/*.py
 models/*.pkl
 
 # Trade logs

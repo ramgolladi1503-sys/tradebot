@@ -14,7 +14,7 @@ _ERROR_LOG_PATH = logs_dir() / "tick_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
 
 def _conn():
-    Path(cfg.TRADE_DB_PATH).parent.mkdir(exist_ok=True)
+    Path(cfg.TRADE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(cfg.TRADE_DB_PATH)
 
 def init_ticks():
@@ -106,7 +106,7 @@ def insert_tick(ts, token, last_price, volume, oi):
         if skew is not None:
             try:
                 log_path = logs_dir() / "clock_skew.jsonl"
-                log_path.parent.mkdir(exist_ok=True)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
                 with log_path.open("a") as f:
                     f.write(
                         json.dumps(

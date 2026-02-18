@@ -14,6 +14,16 @@ from core.auth_health import get_kite_auth_health
 from core.security_guard import write_local_kite_access_token
 import getpass
 
+
+def mask_tail(val, keep_last=4):
+    raw = str(val or "")
+    if not raw:
+        return "MISSING"
+    if len(raw) <= keep_last:
+        return raw
+    return "*" * max(0, len(raw) - keep_last) + raw[-keep_last:]
+
+
 def mask(val, keep=4):
     if not val:
         return "MISSING"
@@ -45,7 +55,13 @@ def _looks_placeholder_api_key(value):
     }
 
 def _persist_local_token(access_token):
-    return write_local_kite_access_token(access_token)
+    token = str(access_token or "").strip()
+    if not token:
+        raise RuntimeError("empty_access_token")
+    token_path = write_local_kite_access_token(token)
+    # Normalize store format to raw token bytes with no trailing newline.
+    token_path.write_text(token)
+    return token_path
 
 
 def generate_validated_token(api_key, api_secret, request_token, kite_connect_cls):
@@ -55,14 +71,21 @@ def generate_validated_token(api_key, api_secret, request_token, kite_connect_cl
     if not access_token:
         raise RuntimeError("no_access_token_returned")
     kite.set_access_token(access_token)
+    try:
+        profile = kite.profile()
+    except Exception as exc:
+        raise RuntimeError(f"Access token verification failed: {exc}")
+    user_id = str((profile or {}).get("user_id") or "").strip()
+    if not user_id:
+        raise RuntimeError("Access token verification failed: missing user_id")
     margins = kite.margins()
     if margins is None:
         raise RuntimeError("margins_missing")
-    return kite, access_token, margins
+    return kite, access_token, margins, profile
 
 
 def generate_token_flow(api_key, api_secret, request_token, update_store, kite_connect_cls, persist_fn):
-    kite, access_token, margins = generate_validated_token(
+    kite, access_token, margins, profile = generate_validated_token(
         api_key,
         api_secret,
         request_token,
@@ -72,16 +95,7 @@ def generate_token_flow(api_key, api_secret, request_token, update_store, kite_c
     if update_store:
         token_path = persist_fn(access_token)
         cfg.KITE_ACCESS_TOKEN = access_token
-        auth_payload = get_kite_auth_health(force=True)
-        if not auth_payload.get("ok"):
-            if token_path:
-                try:
-                    Path(token_path).unlink()
-                except Exception:
-                    pass
-            raise RuntimeError(auth_payload.get("error") or "profile_validation_failed")
-    else:
-        auth_payload = {"user_id": "", "user_name": ""}
+    auth_payload = {"user_id": (profile or {}).get("user_id", ""), "user_name": (profile or {}).get("user_name", "")}
     return {
         "kite": kite,
         "access_token": access_token,
@@ -121,17 +135,18 @@ if __name__ == "__main__":
     )
 
     auto_update = "--update-env" in sys.argv
+    persist_to_store = "--no-store" not in sys.argv
     try:
         flow = generate_token_flow(
             cfg.KITE_API_KEY,
             cfg.KITE_API_SECRET,
             request_token,
-            auto_update,
+            persist_to_store,
             KiteConnect,
             _persist_local_token,
         )
     except Exception as e:
-        raise SystemExit(f"Kite session validation failed (profile/margins): {e}")
+        raise SystemExit(str(e))
     kite = flow["kite"]
     access_token = flow["access_token"]
     profile = flow["profile"]
@@ -146,15 +161,16 @@ if __name__ == "__main__":
         f"access_token_has_whitespace={token_debug['access_token_has_whitespace']}"
     )
 
-    user_id = str(profile.get("user_id", "") or "")
-    print(f"[KITE_AUTH] profile_ok user_last4={user_id[-4:] if user_id else 'NONE'}")
+    user_id = str(profile.get("user_id", "") or "").strip()
+    print(f"[KITE_AUTH] profile_ok user_last4={mask_tail(user_id, keep_last=4)}")
     if isinstance(margins, dict):
         print(f"[KITE_AUTH] margins_ok keys={','.join(sorted(margins.keys())[:5])}")
     else:
         print("[KITE_AUTH] margins_ok")
 
-    if auto_update:
+    if persist_to_store:
         print(f"Updated local token store: {token_path}")
+    if auto_update:
         try:
             # refresh in-memory session using same validated token
             if kite_client.kite:
@@ -176,6 +192,5 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Session refresh warning: {e}")
     print(f"Generated access token: {mask(access_token)}")
-    if not auto_update:
-        print("Export with: export KITE_ACCESS_TOKEN=<token>")
-        print("Or run with --update-env to store under ~/.trading_bot/")
+    if not persist_to_store:
+        print("Token store persistence skipped (--no-store).")

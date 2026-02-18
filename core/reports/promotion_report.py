@@ -104,7 +104,7 @@ def evaluate_promotion(df: pd.DataFrame, day: str, gates: dict) -> dict:
 
 
 def write_promotion_report(report: dict, out_path: Path) -> Path:
-    out_path.parent.mkdir(exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     report["generated_at"] = datetime.now().isoformat()
     out_path.write_text(json.dumps(report, indent=2, default=str))
     return out_path

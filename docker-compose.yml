@@ -1,0 +1,17 @@
+services:
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trading_bot:dev
+    working_dir: /app
+    environment:
+      PYTHONPATH: /app
+    command: ["pytest", "-q"]
+
+  shell:
+    image: trading_bot:dev
+    working_dir: /app
+    environment:
+      PYTHONPATH: /app
+    entrypoint: ["/bin/bash"]

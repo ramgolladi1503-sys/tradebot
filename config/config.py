@@ -7,11 +7,26 @@ import os
 import json
 import csv
 from pathlib import Path
+from core.runtime_paths import (
+    DATA_ROOT as _DATA_ROOT,
+    DESKS_ROOT as _DESKS_ROOT,
+    LOGS_ROOT as _LOGS_ROOT,
+    REPORTS_ROOT as _REPORTS_ROOT,
+    LOCKS_ROOT as _LOCKS_ROOT,
+    DB_ROOT as _DB_ROOT,
+)
 try:
     from dotenv import load_dotenv  # type: ignore
     load_dotenv()
 except Exception:
     pass
+
+DATA_ROOT = os.getenv("DATA_ROOT", str(_DATA_ROOT))
+DESKS_ROOT = os.getenv("DESKS_ROOT", str(_DESKS_ROOT))
+LOGS_ROOT = os.getenv("LOGS_ROOT", str(_LOGS_ROOT))
+REPORTS_ROOT = os.getenv("REPORTS_ROOT", str(_REPORTS_ROOT))
+LOCKS_ROOT = os.getenv("LOCKS_ROOT", str(_LOCKS_ROOT))
+DB_ROOT = os.getenv("DB_ROOT", str(_DB_ROOT))
 
 # -------------------------------
 # Kite / broker API credentials
@@ -169,7 +184,7 @@ EXEC_BASELINE_SLIPPAGE = float(os.getenv("EXEC_BASELINE_SLIPPAGE", "0.0"))
 # -------------------------------
 # Strategy lifecycle governance
 # -------------------------------
-STRATEGY_LIFECYCLE_PATH = os.getenv("STRATEGY_LIFECYCLE_PATH", "logs/strategy_lifecycle.json")
+STRATEGY_LIFECYCLE_PATH = os.getenv("STRATEGY_LIFECYCLE_PATH", f"{LOGS_ROOT}/strategy_lifecycle.json")
 STRATEGY_LIFECYCLE_DEFAULT_STATE = os.getenv("STRATEGY_LIFECYCLE_DEFAULT_STATE", "PAPER")
 ALLOW_RESEARCH_STRATEGIES = os.getenv("ALLOW_RESEARCH_STRATEGIES", "false").lower() == "true"
 PROMOTION_PILOT_DAYS_REQUIRED = int(os.getenv("PROMOTION_PILOT_DAYS_REQUIRED", "3"))
@@ -285,7 +300,7 @@ BANDIT_UTILITY_WEIGHT = 0.5
 BANDIT_ALERT_THRESHOLD = 0.2
 META_MODEL_ENABLED = os.getenv("META_MODEL_ENABLED", "true").lower() == "true"
 META_MODEL_SHADOW_ONLY = os.getenv("META_MODEL_SHADOW_ONLY", "true").lower() == "true"
-META_SHADOW_LOG_PATH = os.getenv("META_SHADOW_LOG_PATH", "logs/meta_shadow.jsonl")
+META_SHADOW_LOG_PATH = os.getenv("META_SHADOW_LOG_PATH", f"{LOGS_ROOT}/meta_shadow.jsonl")
 META_EXECQ_MIN = float(os.getenv("META_EXECQ_MIN", "55"))
 META_DECAY_PENALTY_THRESHOLD = float(os.getenv("META_DECAY_PENALTY_THRESHOLD", "0.6"))
 META_DECAY_PENALTY_MULT = float(os.getenv("META_DECAY_PENALTY_MULT", "0.7"))
@@ -583,7 +598,7 @@ SCALP_STOP_ATR = 0.3
 SCALP_MAX_HOLD_MINUTES = 3
 ML_MODEL_PATH = "models/xgb_live_model.pkl"
 ML_CHALLENGER_MODEL_PATH = os.getenv("ML_CHALLENGER_MODEL_PATH", "models/xgb_live_model_challenger.pkl")
-ML_TRAIN_DATA_PATH = os.getenv("ML_TRAIN_DATA_PATH", "data/ml_features.csv")
+ML_TRAIN_DATA_PATH = os.getenv("ML_TRAIN_DATA_PATH", f"{DATA_ROOT}/ml_features.csv")
 ML_TRAIN_TARGET_COL = os.getenv("ML_TRAIN_TARGET_COL", "target")
 ML_HOLDOUT_FRAC = float(os.getenv("ML_HOLDOUT_FRAC", "0.2"))
 ML_SEGMENT_MIN_SAMPLES = int(os.getenv("ML_SEGMENT_MIN_SAMPLES", "200"))
@@ -611,9 +626,9 @@ ML_PROMOTION_MAX_DRAWDOWN_WORSEN = float(os.getenv("ML_PROMOTION_MAX_DRAWDOWN_WO
 ML_PROMOTION_REQUIRE_ABLATION_SAFETY = os.getenv("ML_PROMOTION_REQUIRE_ABLATION_SAFETY", "true").lower() == "true"
 ML_ABLATION_CHEAT_RETURN_DELTA = float(os.getenv("ML_ABLATION_CHEAT_RETURN_DELTA", "0.05"))
 ML_ABLATION_CHEAT_DRAWDOWN_IMPROVE = float(os.getenv("ML_ABLATION_CHEAT_DRAWDOWN_IMPROVE", "0.03"))
-ABLATION_LATEST_PATH = os.getenv("ABLATION_LATEST_PATH", "reports/ablation/ablation_latest.json")
-ML_DRIFT_BASELINE_PATH = os.getenv("ML_DRIFT_BASELINE_PATH", "logs/drift_baseline.json")
-ML_MODEL_DECISIONS_PATH = os.getenv("ML_MODEL_DECISIONS_PATH", "logs/model_decisions.jsonl")
+ABLATION_LATEST_PATH = os.getenv("ABLATION_LATEST_PATH", f"{REPORTS_ROOT}/ablation/ablation_latest.json")
+ML_DRIFT_BASELINE_PATH = os.getenv("ML_DRIFT_BASELINE_PATH", f"{LOGS_ROOT}/drift_baseline.json")
+ML_MODEL_DECISIONS_PATH = os.getenv("ML_MODEL_DECISIONS_PATH", f"{LOGS_ROOT}/model_decisions.jsonl")
 ML_EXEC_QUALITY_MIN = float(os.getenv("ML_EXEC_QUALITY_MIN", "55"))
 ML_GOV_ENABLE = os.getenv("ML_GOV_ENABLE", "true").lower() == "true"
 ML_AB_ENABLE = os.getenv("ML_AB_ENABLE", "true").lower() == "true"
@@ -673,7 +688,7 @@ RL_SIZE_ENABLE = RL_ENABLED
 RL_SIZE_SHADOW_MODE = RL_SHADOW_ONLY
 RL_SIZE_MODEL_PATH = os.getenv("RL_SIZE_MODEL_PATH", "models/rl_size_agent.json")
 RL_SIZE_CHALLENGER_PATH = os.getenv("RL_SIZE_CHALLENGER_PATH", "models/rl_size_agent_challenger.json")
-RL_SIZE_EVAL_PATH = os.getenv("RL_SIZE_EVAL_PATH", "logs/rl_size_eval.json")
+RL_SIZE_EVAL_PATH = os.getenv("RL_SIZE_EVAL_PATH", f"{LOGS_ROOT}/rl_size_eval.json")
 RL_SIZE_PROMOTE_DIFF = float(os.getenv("RL_SIZE_PROMOTE_DIFF", "0.02"))
 
 # Manual approval
@@ -705,9 +720,9 @@ TOURNAMENT_MIN_WINRATE = float(os.getenv("TOURNAMENT_MIN_WINRATE", "0.4"))
 
 # Storage
 DESK_ID = os.getenv("DESK_ID", "DEFAULT")
-DESK_DATA_DIR = os.getenv("DESK_DATA_DIR", f"data/desks/{DESK_ID}")
-DESK_LOG_DIR = os.getenv("DESK_LOG_DIR", f"logs/desks/{DESK_ID}")
-DB_PATH = os.getenv("DB_PATH", f"{DESK_DATA_DIR}/trades.db")
+DESK_DATA_DIR = os.getenv("DESK_DATA_DIR", f"{DESKS_ROOT}/{DESK_ID}")
+DESK_LOG_DIR = os.getenv("DESK_LOG_DIR", f"{LOGS_ROOT}/desks/{DESK_ID}")
+DB_PATH = os.getenv("DB_PATH", f"{DB_ROOT}/{DESK_ID}.sqlite")
 TRADE_DB_PATH = os.getenv("TRADE_DB_PATH", DB_PATH)
 DECISION_LOG_PATH = os.getenv("DECISION_LOG_PATH", f"{DESK_LOG_DIR}/decision_events.jsonl")
 DECISION_ERROR_LOG_PATH = os.getenv("DECISION_ERROR_LOG_PATH", f"{DESK_LOG_DIR}/decision_event_errors.jsonl")
@@ -731,6 +746,16 @@ READINESS_ENFORCE_PAPER = os.getenv("READINESS_ENFORCE_PAPER", "false").lower() 
 # Backward-compatible alias
 ENFORCE_READINESS_ON_EXECUTION = READINESS_ENFORCE_ON_EXEC
 
+# Governance gate (single trade-emission choke point)
+GOV_GATE_REQUIRE_AUTH = os.getenv("GOV_GATE_REQUIRE_AUTH", "true").lower() == "true"
+GOV_GATE_ENFORCE_PAPER = os.getenv("GOV_GATE_ENFORCE_PAPER", "false").lower() == "true"
+GOV_GATE_REQUIRE_ORB_RESOLVED = os.getenv("GOV_GATE_REQUIRE_ORB_RESOLVED", "false").lower() == "true"
+GOV_GATE_REQUIRE_DAYTYPE_CONF = os.getenv("GOV_GATE_REQUIRE_DAYTYPE_CONF", "false").lower() == "true"
+GOV_GATE_REQUIRE_REGIME_CONF = os.getenv("GOV_GATE_REQUIRE_REGIME_CONF", "false").lower() == "true"
+GOV_GATE_MIN_DAY_CONFIDENCE = float(os.getenv("GOV_GATE_MIN_DAY_CONFIDENCE", "0.6"))
+GOV_GATE_MIN_REGIME_CONFIDENCE = float(os.getenv("GOV_GATE_MIN_REGIME_CONFIDENCE", "0.45"))
+GOV_AUTH_MAX_AGE_SEC = float(os.getenv("GOV_AUTH_MAX_AGE_SEC", "180"))
+
 # Session startup safety
 AUTO_CLEAR_RISK_HALT_ON_START = os.getenv("AUTO_CLEAR_RISK_HALT_ON_START", "true").lower() == "true"
 AUTO_CLEAR_RISK_HALT_REQUIRE_MARKET_CLOSED = (
@@ -742,7 +767,7 @@ AUTO_CLEAR_RISK_HALT_REQUIRE_NO_OPEN_POSITIONS = (
 
 # Pre-open auth warmup
 AUTH_WARMUP_TRIGGER_RISK_HALT = os.getenv("AUTH_WARMUP_TRIGGER_RISK_HALT", "true").lower() == "true"
-AUTH_WARMUP_LOG_PATH = os.getenv("AUTH_WARMUP_LOG_PATH", "logs/auth_warmup.json")
+AUTH_WARMUP_LOG_PATH = os.getenv("AUTH_WARMUP_LOG_PATH", f"{LOGS_ROOT}/auth_warmup.json")
 AUTH_HEALTH_TTL_SEC = float(os.getenv("AUTH_HEALTH_TTL_SEC", "60"))
 KITE_AUTH_RETRY_ATTEMPTS = int(os.getenv("KITE_AUTH_RETRY_ATTEMPTS", "2"))
 KITE_AUTH_RETRY_BACKOFF_SEC = float(os.getenv("KITE_AUTH_RETRY_BACKOFF_SEC", "0.8"))
@@ -750,8 +775,8 @@ KITE_AUTH_RETRY_BACKOFF_SEC = float(os.getenv("KITE_AUTH_RETRY_BACKOFF_SEC", "0.
 # Risk governance / scorecard
 DAILY_LOSS_LIMIT = CAPITAL * MAX_DAILY_LOSS_PCT
 PORTFOLIO_MAX_DRAWDOWN = MAX_DRAWDOWN_PCT
-RISK_HALT_FILE = "logs/risk_halt.json"
-LOG_LOCK_FILE = "logs/trade_log.lock"
+RISK_HALT_FILE = os.getenv("RISK_HALT_FILE", f"{LOGS_ROOT}/risk_halt.json")
+LOG_LOCK_FILE = os.getenv("LOG_LOCK_FILE", f"{LOGS_ROOT}/trade_log.lock")
 APPEND_ONLY_LOG = True
 
 # Data QC / SLA thresholds
@@ -929,7 +954,7 @@ REQUIRE_CROSS_ASSET = os.getenv("REQUIRE_CROSS_ASSET", "true").lower() == "true"
 REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE = os.getenv("REQUIRE_CROSS_ASSET_ONLY_WHEN_LIVE", "true").lower() == "true"
 
 def _load_instrument_symbols():
-    path = Path("data/kite_instruments.csv")
+    path = Path(DATA_ROOT) / "kite_instruments.csv"
     if not path.exists():
         return set()
     symbols = set()

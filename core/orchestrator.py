@@ -60,6 +60,7 @@ from core.decision_builder import build_decision
 from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
 from core.review_packet import build_review_packet, format_review_packet
+from core.governance_gate import trading_allowed_snapshot, write_trading_allowed_snapshot
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
@@ -607,6 +608,24 @@ class Orchestrator:
                         self.last_md_by_symbol[sym] = market_data
                     # Check exits for any open trades on this symbol/instrument
                     self._check_open_trades(market_data)
+                    try:
+                        permission = trading_allowed_snapshot(market_data=market_data)
+                        write_trading_allowed_snapshot(permission)
+                    except Exception as gate_exc:
+                        print(f"[GovernanceGate] snapshot_error:{type(gate_exc).__name__}")
+                        permission = None
+                    if permission is not None and not permission.allowed:
+                        try:
+                            event = self._build_decision_event(
+                                None,
+                                market_data,
+                                gatekeeper_allowed=False,
+                                veto_reasons=list(permission.reasons),
+                            )
+                            self._log_decision_safe(event)
+                        except Exception:
+                            pass
+                        continue
                     cooldown = getattr(cfg, "MIN_COOLDOWN_SEC", 300)
                     last_t = self.last_trade_time.get(sym)
                     if last_t and time.time() - last_t < cooldown:

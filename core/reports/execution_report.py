@@ -14,7 +14,7 @@ def write_execution_report_placeholder(day: str, out_path: Path, reason: str) ->
         "missed_fill_reasons": {},
         "executions": [],
     }
-    out_path.parent.mkdir(exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))
     return out_path
 
@@ -62,6 +62,6 @@ def build_execution_report(df: pd.DataFrame, day: str, out_path: Path) -> Path:
         "missed_fill_reasons": missed_reasons,
         "executions": executions,
     }
-    out_path.parent.mkdir(exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))
     return out_path

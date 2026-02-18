@@ -33,6 +33,6 @@ def build_rl_shadow_report(df: pd.DataFrame, day: str, out_path: Path) -> Path:
         "multiplier_by_regime": df.groupby("primary_regime")["rl_suggested_multiplier"].mean().dropna().to_dict(),
         "risk_guard_overrides": int((df.get("rl_shadow_only", pd.Series(dtype=float)) == 1).sum()),
     }
-    out_path.parent.mkdir(exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))
     return out_path

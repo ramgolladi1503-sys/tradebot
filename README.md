@@ -4,6 +4,7 @@ Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
+After pulling changes, run the same command again to sync new dependencies.
 
 Create a `.env` file using the provided template:
 ```bash
@@ -224,6 +225,7 @@ Risk monitor (independent check):
 ```bash
 python scripts/risk_monitor.py
 python scripts/reset_risk_halt.py
+./scripts/kill_switch.sh
 ```
 
 Scorecard (top-1% readiness):

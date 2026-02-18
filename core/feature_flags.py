@@ -95,7 +95,7 @@ def load_flags() -> Dict[str, Any]:
         merged["CANARY_PERCENT"] = 0
     if merged.get("CANARY_PERCENT", 0) > 100:
         merged["CANARY_PERCENT"] = 100
-    SNAPSHOT_PATH.parent.mkdir(exist_ok=True)
+    SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
     snapshot = {
         "ts_epoch": now_utc_epoch(),
         "flags": merged,
@@ -185,7 +185,7 @@ def _count_decisions(window_sec: float) -> int:
 
 
 def write_override(flags: Dict[str, Any], reason: str = "manual") -> None:
-    OVERRIDE_PATH.parent.mkdir(exist_ok=True)
+    OVERRIDE_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(flags)
     payload["ts_epoch"] = now_utc_epoch()
     payload["reason"] = reason

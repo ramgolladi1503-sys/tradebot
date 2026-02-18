@@ -27,7 +27,7 @@ class FeedRestartGuard:
             print(f"[FEED_RESTART_GUARD] failed to log path={LOG_PATH} err={type(exc).__name__}:{exc}")
 
     def _save_state(self) -> None:
-        STATE_PATH.parent.mkdir(exist_ok=True)
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
         STATE_PATH.write_text(
             json.dumps(
                 {

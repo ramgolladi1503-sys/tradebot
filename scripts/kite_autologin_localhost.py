@@ -148,12 +148,13 @@ def main():
 
     api_key = _resolve_api_key()
     api_secret = _resolve_api_secret()
+    api_key_has_whitespace = bool(re.search(r"\s", api_key))
 
     print(
         "[KITE_AUTH] "
         f"api_key_len={len(api_key)} "
         f"api_key_last4={_tail4(api_key)} "
-        f"api_key_has_whitespace={bool(re.search(r'\\s', api_key))}"
+        f"api_key_has_whitespace={api_key_has_whitespace}"
     )
 
     server_thread = threading.Thread(target=_run_server, args=(HOST, PORT), daemon=True)

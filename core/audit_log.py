@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from config import config as cfg
+from core.paths import logs_dir
 from core.time_utils import now_utc_epoch, now_ist
 
 
-AUDIT_LOG = Path(getattr(cfg, "AUDIT_LOG_PATH", "logs/audit_log.jsonl"))
+AUDIT_LOG = Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl")))
 GENESIS = "GENESIS"
 
 
@@ -50,7 +51,7 @@ def _compute_hash(event: Dict[str, Any]) -> str:
 
 
 def append_event(event: Dict[str, Any]) -> str:
-    AUDIT_LOG.parent.mkdir(exist_ok=True)
+    AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
     event.setdefault("ts_epoch", now_utc_epoch())
     event.setdefault("ts_ist", now_ist().isoformat())
     event.setdefault("desk_id", getattr(cfg, "DESK_ID", "DEFAULT"))

@@ -202,3 +202,14 @@ def test_armed_approval_is_single_use(monkeypatch, tmp_path):
     ok, reason = consume_valid_approval(h, approver_id="ops_user", require_armed=True)
     assert ok is False
     assert reason == "approval_used"
+
+
+def test_approval_store_creates_nested_trade_db_parent_dirs(monkeypatch, tmp_path):
+    nested_db = tmp_path / "missing" / "deep" / "path" / "desks" / "DEFAULT" / "trades.db"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(nested_db), raising=False)
+
+    h = _intent().order_intent_hash()
+    ok, reason = approve_order_intent(h, approver_id="tester", ttl_sec=60)
+    assert ok is True, reason
+    assert nested_db.parent.exists()
+    assert nested_db.exists()

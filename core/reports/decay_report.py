@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
 
+from core.paths import logs_dir
+
 
 def build_decay_report(day: str, out_path: Path) -> Path:
-    state_path = Path("logs/strategy_decay_state.json")
-    prob_path = Path("logs/strategy_decay_probs.json")
+    state_path = logs_dir() / "strategy_decay_state.json"
+    prob_path = logs_dir() / "strategy_decay_probs.json"
 
     decay_state = {}
     decay_prob = {}
@@ -25,6 +27,6 @@ def build_decay_report(day: str, out_path: Path) -> Path:
         "decay_state": decay_state,
         "decay_prob": decay_prob,
     }
-    out_path.parent.mkdir(exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, default=str))
     return out_path
