@@ -216,7 +216,8 @@ except Exception:
 # Expiry configuration
 # -------------------------------
 # 0 = Monday, 1 = Tuesday, ..., 4 = Friday
-EXPIRY_DAY = 1  # always take next Tuesday expiry
+# Legacy fallback only. Ignored when EXPIRY_WEEKDAY_BY_SYMBOL is set.
+EXPIRY_DAY = 1
 
 # -------------------------------
 # Option quote freshness
@@ -228,6 +229,8 @@ MAX_LTP_AGE_SEC = float(os.getenv("MAX_LTP_AGE_SEC", "8"))
 MAX_CANDLE_AGE_SEC = float(os.getenv("MAX_CANDLE_AGE_SEC", "120"))
 INDEX_BIDASK_MISSING_LOG_SEC = float(os.getenv("INDEX_BIDASK_MISSING_LOG_SEC", "60"))
 INDEX_REST_QUOTE_REFRESH_SEC = float(os.getenv("INDEX_REST_QUOTE_REFRESH_SEC", "5"))
+SYNTH_INDEX_SPREAD_PCT = float(os.getenv("SYNTH_INDEX_SPREAD_PCT", "0.00005"))
+SYNTH_INDEX_SPREAD_ABS = float(os.getenv("SYNTH_INDEX_SPREAD_ABS", "0.5"))
 
 # -------------------------------
 # Synthetic option chain
@@ -273,9 +276,9 @@ STRIKES_AROUND_BY_SYMBOL = {
 }
 # Expiry weekdays by symbol (0=Mon ... 6=Sun)
 EXPIRY_WEEKDAY_BY_SYMBOL = {
-    "NIFTY": int(os.getenv("NIFTY_EXPIRY_WEEKDAY", "3")),        # Thu
-    "BANKNIFTY": int(os.getenv("BANKNIFTY_EXPIRY_WEEKDAY", "2")), # Wed
-    "SENSEX": int(os.getenv("SENSEX_EXPIRY_WEEKDAY", "3")),       # Thu (per user preference)
+    "NIFTY": int(os.getenv("NIFTY_EXPIRY_WEEKDAY", "1")),         # Tue (NSE weekly)
+    "BANKNIFTY": int(os.getenv("BANKNIFTY_EXPIRY_WEEKDAY", "1")), # Tue (NSE weekly)
+    "SENSEX": int(os.getenv("SENSEX_EXPIRY_WEEKDAY", "3")),       # Thu (BSE weekly)
 }
 
 # -------------------------------
@@ -505,6 +508,11 @@ REGIME_RANGE_TARGET_MULT = float(os.getenv("REGIME_RANGE_TARGET_MULT", "1.3"))
 REGIME_EVENT_STOP_MULT = float(os.getenv("REGIME_EVENT_STOP_MULT", "1.1"))
 REGIME_EVENT_TARGET_MULT = float(os.getenv("REGIME_EVENT_TARGET_MULT", "1.4"))
 REGIME_EVENT_ROUTE_ALLOW = os.getenv("REGIME_EVENT_ROUTE_ALLOW", "true").lower() == "true"
+# Controlled signal fallback (SIM/PAPER by default; LIVE disabled unless explicitly enabled)
+TREND_VWAP_FALLBACK_ENABLE = os.getenv("TREND_VWAP_FALLBACK_ENABLE", "true").lower() == "true"
+TREND_VWAP_FALLBACK_LIVE_ENABLE = os.getenv("TREND_VWAP_FALLBACK_LIVE_ENABLE", "false").lower() == "true"
+TREND_VWAP_FALLBACK_SCORE = float(os.getenv("TREND_VWAP_FALLBACK_SCORE", "0.60"))
+TREND_VWAP_FALLBACK_SLOPE_ABS_MIN = float(os.getenv("TREND_VWAP_FALLBACK_SLOPE_ABS_MIN", "0.0008"))
 
 # Regime-based threshold multipliers
 REGIME_SCORE_MULT = {

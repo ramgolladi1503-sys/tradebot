@@ -33,7 +33,7 @@ from core.trade_store import fetch_recent_trades, fetch_recent_outcomes, fetch_p
 from core.scorecard import compute_scorecard
 from core.gpt_advisor import get_trade_advice, save_advice, get_day_summary
 from core.market_data import fetch_live_market_data
-from core.day_type_history import load_day_type_events
+from core.day_type_history import load_day_type_events, day_type_events_dataframe
 from core.time_utils import is_today_local, age_minutes_local, now_local, parse_ts_local
 import time
 
@@ -2035,7 +2035,16 @@ if nav == "Home":
 
     section_header("What Blocked Trades Today")
     try:
-        rej_path = Path("logs/rejected_candidates.jsonl")
+        try:
+            from config import config as cfg
+            desk = getattr(cfg, "DESK_ID", "DEFAULT")
+            desk_log_dir = Path(str(getattr(cfg, "DESK_LOG_DIR", f"logs/desks/{desk}")))
+        except Exception:
+            desk = "DEFAULT"
+            desk_log_dir = Path(f"logs/desks/{desk}")
+        blocked_path = desk_log_dir / "blocked_candidates.jsonl"
+        legacy_path = Path("logs/rejected_candidates.jsonl")
+        rej_path = blocked_path if blocked_path.exists() else legacy_path
         if rej_path.exists():
             rows = []
             with rej_path.open() as f:
@@ -2048,11 +2057,38 @@ if nav == "Home":
                         continue
             if rows:
                 df_rej = pd.DataFrame(rows)
+                if "reason" not in df_rej.columns and "reason_code" in df_rej.columns:
+                    df_rej["reason"] = df_rej["reason_code"]
+                if "timestamp" not in df_rej.columns and "ts_ist" in df_rej.columns:
+                    df_rej["timestamp"] = df_rej["ts_ist"]
                 if "timestamp" in df_rej.columns:
                     now = now_local()
                     df_rej["ts_local"] = df_rej["timestamp"].apply(lambda v: parse_ts_local(v))
                     df_rej = df_rej[df_rej["ts_local"].apply(lambda v: v is not None and v.date() == now.date())]
                 if not df_rej.empty and "reason" in df_rej.columns:
+                    latest_cols = [
+                        c
+                        for c in [
+                            "timestamp",
+                            "symbol",
+                            "stage",
+                            "reason",
+                            "reason_text",
+                            "ltp",
+                            "vwap",
+                            "atr",
+                            "primary_regime",
+                            "quote_ok",
+                            "quote_source",
+                        ]
+                        if c in df_rej.columns
+                    ]
+                    latest_sort_col = "ts_epoch" if "ts_epoch" in df_rej.columns else "timestamp"
+                    st.markdown("**Latest Blocked Candidates**")
+                    ui.table(
+                        df_rej.sort_values(latest_sort_col, ascending=False).head(50)[latest_cols],
+                        use_container_width=True,
+                    )
                     summary = df_rej["reason"].value_counts().head(8).reset_index()
                     summary.columns = ["reason", "count"]
                     ui.table(summary, use_container_width=True)
@@ -2149,7 +2185,32 @@ if nav == "Home":
                         reasons = ["(None)"] + summary["reason"].tolist()
                         sel_reason = st.selectbox("Reason", reasons, index=0, key="blocked_reason")
                         if sel_reason != "(None)":
-                            detail_cols = [c for c in ["timestamp", "symbol", "strike", "type", "reason", "ltp", "bid", "ask", "volume", "oi", "iv", "moneyness"] if c in df_rej.columns]
+                            detail_cols = [
+                                c
+                                for c in [
+                                    "timestamp",
+                                    "ts_epoch",
+                                    "symbol",
+                                    "stage",
+                                    "reason",
+                                    "reason_text",
+                                    "ltp",
+                                    "vwap",
+                                    "atr",
+                                    "primary_regime",
+                                    "quote_ok",
+                                    "quote_source",
+                                    "strike",
+                                    "type",
+                                    "bid",
+                                    "ask",
+                                    "volume",
+                                    "oi",
+                                    "iv",
+                                    "moneyness",
+                                ]
+                                if c in df_rej.columns
+                            ]
                             ui.table(df_rej[df_rej["reason"] == sel_reason][detail_cols].head(200), use_container_width=True)
                         # Blocked outcomes (paper results)
                         out_path = Path("logs/blocked_outcomes.jsonl")
@@ -2266,21 +2327,12 @@ if nav == "Home":
     try:
         rows = load_day_type_events(backfill=True, max_rows=10000)
         if rows:
-            df_dt = pd.DataFrame(rows)
-            if "ts_epoch" in df_dt.columns:
-                df_dt["ts_epoch"] = pd.to_numeric(df_dt["ts_epoch"], errors="coerce")
-            if "ts_ist" in df_dt.columns:
-                df_dt["ts_ist"] = pd.to_datetime(df_dt["ts_ist"], errors="coerce")
-            if "ts" not in df_dt.columns:
-                df_dt["ts"] = df_dt.get("ts_ist")
-            else:
-                df_dt["ts"] = pd.to_datetime(df_dt["ts"], errors="coerce")
-            if "ts_ist" in df_dt.columns:
-                df_dt["ts"] = df_dt["ts_ist"]
+            df_dt = day_type_events_dataframe(rows)
             # Export CSV
             try:
                 csv_path = Path("logs/day_type_events.csv")
-                df_dt.sort_values("ts_epoch", ascending=True).to_csv(csv_path, index=False)
+                sort_col = "ts_epoch" if "ts_epoch" in df_dt.columns else "ts"
+                df_dt.sort_values(sort_col, ascending=True).to_csv(csv_path, index=False)
             except Exception:
                 pass
             if st.button("Export Day‑Type History CSV", key="export_daytype_csv"):
@@ -2288,7 +2340,8 @@ if nav == "Home":
                     st.success("Exported to logs/day_type_events.csv")
                 except Exception:
                     pass
-            ui.table(df_dt.sort_values("ts_epoch", ascending=False).head(200), use_container_width=True)
+            table_sort_col = "ts_epoch" if "ts_epoch" in df_dt.columns else "ts"
+            ui.table(df_dt.sort_values(table_sort_col, ascending=False).head(200), use_container_width=True)
             try:
                 if "ts" in df_dt.columns and "confidence" in df_dt.columns:
                     df_plot = df_dt.dropna(subset=["ts", "confidence"])

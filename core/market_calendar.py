@@ -1,17 +1,67 @@
-from datetime import date, timedelta
-import holidays
+from datetime import date, datetime, timedelta
+
 from config import config as cfg
 from core.time_utils import now_ist
 
-IN_HOLIDAYS = holidays.India(years=now_ist().date().year)
+try:
+    import holidays
+
+    IN_HOLIDAYS = holidays.India(years=now_ist().date().year)
+except Exception:
+    IN_HOLIDAYS = set()
+
+
+def _coerce_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    if "T" in text:
+        text = text.split("T", 1)[0]
+    try:
+        return datetime.fromisoformat(text).date()
+    except Exception:
+        return None
+
+
+def _default_weekly_expiry_weekday(symbol: str | None) -> int:
+    # NSE index weeklies: Tuesday, BSE SENSEX weekly: Thursday.
+    sym = str(symbol or "NIFTY").upper()
+    return 3 if sym == "SENSEX" else 1
 
 def _weekly_expiry_weekday(symbol: str | None):
     sym = (symbol or "NIFTY").upper()
-    exp_map = getattr(cfg, "EXPIRY_WEEKDAY_BY_SYMBOL", {})
+    exp_map = getattr(cfg, "EXPIRY_WEEKDAY_BY_SYMBOL", {}) or {}
     try:
-        return int(exp_map.get(sym, 3))
+        if exp_map:
+            if sym in exp_map:
+                return int(exp_map[sym])
+            return int(_default_weekly_expiry_weekday(sym))
     except Exception:
-        return 3
+        pass
+    return int(_default_weekly_expiry_weekday(sym))
+
+
+def choose_nearest_available_expiry(available_expiries, today: date | None = None):
+    """
+    Prefer nearest non-holiday expiry >= today from exchange-provided expiries.
+    """
+    normalized = sorted({d for d in (_coerce_date(x) for x in (available_expiries or [])) if d is not None})
+    if not normalized:
+        return None
+    ref = today or now_ist().date()
+    non_holiday_future = [d for d in normalized if d >= ref and d not in IN_HOLIDAYS]
+    if non_holiday_future:
+        return non_holiday_future[0]
+    non_holiday_any = [d for d in normalized if d not in IN_HOLIDAYS]
+    if non_holiday_any:
+        return non_holiday_any[0]
+    return normalized[0]
 
 def next_expiry(symbol: str | None = None):
     """

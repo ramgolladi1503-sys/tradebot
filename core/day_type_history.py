@@ -29,6 +29,8 @@ def normalize_day_type_event(row: dict[str, Any], *, fill_now: bool = True) -> t
         ts_epoch = normalize_epoch_seconds(payload.get("ts_ist"))
     if ts_epoch is None:
         ts_epoch = normalize_epoch_seconds(payload.get("ts"))
+    if ts_epoch is None:
+        ts_epoch = normalize_epoch_seconds(payload.get("timestamp"))
     if ts_epoch is None and fill_now:
         ts_epoch = float(now_utc_epoch())
     if ts_epoch is not None:
@@ -39,6 +41,8 @@ def normalize_day_type_event(row: dict[str, Any], *, fill_now: bool = True) -> t
     ts_ist = payload.get("ts_ist")
     if not isinstance(ts_ist, str) or not ts_ist.strip():
         dt_ist = parse_ts_ist(payload.get("ts")) if payload.get("ts") is not None else None
+        if dt_ist is None and payload.get("timestamp") is not None:
+            dt_ist = parse_ts_ist(payload.get("timestamp"))
         if dt_ist is None and ts_epoch is not None:
             ts_ist = _to_ts_ist(float(ts_epoch))
         elif dt_ist is not None:
@@ -55,6 +59,39 @@ def normalize_day_type_event(row: dict[str, Any], *, fill_now: bool = True) -> t
         changed = True
 
     return payload, changed
+
+
+def day_type_events_dataframe(rows: list[dict[str, Any]]):
+    """
+    Build a backward-compatible DataFrame for dashboard rendering.
+    Prefers `ts`, falls back to `timestamp`, then `ts_ist`.
+    Always returns a DataFrame with a `ts` column.
+    """
+    import pandas as pd
+
+    df = pd.DataFrame(rows or [])
+    if df.empty:
+        if "ts" not in df.columns:
+            df["ts"] = pd.Series(dtype="datetime64[ns]")
+        return df
+
+    if "ts_epoch" in df.columns:
+        df["ts_epoch"] = pd.to_numeric(df["ts_epoch"], errors="coerce")
+
+    ts_series = None
+    if "ts" in df.columns:
+        ts_series = pd.to_datetime(df["ts"], errors="coerce")
+    if "timestamp" in df.columns:
+        ts_fallback = pd.to_datetime(df["timestamp"], errors="coerce")
+        ts_series = ts_fallback if ts_series is None else ts_series.fillna(ts_fallback)
+    if "ts_ist" in df.columns:
+        ts_ist = pd.to_datetime(df["ts_ist"], errors="coerce")
+        ts_series = ts_ist if ts_series is None else ts_series.fillna(ts_ist)
+
+    if ts_series is None:
+        ts_series = pd.Series([pd.NaT] * len(df), index=df.index)
+    df["ts"] = ts_series
+    return df
 
 
 def append_day_type_event(

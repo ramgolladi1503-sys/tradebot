@@ -239,6 +239,37 @@ def _index_quote_keys(symbol: str) -> list[str]:
     return deduped
 
 
+def _is_index_symbol(symbol: str) -> bool:
+    sym = str(symbol or "").upper()
+    if not sym:
+        return False
+    configured = {
+        str(k).upper()
+        for k in (getattr(cfg, "PREMARKET_INDICES_LTP", {}) or {}).keys()
+        if str(k or "").strip()
+    }
+    if configured:
+        return sym in configured
+    return sym in {"NIFTY", "BANKNIFTY", "SENSEX"}
+
+
+def _synthesize_index_bid_ask(mid_price) -> tuple[float | None, float | None, float | None]:
+    try:
+        mid = float(mid_price)
+        if mid <= 0:
+            return None, None, None
+        spread = max(
+            float(mid) * float(getattr(cfg, "SYNTH_INDEX_SPREAD_PCT", 0.00005)),
+            float(getattr(cfg, "SYNTH_INDEX_SPREAD_ABS", 0.5)),
+        )
+        half = spread / 2.0
+        bid = round(mid - half, 4)
+        ask = round(mid + half, 4)
+        return bid, ask, mid
+    except Exception:
+        return None, None, None
+
+
 def _extract_quote_epoch(raw_ts, fallback_epoch: float) -> float:
     if raw_ts is None:
         return float(fallback_epoch)
@@ -1002,7 +1033,10 @@ def fetch_live_market_data():
         except Exception:
             pass
 
-        # No synthetic bid/ask — require real quotes for trading
+        # Index quote path:
+        # - Prefer real bid/ask from WS/REST depth.
+        # - For index symbols only, synthesize around LTP when depth is missing.
+        # - Never synthesize option-chain quotes.
         bid = None
         ask = None
         mid = None
@@ -1014,6 +1048,7 @@ def fetch_live_market_data():
         quote_age_sec = None
         spread_pct = None
         quote_source = "none"
+        synthetic_index_quote = False
         ws_quote = get_index_quote_snapshot(symbol)
         if ws_quote:
             try:
@@ -1023,7 +1058,6 @@ def fetch_live_market_data():
                 if mid is None and bid is not None and ask is not None:
                     mid = (float(bid) + float(ask)) / 2.0
                 quote_ts_epoch = float(ws_quote.get("ts_epoch")) if ws_quote.get("ts_epoch") is not None else None
-                quote_source = str(ws_quote.get("source") or "ws")
                 if ltp_source == "live" and ws_quote.get("last_price") is not None:
                     try:
                         ltp = float(ws_quote.get("last_price"))
@@ -1034,6 +1068,7 @@ def fetch_live_market_data():
                     quote_age_sec = max(0.0, now_utc_epoch() - quote_ts_epoch)
                 if bid and ask:
                     quote_ok = True
+                    quote_source = "depth"
                     if ltp:
                         spread_pct = (ask - bid) / ltp
             except Exception:
@@ -1062,10 +1097,29 @@ def fetch_live_market_data():
                             ltp_ts_epoch = quote_ts_epoch
                     if bid and ask:
                         quote_ok = True
+                        quote_source = "depth"
                         if ltp:
                             spread_pct = (ask - bid) / ltp
                 except Exception:
                     quote_ok = False
+        if not quote_ok and _is_index_symbol(symbol):
+            synth_bid, synth_ask, synth_mid = _synthesize_index_bid_ask(ltp)
+            if synth_bid is not None and synth_ask is not None and synth_mid is not None:
+                bid = synth_bid
+                ask = synth_ask
+                mid = synth_mid
+                synthetic_index_quote = True
+                quote_source = "synthetic_index"
+                quote_ok = True
+                if quote_ts_epoch is None:
+                    if isinstance(ltp_ts_epoch, (int, float)):
+                        quote_ts_epoch = float(ltp_ts_epoch)
+                    else:
+                        quote_ts_epoch = now_utc_epoch()
+                quote_ts = datetime.utcfromtimestamp(float(quote_ts_epoch)).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+                quote_age_sec = max(0.0, now_utc_epoch() - float(quote_ts_epoch))
+                if ltp:
+                    spread_pct = (ask - bid) / ltp
         if quote_ts_epoch is not None:
             update_index_quote_snapshot(
                 symbol=symbol,
@@ -1089,6 +1143,10 @@ def fetch_live_market_data():
             max_candle_age_sec=getattr(cfg, "MAX_CANDLE_AGE_SEC", 120),
             now_epoch=now_utc_epoch(),
         )
+        if synthetic_index_quote:
+            quote_ok = bool(time_sanity.get("ok", False) and ltp is not None and float(ltp) > 0)
+            if not quote_ok:
+                quote_source = "none"
         if not time_sanity.get("ok", True):
             reasons = list(time_sanity.get("reasons", []) or [])
             invalid_reason = "|".join(reasons) if reasons else "timestamp_stale"
@@ -1102,6 +1160,7 @@ def fetch_live_market_data():
                     "valid": False,
                     "invalid_reason": invalid_reason,
                     "invalid_reason_codes": reasons,
+                    "quote_source": quote_source,
                     "quote_ts": quote_ts,
                     "quote_ts_epoch": quote_ts_epoch,
                     "quote_age_sec": quote_age_sec,
@@ -1554,6 +1613,7 @@ def fetch_live_market_data():
             "bid_qty": bid_qty,
             "ask_qty": ask_qty,
             "quote_ok": quote_ok,
+            "quote_source": quote_source,
             "quote_ts": quote_ts,
             "quote_ts_epoch": quote_ts_epoch,
             "quote_age_sec": quote_age_sec,
@@ -1631,6 +1691,7 @@ def fetch_live_market_data():
                 "bid_qty": bid_qty,
                 "ask_qty": ask_qty,
                 "quote_ok": quote_ok,
+                "quote_source": quote_source,
                 "quote_ts": quote_ts,
                 "quote_ts_epoch": quote_ts_epoch,
                 "quote_age_sec": quote_age_sec,
@@ -1702,6 +1763,7 @@ def fetch_live_market_data():
                 "bid_qty": bid_qty,
                 "ask_qty": ask_qty,
                 "quote_ok": quote_ok,
+                "quote_source": quote_source,
                 "quote_ts": quote_ts,
                 "quote_ts_epoch": quote_ts_epoch,
                 "quote_age_sec": quote_age_sec,

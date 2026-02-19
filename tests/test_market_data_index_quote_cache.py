@@ -3,6 +3,31 @@ import json
 from core import market_data as md
 
 
+class _DummyNewsCal:
+    def get_shock(self):
+        return {}
+
+
+class _DummyNewsText:
+    def encode(self):
+        return {}
+
+
+class _DummyCross:
+    def update(self, *_args, **_kwargs):
+        return {"features": {}, "data_quality": {}}
+
+
+class _DummyRegimeModel:
+    def predict(self, _features):
+        return {
+            "primary_regime": "TREND",
+            "regime_probs": {"TREND": 0.9, "RANGE": 0.1},
+            "regime_entropy": 0.1,
+            "unstable_regime_flag": False,
+        }
+
+
 def test_index_quote_cache_stores_bid_ask_mid_ts_source():
     md._DATA_CACHE.clear()
     md.update_index_quote_snapshot(
@@ -67,3 +92,76 @@ def test_refresh_index_quote_from_rest_populates_bid_ask(monkeypatch):
     assert snap["ask"] == 25000.6
     assert snap["last_price"] == 25000.25
     assert snap["ts_epoch"] == 1710000000.0
+
+
+def test_index_depth_missing_synthesizes_quote(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    md._DATA_CACHE.clear()
+    fixed_epoch = 1710000000.0
+    fixed_now = md.now_ist().replace(hour=10, minute=0, second=0, microsecond=0)
+
+    monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
+    monkeypatch.setattr(md.cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(md.cfg, "SYNTH_INDEX_SPREAD_PCT", 0.00005, raising=False)
+    monkeypatch.setattr(md.cfg, "SYNTH_INDEX_SPREAD_ABS", 0.5, raising=False)
+    monkeypatch.setattr(md, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(md, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(md, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(md, "check_market_data_time_sanity", lambda **kwargs: {"ok": True, "reasons": []})
+    monkeypatch.setattr(md, "now_utc_epoch", lambda: fixed_epoch)
+    monkeypatch.setattr(md, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda symbol, force=False: False)
+
+    def _fake_get_ltp(sym: str):
+        md._DATA_CACHE.setdefault(sym, {})
+        md._DATA_CACHE[sym]["ltp_source"] = "live"
+        md._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_epoch
+        return 25000.0
+
+    monkeypatch.setattr(md, "get_ltp", _fake_get_ltp)
+
+    rows = md.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("symbol") == "NIFTY" and r.get("instrument") == "OPT")
+    assert snap["quote_ok"] is True
+    assert snap["quote_source"] == "synthetic_index"
+    assert snap["bid"] is not None
+    assert snap["ask"] is not None
+    assert snap["ask"] > snap["bid"]
+    assert snap["index_quote_source"] == "synthetic_index"
+
+
+def test_non_index_depth_missing_keeps_quote_false(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    md._DATA_CACHE.clear()
+    fixed_epoch = 1710000000.0
+    fixed_now = md.now_ist().replace(hour=10, minute=0, second=0, microsecond=0)
+
+    monkeypatch.setattr(md.cfg, "SYMBOLS", ["RELIANCE"], raising=False)
+    monkeypatch.setattr(md.cfg, "PREMARKET_INDICES_LTP", {"NIFTY": "NSE:NIFTY 50"}, raising=False)
+    monkeypatch.setattr(md.cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(md, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(md, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(md, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(md, "check_market_data_time_sanity", lambda **kwargs: {"ok": True, "reasons": []})
+    monkeypatch.setattr(md, "now_utc_epoch", lambda: fixed_epoch)
+    monkeypatch.setattr(md, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda symbol, force=False: False)
+
+    def _fake_get_ltp(sym: str):
+        md._DATA_CACHE.setdefault(sym, {})
+        md._DATA_CACHE[sym]["ltp_source"] = "live"
+        md._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_epoch
+        return 1500.0
+
+    monkeypatch.setattr(md, "get_ltp", _fake_get_ltp)
+
+    rows = md.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("symbol") == "RELIANCE" and r.get("instrument") == "OPT")
+    assert snap["quote_ok"] is False
+    assert snap["quote_source"] == "none"
+    assert snap["bid"] is None
+    assert snap["ask"] is None

@@ -1,6 +1,10 @@
 from datetime import datetime, date
 from config import config as cfg
-from core.market_calendar import next_expiry_by_type, next_expiry_after
+from core.market_calendar import (
+    choose_nearest_available_expiry,
+    next_expiry_by_type,
+    next_expiry_after,
+)
 from core.kite_client import kite_client
 from core.greeks import implied_vol, greeks
 
@@ -32,17 +36,10 @@ def _coerce_expiry_date(value):
 
 
 def _choose_expiry(available_expiries, preferred_expiry):
-    normalized = sorted({exp for exp in (_coerce_expiry_date(x) for x in available_expiries) if exp is not None})
-    preferred = _coerce_expiry_date(preferred_expiry)
-    if not normalized:
-        return None
-    if preferred in normalized:
-        return preferred
-    today = date.today()
-    future = [exp for exp in normalized if exp >= today]
-    if future:
-        return future[0]
-    return normalized[0]
+    chosen = choose_nearest_available_expiry(available_expiries, today=date.today())
+    if chosen is not None:
+        return chosen
+    return _coerce_expiry_date(preferred_expiry)
 
 def _write_chain_snapshot(chain, symbol=None):
     try:
@@ -197,13 +194,13 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 return str(_coerce_expiry_date(x) or x)
             except Exception:
                 return ""
-        # Prefer available expiry from instruments (per symbol/exchange)
+        # Exchange-provided expiries are source of truth.
         exchange = "BFO" if symbol.upper() == "SENSEX" else "NFO"
-        expiry = kite_client.next_available_expiry(symbol, exchange=exchange)
-        if not expiry:
-            expiry = next_expiry_by_type(expiry_type, symbol=symbol)
+        fallback_expiry = kite_client.next_available_expiry(symbol, exchange=exchange)
+        if not fallback_expiry:
+            fallback_expiry = next_expiry_by_type(expiry_type, symbol=symbol)
         next_exp = None
-        expiry_for_term = _coerce_expiry_date(expiry)
+        expiry_for_term = _coerce_expiry_date(fallback_expiry)
         if expiry_for_term:
             next_exp = next_expiry_after(expiry_for_term, expiry_type=expiry_type, symbol=symbol)
         min_prem = getattr(cfg, "MIN_PREMIUM", 40)
@@ -240,7 +237,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             )
             expiry_date = _choose_expiry(
                 [inst.get("expiry") for inst in symbol_instruments],
-                expiry,
+                fallback_expiry,
             )
             if symbol.upper() in {"NIFTY", "BANKNIFTY", "SENSEX"}:
                 print(
@@ -251,6 +248,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     f" available_expiries={available_expiries}"
                     f" chosen_expiry={str(expiry_date) if expiry_date else None}"
                 )
+            if expiry_date is None:
+                expiry_date = _coerce_expiry_date(fallback_expiry)
             if expiry_date is None:
                 raise ValueError(f"No expiry available for {symbol}")
             next_exp = next_expiry_after(expiry_date, expiry_type=expiry_type, symbol=symbol) if expiry_date else None

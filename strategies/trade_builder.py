@@ -15,7 +15,7 @@ from core.feature_builder import build_trade_features, validate_trade_features
 from core.trade_scoring import compute_trade_score
 from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
-from core.time_utils import is_market_open_ist
+from core.time_utils import is_market_open_ist, now_ist, now_utc_epoch
 from core.regime import RegimeClassifier, normalize_regime
 import time as _time
 import time
@@ -83,6 +83,46 @@ class TradeBuilder:
         self._expiry_zero_hero_disabled_until = {}
         self._expiry_zero_hero_pnl = {}
         self._reject_ctx = {}
+
+    def _blocked_candidates_path(self) -> Path:
+        desk_log_dir = getattr(cfg, "DESK_LOG_DIR", None)
+        if desk_log_dir:
+            return Path(str(desk_log_dir)) / "blocked_candidates.jsonl"
+        desk = getattr(cfg, "DESK_ID", "DEFAULT")
+        return Path(f"logs/desks/{desk}/blocked_candidates.jsonl")
+
+    def _log_blocked_candidate(
+        self,
+        symbol: str,
+        reason_code: str,
+        reason_text: str,
+        market_data: dict | None = None,
+        extra: dict | None = None,
+    ) -> None:
+        data = market_data or {}
+        rec = {
+            "ts_ist": now_ist().isoformat(),
+            "ts_epoch": now_utc_epoch(),
+            "symbol": symbol,
+            "stage": "trade_builder",
+            "reason_code": str(reason_code),
+            "reason_text": str(reason_text),
+            "ltp": data.get("ltp"),
+            "vwap": data.get("vwap"),
+            "atr": data.get("atr"),
+            "primary_regime": data.get("primary_regime") or data.get("regime_day") or data.get("regime"),
+            "quote_ok": data.get("quote_ok"),
+            "quote_source": data.get("quote_source") or data.get("index_quote_source") or data.get("ltp_source"),
+        }
+        if extra:
+            rec.update(extra)
+        try:
+            path = self._blocked_candidates_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=True) + "\n")
+        except Exception:
+            pass
 
     def _identity_fields(self, symbol, instrument, expiry, strike, right, qty_lots):
         instrument_type = instrument
@@ -152,6 +192,7 @@ class TradeBuilder:
             if isinstance(quote_cache, dict)
             else None
         )
+        preexisting_synthetic = bool(market_data.get("index_bidask_synthetic")) or source in ("synthetic", "synthetic_index")
         missing_bid_ask = (bid is None) or (ask is None) or (ask < bid)
         synthetic = False
 
@@ -168,9 +209,10 @@ class TradeBuilder:
                 source = "synthetic"
                 synthetic = True
 
-        quote_kind = "synthetic" if synthetic else ("real" if (bid is not None and ask is not None) else "missing")
+        has_bid_ask = (bid is not None) and (ask is not None)
+        quote_kind = "synthetic" if (synthetic or (preexisting_synthetic and has_bid_ask)) else ("real" if has_bid_ask else "missing")
         market_data["index_quote_source"] = source if quote_kind != "missing" else "missing"
-        market_data["index_bidask_synthetic"] = bool(synthetic)
+        market_data["index_bidask_synthetic"] = bool(synthetic or (preexisting_synthetic and has_bid_ask))
         market_data["index_quote_kind"] = quote_kind
         if bid is not None:
             market_data["bid"] = bid
@@ -422,6 +464,67 @@ class TradeBuilder:
             return None
         return families[0]
 
+    def _trend_vwap_fallback_signal(self, market_data: dict, regime_day: str):
+        if not bool(getattr(cfg, "TREND_VWAP_FALLBACK_ENABLE", True)):
+            return None
+        exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+        if exec_mode == "LIVE" and not bool(getattr(cfg, "TREND_VWAP_FALLBACK_LIVE_ENABLE", False)):
+            return None
+        if not bool(market_data.get("indicators_ok", False)):
+            return None
+        primary_regime = normalize_regime(
+            market_data.get("primary_regime") or market_data.get("regime") or regime_day
+        )
+        if primary_regime not in ("TREND", "EVENT"):
+            return None
+        vwap_slope = float(market_data.get("vwap_slope", 0.0) or 0.0)
+        slope_abs_min = float(getattr(cfg, "TREND_VWAP_FALLBACK_SLOPE_ABS_MIN", 0.0008))
+        orb_bias = str(market_data.get("orb_bias") or "").upper()
+        orb_lock_min = int(market_data.get("orb_lock_min") or getattr(cfg, "ORB_LOCK_MIN", 15))
+        minutes_since_open = float(market_data.get("minutes_since_open", 0) or 0)
+        orb_locked = (
+            orb_bias not in ("", "PENDING")
+            and minutes_since_open >= orb_lock_min
+        )
+        if (not orb_locked) and (abs(vwap_slope) < slope_abs_min):
+            return None
+        direction = None
+        if orb_locked and orb_bias in ("UP", "DOWN"):
+            direction = "BUY_CALL" if orb_bias == "UP" else "BUY_PUT"
+        elif vwap_slope > 0:
+            direction = "BUY_CALL"
+        elif vwap_slope < 0:
+            direction = "BUY_PUT"
+        if direction is None:
+            return None
+        score = float(getattr(cfg, "TREND_VWAP_FALLBACK_SCORE", 0.60))
+        reason = "trend_vwap_fallback"
+        symbol = str(market_data.get("symbol") or "UNKNOWN")
+        payload = {
+            "fallback": reason,
+            "direction": direction,
+            "score": score,
+            "primary_regime": primary_regime,
+            "vwap_slope": vwap_slope,
+            "orb_bias": orb_bias,
+            "orb_locked": orb_locked,
+            "exec_mode": exec_mode,
+        }
+        _log_signal_event("signal_fallback_trend_vwap", symbol, payload)
+        self._log_blocked_candidate(
+            symbol,
+            "trend_vwap_fallback",
+            "Fallback signal emitted from trend/event regime with VWAP/ORB guardrails",
+            market_data=market_data,
+            extra=payload,
+        )
+        return {
+            "direction": direction,
+            "reason": reason,
+            "score": score,
+            "regime_day": primary_regime,
+        }
+
     def _signal_for_symbol(self, market_data, force_family: str | None = None):
         instrument = market_data.get("instrument", "OPT")
         regime_day = self._resolve_regime(market_data)
@@ -590,8 +693,20 @@ class TradeBuilder:
             else:
                 sig = ensemble_signal(market_data)
         if not sig:
-            return None
-        return {"direction": sig.direction, "reason": sig.reason, "score": sig.score, "regime_day": normalize_regime(regime_day)}
+            sig = self._trend_vwap_fallback_signal(market_data, regime_day)
+            if not sig:
+                return None
+        if isinstance(sig, dict):
+            direction = sig.get("direction")
+            reason = sig.get("reason")
+            score = sig.get("score")
+            sig_regime = normalize_regime(sig.get("regime_day") or regime_day)
+        else:
+            direction = sig.direction
+            reason = sig.reason
+            score = sig.score
+            sig_regime = normalize_regime(regime_day)
+        return {"direction": direction, "reason": reason, "score": score, "regime_day": sig_regime}
 
     def _opt_risk_levels(self, entry_price, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5):
         """
@@ -625,6 +740,13 @@ class TradeBuilder:
         # Hard disable quick/baseline paths in LIVE mode
         if exec_mode == "LIVE":
             if quick_mode:
+                self._log_blocked_candidate(
+                    market_data.get("symbol", "UNKNOWN"),
+                    "quick_mode_live_blocked",
+                    "Quick mode is disabled in LIVE mode",
+                    market_data=market_data,
+                    extra={"execution_mode": exec_mode},
+                )
                 return None
             allow_fallbacks = False
             allow_baseline = False
@@ -636,6 +758,12 @@ class TradeBuilder:
         market_data = self._resolve_index_bid_ask(market_data, exec_mode)
         if market_data.get("valid") is False:
             self._reject_ctx = {"symbol": symbol, "reason": market_data.get("invalid_reason") or "invalid_snapshot"}
+            self._log_blocked_candidate(
+                symbol,
+                "invalid_snapshot",
+                str(market_data.get("invalid_reason") or "invalid_snapshot"),
+                market_data=market_data,
+            )
             if debug_reasons:
                 print(f"[TradeBuilder] Reject {symbol}: {self._reject_ctx['reason']}")
             return None
@@ -678,6 +806,13 @@ class TradeBuilder:
             }
             self._reject_ctx = {"symbol": symbol, "reason": reject_reason, **reject_payload}
             _log_signal_event(f"trade_reject_{reject_reason}", symbol, reject_payload)
+            self._log_blocked_candidate(
+                symbol,
+                reject_reason,
+                "Missing index bid/ask quote",
+                market_data=market_data,
+                extra=reject_payload,
+            )
             if debug_reasons:
                 print(
                     f"[TradeBuilder] Reject {symbol}: {reject_reason} "
@@ -734,18 +869,41 @@ class TradeBuilder:
             except Exception:
                 pass
         if not signal:
+            self._reject_ctx = {"symbol": symbol, "reason": "no_signal"}
+            self._log_blocked_candidate(
+                symbol,
+                "no_signal",
+                "No strategy signal generated for current snapshot",
+                market_data=market_data,
+            )
             if debug_reasons:
                 print(f"[TradeBuilder] No signal for {symbol} | ltp={ltp} vwap={vwap} atr={market_data.get('atr')} ltp_change={market_data.get('ltp_change')} ltp_change_window={market_data.get('ltp_change_window')}")
             return None
         strategy_tag = "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"
+        if signal.get("reason") == "trend_vwap_fallback":
+            strategy_tag = "TREND_VWAP_FALLBACK"
         allowed_life, _ = self._apply_lifecycle_gate(strategy_tag, mode="MAIN" if not quick_mode else "QUICK")
         if not allowed_life:
+            self._log_blocked_candidate(
+                symbol,
+                "lifecycle_gate_fail",
+                "Strategy lifecycle gate rejected candidate",
+                market_data=market_data,
+                extra={"strategy": strategy_tag},
+            )
             if debug_reasons:
                 print(f"[TradeBuilder] Reject {symbol}: lifecycle_gate ({strategy_tag})")
             return None
         decay_size_mult = 1.0
         allowed, adj_score, decay_size_mult, _decay_reason = self._apply_decay_gate(strategy_tag, signal.get("score"), decay_size_mult)
         if not allowed:
+            self._log_blocked_candidate(
+                symbol,
+                "strategy_quarantined",
+                "Strategy decay gate quarantined strategy",
+                market_data=market_data,
+                extra={"strategy": strategy_tag},
+            )
             if debug_reasons:
                 print(f"[TradeBuilder] Reject {symbol}: strategy_quarantined ({strategy_tag})")
             return None
@@ -771,6 +929,13 @@ class TradeBuilder:
                 },
             )
         if signal.get("score", 0) < min_score:
+            self._log_blocked_candidate(
+                symbol,
+                "signal_score_below_min",
+                f"Signal score {signal.get('score', 0)} below minimum {min_score}",
+                market_data=market_data,
+                extra={"min_score": min_score, "signal_score": signal.get("score", 0)},
+            )
             if debug_reasons:
                 print(f"[TradeBuilder] Signal score below min ({signal.get('score', 0)} < {min_score}) for {symbol}")
                 _log_signal_event(
@@ -790,6 +955,13 @@ class TradeBuilder:
         # Require live option chain by default (no synthetic trades)
         try:
             if market_data.get("chain_source") != "live":
+                self._log_blocked_candidate(
+                    symbol,
+                    "non_live_option_chain",
+                    "Option chain source is not live",
+                    market_data=market_data,
+                    extra={"chain_source": market_data.get("chain_source")},
+                )
                 if debug_reasons:
                     print(f"[TradeBuilder] Reject {symbol}: non-live option chain")
                 return None
@@ -812,6 +984,13 @@ class TradeBuilder:
                 vwap = market_data.get("vwap", ltp)
                 htf_dir = market_data.get("htf_dir", "FLAT")
                 if ltp >= vwap and htf_dir == "UP":
+                    self._log_blocked_candidate(
+                        symbol,
+                        "direction_sanity_block",
+                        "Direction sanity rejected BUY_PUT while HTF trend is UP",
+                        market_data=market_data,
+                        extra={"direction": direction, "htf_dir": htf_dir},
+                    )
                     if debug_reasons:
                         print(f"[TradeBuilder] Direction sanity block: PE while price>VWAP and HTF UP for {symbol}")
                     return None
@@ -822,12 +1001,40 @@ class TradeBuilder:
             if getattr(cfg, "ORB_BIAS_LOCK", True):
                 orb_bias = market_data.get("orb_bias", "NEUTRAL")
                 if orb_bias == "PENDING":
+                    self._log_blocked_candidate(
+                        symbol,
+                        "orb_pending",
+                        "ORB bias is still pending",
+                        market_data=market_data,
+                        extra={"orb_bias": orb_bias},
+                    )
                     return None
                 if orb_bias == "UP" and direction == "BUY_PUT":
+                    self._log_blocked_candidate(
+                        symbol,
+                        "orb_bias_conflict",
+                        "ORB bias UP conflicts with BUY_PUT",
+                        market_data=market_data,
+                        extra={"orb_bias": orb_bias, "direction": direction},
+                    )
                     return None
                 if orb_bias == "DOWN" and direction == "BUY_CALL":
+                    self._log_blocked_candidate(
+                        symbol,
+                        "orb_bias_conflict",
+                        "ORB bias DOWN conflicts with BUY_CALL",
+                        market_data=market_data,
+                        extra={"orb_bias": orb_bias, "direction": direction},
+                    )
                     return None
                 if orb_bias == "NEUTRAL" and not getattr(cfg, "ORB_NEUTRAL_ALLOW", True):
+                    self._log_blocked_candidate(
+                        symbol,
+                        "orb_neutral_blocked",
+                        "ORB neutral trades are disabled",
+                        market_data=market_data,
+                        extra={"orb_bias": orb_bias, "direction": direction},
+                    )
                     return None
         except Exception:
             pass
@@ -835,14 +1042,28 @@ class TradeBuilder:
         if getattr(cfg, "HTF_ALIGN_REQUIRED", True) and not quick_mode:
             htf_dir = market_data.get("htf_dir", "FLAT")
             if direction == "BUY_CALL" and htf_dir == "DOWN":
+                self._log_blocked_candidate(
+                    symbol,
+                    "htf_alignment_fail",
+                    "HTF alignment rejected BUY_CALL while HTF trend is DOWN",
+                    market_data=market_data,
+                    extra={"direction": direction, "htf_dir": htf_dir},
+                )
                 return None
             if direction == "BUY_PUT" and htf_dir == "UP":
+                self._log_blocked_candidate(
+                    symbol,
+                    "htf_alignment_fail",
+                    "HTF alignment rejected BUY_PUT while HTF trend is UP",
+                    market_data=market_data,
+                    extra={"direction": direction, "htf_dir": htf_dir},
+                )
                 return None
         opt_type = "CE" if direction == "BUY_CALL" else "PE"
         candidates = []
         debug_candidates = []
         rejected = []
-        strategy_tag = "ENSEMBLE_OPT"
+        candidate_strategy_tag = strategy_tag
 
         seq_buffer = market_data.get("seq_buffer")
         atr = market_data.get("atr", max(1.0, ltp * 0.002))
@@ -1031,6 +1252,19 @@ class TradeBuilder:
             band = band_map.get(symbol, (getattr(cfg, "MIN_PREMIUM", 40), getattr(cfg, "MAX_PREMIUM", 150)))
             min_p, max_p = band
             if (opt["ltp"] < min_p or opt["ltp"] > max_p) and not _relax("premium"):
+                self._log_blocked_candidate(
+                    symbol,
+                    "premium_band_fail",
+                    "Option premium outside configured premium band",
+                    market_data=market_data,
+                    extra={
+                        "strike": opt.get("strike"),
+                        "option_type": opt.get("type"),
+                        "option_ltp": opt.get("ltp"),
+                        "premium_min": min_p,
+                        "premium_max": max_p,
+                    },
+                )
                 if debug_reasons:
                     print(f"[TradeBuilder] Reject {symbol} {opt['strike']} {opt_type}: premium")
                     rec = self._reject_record(symbol, opt, opt_type, "premium", atr=atr)
@@ -1332,7 +1566,7 @@ class TradeBuilder:
                 capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                 expected_slippage=round(slippage, 2),
                 confidence=round(confidence, 3),
-                strategy=strategy_tag,
+                strategy=candidate_strategy_tag,
                 regime=market_data.get("regime", "NEUTRAL"),
                 tier=tier,
                 day_type=market_data.get("day_type", "UNKNOWN"),
@@ -1373,10 +1607,23 @@ class TradeBuilder:
 
         if not candidates:
             if not allow_fallbacks:
+                self._log_blocked_candidate(
+                    symbol,
+                    "no_viable_candidates",
+                    "No viable trade candidates and fallback path disabled",
+                    market_data=market_data,
+                )
                 return None
             # Quick fallback: synthesize ATM option if chain is empty
             if quick_mode and market_data.get("ltp", 0):
                 if market_data.get("chain_source") != "live":
+                    self._log_blocked_candidate(
+                        symbol,
+                        "non_live_option_chain",
+                        "Quick fallback blocked because option chain is not live",
+                        market_data=market_data,
+                        extra={"chain_source": market_data.get("chain_source")},
+                    )
                     return None
                 try:
                     band_map = getattr(cfg, "PREMIUM_BANDS", {})
@@ -1407,6 +1654,13 @@ class TradeBuilder:
                         1,
                     )
                     if ident_err:
+                        self._log_blocked_candidate(
+                            symbol,
+                            "missing_contract_fields",
+                            str(ident_err),
+                            market_data=market_data,
+                            extra={"strike": atm_strike, "option_type": opt_type},
+                        )
                         if debug_reasons:
                             rec = self._reject_record(symbol, {"strike": atm_strike}, opt_type, "missing_contract_fields", atr=atr)
                             rejected.append(rec)
@@ -1465,6 +1719,13 @@ class TradeBuilder:
                 strat_name = "FUT_TREND" if instrument == "FUT" else "EQ_TREND"
                 allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate(strat_name, base_conf, 1.0)
                 if not allowed:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "strategy_quarantined",
+                        "Strategy decay gate quarantined strategy",
+                        market_data=market_data,
+                        extra={"strategy": strat_name},
+                    )
                     if debug_reasons:
                         print(f"[TradeBuilder] Reject {symbol}: strategy_quarantined ({strat_name})")
                     return None
@@ -1483,6 +1744,13 @@ class TradeBuilder:
                     1,
                 )
                 if ident_err:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "missing_contract_fields",
+                        str(ident_err),
+                        market_data=market_data,
+                        extra={"instrument": instrument},
+                    )
                     if debug_reasons:
                         print(f"[TradeBuilder] Reject {symbol} {instrument}: {ident_err}")
                     return None
@@ -1527,9 +1795,22 @@ class TradeBuilder:
                 )
                 if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
                     return trade
+                self._log_blocked_candidate(
+                    symbol,
+                    "low_confidence",
+                    "Trade confidence below configured threshold",
+                    market_data=market_data,
+                    extra={"confidence": trade.confidence, "min_confidence": getattr(cfg, "ML_MIN_PROBA", 0.6)},
+                )
                 if debug_reasons:
                     print(f"[TradeBuilder] Reject {symbol} {instrument}: low confidence")
                 return None
+            self._log_blocked_candidate(
+                symbol,
+                "no_viable_candidates",
+                "No viable trade candidates after all filters",
+                market_data=market_data,
+            )
             return None
 
         # Choose highest-confidence candidate
