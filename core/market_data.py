@@ -46,6 +46,8 @@ _REGIME_TRANSITIONS = {}
 _LAST_REGIME_SNAPSHOT = {}
 _INDICATOR_LAST_UPDATE_EPOCH = {}
 _INSUFFICIENT_OHLC_WARNED = set()
+_INDEX_BIDASK_MISSING_LOG_TS = {}
+_INDEX_REST_QUOTE_REFRESH_TS = {}
 
 _REGIME_MODEL = None
 _NEWS_ENCODER = None
@@ -128,6 +130,224 @@ def _apply_indicator_quote_policy(
     return True
 
 
+def update_index_quote_snapshot(
+    symbol: str,
+    bid=None,
+    ask=None,
+    mid=None,
+    ts_epoch: float | None = None,
+    source: str = "ws",
+    ltp=None,
+):
+    """
+    Update index quote cache from live sources (WS/REST) in a uniform structure:
+      bid, ask, mid, ts_epoch, source
+    """
+    sym = str(symbol or "").upper()
+    if not sym:
+        return
+    ts = float(ts_epoch) if isinstance(ts_epoch, (int, float)) else now_utc_epoch()
+    def _valid_price(value):
+        try:
+            p = float(value)
+            if p > 0:
+                return p
+        except Exception:
+            return None
+        return None
+
+    if mid is None and bid is not None and ask is not None:
+        try:
+            b = float(bid)
+            a = float(ask)
+            if b > 0 and a > 0:
+                mid = (b + a) / 2.0
+        except Exception:
+            mid = None
+    cache = _DATA_CACHE.setdefault(sym, {})
+    prev = cache.get("index_quote") or {}
+    try:
+        prev_ts = float(prev.get("ts_epoch") or 0.0)
+    except Exception:
+        prev_ts = 0.0
+    if prev_ts and ts < prev_ts:
+        return
+    resolved_bid = _valid_price(bid)
+    if resolved_bid is None:
+        resolved_bid = _valid_price(prev.get("bid"))
+    resolved_ask = _valid_price(ask)
+    if resolved_ask is None:
+        resolved_ask = _valid_price(prev.get("ask"))
+    resolved_last_price = _valid_price(ltp)
+    if resolved_last_price is None:
+        resolved_last_price = _valid_price(prev.get("last_price"))
+    resolved_mid = _valid_price(mid)
+    if resolved_mid is None and resolved_bid is not None and resolved_ask is not None:
+        resolved_mid = (resolved_bid + resolved_ask) / 2.0
+    if resolved_mid is None:
+        resolved_mid = _valid_price(prev.get("mid"))
+    snap = {
+        "symbol": sym,
+        "bid": resolved_bid,
+        "ask": resolved_ask,
+        "mid": resolved_mid,
+        "last_price": resolved_last_price,
+        "ts_epoch": ts,
+        "source": str(source or "unknown"),
+    }
+    cache["index_quote"] = snap
+    if resolved_last_price is not None:
+        cache["last_ltp"] = float(resolved_last_price)
+        cache["ltp_source"] = "live"
+        cache["ltp_ts_epoch"] = ts
+    elif resolved_mid is not None:
+        try:
+            cache["last_ltp"] = float(resolved_mid)
+            cache["ltp_source"] = "live"
+            cache["ltp_ts_epoch"] = ts
+        except Exception:
+            pass
+
+
+def get_index_quote_snapshot(symbol: str) -> dict:
+    sym = str(symbol or "").upper()
+    if not sym:
+        return {}
+    return dict((_DATA_CACHE.get(sym) or {}).get("index_quote") or {})
+
+
+def _index_quote_keys(symbol: str) -> list[str]:
+    sym = str(symbol or "").upper()
+    primary = str((getattr(cfg, "PREMARKET_INDICES_LTP", {}) or {}).get(sym) or "").strip()
+    aliases = {
+        "NIFTY": ["NSE:NIFTY 50"],
+        "BANKNIFTY": ["NSE:NIFTY BANK", "NSE:BANKNIFTY"],
+        "SENSEX": ["BSE:SENSEX"],
+    }.get(sym, [])
+    keys = []
+    if primary:
+        keys.append(primary)
+    keys.extend(aliases)
+    deduped = []
+    seen = set()
+    for key in keys:
+        k = str(key or "").strip()
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        deduped.append(k)
+    return deduped
+
+
+def _extract_quote_epoch(raw_ts, fallback_epoch: float) -> float:
+    if raw_ts is None:
+        return float(fallback_epoch)
+    try:
+        if hasattr(raw_ts, "timestamp"):
+            out = float(raw_ts.timestamp())
+        elif isinstance(raw_ts, (int, float)):
+            out = float(raw_ts)
+        else:
+            out = float(datetime.fromisoformat(str(raw_ts)).timestamp())
+        if out > 1e12:
+            out = out / 1000.0
+        return out
+    except Exception:
+        return float(fallback_epoch)
+
+
+def _refresh_index_quote_from_rest(symbol: str, force: bool = False) -> bool:
+    """
+    Populate index bid/ask from REST quote API when WS depth is absent.
+    Returns True when bid/ask is present in cache after refresh attempt.
+    """
+    sym = str(symbol or "").upper()
+    if not sym:
+        return False
+    now_epoch = now_utc_epoch()
+    min_interval = float(getattr(cfg, "INDEX_REST_QUOTE_REFRESH_SEC", 5.0))
+    snap = get_index_quote_snapshot(sym)
+    has_cached_bidask = bool(snap.get("bid") is not None and snap.get("ask") is not None)
+    snap_ts = snap.get("ts_epoch")
+    try:
+        snap_age = max(0.0, now_epoch - float(snap_ts)) if snap_ts is not None else float("inf")
+    except Exception:
+        snap_age = float("inf")
+    if (not force) and has_cached_bidask and snap_age <= min_interval:
+        return True
+    last_refresh = float(_INDEX_REST_QUOTE_REFRESH_TS.get(sym) or 0.0)
+    if (not force) and last_refresh and (now_epoch - last_refresh) < min_interval:
+        return has_cached_bidask
+    if not bool(getattr(cfg, "KITE_USE_API", True)):
+        return has_cached_bidask
+    try:
+        kite_client.ensure()
+    except Exception:
+        return has_cached_bidask
+    if not kite_client.kite:
+        return has_cached_bidask
+    _INDEX_REST_QUOTE_REFRESH_TS[sym] = now_epoch
+    for key in _index_quote_keys(sym):
+        try:
+            payload = kite_client.kite.quote([key]) or {}
+            q = payload.get(key) or {}
+            depth = q.get("depth") or {}
+            buy_book = depth.get("buy") or []
+            sell_book = depth.get("sell") or []
+            bid = buy_book[0].get("price") if buy_book else None
+            ask = sell_book[0].get("price") if sell_book else None
+            if bid is None or ask is None:
+                continue
+            bid = float(bid)
+            ask = float(ask)
+            if bid <= 0 or ask <= 0:
+                continue
+            last_price = q.get("last_price")
+            ts_epoch = _extract_quote_epoch(
+                q.get("timestamp") or q.get("last_trade_time"),
+                fallback_epoch=now_epoch,
+            )
+            update_index_quote_snapshot(
+                symbol=sym,
+                bid=bid,
+                ask=ask,
+                mid=(bid + ask) / 2.0,
+                ts_epoch=ts_epoch,
+                source="rest_quote",
+                ltp=last_price,
+            )
+            return True
+        except Exception:
+            continue
+    return bool(get_index_quote_snapshot(sym).get("bid") is not None and get_index_quote_snapshot(sym).get("ask") is not None)
+
+
+def _log_index_bidask_missing(symbol: str, source: str | None = None):
+    sym = str(symbol or "").upper()
+    if not sym:
+        return
+    now_epoch = now_utc_epoch()
+    min_interval = float(getattr(cfg, "INDEX_BIDASK_MISSING_LOG_SEC", 60.0))
+    last = float(_INDEX_BIDASK_MISSING_LOG_TS.get(sym) or 0.0)
+    if last and (now_epoch - last) < min_interval:
+        return
+    _INDEX_BIDASK_MISSING_LOG_TS[sym] = now_epoch
+    try:
+        payload = {
+            "event": "index_bidask_missing",
+            "symbol": sym,
+            "source": source or "unknown",
+            "ts_epoch": now_epoch,
+            "ts_ist": now_ist().isoformat(),
+        }
+        p = Path("logs/live_quote_errors.jsonl")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+
+
 def _derive_unstable_reasons(
     *,
     regime_probs: dict | None,
@@ -141,13 +361,12 @@ def _derive_unstable_reasons(
 ):
     """
     Build explicit reasons for regime instability.
-    Regime is unstable only when one of these holds:
-      - indicators missing
-      - bars insufficient (warm-up incomplete)
-      - regime max probability below threshold
-      - regime entropy above threshold
-    Strong confidence (very high max-probability + very low entropy) clears
-    probabilistic instability reasons, but keeps structural reasons.
+    Reasons are explicit and deterministic:
+      - prob_too_low
+      - entropy_too_high
+    Additional non-probabilistic reasons are preserved for diagnosability.
+    Strong confidence (very high max-probability + very low entropy)
+    clears probabilistic instability reasons.
     """
     reasons = []
     probs = regime_probs or {}
@@ -182,15 +401,15 @@ def _derive_unstable_reasons(
     entropy_unstable = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
     prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
     if entropy > entropy_unstable:
-        reasons.append("entropy_high")
+        reasons.append("entropy_too_high")
     if max_prob < prob_min:
-        reasons.append("regime_low_confidence")
+        reasons.append("prob_too_low")
 
     # Confidence override for clearly stable distributions.
     strong_prob = float(getattr(cfg, "REGIME_STABLE_PROB_OVERRIDE_MIN", 0.99))
     strong_entropy = float(getattr(cfg, "REGIME_STABLE_ENTROPY_OVERRIDE_MAX", 0.01))
-    if bool(indicators_ok) and max_prob >= strong_prob and entropy <= strong_entropy:
-        probabilistic = {"entropy_high", "regime_low_confidence"}
+    if max_prob >= strong_prob and entropy <= strong_entropy:
+        probabilistic = {"entropy_too_high", "prob_too_low"}
         reasons = [r for r in reasons if r not in probabilistic]
 
     return list(dict.fromkeys(reasons))
@@ -344,13 +563,30 @@ def get_ltp(symbol: str):
     Fetch latest market price from Kite or fallback.
     """
     live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+    _refresh_index_quote_from_rest(symbol, force=False)
+    ws_quote = get_index_quote_snapshot(symbol)
+    if ws_quote:
+        try:
+            ws_price = ws_quote.get("last_price")
+            if ws_price is None:
+                ws_price = ws_quote.get("mid")
+            if ws_price is None:
+                ws_price = (_DATA_CACHE.get(symbol, {}) or {}).get("last_ltp")
+            if ws_price is not None and float(ws_price) > 0:
+                _save_cached_ltp(symbol, float(ws_price))
+                cache = _DATA_CACHE.setdefault(symbol, {})
+                cache["ltp_source"] = "live"
+                cache["ltp_ts_epoch"] = float(ws_quote.get("ts_epoch") or now_utc_epoch())
+                return float(ws_price)
+        except Exception:
+            pass
     if cfg.KITE_USE_API:
         kite_client.ensure()
         if not kite_client.kite and getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
             try:
                 err = {"symbol": symbol, "error": "kite_not_initialized", "timestamp": now_ist().isoformat()}
                 p = Path("logs/live_quote_errors.jsonl")
-                p.parent.mkdir(exist_ok=True)
+                p.parent.mkdir(parents=True, exist_ok=True)
                 with p.open("a") as f:
                     f.write(json.dumps(err) + "\n")
             except Exception:
@@ -372,7 +608,7 @@ def get_ltp(symbol: str):
                 try:
                     err = {"symbol": symbol, "error": "ltp_fetch_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
                     p = Path("logs/live_quote_errors.jsonl")
-                    p.parent.mkdir(exist_ok=True)
+                    p.parent.mkdir(parents=True, exist_ok=True)
                     with p.open("a") as f:
                         f.write(json.dumps(err) + "\n")
                 except Exception:
@@ -401,7 +637,7 @@ def get_ltp(symbol: str):
                     import json
                     err = {"symbol": symbol, "error": "ltp_alias_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
                     p = Path("logs/live_quote_errors.jsonl")
-                    p.parent.mkdir(exist_ok=True)
+                    p.parent.mkdir(parents=True, exist_ok=True)
                     with p.open("a") as f:
                         f.write(json.dumps(err) + "\n")
                 except Exception:
@@ -618,6 +854,7 @@ def fetch_live_market_data():
         # Compute indicators from rolling OHLC buffer (no CSV dependency)
         indicators_ok = False
         indicator_inputs_ok = False
+        now_epoch_for_indicators = float(now_utc_epoch())
         indicators_age_sec = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
         candle_ts_epoch = None
         indicator_last_update_epoch = _INDICATOR_LAST_UPDATE_EPOCH.get(symbol)
@@ -643,10 +880,16 @@ def fetch_live_market_data():
                     ohlc_last_bar_epoch = float(bars[-1].get("ts").timestamp())
                 except Exception:
                     ohlc_last_bar_epoch = None
+            if isinstance(indicator_last_update_epoch, (int, float)):
+                indicator_last_update_epoch = float(indicator_last_update_epoch)
+            elif ohlc_last_bar_epoch is not None:
+                indicator_last_update_epoch = float(ohlc_last_bar_epoch)
+            else:
+                indicator_last_update_epoch = 0.0
             if ohlc_bars_count == 0:
                 missing_inputs.append("ohlc_buffer_empty")
             elif ohlc_bars_count < min_bars:
-                missing_inputs.append("ohlc_buffer_insufficient")
+                missing_inputs.append("insufficient_bars")
             ind = compute_indicators(
                 bars,
                 vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
@@ -666,58 +909,36 @@ def fetch_live_market_data():
             if ind.get("vwap_slope") is not None:
                 vwap_slope = ind["vwap_slope"]
             last_ts = ind.get("last_ts")
-            required_inputs_ok = bool(ind.get("ok"))
-            indicator_inputs_ok = required_inputs_ok
+            bars_ready = bool(ohlc_bars_count >= min_bars and ohlc_bars_count > 0)
+            required_inputs_ok = bars_ready
+            indicator_inputs_ok = bars_ready
             if last_ts:
                 try:
                     candle_ts_epoch = float(last_ts.timestamp())
                 except Exception:
                     candle_ts_epoch = None
-            if required_inputs_ok:
-                # Keep this epoch updated whenever indicators compute successfully.
-                # Prefer indicator timestamp; then last OHLC bar; finally "now" as conservative fallback.
+            if bars_ready:
+                # Successful indicator compute: always refresh last update epoch.
                 indicator_last_update_epoch = (
                     candle_ts_epoch
                     if candle_ts_epoch is not None
-                    else (ohlc_last_bar_epoch if ohlc_last_bar_epoch is not None else now_utc_epoch())
+                    else (ohlc_last_bar_epoch if ohlc_last_bar_epoch is not None else now_epoch_for_indicators)
                 )
-                _INDICATOR_LAST_UPDATE_EPOCH[symbol] = indicator_last_update_epoch
-            freshness = _indicator_freshness_status(
-                required_inputs_ok=required_inputs_ok,
-                last_update_epoch=indicator_last_update_epoch,
-            )
-            indicators_age_sec = freshness["age_sec"]
-            ltp_source = _DATA_CACHE.get(symbol, {}).get("ltp_source")
-            indicators_ok = _apply_indicator_quote_policy(
-                indicators_ok=freshness["ok"],
-                ltp=ltp,
-                ltp_source=ltp_source,
-                execution_mode=getattr(cfg, "EXECUTION_MODE", "SIM"),
-                require_live_quotes=getattr(cfg, "REQUIRE_LIVE_QUOTES", True),
-            )
-            if not required_inputs_ok:
-                missing_inputs.append("compute_indicators_not_ready")
-            if freshness.get("reason"):
-                missing_inputs.append(str(freshness["reason"]))
-                if str(freshness["reason"]) == "indicators_never_computed":
+                _INDICATOR_LAST_UPDATE_EPOCH[symbol] = float(indicator_last_update_epoch)
+            else:
+                if ohlc_bars_count == 0:
                     missing_inputs.append("never_computed")
-            try:
-                if ltp is None or float(ltp) <= 0.0:
-                    missing_inputs.append("ltp_missing")
-            except Exception:
-                missing_inputs.append("ltp_missing")
-            if _should_require_live_ltp(
-                execution_mode=getattr(cfg, "EXECUTION_MODE", "SIM"),
-                require_live_quotes=getattr(cfg, "REQUIRE_LIVE_QUOTES", True),
-            ) and str(ltp_source or "").lower() != "live":
-                missing_inputs.append("ltp_not_live")
+            indicators_age_sec = max(0.0, now_epoch_for_indicators - float(indicator_last_update_epoch))
+            indicators_ok = bool(bars_ready)
         except Exception as exc:
             indicators_ok = False
             indicator_inputs_ok = False
-            indicators_age_sec = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
+            if not isinstance(indicator_last_update_epoch, (int, float)):
+                indicator_last_update_epoch = 0.0
+            indicators_age_sec = max(0.0, now_epoch_for_indicators - float(indicator_last_update_epoch))
             compute_indicators_error = f"{type(exc).__name__}:{exc}"
             missing_inputs.append("compute_indicators_exception")
-            if indicator_last_update_epoch is None:
+            if float(indicator_last_update_epoch) <= 0.0:
                 missing_inputs.append("indicators_never_computed")
                 missing_inputs.append("never_computed")
         if ohlc_seed_reason == "kite_api_unavailable" and ohlc_bars_count == 0:
@@ -784,6 +1005,7 @@ def fetch_live_market_data():
         # No synthetic bid/ask — require real quotes for trading
         bid = None
         ask = None
+        mid = None
         bid_qty = None
         ask_qty = None
         quote_ok = False
@@ -791,41 +1013,72 @@ def fetch_live_market_data():
         quote_ts_epoch = None
         quote_age_sec = None
         spread_pct = None
-        try:
-            if cfg.KITE_USE_API and kite_client.kite:
-                ksym = getattr(cfg, "PREMARKET_INDICES_LTP", {}).get(symbol)
-                if not ksym:
-                    ksym = f"NSE:{symbol}" if symbol != "SENSEX" else f"BSE:{symbol}"
-                q = kite_client.quote([ksym]).get(ksym, {}) if ksym else {}
-                depth = q.get("depth") or {}
-                bid = depth.get("buy", [{}])[0].get("price")
-                ask = depth.get("sell", [{}])[0].get("price")
-                bid_qty = depth.get("buy", [{}])[0].get("quantity")
-                ask_qty = depth.get("sell", [{}])[0].get("quantity")
-                quote_ts = q.get("timestamp") or q.get("last_trade_time")
-                if hasattr(quote_ts, "timestamp"):
-                    quote_ts_epoch = float(quote_ts.timestamp())
-                elif isinstance(quote_ts, (int, float)):
-                    quote_ts_epoch = float(quote_ts)
-                elif quote_ts:
+        quote_source = "none"
+        ws_quote = get_index_quote_snapshot(symbol)
+        if ws_quote:
+            try:
+                bid = ws_quote.get("bid")
+                ask = ws_quote.get("ask")
+                mid = ws_quote.get("mid")
+                if mid is None and bid is not None and ask is not None:
+                    mid = (float(bid) + float(ask)) / 2.0
+                quote_ts_epoch = float(ws_quote.get("ts_epoch")) if ws_quote.get("ts_epoch") is not None else None
+                quote_source = str(ws_quote.get("source") or "ws")
+                if ltp_source == "live" and ws_quote.get("last_price") is not None:
                     try:
-                        quote_ts_epoch = float(quote_ts)
+                        ltp = float(ws_quote.get("last_price"))
                     except Exception:
-                        try:
-                            quote_ts_epoch = datetime.fromisoformat(str(quote_ts)).timestamp()
-                        except Exception:
-                            quote_ts_epoch = None
+                        pass
                 if quote_ts_epoch is not None:
                     quote_ts = datetime.utcfromtimestamp(quote_ts_epoch).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
                     quote_age_sec = max(0.0, now_utc_epoch() - quote_ts_epoch)
-                    if ltp_source == "live":
-                        ltp_ts_epoch = quote_ts_epoch
                 if bid and ask:
                     quote_ok = True
                     if ltp:
                         spread_pct = (ask - bid) / ltp
-        except Exception:
-            quote_ok = False
+            except Exception:
+                quote_ok = False
+        if not quote_ok:
+            _refresh_index_quote_from_rest(symbol, force=False)
+            ws_quote = get_index_quote_snapshot(symbol)
+            if ws_quote:
+                try:
+                    bid = ws_quote.get("bid")
+                    ask = ws_quote.get("ask")
+                    mid = ws_quote.get("mid")
+                    if mid is None and bid is not None and ask is not None:
+                        mid = (float(bid) + float(ask)) / 2.0
+                    quote_ts_epoch = float(ws_quote.get("ts_epoch")) if ws_quote.get("ts_epoch") is not None else None
+                    quote_source = str(ws_quote.get("source") or "rest_quote")
+                    if ltp_source == "live" and ws_quote.get("last_price") is not None:
+                        try:
+                            ltp = float(ws_quote.get("last_price"))
+                        except Exception:
+                            pass
+                    if quote_ts_epoch is not None:
+                        quote_ts = datetime.utcfromtimestamp(quote_ts_epoch).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+                        quote_age_sec = max(0.0, now_utc_epoch() - quote_ts_epoch)
+                        if ltp_source == "live":
+                            ltp_ts_epoch = quote_ts_epoch
+                    if bid and ask:
+                        quote_ok = True
+                        if ltp:
+                            spread_pct = (ask - bid) / ltp
+                except Exception:
+                    quote_ok = False
+        if quote_ts_epoch is not None:
+            update_index_quote_snapshot(
+                symbol=symbol,
+                bid=bid,
+                ask=ask,
+                mid=mid,
+                ts_epoch=quote_ts_epoch,
+                source=quote_source,
+                ltp=ltp,
+            )
+        if not quote_ok:
+            _log_index_bidask_missing(symbol, source=quote_source)
+        index_quote_cache = dict(get_index_quote_snapshot(symbol) or {})
 
         time_sanity = check_market_data_time_sanity(
             ltp_ts_epoch=ltp_ts_epoch,
@@ -1304,6 +1557,8 @@ def fetch_live_market_data():
             "quote_ts": quote_ts,
             "quote_ts_epoch": quote_ts_epoch,
             "quote_age_sec": quote_age_sec,
+            "index_quote_cache": index_quote_cache,
+            "index_quote_source": quote_source,
             "candle_ts_epoch": candle_ts_epoch,
             "depth_age_sec": depth_age_sec,
             "spread_pct": spread_pct,
@@ -1379,6 +1634,8 @@ def fetch_live_market_data():
                 "quote_ts": quote_ts,
                 "quote_ts_epoch": quote_ts_epoch,
                 "quote_age_sec": quote_age_sec,
+                "index_quote_cache": index_quote_cache,
+                "index_quote_source": quote_source,
                 "candle_ts_epoch": candle_ts_epoch,
                 "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,
@@ -1448,6 +1705,8 @@ def fetch_live_market_data():
                 "quote_ts": quote_ts,
                 "quote_ts_epoch": quote_ts_epoch,
                 "quote_age_sec": quote_age_sec,
+                "index_quote_cache": index_quote_cache,
+                "index_quote_source": quote_source,
                 "candle_ts_epoch": candle_ts_epoch,
                 "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,

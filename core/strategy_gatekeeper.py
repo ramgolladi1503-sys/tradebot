@@ -105,6 +105,21 @@ class StrategyGatekeeper:
         if regime_probs:
             max_prob = max(regime_probs.values()) if regime_probs else 0.0
             if unstable_reasons:
+                paper_soft_unblock_enabled = bool(getattr(cfg, "PAPER_SOFT_UNBLOCK_ENABLE", True))
+                paper_soft_unblock_conf_min = float(getattr(cfg, "PAPER_SOFT_UNBLOCK_CONF_MIN", 0.80))
+                contradictory_reasons = set(
+                    str(x).strip()
+                    for x in (getattr(cfg, "PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS", ["entropy_too_high", "prob_too_low"]) or [])
+                    if str(x).strip()
+                )
+                if (
+                    paper_relax
+                    and paper_soft_unblock_enabled
+                    and bool(indicators_ok)
+                    and max_prob >= paper_soft_unblock_conf_min
+                    and not (set(unstable_reasons) & contradictory_reasons)
+                ):
+                    return GateResult(True, "DEFINED_RISK", reasons + ["paper_soft_unblock"])
                 reasons.append("regime_unstable")
                 if unstable_reasons:
                     reasons.extend(f"unstable:{r}" for r in unstable_reasons)

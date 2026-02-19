@@ -54,3 +54,29 @@ def test_build_depth_subscription_tokens_window(monkeypatch):
     assert 999 in result_tokens
     assert len(result_tokens) == 11
     assert resolution[0]["count"] == 11
+
+
+def test_underlying_index_tokens_preserved_when_truncated(monkeypatch):
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", False, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 4, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 10, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(cfg, "STRIKE_STEP_BY_SYMBOL", {"NIFTY": 50, "BANKNIFTY": 100, "SENSEX": 100}, raising=False)
+    monkeypatch.setattr(cfg, "STRIKE_STEP", 50, raising=False)
+    monkeypatch.setattr(ws, "_underlying_ltp", lambda symbol: 100.0)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda symbol, exchange="NFO": "2026-02-17")
+    monkeypatch.setattr(
+        ws.kite_client,
+        "resolve_option_tokens_window",
+        lambda symbol, expiry, atm, strikes_around, step, exchange="NFO": list(range(1000, 1015)),
+    )
+    monkeypatch.setattr(
+        ws.kite_client,
+        "resolve_index_token",
+        lambda symbol: {"NIFTY": 256265, "BANKNIFTY": 260105, "SENSEX": 265001}.get(symbol),
+    )
+
+    tokens, _ = ws.build_depth_subscription_tokens(["NIFTY", "BANKNIFTY", "SENSEX"])
+    assert 256265 in tokens
+    assert 260105 in tokens
+    assert 265001 in tokens

@@ -226,6 +226,8 @@ STRICT_LIVE_QUOTES = os.getenv("STRICT_LIVE_QUOTES", "true").lower() == "true"
 PAPER_STRICT_QUOTES = os.getenv("PAPER_STRICT_QUOTES", "true").lower() == "true"
 MAX_LTP_AGE_SEC = float(os.getenv("MAX_LTP_AGE_SEC", "8"))
 MAX_CANDLE_AGE_SEC = float(os.getenv("MAX_CANDLE_AGE_SEC", "120"))
+INDEX_BIDASK_MISSING_LOG_SEC = float(os.getenv("INDEX_BIDASK_MISSING_LOG_SEC", "60"))
+INDEX_REST_QUOTE_REFRESH_SEC = float(os.getenv("INDEX_REST_QUOTE_REFRESH_SEC", "5"))
 
 # -------------------------------
 # Synthetic option chain
@@ -538,6 +540,14 @@ PAPER_RELAX_GATES = os.getenv("PAPER_RELAX_GATES", "true").lower() == "true"
 PAPER_REGIME_PROB_MIN = float(os.getenv("PAPER_REGIME_PROB_MIN", "0.30"))
 PAPER_REGIME_ENTROPY_MAX = float(os.getenv("PAPER_REGIME_ENTROPY_MAX", "1.8"))
 PAPER_NEUTRAL_FAMILY = os.getenv("PAPER_NEUTRAL_FAMILY", "DEFINED_RISK").upper()
+# Paper/SIM-only soft unblock for non-contradictory regime instability.
+PAPER_SOFT_UNBLOCK_ENABLE = os.getenv("PAPER_SOFT_UNBLOCK_ENABLE", "true").lower() == "true"
+PAPER_SOFT_UNBLOCK_CONF_MIN = float(os.getenv("PAPER_SOFT_UNBLOCK_CONF_MIN", "0.80"))
+PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS = [
+    s.strip()
+    for s in os.getenv("PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS", "entropy_too_high,prob_too_low").split(",")
+    if s.strip()
+]
 
 # Research pipeline degradation thresholds
 RESEARCH_DEGRADE_SHARPE_MIN = float(os.getenv("RESEARCH_DEGRADE_SHARPE_MIN", "0.2"))

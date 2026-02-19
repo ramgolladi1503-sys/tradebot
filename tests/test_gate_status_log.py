@@ -57,8 +57,14 @@ def test_gate_status_logs_gate_reasons(tmp_path, monkeypatch):
     assert row["compute_indicators_error"] == "ValueError:test"
     assert row["indicator_inputs_ok"] is False
     assert isinstance(row["indicators_age_sec"], (int, float))
+    assert "unstable_regime_flag" not in row
     assert row["indicator_missing_inputs"] == ["ohlc_buffer_empty", "ltp_missing", "never_computed"]
     assert row["missing_inputs"] == ["ohlc_buffer_empty", "ltp_missing", "never_computed"]
+    assert "indicator_reasons" in row
+    assert set(["ohlc_buffer_empty", "ltp_missing", "never_computed"]).issubset(set(row["indicator_reasons"]))
+    assert "compute_indicators_error" in row["indicator_reasons"]
+    assert "regime_reasons" in row
+    assert row["regime_reasons"] == ["legacy_unstable_flag"]
 
 
 def test_gate_status_once_per_stage_symbol_cycle(monkeypatch):
@@ -120,5 +126,30 @@ def test_gate_status_includes_indicator_fields_for_strategy_stage():
     assert isinstance(row["indicators_age_sec"], (int, float))
     assert row["indicator_last_update_epoch"] == 998.8
     assert row["indicator_missing_inputs"] == []
+    assert row["indicator_reasons"] == []
     assert row["ohlc_seeded"] is True
     assert row["ohlc_bars_count"] == 40
+    assert row["regime_reasons"] == []
+
+
+def test_gate_status_includes_explicit_regime_reasons():
+    md = {
+        "symbol": "NIFTY",
+        "ltp": 25000.0,
+        "ltp_source": "live",
+        "ltp_ts_epoch": 1000.0,
+        "indicators_ok": True,
+        "indicators_age_sec": 1.0,
+        "primary_regime": "NEUTRAL",
+        "regime_probs": {"NEUTRAL": 0.40, "TREND": 0.30, "EVENT": 0.30},
+        "regime_entropy": 2.0,
+        "unstable_reasons": ["prob_too_low", "entropy_too_high"],
+    }
+    row = build_gate_status_record(
+        market_data=md,
+        gate_allowed=False,
+        gate_family=None,
+        gate_reasons=["regime_unstable"],
+        stage="strategy_gate",
+    )
+    assert row["regime_reasons"] == ["prob_too_low", "entropy_too_high"]

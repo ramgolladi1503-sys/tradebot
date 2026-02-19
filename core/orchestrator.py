@@ -2,6 +2,7 @@ import time
 import json
 import argparse
 import copy
+from types import MappingProxyType
 from pathlib import Path
 import pandas as pd
 from datetime import datetime, timedelta
@@ -214,10 +215,12 @@ class Orchestrator:
 
     def _build_cycle_market_data(self, market_data_list: list[dict] | None) -> list[dict]:
         """
-        Build one immutable-like snapshot per symbol per cycle.
-        This prevents conflicting gate logs caused by mutable/reused payloads.
+        Build one canonical snapshot per symbol per cycle.
+        Mutable snapshots are returned for execution flow.
+        Immutable snapshots are cached for gatekeeper/logging.
         """
         if not isinstance(market_data_list, list):
+            self._cycle_market_snapshot_by_symbol = {}
             return []
         per_symbol: dict[str, dict] = {}
         symbol_order: list[str] = []
@@ -252,23 +255,45 @@ class Orchestrator:
                 prev_ts = 0.0
             if ts_epoch >= prev_ts:
                 per_symbol[symbol] = snap
-        return [per_symbol[sym] for sym in symbol_order if sym in per_symbol]
+        cycle_rows = [per_symbol[sym] for sym in symbol_order if sym in per_symbol]
+        immutable_map: dict[str, MappingProxyType] = {}
+        for row in cycle_rows:
+            sym = str(row.get("symbol") or "").upper()
+            if not sym:
+                continue
+            try:
+                immutable_map[sym] = MappingProxyType(copy.deepcopy(row))
+            except Exception:
+                immutable_map[sym] = MappingProxyType(dict(row))
+        self._cycle_market_snapshot_by_symbol = immutable_map
+        return cycle_rows
+
+    def _immutable_cycle_snapshot(self, market_data: dict):
+        symbol = str((market_data or {}).get("symbol") or "").upper()
+        snap_map = getattr(self, "_cycle_market_snapshot_by_symbol", None)
+        if isinstance(snap_map, dict) and symbol in snap_map:
+            return snap_map[symbol]
+        try:
+            return MappingProxyType(copy.deepcopy(market_data or {}))
+        except Exception:
+            return MappingProxyType(dict(market_data or {}))
 
     def _strategy_gate_for_symbol(self, market_data: dict):
         """
         Evaluate strategy gate exactly once per symbol per cycle and log once.
         """
-        symbol = str((market_data or {}).get("symbol") or "").upper()
+        snapshot = self._immutable_cycle_snapshot(market_data)
+        symbol = str((snapshot or {}).get("symbol") or "").upper()
         cache = getattr(self, "_gatekeeper_cycle_cache", None)
         if not isinstance(cache, dict):
             cache = {}
             self._gatekeeper_cycle_cache = cache
         if symbol in cache:
             return cache[symbol]
-        gate = self.gatekeeper.evaluate(market_data, mode="MAIN")
+        gate = self.gatekeeper.evaluate(snapshot, mode="MAIN")
         cache[symbol] = gate
         self._append_gate_status(
-            market_data,
+            snapshot,
             gate_allowed=bool(gate.allowed),
             gate_family=gate.family,
             gate_reasons=gate.reasons,
@@ -815,6 +840,7 @@ class Orchestrator:
                     max_trades_day = min(max_trades_day, int(getattr(cfg, "LIVE_MAX_TRADES_PER_DAY", 2)))
 
                 for market_data in market_data_list:
+                    market_snapshot = self._immutable_cycle_snapshot(market_data)
                     snap_ok, halt_cycle = self._validate_market_snapshot(market_data)
                     if not snap_ok:
                         if halt_cycle:
@@ -874,7 +900,7 @@ class Orchestrator:
                         permission = None
                     if permission is not None and not permission.allowed:
                         self._append_gate_status(
-                            market_data,
+                            market_snapshot,
                             gate_allowed=False,
                             gate_family=None,
                             gate_reasons=list(permission.reasons),
@@ -897,16 +923,17 @@ class Orchestrator:
                         continue
                     # Phase C: Build trade suggestion
                     indicators_ok = bool(market_data.get("indicators_ok", False))
-                    indicators_age = market_data.get("indicators_age_sec")
+                    indicators_age = market_snapshot.get("indicators_age_sec")
                     indicators_stale = (
                         indicators_age is None
                         or float(indicators_age) > float(getattr(cfg, "INDICATOR_STALE_SEC", 120))
                     )
+                    indicators_ok = bool(market_snapshot.get("indicators_ok", False))
                     allow_main = indicators_ok and not indicators_stale
                     if not allow_main:
                         veto = "indicators_missing" if not indicators_ok else "indicators_stale"
                         self._append_gate_status(
-                            market_data,
+                            market_snapshot,
                             gate_allowed=False,
                             gate_family=None,
                             gate_reasons=[veto],
@@ -921,7 +948,7 @@ class Orchestrator:
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     trade = None
                     if allow_main:
-                        gate = self._strategy_gate_for_symbol(market_data)
+                        gate = self._strategy_gate_for_symbol(market_snapshot)
                         if not gate.allowed:
                             if debug_flag:
                                 print(f"[Gatekeeper] Blocked {sym}: {','.join(gate.reasons)}")
@@ -957,10 +984,27 @@ class Orchestrator:
                             except Exception:
                                 pass
                     if trade is None:
+                        reject_ctx = {}
+                        try:
+                            reject_ctx = dict(self.trade_builder._reject_ctx or {})
+                        except Exception:
+                            reject_ctx = {}
+                        reject_reason = str(reject_ctx.get("reason") or "").strip()
+                        reject_gate_reasons = [str(x) for x in (reject_ctx.get("gate_reasons") or []) if str(x).strip()]
+                        if not reject_gate_reasons:
+                            reject_gate_reasons = [reject_reason] if reject_reason else ["no_trade_generated"]
+                        if reject_reason == "missing_live_bidask":
+                            self._append_gate_status(
+                                market_snapshot,
+                                gate_allowed=False,
+                                gate_family=None,
+                                gate_reasons=reject_gate_reasons,
+                                stage="trade_builder_gate",
+                            )
                         self._maybe_queue_target_points_idea(
                             market_data,
                             debug_flag=debug_flag,
-                            gate_reasons=["no_trade_generated"],
+                            gate_reasons=reject_gate_reasons,
                         )
                         if self.decision_store is not None:
                             try:
@@ -980,7 +1024,7 @@ class Orchestrator:
                                         "iv": market_data.get("iv"),
                                         "ivp": market_data.get("ivp"),
                                     },
-                                    outcome={"status": "skipped", "reject_reasons": ["no_trade_generated"]},
+                                    outcome={"status": "skipped", "reject_reasons": reject_gate_reasons},
                                 )
                                 self.decision_store.save_decision(decision)
                             except Exception as exc:

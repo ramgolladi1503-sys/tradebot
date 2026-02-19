@@ -45,7 +45,7 @@ class _NoopPredictor:
 def _log_signal_event(kind, symbol, payload=None):
     try:
         path = Path("logs/signal_path.jsonl")
-        path.parent.mkdir(exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         obj = {"timestamp": datetime.now().isoformat(), "kind": kind, "symbol": symbol}
         if payload:
             obj.update(payload)
@@ -116,6 +116,81 @@ class TradeBuilder:
         qty_units = int(qty_lots) * (lot_size if instrument_type == "OPT" else 1)
         return instrument_type, instrument_id, qty_units, None
 
+    def _resolve_index_bid_ask(self, market_data: dict, exec_mode: str) -> dict:
+        """
+        Resolve index bid/ask for intent gating.
+        LIVE: fail-closed on missing/invalid bid/ask.
+        PAPER/SIM: synthesize from quote-cache last_price when missing.
+        """
+        symbol = str(market_data.get("symbol") or "")
+        source = str(market_data.get("index_quote_source") or "real")
+
+        def _as_valid_price(value):
+            try:
+                p = float(value)
+                if p > 0:
+                    return p
+            except Exception:
+                return None
+            return None
+
+        quote_cache = market_data.get("index_quote_cache")
+        if not isinstance(quote_cache, dict):
+            quote_cache = {}
+        if not quote_cache and symbol:
+            try:
+                from core.market_data import get_index_quote_snapshot
+
+                quote_cache = get_index_quote_snapshot(symbol) or {}
+            except Exception:
+                quote_cache = {}
+
+        bid = _as_valid_price(market_data.get("bid"))
+        ask = _as_valid_price(market_data.get("ask"))
+        last_price = _as_valid_price(
+            quote_cache.get("last_price")
+            if isinstance(quote_cache, dict)
+            else None
+        )
+        missing_bid_ask = (bid is None) or (ask is None) or (ask < bid)
+        synthetic = False
+
+        if missing_bid_ask and exec_mode != "LIVE":
+            if last_price is not None:
+                spread = max(0.5, last_price * 0.0002)
+                bid = round(last_price - spread, 2)
+                ask = round(last_price + spread, 2)
+                market_data["bid"] = bid
+                market_data["ask"] = ask
+                market_data["quote_ok"] = True
+                market_data["quote_ts_epoch"] = float(time.time())
+                market_data["quote_age_sec"] = 0.0
+                source = "synthetic"
+                synthetic = True
+
+        quote_kind = "synthetic" if synthetic else ("real" if (bid is not None and ask is not None) else "missing")
+        market_data["index_quote_source"] = source if quote_kind != "missing" else "missing"
+        market_data["index_bidask_synthetic"] = bool(synthetic)
+        market_data["index_quote_kind"] = quote_kind
+        if bid is not None:
+            market_data["bid"] = bid
+        if ask is not None:
+            market_data["ask"] = ask
+
+        _log_signal_event(
+            "index_bidask_source",
+            symbol,
+            {
+                "source": market_data.get("index_quote_source"),
+                "quote_kind": market_data.get("index_quote_kind"),
+                "synthetic": bool(market_data.get("index_bidask_synthetic", False)),
+                "bid": market_data.get("bid"),
+                "ask": market_data.get("ask"),
+                "last_price": last_price,
+            },
+        )
+        return market_data
+
     def trade_intent_flags(
         self,
         market_data: dict,
@@ -129,6 +204,9 @@ class TradeBuilder:
         require_live_quotes = bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
         quote_ok = market_data.get("quote_ok", True)
         quote_age_sec = market_data.get("quote_age_sec")
+        index_quote_source = market_data.get("index_quote_source", "real")
+        index_bidask_synthetic = bool(market_data.get("index_bidask_synthetic", False))
+        index_quote_kind = market_data.get("index_quote_kind", "real")
         if opt is not None:
             quote_ok = opt.get("quote_ok", quote_ok)
             quote_age_sec = opt.get("quote_age_sec", quote_age_sec)
@@ -169,6 +247,9 @@ class TradeBuilder:
                 "ltp_source": ltp_source,
                 "snapshot_valid": bool(market_data.get("valid", True)),
                 "risk_guard_passed": risk_guard_passed,
+                "index_quote_source": index_quote_source,
+                "index_bidask_synthetic": index_bidask_synthetic,
+                "index_quote_kind": index_quote_kind,
             },
         }
 
@@ -536,6 +617,7 @@ class TradeBuilder:
         Returns Trade or None.
         """
         self._reject_ctx = {}
+        market_data = dict(market_data or {})
         debug_mode = getattr(cfg, "DEBUG_TRADE_MODE", False)
         if debug_mode:
             debug_reasons = True
@@ -551,6 +633,7 @@ class TradeBuilder:
             allow_baseline = False
             allow_fallbacks = False
         symbol = market_data["symbol"]
+        market_data = self._resolve_index_bid_ask(market_data, exec_mode)
         if market_data.get("valid") is False:
             self._reject_ctx = {"symbol": symbol, "reason": market_data.get("invalid_reason") or "invalid_snapshot"}
             if debug_reasons:
@@ -560,9 +643,48 @@ class TradeBuilder:
         vwap = market_data.get("vwap", ltp)
         bias = market_data.get("bias", "Bullish")
         instrument = market_data.get("instrument", "OPT")
-        if market_data.get("quote_ok") is False:
+        if (
+            market_data.get("quote_ok") is False
+            or market_data.get("bid") is None
+            or market_data.get("ask") is None
+        ):
+            ltp = market_data.get("ltp")
+            ltp_source = market_data.get("ltp_source")
+            has_depth = bool(
+                market_data.get("depth") is not None
+                or market_data.get("depth_age_sec") is not None
+            )
+            has_quote = bool(
+                market_data.get("quote_ok") is True
+                and market_data.get("bid") is not None
+                and market_data.get("ask") is not None
+            )
+            ws_subscribed = market_data.get("ws_subscribed")
+            if ws_subscribed is None:
+                ws_subscribed = bool(
+                    str(market_data.get("ltp_source") or "").lower() == "live"
+                    or str(market_data.get("chain_source") or "").lower() == "live"
+                )
+            reject_reason = "missing_live_bidask" if exec_mode == "LIVE" else "missing_index_bid_ask"
+            gate_reasons = ["missing_live_bidask", "quote_api_issue"] if exec_mode == "LIVE" else [reject_reason]
+            reject_payload = {
+                "mode": exec_mode,
+                "ltp": ltp,
+                "ltp_source": ltp_source,
+                "has_depth": has_depth,
+                "has_quote": has_quote,
+                "ws_subscribed": ws_subscribed,
+                "gate_reasons": list(gate_reasons),
+            }
+            self._reject_ctx = {"symbol": symbol, "reason": reject_reason, **reject_payload}
+            _log_signal_event(f"trade_reject_{reject_reason}", symbol, reject_payload)
             if debug_reasons:
-                print(f"[TradeBuilder] Reject {symbol}: missing index bid/ask")
+                print(
+                    f"[TradeBuilder] Reject {symbol}: {reject_reason} "
+                    f"ltp={ltp} ltp_source={ltp_source} has_depth={has_depth} "
+                    f"has_quote={has_quote} ws_subscribed={ws_subscribed} "
+                    f"gate_reasons={gate_reasons}"
+                )
             return None
 
         signal = self._signal_for_symbol(market_data, force_family=force_family)

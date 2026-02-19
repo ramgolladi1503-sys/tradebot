@@ -20,6 +20,7 @@ def build_gate_status_record(
     data = market_data or {}
     regime_probs = data.get("regime_probs") or {}
     max_prob = max(regime_probs.values()) if regime_probs else None
+    regime_entropy = data.get("regime_entropy")
     indicator_stale_sec = float(getattr(cfg, "INDICATOR_STALE_SEC", 120))
     never_computed_age = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
     age_raw = data.get("indicators_age_sec")
@@ -30,6 +31,31 @@ def build_gate_status_record(
     indicator_missing_inputs = list(data.get("indicator_missing_inputs") or data.get("missing_inputs") or [])
     if age_raw is None and "never_computed" not in indicator_missing_inputs:
         indicator_missing_inputs.append("never_computed")
+
+    indicator_reasons = list(indicator_missing_inputs)
+    if not bool(data.get("indicators_ok", False)) and "indicators_not_ok" not in indicator_reasons:
+        indicator_reasons.append("indicators_not_ok")
+    if indicators_age_sec > indicator_stale_sec and "indicators_stale" not in indicator_reasons:
+        indicator_reasons.append("indicators_stale")
+    if data.get("compute_indicators_error") and "compute_indicators_error" not in indicator_reasons:
+        indicator_reasons.append("compute_indicators_error")
+
+    regime_reasons = list(data.get("unstable_reasons") or [])
+    if not regime_reasons and bool(data.get("unstable_regime_flag", False)):
+        regime_reasons.append("legacy_unstable_flag")
+    try:
+        prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
+        if max_prob is not None and float(max_prob) < prob_min and "prob_too_low" not in regime_reasons:
+            regime_reasons.append("prob_too_low")
+    except Exception:
+        pass
+    try:
+        entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
+        if regime_entropy is not None and float(regime_entropy) > entropy_max and "entropy_too_high" not in regime_reasons:
+            regime_reasons.append("entropy_too_high")
+    except Exception:
+        pass
+
     payload = {
         "symbol": data.get("symbol"),
         "stage": stage,
@@ -47,15 +73,16 @@ def build_gate_status_record(
         "indicator_missing_inputs": indicator_missing_inputs,
         # Backward-compatible key retained for existing readers.
         "missing_inputs": indicator_missing_inputs,
+        "indicator_reasons": indicator_reasons,
         "ohlc_seeded": bool(data.get("ohlc_seeded", False)),
         "ohlc_seed_reason": data.get("ohlc_seed_reason"),
         "primary_regime": data.get("primary_regime") or data.get("regime"),
         "regime_probs_max": max_prob,
         # Backward-compatible key retained for existing dashboards.
         "regime_prob_max": max_prob,
-        "regime_entropy": data.get("regime_entropy"),
-        "unstable_regime_flag": bool(data.get("unstable_regime_flag", False)),
+        "regime_entropy": regime_entropy,
         "unstable_reasons": list(data.get("unstable_reasons") or []),
+        "regime_reasons": regime_reasons,
         "gate_allowed": bool(gate_allowed),
         "gate_family": gate_family,
         "gate_reasons": list(gate_reasons or []),

@@ -128,6 +128,53 @@ def test_fetch_live_market_data_seeds_empty_buffer_and_enables_indicators(tmp_pa
     assert snap["ohlc_seeded"] is True
     assert snap["ohlc_bars_count"] >= 30
     assert snap["indicators_ok"] is True
+    assert isinstance(snap.get("indicator_last_update_epoch"), (int, float))
+    assert isinstance(snap.get("indicators_age_sec"), (int, float))
+
+
+def test_fetch_live_market_data_empty_buffer_sets_indicators_false(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "NIFTY_EMPTY_BUFFER"
+    fixed_now = market_data.now_ist().replace(second=0, microsecond=0)
+
+    monkeypatch.setattr(cfg, "SYMBOLS", [symbol], raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 30, raising=False)
+    monkeypatch.setattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False, raising=False)
+    monkeypatch.setattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO", raising=False)
+
+    market_data._DATA_CACHE.clear()
+    market_data._OPEN_RANGE.clear()
+    market_data._INSUFFICIENT_OHLC_WARNED.clear()
+    market_data.ohlc_buffer._bars.pop(symbol, None)
+
+    monkeypatch.setattr(market_data, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(market_data, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(market_data, "now_utc_epoch", lambda: fixed_now.timestamp())
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", None, raising=False)
+
+    def _fake_get_ltp(sym: str):
+        market_data._DATA_CACHE.setdefault(sym, {})
+        market_data._DATA_CACHE[sym]["ltp_source"] = "live"
+        market_data._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_now.timestamp()
+        return 25000.0
+
+    monkeypatch.setattr(market_data, "get_ltp", _fake_get_ltp)
+
+    rows = market_data.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
+    assert snap["indicators_ok"] is False
+    assert int(snap["ohlc_bars_count"]) < int(getattr(cfg, "OHLC_MIN_BARS", 30))
+    reasons = set(snap.get("indicator_missing_inputs") or [])
+    assert ("ohlc_buffer_empty" in reasons) or ("insufficient_bars" in reasons)
+    assert isinstance(snap.get("indicator_last_update_epoch"), (int, float))
+    assert isinstance(snap.get("indicators_age_sec"), (int, float))
 
 
 def test_insufficient_ohlc_warning_logged_once_when_kite_unavailable(tmp_path, monkeypatch):

@@ -86,3 +86,53 @@ def test_paper_mode_relaxes_thresholds_and_routes_neutral(monkeypatch):
     assert gate.allowed is True
     assert gate.family == "DEFINED_RISK"
     assert "paper_neutral_routed" in gate.reasons
+
+
+def test_paper_soft_unblock_allows_defined_risk_for_non_contradictory_unstable(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_CROSS_ASSET", False, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_RELAX_GATES", True, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_CONF_MIN", 0.80, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS", ["entropy_too_high", "prob_too_low"], raising=False)
+
+    md = _base_market_data()
+    md.update(
+        {
+            "primary_regime": "TREND",
+            "regime_probs": {"TREND": 0.85, "RANGE": 0.10, "EVENT": 0.05},
+            "regime_entropy": 0.25,
+            "unstable_reasons": ["warmup_incomplete"],
+            "indicators_ok": True,
+        }
+    )
+    gate = StrategyGatekeeper().evaluate(md, mode="MAIN")
+
+    assert gate.allowed is True
+    assert gate.family == "DEFINED_RISK"
+    assert "paper_soft_unblock" in gate.reasons
+
+
+def test_live_mode_never_applies_paper_soft_unblock(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_CROSS_ASSET", False, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_RELAX_GATES", True, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_CONF_MIN", 0.80, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS", ["entropy_too_high", "prob_too_low"], raising=False)
+
+    md = _base_market_data()
+    md.update(
+        {
+            "primary_regime": "TREND",
+            "regime_probs": {"TREND": 0.90, "RANGE": 0.05, "EVENT": 0.05},
+            "regime_entropy": 0.20,
+            "unstable_reasons": ["warmup_incomplete"],
+            "indicators_ok": True,
+        }
+    )
+    gate = StrategyGatekeeper().evaluate(md, mode="MAIN")
+
+    assert gate.allowed is False
+    assert "regime_unstable" in gate.reasons
+    assert "paper_soft_unblock" not in gate.reasons

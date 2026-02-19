@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 
 from config import config as cfg
 import core.kite_depth_ws as ws
@@ -120,3 +121,56 @@ def test_on_close_does_not_restart_after_stop(monkeypatch):
     ticker.on_close(ticker, 1000, "normal")
 
     assert restarts["count"] == 0
+
+
+def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    cache_updates = []
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(
+        ws,
+        "_update_index_quote_cache",
+        lambda symbol, bid, ask, mid, ts_epoch, last_price: cache_updates.append(
+            {
+                "symbol": symbol,
+                "bid": bid,
+                "ask": ask,
+                "mid": mid,
+                "ts_epoch": ts_epoch,
+                "last_price": last_price,
+            }
+        ),
+    )
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_ticks(
+        ticker,
+        [
+            {
+                "instrument_token": 101,
+                "last_price": 101.0,
+                "depth": {
+                    "buy": [{"price": 100.0, "quantity": 10}],
+                    "sell": [{"price": 102.0, "quantity": 12}],
+                },
+                "exchange_timestamp": datetime(2026, 2, 19, 9, 30, tzinfo=timezone.utc),
+            }
+        ],
+    )
+
+    assert cache_updates
+    row = cache_updates[-1]
+    assert row["symbol"] == "NIFTY"
+    assert row["bid"] == 100.0
+    assert row["ask"] == 102.0
+    assert row["mid"] == 101.0

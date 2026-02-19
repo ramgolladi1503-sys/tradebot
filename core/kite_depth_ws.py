@@ -30,6 +30,7 @@ _WATCHDOG_THREAD = None
 _WATCHDOG_STOP = None
 _LAST_TOKENS = []
 _UNDERLYING_TOKENS: set[int] = set()
+_UNDERLYING_TOKEN_TO_SYMBOL: dict[int, str] = {}
 _UNDERLYING_LOGGED_MISSING = False
 _RESTART_LOCK = threading.Lock()
 _LAST_FULL_RESTART_EPOCH = 0.0
@@ -41,6 +42,50 @@ _LOG_WRITER = get_jsonl_writer(_LOG_PATH)
 _DEPTH_WS_LOCK: RunLock | None = None
 _DEPTH_WS_LOCK_ACQUIRED = False
 _STOP_REQUESTED = False
+_SCHEMA_LOG_TS = 0.0
+
+
+def _extract_tick_epoch(tick: dict) -> float:
+    ts = tick.get("exchange_timestamp") or tick.get("last_trade_time") or tick.get("timestamp")
+    if ts is not None:
+        try:
+            if hasattr(ts, "timestamp"):
+                out = float(ts.timestamp())
+            else:
+                out = float(ts)
+            if out > 1e12:
+                out = out / 1000.0
+            return out
+        except Exception:
+            pass
+    return float(time.time())
+
+
+def _best_price(levels):
+    try:
+        if not levels:
+            return None
+        price = levels[0].get("price")
+        return float(price) if price is not None else None
+    except Exception:
+        return None
+
+
+def _update_index_quote_cache(symbol: str, bid, ask, mid, ts_epoch: float, last_price):
+    try:
+        from core.market_data import update_index_quote_snapshot
+
+        update_index_quote_snapshot(
+            symbol=symbol,
+            bid=bid,
+            ask=ask,
+            mid=mid,
+            ts_epoch=ts_epoch,
+            source="ws",
+            ltp=last_price,
+        )
+    except Exception as exc:
+        _log_ws("FEED_INDEX_CACHE_ERROR", {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"})
 
 
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):
@@ -105,10 +150,11 @@ def _underlying_ltp(symbol: str) -> float | None:
 
 
 def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None) -> tuple[list[int], list[dict]]:
-    global _UNDERLYING_TOKENS, _UNDERLYING_LOGGED_MISSING
+    global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
+    underlying_token_to_symbol: dict[int, str] = {}
     if max_tokens is None:
         max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 10))
@@ -154,6 +200,7 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
         if index_token:
             per_tokens.add(index_token)
             underlying_tokens.append(int(index_token))
+            underlying_token_to_symbol[int(index_token)] = sym_upper
 
         tokens.extend(list(per_tokens))
         resolution.append(
@@ -175,6 +222,7 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
 
     tokens = list(dict.fromkeys(tokens))
     _UNDERLYING_TOKENS = set(int(t) for t in underlying_tokens if t is not None)
+    _UNDERLYING_TOKEN_TO_SYMBOL = dict(underlying_token_to_symbol)
     _UNDERLYING_LOGGED_MISSING = False
 
     if validate_tokens:
@@ -192,13 +240,17 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
             known_tokens = set()
         if known_tokens:
             before = len(tokens)
-            tokens = [t for t in tokens if int(t) in known_tokens]
+            tokens = [t for t in tokens if int(t) in known_tokens or int(t) in _UNDERLYING_TOKENS]
             dropped = before - len(tokens)
             if dropped > 0:
                 _log_ws("FEED_TOKEN_FILTERED", {"dropped": dropped, "kept": len(tokens)})
     truncated = False
     if max_tokens and len(tokens) > max_tokens:
-        tokens = tokens[:max_tokens]
+        underlying_first = [t for t in tokens if int(t) in _UNDERLYING_TOKENS]
+        option_tokens = [t for t in tokens if int(t) not in _UNDERLYING_TOKENS]
+        keep_underlyings = underlying_first[: max_tokens]
+        budget = max(0, max_tokens - len(keep_underlyings))
+        tokens = keep_underlyings + option_tokens[:budget]
         truncated = True
 
     try:
@@ -216,6 +268,7 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
             "truncated": truncated,
             "per_symbol": {r["symbol"]: r.get("count", 0) for r in resolution},
             "underlying_tokens": list(_UNDERLYING_TOKENS),
+            "underlying_token_to_symbol": dict(_UNDERLYING_TOKEN_TO_SYMBOL),
             "sample_tokens": tokens[:10],
         },
     )
@@ -549,28 +602,61 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             restart_depth_ws(reason=f"ws_close:{code}")
 
     def on_ticks(ws, ticks):
-        global _UNDERLYING_LOGGED_MISSING
+        global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS
+        now_epoch = time.time()
+        if ticks and (now_epoch - _SCHEMA_LOG_TS) >= 30.0:
+            try:
+                sample = ticks[0] if isinstance(ticks[0], dict) else {}
+                sample_keys = sorted(list(sample.keys()))
+                ts_fields = [k for k in ("exchange_timestamp", "last_trade_time", "timestamp") if k in sample]
+                _log_ws(
+                    "TICK_PAYLOAD_SCHEMA",
+                    {
+                        "sample_keys": sample_keys,
+                        "has_last_price": sample.get("last_price") is not None,
+                        "has_depth": sample.get("depth") is not None,
+                        "instrument_token": sample.get("instrument_token"),
+                        "ts_fields_present": ts_fields,
+                    },
+                )
+                _SCHEMA_LOG_TS = now_epoch
+            except Exception:
+                pass
         for t in ticks:
             token = t.get("instrument_token")
             depth = t.get("depth")
             last_price = t.get("last_price")
             if token and depth:
                 depth_store.update(token, depth)
-            ts = t.get("exchange_timestamp") or t.get("last_trade_time") or t.get("timestamp")
-            tick_epoch = None
-            if ts is not None:
-                try:
-                    if hasattr(ts, "timestamp"):
-                        tick_epoch = float(ts.timestamp())
-                    else:
-                        tick_epoch = float(ts)
-                except Exception:
-                    tick_epoch = None
-            if tick_epoch is not None and tick_epoch > 1e12:
-                tick_epoch = tick_epoch / 1000.0
+            tick_epoch = _extract_tick_epoch(t)
+            if token in _UNDERLYING_TOKEN_TO_SYMBOL:
+                symbol = _UNDERLYING_TOKEN_TO_SYMBOL.get(token)
+                if isinstance(depth, dict) and depth:
+                    buy_book = depth.get("buy", [])
+                    sell_book = depth.get("sell", [])
+                    bid = _best_price(buy_book)
+                    ask = _best_price(sell_book)
+                    mid = None
+                    if bid is not None and ask is not None and bid > 0 and ask > 0:
+                        mid = (bid + ask) / 2.0
+                    _update_index_quote_cache(
+                        symbol=symbol,
+                        bid=bid,
+                        ask=ask,
+                        mid=mid,
+                        ts_epoch=tick_epoch,
+                        last_price=last_price,
+                    )
+                elif last_price is not None:
+                    _update_index_quote_cache(
+                        symbol=symbol,
+                        bid=None,
+                        ask=None,
+                        mid=None,
+                        ts_epoch=tick_epoch,
+                        last_price=last_price,
+                    )
             if last_price is not None or depth is not None:
-                if tick_epoch is None:
-                    tick_epoch = time.time()
                 record_tick_epoch(tick_epoch)
                 if not _UNDERLYING_TOKENS and not _UNDERLYING_LOGGED_MISSING:
                     _log_ws("FEED_UNDERLYING_TOKENS_MISSING", {})
@@ -578,7 +664,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if cfg.KITE_STORE_TICKS:
                 try:
                     ok = insert_tick(
-                        ts,
+                        t.get("exchange_timestamp") or t.get("last_trade_time") or t.get("timestamp"),
                         token,
                         last_price,
                         t.get("volume"),
@@ -592,7 +678,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                                 "error": "insert_failed",
                                 "has_ltp": last_price is not None,
                                 "has_depth": depth is not None,
-                                "ts_present": ts is not None,
+                                "ts_present": (t.get("exchange_timestamp") or t.get("last_trade_time") or t.get("timestamp")) is not None,
                                 "keys": list(t.keys())[:20],
                             },
                         )
@@ -604,7 +690,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             "error": f"{type(exc).__name__}:{exc}",
                             "has_ltp": last_price is not None,
                             "has_depth": depth is not None,
-                            "ts_present": ts is not None,
+                            "ts_present": (t.get("exchange_timestamp") or t.get("last_trade_time") or t.get("timestamp")) is not None,
                             "keys": list(t.keys())[:20],
                         },
                     )
