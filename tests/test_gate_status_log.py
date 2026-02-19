@@ -55,7 +55,10 @@ def test_gate_status_logs_gate_reasons(tmp_path, monkeypatch):
     assert row["regime_probs_max"] == 0.61
     assert row["ohlc_bars_count"] == 0
     assert row["compute_indicators_error"] == "ValueError:test"
-    assert row["missing_inputs"] == ["ohlc_buffer_empty", "ltp_missing"]
+    assert row["indicator_inputs_ok"] is False
+    assert isinstance(row["indicators_age_sec"], (int, float))
+    assert row["indicator_missing_inputs"] == ["ohlc_buffer_empty", "ltp_missing", "never_computed"]
+    assert row["missing_inputs"] == ["ohlc_buffer_empty", "ltp_missing", "never_computed"]
 
 
 def test_gate_status_once_per_stage_symbol_cycle(monkeypatch):
@@ -85,3 +88,37 @@ def test_gate_status_once_per_stage_symbol_cycle(monkeypatch):
         ("NIFTY", "indicator_gate", "TEST"),
         ("NIFTY", "strategy_gate", "TEST"),
     ]
+
+
+def test_gate_status_includes_indicator_fields_for_strategy_stage():
+    md = {
+        "symbol": "NIFTY",
+        "ltp": 25000.0,
+        "ltp_source": "live",
+        "ltp_ts_epoch": 1000.0,
+        "indicators_ok": True,
+        "indicator_inputs_ok": True,
+        "indicators_age_sec": 1.2,
+        "indicator_last_update_epoch": 998.8,
+        "indicator_missing_inputs": [],
+        "ohlc_seeded": True,
+        "ohlc_bars_count": 40,
+        "primary_regime": "TREND",
+        "regime_probs": {"TREND": 0.99},
+        "regime_entropy": 0.01,
+        "unstable_regime_flag": False,
+    }
+    row = build_gate_status_record(
+        market_data=md,
+        gate_allowed=True,
+        gate_family="DEFINED_RISK",
+        gate_reasons=[],
+        stage="strategy_gate",
+    )
+    assert row["stage"] == "strategy_gate"
+    assert row["indicator_inputs_ok"] is True
+    assert isinstance(row["indicators_age_sec"], (int, float))
+    assert row["indicator_last_update_epoch"] == 998.8
+    assert row["indicator_missing_inputs"] == []
+    assert row["ohlc_seeded"] is True
+    assert row["ohlc_bars_count"] == 40

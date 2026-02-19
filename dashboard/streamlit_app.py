@@ -33,6 +33,7 @@ from core.trade_store import fetch_recent_trades, fetch_recent_outcomes, fetch_p
 from core.scorecard import compute_scorecard
 from core.gpt_advisor import get_trade_advice, save_advice, get_day_summary
 from core.market_data import fetch_live_market_data
+from core.day_type_history import load_day_type_events
 from core.time_utils import is_today_local, age_minutes_local, now_local, parse_ts_local
 import time
 
@@ -642,22 +643,13 @@ def _get_daytype_history(symbol, max_points=60):
         pass
     hist = []
     try:
-        path = Path("logs/day_type_events.jsonl")
-        if path.exists():
-            with path.open() as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except Exception:
-                        continue
-                    if obj.get("symbol") != symbol:
-                        continue
-                    conf = obj.get("confidence")
-                    if conf is None:
-                        continue
-                    hist.append(conf)
+        for obj in load_day_type_events(backfill=True, max_rows=5000):
+            if obj.get("symbol") != symbol:
+                continue
+            conf = obj.get("confidence")
+            if conf is None:
+                continue
+            hist.append(conf)
     except Exception:
         hist = []
     if hist:
@@ -2271,67 +2263,63 @@ if nav == "Home":
 
     section_header("Day‑Type History")
     try:
-        dt_path = Path("logs/day_type_events.jsonl")
-        if dt_path.exists():
-            rows = []
-            with dt_path.open() as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        rows.append(json.loads(line))
-                    except Exception:
-                        continue
-            if rows:
-                df_dt = pd.DataFrame(rows)
-                if "ts" in df_dt.columns:
-                    df_dt["ts"] = pd.to_datetime(df_dt["ts"], errors="coerce")
-                # Export CSV
-                try:
-                    csv_path = Path("logs/day_type_events.csv")
-                    df_dt.sort_values("ts", ascending=True).to_csv(csv_path, index=False)
-                except Exception:
-                    pass
-                if st.button("Export Day‑Type History CSV", key="export_daytype_csv"):
-                    try:
-                        st.success("Exported to logs/day_type_events.csv")
-                    except Exception:
-                        pass
-                ui.table(df_dt.sort_values("ts", ascending=False).head(200), use_container_width=True)
-                try:
-                    if "ts" in df_dt.columns and "confidence" in df_dt.columns:
-                        df_plot = df_dt.dropna(subset=["ts", "confidence"])
-                        df_plot = df_plot.sort_values("ts")
-                        df_plot = df_plot.set_index("ts")
-                        st.line_chart(df_plot[["confidence"]])
-                except Exception:
-                    pass
-                # Color-coded day-type timeline
-                try:
-                    if "ts" in df_dt.columns and "day_type" in df_dt.columns:
-                        timeline = df_dt.dropna(subset=["ts", "day_type"]).copy()
-                        timeline = timeline.sort_values("ts")
-                        chart = alt.Chart(timeline).mark_point(size=60).encode(
-                            x="ts:T",
-                            y=alt.Y("symbol:N", sort=None),
-                            color=alt.Color("day_type:N"),
-                            tooltip=["ts:T", "symbol:N", "day_type:N", "confidence:Q", "event:N"],
-                        ).properties(height=200)
-                        st.markdown("**Day‑Type Timeline (Color‑coded)**")
-                        st.altair_chart(chart, use_container_width=True)
-                        # Grouped per symbol (one row per symbol)
-                        st.markdown("**Day‑Type Timeline by Symbol**")
-                        chart2 = alt.Chart(timeline).mark_point(size=60).encode(
-                            x="ts:T",
-                            y=alt.Y("symbol:N", sort=None, title=None),
-                            color=alt.Color("day_type:N"),
-                            tooltip=["ts:T", "symbol:N", "day_type:N", "confidence:Q", "event:N"],
-                        ).properties(height=200)
-                        st.altair_chart(chart2, use_container_width=True)
-                except Exception:
-                    pass
+        rows = load_day_type_events(backfill=True, max_rows=10000)
+        if rows:
+            df_dt = pd.DataFrame(rows)
+            if "ts_epoch" in df_dt.columns:
+                df_dt["ts_epoch"] = pd.to_numeric(df_dt["ts_epoch"], errors="coerce")
+            if "ts_ist" in df_dt.columns:
+                df_dt["ts_ist"] = pd.to_datetime(df_dt["ts_ist"], errors="coerce")
+            if "ts" not in df_dt.columns:
+                df_dt["ts"] = df_dt.get("ts_ist")
             else:
-                empty_state("No day‑type history yet.")
+                df_dt["ts"] = pd.to_datetime(df_dt["ts"], errors="coerce")
+            if "ts_ist" in df_dt.columns:
+                df_dt["ts"] = df_dt["ts_ist"]
+            # Export CSV
+            try:
+                csv_path = Path("logs/day_type_events.csv")
+                df_dt.sort_values("ts_epoch", ascending=True).to_csv(csv_path, index=False)
+            except Exception:
+                pass
+            if st.button("Export Day‑Type History CSV", key="export_daytype_csv"):
+                try:
+                    st.success("Exported to logs/day_type_events.csv")
+                except Exception:
+                    pass
+            ui.table(df_dt.sort_values("ts_epoch", ascending=False).head(200), use_container_width=True)
+            try:
+                if "ts" in df_dt.columns and "confidence" in df_dt.columns:
+                    df_plot = df_dt.dropna(subset=["ts", "confidence"])
+                    df_plot = df_plot.sort_values("ts")
+                    df_plot = df_plot.set_index("ts")
+                    st.line_chart(df_plot[["confidence"]])
+            except Exception:
+                pass
+            # Color-coded day-type timeline
+            try:
+                if "ts" in df_dt.columns and "day_type" in df_dt.columns:
+                    timeline = df_dt.dropna(subset=["ts", "day_type"]).copy()
+                    timeline = timeline.sort_values("ts")
+                    chart = alt.Chart(timeline).mark_point(size=60).encode(
+                        x="ts:T",
+                        y=alt.Y("symbol:N", sort=None),
+                        color=alt.Color("day_type:N"),
+                        tooltip=["ts:T", "symbol:N", "day_type:N", "confidence:Q", "event:N"],
+                    ).properties(height=200)
+                    st.markdown("**Day‑Type Timeline (Color‑coded)**")
+                    st.altair_chart(chart, use_container_width=True)
+                    # Grouped per symbol (one row per symbol)
+                    st.markdown("**Day‑Type Timeline by Symbol**")
+                    chart2 = alt.Chart(timeline).mark_point(size=60).encode(
+                        x="ts:T",
+                        y=alt.Y("symbol:N", sort=None, title=None),
+                        color=alt.Color("day_type:N"),
+                        tooltip=["ts:T", "symbol:N", "day_type:N", "confidence:Q", "event:N"],
+                    ).properties(height=200)
+                    st.altair_chart(chart2, use_container_width=True)
+            except Exception:
+                pass
         else:
             empty_state("No day‑type history yet.")
     except Exception as e:

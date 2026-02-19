@@ -20,7 +20,6 @@ class StrategyGatekeeper:
     def evaluate(self, market_data, mode="MAIN") -> GateResult:
         reasons = []
         regime_probs = market_data.get("regime_probs") or {}
-        regime_entropy = market_data.get("regime_entropy", 0.0) or 0.0
         if "unstable_reasons" in market_data:
             unstable_reasons = [str(x) for x in (market_data.get("unstable_reasons") or []) if str(x)]
         else:
@@ -29,10 +28,8 @@ class StrategyGatekeeper:
         live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
         paper_relax = (not live_mode) and bool(getattr(cfg, "PAPER_RELAX_GATES", True))
         regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
-        regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
         if paper_relax:
             regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
-            regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
         indicators_ok = market_data.get("indicators_ok", True)
         indicators_age = market_data.get("indicators_age_sec")
         if indicators_age is None:
@@ -107,7 +104,7 @@ class StrategyGatekeeper:
 
         if regime_probs:
             max_prob = max(regime_probs.values()) if regime_probs else 0.0
-            if unstable_reasons or regime_entropy > regime_entropy_max:
+            if unstable_reasons:
                 reasons.append("regime_unstable")
                 if unstable_reasons:
                     reasons.extend(f"unstable:{r}" for r in unstable_reasons)

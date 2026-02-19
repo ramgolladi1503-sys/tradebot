@@ -19,6 +19,7 @@ from core.depth_store import depth_store
 from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
 from core.session_calendar import minutes_since_open as session_minutes_since_open, is_open
 from core.time_sanity import check_market_data_time_sanity
+from core.day_type_history import append_day_type_event
 
 from core.kite_client import kite_client
 
@@ -140,6 +141,11 @@ def _derive_unstable_reasons(
 ):
     """
     Build explicit reasons for regime instability.
+    Regime is unstable only when one of these holds:
+      - indicators missing
+      - bars insufficient (warm-up incomplete)
+      - regime max probability below threshold
+      - regime entropy above threshold
     Strong confidence (very high max-probability + very low entropy) clears
     probabilistic instability reasons, but keeps structural reasons.
     """
@@ -153,10 +159,6 @@ def _derive_unstable_reasons(
         entropy = float(regime_entropy or 0.0)
     except Exception:
         entropy = 0.0
-    try:
-        transition_rate = float(regime_transition_rate or 0.0)
-    except Exception:
-        transition_rate = 0.0
     try:
         bars = int(ohlc_bars_count)
     except Exception:
@@ -172,29 +174,23 @@ def _derive_unstable_reasons(
         reasons.append("bars_insufficient")
     if not bool(indicators_ok):
         reasons.append("indicators_missing")
-    if "indicators_stale" in missing:
-        reasons.append("indicators_stale")
-    if "indicators_never_computed" in missing:
-        reasons.append("indicators_never_computed")
+    if ("indicators_stale" in missing) and ("indicators_missing" not in reasons):
+        reasons.append("indicators_missing")
+    if ("indicators_never_computed" in missing or "never_computed" in missing) and ("indicators_missing" not in reasons):
+        reasons.append("indicators_missing")
 
-    entropy_unstable = float(getattr(cfg, "REGIME_ENTROPY_UNSTABLE", 1.5))
-    transition_unstable = float(getattr(cfg, "REGIME_TRANSITION_RATE_MAX", 6.0))
+    entropy_unstable = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
     prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
     if entropy > entropy_unstable:
         reasons.append("entropy_high")
-    if transition_rate > transition_unstable:
-        reasons.append("transition_rate_high")
     if max_prob < prob_min:
         reasons.append("regime_low_confidence")
-
-    if bool(model_unstable_flag) and not (entropy > entropy_unstable):
-        reasons.append("model_reported_unstable")
 
     # Confidence override for clearly stable distributions.
     strong_prob = float(getattr(cfg, "REGIME_STABLE_PROB_OVERRIDE_MIN", 0.99))
     strong_entropy = float(getattr(cfg, "REGIME_STABLE_ENTROPY_OVERRIDE_MAX", 0.01))
-    if max_prob >= strong_prob and entropy <= strong_entropy:
-        probabilistic = {"entropy_high", "regime_low_confidence", "model_reported_unstable"}
+    if bool(indicators_ok) and max_prob >= strong_prob and entropy <= strong_entropy:
+        probabilistic = {"entropy_high", "regime_low_confidence"}
         reasons = [r for r in reasons if r not in probabilistic]
 
     return list(dict.fromkeys(reasons))
@@ -621,11 +617,13 @@ def fetch_live_market_data():
 
         # Compute indicators from rolling OHLC buffer (no CSV dependency)
         indicators_ok = False
+        indicator_inputs_ok = False
         indicators_age_sec = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
         candle_ts_epoch = None
         indicator_last_update_epoch = _INDICATOR_LAST_UPDATE_EPOCH.get(symbol)
         ohlc_bars_count = 0
         min_bars = int(getattr(cfg, "OHLC_MIN_BARS", 30))
+        ohlc_seeded = False
         ohlc_last_bar_epoch = None
         compute_indicators_error = None
         missing_inputs = []
@@ -638,6 +636,7 @@ def fetch_live_market_data():
                     bars=bars,
                     min_bars=min_bars,
                 )
+                ohlc_seeded = bool(_seeded_ok)
             ohlc_bars_count = len(bars)
             if bars:
                 try:
@@ -668,6 +667,7 @@ def fetch_live_market_data():
                 vwap_slope = ind["vwap_slope"]
             last_ts = ind.get("last_ts")
             required_inputs_ok = bool(ind.get("ok"))
+            indicator_inputs_ok = required_inputs_ok
             if last_ts:
                 try:
                     candle_ts_epoch = float(last_ts.timestamp())
@@ -699,6 +699,8 @@ def fetch_live_market_data():
                 missing_inputs.append("compute_indicators_not_ready")
             if freshness.get("reason"):
                 missing_inputs.append(str(freshness["reason"]))
+                if str(freshness["reason"]) == "indicators_never_computed":
+                    missing_inputs.append("never_computed")
             try:
                 if ltp is None or float(ltp) <= 0.0:
                     missing_inputs.append("ltp_missing")
@@ -711,11 +713,13 @@ def fetch_live_market_data():
                 missing_inputs.append("ltp_not_live")
         except Exception as exc:
             indicators_ok = False
+            indicator_inputs_ok = False
             indicators_age_sec = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
             compute_indicators_error = f"{type(exc).__name__}:{exc}"
             missing_inputs.append("compute_indicators_exception")
             if indicator_last_update_epoch is None:
                 missing_inputs.append("indicators_never_computed")
+                missing_inputs.append("never_computed")
         if ohlc_seed_reason == "kite_api_unavailable" and ohlc_bars_count == 0:
             # Explicit fail-closed reason when REST warm-start is not available.
             missing_inputs = ["ohlc_buffer_empty"]
@@ -1140,17 +1144,13 @@ def fetch_live_market_data():
             else:
                 _DAYTYPE_LOCK[symbol] = {"day_type": day_type, "day_conf": day_conf, "locked_at": minutes_since_open}
                 try:
-                    Path("logs").mkdir(exist_ok=True)
-                    with open("logs/day_type_events.jsonl", "a") as f:
-                        f.write(json.dumps({
-                            "ts_epoch": now_utc_epoch(),
-                            "ts_ist": now_ist().isoformat(),
-                            "symbol": symbol,
-                            "event": "LOCK",
-                            "day_type": day_type,
-                            "confidence": day_conf,
-                            "minutes_since_open": minutes_since_open,
-                        }) + "\n")
+                    append_day_type_event(
+                        symbol=symbol,
+                        event="LOCK",
+                        day_type=day_type,
+                        confidence=day_conf,
+                        minutes_since_open=minutes_since_open,
+                    )
                 except Exception:
                     pass
 
@@ -1159,17 +1159,13 @@ def fetch_live_market_data():
             last = _DAYTYPE_LAST.get(symbol)
             if last != day_type:
                 _DAYTYPE_LAST[symbol] = day_type
-                Path("logs").mkdir(exist_ok=True)
-                with open("logs/day_type_events.jsonl", "a") as f:
-                    f.write(json.dumps({
-                        "ts_epoch": now_utc_epoch(),
-                        "ts_ist": now_ist().isoformat(),
-                        "symbol": symbol,
-                        "event": "CHANGE",
-                        "day_type": day_type,
-                        "confidence": day_conf,
-                        "minutes_since_open": minutes_since_open,
-                    }) + "\n")
+                append_day_type_event(
+                    symbol=symbol,
+                    event="CHANGE",
+                    day_type=day_type,
+                    confidence=day_conf,
+                    minutes_since_open=minutes_since_open,
+                )
         except Exception:
             pass
 
@@ -1180,17 +1176,13 @@ def fetch_live_market_data():
             every = getattr(cfg, "DAYTYPE_LOG_EVERY_SEC", 60)
             if now_ts - last_ts >= every:
                 _DAYTYPE_LAST_LOG[symbol] = now_ts
-                Path("logs").mkdir(exist_ok=True)
-                with open("logs/day_type_events.jsonl", "a") as f:
-                    f.write(json.dumps({
-                        "ts_epoch": now_utc_epoch(),
-                        "ts_ist": now_ist().isoformat(),
-                        "symbol": symbol,
-                        "event": "TICK",
-                        "day_type": day_type,
-                        "confidence": day_conf,
-                        "minutes_since_open": minutes_since_open,
-                    }) + "\n")
+                append_day_type_event(
+                    symbol=symbol,
+                    event="TICK",
+                    day_type=day_type,
+                    confidence=day_conf,
+                    minutes_since_open=minutes_since_open,
+                )
         except Exception:
             pass
 
@@ -1276,12 +1268,16 @@ def fetch_live_market_data():
             "day_confidence": round(day_conf, 3),
             "day_conf_history": conf_hist,
             "indicators_ok": indicators_ok,
+            "indicator_inputs_ok": indicator_inputs_ok,
             "indicators_age_sec": indicators_age_sec,
             "indicator_last_update_epoch": indicator_last_update_epoch,
             "ohlc_bars_count": ohlc_bars_count,
+            "ohlc_seeded": bool(ohlc_seeded),
+            "ohlc_seed_reason": ohlc_seed_reason,
             "ohlc_last_bar_epoch": ohlc_last_bar_epoch,
             "compute_indicators_error": compute_indicators_error,
             "missing_inputs": missing_inputs,
+            "indicator_missing_inputs": missing_inputs,
             "time_to_expiry_hrs": time_to_expiry_hrs,
             "orb_bias": orb_bias,
             "orb_lock_min": orb_lock_min,
