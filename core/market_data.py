@@ -48,6 +48,7 @@ _INDICATOR_LAST_UPDATE_EPOCH = {}
 _INSUFFICIENT_OHLC_WARNED = set()
 _INDEX_BIDASK_MISSING_LOG_TS = {}
 _INDEX_REST_QUOTE_REFRESH_TS = {}
+_INDEX_QUOTE_REQUEST_LOG_TS = {}
 
 _REGIME_MODEL = None
 _NEWS_ENCODER = None
@@ -218,6 +219,11 @@ def get_index_quote_snapshot(symbol: str) -> dict:
 
 def _index_quote_keys(symbol: str) -> list[str]:
     sym = str(symbol or "").upper()
+    canonical = {
+        "NIFTY": "NSE:NIFTY 50",
+        "BANKNIFTY": "NSE:NIFTY BANK",
+        "SENSEX": "BSE:SENSEX",
+    }.get(sym)
     primary = str((getattr(cfg, "PREMARKET_INDICES_LTP", {}) or {}).get(sym) or "").strip()
     aliases = {
         "NIFTY": ["NSE:NIFTY 50"],
@@ -225,7 +231,10 @@ def _index_quote_keys(symbol: str) -> list[str]:
         "SENSEX": ["BSE:SENSEX"],
     }.get(sym, [])
     keys = []
-    if primary:
+    if canonical:
+        keys.append(canonical)
+    # honor configured symbol only when it is already exchange-qualified.
+    if primary and ":" in primary:
         keys.append(primary)
     keys.extend(aliases)
     deduped = []
@@ -237,6 +246,35 @@ def _index_quote_keys(symbol: str) -> list[str]:
         seen.add(k)
         deduped.append(k)
     return deduped
+
+
+def _log_index_quote_request(symbol: str, endpoint: str, requested_symbols: list[str]) -> None:
+    sym = str(symbol or "").upper()
+    symbols = [str(s).strip() for s in (requested_symbols or []) if str(s).strip()]
+    if not sym or not symbols:
+        return
+    now_epoch = now_utc_epoch()
+    key = f"{endpoint}:{sym}"
+    min_interval = float(getattr(cfg, "INDEX_QUOTE_REQUEST_LOG_SEC", 60.0))
+    last = float(_INDEX_QUOTE_REQUEST_LOG_TS.get(key) or 0.0)
+    if last and (now_epoch - last) < min_interval:
+        return
+    _INDEX_QUOTE_REQUEST_LOG_TS[key] = now_epoch
+    try:
+        payload = {
+            "event": "index_quote_request",
+            "endpoint": str(endpoint),
+            "symbol": sym,
+            "requested_symbols": symbols,
+            "ts_epoch": now_epoch,
+            "ts_ist": now_ist().isoformat(),
+        }
+        p = Path("logs/index_quote_requests.jsonl")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
 
 
 def _is_index_symbol(symbol: str) -> bool:
@@ -262,12 +300,84 @@ def _synthesize_index_bid_ask(mid_price) -> tuple[float | None, float | None, fl
             float(mid) * float(getattr(cfg, "SYNTH_INDEX_SPREAD_PCT", 0.00005)),
             float(getattr(cfg, "SYNTH_INDEX_SPREAD_ABS", 0.5)),
         )
+        spread_cap = float(getattr(cfg, "SYNTH_INDEX_SPREAD_CAP", 5.0))
+        spread = min(spread, spread_cap)
         half = spread / 2.0
         bid = round(mid - half, 4)
         ask = round(mid + half, 4)
         return bid, ask, mid
     except Exception:
         return None, None, None
+
+
+def resolve_index_quote(symbol: str, mode: str, ltp, depth) -> dict:
+    """
+    Resolve index quote in a single deterministic path.
+
+    Returns:
+      {
+        "bid": float|None,
+        "ask": float|None,
+        "mid": float|None,
+        "quote_ok": bool,
+        "quote_source": "depth" | "synthetic_index" | "missing_depth",
+      }
+    """
+
+    def _as_price(value):
+        try:
+            p = float(value)
+            if p > 0:
+                return p
+        except Exception:
+            return None
+        return None
+
+    bid = None
+    ask = None
+    if isinstance(depth, dict):
+        bid = _as_price(depth.get("bid"))
+        ask = _as_price(depth.get("ask"))
+        if bid is None or ask is None:
+            try:
+                buy_book = depth.get("buy") if isinstance(depth.get("buy"), list) else []
+                sell_book = depth.get("sell") if isinstance(depth.get("sell"), list) else []
+                b0 = buy_book[0].get("price") if buy_book else None
+                a0 = sell_book[0].get("price") if sell_book else None
+                bid = _as_price(b0) if bid is None else bid
+                ask = _as_price(a0) if ask is None else ask
+            except Exception:
+                pass
+
+    if bid is not None and ask is not None and ask >= bid:
+        return {
+            "bid": bid,
+            "ask": ask,
+            "mid": (bid + ask) / 2.0,
+            "quote_ok": True,
+            "quote_source": "depth",
+        }
+
+    if str(mode or "").upper() in {"SIM", "PAPER"} and _is_index_symbol(symbol):
+        ltp_price = _as_price(ltp)
+        if ltp_price is not None:
+            synth_bid, synth_ask, synth_mid = _synthesize_index_bid_ask(ltp_price)
+            if synth_bid is not None and synth_ask is not None and synth_mid is not None:
+                return {
+                    "bid": synth_bid,
+                    "ask": synth_ask,
+                    "mid": synth_mid,
+                    "quote_ok": True,
+                    "quote_source": "synthetic_index",
+                }
+
+    return {
+        "bid": None,
+        "ask": None,
+        "mid": None,
+        "quote_ok": False,
+        "quote_source": "missing_depth",
+    }
 
 
 def _extract_quote_epoch(raw_ts, fallback_epoch: float) -> float:
@@ -318,7 +428,9 @@ def _refresh_index_quote_from_rest(symbol: str, force: bool = False) -> bool:
     if not kite_client.kite:
         return has_cached_bidask
     _INDEX_REST_QUOTE_REFRESH_TS[sym] = now_epoch
-    for key in _index_quote_keys(sym):
+    request_keys = _index_quote_keys(sym)
+    _log_index_quote_request(sym, "quote", request_keys)
+    for key in request_keys:
         try:
             payload = kite_client.kite.quote([key]) or {}
             q = payload.get(key) or {}
@@ -622,38 +734,41 @@ def get_ltp(symbol: str):
                     f.write(json.dumps(err) + "\n")
             except Exception:
                 pass
-        try:
-            ksym = getattr(cfg, "PREMARKET_INDICES_LTP", {}).get(symbol)
-            if not ksym:
-                ksym = f"NSE:{symbol}" if symbol != "SENSEX" else f"BSE:{symbol}"
-            data = kite_client.ltp([ksym])
-            price = data.get(ksym, {}).get("last_price", 0)
-            if price:
-                _save_cached_ltp(symbol, price)
-                cache = _DATA_CACHE.setdefault(symbol, {})
-                cache["ltp_source"] = "live"
-                cache["ltp_ts_epoch"] = now_utc_epoch()
-                return price
-        except Exception as e:
+        if _is_index_symbol(symbol):
+            failures = []
+            index_keys = _index_quote_keys(symbol)
+            _log_index_quote_request(symbol, "ltp", index_keys)
+            for ksym in index_keys:
+                try:
+                    data = kite_client.ltp([ksym]) or {}
+                    price = data.get(ksym, {}).get("last_price", 0)
+                    if price:
+                        _save_cached_ltp(symbol, price)
+                        cache = _DATA_CACHE.setdefault(symbol, {})
+                        cache["ltp_source"] = "live"
+                        cache["ltp_ts_epoch"] = now_utc_epoch()
+                        return price
+                except Exception as e:
+                    failures.append(f"{ksym}:{e}")
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
                 try:
-                    err = {"symbol": symbol, "error": "ltp_fetch_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
+                    err = {
+                        "symbol": symbol,
+                        "error": "ltp_fetch_failed",
+                        "detail": failures[-1] if failures else "no_price_in_response",
+                        "requested_symbols": index_keys,
+                        "timestamp": now_ist().isoformat(),
+                    }
                     p = Path("logs/live_quote_errors.jsonl")
                     p.parent.mkdir(parents=True, exist_ok=True)
-                    with p.open("a") as f:
-                        f.write(json.dumps(err) + "\n")
+                    with p.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(err, ensure_ascii=True) + "\n")
                 except Exception:
                     pass
-
-        # hard fallback for index aliases
-        try:
-            alias_map = {
-                "NIFTY": ["NSE:NIFTY 50"],
-                "BANKNIFTY": ["NSE:NIFTY BANK", "NSE:BANKNIFTY"],
-                "SENSEX": ["BSE:SENSEX"],
-            }
-            for ksym in alias_map.get(symbol, []):
-                data = kite_client.ltp([ksym])
+        else:
+            try:
+                ksym = f"NSE:{symbol}"
+                data = kite_client.ltp([ksym]) or {}
                 price = data.get(ksym, {}).get("last_price", 0)
                 if price:
                     _save_cached_ltp(symbol, price)
@@ -661,19 +776,16 @@ def get_ltp(symbol: str):
                     cache["ltp_source"] = "live"
                     cache["ltp_ts_epoch"] = now_utc_epoch()
                     return price
-        except Exception as e:
-            if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
-                try:
-                    from pathlib import Path
-                    import json
-                    err = {"symbol": symbol, "error": "ltp_alias_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
-                    p = Path("logs/live_quote_errors.jsonl")
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    with p.open("a") as f:
-                        f.write(json.dumps(err) + "\n")
-                except Exception:
-                    pass
-                pass
+            except Exception as e:
+                if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
+                    try:
+                        err = {"symbol": symbol, "error": "ltp_fetch_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
+                        p = Path("logs/live_quote_errors.jsonl")
+                        p.parent.mkdir(parents=True, exist_ok=True)
+                        with p.open("a", encoding="utf-8") as f:
+                            f.write(json.dumps(err, ensure_ascii=True) + "\n")
+                    except Exception:
+                        pass
 
     # Fallback to cached LTP if allowed (disabled in LIVE)
     if (not live_mode) and getattr(cfg, "ALLOW_STALE_LTP", True):
@@ -1102,15 +1214,21 @@ def fetch_live_market_data():
                             spread_pct = (ask - bid) / ltp
                 except Exception:
                     quote_ok = False
-        if not quote_ok and _is_index_symbol(symbol):
-            synth_bid, synth_ask, synth_mid = _synthesize_index_bid_ask(ltp)
-            if synth_bid is not None and synth_ask is not None and synth_mid is not None:
-                bid = synth_bid
-                ask = synth_ask
-                mid = synth_mid
-                synthetic_index_quote = True
-                quote_source = "synthetic_index"
-                quote_ok = True
+        if _is_index_symbol(symbol):
+            exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+            resolved_quote = resolve_index_quote(
+                symbol=symbol,
+                mode=exec_mode,
+                ltp=ltp,
+                depth={"bid": bid, "ask": ask},
+            )
+            bid = resolved_quote.get("bid")
+            ask = resolved_quote.get("ask")
+            mid = resolved_quote.get("mid")
+            quote_ok = bool(resolved_quote.get("quote_ok", False))
+            quote_source = str(resolved_quote.get("quote_source") or "missing_depth")
+            synthetic_index_quote = quote_source == "synthetic_index"
+            if quote_ok:
                 if quote_ts_epoch is None:
                     if isinstance(ltp_ts_epoch, (int, float)):
                         quote_ts_epoch = float(ltp_ts_epoch)

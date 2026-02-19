@@ -82,16 +82,16 @@ def test_paper_missing_index_bid_ask_uses_synthetic(monkeypatch, tmp_path):
     trade = builder.build(_base_market_data(), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
 
     assert trade is not None
-    assert trade.source_flags.get("index_quote_source") == "synthetic"
+    assert trade.source_flags.get("index_quote_source") == "synthetic_index"
     assert trade.source_flags.get("index_bidask_synthetic") is True
     assert trade.source_flags.get("index_quote_kind") == "synthetic"
-    rows = [e for e in events if e["kind"] == "index_bidask_source" and e["payload"].get("source") == "synthetic"]
+    rows = [e for e in events if e["kind"] == "index_bidask_source" and e["payload"].get("source") == "synthetic_index"]
     assert rows
     payload = rows[-1]["payload"]
     assert payload.get("quote_kind") == "synthetic"
     assert payload.get("last_price") == 25000.0
-    assert payload.get("bid") == 24995.0
-    assert payload.get("ask") == 25005.0
+    assert payload.get("bid") == 24999.375
+    assert payload.get("ask") == 25000.625
 
 
 def test_live_missing_index_bid_ask_rejects(monkeypatch, tmp_path, capsys):
@@ -113,7 +113,7 @@ def test_live_missing_index_bid_ask_rejects(monkeypatch, tmp_path, capsys):
     assert trade is None
     assert builder._reject_ctx.get("reason") == "missing_live_bidask"
     assert builder._reject_ctx.get("gate_reasons") == ["missing_live_bidask", "quote_api_issue"]
-    assert any(e["kind"] == "index_bidask_source" and e["payload"].get("source") == "missing" for e in events)
+    assert any(e["kind"] == "index_bidask_source" and e["payload"].get("source") == "missing_depth" for e in events)
     reject_rows = [e for e in events if e["kind"] == "trade_reject_missing_live_bidask"]
     assert reject_rows
     reject_payload = reject_rows[-1]["payload"]

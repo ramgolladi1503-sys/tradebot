@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: setup test run-paper run-live sanity
+.PHONY: setup test run-paper run-live sanity doctor
 
 setup:
 	$(PYTHON) -m pip install -r requirements.lock
@@ -16,3 +16,6 @@ run-live:
 
 sanity:
 	PYTHONPATH=. ./scripts/ci_sanity.sh
+
+doctor:
+	PYTHONPATH=. $(PYTHON) scripts/doctor.py

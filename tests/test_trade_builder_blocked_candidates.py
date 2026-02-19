@@ -35,8 +35,8 @@ def test_blocked_candidate_logged_for_missing_quote(monkeypatch, tmp_path):
         {
             "symbol": "NIFTY",
             "valid": True,
-            "ltp": 25000.0,
-            "vwap": 24990.0,
+            "ltp": None,
+            "vwap": None,
             "atr": 20.0,
             "instrument": "OPT",
             "quote_ok": False,

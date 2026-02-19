@@ -160,10 +160,14 @@ class TradeBuilder:
         """
         Resolve index bid/ask for intent gating.
         LIVE: fail-closed on missing/invalid bid/ask.
-        PAPER/SIM: synthesize from quote-cache last_price when missing.
+        PAPER/SIM: synthesize only for index symbols using LTP when depth is missing.
         """
         symbol = str(market_data.get("symbol") or "")
-        source = str(market_data.get("index_quote_source") or "real")
+        source = str(
+            market_data.get("index_quote_source")
+            or market_data.get("quote_source")
+            or "real"
+        )
 
         def _as_valid_price(value):
             try:
@@ -173,6 +177,17 @@ class TradeBuilder:
             except Exception:
                 return None
             return None
+
+        def _is_index_symbol(sym: str) -> bool:
+            s = str(sym or "").upper()
+            configured = {
+                str(k).upper()
+                for k in (getattr(cfg, "PREMARKET_INDICES_LTP", {}) or {}).keys()
+                if str(k or "").strip()
+            }
+            if configured:
+                return s in configured
+            return s in {"NIFTY", "BANKNIFTY", "SENSEX"}
 
         quote_cache = market_data.get("index_quote_cache")
         if not isinstance(quote_cache, dict):
@@ -187,31 +202,40 @@ class TradeBuilder:
 
         bid = _as_valid_price(market_data.get("bid"))
         ask = _as_valid_price(market_data.get("ask"))
+        ltp = _as_valid_price(market_data.get("ltp"))
         last_price = _as_valid_price(
             quote_cache.get("last_price")
             if isinstance(quote_cache, dict)
             else None
         )
         preexisting_synthetic = bool(market_data.get("index_bidask_synthetic")) or source in ("synthetic", "synthetic_index")
-        missing_bid_ask = (bid is None) or (ask is None) or (ask < bid)
+        # Single resolver path shared with core.market_data
+        is_index = _is_index_symbol(symbol)
         synthetic = False
+        try:
+            from core.market_data import resolve_index_quote
 
-        if missing_bid_ask and exec_mode != "LIVE":
-            if last_price is not None:
-                spread = max(0.5, last_price * 0.0002)
-                bid = round(last_price - spread, 2)
-                ask = round(last_price + spread, 2)
-                market_data["bid"] = bid
-                market_data["ask"] = ask
-                market_data["quote_ok"] = True
+            resolved = resolve_index_quote(
+                symbol=symbol,
+                mode=exec_mode,
+                ltp=(ltp if ltp is not None else last_price),
+                depth={"bid": bid, "ask": ask},
+            )
+            bid = _as_valid_price(resolved.get("bid"))
+            ask = _as_valid_price(resolved.get("ask"))
+            source = str(resolved.get("quote_source") or source or "missing_depth")
+            synthetic = source == "synthetic_index"
+            market_data["quote_ok"] = bool(resolved.get("quote_ok", False))
+            if synthetic:
                 market_data["quote_ts_epoch"] = float(time.time())
                 market_data["quote_age_sec"] = 0.0
-                source = "synthetic"
-                synthetic = True
+        except Exception:
+            pass
 
         has_bid_ask = (bid is not None) and (ask is not None)
         quote_kind = "synthetic" if (synthetic or (preexisting_synthetic and has_bid_ask)) else ("real" if has_bid_ask else "missing")
-        market_data["index_quote_source"] = source if quote_kind != "missing" else "missing"
+        market_data["index_quote_source"] = source if quote_kind != "missing" else ("missing_depth" if is_index else "missing")
+        market_data["quote_source"] = market_data["index_quote_source"]
         market_data["index_bidask_synthetic"] = bool(synthetic or (preexisting_synthetic and has_bid_ask))
         market_data["index_quote_kind"] = quote_kind
         if bid is not None:
@@ -229,6 +253,10 @@ class TradeBuilder:
                 "bid": market_data.get("bid"),
                 "ask": market_data.get("ask"),
                 "last_price": last_price,
+                "ltp": ltp,
+                "mode": exec_mode,
+                "is_index": is_index,
+                "quote_source": market_data.get("quote_source"),
             },
         )
         return market_data

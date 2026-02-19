@@ -306,6 +306,12 @@ def _render_confidence_reliability():
     st.progress(ratio)
 
 def _render_market_snapshot():
+    def fmt2(value):
+        try:
+            return f"{float(value):.2f}"
+        except Exception:
+            return "n/a"
+
     try:
         from core.kite_client import kite_client
         from config import config as cfg
@@ -436,7 +442,10 @@ def _render_market_snapshot():
             st.metric(label, f"{price:.2f}" if isinstance(price, (int, float)) else "N/A", delta)
             if sym_key in day_map:
                 dtype, conf, hist = day_map[sym_key]
-                st.markdown(f"<div class='market-card-sub'>Day Type: {sym_key}: {dtype} (conf {conf:.2f})</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='market-card-sub'>Day Type: {sym_key}: {dtype} (conf {fmt2(conf)})</div>",
+                    unsafe_allow_html=True,
+                )
                 st.caption("Day‑Type Confidence (per symbol)")
                 if not hist:
                     hist = _get_daytype_history(sym_key)
@@ -1873,10 +1882,13 @@ if nav == "Home":
                         continue
             if rows:
                 df_sp = pd.DataFrame(rows).tail(100)
+                for col, default in (("source", "none"), ("quote_source", "none")):
+                    if col in df_sp.columns:
+                        df_sp[col] = df_sp[col].fillna(default)
                 sym_filter = st.selectbox("Signal Path Symbol", ["All"] + sorted(df_sp["symbol"].dropna().unique().tolist()), key="signal_path_symbol")
                 if sym_filter != "All":
                     df_sp = df_sp[df_sp["symbol"] == sym_filter]
-                show_cols = [c for c in ["timestamp", "symbol", "kind", "regime", "direction", "score", "reason", "ltp_change_window", "atr", "threshold"] if c in df_sp.columns]
+                show_cols = [c for c in ["timestamp", "symbol", "kind", "source", "quote_source", "regime", "direction", "score", "reason", "ltp_change_window", "atr", "threshold"] if c in df_sp.columns]
                 ui.table(df_sp.sort_values("timestamp", ascending=False)[show_cols].head(50), use_container_width=True)
             else:
                 empty_state("No signal path entries yet.")
