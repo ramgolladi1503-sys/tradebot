@@ -259,6 +259,18 @@ def _should_show_quote_errors(readiness_state: str) -> bool:
         st.session_state["force_show_quote_errors_ts"] = 0.0
     return readiness_state in ("READY", "DEGRADED", "BLOCKED", "BOOTING")
 
+
+def _truncate_live_quote_errors_log() -> bool:
+    """Best-effort truncate for live quote error log."""
+    try:
+        log_path = Path("logs/live_quote_errors.jsonl")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("w", encoding="utf-8"):
+            pass
+        return True
+    except Exception:
+        return False
+
 def _localize_ts(df_in, col="timestamp"):
     df_out = df_in.copy()
     if col not in df_out.columns:
@@ -1218,6 +1230,7 @@ if nav == "Home":
         # Live quotes status banner
         try:
             quote_err = None
+            quote_err_file_missing = False
             err_path = Path("logs/live_quote_errors.jsonl")
             if err_path.exists():
                 lines = err_path.read_text().strip().splitlines()
@@ -1227,16 +1240,25 @@ if nav == "Home":
                     # Ignore stale errors
                     try:
                         from config import config as cfg
-                        ts = quote_err.get("timestamp")
-                        if ts:
-                            err_dt = datetime.fromisoformat(ts)
-                            if err_dt.tzinfo is None:
-                                err_dt = err_dt.replace(tzinfo=timezone.utc)
-                            age = (datetime.now(timezone.utc) - err_dt.astimezone(timezone.utc)).total_seconds()
-                            if age > getattr(cfg, "LIVE_QUOTE_ERROR_TTL_SEC", 300):
+                        ttl_sec = float(getattr(cfg, "LIVE_QUOTE_ERROR_TTL_SEC", 300))
+                        ts_epoch = quote_err.get("ts_epoch")
+                        if isinstance(ts_epoch, (int, float)):
+                            age = time.time() - float(ts_epoch)
+                            if age > ttl_sec:
                                 quote_err = None
+                        else:
+                            ts = quote_err.get("ts_ist") or quote_err.get("timestamp")
+                            if ts:
+                                err_dt = datetime.fromisoformat(ts)
+                                if err_dt.tzinfo is None:
+                                    err_dt = err_dt.replace(tzinfo=timezone.utc)
+                                age = (datetime.now(timezone.utc) - err_dt.astimezone(timezone.utc)).total_seconds()
+                                if age > ttl_sec:
+                                    quote_err = None
                     except Exception:
                         pass
+            else:
+                quote_err_file_missing = True
             chain_health = {}
             health_path = Path("logs/option_chain_health.json")
             if health_path.exists():
@@ -1257,7 +1279,13 @@ if nav == "Home":
                 notes.append("Feed stale (market open)")
             if quote_err and status == "OK":
                 status = "WARN"
-                notes.append("Live quote fetch failed")
+                quote_event = (
+                    quote_err.get("event_code")
+                    or quote_err.get("error")
+                    or quote_err.get("event")
+                    or "live_quote_error"
+                )
+                notes.append(f"Live quote fetch failed ({quote_event})")
             if chain_health:
                 bad = [k for k, v in chain_health.items() if isinstance(v, dict) and v.get("status") in ("ERROR", "WARN")]
                 if bad:
@@ -1276,7 +1304,9 @@ if nav == "Home":
                     detail = ""
                     reason = ""
                     try:
-                        if quote_err and quote_err.get("detail"):
+                        if quote_err and isinstance(quote_err.get("details"), dict) and quote_err["details"].get("detail"):
+                            detail = str(quote_err["details"].get("detail"))
+                        elif quote_err and quote_err.get("detail"):
                             detail = str(quote_err.get("detail"))
                         elif quote_err:
                             detail = str(quote_err)
@@ -1292,6 +1322,8 @@ if nav == "Home":
                     if reason:
                         reason = f" ({reason})"
                     st.error("Live Quotes: ERROR — " + "; ".join(notes) + (f" [{reason.strip()}]" if reason else "") + (f" ({detail})" if detail else ""))
+                if quote_err_file_missing:
+                    st.info("No live quote errors yet")
         except Exception:
             pass
         try:
@@ -1310,8 +1342,10 @@ if nav == "Home":
                             st.toast("Live quote fetch triggered")
                     if col_q2.button("Clear Live Quote Errors", key="clear_live_quote_errors", disabled=clear_disabled):
                         try:
-                            Path("logs/live_quote_errors.jsonl").write_text("")
-                            st.success("Cleared live quote error log.")
+                            if _truncate_live_quote_errors_log():
+                                st.success("Cleared live quote error log.")
+                            else:
+                                st.warning("Unable to clear live quote error log.")
                         except Exception:
                             st.warning("Unable to clear live quote error log.")
                     try:
@@ -1339,8 +1373,10 @@ if nav == "Home":
                         st.toast("Live quote fetch triggered")
                 if col_q2.button("Clear Live Quote Errors", key="clear_live_quote_errors", disabled=clear_disabled):
                     try:
-                        Path("logs/live_quote_errors.jsonl").write_text("")
-                        st.success("Cleared live quote error log.")
+                        if _truncate_live_quote_errors_log():
+                            st.success("Cleared live quote error log.")
+                        else:
+                            st.warning("Unable to clear live quote error log.")
                     except Exception:
                         st.warning("Unable to clear live quote error log.")
         except Exception:

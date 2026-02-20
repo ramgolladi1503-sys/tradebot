@@ -47,9 +47,9 @@ _REGIME_TRANSITIONS = {}
 _LAST_REGIME_SNAPSHOT = {}
 _INDICATOR_LAST_UPDATE_EPOCH = {}
 _INSUFFICIENT_OHLC_WARNED = set()
-_INDEX_BIDASK_MISSING_LOG_TS = {}
 _INDEX_REST_QUOTE_REFRESH_TS = {}
 _INDEX_QUOTE_REQUEST_LOG_TS = {}
+_LIVE_QUOTE_ERROR_LAST_TS = {}
 
 _REGIME_MODEL = None
 _NEWS_ENCODER = None
@@ -300,6 +300,84 @@ def _is_index_symbol(symbol: str) -> bool:
     return sym in {"NIFTY", "BANKNIFTY", "SENSEX"}
 
 
+def is_index(symbol: str) -> bool:
+    """Public helper for consistent index classification."""
+    return _is_index_symbol(symbol)
+
+
+def _index_depth_required(symbol: str, execution_mode: str | None = None) -> bool:
+    mode = str(execution_mode if execution_mode is not None else getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    return bool(is_index(symbol) and mode == "LIVE")
+
+
+def _classify_index_feed_health(
+    *,
+    symbol: str,
+    execution_mode: str | None,
+    now_epoch: float,
+    ltp,
+    ltp_ts_epoch,
+    quote_ok: bool,
+    quote_source: str | None,
+    quote_ts_epoch,
+) -> dict:
+    """
+    Canonical feed health for index underlyings:
+    - STALE: LTP timestamp missing/old.
+    - MISSING: bid/ask unavailable while LTP is fresh.
+    - SIM/PAPER: missing depth does not become STALE and does not require depth.
+    - LIVE: missing depth is MISSING (strict), not STALE.
+    """
+    max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+    max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0))
+
+    ltp_age_sec = None
+    if isinstance(ltp_ts_epoch, (int, float)):
+        ltp_age_sec = max(0.0, float(now_epoch) - float(ltp_ts_epoch))
+    depth_age_sec = None
+    if isinstance(quote_ts_epoch, (int, float)):
+        depth_age_sec = max(0.0, float(now_epoch) - float(quote_ts_epoch))
+
+    stale_reasons = []
+    missing_reasons = []
+    if ltp is None or float(ltp) <= 0:
+        stale_reasons.append("ltp_missing")
+    elif ltp_age_sec is None:
+        stale_reasons.append("ltp_timestamp_missing")
+    elif float(ltp_age_sec) > max_ltp_age:
+        stale_reasons.append(f"ltp_stale age={float(ltp_age_sec):.2f} max={max_ltp_age:.2f}")
+
+    depth_required = _index_depth_required(symbol, execution_mode=execution_mode)
+    if not bool(quote_ok):
+        missing_reasons.append("depth_missing")
+        missing_reasons.append(str(quote_source or "missing_depth"))
+
+    if stale_reasons:
+        state = "STALE"
+    elif missing_reasons:
+        state = "MISSING"
+    else:
+        state = "OK"
+
+    if state == "MISSING" and not depth_required:
+        feed_ok = True
+    else:
+        feed_ok = state == "OK"
+
+    return {
+        "state": state,
+        "ok": bool(feed_ok),
+        "ltp_age_sec": ltp_age_sec,
+        "depth_age_sec": depth_age_sec,
+        "max_ltp_age_sec": max_ltp_age,
+        "max_depth_age_sec": max_depth_age,
+        "depth_required": bool(depth_required),
+        "stale_reasons": stale_reasons,
+        "missing_reasons": missing_reasons,
+        "source": str(quote_source or "none"),
+    }
+
+
 def _synthesize_index_bid_ask(mid_price) -> tuple[float | None, float | None, float | None]:
     try:
         mid = float(mid_price)
@@ -367,7 +445,7 @@ def resolve_index_quote(symbol: str, mode: str, ltp, depth) -> dict:
             "quote_source": "depth",
         }
 
-    if str(mode or "").upper() in {"SIM", "PAPER"} and _is_index_symbol(symbol):
+    if str(mode or "").upper() in {"SIM", "PAPER"} and is_index(symbol):
         ltp_price = _as_price(ltp)
         if ltp_price is not None:
             synth_bid, synth_ask, synth_mid = _synthesize_index_bid_ask(ltp_price)
@@ -474,23 +552,35 @@ def _refresh_index_quote_from_rest(symbol: str, force: bool = False) -> bool:
     return bool(get_index_quote_snapshot(sym).get("bid") is not None and get_index_quote_snapshot(sym).get("ask") is not None)
 
 
-def _log_index_bidask_missing(symbol: str, source: str | None = None):
+def _append_live_quote_error(
+    event_code: str,
+    symbol: str,
+    *,
+    category: str,
+    source: str | None = None,
+    details: dict | None = None,
+) -> None:
+    event = str(event_code or "").strip()
     sym = str(symbol or "").upper()
-    if not sym:
+    cat = str(category or "").strip().lower()
+    if not event or not sym or not cat:
         return
     now_epoch = now_utc_epoch()
-    min_interval = float(getattr(cfg, "INDEX_BIDASK_MISSING_LOG_SEC", 60.0))
-    last = float(_INDEX_BIDASK_MISSING_LOG_TS.get(sym) or 0.0)
+    min_interval = float(getattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 30.0))
+    key = (event, sym, cat)
+    last = float(_LIVE_QUOTE_ERROR_LAST_TS.get(key) or 0.0)
     if last and (now_epoch - last) < min_interval:
         return
-    _INDEX_BIDASK_MISSING_LOG_TS[sym] = now_epoch
+    _LIVE_QUOTE_ERROR_LAST_TS[key] = now_epoch
     try:
         payload = {
-            "event": "index_bidask_missing",
-            "symbol": sym,
-            "source": source or "unknown",
-            "ts_epoch": now_epoch,
             "ts_ist": now_ist().isoformat(),
+            "ts_epoch": float(now_epoch),
+            "event_code": event,
+            "category": cat,
+            "symbol": sym,
+            "source": str(source) if source is not None else None,
+            "details": details if isinstance(details, dict) else {},
         }
         p = Path("logs/live_quote_errors.jsonl")
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -498,6 +588,66 @@ def _log_index_bidask_missing(symbol: str, source: str | None = None):
             f.write(json.dumps(payload, ensure_ascii=True) + "\n")
     except Exception:
         pass
+
+
+def _log_index_bidask_missing(
+    symbol: str,
+    source: str | None = None,
+    *,
+    details: dict | None = None,
+):
+    payload_details = {
+        "missing_fields": ["bid", "ask"],
+        "hint": "index often has no depth",
+    }
+    if isinstance(details, dict):
+        payload_details.update(details)
+    _append_live_quote_error(
+        event_code="index_bidask_missing",
+        symbol=symbol,
+        category="missing",
+        source=source,
+        details=payload_details,
+    )
+
+
+def _should_log_index_bidask_missing(*, execution_mode: str, require_live_quotes: bool, market_open: bool) -> bool:
+    mode = str(execution_mode or "").upper()
+    if not bool(market_open):
+        return False
+    if mode in {"SIM", "PAPER"}:
+        return False
+    return mode == "LIVE" or bool(require_live_quotes)
+
+
+def _maybe_log_index_bidask_missing(
+    symbol: str,
+    *,
+    quote_ok: bool,
+    quote_source: str | None,
+    ltp_source: str | None,
+    market_open: bool,
+) -> None:
+    if quote_ok:
+        return
+    execution_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    require_live_quotes = bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
+    if not _should_log_index_bidask_missing(
+        execution_mode=execution_mode,
+        require_live_quotes=require_live_quotes,
+        market_open=market_open,
+    ):
+        return
+    _log_index_bidask_missing(
+        symbol,
+        source=quote_source,
+        details={
+            "mode": execution_mode,
+            "market_open": bool(market_open),
+            "quote_source": str(quote_source) if quote_source is not None else None,
+            "ltp_source": str(ltp_source) if ltp_source is not None else None,
+        },
+    )
 
 
 def _derive_unstable_reasons(
@@ -810,15 +960,14 @@ def get_ltp(symbol: str):
     if cfg.KITE_USE_API:
         kite_client.ensure()
         if not kite_client.kite and getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
-            try:
-                err = {"symbol": symbol, "error": "kite_not_initialized", "timestamp": now_ist().isoformat()}
-                p = Path("logs/live_quote_errors.jsonl")
-                p.parent.mkdir(parents=True, exist_ok=True)
-                with p.open("a") as f:
-                    f.write(json.dumps(err) + "\n")
-            except Exception:
-                pass
-        if _is_index_symbol(symbol):
+            _append_live_quote_error(
+                event_code="kite_not_initialized",
+                symbol=symbol,
+                category="auth",
+                source="rest",
+                details={"require_live_quotes": bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))},
+            )
+        if is_index(symbol):
             failures = []
             index_keys = _index_quote_keys(symbol)
             _log_index_quote_request(symbol, "ltp", index_keys)
@@ -835,20 +984,16 @@ def get_ltp(symbol: str):
                 except Exception as e:
                     failures.append(f"{ksym}:{e}")
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
-                try:
-                    err = {
-                        "symbol": symbol,
-                        "error": "ltp_fetch_failed",
+                _append_live_quote_error(
+                    event_code="ltp_fetch_failed",
+                    symbol=symbol,
+                    category="exception",
+                    source="rest",
+                    details={
                         "detail": failures[-1] if failures else "no_price_in_response",
                         "requested_symbols": index_keys,
-                        "timestamp": now_ist().isoformat(),
-                    }
-                    p = Path("logs/live_quote_errors.jsonl")
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    with p.open("a", encoding="utf-8") as f:
-                        f.write(json.dumps(err, ensure_ascii=True) + "\n")
-                except Exception:
-                    pass
+                    },
+                )
         else:
             try:
                 ksym = f"NSE:{symbol}"
@@ -862,14 +1007,13 @@ def get_ltp(symbol: str):
                     return price
             except Exception as e:
                 if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
-                    try:
-                        err = {"symbol": symbol, "error": "ltp_fetch_failed", "detail": str(e), "timestamp": now_ist().isoformat()}
-                        p = Path("logs/live_quote_errors.jsonl")
-                        p.parent.mkdir(parents=True, exist_ok=True)
-                        with p.open("a", encoding="utf-8") as f:
-                            f.write(json.dumps(err, ensure_ascii=True) + "\n")
-                    except Exception:
-                        pass
+                    _append_live_quote_error(
+                        event_code="ltp_fetch_failed",
+                        symbol=symbol,
+                        category="exception",
+                        source="rest",
+                        details={"detail": str(e), "requested_symbols": [ksym]},
+                    )
 
     # Fallback to cached LTP if allowed (disabled in LIVE)
     if (not live_mode) and getattr(cfg, "ALLOW_STALE_LTP", True):
@@ -1298,7 +1442,7 @@ def fetch_live_market_data():
                             spread_pct = (ask - bid) / ltp
                 except Exception:
                     quote_ok = False
-        if _is_index_symbol(symbol):
+        if is_index(symbol):
             exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
             resolved_quote = resolve_index_quote(
                 symbol=symbol,
@@ -1332,9 +1476,27 @@ def fetch_live_market_data():
                 source=quote_source,
                 ltp=ltp,
             )
-        if not quote_ok:
-            _log_index_bidask_missing(symbol, source=quote_source)
+        if is_index(symbol):
+            _maybe_log_index_bidask_missing(
+                symbol,
+                quote_ok=bool(quote_ok),
+                quote_source=quote_source,
+                ltp_source=ltp_source,
+                market_open=bool(market_open_for_segment),
+            )
         index_quote_cache = dict(get_index_quote_snapshot(symbol) or {})
+        quote_feed_health = None
+        if is_index(symbol):
+            quote_feed_health = _classify_index_feed_health(
+                symbol=symbol,
+                execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+                now_epoch=now_utc_epoch(),
+                ltp=ltp,
+                ltp_ts_epoch=ltp_ts_epoch,
+                quote_ok=bool(quote_ok),
+                quote_source=quote_source,
+                quote_ts_epoch=quote_ts_epoch,
+            )
 
         time_sanity = check_market_data_time_sanity(
             ltp_ts_epoch=ltp_ts_epoch,
@@ -1371,6 +1533,7 @@ def fetch_live_market_data():
                     "timestamp_ist": now_ist().isoformat(),
                     "instrument": "OPT",
                     "feed_health": {"time_sanity": time_sanity},
+                    "quote_health": quote_feed_health,
                 }
             )
             continue
@@ -1910,6 +2073,7 @@ def fetch_live_market_data():
             "depth_age_sec": depth_age_sec,
             "spread_pct": spread_pct,
             "feed_health": {"time_sanity": time_sanity},
+            "quote_health": quote_feed_health,
             "time_sanity": time_sanity,
             "timestamp": now_utc_epoch(),
             "timestamp_ist": now_ist().isoformat(),
@@ -1995,6 +2159,7 @@ def fetch_live_market_data():
                 "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,
                 "feed_health": {"time_sanity": time_sanity},
+                "quote_health": quote_feed_health,
                 "time_sanity": time_sanity,
                 "timestamp": now_utc_epoch(),
                 "timestamp_ist": now_ist().isoformat(),
@@ -2074,6 +2239,7 @@ def fetch_live_market_data():
                 "depth_age_sec": depth_age_sec,
                 "spread_pct": spread_pct,
                 "feed_health": {"time_sanity": time_sanity},
+                "quote_health": quote_feed_health,
                 "time_sanity": time_sanity,
                 "timestamp": now_utc_epoch(),
                 "timestamp_ist": now_ist().isoformat(),

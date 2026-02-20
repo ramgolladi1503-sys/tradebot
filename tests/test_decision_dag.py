@@ -90,13 +90,14 @@ def test_index_no_depth_with_fresh_ltp_live_fails_quote_gate_not_feed(monkeypatc
     )
     decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
     assert decision.allowed is False
-    assert "QUOTE_INVALID" in decision.blockers
+    assert "index_bidask_missing" in decision.blockers
     assert "FEED_STALE" not in decision.blockers
     feed_rows = [row for row in decision.explain if row["node"] == NODE_N2_FEED_FRESH]
     quote_rows = [row for row in decision.explain if row["node"] == NODE_N4_QUOTE_OK]
     assert feed_rows and feed_rows[0]["ok"] is True
     assert quote_rows and quote_rows[0]["ok"] is False
     assert quote_rows[0]["facts"]["quote_source"] == "missing_depth"
+    assert quote_rows[0]["facts"]["quote_ok"] is False
 
 
 def test_index_sim_mode_uses_synthetic_bidask_when_depth_missing(monkeypatch):
@@ -118,6 +119,7 @@ def test_index_sim_mode_uses_synthetic_bidask_when_depth_missing(monkeypatch):
     quote_rows = [row for row in decision.explain if row["node"] == NODE_N4_QUOTE_OK]
     assert quote_rows and quote_rows[0]["ok"] is True
     assert quote_rows[0]["facts"]["quote_source"] == "synthetic_index"
+    assert quote_rows[0]["facts"]["quote_ok"] is True
 
 
 def test_live_option_missing_bidask_is_quote_invalid_not_feed_stale(monkeypatch):

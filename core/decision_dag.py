@@ -17,6 +17,7 @@ REASON_FEED_STALE = "FEED_STALE"
 REASON_WARMUP_INCOMPLETE = "WARMUP_INCOMPLETE"
 REASON_INDICATORS_MISSING = "INDICATORS_MISSING"
 REASON_QUOTE_INVALID = "QUOTE_INVALID"
+REASON_INDEX_BIDASK_MISSING = "index_bidask_missing"
 REASON_REGIME_UNKNOWN = "REGIME_UNKNOWN"
 REASON_REGIME_UNSTABLE = "REGIME_UNSTABLE"
 REASON_RISK_LIMIT = "RISK_LIMIT"
@@ -89,6 +90,8 @@ def _is_index_symbol(symbol: str, instrument: str | None = None) -> bool:
     inst = str(instrument or "").upper()
     if inst == "INDEX":
         return True
+    if inst:
+        return False
     return str(symbol or "").upper() in {"NIFTY", "BANKNIFTY", "SENSEX"}
 
 
@@ -169,7 +172,7 @@ class StrategyCandidate:
 
 
 @dataclass
-class Decision:
+class DecisionReport:
     symbol: str
     ts_epoch: float
     allowed: bool
@@ -180,6 +183,10 @@ class Decision:
     risk_params: Mapping[str, Any]
     facts: Mapping[str, Any]
     explain: tuple[Mapping[str, Any], ...]
+
+
+# Backward-compatible name for existing integrations.
+Decision = DecisionReport
 
 
 @dataclass(frozen=True)
@@ -443,6 +450,7 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
     if is_index:
         resolved = resolve_index_quote(symbol=symbol, mode=mode, ltp=snapshot.ltp, depth=snapshot.depth)
         facts = {
+            "quote_ok": bool(resolved.get("quote_ok")),
             "quote_source": resolved.get("quote_source"),
             "bid": resolved.get("bid"),
             "ask": resolved.get("ask"),
@@ -452,7 +460,7 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
         }
         if bool(resolved.get("quote_ok")):
             return NodeResult(ok=True, value=resolved, facts=facts)
-        return NodeResult(ok=False, reasons=(REASON_QUOTE_INVALID,), facts=facts)
+        return NodeResult(ok=False, reasons=(REASON_INDEX_BIDASK_MISSING,), facts=facts)
 
     bid = snapshot.bid
     ask = snapshot.ask
@@ -464,11 +472,15 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
         and ask >= bid
     )
     if snapshot.quote_ok_input is not None:
-        quote_ok = bool(snapshot.quote_ok_input and valid_depth_bidask)
+        if snapshot.mode == "LIVE":
+            quote_ok = bool(snapshot.quote_ok_input and valid_depth_bidask)
+        else:
+            quote_ok = bool(snapshot.quote_ok_input)
     else:
         quote_ok = valid_depth_bidask
     quote_source = snapshot.quote_source_input or ("depth" if valid_depth_bidask else "missing_depth")
     facts = {
+        "quote_ok": bool(quote_ok),
         "quote_source": quote_source,
         "bid": bid,
         "ask": ask,
@@ -695,7 +707,7 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
         first_failing_node = NODE_N8_STRATEGY_SELECT
 
     stage = first_failing_node or NODE_N11_FINAL_DECISION
-    decision = Decision(
+    decision = DecisionReport(
         symbol=snapshot.symbol,
         ts_epoch=float(snapshot.ts_epoch),
         allowed=bool(allowed),
@@ -763,7 +775,7 @@ class DecisionDAGEvaluator:
         cache[node_name] = result
         return result
 
-    def evaluate(self, snapshot: MarketSnapshot | Mapping[str, Any]) -> Decision:
+    def evaluate(self, snapshot: MarketSnapshot | Mapping[str, Any]) -> DecisionReport:
         snap = build_market_snapshot(snapshot)
         ctx: dict[str, Any] = {
             "cache": {},
@@ -772,10 +784,10 @@ class DecisionDAGEvaluator:
         }
         final_result = self._eval_node(NODE_N11_FINAL_DECISION, snap, ctx)
         decision = final_result.value
-        if not isinstance(decision, Decision):
+        if not isinstance(decision, DecisionReport):
             blockers = tuple(final_result.reasons or ())
             stage = str((final_result.facts or {}).get("stage") or NODE_N11_FINAL_DECISION)
-            decision = Decision(
+            decision = DecisionReport(
                 symbol=snap.symbol,
                 ts_epoch=float(snap.ts_epoch),
                 allowed=False,
@@ -803,7 +815,7 @@ def evaluate_decision(
     strategy_evaluator: Callable[[MarketSnapshot], Sequence[Mapping[str, Any]]] | None = None,
     strategy_candidates: Sequence[StrategyCandidate | Mapping[str, Any]] | None = None,
     now_epoch: float | None = None,
-) -> Decision:
+) -> DecisionReport:
     snapshot = build_market_snapshot(market_data, now_epoch=now_epoch)
 
     pure_strategy_evaluator = strategy_evaluator
@@ -823,6 +835,7 @@ def evaluate_decision(
 
 __all__ = [
     "Decision",
+    "DecisionReport",
     "DecisionDAGEvaluator",
     "MarketSnapshot",
     "NodeResult",

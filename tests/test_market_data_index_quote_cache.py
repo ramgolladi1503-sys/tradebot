@@ -212,9 +212,9 @@ def test_update_index_quote_snapshot_latest_ltp_used(monkeypatch):
 
 
 def test_index_bidask_missing_log_rate_limited(monkeypatch, tmp_path):
-    md._INDEX_BIDASK_MISSING_LOG_TS.clear()
+    md._LIVE_QUOTE_ERROR_LAST_TS.clear()
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(md.cfg, "INDEX_BIDASK_MISSING_LOG_SEC", 60.0, raising=False)
+    monkeypatch.setattr(md.cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 60.0, raising=False)
     monkeypatch.setattr(md, "now_utc_epoch", lambda: 1000.0)
     md._log_index_bidask_missing("NIFTY", source="ws")
     # second call inside same minute must be suppressed
@@ -223,7 +223,7 @@ def test_index_bidask_missing_log_rate_limited(monkeypatch, tmp_path):
     p = tmp_path / "logs" / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 1
-    assert rows[0]["event"] == "index_bidask_missing"
+    assert rows[0]["event_code"] == "index_bidask_missing"
 
 
 def test_refresh_index_quote_from_rest_populates_bid_ask(monkeypatch):
