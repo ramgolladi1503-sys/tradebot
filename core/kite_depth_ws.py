@@ -31,7 +31,11 @@ _WATCHDOG_STOP = None
 _LAST_TOKENS = []
 _UNDERLYING_TOKENS: set[int] = set()
 _UNDERLYING_TOKEN_TO_SYMBOL: dict[int, str] = {}
+_TOKEN_TO_SYMBOL: dict[int, str] = {}
 _UNDERLYING_LOGGED_MISSING = False
+_SYMBOL_LAST_LTP_TS: dict[str, float] = {}
+_SYMBOL_LAST_DEPTH_TS: dict[str, float] = {}
+_LAST_WS_TICK_EPOCH: float = 0.0
 _RESTART_LOCK = threading.Lock()
 _LAST_FULL_RESTART_EPOCH = 0.0
 _FULL_RESTARTS = []
@@ -69,6 +73,24 @@ def _best_price(levels):
         return float(price) if price is not None else None
     except Exception:
         return None
+
+
+def _depth_has_bid_ask(depth: dict | None) -> bool:
+    if not isinstance(depth, dict):
+        return False
+    bid = _best_price(depth.get("buy", []))
+    ask = _best_price(depth.get("sell", []))
+    return bid is not None and ask is not None and bid > 0 and ask > 0
+
+
+def _update_symbol_freshness(symbol: str | None, tick_epoch: float, has_ltp: bool, has_depth: bool) -> None:
+    if not symbol:
+        return
+    sym = str(symbol).upper()
+    if has_ltp:
+        _SYMBOL_LAST_LTP_TS[sym] = float(tick_epoch)
+    if has_depth:
+        _SYMBOL_LAST_DEPTH_TS[sym] = float(tick_epoch)
 
 
 def _update_index_quote_cache(symbol: str, bid, ask, mid, ts_epoch: float, last_price):
@@ -150,11 +172,12 @@ def _underlying_ltp(symbol: str) -> float | None:
 
 
 def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None) -> tuple[list[int], list[dict]]:
-    global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING
+    global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
     underlying_token_to_symbol: dict[int, str] = {}
+    token_to_symbol: dict[int, str] = {}
     if max_tokens is None:
         max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 10))
@@ -201,6 +224,11 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
             per_tokens.add(index_token)
             underlying_tokens.append(int(index_token))
             underlying_token_to_symbol[int(index_token)] = sym_upper
+        for tok in per_tokens:
+            try:
+                token_to_symbol[int(tok)] = sym_upper
+            except Exception:
+                continue
 
         tokens.extend(list(per_tokens))
         resolution.append(
@@ -223,6 +251,7 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
     tokens = list(dict.fromkeys(tokens))
     _UNDERLYING_TOKENS = set(int(t) for t in underlying_tokens if t is not None)
     _UNDERLYING_TOKEN_TO_SYMBOL = dict(underlying_token_to_symbol)
+    _TOKEN_TO_SYMBOL = dict(token_to_symbol)
     _UNDERLYING_LOGGED_MISSING = False
 
     if validate_tokens:
@@ -310,13 +339,14 @@ def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH
     with _KITE_TICKER_LOCK:
         _STOP_REQUESTED = True
         _log_ws("FEED_STOP", {"reason": reason})
         if _WATCHDOG_STOP is not None:
             _WATCHDOG_STOP.set()
         _STALE_STRIKES = 0
+        _LAST_WS_TICK_EPOCH = 0.0
         _close_ticker_instance(_KITE_TICKER)
         _KITE_TICKER = None
     _WATCHDOG_THREAD = None
@@ -399,7 +429,7 @@ def restart_depth_ws(reason: str = "unknown"):
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False):
-    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED
+    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH
     if not skip_lock:
         if not _ensure_depth_ws_lock():
             return
@@ -457,6 +487,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _STALE_STRIKES = 0
     _WARMUP_PENDING = True
     _STOP_REQUESTED = False
+    _LAST_WS_TICK_EPOCH = 0.0
 
     computed_profile_verified = False
     profile_error = ""
@@ -519,6 +550,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     handshake_soft_reset_used = False
 
+    def _resubscribe_full(ws, reason: str):
+        ws.subscribe(tokens)
+        ws.set_mode(ws.MODE_FULL, tokens)
+        _log_ws("FEED_RESUBSCRIBE", {"reason": reason, "tokens": len(tokens)})
+
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING
         try:
@@ -531,15 +567,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if isinstance(book, dict):
                     book["ts_epoch"] = None
                     book["ts"] = None
-            ws.subscribe(tokens)
-            ws.set_mode(ws.MODE_FULL, tokens)
+            _resubscribe_full(ws, reason="connect")
         except Exception as exc:
             _log_ws("FEED_CONNECT_ERROR", {"error": str(exc)})
 
     def on_reconnect(ws, attempts):
         try:
-            ws.subscribe(tokens)
-            ws.set_mode(ws.MODE_FULL, tokens)
+            _resubscribe_full(ws, reason=f"reconnect:{attempts}")
             _log_ws("FEED_RECONNECT", {"attempts": attempts})
         except Exception as exc:
             _log_ws("FEED_RECONNECT_ERROR", {"error": str(exc), "attempts": attempts})
@@ -574,8 +608,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if not handshake_soft_reset_used:
                 handshake_soft_reset_used = True
                 try:
-                    ws.subscribe(tokens)
-                    ws.set_mode(ws.MODE_FULL, tokens)
+                    _resubscribe_full(ws, reason="handshake_soft_reset")
                     _log_ws("FEED_HANDSHAKE_SOFT_RESET", {"code": code, "reason": reason_text})
                 except Exception as exc:
                     _log_ws("FEED_HANDSHAKE_SOFT_RESET_ERROR", {"code": code, "reason": reason_text, "error": str(exc)})
@@ -602,8 +635,10 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             restart_depth_ws(reason=f"ws_close:{code}")
 
     def on_ticks(ws, ticks):
-        global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS
+        global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH
         now_epoch = time.time()
+        if ticks:
+            _LAST_WS_TICK_EPOCH = now_epoch
         if ticks and (now_epoch - _SCHEMA_LOG_TS) >= 30.0:
             try:
                 sample = ticks[0] if isinstance(ticks[0], dict) else {}
@@ -626,11 +661,19 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             token = t.get("instrument_token")
             depth = t.get("depth")
             last_price = t.get("last_price")
-            if token and depth:
+            token_int = None
+            if token is not None:
+                try:
+                    token_int = int(token)
+                except Exception:
+                    token_int = None
+            symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
+            has_depth = _depth_has_bid_ask(depth)
+            if token is not None and depth:
                 depth_store.update(token, depth)
             tick_epoch = _extract_tick_epoch(t)
-            if token in _UNDERLYING_TOKEN_TO_SYMBOL:
-                symbol = _UNDERLYING_TOKEN_TO_SYMBOL.get(token)
+            if token_int is not None and token_int in _UNDERLYING_TOKEN_TO_SYMBOL:
+                symbol = _UNDERLYING_TOKEN_TO_SYMBOL.get(token_int) or symbol
                 if isinstance(depth, dict) and depth:
                     buy_book = depth.get("buy", [])
                     sell_book = depth.get("sell", [])
@@ -656,7 +699,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         ts_epoch=tick_epoch,
                         last_price=last_price,
                     )
-            if last_price is not None or depth is not None:
+            _update_symbol_freshness(symbol, tick_epoch, has_ltp=last_price is not None, has_depth=has_depth)
+            if last_price is not None or has_depth:
                 record_tick_epoch(tick_epoch)
                 if not _UNDERLYING_TOKENS and not _UNDERLYING_LOGGED_MISSING:
                     _log_ws("FEED_UNDERLYING_TOKENS_MISSING", {})
@@ -700,13 +744,38 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         max_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
         strikes_to_restart = int(getattr(cfg, "FEED_RESTART_STRIKES", 3))
+        no_ticks_sec = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_SEC", 10.0))
+        no_ticks_base_backoff = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_BACKOFF_SEC", 15.0))
         last_soft = 0.0
         last_warmup_log = 0.0
+        no_tick_strikes = 0
+        last_no_tick_restart = 0.0
         while not _WATCHDOG_STOP.is_set():
             time.sleep(5)
             if not is_market_open_ist():
                 _STALE_STRIKES = 0
+                no_tick_strikes = 0
                 continue
+            tick_age = None
+            if _LAST_WS_TICK_EPOCH > 0:
+                tick_age = time.time() - _LAST_WS_TICK_EPOCH
+            if tick_age is not None and tick_age > no_ticks_sec:
+                no_tick_strikes += 1
+                backoff = no_ticks_base_backoff * (2 ** min(no_tick_strikes - 1, 3))
+                _log_ws(
+                    "FEED_NO_TICKS_DETECTED",
+                    {
+                        "tick_age_sec": tick_age,
+                        "threshold_sec": no_ticks_sec,
+                        "strikes": no_tick_strikes,
+                        "backoff_sec": backoff,
+                    },
+                )
+                if (time.time() - last_no_tick_restart) >= backoff:
+                    last_no_tick_restart = time.time()
+                    restart_depth_ws(reason=f"no_ticks_age={tick_age:.1f}s")
+                continue
+            no_tick_strikes = 0
             latest = None
             try:
                 # find latest depth ts in store
@@ -744,8 +813,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if time.time() - last_soft >= backoff:
                     last_soft = time.time()
                     try:
-                        kws.subscribe(tokens)
-                        kws.set_mode(kws.MODE_FULL, tokens)
+                        _resubscribe_full(kws, reason=f"soft_reset:strikes={_STALE_STRIKES}")
                         _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
                     except Exception as exc:
                         _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})

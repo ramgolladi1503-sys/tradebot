@@ -335,9 +335,28 @@ def _render_market_snapshot():
     day_map = {}
     try:
         md = fetch_live_market_data()
-        reg_map = {m.get("symbol"): m.get("regime_day") or m.get("regime") for m in md if m.get("instrument") == "OPT"}
+        reg_map = {
+            m.get("symbol"): {
+                "regime": m.get("regime_day") or m.get("regime") or "UNKNOWN",
+                "confidence": m.get("regime_confidence"),
+                "reasons": m.get("regime_reasons") or [],
+            }
+            for m in md
+            if m.get("instrument") == "OPT"
+        }
         if reg_map:
-            st.write("Detected Regime: " + ", ".join([f"{k}: {v}" for k, v in reg_map.items()]))
+            lines = []
+            for sym, info in reg_map.items():
+                conf_txt = "n/a"
+                try:
+                    if info.get("confidence") is not None:
+                        conf_txt = f"{float(info.get('confidence')):.2f}"
+                except Exception:
+                    conf_txt = "n/a"
+                reasons = info.get("reasons") or []
+                reason_txt = f" reasons={','.join(str(r) for r in reasons)}" if reasons else ""
+                lines.append(f"{sym}: {info.get('regime')} (conf={conf_txt}){reason_txt}")
+            st.write("Detected Regime: " + " | ".join(lines))
         day_map = {m.get("symbol"): (m.get("day_type"), m.get("day_confidence"), m.get("day_conf_history", [])) for m in md if m.get("instrument") == "OPT"}
         if day_map:
             try:
@@ -1144,10 +1163,13 @@ if nav == "Home":
         breaker_tripped = False
         auth_health = {}
         feed_freshness = {}
+        decision_gate = {}
+        decision_rows = {}
+        decision_blockers_by_symbol = {}
+        latest_decision_row = {}
         try:
             from core.readiness_gate import run_readiness_check
             from core.auth_health import get_kite_auth_health
-            from core.freshness_sla import get_freshness_status
             readiness = run_readiness_check(write_log=False)
             state = readiness.get("state", "UNKNOWN")
             can_trade = bool(readiness.get("can_trade", False))
@@ -1157,8 +1179,29 @@ if nav == "Home":
             feed = checks.get("feed_health") or {}
             kite = checks.get("kite_auth") or {}
             breaker_tripped = bool((checks.get("feed_breaker") or {}).get("tripped"))
+            decision_gate = checks.get("decision_gate") or {}
+            decision_rows = decision_gate.get("rows") or {}
+            decision_blockers_by_symbol = decision_gate.get("blockers_by_symbol") or {}
+            if isinstance(decision_rows, dict) and decision_rows:
+                try:
+                    latest_decision_row = max(
+                        decision_rows.values(),
+                        key=lambda row: float((row or {}).get("ts_epoch") or 0.0),
+                    )
+                except Exception:
+                    latest_decision_row = {}
+            if "ok" in decision_gate:
+                can_trade = bool(decision_gate.get("ok"))
             auth_health = get_kite_auth_health(force=False)
-            feed_freshness = get_freshness_status(force=False)
+            feed_freshness = {
+                "ok": bool(feed.get("ok", False)),
+                "state": str(feed.get("state") or "UNKNOWN"),
+                "market_open": bool(readiness.get("market_open", False)),
+                "reasons": list(feed.get("reasons") or []),
+                "ltp": dict(feed.get("ltp") or {}),
+                "depth": dict(feed.get("depth") or {}),
+                "source": str(feed.get("source") or "decision_dag"),
+            }
             if state == "MARKET_CLOSED":
                 shown_ts = float(st.session_state.get("force_show_quote_errors_ts", 0.0) or 0.0)
                 if shown_ts and (time.time() - shown_ts) > 300.0:
@@ -1351,6 +1394,35 @@ if nav == "Home":
                 st.error("Blockers: " + ", ".join(blockers))
             if warnings:
                 st.warning("Warnings: " + ", ".join(warnings))
+            if isinstance(decision_blockers_by_symbol, dict) and decision_blockers_by_symbol:
+                rows = []
+                for sym, sym_blockers in sorted(decision_blockers_by_symbol.items()):
+                    vals = [str(x) for x in (sym_blockers or []) if str(x).strip()]
+                    rows.append(
+                        {
+                            "symbol": sym,
+                            "decision_allowed": len(vals) == 0,
+                            "decision_blockers": ", ".join(vals) if vals else "[]",
+                        }
+                    )
+                if rows:
+                    st.caption("Decision Blockers By Symbol")
+                    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            explain_rows = []
+            for node in (latest_decision_row.get("decision_explain") or []):
+                if not isinstance(node, dict):
+                    continue
+                reasons = node.get("reasons") or []
+                explain_rows.append(
+                    {
+                        "node": node.get("node"),
+                        "ok": bool(node.get("ok")),
+                        "reasons": ", ".join([str(x) for x in reasons if str(x).strip()]) if reasons else "",
+                    }
+                )
+            if explain_rows:
+                st.caption("Decision DAG Explain (Latest)")
+                st.dataframe(pd.DataFrame(explain_rows), use_container_width=True, hide_index=True)
         except Exception:
             st.error("Readiness: BLOCKED — readiness check unavailable")
         try:
@@ -1419,19 +1491,59 @@ if nav == "Home":
                     continue
             if rows:
                 gate_df = pd.DataFrame(rows)
+                for _json_col in ("gate_reasons", "decision_blockers", "decision_explain", "feed_health_snapshot", "node_call_counts"):
+                    if _json_col in gate_df.columns:
+                        gate_df[_json_col] = gate_df[_json_col].apply(
+                            lambda v: json.dumps(v, ensure_ascii=True) if isinstance(v, (dict, list)) else v
+                        )
+                if "system_state" in gate_df.columns:
+                    warmup_df = gate_df[gate_df["system_state"].fillna("READY").astype(str).str.upper() == "WARMUP"]
+                    if not warmup_df.empty:
+                        st.warning("System State: WARMUP — strategy evaluation blocked until warmup contract is met.")
+                        warmup_latest = (
+                            warmup_df.sort_values("ts_ist", ascending=False)
+                            .groupby("symbol", as_index=False)
+                            .first()
+                        )
+                        for col in ("warmup_bars_by_timeframe", "warmup_min_bars_by_timeframe", "warmup_reasons"):
+                            if col in warmup_latest.columns:
+                                warmup_latest[col] = warmup_latest[col].apply(
+                                    lambda v: json.dumps(v, ensure_ascii=True) if isinstance(v, (dict, list)) else v
+                                )
+                        warmup_cols = [
+                            c
+                            for c in [
+                                "ts_ist",
+                                "symbol",
+                                "system_state",
+                                "warmup_bars_by_timeframe",
+                                "warmup_min_bars_by_timeframe",
+                                "indicator_last_update_epoch",
+                                "warmup_reasons",
+                            ]
+                            if c in warmup_latest.columns
+                        ]
+                        if warmup_cols:
+                            ui.table(warmup_latest[warmup_cols], use_container_width=True)
                 cols = [
                     c
                     for c in [
                         "ts_ist",
                         "symbol",
                         "stage",
+                        "system_state",
                         "indicators_ok",
                         "indicators_age_sec",
+                        "ohlc_bars_count",
+                        "warmup_min_bars",
                         "primary_regime",
                         "regime_prob_max",
                         "regime_entropy",
                         "indicator_reasons",
+                        "warmup_reasons",
                         "regime_reasons",
+                        "decision_stage",
+                        "decision_blockers",
                         "gate_allowed",
                         "gate_family",
                         "gate_reasons",
@@ -2071,6 +2183,8 @@ if nav == "Home":
                 df_rej = pd.DataFrame(rows)
                 if "reason" not in df_rej.columns and "reason_code" in df_rej.columns:
                     df_rej["reason"] = df_rej["reason_code"]
+                if "reason" not in df_rej.columns and "primary_blocker" in df_rej.columns:
+                    df_rej["reason"] = df_rej["primary_blocker"]
                 if "timestamp" not in df_rej.columns and "ts_ist" in df_rej.columns:
                     df_rej["timestamp"] = df_rej["ts_ist"]
                 if "timestamp" in df_rej.columns:
@@ -2104,6 +2218,13 @@ if nav == "Home":
                     summary = df_rej["reason"].value_counts().head(8).reset_index()
                     summary.columns = ["reason", "count"]
                     ui.table(summary, use_container_width=True)
+                    if "stage" in df_rej.columns:
+                        dag_rows = df_rej[df_rej["stage"] == "decision_dag"]
+                        if not dag_rows.empty:
+                            st.markdown("**Decision DAG Blockers (Today)**")
+                            dag_summary = dag_rows["reason"].value_counts().reset_index()
+                            dag_summary.columns = ["reason", "count"]
+                            ui.table(dag_summary.head(8), use_container_width=True)
                     # Per-strategy debug report
                     try:
                         if "strategy" in df_rej.columns:

@@ -113,8 +113,12 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
         return dict(_CACHE["payload"])
 
     market_open = bool(is_market_open_ist())
+    exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
     max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0))
+    require_depth_live = bool(getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
+    require_depth_non_live = bool(getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_NON_LIVE", False))
+    depth_required = require_depth_live if exec_mode == "LIVE" else require_depth_non_live
 
     ltp_last_epoch = None
     depth_last_epoch = None
@@ -187,22 +191,33 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
         elif ltp_age > max_ltp_age:
             reasons.append(f"ltp_stale:NIFTY age={ltp_age:.2f} max={max_ltp_age:.2f}")
 
-        if depth_age is None:
-            reasons.append("depth_missing")
-        elif depth_age > max_depth_age:
-            reasons.append(f"depth_stale age={depth_age:.2f} max={max_depth_age:.2f}")
+        if depth_required:
+            if depth_age is None:
+                reasons.append("depth_missing")
+            elif depth_age > max_depth_age:
+                reasons.append(f"depth_stale age={depth_age:.2f} max={max_depth_age:.2f}")
 
     if not market_open:
         state = "MARKET_CLOSED"
         ok = True
     else:
-        if ltp_ok and depth_ok:
-            state = "OK"
-        elif ltp_ok or depth_ok:
-            state = "DEGRADED"
+        if depth_required:
+            if ltp_ok and depth_ok:
+                state = "OK"
+            elif ltp_ok or depth_ok:
+                state = "DEGRADED"
+            else:
+                state = "STALE"
+            ok = state == "OK"
         else:
-            state = "STALE"
-        ok = state == "OK"
+            if ltp_ok:
+                state = "OK"
+                # Optional depth signal still visible without blocking.
+                if depth_age is not None and depth_age > max_depth_age:
+                    state = "DEGRADED"
+            else:
+                state = "STALE"
+            ok = ltp_ok
 
     payload = {
         "ok": ok,
@@ -217,11 +232,12 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
             "source": ltp_source,
         },
         "depth": {
-            "ok": depth_ok if market_open else True,
+            "ok": depth_ok if (market_open and depth_required) else True,
             "age_sec": depth_age,
             "max_age_sec": max_depth_age,
             "scope": "options",
             "source": depth_source,
+            "required": bool(market_open and depth_required),
         },
         "reasons": reasons,
     }

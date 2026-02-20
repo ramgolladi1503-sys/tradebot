@@ -3,6 +3,7 @@
 import os
 import json
 import time
+import math
 from datetime import timezone
 from datetime import datetime, timedelta
 from config import config as cfg
@@ -129,6 +130,14 @@ def _apply_indicator_quote_policy(
     if require_live_ltp and str(ltp_source or "").lower() != "live":
         return False
     return True
+
+
+def _is_finite_number(value) -> bool:
+    try:
+        v = float(value)
+    except Exception:
+        return False
+    return math.isfinite(v)
 
 
 def update_index_quote_snapshot(
@@ -662,6 +671,78 @@ def _warm_seed_ohlc_from_history(symbol: str, bars: list, min_bars: int):
         )
         return bars, False, "historical_seed_error"
 
+
+def seed_ohlc_buffers_on_startup(symbols: list[str] | None = None) -> list[dict]:
+    """
+    Seed OHLC buffers from historical minute candles at process startup.
+    This runs before live ticks and writes structured observability logs.
+    """
+    symbol_list = symbols or list(getattr(cfg, "SYMBOLS", []) or [])
+    min_bars = int(getattr(cfg, "SYSTEM_WARMUP_MIN_BARS", getattr(cfg, "OHLC_MIN_BARS", 30)))
+    rows = []
+    for symbol in list(dict.fromkeys(str(s).upper() for s in symbol_list if str(s).strip())):
+        pre_bars = ohlc_buffer.get_bars(symbol)
+        pre_count = int(len(pre_bars))
+        bars, seeded_ok, seed_reason = _warm_seed_ohlc_from_history(
+            symbol=symbol,
+            bars=pre_bars,
+            min_bars=min_bars,
+        )
+        seeded_count = int(len(bars))
+        indicators_ok = False
+        last_candle_epoch = None
+        last_candle_ts = None
+        indicator_last_update_epoch = _INDICATOR_LAST_UPDATE_EPOCH.get(symbol)
+        indicator_last_update_ts = None
+        try:
+            ind = compute_indicators(
+                bars,
+                vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
+                atr_period=getattr(cfg, "ATR_PERIOD", 14),
+                adx_period=getattr(cfg, "ADX_PERIOD", 14),
+                vol_window=getattr(cfg, "VOL_WINDOW", 30),
+                slope_window=getattr(cfg, "VWAP_SLOPE_WINDOW", 10),
+            )
+            indicators_ok = bool(ind.get("ok")) and (seeded_count >= min_bars)
+            last_ts = ind.get("last_ts") or (bars[-1].get("ts") if bars else None)
+            if hasattr(last_ts, "timestamp"):
+                last_candle_epoch = float(last_ts.timestamp())
+                last_candle_ts = datetime.fromtimestamp(last_candle_epoch, tz=timezone.utc).astimezone(now_ist().tzinfo).isoformat()
+            if indicators_ok and isinstance(last_candle_epoch, (int, float)):
+                indicator_last_update_epoch = float(last_candle_epoch)
+                _INDICATOR_LAST_UPDATE_EPOCH[symbol] = indicator_last_update_epoch
+        except Exception:
+            indicators_ok = False
+        if isinstance(indicator_last_update_epoch, (int, float)):
+            indicator_last_update_ts = datetime.fromtimestamp(
+                float(indicator_last_update_epoch), tz=timezone.utc
+            ).astimezone(now_ist().tzinfo).isoformat()
+        row = {
+            "event": "OHLC_STARTUP_SEED",
+            "ts_epoch": now_utc_epoch(),
+            "ts_ist": now_ist().isoformat(),
+            "symbol": symbol,
+            "min_bars": min_bars,
+            "pre_seed_bars_count": pre_count,
+            "seeded_bars_count": seeded_count,
+            "seeded_ok": bool(seeded_ok),
+            "seed_reason": seed_reason,
+            "last_candle_ts": last_candle_ts,
+            "last_candle_ts_epoch": last_candle_epoch,
+            "indicators_ok_after_seed": indicators_ok,
+            "indicator_last_update_ts": indicator_last_update_ts,
+            "indicator_last_update_epoch": indicator_last_update_epoch,
+        }
+        rows.append(row)
+        try:
+            p = Path("logs/market_data_warmup.jsonl")
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=True) + "\n")
+        except Exception:
+            pass
+    return rows
+
 def get_current_regime(symbol: str | None = None):
     """
     Canonical regime provider. Returns latest cached regime output from RegimeProbModel.
@@ -674,7 +755,10 @@ def get_current_regime(symbol: str | None = None):
             snap = _LAST_REGIME_SNAPSHOT.get(str(symbol))
         if snap is None:
             return {
-                "primary_regime": "NEUTRAL",
+                "regime": "UNKNOWN",
+                "primary_regime": "UNKNOWN",
+                "regime_confidence": None,
+                "regime_reasons": ["warmup_incomplete", "missing_ohlc"],
                 "regime_probs": {},
                 "regime_entropy": 0.0,
                 "unstable_regime_flag": True,
@@ -1420,12 +1504,60 @@ def fetch_live_market_data():
             "x_index_ret1": cross_feat.get("x_index_ret1"),
             "x_index_ret5": cross_feat.get("x_index_ret5"),
         }
-        model_out = _REGIME_MODEL.predict(features)
-        regime_probs = model_out.get("regime_probs", {})
-        primary_regime = model_out.get("primary_regime", "NEUTRAL")
-        regime_entropy = model_out.get("regime_entropy", 0.0)
-        model_unstable_flag = bool(model_out.get("unstable_regime_flag", False))
+        regime_probs = {}
+        primary_regime = None
+        regime_entropy = 0.0
+        model_unstable_flag = False
         unstable_reasons = []
+        regime_reasons = []
+        regime_confidence = None
+        try:
+            model_out = _REGIME_MODEL.predict(features)
+            regime_probs = dict(model_out.get("regime_probs", {}) or {})
+            raw_primary = model_out.get("primary_regime")
+            primary_regime = str(raw_primary).upper().strip() if raw_primary else None
+            regime_entropy = float(model_out.get("regime_entropy", 0.0) or 0.0)
+            model_unstable_flag = bool(model_out.get("unstable_regime_flag", False))
+        except Exception:
+            regime_probs = {}
+            primary_regime = None
+            regime_entropy = 0.0
+            model_unstable_flag = False
+            regime_reasons.append("indicator_nan")
+
+        if int(ohlc_bars_count) < int(min_bars):
+            regime_reasons.append("warmup_incomplete")
+        if int(ohlc_bars_count) <= 0 or ("ohlc_buffer_empty" in set(missing_inputs)):
+            regime_reasons.append("missing_ohlc")
+        feature_values = [
+            features.get("adx"),
+            features.get("vwap_slope"),
+            features.get("vol_z"),
+            features.get("atr_pct"),
+            features.get("iv_mean"),
+            features.get("ltp_acceleration"),
+            features.get("option_chain_skew"),
+            features.get("oi_delta"),
+            features.get("depth_imbalance"),
+        ]
+        if any((v is not None) and (not _is_finite_number(v)) for v in feature_values):
+            regime_reasons.append("indicator_nan")
+        indicator_stale_sec = float(getattr(cfg, "INDICATOR_STALE_SEC", 120.0))
+        if candle_ts_epoch is None:
+            regime_reasons.append("stale_last_candle")
+        else:
+            try:
+                candle_age = max(0.0, float(now_epoch_for_indicators) - float(candle_ts_epoch))
+            except Exception:
+                candle_age = indicator_stale_sec + 1.0
+            if candle_age > indicator_stale_sec:
+                regime_reasons.append("stale_last_candle")
+
+        if regime_probs:
+            try:
+                regime_confidence = max(float(v) for v in regime_probs.values())
+            except Exception:
+                regime_confidence = None
 
         # Update transition rate
         try:
@@ -1447,7 +1579,7 @@ def fetch_live_market_data():
 
         features["regime_transition_rate"] = regime_transition_rate
 
-        regime = primary_regime
+        regime = str(primary_regime).upper().strip() if primary_regime else None
 
         # time to expiry (hours)
         time_to_expiry_hrs = None
@@ -1465,13 +1597,18 @@ def fetch_live_market_data():
         # Force regime override (for testing)
         force = getattr(cfg, "FORCE_REGIME", "")
         if isinstance(force, str) and force.strip():
-            regime = force.strip().upper()
-
-        if not indicators_ok:
-            regime = "NEUTRAL"
-            primary_regime = "NEUTRAL"
+            forced_regime = force.strip().upper()
+            regime = forced_regime
+            primary_regime = forced_regime
+            regime_reasons = []
+            regime_confidence = 1.0
+        regime_reasons = list(dict.fromkeys(str(x) for x in regime_reasons if str(x).strip()))
+        if (not indicators_ok) or (not regime) or regime_reasons:
+            regime = "UNKNOWN"
+            primary_regime = "UNKNOWN"
             regime_probs = {}
             regime_entropy = 0.0
+            regime_confidence = None
         unstable_reasons = _derive_unstable_reasons(
             regime_probs=regime_probs,
             regime_entropy=regime_entropy,
@@ -1483,6 +1620,28 @@ def fetch_live_market_data():
             model_unstable_flag=model_unstable_flag,
         )
         unstable_regime_flag = bool(unstable_reasons)
+
+        warmup_min_bars = int(getattr(cfg, "SYSTEM_WARMUP_MIN_BARS", min_bars))
+        warmup_bars_by_timeframe = {"1m": int(ohlc_bars_count)}
+        warmup_min_bars_by_timeframe = {"1m": int(warmup_min_bars)}
+        indicator_last_ok = isinstance(indicator_last_update_epoch, (int, float)) and float(indicator_last_update_epoch) > 0.0
+        warmup_reasons = []
+        if ohlc_bars_count < warmup_min_bars:
+            warmup_reasons.append(f"bars_below_min:1m:{ohlc_bars_count}/{warmup_min_bars}")
+        if not indicator_last_ok:
+            warmup_reasons.append("indicator_last_update_missing")
+        elif isinstance(indicators_age_sec, (int, float)) and float(indicators_age_sec) > indicator_stale_sec:
+            warmup_reasons.append(
+                f"indicator_last_update_stale:{float(indicators_age_sec):.1f}s>{indicator_stale_sec:.1f}s"
+            )
+        if not bool(indicators_ok):
+            warmup_reasons.append("indicators_not_ready")
+        if regime == "UNKNOWN":
+            warmup_reasons.append("regime_missing")
+        for reason in missing_inputs:
+            warmup_reasons.append(f"missing_input:{reason}")
+        warmup_reasons = list(dict.fromkeys(warmup_reasons))
+        system_state = "WARMUP" if warmup_reasons else "READY"
 
         # Day-type classifier (first 30–60 min decisive)
         day_type = "UNKNOWN"
@@ -1651,7 +1810,10 @@ def fetch_live_market_data():
         regime_ts = now_ist().isoformat()
         try:
             _LAST_REGIME_SNAPSHOT[str(symbol).upper()] = {
+                "regime": regime,
                 "primary_regime": primary_regime,
+                "regime_confidence": regime_confidence,
+                "regime_reasons": list(regime_reasons),
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
@@ -1673,6 +1835,8 @@ def fetch_live_market_data():
             "bias": get_bias(ltp, vwap),
             "regime": regime,
             "primary_regime": primary_regime,
+            "regime_confidence": regime_confidence,
+            "regime_reasons": list(regime_reasons),
             "regime_probs": regime_probs,
             "regime_entropy": regime_entropy,
             "unstable_regime_flag": unstable_regime_flag,
@@ -1708,6 +1872,11 @@ def fetch_live_market_data():
             "compute_indicators_error": compute_indicators_error,
             "missing_inputs": missing_inputs,
             "indicator_missing_inputs": missing_inputs,
+            "system_state": system_state,
+            "warmup_reasons": warmup_reasons,
+            "warmup_min_bars": warmup_min_bars,
+            "warmup_bars_by_timeframe": warmup_bars_by_timeframe,
+            "warmup_min_bars_by_timeframe": warmup_min_bars_by_timeframe,
             "time_to_expiry_hrs": time_to_expiry_hrs,
             "orb_bias": orb_bias,
             "orb_lock_min": orb_lock_min,
@@ -1770,27 +1939,34 @@ def fetch_live_market_data():
                 "bias": get_bias(ltp, vwap),
                 "regime": regime,
                 "primary_regime": primary_regime,
+                "regime_confidence": regime_confidence,
+                "regime_reasons": list(regime_reasons),
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
-            "regime_transition_rate": regime_transition_rate,
+                "regime_transition_rate": regime_transition_rate,
                 "regime_ts": regime_ts,
-            "shock_score": shock.get("shock_score"),
-            "macro_direction_bias": shock.get("macro_direction_bias"),
-            "uncertainty_index": shock.get("uncertainty_index"),
-            "event_name": shock.get("event_name"),
-            "minutes_to_event": shock.get("minutes_to_event"),
-            "event_category": shock.get("event_category"),
-            "event_importance": shock.get("event_importance"),
-            "fx_ret_5m": fx_ret_5m or 0.0,
-            "vix_z": vix_z or 0.0,
-            "crude_ret_15m": crude_ret_15m or 0.0,
-            "corr_fx_nifty": corr_fx_nifty or 0.0,
-            "cross_asset_ok": not bool(cross_quality.get("any_stale")),
-            "cross_asset_quality": cross_quality,
-            **cross_feat,
-            "regime_day": regime,
+                "shock_score": shock.get("shock_score"),
+                "macro_direction_bias": shock.get("macro_direction_bias"),
+                "uncertainty_index": shock.get("uncertainty_index"),
+                "event_name": shock.get("event_name"),
+                "minutes_to_event": shock.get("minutes_to_event"),
+                "event_category": shock.get("event_category"),
+                "event_importance": shock.get("event_importance"),
+                "fx_ret_5m": fx_ret_5m or 0.0,
+                "vix_z": vix_z or 0.0,
+                "crude_ret_15m": crude_ret_15m or 0.0,
+                "corr_fx_nifty": corr_fx_nifty or 0.0,
+                "cross_asset_ok": not bool(cross_quality.get("any_stale")),
+                "cross_asset_quality": cross_quality,
+                **cross_feat,
+                "regime_day": regime,
+                "system_state": system_state,
+                "warmup_reasons": warmup_reasons,
+                "warmup_min_bars": warmup_min_bars,
+                "warmup_bars_by_timeframe": warmup_bars_by_timeframe,
+                "warmup_min_bars_by_timeframe": warmup_min_bars_by_timeframe,
                 "atr": atr,
                 "vwap_slope": vwap_slope,
                 "rsi_mom": rsi_mom,
@@ -1842,27 +2018,34 @@ def fetch_live_market_data():
                 "bias": get_bias(ltp, vwap),
                 "regime": regime,
                 "primary_regime": primary_regime,
+                "regime_confidence": regime_confidence,
+                "regime_reasons": list(regime_reasons),
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
-            "regime_transition_rate": regime_transition_rate,
+                "regime_transition_rate": regime_transition_rate,
                 "regime_ts": regime_ts,
-            "shock_score": shock.get("shock_score"),
-            "macro_direction_bias": shock.get("macro_direction_bias"),
-            "uncertainty_index": shock.get("uncertainty_index"),
-            "event_name": shock.get("event_name"),
-            "minutes_to_event": shock.get("minutes_to_event"),
-            "event_category": shock.get("event_category"),
-            "event_importance": shock.get("event_importance"),
-            "fx_ret_5m": fx_ret_5m or 0.0,
-            "vix_z": vix_z or 0.0,
-            "crude_ret_15m": crude_ret_15m or 0.0,
-            "corr_fx_nifty": corr_fx_nifty or 0.0,
-            "cross_asset_ok": not bool(cross_quality.get("any_stale")),
-            "cross_asset_quality": cross_quality,
-            **cross_feat,
-            "regime_day": regime,
+                "shock_score": shock.get("shock_score"),
+                "macro_direction_bias": shock.get("macro_direction_bias"),
+                "uncertainty_index": shock.get("uncertainty_index"),
+                "event_name": shock.get("event_name"),
+                "minutes_to_event": shock.get("minutes_to_event"),
+                "event_category": shock.get("event_category"),
+                "event_importance": shock.get("event_importance"),
+                "fx_ret_5m": fx_ret_5m or 0.0,
+                "vix_z": vix_z or 0.0,
+                "crude_ret_15m": crude_ret_15m or 0.0,
+                "corr_fx_nifty": corr_fx_nifty or 0.0,
+                "cross_asset_ok": not bool(cross_quality.get("any_stale")),
+                "cross_asset_quality": cross_quality,
+                **cross_feat,
+                "regime_day": regime,
+                "system_state": system_state,
+                "warmup_reasons": warmup_reasons,
+                "warmup_min_bars": warmup_min_bars,
+                "warmup_bars_by_timeframe": warmup_bars_by_timeframe,
+                "warmup_min_bars_by_timeframe": warmup_min_bars_by_timeframe,
                 "atr": atr,
                 "vwap_slope": vwap_slope,
                 "rsi_mom": rsi_mom,

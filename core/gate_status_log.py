@@ -18,6 +18,15 @@ def build_gate_status_record(
     stage: str,
 ) -> dict:
     data = market_data or {}
+    decision_stage = str(data.get("decision_stage") or "").strip()
+    decision_blockers = [str(x) for x in (data.get("decision_blockers") or []) if str(x).strip()]
+    effective_stage = decision_stage or stage
+    if decision_stage:
+        effective_allowed = bool(data.get("decision_allowed", gate_allowed))
+        effective_reasons = decision_blockers
+    else:
+        effective_allowed = bool(gate_allowed)
+        effective_reasons = [str(x) for x in (gate_reasons or []) if str(x).strip()]
     regime_probs = data.get("regime_probs") or {}
     max_prob = max(regime_probs.values()) if regime_probs else None
     regime_entropy = data.get("regime_entropy")
@@ -40,7 +49,14 @@ def build_gate_status_record(
     if data.get("compute_indicators_error") and "compute_indicators_error" not in indicator_reasons:
         indicator_reasons.append("compute_indicators_error")
 
-    regime_reasons = list(data.get("unstable_reasons") or [])
+    system_state = str(data.get("system_state") or "READY").upper()
+    warmup_reasons = list(data.get("warmup_reasons") or [])
+    if system_state == "WARMUP" and not warmup_reasons:
+        warmup_reasons = list(indicator_reasons)
+    if system_state != "WARMUP" and warmup_reasons:
+        warmup_reasons = []
+
+    regime_reasons = list(data.get("regime_reasons") or data.get("unstable_reasons") or [])
     if not regime_reasons and bool(data.get("unstable_regime_flag", False)):
         regime_reasons.append("legacy_unstable_flag")
     try:
@@ -58,7 +74,7 @@ def build_gate_status_record(
 
     payload = {
         "symbol": data.get("symbol"),
-        "stage": stage,
+        "stage": effective_stage,
         "cycle_id": data.get("cycle_id"),
         "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")),
         "kite_use_api": bool(getattr(cfg, "KITE_USE_API", True)),
@@ -77,18 +93,30 @@ def build_gate_status_record(
         "ohlc_seeded": bool(data.get("ohlc_seeded", False)),
         "ohlc_seed_reason": data.get("ohlc_seed_reason"),
         "primary_regime": data.get("primary_regime") or data.get("regime"),
+        "regime_confidence": data.get("regime_confidence"),
         "regime_probs_max": max_prob,
         # Backward-compatible key retained for existing dashboards.
         "regime_prob_max": max_prob,
         "regime_entropy": regime_entropy,
         "unstable_reasons": list(data.get("unstable_reasons") or []),
         "regime_reasons": regime_reasons,
-        "gate_allowed": bool(gate_allowed),
+        "gate_allowed": bool(effective_allowed),
         "gate_family": gate_family,
-        "gate_reasons": list(gate_reasons or []),
+        "gate_reasons": list(effective_reasons),
         "ohlc_bars_count": data.get("ohlc_bars_count"),
         "ohlc_last_bar_epoch": data.get("ohlc_last_bar_epoch"),
         "compute_indicators_error": data.get("compute_indicators_error"),
+        "system_state": system_state,
+        "warmup_reasons": warmup_reasons,
+        "warmup_min_bars": data.get("warmup_min_bars"),
+        "warmup_bars_by_timeframe": data.get("warmup_bars_by_timeframe"),
+        "warmup_min_bars_by_timeframe": data.get("warmup_min_bars_by_timeframe"),
+        "decision_allowed": data.get("decision_allowed"),
+        "decision_stage": data.get("decision_stage"),
+        "decision_blockers": list(data.get("decision_blockers") or []),
+        "decision_explain": data.get("decision_explain"),
+        "feed_health_snapshot": data.get("feed_health_snapshot") or {},
+        "node_call_counts": data.get("node_call_counts") or {},
     }
     return payload
 

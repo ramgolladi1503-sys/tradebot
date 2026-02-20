@@ -9,8 +9,9 @@ from config import config as cfg
 from core import risk_halt
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
 from core.freshness_sla import get_freshness_status
+from core.gate_status_log import gate_status_path
 from core.paths import logs_dir
-from core.time_utils import now_utc_epoch
+from core.time_utils import now_utc_epoch, is_market_open_ist
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,104 @@ def _quote_health(market_data: Optional[Dict[str, Any]]) -> str:
     return "ERROR"
 
 
+def _load_latest_decision_for_symbol(symbol: str, now_epoch: float) -> Dict[str, Any]:
+    sym = str(symbol or "").upper()
+    if not sym:
+        return {}
+    path = gate_status_path(getattr(cfg, "DESK_ID", "DEFAULT"))
+    if not path.exists():
+        return {}
+    max_age = float(getattr(cfg, "GOV_DECISION_MAX_AGE_SEC", 45.0))
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return {}
+    for raw in reversed(lines[-500:]):
+        row = raw.strip()
+        if not row:
+            continue
+        try:
+            payload = json.loads(row)
+        except Exception:
+            continue
+        if str(payload.get("symbol") or "").upper() != sym:
+            continue
+        decision_stage = str(payload.get("decision_stage") or "").strip()
+        if not decision_stage:
+            continue
+        try:
+            ts_epoch = float(payload.get("ts_epoch"))
+        except Exception:
+            continue
+        if (now_epoch - ts_epoch) > max_age:
+            continue
+        return payload
+    return {}
+
+
+def _snapshot_feed_health(
+    market_data: Optional[Dict[str, Any]],
+    now_epoch: float,
+    market_open: bool,
+    mode: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Canonical per-snapshot feed health.
+    Uses one market snapshot and avoids recomputing from unrelated stores.
+    """
+    if not isinstance(market_data, dict):
+        return None
+
+    instrument = str(market_data.get("instrument") or "OPT").upper()
+    max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+    max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0))
+
+    ltp_ts = market_data.get("ltp_ts_epoch")
+    try:
+        ltp_age_sec = max(0.0, now_epoch - float(ltp_ts)) if ltp_ts is not None else None
+    except Exception:
+        ltp_age_sec = None
+
+    depth_age_raw = market_data.get("depth_age_sec")
+    if depth_age_raw is None:
+        try:
+            depth_age_raw = ((market_data.get("feed_health") or {}).get("depth_age_sec"))
+        except Exception:
+            depth_age_raw = None
+    try:
+        depth_age_sec = max(0.0, float(depth_age_raw)) if depth_age_raw is not None else None
+    except Exception:
+        depth_age_sec = None
+
+    ltp_ok = ltp_age_sec is not None and ltp_age_sec <= max_ltp_age
+    reasons: List[str] = []
+    if market_open:
+        if ltp_age_sec is None:
+            reasons.append("ltp_missing")
+        elif ltp_age_sec > max_ltp_age:
+            reasons.append(f"ltp_stale age={ltp_age_sec:.2f} max={max_ltp_age:.2f}")
+
+    # FEED_STALE is strictly time-based on LTP freshness.
+    # Depth quality is tracked as diagnostics/quote-quality, not feed freshness.
+    ok = (not market_open) or ltp_ok
+    state = "MARKET_CLOSED" if not market_open else ("OK" if ok else "STALE")
+    return {
+        "ok": ok,
+        "state": state,
+        "market_open": market_open,
+        "reasons": reasons,
+        "ltp": {"age_sec": ltp_age_sec, "max_age_sec": max_ltp_age},
+        "depth": {
+            "age_sec": depth_age_sec,
+            "max_age_sec": max_depth_age,
+            "required": False,
+            "instrument": instrument,
+            "mode": mode,
+        },
+        "source": "market_snapshot",
+    }
+
+
 def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> TradingAllowedSnapshot:
     """
     Single fail-closed permission gate used before trade emission.
@@ -151,8 +250,30 @@ def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> Tr
     now_epoch = now_utc_epoch()
     reasons: List[str] = []
     mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    symbol = str((market_data or {}).get("symbol") or "").upper() if isinstance(market_data, dict) else ""
 
-    freshness = get_freshness_status(force=False)
+    snapshot_market_open = bool(market_data.get("market_open")) if isinstance(market_data, dict) and ("market_open" in market_data) else bool(is_market_open_ist())
+    decision_row = _load_latest_decision_for_symbol(symbol=symbol, now_epoch=now_epoch)
+    snapshot_freshness = _snapshot_feed_health(
+        market_data=market_data,
+        now_epoch=now_epoch,
+        market_open=snapshot_market_open,
+        mode=mode,
+    )
+    if decision_row:
+        decision_feed = decision_row.get("feed_health_snapshot") or {}
+        decision_is_fresh = bool(decision_feed.get("is_fresh", False))
+        freshness = {
+            "ok": decision_is_fresh,
+            "state": "OK" if decision_is_fresh else "STALE",
+            "market_open": snapshot_market_open,
+            "reasons": list(decision_row.get("decision_blockers") or []),
+            "ltp": {"age_sec": decision_feed.get("ltp_age_sec")},
+            "depth": {"age_sec": decision_feed.get("depth_age_sec")},
+            "source": "decision_dag",
+        }
+    else:
+        freshness = snapshot_freshness or get_freshness_status(force=False)
     market_open = bool(freshness.get("market_open"))
     freshness_state = str(freshness.get("state") or "UNKNOWN")
     ltp_age_sec = (freshness.get("ltp") or {}).get("age_sec")
@@ -216,6 +337,11 @@ def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> Tr
         "auth_state": auth_check.get("auth_state"),
         "auth_reason": auth_check.get("reason"),
         "freshness_reasons": list(freshness.get("reasons") or []),
+        "freshness_source": str(
+            freshness.get("source") or ("snapshot" if snapshot_freshness else "global")
+        ),
+        "decision_stage": decision_row.get("decision_stage"),
+        "decision_blockers": list(decision_row.get("decision_blockers") or []),
         "symbol": (market_data or {}).get("symbol") if isinstance(market_data, dict) else None,
         "chain_source": (market_data or {}).get("chain_source") if isinstance(market_data, dict) else None,
     }

@@ -18,8 +18,21 @@ def test_readiness_ready_market_open(monkeypatch):
     monkeypatch.setattr(readiness_gate, "is_market_open_ist", lambda now=None: True)
     monkeypatch.setattr(
         readiness_gate,
-        "get_freshness_status",
-        lambda force=False: {"ok": True, "reasons": [], "ltp": {"age_sec": 1.0}, "depth": {"age_sec": 1.2}, "market_open": True, "state": "OK"},
+        "_decision_gate_health",
+        lambda now_epoch, market_open: {
+            "ok": True,
+            "feed_ok": True,
+            "blockers": [],
+            "reasons": [],
+            "symbols": ["NIFTY"],
+            "allowed_symbols": ["NIFTY"],
+            "blocked_symbols": [],
+            "blockers_by_symbol": {"NIFTY": []},
+            "rows": {},
+            "ltp_age_sec": 1.0,
+            "depth_age_sec": 1.2,
+            "latest_explain": [],
+        },
     )
 
     result = readiness_gate.run_readiness_state(write_log=False)
@@ -34,8 +47,21 @@ def test_readiness_blocked_market_open_feed_stale(monkeypatch):
     monkeypatch.setattr(readiness_gate, "is_market_open_ist", lambda now=None: True)
     monkeypatch.setattr(
         readiness_gate,
-        "get_freshness_status",
-        lambda force=False: {"ok": False, "reasons": ["tick_feed_stale"], "ltp": {"age_sec": 300.0}, "depth": {"age_sec": 2.0}, "market_open": True, "state": "STALE"},
+        "_decision_gate_health",
+        lambda now_epoch, market_open: {
+            "ok": False,
+            "feed_ok": False,
+            "blockers": ["decision_gate_blocked"],
+            "reasons": ["tick_feed_stale"],
+            "symbols": ["NIFTY"],
+            "allowed_symbols": [],
+            "blocked_symbols": ["NIFTY"],
+            "blockers_by_symbol": {"NIFTY": ["FEED_STALE"]},
+            "rows": {},
+            "ltp_age_sec": 300.0,
+            "depth_age_sec": 2.0,
+            "latest_explain": [],
+        },
     )
 
     result = readiness_gate.run_readiness_state(write_log=False)
@@ -50,8 +76,21 @@ def test_readiness_degraded_market_closed_feed_stale(monkeypatch):
     monkeypatch.setattr(readiness_gate, "is_market_open_ist", lambda now=None: False)
     monkeypatch.setattr(
         readiness_gate,
-        "get_freshness_status",
-        lambda force=False: {"ok": False, "reasons": ["tick_feed_stale"], "ltp": {"age_sec": 300.0}, "depth": {"age_sec": 2.0}, "market_open": False, "state": "MARKET_CLOSED"},
+        "_decision_gate_health",
+        lambda now_epoch, market_open: {
+            "ok": True,
+            "feed_ok": True,
+            "blockers": [],
+            "reasons": [],
+            "symbols": [],
+            "allowed_symbols": [],
+            "blocked_symbols": [],
+            "blockers_by_symbol": {},
+            "rows": {},
+            "ltp_age_sec": 300.0,
+            "depth_age_sec": 2.0,
+            "latest_explain": [],
+        },
     )
 
     result = readiness_gate.run_readiness_state(write_log=False)

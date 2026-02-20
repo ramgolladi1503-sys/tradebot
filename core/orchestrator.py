@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dataclasses import replace
 from strategies.trade_builder import TradeBuilder
-from core.market_data import fetch_live_market_data
+from core.market_data import fetch_live_market_data, seed_ohlc_buffers_on_startup
 from core.risk_engine import RiskEngine
 from core.execution_guard import ExecutionGuard
 from core.trade_logger import log_trade, update_trade_outcome, update_trade_fill
@@ -21,14 +21,13 @@ from core.execution_engine import ExecutionEngine
 from core.execution_router import ExecutionRouter
 from core.fill_quality import log_fill_quality
 from core.risk_state import RiskState
-from core.strategy_gatekeeper import StrategyGatekeeper
+from core.strategy_gatekeeper import StrategyGatekeeper, GateResult
 from core.portfolio_risk_allocator import PortfolioRiskAllocator
 from core.exposure_ledger import ExposureLedger
 from core.circuit_breaker import CircuitBreaker
 from core.run_lock import RunLock
 from core.governance import record_governance
 from core.audit_log import append_event as audit_append, verify_chain as verify_audit_chain
-from core.feed_health import check_and_trigger as check_feed_health
 from core.incidents import create_incident, trigger_audit_chain_fail
 from core.ml_governance import log_ab_trial
 from rl.size_agent import SizeRLAgent, build_features
@@ -62,9 +61,19 @@ from core.decision_builder import build_decision
 from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
 from core.review_packet import build_review_packet, format_review_packet
-from core.governance_gate import trading_allowed_snapshot, write_trading_allowed_snapshot
 from core.gate_status_log import append_gate_status, build_gate_status_record
-from core.freshness_sla import get_freshness_status
+from core.decision_dag import (
+    NODE_N1_MARKET_OPEN,
+    NODE_N2_FEED_FRESH,
+    NODE_N3_WARMUP_DONE,
+    NODE_N4_QUOTE_OK,
+    NODE_N5_REGIME_OK,
+    NODE_N6_RISK_OK,
+    NODE_N7_GOVERNANCE_LOCKS_OK,
+    build_market_snapshot,
+    evaluate_decision,
+)
+from core.decision_side_effects import handle_post_decision_side_effects
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
@@ -280,7 +289,7 @@ class Orchestrator:
 
     def _strategy_gate_for_symbol(self, market_data: dict):
         """
-        Evaluate strategy gate exactly once per symbol per cycle and log once.
+        Evaluate one pure decision DAG per symbol per cycle and log once.
         """
         snapshot = self._immutable_cycle_snapshot(market_data)
         symbol = str((snapshot or {}).get("symbol") or "").upper()
@@ -289,20 +298,105 @@ class Orchestrator:
             cache = {}
             self._gatekeeper_cycle_cache = cache
         if symbol in cache:
-            return cache[symbol]
-        gate = self.gatekeeper.evaluate(snapshot, mode="MAIN")
-        cache[symbol] = gate
+            decision = cache[symbol]
+            return GateResult(bool(decision.allowed), decision.selected_strategy, list(decision.blockers))
+
+        precondition_blocking_nodes = {
+            NODE_N1_MARKET_OPEN,
+            NODE_N2_FEED_FRESH,
+            NODE_N3_WARMUP_DONE,
+            NODE_N4_QUOTE_OK,
+            NODE_N5_REGIME_OK,
+            NODE_N6_RISK_OK,
+            NODE_N7_GOVERNANCE_LOCKS_OK,
+        }
+        precheck = evaluate_decision(snapshot, strategy_candidates=())
+        if (not precheck.allowed) and (precheck.stage in precondition_blocking_nodes):
+            decision = precheck
+        else:
+            gate = self.gatekeeper.evaluate(snapshot, mode="MAIN")
+            strategy_candidates = [
+                {
+                    "family": getattr(gate, "family", None),
+                    "allowed": bool(getattr(gate, "allowed", False)),
+                    "reasons": list(getattr(gate, "reasons", []) or []),
+                    "candidate_summary": {
+                        "gate_family": getattr(gate, "family", None),
+                        "gate_allowed": bool(getattr(gate, "allowed", False)),
+                    },
+                }
+            ]
+            decision = evaluate_decision(snapshot, strategy_candidates=strategy_candidates)
+
+        try:
+            handle_post_decision_side_effects(
+                decision=decision,
+                explain=decision.explain,
+                snapshot=build_market_snapshot(snapshot),
+            )
+        except Exception:
+            pass
+        cache[symbol] = decision
+
+        log_snapshot = dict(snapshot)
+        log_snapshot["decision_allowed"] = bool(decision.allowed)
+        log_snapshot["decision_stage"] = decision.stage
+        log_snapshot["decision_blockers"] = list(decision.blockers)
+        log_snapshot["decision_explain"] = list(decision.explain)
+        log_snapshot["feed_health_snapshot"] = dict(decision.facts.get("feed_health") or {})
+        log_snapshot["node_call_counts"] = dict(decision.facts.get("node_call_counts") or {})
+
         self._append_gate_status(
-            snapshot,
-            gate_allowed=bool(gate.allowed),
-            gate_family=gate.family,
-            gate_reasons=gate.reasons,
-            stage="strategy_gate",
+            log_snapshot,
+            gate_allowed=bool(decision.allowed),
+            gate_family=decision.selected_strategy,
+            gate_reasons=list(decision.blockers),
+            stage=str(decision.stage or "strategy_gate"),
         )
-        return gate
+
+        return GateResult(bool(decision.allowed), decision.selected_strategy, list(decision.blockers))
 
     def _is_live_mode(self):
         return str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+
+    def _latest_decision_rows(self, max_age_sec: float | None = None) -> dict:
+        """
+        Return latest Decision DAG row per symbol from gate_status.jsonl.
+        This is used for governance/readiness-derived checks without recomputing feed health.
+        """
+        if max_age_sec is None:
+            max_age_sec = float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 45.0))
+        path = Path(f"logs/desks/{getattr(cfg, 'DESK_ID', 'DEFAULT')}/gate_status.jsonl")
+        if not path.exists():
+            return {}
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return {}
+        now_epoch = now_utc_epoch()
+        rows = {}
+        for raw in reversed(lines[-500:]):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+            symbol = str(payload.get("symbol") or "").upper()
+            if not symbol or symbol in rows:
+                continue
+            decision_stage = str(payload.get("decision_stage") or "").strip()
+            if not decision_stage:
+                continue
+            try:
+                ts_epoch = float(payload.get("ts_epoch"))
+            except Exception:
+                continue
+            if (now_epoch - ts_epoch) > float(max_age_sec):
+                continue
+            rows[symbol] = payload
+        return rows
 
     def _update_pilot_unlock_clean_cycles(self):
         """
@@ -317,16 +411,103 @@ class Orchestrator:
             self._pilot_unlock_clean_cycles = 0
             self._pilot_unlock_used_day = None
         try:
-            freshness = get_freshness_status(force=False)
-            ltp_ok = bool((freshness.get("ltp") or {}).get("ok"))
-            depth_ok = bool((freshness.get("depth") or {}).get("ok"))
-            market_open = bool(freshness.get("market_open", True))
-            if market_open and ltp_ok and depth_ok:
-                self._pilot_unlock_clean_cycles += 1
+            market_open = bool(is_market_open_ist())
+            decision_rows = self._latest_decision_rows()
+            if market_open and decision_rows:
+                all_fresh = True
+                for row in decision_rows.values():
+                    fhs = row.get("feed_health_snapshot") or {}
+                    if fhs.get("is_fresh") is not True:
+                        all_fresh = False
+                        break
+                if all_fresh:
+                    self._pilot_unlock_clean_cycles += 1
+                else:
+                    self._pilot_unlock_clean_cycles = 0
             else:
                 self._pilot_unlock_clean_cycles = 0
         except Exception:
             self._pilot_unlock_clean_cycles = 0
+
+    def _pilot_feed_ok(self):
+        decision_rows = self._latest_decision_rows()
+        market_open = bool(is_market_open_ist())
+        if not market_open:
+            return True, []
+        if not decision_rows:
+            return False, ["decision_gate_missing"]
+        stale_symbols = []
+        for sym, row in decision_rows.items():
+            blockers = [str(x).upper() for x in (row.get("decision_blockers") or [])]
+            fhs = row.get("feed_health_snapshot") or {}
+            if ("FEED_STALE" in blockers) or (fhs.get("is_fresh") is False):
+                stale_symbols.append(sym)
+        if stale_symbols:
+            return False, [f"feed_stale:{','.join(sorted(set(stale_symbols)))}"]
+        return True, []
+
+    def _pilot_checks(self):
+        if not getattr(cfg, "LIVE_PILOT_MODE", False):
+            return True, []
+        now = time.time()
+        if now - self._pilot_check_cache.get("ts", 0) < 60:
+            return self._pilot_check_cache["ok"], list(self._pilot_check_cache["reasons"])
+        reasons = []
+        if getattr(cfg, "RISK_PROFILE", "PILOT") != "PILOT":
+            reasons.append("risk_profile_not_pilot")
+        if not getattr(cfg, "LIVE_STRATEGY_WHITELIST", []):
+            reasons.append("strategy_whitelist_empty")
+        ok, r = self._pilot_audit_ok()
+        if not ok:
+            reasons.extend(r)
+        ok, r = self._pilot_models_ok()
+        if not ok:
+            reasons.extend(r)
+        ok, r = self._pilot_feed_ok()
+        if not ok:
+            reasons.extend(r)
+        ok = len(reasons) == 0
+        self._pilot_check_cache = {"ts": now, "ok": ok, "reasons": reasons}
+        return ok, reasons
+
+    def _pilot_exec_degradation(self):
+        if not getattr(cfg, "LIVE_PILOT_MODE", False):
+            return
+        path = Path("logs/fill_quality_daily.json")
+        if not path.exists():
+            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_missing")
+            return
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_unreadable")
+            return
+        day = now_ist().date().isoformat()
+        row = data.get(day)
+        if not row:
+            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_empty")
+            return
+        fill_rate = row.get("fill_rate")
+        max_miss = float(getattr(cfg, "EXEC_DEGRADATION_MAX_MISSED_FILL_RATE", 0.5))
+        if fill_rate is not None:
+            missed_rate = 1.0 - float(fill_rate)
+            if missed_rate > max_miss:
+                self.risk_state.set_mode("HARD_HALT", "pilot_missed_fill_rate")
+                return
+        baseline = float(getattr(cfg, "EXEC_BASELINE_SLIPPAGE", 0.0))
+        if baseline <= 0:
+            self.risk_state.set_mode("HARD_HALT", "pilot_slippage_baseline_missing")
+            return
+        slippage = row.get("avg_slippage_vs_mid")
+        if slippage is not None:
+            max_mult = float(getattr(cfg, "EXEC_DEGRADATION_MAX_SLIPPAGE_MULT", 2.0))
+            if float(slippage) > baseline * max_mult:
+                self.risk_state.set_mode("HARD_HALT", "pilot_slippage_degradation")
+                return
+        try:
+            self.risk_state.set_mode("SOFT_HALT", "pilot_exec_ok")
+        except Exception:
+            pass
 
     def _maybe_queue_pilot_unlock(self, market_data: dict, gate_reasons: list[str] | None = None, debug_flag: bool = False):
         """
@@ -534,80 +715,6 @@ class Orchestrator:
             return False, ["model_registry_empty"]
         return True, []
 
-    def _pilot_feed_ok(self):
-        from core.freshness_sla import get_freshness_status
-        data = get_freshness_status(force=False)
-        max_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
-        depth_lag = (data.get("depth") or {}).get("age_sec")
-        tick_lag = (data.get("ltp") or {}).get("age_sec")
-        market_open = bool(data.get("market_open", is_market_open_ist()))
-        if not market_open:
-            return True, []
-        if depth_lag is None or depth_lag > max_age:
-            return False, ["depth_feed_stale"]
-        if tick_lag is not None and tick_lag > max_age:
-            return False, ["tick_feed_stale"]
-        return True, []
-
-    def _pilot_checks(self):
-        if not getattr(cfg, "LIVE_PILOT_MODE", False):
-            return True, []
-        now = time.time()
-        if now - self._pilot_check_cache.get("ts", 0) < 60:
-            return self._pilot_check_cache["ok"], list(self._pilot_check_cache["reasons"])
-        reasons = []
-        if getattr(cfg, "RISK_PROFILE", "PILOT") != "PILOT":
-            reasons.append("risk_profile_not_pilot")
-        if not getattr(cfg, "LIVE_STRATEGY_WHITELIST", []):
-            reasons.append("strategy_whitelist_empty")
-        ok, r = self._pilot_audit_ok()
-        if not ok:
-            reasons.extend(r)
-        ok, r = self._pilot_models_ok()
-        if not ok:
-            reasons.extend(r)
-        ok, r = self._pilot_feed_ok()
-        if not ok:
-            reasons.extend(r)
-        ok = len(reasons) == 0
-        self._pilot_check_cache = {"ts": now, "ok": ok, "reasons": reasons}
-        return ok, reasons
-
-    def _pilot_exec_degradation(self):
-        if not getattr(cfg, "LIVE_PILOT_MODE", False):
-            return
-        path = Path("logs/fill_quality_daily.json")
-        if not path.exists():
-            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_missing")
-            return
-        try:
-            data = json.loads(path.read_text())
-        except Exception:
-            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_unreadable")
-            return
-        day = now_ist().date().isoformat()
-        row = data.get(day)
-        if not row:
-            self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_empty")
-            return
-        fill_rate = row.get("fill_rate")
-        max_miss = float(getattr(cfg, "EXEC_DEGRADATION_MAX_MISSED_FILL_RATE", 0.5))
-        if fill_rate is not None:
-            missed_rate = 1.0 - float(fill_rate)
-            if missed_rate > max_miss:
-                self.risk_state.set_mode("HARD_HALT", "pilot_missed_fill_rate")
-                return
-        baseline = float(getattr(cfg, "EXEC_BASELINE_SLIPPAGE", 0.0))
-        if baseline <= 0:
-            self.risk_state.set_mode("HARD_HALT", "pilot_slippage_baseline_missing")
-            return
-        slippage = row.get("avg_slippage_vs_mid")
-        if slippage is not None:
-            max_mult = float(getattr(cfg, "EXEC_DEGRADATION_MAX_SLIPPAGE_MULT", 2.0))
-            if float(slippage) > baseline * max_mult:
-                self.risk_state.set_mode("HARD_HALT", "pilot_slippage_degradation")
-                return
-
     def _load_truth_dataset_for_reports(self):
         return orchestrator_data.load_truth_dataset_for_reports()
 
@@ -741,50 +848,8 @@ class Orchestrator:
                         continue
                 except Exception as cb_exc:
                     print(f"[CircuitBreaker] state_error:{type(cb_exc).__name__}")
-                # Feed health check (block pilot/live on stale feeds)
-                try:
-                    feed_health = check_feed_health()
-                    live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
-                    pilot_mode = bool(getattr(cfg, "LIVE_PILOT_MODE", False))
-                    reasons = set(feed_health.get("reasons") or [])
-                    if is_market_open_ist() and (live_mode or pilot_mode):
-                        if "tick_feed_stale" in reasons or "depth_feed_stale" in reasons:
-                            restart_depth_ws(reason="sla:" + ",".join(sorted(reasons)))
-                    tripped, cb_reason = self.circuit_breaker.observe_feed_health(bool(feed_health.get("ok", False)))
-                    if tripped:
-                        cycle_reason = cb_reason or "CB_FEED_UNHEALTHY"
-                        try:
-                            audit_append(
-                                {
-                                    "event": "CIRCUIT_BREAKER_TRIP",
-                                    "reason": cycle_reason,
-                                    "feed_health": feed_health,
-                                    "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
-                                }
-                            )
-                        except Exception as exc:
-                            print(f"[CircuitBreaker] audit_error:{type(exc).__name__}")
-                        try:
-                            create_incident(
-                                "SEV2",
-                                cycle_reason,
-                                {"feed_health": feed_health, "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")},
-                            )
-                        except Exception as exc:
-                            print(f"[CircuitBreaker] incident_error:{type(exc).__name__}")
-                    if (live_mode or pilot_mode) and (not feed_health.get("ok", True) or self.circuit_breaker.is_halted()):
-                        if not feed_health.get("ok", True):
-                            cycle_reason = "feed_unhealthy"
-                        if self.circuit_breaker.is_halted():
-                            cycle_reason = self.circuit_breaker.halt_reason or "CB_ACTIVE"
-                        continue
-                except Exception as feed_exc:
-                    tripped, cb_reason = self.circuit_breaker.record_error("FEED_HEALTH_EXCEPTION")
-                    cycle_reason = f"feed_health_exception:{type(feed_exc).__name__}"
-                    if tripped:
-                        cycle_reason = cb_reason or "CB_ERROR_STORM"
-                    print(f"[FeedHealth ERROR] {type(feed_exc).__name__}")
-                    continue
+                # Feed freshness is now evaluated only in the Decision DAG from the
+                # immutable market snapshot. Do not recompute readiness here.
                 # Daily decay report / strategy gating
                 self._refresh_decay_report()
                 market_data_list = self._build_cycle_market_data(fetch_live_market_data())
@@ -892,97 +957,48 @@ class Orchestrator:
                         self.last_md_by_symbol[sym] = market_data
                     # Check exits for any open trades on this symbol/instrument
                     self._check_open_trades(market_data)
-                    try:
-                        permission = trading_allowed_snapshot(market_data=market_data)
-                        write_trading_allowed_snapshot(permission)
-                    except Exception as gate_exc:
-                        print(f"[GovernanceGate] snapshot_error:{type(gate_exc).__name__}")
-                        permission = None
-                    if permission is not None and not permission.allowed:
-                        self._append_gate_status(
-                            market_snapshot,
-                            gate_allowed=False,
-                            gate_family=None,
-                            gate_reasons=list(permission.reasons),
-                            stage="governance_gate",
-                        )
-                        try:
-                            event = self._build_decision_event(
-                                None,
-                                market_data,
-                                gatekeeper_allowed=False,
-                                veto_reasons=list(permission.reasons),
-                            )
-                            self._log_decision_safe(event)
-                        except Exception:
-                            pass
-                        continue
                     cooldown = getattr(cfg, "MIN_COOLDOWN_SEC", 300)
                     last_t = self.last_trade_time.get(sym)
                     if last_t and time.time() - last_t < cooldown:
                         continue
                     # Phase C: Build trade suggestion
-                    indicators_ok = bool(market_data.get("indicators_ok", False))
-                    indicators_age = market_snapshot.get("indicators_age_sec")
-                    indicators_stale = (
-                        indicators_age is None
-                        or float(indicators_age) > float(getattr(cfg, "INDICATOR_STALE_SEC", 120))
-                    )
-                    indicators_ok = bool(market_snapshot.get("indicators_ok", False))
-                    allow_main = indicators_ok and not indicators_stale
-                    if not allow_main:
-                        veto = "indicators_missing" if not indicators_ok else "indicators_stale"
-                        self._append_gate_status(
-                            market_snapshot,
-                            gate_allowed=False,
-                            gate_family=None,
-                            gate_reasons=[veto],
-                            stage="indicator_gate",
-                        )
-                        try:
-                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=[veto])
-                            self._log_decision_safe(event)
-                        except Exception:
-                            pass
-                        continue
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     trade = None
-                    if allow_main:
-                        gate = self._strategy_gate_for_symbol(market_snapshot)
-                        if not gate.allowed:
-                            if debug_flag:
-                                print(f"[Gatekeeper] Blocked {sym}: {','.join(gate.reasons)}")
-                            try:
-                                event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=gate.reasons)
-                                self._log_decision_safe(event)
-                                audit_append({"event": "GATEKEEPER_BLOCK", "symbol": sym, "reasons": gate.reasons, "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
-                            except Exception:
-                                pass
-                            # Advisory-only fallback: queue higher-upside ideas for operator review.
-                            self._maybe_queue_target_points_idea(
-                                market_data,
-                                debug_flag=debug_flag,
-                                gate_reasons=gate.reasons,
-                            )
-                            self._maybe_queue_pilot_unlock(
-                                market_data,
-                                gate_reasons=gate.reasons,
-                                debug_flag=debug_flag,
-                            )
-                            continue
-                        trade, decision_trace = self.trade_builder.build_with_trace(
+                    gate = self._strategy_gate_for_symbol(market_snapshot)
+                    if not gate.allowed:
+                        if debug_flag:
+                            print(f"[Gatekeeper] Blocked {sym}: {','.join(gate.reasons)}")
+                        try:
+                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=gate.reasons)
+                            self._log_decision_safe(event)
+                            audit_append({"event": "GATEKEEPER_BLOCK", "symbol": sym, "reasons": gate.reasons, "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
+                        except Exception:
+                            pass
+                        # Advisory-only fallback: queue higher-upside ideas for operator review.
+                        self._maybe_queue_target_points_idea(
                             market_data,
-                            quick_mode=False,
-                            debug_reasons=debug_flag,
-                            force_family=gate.family,
-                            allow_fallbacks=False,
-                            allow_baseline=False,
+                            debug_flag=debug_flag,
+                            gate_reasons=gate.reasons,
                         )
-                        if decision_trace is not None:
-                            try:
-                                self._decision_traces.append(decision_trace.to_dict())
-                            except Exception:
-                                pass
+                        self._maybe_queue_pilot_unlock(
+                            market_data,
+                            gate_reasons=gate.reasons,
+                            debug_flag=debug_flag,
+                        )
+                        continue
+                    trade, decision_trace = self.trade_builder.build_with_trace(
+                        market_data,
+                        quick_mode=False,
+                        debug_reasons=debug_flag,
+                        force_family=gate.family,
+                        allow_fallbacks=False,
+                        allow_baseline=False,
+                    )
+                    if decision_trace is not None:
+                        try:
+                            self._decision_traces.append(decision_trace.to_dict())
+                        except Exception:
+                            pass
                     if trade is None:
                         reject_ctx = {}
                         try:
@@ -1946,6 +1962,18 @@ class Orchestrator:
             )
         user_id = str((auth_payload or {}).get("user_id", "") or "")
         print(f"[KITE_WS] profile verified user_last4={user_id[-4:] if user_id else 'NONE'}")
+        try:
+            warmup_rows = seed_ohlc_buffers_on_startup(list(getattr(cfg, "SYMBOLS", []) or []))
+            for row in warmup_rows:
+                print(
+                    "[WARMUP] "
+                    f"{row.get('symbol')} bars={row.get('seeded_bars_count')} "
+                    f"last_candle_ts={row.get('last_candle_ts')} "
+                    f"indicator_last_update_ts={row.get('indicator_last_update_ts')} "
+                    f"ok={row.get('indicators_ok_after_seed')}"
+                )
+        except Exception as exc:
+            print(f"[WARMUP] startup seeding failed: {exc}")
         # Resolve a minimal depth subscription universe (index + ATM window).
         from core.kite_depth_ws import build_depth_subscription_tokens
         tokens, _resolution = build_depth_subscription_tokens(list(cfg.SYMBOLS))

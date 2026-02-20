@@ -64,6 +64,10 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(ws, "_WARMUP_PENDING", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_SYMBOL_LAST_LTP_TS", {}, raising=False)
+    monkeypatch.setattr(ws, "_SYMBOL_LAST_DEPTH_TS", {}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     monkeypatch.setattr(ws, "repo_root", lambda: Path("/tmp"))
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: False)
@@ -174,3 +178,55 @@ def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
     assert row["bid"] == 100.0
     assert row["ask"] == 102.0
     assert row["mid"] == 101.0
+
+
+def test_on_ticks_updates_symbol_ltp_and_depth_timestamps(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(ws, "record_tick_epoch", lambda ts: None)
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+
+    ltp_ts = datetime(2026, 2, 19, 9, 30, tzinfo=timezone.utc)
+    ticker.on_ticks(
+        ticker,
+        [
+            {
+                "instrument_token": 101,
+                "last_price": 25000.0,
+                "exchange_timestamp": ltp_ts,
+            }
+        ],
+    )
+    assert ws._SYMBOL_LAST_LTP_TS.get("NIFTY") == ltp_ts.timestamp()
+    assert "NIFTY" not in ws._SYMBOL_LAST_DEPTH_TS
+    assert ws._LAST_WS_TICK_EPOCH > 0
+
+    depth_ts = datetime(2026, 2, 19, 9, 31, tzinfo=timezone.utc)
+    ticker.on_ticks(
+        ticker,
+        [
+            {
+                "instrument_token": 101,
+                "last_price": 25001.0,
+                "exchange_timestamp": depth_ts,
+                "depth": {
+                    "buy": [{"price": 25000.0, "quantity": 12}],
+                    "sell": [{"price": 25002.0, "quantity": 9}],
+                },
+            }
+        ],
+    )
+    assert ws._SYMBOL_LAST_LTP_TS.get("NIFTY") == depth_ts.timestamp()
+    assert ws._SYMBOL_LAST_DEPTH_TS.get("NIFTY") == depth_ts.timestamp()

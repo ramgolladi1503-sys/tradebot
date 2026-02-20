@@ -119,3 +119,40 @@ def test_profile_ok_persists_and_ticker_allowed(monkeypatch):
     args, kwargs = start_mock.call_args
     assert 101 in args[0]
     assert kwargs.get("profile_verified") is True
+
+
+def test_start_depth_ws_seeds_ohlc_before_ws_start(monkeypatch):
+    import core.orchestrator as orchestrator_mod
+    import core.kite_depth_ws as ws
+    import core.auth_health as auth_health
+
+    class _KiteOk:
+        def __init__(self, api_key=None):
+            self.api_key = api_key
+
+        def profile(self):
+            return {"user_id": "ABCD1234"}
+
+    call_order = []
+
+    def _seed(symbols):
+        call_order.append(("seed", tuple(symbols)))
+        return [{"symbol": "NIFTY", "seeded_bars_count": 60, "last_candle_ts": "x", "indicator_last_update_ts": "y"}]
+
+    def _start(tokens, **kwargs):
+        call_order.append(("start", tuple(tokens), kwargs.get("profile_verified")))
+
+    monkeypatch.setattr(orchestrator_mod, "seed_ohlc_buffers_on_startup", _seed)
+    monkeypatch.setattr(orchestrator_mod, "start_depth_ws", _start)
+    monkeypatch.setattr(orchestrator_mod.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(orchestrator_mod.kite_client, "kite", _KiteOk("api_key_1234"), raising=False)
+    monkeypatch.setattr(ws, "build_depth_subscription_tokens", lambda symbols: ([101], [{"symbol": "NIFTY", "count": 1}]))
+    monkeypatch.setattr(auth_health, "get_kite_auth_health", lambda force=True: {"ok": True, "user_id": "ABCD1234"})
+    monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
+    monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
+
+    orchestrator_mod.Orchestrator._start_depth_ws(object())
+    assert call_order[0] == ("seed", ("NIFTY",))
+    assert call_order[1][0] == "start"
+    assert call_order[1][1] == (101,)
+    assert call_order[1][2] is True

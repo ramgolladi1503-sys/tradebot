@@ -4,18 +4,18 @@ import json
 import shutil
 import sqlite3
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List, Any
 
 from config import config as cfg
 from core import risk_halt
 from core.audit_log import verify_chain as verify_audit_chain
-from core.freshness_sla import get_freshness_status
 from core.auth_health import get_kite_auth_health
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
 from core.time_utils import now_ist, is_market_open_ist
 from core.market_calendar import IN_HOLIDAYS
 from core.trade_store import init_db
 from core.readiness_state import ReadinessResult, ReadinessState
+from core.gate_status_log import gate_status_path
 
 
 def _disk_free_gb(path: str = ".") -> float:
@@ -67,6 +67,118 @@ def _check_trade_identity_schema() -> Tuple[bool, str]:
     if missing:
         return False, f"trade_schema_missing:{','.join(missing)}"
     return True, "ok"
+
+
+def _load_recent_decision_rows(now_epoch: float) -> Dict[str, Dict[str, Any]]:
+    desk = getattr(cfg, "DESK_ID", "DEFAULT")
+    path = gate_status_path(desk_id=desk)
+    if not path.exists():
+        return {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return {}
+    max_age = float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 45.0))
+    out: Dict[str, Dict[str, Any]] = {}
+    for raw in reversed(lines[-500:]):
+        row = raw.strip()
+        if not row:
+            continue
+        try:
+            payload = json.loads(row)
+        except Exception:
+            continue
+        symbol = str(payload.get("symbol") or "").upper()
+        if not symbol:
+            continue
+        if symbol in out:
+            continue
+        ts = payload.get("ts_epoch")
+        try:
+            ts_epoch = float(ts)
+        except Exception:
+            continue
+        if (now_epoch - ts_epoch) > max_age:
+            continue
+        # Ignore non-decision rows (for example trade-builder reject rows) so
+        # readiness is sourced from the Decision DAG output only.
+        has_decision_stage = str(payload.get("decision_stage") or "").strip() != ""
+        has_decision_explain = payload.get("decision_explain") is not None
+        has_decision_blockers = payload.get("decision_blockers") is not None
+        if not (has_decision_stage or has_decision_explain or has_decision_blockers):
+            continue
+        out[symbol] = payload
+    return out
+
+
+def _decision_gate_health(now_epoch: float, market_open: bool) -> Dict[str, Any]:
+    rows = _load_recent_decision_rows(now_epoch)
+    symbols = sorted(rows.keys())
+    blocked_rows: List[Dict[str, Any]] = []
+    allowed_rows: List[Dict[str, Any]] = []
+    feed_stale_symbols: List[str] = []
+    blockers_by_symbol: Dict[str, List[str]] = {}
+    max_ltp_age = None
+    max_depth_age = None
+    latest_explain = None
+
+    for sym, row in rows.items():
+        row_blockers = [str(x) for x in (row.get("decision_blockers") or row.get("gate_reasons") or []) if str(x).strip()]
+        blockers_by_symbol[sym] = row_blockers
+        if bool(row.get("gate_allowed")):
+            allowed_rows.append(row)
+        else:
+            blocked_rows.append(row)
+        fhs = row.get("feed_health_snapshot") or {}
+        if isinstance(fhs, dict):
+            try:
+                ltp_age = float(fhs.get("ltp_age_sec")) if fhs.get("ltp_age_sec") is not None else None
+            except Exception:
+                ltp_age = None
+            try:
+                depth_age = float(fhs.get("depth_age_sec")) if fhs.get("depth_age_sec") is not None else None
+            except Exception:
+                depth_age = None
+            if ltp_age is not None:
+                max_ltp_age = ltp_age if max_ltp_age is None else max(max_ltp_age, ltp_age)
+            if depth_age is not None:
+                max_depth_age = depth_age if max_depth_age is None else max(max_depth_age, depth_age)
+            if market_open and (fhs.get("is_fresh") is False):
+                feed_stale_symbols.append(sym)
+        if market_open and any(str(reason).upper() == "FEED_STALE" for reason in row_blockers):
+            feed_stale_symbols.append(sym)
+        if latest_explain is None and row.get("decision_explain") is not None:
+            latest_explain = row.get("decision_explain")
+
+    blockers: List[str] = []
+    reasons: List[str] = []
+    require_decision = bool(getattr(cfg, "READINESS_REQUIRE_DECISION_GATE", True))
+    if market_open and require_decision:
+        if not rows:
+            blockers.append("decision_gate_missing")
+        elif blocked_rows:
+            blockers.append("decision_gate_blocked")
+
+    unique_feed_stale_symbols = sorted(set(feed_stale_symbols))
+    if market_open and unique_feed_stale_symbols:
+        reasons.append("feed_stale:" + ",".join(unique_feed_stale_symbols))
+
+    decision_ok = (not market_open) or (not blockers)
+    feed_ok = (not market_open) or (len(feed_stale_symbols) == 0)
+    return {
+        "ok": decision_ok,
+        "feed_ok": feed_ok,
+        "blockers": blockers,
+        "reasons": reasons,
+        "symbols": symbols,
+        "allowed_symbols": sorted(str(row.get("symbol") or "").upper() for row in allowed_rows),
+        "blocked_symbols": sorted(str(row.get("symbol") or "").upper() for row in blocked_rows),
+        "blockers_by_symbol": blockers_by_symbol,
+        "rows": rows,
+        "ltp_age_sec": max_ltp_age,
+        "depth_age_sec": max_depth_age,
+        "latest_explain": latest_explain,
+    }
 
 
 def run_readiness_check(write_log: bool = True) -> Dict[str, object]:
@@ -149,29 +261,40 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
             blockers.append(schema_reason)
     checks["trade_identity_schema"] = {"ok": schema_ok, "reason": schema_reason}
 
-    # Feed health
-    feed_ok = True
-    feed_reasons = []
-    ltp_age = None
-    depth_age = None
-    if getattr(cfg, "READINESS_REQUIRE_FEED_HEALTH", True):
-        freshness = get_freshness_status(force=False)
-        feed_ok = bool(freshness.get("ok"))
-        feed_reasons = freshness.get("reasons") or []
-        ltp_age = (freshness.get("ltp") or {}).get("age_sec")
-        depth_age = (freshness.get("depth") or {}).get("age_sec")
-        if market_open and not feed_ok:
-            blockers.append(f"feed_health:{','.join(feed_reasons) or 'feed_stale'}")
-        checks["feed_health"] = {
-            "ok": feed_ok,
-            "reasons": feed_reasons,
-            "ltp_age_sec": ltp_age,
-            "depth_age_sec": depth_age,
-            "state": freshness.get("state"),
-            "market_open": freshness.get("market_open"),
-        }
-    else:
-        checks["feed_health"] = {"ok": True, "reason": "skipped", "reasons": []}
+    # Decision DAG health (single source of truth for gating/readiness)
+    decision_health = _decision_gate_health(now_epoch=float(checks["ts_epoch"]), market_open=market_open)
+    for reason in decision_health.get("blockers", []):
+        blockers.append(reason)
+    checks["decision_gate"] = {
+        "ok": bool(decision_health.get("ok")),
+        "symbols": decision_health.get("symbols") or [],
+        "allowed_symbols": decision_health.get("allowed_symbols") or [],
+        "blocked_symbols": decision_health.get("blocked_symbols") or [],
+        "blockers_by_symbol": decision_health.get("blockers_by_symbol") or {},
+        "rows": decision_health.get("rows") or {},
+        "latest_explain": decision_health.get("latest_explain"),
+    }
+    feed_ok = bool(decision_health.get("feed_ok", True))
+    feed_reasons = list(decision_health.get("reasons") or [])
+    if market_open and not feed_ok:
+        blockers.append(f"feed_health:{','.join(feed_reasons) or 'feed_stale'}")
+    checks["feed_health"] = {
+        "ok": feed_ok,
+        "reasons": feed_reasons,
+        "ltp_age_sec": decision_health.get("ltp_age_sec"),
+        "depth_age_sec": decision_health.get("depth_age_sec"),
+        "state": "OK" if feed_ok else "STALE",
+        "market_open": market_open,
+        "ltp": {
+            "age_sec": decision_health.get("ltp_age_sec"),
+            "max_age_sec": float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        },
+        "depth": {
+            "age_sec": decision_health.get("depth_age_sec"),
+            "max_age_sec": float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
+        },
+        "source": "decision_dag",
+    }
 
     breaker_tripped = feed_breaker_tripped()
     checks["feed_breaker"] = {"tripped": breaker_tripped}
