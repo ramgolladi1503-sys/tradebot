@@ -37,6 +37,16 @@ from core.day_type_history import load_day_type_events, day_type_events_datafram
 from core.time_utils import is_today_local, age_minutes_local, now_local, parse_ts_local
 import time
 
+
+def fmt_conf(conf) -> str:
+    try:
+        val = float(conf)
+    except Exception:
+        return "n/a"
+    if not math.isfinite(val):
+        return "n/a"
+    return f"{val:.2f}"
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -306,12 +316,6 @@ def _render_confidence_reliability():
     st.progress(ratio)
 
 def _render_market_snapshot():
-    def fmt2(value):
-        try:
-            return f"{float(value):.2f}"
-        except Exception:
-            return "n/a"
-
     try:
         from core.kite_client import kite_client
         from config import config as cfg
@@ -462,7 +466,7 @@ def _render_market_snapshot():
             if sym_key in day_map:
                 dtype, conf, hist = day_map[sym_key]
                 st.markdown(
-                    f"<div class='market-card-sub'>Day Type: {sym_key}: {dtype} (conf {fmt2(conf)})</div>",
+                    f"<div class='market-card-sub'>Day Type: {sym_key}: {dtype} (conf {fmt_conf(conf)})</div>",
                     unsafe_allow_html=True,
                 )
                 st.caption("Day‑Type Confidence (per symbol)")
@@ -3075,7 +3079,7 @@ if nav == "Gemini":
             elif score >= getattr(cfg, "QUICK_TRADE_SCORE_MIN", 60):
                 opinion = "WAIT"
 
-            st.metric("Confidence", f"{conf:.3f}")
+            st.metric("Confidence", fmt_conf(conf))
             st.metric("Score", f"{score:.0f}/100")
             # Color-coded alignment badge
             align_color = "#22c55e" if alignment >= 75 else "#f59e0b" if alignment >= 60 else "#ef4444"

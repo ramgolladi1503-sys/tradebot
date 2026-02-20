@@ -230,3 +230,54 @@ def test_on_ticks_updates_symbol_ltp_and_depth_timestamps(monkeypatch):
     )
     assert ws._SYMBOL_LAST_LTP_TS.get("NIFTY") == depth_ts.timestamp()
     assert ws._SYMBOL_LAST_DEPTH_TS.get("NIFTY") == depth_ts.timestamp()
+
+
+def test_on_ticks_updates_index_quote_cache_from_index_ltp_without_underlying_map(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    cache_updates = []
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(
+        ws,
+        "_update_index_quote_cache",
+        lambda symbol, bid, ask, mid, ts_epoch, last_price: cache_updates.append(
+            {
+                "symbol": symbol,
+                "bid": bid,
+                "ask": ask,
+                "mid": mid,
+                "ts_epoch": ts_epoch,
+                "last_price": last_price,
+            }
+        ),
+    )
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    tick_ts = datetime(2026, 2, 19, 9, 35, tzinfo=timezone.utc)
+    ticker.on_ticks(
+        ticker,
+        [
+            {
+                "instrument_token": 101,
+                "last_price": 25123.5,
+                "exchange_timestamp": tick_ts,
+            }
+        ],
+    )
+
+    assert cache_updates
+    row = cache_updates[-1]
+    assert row["symbol"] == "NIFTY"
+    assert row["last_price"] == 25123.5
+    assert row["bid"] is None
+    assert row["ask"] is None

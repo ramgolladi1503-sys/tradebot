@@ -1,14 +1,29 @@
 from __future__ import annotations
 
+import copy
+import math
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
-from core import risk_halt
-from core.time_utils import is_market_open_ist, now_utc_epoch
+from core.market_data import resolve_index_quote
+from core.time_utils import now_utc_epoch
 
-INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
+ReasonCode = str
+
+REASON_MARKET_CLOSED = "MARKET_CLOSED"
+REASON_FEED_STALE = "FEED_STALE"
+REASON_WARMUP_INCOMPLETE = "WARMUP_INCOMPLETE"
+REASON_INDICATORS_MISSING = "INDICATORS_MISSING"
+REASON_QUOTE_INVALID = "QUOTE_INVALID"
+REASON_REGIME_UNKNOWN = "REGIME_UNKNOWN"
+REASON_REGIME_UNSTABLE = "REGIME_UNSTABLE"
+REASON_RISK_LIMIT = "RISK_LIMIT"
+REASON_LOCK_ACTIVE = "LOCK_ACTIVE"
+REASON_BROKER_DISABLED = "BROKER_DISABLED"
+REASON_NO_STRATEGY_QUALIFIED = "NO_STRATEGY_QUALIFIED"
+REASON_MANUAL_REVIEW_REQUIRED = "MANUAL_REVIEW_REQUIRED"
 
 NODE_N1_MARKET_OPEN = "N1_MARKET_OPEN"
 NODE_N2_FEED_FRESH = "N2_FEED_FRESH"
@@ -18,52 +33,120 @@ NODE_N5_REGIME_OK = "N5_REGIME_OK"
 NODE_N6_RISK_OK = "N6_RISK_OK"
 NODE_N7_GOVERNANCE_LOCKS_OK = "N7_GOVERNANCE_LOCKS_OK"
 NODE_N8_STRATEGY_SELECT = "N8_STRATEGY_SELECT"
-NODE_N9_FINAL_DECISION = "N9_FINAL_DECISION"
+NODE_N9_STRATEGY_ELIGIBLE = "N9_STRATEGY_ELIGIBLE"
+NODE_N10_DECISION_READY = "N10_DECISION_READY"
+NODE_N11_FINAL_DECISION = "N11_FINAL_DECISION"
+# Backward-compat export. Existing callsites/tests import NODE_N9_FINAL_DECISION.
+NODE_N9_FINAL_DECISION = NODE_N11_FINAL_DECISION
+
+_LINEAR_NODE_ORDER = (
+    NODE_N1_MARKET_OPEN,
+    NODE_N2_FEED_FRESH,
+    NODE_N3_WARMUP_DONE,
+    NODE_N4_QUOTE_OK,
+    NODE_N5_REGIME_OK,
+    NODE_N6_RISK_OK,
+    NODE_N7_GOVERNANCE_LOCKS_OK,
+    NODE_N8_STRATEGY_SELECT,
+    NODE_N9_STRATEGY_ELIGIBLE,
+    NODE_N10_DECISION_READY,
+    NODE_N11_FINAL_DECISION,
+)
 
 
-@dataclass(frozen=True)
-class FeedHealthSnapshot:
-    ltp_age_sec: Optional[float]
-    depth_age_sec: Optional[float]
-    is_fresh: bool
-    ts_epoch: float
-    source: str
+def _to_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        v = float(value)
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
+    except Exception:
+        return None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "ltp_age_sec": self.ltp_age_sec,
-            "depth_age_sec": self.depth_age_sec,
-            "is_fresh": self.is_fresh,
-            "ts_epoch": self.ts_epoch,
-            "source": self.source,
-        }
+
+def _to_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    sval = str(value).strip().lower()
+    if sval in {"1", "true", "yes", "y", "on"}:
+        return True
+    if sval in {"0", "false", "no", "n", "off"}:
+        return False
+    return bool(default)
+
+
+def _normalized_mode(raw_mode: Any) -> str:
+    return str(raw_mode or getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+
+
+def _is_index_symbol(symbol: str, instrument: str | None = None) -> bool:
+    inst = str(instrument or "").upper()
+    if inst == "INDEX":
+        return True
+    return str(symbol or "").upper() in {"NIFTY", "BANKNIFTY", "SENSEX"}
+
+
+def _to_immutable_mapping(data: Mapping[str, Any]) -> Mapping[str, Any]:
+    try:
+        return MappingProxyType(copy.deepcopy(dict(data)))
+    except Exception:
+        return MappingProxyType(dict(data))
+
+
+def _clean_reasons(reasons: Sequence[Any] | None) -> tuple[str, ...]:
+    out: list[str] = []
+    for raw in reasons or ():
+        text = str(raw or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return tuple(out)
+
+
+def _synth_index_bid_ask(ltp: float) -> tuple[float, float]:
+    spread = max(float(ltp) * 0.00005, 0.5)
+    spread = min(spread, 5.0)
+    half = spread / 2.0
+    return round(float(ltp) - half, 4), round(float(ltp) + half, 4)
 
 
 @dataclass(frozen=True)
 class MarketSnapshot:
     symbol: str
-    instrument: str
-    execution_mode: str
     ts_epoch: float
+    mode: str
     market_open: bool
-    ltp: Optional[float]
-    ltp_source: str
-    ltp_ts_epoch: Optional[float]
-    bid: Optional[float]
-    ask: Optional[float]
-    quote_ok: bool
-    quote_source: str
+    ltp: float | None
+    ltp_ts_epoch: float | None
+    ltp_source: str | None
+    depth: Mapping[str, Any] | None
+    depth_ts_epoch: float | None
+    ohlc_bars_count: int
+    last_bar_ts_epoch: float | None
     indicators_ok: bool
     indicators_age_sec: float
-    indicator_stale_sec: float
-    system_state: str
-    warmup_reasons: Tuple[str, ...]
-    primary_regime: str
-    regime_probs_max: Optional[float]
-    regime_entropy: Optional[float]
-    unstable_reasons: Tuple[str, ...]
-    risk_halted: bool
-    feed_health: FeedHealthSnapshot
+    indicator_last_update_epoch: float | None
+    regime_probs: Mapping[str, float]
+    regime_entropy: float | None
+    regime_prob_max: float | None
+    primary_regime: str | None
+    unstable_reasons: tuple[str, ...]
+    risk_ok: bool
+    risk_reasons: tuple[str, ...]
+    governance_lock_active: bool
+    broker_enabled: bool
+    manual_review_required: bool
+    instrument: str
+    bid: float | None
+    ask: float | None
+    quote_ok_input: bool | None
+    quote_source_input: str | None
+    feed_health: Mapping[str, Any]
     raw_data: Mapping[str, Any]
 
 
@@ -71,409 +154,440 @@ class MarketSnapshot:
 class NodeResult:
     ok: bool
     value: Any = None
-    reasons: Tuple[str, ...] = field(default_factory=tuple)
+    reasons: tuple[str, ...] = ()
     facts: Mapping[str, Any] = field(default_factory=dict)
-
-    def to_dict(self, node: str) -> Dict[str, Any]:
-        return {
-            "node": node,
-            "ok": self.ok,
-            "value": self.value,
-            "reasons": list(self.reasons),
-            "facts": dict(self.facts or {}),
-        }
-
-
-@dataclass(frozen=True)
-class Decision:
-    symbol: str
-    ts_epoch: float
-    allowed: bool
-    primary_blocker: Optional[str]
-    blockers: Tuple[str, ...]
-    stage: str
-    selected_strategy: Optional[str]
-    risk_params: Mapping[str, Any]
-    facts: Mapping[str, Any]
-    explain: Tuple[Dict[str, Any], ...]
 
 
 @dataclass(frozen=True)
 class StrategyCandidate:
-    family: Optional[str]
-    allowed: bool
-    reasons: Tuple[str, ...] = field(default_factory=tuple)
+    family: str | None = None
+    allowed: bool = False
+    reasons: tuple[str, ...] = ()
     candidate_summary: Mapping[str, Any] = field(default_factory=dict)
+    risk_params: Mapping[str, Any] = field(default_factory=dict)
+    manual_review_required: bool = False
 
-    def to_summary(self) -> Dict[str, Any]:
-        summary = dict(self.candidate_summary or {})
-        summary.setdefault("family", self.family)
-        summary.setdefault("allowed", bool(self.allowed))
-        summary.setdefault("reasons", list(self.reasons))
-        return summary
 
-    @property
-    def actionable(self) -> bool:
-        return bool(self.allowed or self.family)
+@dataclass
+class Decision:
+    symbol: str
+    ts_epoch: float
+    allowed: bool
+    blockers: tuple[str, ...]
+    primary_blocker: str | None
+    stage: str
+    selected_strategy: str | None
+    risk_params: Mapping[str, Any]
+    facts: Mapping[str, Any]
+    explain: tuple[Mapping[str, Any], ...]
 
 
 @dataclass(frozen=True)
-class _NodeDef:
+class NodeSpec:
     name: str
-    deps: Tuple[str, ...]
-    fn: Callable[[MarketSnapshot, Mapping[str, Any]], NodeResult]
+    deps: tuple[str, ...]
+    fn: Callable[[MarketSnapshot, Mapping[str, Any], Mapping[str, NodeResult]], NodeResult]
 
 
-def _to_float(value: Any) -> Optional[float]:
-    try:
-        if value is None:
-            return None
-        out = float(value)
-    except Exception:
-        return None
-    if out != out:
-        return None
-    return out
-
-
-def _as_positive_float(value: Any) -> Optional[float]:
-    out = _to_float(value)
-    if out is None or out <= 0:
-        return None
-    return out
-
-
-def _uniq(values: Iterable[str]) -> Tuple[str, ...]:
-    out: list[str] = []
-    seen = set()
-    for raw in values:
-        val = str(raw or "").strip()
-        if not val or val in seen:
-            continue
-        seen.add(val)
-        out.append(val)
-    return tuple(out)
-
-
-def _as_strategy_candidate(raw: Any) -> Optional[StrategyCandidate]:
+def _normalize_candidate(raw: Any) -> StrategyCandidate:
     if isinstance(raw, StrategyCandidate):
         return raw
-    if raw is None:
-        return None
-    family = None
-    allowed = False
-    reasons: Sequence[str] = ()
-    candidate_summary: Mapping[str, Any] = {}
-    if isinstance(raw, Mapping):
-        family = raw.get("family")
-        allowed = bool(raw.get("allowed", False))
-        reasons = raw.get("reasons") or ()
-        candidate_summary = raw.get("candidate_summary") or {}
-    else:
-        family = getattr(raw, "family", None)
-        allowed = bool(getattr(raw, "allowed", False))
-        reasons = getattr(raw, "reasons", ()) or ()
-        candidate_summary = getattr(raw, "candidate_summary", {}) or {}
+    row = dict(raw or {})
+    candidate_summary = row.get("candidate_summary") if isinstance(row.get("candidate_summary"), Mapping) else {}
+    reasons = _clean_reasons(row.get("reasons") if isinstance(row.get("reasons"), Sequence) else ())
+    manual_review_required = _to_bool(
+        row.get("manual_review_required", candidate_summary.get("manual_review_required", False)),
+        default=False,
+    )
+    risk_params = row.get("risk_params") if isinstance(row.get("risk_params"), Mapping) else {}
+    family = row.get("family")
+    family_str = str(family).strip().upper() if family is not None else None
+    if not family_str:
+        family_str = None
+    allowed = _to_bool(row.get("allowed"), default=False)
     return StrategyCandidate(
-        family=str(family) if family is not None else None,
-        allowed=bool(allowed),
-        reasons=_uniq(reasons),
-        candidate_summary=MappingProxyType(dict(candidate_summary) if isinstance(candidate_summary, Mapping) else {}),
+        family=family_str,
+        allowed=allowed,
+        reasons=reasons,
+        candidate_summary=dict(candidate_summary),
+        risk_params=dict(risk_params),
+        manual_review_required=manual_review_required,
     )
 
 
-def _normalize_strategy_candidates(raw_candidates: Sequence[Any] | None) -> Tuple[StrategyCandidate, ...]:
+def _normalize_candidates(raw_candidates: Sequence[Any] | None) -> tuple[StrategyCandidate, ...]:
     out: list[StrategyCandidate] = []
-    for item in (raw_candidates or ()):
-        cand = _as_strategy_candidate(item)
-        if cand is None:
-            continue
-        out.append(cand)
+    for raw in raw_candidates or ():
+        out.append(_normalize_candidate(raw))
     return tuple(out)
 
 
-def _max_regime_prob(raw: Mapping[str, Any]) -> Optional[float]:
-    direct = _to_float(raw.get("regime_prob_max"))
-    if direct is not None:
-        return direct
-    probs = raw.get("regime_probs") or {}
-    if not isinstance(probs, Mapping):
-        return None
-    vals = [_to_float(v) for v in probs.values()]
-    vals = [v for v in vals if v is not None]
-    return max(vals) if vals else None
+def build_market_snapshot(
+    market_data: Mapping[str, Any] | MarketSnapshot,
+    *,
+    now_epoch: float | None = None,
+) -> MarketSnapshot:
+    if isinstance(market_data, MarketSnapshot):
+        return market_data
+    data = dict(market_data or {})
+    now_value = _to_float(now_epoch)
+    if now_value is None:
+        now_value = _to_float(data.get("timestamp"))
+    if now_value is None:
+        now_value = float(now_utc_epoch())
 
+    symbol = str(data.get("symbol") or "").upper() or "UNKNOWN"
+    mode = _normalized_mode(data.get("execution_mode"))
+    market_open = _to_bool(data.get("market_open"), default=False)
 
-def _compute_feed_health(raw: Mapping[str, Any], now_epoch: float, market_open: bool) -> FeedHealthSnapshot:
-    max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
-    ltp_ts_epoch = _to_float(raw.get("ltp_ts_epoch"))
-    ltp_age_sec = None if ltp_ts_epoch is None else max(0.0, now_epoch - ltp_ts_epoch)
-    depth_age_sec = _to_float(raw.get("depth_age_sec"))
-    if depth_age_sec is None:
-        feed = raw.get("feed_health") or {}
-        if isinstance(feed, Mapping):
-            depth_age_sec = _to_float(feed.get("depth_age_sec"))
-    # FEED_FRESH is strictly time-based.
-    is_fresh = (not market_open) or (ltp_age_sec is not None and ltp_age_sec <= max_ltp_age)
-    return FeedHealthSnapshot(
-        ltp_age_sec=ltp_age_sec,
-        depth_age_sec=depth_age_sec,
-        is_fresh=bool(is_fresh),
-        ts_epoch=now_epoch,
-        source=str(raw.get("ltp_source") or "unknown"),
-    )
+    ltp = _to_float(data.get("ltp"))
+    ltp_ts_epoch = _to_float(data.get("ltp_ts_epoch"))
+    if ltp_ts_epoch is None:
+        ltp_ts_epoch = _to_float(data.get("tick_last_epoch"))
+    ltp_source = str(data.get("ltp_source") or "").strip() or None
 
+    bid = _to_float(data.get("bid"))
+    ask = _to_float(data.get("ask"))
+    depth_raw = data.get("depth")
+    depth: Mapping[str, Any] | None
+    if isinstance(depth_raw, Mapping):
+        depth = dict(depth_raw)
+    else:
+        d: dict[str, Any] = {}
+        if bid is not None:
+            d["bid"] = bid
+        if ask is not None:
+            d["ask"] = ask
+        depth = d or None
 
-def build_market_snapshot(market_data: Mapping[str, Any], now_epoch: Optional[float] = None) -> MarketSnapshot:
-    raw = dict(market_data or {})
-    symbol = str(raw.get("symbol") or "").upper()
-    execution_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
-    ts_epoch = _to_float(now_epoch if now_epoch is not None else raw.get("timestamp")) or now_utc_epoch()
-    market_open = bool(raw.get("market_open")) if "market_open" in raw else bool(is_market_open_ist())
-    instrument = str(raw.get("instrument") or "").upper()
-    if not instrument:
-        instrument = "INDEX" if symbol in INDEX_SYMBOLS else "OPT"
+    depth_ts_epoch = _to_float(data.get("depth_ts_epoch"))
+    if depth_ts_epoch is None:
+        depth_ts_epoch = _to_float(data.get("depth_last_epoch"))
+    depth_age_from_row = _to_float(data.get("depth_age_sec"))
+    if depth_ts_epoch is None and depth_age_from_row is not None:
+        depth_ts_epoch = max(0.0, float(now_value) - float(depth_age_from_row))
 
-    indicator_stale_sec = float(getattr(cfg, "INDICATOR_STALE_SEC", 120))
-    indicators_age = _to_float(raw.get("indicators_age_sec"))
-    if indicators_age is None:
-        last_upd = _to_float(raw.get("indicator_last_update_epoch"))
-        if last_upd is not None:
-            indicators_age = max(0.0, ts_epoch - last_upd)
+    ohlc_bars_count_raw = data.get("ohlc_bars_count")
+    try:
+        ohlc_bars_count = int(ohlc_bars_count_raw) if ohlc_bars_count_raw is not None else 0
+    except Exception:
+        ohlc_bars_count = 0
+    last_bar_ts_epoch = _to_float(data.get("last_bar_ts_epoch"))
+    if last_bar_ts_epoch is None:
+        last_bar_ts_epoch = _to_float(data.get("ohlc_last_bar_epoch"))
+
+    indicator_last_update_epoch = _to_float(data.get("indicator_last_update_epoch"))
+    indicators_ok = _to_bool(data.get("indicators_ok"), default=False)
+    indicators_age_sec = _to_float(data.get("indicators_age_sec"))
+    never_computed_age = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
+    if indicators_age_sec is None:
+        if indicator_last_update_epoch is not None:
+            indicators_age_sec = max(0.0, float(now_value) - float(indicator_last_update_epoch))
         else:
-            indicators_age = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
+            indicators_age_sec = never_computed_age
 
-    warmup_reasons = _uniq(raw.get("warmup_reasons") or [])
-    feed_health = _compute_feed_health(raw=raw, now_epoch=ts_epoch, market_open=market_open)
+    regime_probs_raw = data.get("regime_probs") if isinstance(data.get("regime_probs"), Mapping) else {}
+    regime_probs: dict[str, float] = {}
+    for key, value in regime_probs_raw.items():
+        fv = _to_float(value)
+        if fv is not None:
+            regime_probs[str(key)] = fv
+    regime_prob_max = _to_float(data.get("regime_prob_max"))
+    if regime_prob_max is None:
+        regime_prob_max = _to_float(data.get("regime_probs_max"))
+    if regime_prob_max is None and regime_probs:
+        regime_prob_max = max(regime_probs.values())
+    regime_entropy = _to_float(data.get("regime_entropy"))
+    primary_regime = str(data.get("primary_regime") or data.get("regime") or "").upper() or None
+    unstable_reasons = _clean_reasons(data.get("unstable_reasons") if isinstance(data.get("unstable_reasons"), Sequence) else ())
+    if _to_bool(data.get("unstable_regime_flag"), default=False) and "legacy_unstable_flag" not in unstable_reasons:
+        unstable_reasons = tuple(list(unstable_reasons) + ["legacy_unstable_flag"])
+
+    risk_ok_raw = data.get("risk_ok")
+    if risk_ok_raw is None:
+        risk_ok = not _to_bool(data.get("risk_limit"), default=False) and not _to_bool(data.get("risk_halt_active"), default=False)
+    else:
+        risk_ok = _to_bool(risk_ok_raw, default=True)
+    risk_reasons = _clean_reasons(data.get("risk_reasons") if isinstance(data.get("risk_reasons"), Sequence) else ())
+    if (not risk_ok) and (REASON_RISK_LIMIT not in risk_reasons):
+        risk_reasons = tuple(list(risk_reasons) + [REASON_RISK_LIMIT])
+
+    governance_lock_active = _to_bool(
+        data.get("governance_lock_active", data.get("lock_active", data.get("wf_lock_active", False))),
+        default=False,
+    )
+    if "wf_lock" in str(data.get("gate_reasons", "")).lower():
+        governance_lock_active = True
+    broker_enabled = _to_bool(data.get("broker_enabled"), default=True) and (not _to_bool(data.get("broker_disabled"), default=False))
+    manual_review_required = _to_bool(data.get("manual_review_required", data.get("review_required", False)), default=False)
+
+    instrument = str(data.get("instrument") or data.get("instrument_type") or "").upper() or "OPT"
+    quote_ok_input: bool | None
+    if "quote_ok" in data:
+        quote_ok_input = _to_bool(data.get("quote_ok"), default=False)
+    else:
+        quote_ok_input = None
+    quote_source_input = str(data.get("quote_source") or "").strip() or None
+
+    max_ltp_age = _to_float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", None))
+    if max_ltp_age is None:
+        max_ltp_age = _to_float(getattr(cfg, "MAX_LTP_AGE_SEC", 2.5))
+    if max_ltp_age is None:
+        max_ltp_age = 2.5
+    if ltp_ts_epoch is None:
+        ltp_age_sec = float("inf")
+    else:
+        ltp_age_sec = max(0.0, float(now_value) - float(ltp_ts_epoch))
+    if depth_ts_epoch is None:
+        depth_age_sec = depth_age_from_row
+    else:
+        depth_age_sec = max(0.0, float(now_value) - float(depth_ts_epoch))
+    feed_health = {
+        "ltp_age_sec": ltp_age_sec,
+        "depth_age_sec": depth_age_sec,
+        "is_fresh": bool(ltp is not None and ltp > 0 and ltp_age_sec <= float(max_ltp_age)),
+        "source": ltp_source or "unknown",
+        "ts_epoch": float(now_value),
+    }
 
     return MarketSnapshot(
         symbol=symbol,
-        instrument=instrument,
-        execution_mode=execution_mode,
-        ts_epoch=ts_epoch,
+        ts_epoch=float(now_value),
+        mode=mode,
         market_open=market_open,
-        ltp=_to_float(raw.get("ltp")),
-        ltp_source=str(raw.get("ltp_source") or "none"),
-        ltp_ts_epoch=_to_float(raw.get("ltp_ts_epoch")),
-        bid=_as_positive_float(raw.get("bid")),
-        ask=_as_positive_float(raw.get("ask")),
-        quote_ok=bool(raw.get("quote_ok", False)),
-        quote_source=str(raw.get("quote_source") or "none"),
-        indicators_ok=bool(raw.get("indicators_ok", False)),
-        indicators_age_sec=float(indicators_age),
-        indicator_stale_sec=indicator_stale_sec,
-        system_state=str(raw.get("system_state") or "READY").upper(),
-        warmup_reasons=tuple(warmup_reasons),
-        primary_regime=str(raw.get("primary_regime") or raw.get("regime") or "UNKNOWN").upper(),
-        regime_probs_max=_max_regime_prob(raw),
-        regime_entropy=_to_float(raw.get("regime_entropy")),
-        unstable_reasons=_uniq(raw.get("unstable_reasons") or []),
-        risk_halted=bool(risk_halt.is_halted()),
-        feed_health=feed_health,
-        raw_data=MappingProxyType(raw),
+        ltp=ltp,
+        ltp_ts_epoch=ltp_ts_epoch,
+        ltp_source=ltp_source,
+        depth=depth,
+        depth_ts_epoch=depth_ts_epoch,
+        ohlc_bars_count=max(0, int(ohlc_bars_count)),
+        last_bar_ts_epoch=last_bar_ts_epoch,
+        indicators_ok=indicators_ok,
+        indicators_age_sec=float(indicators_age_sec),
+        indicator_last_update_epoch=indicator_last_update_epoch,
+        regime_probs=MappingProxyType(regime_probs),
+        regime_entropy=regime_entropy,
+        regime_prob_max=regime_prob_max,
+        primary_regime=primary_regime,
+        unstable_reasons=unstable_reasons,
+        risk_ok=risk_ok,
+        risk_reasons=risk_reasons,
+        governance_lock_active=governance_lock_active,
+        broker_enabled=broker_enabled,
+        manual_review_required=manual_review_required,
+        instrument=instrument,
+        bid=bid,
+        ask=ask,
+        quote_ok_input=quote_ok_input,
+        quote_source_input=quote_source_input,
+        feed_health=MappingProxyType(feed_health),
+        raw_data=_to_immutable_mapping(data),
     )
 
 
-def _has_bid_ask(snapshot: MarketSnapshot) -> bool:
-    return snapshot.bid is not None and snapshot.ask is not None and snapshot.ask >= snapshot.bid
-
-
-def _synth_index_bid_ask(ltp: float) -> Tuple[float, float]:
-    spread = max(ltp * 0.00005, 0.5)
-    half = spread / 2.0
-    return round(ltp - half, 4), round(ltp + half, 4)
-
-
-def _node_n1_market_open(snapshot: MarketSnapshot, _ctx: Mapping[str, Any]) -> NodeResult:
+def _node_market_open(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     if snapshot.market_open:
-        return NodeResult(ok=True, value=True, reasons=(), facts=MappingProxyType({"market_open": True}))
-    return NodeResult(ok=False, value=False, reasons=("MARKET_CLOSED",), facts=MappingProxyType({"market_open": False}))
+        return NodeResult(ok=True, facts={"market_open": True})
+    return NodeResult(ok=False, reasons=(REASON_MARKET_CLOSED,), facts={"market_open": False})
 
 
-def _node_n2_feed_fresh(snapshot: MarketSnapshot, _ctx: Mapping[str, Any]) -> NodeResult:
-    # FEED_STALE is exclusively based on snapshot.feed_health.is_fresh.
-    if not snapshot.market_open:
-        return NodeResult(ok=True, value=True, reasons=(), facts=MappingProxyType(snapshot.feed_health.to_dict()))
-    if snapshot.feed_health.is_fresh:
-        return NodeResult(ok=True, value=True, reasons=(), facts=MappingProxyType(snapshot.feed_health.to_dict()))
-    return NodeResult(
-        ok=False,
-        value=False,
-        reasons=("FEED_STALE",),
-        facts=MappingProxyType(snapshot.feed_health.to_dict()),
-    )
+def _node_feed_fresh(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    feed = dict(snapshot.feed_health or {})
+    if bool(feed.get("is_fresh")):
+        return NodeResult(ok=True, facts=feed)
+    return NodeResult(ok=False, reasons=(REASON_FEED_STALE,), facts=feed)
 
 
-def _node_n3_warmup_done(snapshot: MarketSnapshot, _ctx: Mapping[str, Any]) -> NodeResult:
+def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     reasons: list[str] = []
-    if snapshot.system_state == "WARMUP":
-        reasons.append("WARMUP_INCOMPLETE")
-    if (not snapshot.indicators_ok) or (snapshot.indicators_age_sec > snapshot.indicator_stale_sec):
-        reasons.append("INDICATORS_MISSING")
-    return NodeResult(
-        ok=len(_uniq(reasons)) == 0,
-        reasons=_uniq(reasons),
-        facts=MappingProxyType(
-            {
-                "system_state": snapshot.system_state,
-                "warmup_reasons": list(snapshot.warmup_reasons),
-                "indicators_ok": snapshot.indicators_ok,
-                "indicators_age_sec": snapshot.indicators_age_sec,
-                "indicator_stale_sec": snapshot.indicator_stale_sec,
-            }
-        ),
-    )
+    warmup_reasons = _clean_reasons(snapshot.raw_data.get("warmup_reasons") if isinstance(snapshot.raw_data.get("warmup_reasons"), Sequence) else ())
+    system_state = str(snapshot.raw_data.get("system_state") or "READY").upper()
+    min_bars_cfg = int(getattr(cfg, "WARMUP_MIN_BARS", 50))
+    min_bars = int(snapshot.raw_data.get("warmup_min_bars") or min_bars_cfg)
+    indicator_stale_sec = float(getattr(cfg, "INDICATOR_STALE_SEC", 120.0))
+    never_computed_age = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
+    has_explicit_bar_contract = ("ohlc_bars_count" in snapshot.raw_data) or ("warmup_min_bars" in snapshot.raw_data)
+
+    if system_state == "WARMUP":
+        reasons.append(REASON_WARMUP_INCOMPLETE)
+    if (system_state == "WARMUP") or has_explicit_bar_contract:
+        if snapshot.ohlc_bars_count < min_bars:
+            reasons.append(REASON_WARMUP_INCOMPLETE)
+    if not snapshot.indicators_ok:
+        reasons.append(REASON_INDICATORS_MISSING)
+    elif snapshot.indicators_age_sec >= never_computed_age:
+        reasons.append(REASON_INDICATORS_MISSING)
+    if snapshot.indicators_age_sec > indicator_stale_sec:
+        reasons.append(REASON_WARMUP_INCOMPLETE)
+
+    reasons_tuple = _clean_reasons(reasons)
+    facts = {
+        "system_state": system_state,
+        "warmup_reasons": list(warmup_reasons),
+        "min_bars": min_bars,
+        "ohlc_bars_count": snapshot.ohlc_bars_count,
+        "indicator_last_update_epoch": snapshot.indicator_last_update_epoch,
+        "indicator_stale_sec": indicator_stale_sec,
+        "never_computed_age": never_computed_age,
+        "indicators_age_sec": snapshot.indicators_age_sec,
+        "indicators_ok": snapshot.indicators_ok,
+    }
+    return NodeResult(ok=not bool(reasons_tuple), reasons=reasons_tuple, facts=facts)
 
 
-def _node_n4_quote_ok(snapshot: MarketSnapshot, _ctx: Mapping[str, Any]) -> NodeResult:
-    if not snapshot.market_open:
-        return NodeResult(
-            ok=True,
-            value={"quote_ok": True, "quote_source": "offhours"},
-            reasons=(),
-            facts=MappingProxyType({"instrument": snapshot.instrument, "quote_source": "offhours"}),
-        )
+def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    symbol = snapshot.symbol
+    mode = snapshot.mode
+    is_index = _is_index_symbol(symbol, snapshot.instrument)
 
-    is_index = snapshot.instrument == "INDEX"
     if is_index:
-        if _has_bid_ask(snapshot):
-            bid = float(snapshot.bid)
-            ask = float(snapshot.ask)
-            return NodeResult(
-                ok=True,
-                value={"bid": bid, "ask": ask, "mid": (bid + ask) / 2.0, "quote_source": "depth"},
-                reasons=(),
-                facts=MappingProxyType({"instrument": "INDEX", "quote_source": "depth"}),
-            )
-        if snapshot.ltp is not None and snapshot.ltp > 0:
-            mid = float(snapshot.ltp)
-            if snapshot.execution_mode in {"SIM", "PAPER"}:
-                bid, ask = _synth_index_bid_ask(mid)
-                return NodeResult(
-                    ok=True,
-                    value={"bid": bid, "ask": ask, "mid": mid, "quote_source": "synthetic_index"},
-                    reasons=(),
-                    facts=MappingProxyType({"instrument": "INDEX", "quote_source": "synthetic_index"}),
-                )
-            # LIVE: no depth requirement for indices, use ltp mid.
-            return NodeResult(
-                ok=True,
-                value={"bid": None, "ask": None, "mid": mid, "quote_source": "ltp_mid"},
-                reasons=(),
-                facts=MappingProxyType({"instrument": "INDEX", "quote_source": "ltp_mid"}),
-            )
-        return NodeResult(
-            ok=False,
-            value={"quote_source": "missing_depth_or_ltp"},
-            reasons=("QUOTE_INVALID",),
-            facts=MappingProxyType({"instrument": "INDEX", "quote_source": "missing_depth_or_ltp"}),
-        )
+        resolved = resolve_index_quote(symbol=symbol, mode=mode, ltp=snapshot.ltp, depth=snapshot.depth)
+        facts = {
+            "quote_source": resolved.get("quote_source"),
+            "bid": resolved.get("bid"),
+            "ask": resolved.get("ask"),
+            "mid": resolved.get("mid"),
+            "mode": mode,
+            "instrument": snapshot.instrument,
+        }
+        if bool(resolved.get("quote_ok")):
+            return NodeResult(ok=True, value=resolved, facts=facts)
+        return NodeResult(ok=False, reasons=(REASON_QUOTE_INVALID,), facts=facts)
 
-    # OPTIONS: LIVE requires bid+ask. Never synthesize option bid/ask.
-    if snapshot.instrument == "OPT" and snapshot.execution_mode == "LIVE":
-        if _has_bid_ask(snapshot):
-            bid = float(snapshot.bid)
-            ask = float(snapshot.ask)
-            return NodeResult(
-                ok=True,
-                value={"bid": bid, "ask": ask, "mid": (bid + ask) / 2.0, "quote_source": snapshot.quote_source},
-                reasons=(),
-                facts=MappingProxyType({"instrument": "OPT", "quote_source": snapshot.quote_source}),
-            )
-        return NodeResult(
-            ok=False,
-            value={"quote_source": snapshot.quote_source or "missing_depth"},
-            reasons=("QUOTE_INVALID",),
-            facts=MappingProxyType({"instrument": "OPT", "quote_source": snapshot.quote_source or "missing_depth"}),
-        )
+    bid = snapshot.bid
+    ask = snapshot.ask
+    valid_depth_bidask = bool(
+        bid is not None
+        and ask is not None
+        and bid > 0
+        and ask > 0
+        and ask >= bid
+    )
+    if snapshot.quote_ok_input is not None:
+        quote_ok = bool(snapshot.quote_ok_input and valid_depth_bidask)
+    else:
+        quote_ok = valid_depth_bidask
+    quote_source = snapshot.quote_source_input or ("depth" if valid_depth_bidask else "missing_depth")
+    facts = {
+        "quote_source": quote_source,
+        "bid": bid,
+        "ask": ask,
+        "mid": ((bid + ask) / 2.0 if valid_depth_bidask else None),
+        "mode": mode,
+        "instrument": snapshot.instrument,
+    }
+    if quote_ok:
+        return NodeResult(ok=True, facts=facts)
+    return NodeResult(ok=False, reasons=(REASON_QUOTE_INVALID,), facts=facts)
 
-    # Non-LIVE options still require quote_ok but no synthetic option quotes are ever generated here.
-    if snapshot.quote_ok:
-        return NodeResult(
-            ok=True,
-            value={"bid": snapshot.bid, "ask": snapshot.ask, "quote_source": snapshot.quote_source},
-            reasons=(),
-            facts=MappingProxyType({"instrument": snapshot.instrument, "quote_source": snapshot.quote_source}),
-        )
+
+def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    reasons: list[str] = []
+    unstable_reasons = list(snapshot.unstable_reasons)
+    primary_regime = str(snapshot.primary_regime or "UNKNOWN").upper()
+    if primary_regime in {"", "NONE", "UNKNOWN", "NULL"}:
+        reasons.append(REASON_REGIME_UNKNOWN)
+
+    live_mode = snapshot.mode == "LIVE"
+    regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
+    regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
+    if (not live_mode) and bool(getattr(cfg, "PAPER_RELAX_GATES", True)):
+        regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
+        regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
+
+    if snapshot.regime_prob_max is not None and float(snapshot.regime_prob_max) < regime_prob_min:
+        unstable_reasons.append("prob_too_low")
+    if snapshot.regime_entropy is not None and float(snapshot.regime_entropy) > regime_entropy_max:
+        unstable_reasons.append("entropy_too_high")
+
+    # Strongly deterministic regime with clean indicators should not be marked unstable.
+    if (
+        snapshot.regime_prob_max is not None
+        and snapshot.regime_entropy is not None
+        and float(snapshot.regime_prob_max) >= 0.99
+        and float(snapshot.regime_entropy) <= 0.01
+        and snapshot.indicators_ok
+    ):
+        unstable_reasons = [r for r in unstable_reasons if r not in {"prob_too_low", "entropy_too_high"}]
+
+    unstable_reasons = list(_clean_reasons(unstable_reasons))
+    if unstable_reasons:
+        reasons.append(REASON_REGIME_UNSTABLE)
+
+    reasons_tuple = _clean_reasons(reasons)
+    facts = {
+        "primary_regime": primary_regime,
+        "regime_prob_max": snapshot.regime_prob_max,
+        "regime_entropy": snapshot.regime_entropy,
+        "unstable_reasons": unstable_reasons,
+        "regime_prob_min": regime_prob_min,
+        "regime_entropy_max": regime_entropy_max,
+    }
+    return NodeResult(ok=not bool(reasons_tuple), reasons=reasons_tuple, facts=facts)
+
+
+def _node_risk_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    if snapshot.risk_ok:
+        return NodeResult(ok=True, facts={"risk_ok": True, "risk_reasons": list(snapshot.risk_reasons)})
+    reasons = list(snapshot.risk_reasons) or [REASON_RISK_LIMIT]
+    if REASON_RISK_LIMIT not in reasons:
+        reasons.append(REASON_RISK_LIMIT)
     return NodeResult(
         ok=False,
-        value={"quote_source": snapshot.quote_source or "none"},
-        reasons=("QUOTE_INVALID",),
-        facts=MappingProxyType({"instrument": snapshot.instrument, "quote_source": snapshot.quote_source or "none"}),
+        reasons=_clean_reasons(reasons),
+        facts={"risk_ok": False, "risk_reasons": list(snapshot.risk_reasons)},
     )
 
 
-def _node_n5_regime_ok(snapshot: MarketSnapshot, _ctx: Mapping[str, Any]) -> NodeResult:
+def _node_governance_locks_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     reasons: list[str] = []
-    if snapshot.primary_regime in {"", "NONE", "UNKNOWN"}:
-        reasons.append("REGIME_UNKNOWN")
-    if snapshot.unstable_reasons:
-        reasons.append("REGIME_UNSTABLE")
+    if snapshot.governance_lock_active:
+        reasons.append(REASON_LOCK_ACTIVE)
+    if not snapshot.broker_enabled:
+        reasons.append(REASON_BROKER_DISABLED)
+    reasons_tuple = _clean_reasons(reasons)
     return NodeResult(
-        ok=len(_uniq(reasons)) == 0,
-        reasons=_uniq(reasons),
-        facts=MappingProxyType(
-            {
-                "primary_regime": snapshot.primary_regime,
-                "regime_probs_max": snapshot.regime_probs_max,
-                "regime_entropy": snapshot.regime_entropy,
-                "unstable_reasons": list(snapshot.unstable_reasons),
-            }
-        ),
+        ok=not bool(reasons_tuple),
+        reasons=reasons_tuple,
+        facts={
+            "governance_lock_active": snapshot.governance_lock_active,
+            "broker_enabled": snapshot.broker_enabled,
+        },
     )
 
 
-def _node_n6_risk_ok(snapshot: MarketSnapshot, _ctx: Mapping[str, Any]) -> NodeResult:
-    raw = snapshot.raw_data
-    risk_ok = bool(raw.get("risk_ok", True))
-    risk_limit_hit = bool(raw.get("risk_limit_hit", False))
-    risk_mode = str(raw.get("risk_state_mode") or raw.get("risk_mode") or "").upper()
-    blocked = (not risk_ok) or risk_limit_hit or (risk_mode == "HARD_HALT")
-    return NodeResult(
-        ok=not blocked,
-        reasons=("RISK_LIMIT",) if blocked else (),
-        facts=MappingProxyType(
-            {
-                "risk_ok": risk_ok,
-                "risk_limit_hit": risk_limit_hit,
-                "risk_state_mode": risk_mode,
-            }
-        ),
-    )
+def _pick_actionable_candidate(candidates: Sequence[StrategyCandidate]) -> StrategyCandidate | None:
+    for candidate in candidates:
+        if candidate.family or candidate.allowed:
+            return candidate
+    return None
 
 
-def _node_n7_governance_locks_ok(snapshot: MarketSnapshot, _ctx: Mapping[str, Any]) -> NodeResult:
-    raw = snapshot.raw_data
+def _candidate_summary(candidate: StrategyCandidate | None) -> dict[str, Any]:
+    if candidate is None:
+        return {}
+    summary = dict(candidate.candidate_summary or {})
+    summary.setdefault("family", candidate.family)
+    summary.setdefault("allowed", bool(candidate.allowed))
+    summary.setdefault("reasons", list(candidate.reasons))
+    return summary
+
+
+def _collect_failed_deps(deps: Mapping[str, NodeResult], dep_order: Sequence[str]) -> tuple[list[str], list[str]]:
+    failures: list[str] = []
     reasons: list[str] = []
-    lock_active = bool(
-        snapshot.risk_halted
-        or raw.get("lock_active", False)
-        or raw.get("wf_lock_active", False)
-        or raw.get("governance_lock_active", False)
-    )
-    if lock_active:
-        reasons.append("LOCK_ACTIVE")
-
-    broker_enabled_raw = raw.get("broker_enabled")
-    if broker_enabled_raw is None:
-        broker_enabled = bool(raw.get("kite_use_api", getattr(cfg, "KITE_USE_API", True)))
-    else:
-        broker_enabled = bool(broker_enabled_raw)
-    if snapshot.execution_mode == "LIVE" and not broker_enabled:
-        reasons.append("BROKER_DISABLED")
-
-    return NodeResult(
-        ok=len(_uniq(reasons)) == 0,
-        reasons=_uniq(reasons),
-        facts=MappingProxyType({"lock_active": lock_active, "broker_enabled": broker_enabled}),
-    )
+    for dep_name in dep_order:
+        dep_result = deps.get(dep_name)
+        if dep_result is None or dep_result.ok:
+            continue
+        failures.append(dep_name)
+        for reason in dep_result.reasons:
+            if reason not in reasons:
+                reasons.append(reason)
+    return failures, reasons
 
 
-def _node_n8_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any]) -> NodeResult:
-    deps = ctx["deps"]
-    all_node_results = ctx.get("all_node_results") or {}
-    strategy_candidates = tuple(ctx.get("strategy_candidates") or ())
-
+def _node_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     precondition_nodes = (
         NODE_N1_MARKET_OPEN,
         NODE_N2_FEED_FRESH,
@@ -483,251 +597,249 @@ def _node_n8_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any]) -
         NODE_N6_RISK_OK,
         NODE_N7_GOVERNANCE_LOCKS_OK,
     )
-    precondition_failures: list[str] = []
-    for name in precondition_nodes:
-        dep = all_node_results.get(name) or deps.get(name)
-        if dep is None or not dep.ok:
-            precondition_failures.append(name)
-    if precondition_failures:
-        precondition_reasons: list[str] = []
-        for name in precondition_failures:
-            dep = all_node_results.get(name) or deps.get(name)
-            if dep is None:
-                continue
-            precondition_reasons.extend(list(dep.reasons))
-        precondition_reasons = list(_uniq(precondition_reasons))
-        candidate_summary: Dict[str, Any] = {}
-        actionable_candidates = [cand for cand in strategy_candidates if cand.actionable]
-        if actionable_candidates:
-            candidate_summary = actionable_candidates[0].to_summary()
-        return NodeResult(
-            ok=True,
-            value={"selected_strategy": None},
-            reasons=(),
-            facts=MappingProxyType(
-                {
-                    "strategy_skipped_due_to_preconditions": True,
-                    "precondition_failures": precondition_failures,
-                    "precondition_reasons": precondition_reasons,
-                    "candidate_summary": candidate_summary,
-                }
-            ),
-        )
-
-    if not strategy_candidates:
-        return NodeResult(
-            ok=False,
-            reasons=("NO_STRATEGY_QUALIFIED",),
-            facts=MappingProxyType({"strategy_candidates_missing": True}),
-        )
-
-    chosen = next((cand for cand in strategy_candidates if cand.allowed), None)
-    if chosen is not None:
-        return NodeResult(
-            ok=True,
-            value={"selected_strategy": chosen.family},
-            reasons=(),
-            facts=MappingProxyType(
-                {
-                    "gate_family": chosen.family,
-                    "gate_reasons": list(chosen.reasons),
-                    "candidate_summary": chosen.to_summary(),
-                }
-            ),
-        )
-
-    gate_reasons: list[str] = []
-    for cand in strategy_candidates:
-        gate_reasons.extend(list(cand.reasons))
-    gate_reasons = list(_uniq(gate_reasons))
-    manual_review = bool(snapshot.raw_data.get("manual_review_required", False)) or any("manual_review" in r.lower() for r in gate_reasons)
-    reason = "MANUAL_REVIEW_REQUIRED" if manual_review else "NO_STRATEGY_QUALIFIED"
-    return NodeResult(
-        ok=False,
-        value={"selected_strategy": None},
-        reasons=(reason,),
-        facts=MappingProxyType(
-            {
-                "gate_family": None,
-                "gate_reasons": gate_reasons,
-                "candidate_count": len(strategy_candidates),
-            }
-        ),
-    )
-
-
-def _node_n9_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any]) -> NodeResult:
-    deps = ctx["deps"]
-    all_node_results = ctx.get("all_node_results") or {}
-    blockers: list[str] = []
-    for name in (
-        NODE_N1_MARKET_OPEN,
-        NODE_N2_FEED_FRESH,
-        NODE_N3_WARMUP_DONE,
-        NODE_N4_QUOTE_OK,
-        NODE_N5_REGIME_OK,
-        NODE_N6_RISK_OK,
-        NODE_N7_GOVERNANCE_LOCKS_OK,
-        NODE_N8_STRATEGY_SELECT,
-    ):
-        dep = all_node_results.get(name) or deps.get(name)
-        if dep is None:
-            continue
-        blockers.extend(list(dep.reasons))
-    blockers_tuple = _uniq(blockers)
-    selected_strategy = None
-    n8_val = deps[NODE_N8_STRATEGY_SELECT].value
-    if isinstance(n8_val, Mapping):
-        selected_strategy = n8_val.get("selected_strategy")
-
-    stage = NODE_N9_FINAL_DECISION
-    primary_blocker = None
-    for name in (
-        NODE_N1_MARKET_OPEN,
-        NODE_N2_FEED_FRESH,
-        NODE_N3_WARMUP_DONE,
-        NODE_N4_QUOTE_OK,
-        NODE_N5_REGIME_OK,
-        NODE_N6_RISK_OK,
-        NODE_N7_GOVERNANCE_LOCKS_OK,
-        NODE_N8_STRATEGY_SELECT,
-    ):
-        dep = all_node_results.get(name) or deps.get(name)
-        if dep is not None and not dep.ok:
-            stage = name
-            primary_blocker = dep.reasons[0] if dep.reasons else name
-            break
-
-    risk_params = {
-        "size_mult": snapshot.raw_data.get("size_mult"),
-        "risk_multiplier": snapshot.raw_data.get("risk_multiplier"),
+    cached_results = ctx.get("cache") if isinstance(ctx, Mapping) else None
+    if not isinstance(cached_results, Mapping):
+        cached_results = deps
+    precondition_failures, precondition_reasons = _collect_failed_deps(cached_results, precondition_nodes)
+    candidates = tuple(ctx.get("strategy_candidates") or ())
+    candidate = _pick_actionable_candidate(candidates)
+    candidate_summary = _candidate_summary(candidate)
+    facts: dict[str, Any] = {
+        "strategy_skipped_due_to_preconditions": bool(precondition_failures),
+        "precondition_failures": list(precondition_failures),
+        "precondition_reasons": list(precondition_reasons),
+        "candidate_summary": candidate_summary if candidate_summary else {},
     }
 
+    if precondition_failures:
+        return NodeResult(ok=True, reasons=(), facts=facts)
+
+    if candidate is None:
+        facts["strategy_reasons"] = []
+        return NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts=facts)
+
+    facts["strategy_reasons"] = list(candidate.reasons)
+    if snapshot.manual_review_required or candidate.manual_review_required:
+        return NodeResult(ok=False, reasons=(REASON_MANUAL_REVIEW_REQUIRED,), facts=facts)
+
+    if not candidate.allowed or not candidate.family:
+        has_manual_reason = any("manual_review" in reason.lower() for reason in candidate.reasons)
+        reason = REASON_MANUAL_REVIEW_REQUIRED if has_manual_reason else REASON_NO_STRATEGY_QUALIFIED
+        return NodeResult(ok=False, reasons=(reason,), facts=facts)
+
     return NodeResult(
-        ok=(len(blockers_tuple) == 0),
-        value={
-            "symbol": snapshot.symbol,
-            "ts_epoch": snapshot.ts_epoch,
-            "allowed": len(blockers_tuple) == 0,
-            "primary_blocker": primary_blocker,
-            "blockers": list(blockers_tuple),
-            "stage": stage,
-            "selected_strategy": selected_strategy,
-            "risk_params": risk_params,
-        },
-        reasons=blockers_tuple,
-        facts=MappingProxyType(
-            {
-                "stage": stage,
-                "primary_blocker": primary_blocker,
-                "blockers": list(blockers_tuple),
-            }
-        ),
+        ok=True,
+        value={"selected_strategy": candidate.family, "risk_params": dict(candidate.risk_params)},
+        reasons=(),
+        facts=facts,
     )
+
+
+def _node_strategy_eligible(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    n8 = deps.get(NODE_N8_STRATEGY_SELECT, NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts={}))
+    facts = {"from_node": NODE_N8_STRATEGY_SELECT, "candidate_summary": (n8.facts or {}).get("candidate_summary", {})}
+    if n8.ok:
+        return NodeResult(ok=True, value=n8.value, facts=facts)
+    return NodeResult(ok=False, reasons=n8.reasons, facts=facts)
+
+
+def _node_decision_ready(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    n9 = deps.get(NODE_N9_STRATEGY_ELIGIBLE, NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts={}))
+    facts = {"from_node": NODE_N9_STRATEGY_ELIGIBLE}
+    if n9.ok:
+        return NodeResult(ok=True, value=n9.value, facts=facts)
+    return NodeResult(ok=False, reasons=n9.reasons, facts=facts)
+
+
+def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    explain_rows: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    first_failing_node: str | None = None
+    cached_results = ctx.get("cache") if isinstance(ctx, Mapping) else None
+    if not isinstance(cached_results, Mapping):
+        cached_results = {}
+
+    for node_name in _LINEAR_NODE_ORDER[:-1]:
+        result = cached_results.get(node_name)
+        if result is None:
+            continue
+        row = {
+            "node": node_name,
+            "ok": bool(result.ok),
+            "reasons": list(result.reasons),
+            "facts": dict(result.facts or {}),
+        }
+        explain_rows.append(row)
+        if (not result.ok) and first_failing_node is None:
+            first_failing_node = node_name
+        if not result.ok:
+            for reason in result.reasons:
+                if reason not in blockers:
+                    blockers.append(reason)
+
+    decision_ready = cached_results.get(
+        NODE_N10_DECISION_READY,
+        NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts={}),
+    )
+    selected_strategy = None
+    risk_params: dict[str, Any] = {}
+    if isinstance(decision_ready.value, Mapping):
+        selected_strategy = str(decision_ready.value.get("selected_strategy") or "").upper() or None
+        risk_params_raw = decision_ready.value.get("risk_params")
+        if isinstance(risk_params_raw, Mapping):
+            risk_params = dict(risk_params_raw)
+
+    allowed = (not blockers) and bool(selected_strategy)
+    if (not allowed) and (not blockers):
+        blockers = [REASON_NO_STRATEGY_QUALIFIED]
+        first_failing_node = NODE_N8_STRATEGY_SELECT
+
+    stage = first_failing_node or NODE_N11_FINAL_DECISION
+    decision = Decision(
+        symbol=snapshot.symbol,
+        ts_epoch=float(snapshot.ts_epoch),
+        allowed=bool(allowed),
+        blockers=tuple(blockers),
+        primary_blocker=(blockers[0] if blockers else None),
+        stage=stage,
+        selected_strategy=selected_strategy,
+        risk_params=risk_params,
+        facts={},
+        explain=tuple(explain_rows),
+    )
+    final_row = {
+        "node": NODE_N11_FINAL_DECISION,
+        "ok": bool(allowed),
+        "reasons": list(blockers),
+        "facts": {"stage": stage},
+    }
+    decision.explain = tuple(list(decision.explain) + [final_row])
+    return NodeResult(ok=bool(allowed), value=decision, reasons=tuple(blockers), facts={"stage": stage})
 
 
 class DecisionDAGEvaluator:
-    NODE_ORDER = (
-        NODE_N1_MARKET_OPEN,
-        NODE_N2_FEED_FRESH,
-        NODE_N3_WARMUP_DONE,
-        NODE_N4_QUOTE_OK,
-        NODE_N5_REGIME_OK,
-        NODE_N6_RISK_OK,
-        NODE_N7_GOVERNANCE_LOCKS_OK,
-        NODE_N8_STRATEGY_SELECT,
-        NODE_N9_FINAL_DECISION,
-    )
-
-    def __init__(self, strategy_candidates: Sequence[StrategyCandidate] | None = None):
-        self._strategy_candidates = _normalize_strategy_candidates(strategy_candidates)
-        self._nodes: Dict[str, _NodeDef] = {
-            NODE_N1_MARKET_OPEN: _NodeDef(NODE_N1_MARKET_OPEN, (), _node_n1_market_open),
-            NODE_N2_FEED_FRESH: _NodeDef(NODE_N2_FEED_FRESH, (NODE_N1_MARKET_OPEN,), _node_n2_feed_fresh),
-            NODE_N3_WARMUP_DONE: _NodeDef(NODE_N3_WARMUP_DONE, (NODE_N2_FEED_FRESH,), _node_n3_warmup_done),
-            NODE_N4_QUOTE_OK: _NodeDef(NODE_N4_QUOTE_OK, (NODE_N3_WARMUP_DONE,), _node_n4_quote_ok),
-            NODE_N5_REGIME_OK: _NodeDef(NODE_N5_REGIME_OK, (NODE_N4_QUOTE_OK,), _node_n5_regime_ok),
-            NODE_N6_RISK_OK: _NodeDef(NODE_N6_RISK_OK, (NODE_N5_REGIME_OK,), _node_n6_risk_ok),
-            NODE_N7_GOVERNANCE_LOCKS_OK: _NodeDef(NODE_N7_GOVERNANCE_LOCKS_OK, (NODE_N6_RISK_OK,), _node_n7_governance_locks_ok),
-            NODE_N8_STRATEGY_SELECT: _NodeDef(
-                NODE_N8_STRATEGY_SELECT,
-                (NODE_N7_GOVERNANCE_LOCKS_OK,),
-                _node_n8_strategy_select,
-            ),
-            NODE_N9_FINAL_DECISION: _NodeDef(
-                NODE_N9_FINAL_DECISION,
-                (NODE_N8_STRATEGY_SELECT,),
-                _node_n9_final_decision,
-            ),
+    def __init__(
+        self,
+        *,
+        strategy_candidates: Sequence[StrategyCandidate | Mapping[str, Any]] | None = None,
+        strategy_evaluator: Callable[[MarketSnapshot], Sequence[StrategyCandidate | Mapping[str, Any]]] | None = None,
+    ) -> None:
+        self._precomputed_candidates = _normalize_candidates(strategy_candidates)
+        self._strategy_evaluator = strategy_evaluator
+        self._nodes: dict[str, NodeSpec] = {
+            NODE_N1_MARKET_OPEN: NodeSpec(NODE_N1_MARKET_OPEN, (), _node_market_open),
+            NODE_N2_FEED_FRESH: NodeSpec(NODE_N2_FEED_FRESH, (NODE_N1_MARKET_OPEN,), _node_feed_fresh),
+            NODE_N3_WARMUP_DONE: NodeSpec(NODE_N3_WARMUP_DONE, (NODE_N2_FEED_FRESH,), _node_warmup_done),
+            NODE_N4_QUOTE_OK: NodeSpec(NODE_N4_QUOTE_OK, (NODE_N3_WARMUP_DONE,), _node_quote_ok),
+            NODE_N5_REGIME_OK: NodeSpec(NODE_N5_REGIME_OK, (NODE_N4_QUOTE_OK,), _node_regime_ok),
+            NODE_N6_RISK_OK: NodeSpec(NODE_N6_RISK_OK, (NODE_N5_REGIME_OK,), _node_risk_ok),
+            NODE_N7_GOVERNANCE_LOCKS_OK: NodeSpec(NODE_N7_GOVERNANCE_LOCKS_OK, (NODE_N6_RISK_OK,), _node_governance_locks_ok),
+            NODE_N8_STRATEGY_SELECT: NodeSpec(NODE_N8_STRATEGY_SELECT, (NODE_N7_GOVERNANCE_LOCKS_OK,), _node_strategy_select),
+            NODE_N9_STRATEGY_ELIGIBLE: NodeSpec(NODE_N9_STRATEGY_ELIGIBLE, (NODE_N8_STRATEGY_SELECT,), _node_strategy_eligible),
+            NODE_N10_DECISION_READY: NodeSpec(NODE_N10_DECISION_READY, (NODE_N9_STRATEGY_ELIGIBLE,), _node_decision_ready),
+            NODE_N11_FINAL_DECISION: NodeSpec(NODE_N11_FINAL_DECISION, (NODE_N10_DECISION_READY,), _node_final_decision),
         }
 
-    def evaluate(self, snapshot: MarketSnapshot) -> Decision:
-        cache: Dict[str, NodeResult] = {}
-        call_counts: Dict[str, int] = {}
+    def _prepare_candidates(self, snapshot: MarketSnapshot) -> tuple[StrategyCandidate, ...]:
+        if self._precomputed_candidates:
+            return self._precomputed_candidates
+        if self._strategy_evaluator is None:
+            return ()
+        raw = self._strategy_evaluator(snapshot)
+        return _normalize_candidates(raw)
 
-        def run(name: str) -> NodeResult:
-            if name in cache:
-                return cache[name]
-            node = self._nodes[name]
-            deps = {dep: run(dep) for dep in node.deps}
-            ctx = {"deps": deps, "all_node_results": cache, "strategy_candidates": self._strategy_candidates}
-            call_counts[name] = call_counts.get(name, 0) + 1
-            out = node.fn(snapshot, ctx)
-            cache[name] = out
-            return out
+    def _eval_node(self, node_name: str, snapshot: MarketSnapshot, ctx: dict[str, Any]) -> NodeResult:
+        cache: dict[str, NodeResult] = ctx["cache"]
+        if node_name in cache:
+            return cache[node_name]
 
-        final = run(NODE_N9_FINAL_DECISION)
-        final_payload = dict(final.value or {})
-        explain = tuple(cache[name].to_dict(name) for name in self.NODE_ORDER if name in cache)
-        facts = {
-            "feed_health": snapshot.feed_health.to_dict(),
-            "node_call_counts": dict(call_counts),
-            "instrument": snapshot.instrument,
-            "execution_mode": snapshot.execution_mode,
-            "ltp_source": snapshot.ltp_source,
-            "quote_source": snapshot.quote_source,
+        node = self._nodes[node_name]
+        dep_results = {
+            dep_name: self._eval_node(dep_name, snapshot, ctx)
+            for dep_name in node.deps
         }
+        ctx["node_call_counts"][node_name] = int(ctx["node_call_counts"].get(node_name, 0)) + 1
+        result = node.fn(snapshot, ctx, dep_results)
+        cache[node_name] = result
+        return result
 
-        return Decision(
-            symbol=snapshot.symbol,
-            ts_epoch=snapshot.ts_epoch,
-            allowed=bool(final_payload.get("allowed", False)),
-            primary_blocker=final_payload.get("primary_blocker"),
-            blockers=tuple(final_payload.get("blockers") or []),
-            stage=str(final_payload.get("stage") or NODE_N9_FINAL_DECISION),
-            selected_strategy=final_payload.get("selected_strategy"),
-            risk_params=MappingProxyType(dict(final_payload.get("risk_params") or {})),
-            facts=MappingProxyType(facts),
-            explain=explain,
-        )
+    def evaluate(self, snapshot: MarketSnapshot | Mapping[str, Any]) -> Decision:
+        snap = build_market_snapshot(snapshot)
+        ctx: dict[str, Any] = {
+            "cache": {},
+            "node_call_counts": {},
+            "strategy_candidates": self._prepare_candidates(snap),
+        }
+        final_result = self._eval_node(NODE_N11_FINAL_DECISION, snap, ctx)
+        decision = final_result.value
+        if not isinstance(decision, Decision):
+            blockers = tuple(final_result.reasons or ())
+            stage = str((final_result.facts or {}).get("stage") or NODE_N11_FINAL_DECISION)
+            decision = Decision(
+                symbol=snap.symbol,
+                ts_epoch=float(snap.ts_epoch),
+                allowed=False,
+                blockers=blockers,
+                primary_blocker=(blockers[0] if blockers else None),
+                stage=stage,
+                selected_strategy=None,
+                risk_params={},
+                facts={},
+                explain=(),
+            )
+        decision.facts = {
+            **dict(decision.facts or {}),
+            "feed_health": dict(snap.feed_health or {}),
+            "node_call_counts": dict(ctx.get("node_call_counts") or {}),
+            "snapshot_mode": snap.mode,
+        }
+        return decision
 
 
 def evaluate_decision(
-    market_data: Mapping[str, Any],
-    strategy_eval: Callable[..., Any] | None = None,
-    now_epoch: Optional[float] = None,
-    strategy_candidates: Sequence[Any] | None = None,
-    strategy_evaluator: Callable[[MarketSnapshot], Sequence[Any] | Any] | None = None,
+    market_data: Mapping[str, Any] | MarketSnapshot,
+    *,
+    strategy_eval: Callable[..., Sequence[Mapping[str, Any]]] | None = None,
+    strategy_evaluator: Callable[[MarketSnapshot], Sequence[Mapping[str, Any]]] | None = None,
+    strategy_candidates: Sequence[StrategyCandidate | Mapping[str, Any]] | None = None,
+    now_epoch: float | None = None,
 ) -> Decision:
     snapshot = build_market_snapshot(market_data, now_epoch=now_epoch)
-    candidates: Tuple[StrategyCandidate, ...] = ()
-    if strategy_candidates is not None:
-        candidates = _normalize_strategy_candidates(strategy_candidates)
-    elif strategy_evaluator is not None:
-        evaluated = strategy_evaluator(snapshot)
-        if isinstance(evaluated, Sequence) and not isinstance(evaluated, (str, bytes, bytearray)):
-            candidates = _normalize_strategy_candidates(evaluated)
-        else:
-            one = _as_strategy_candidate(evaluated)
-            candidates = (one,) if one is not None else ()
-    elif strategy_eval is not None:
-        # Backward-compatible shim: call with snapshot only.
-        try:
-            legacy = strategy_eval(snapshot, mode="MAIN")
-        except TypeError:
-            legacy = strategy_eval(snapshot)
-        one = _as_strategy_candidate(legacy)
-        candidates = (one,) if one is not None else ()
 
-    evaluator = DecisionDAGEvaluator(strategy_candidates=candidates)
+    pure_strategy_evaluator = strategy_evaluator
+    if pure_strategy_evaluator is None and strategy_eval is not None:
+        # Backward-compatible shim: strategy_eval is used only outside DAG execution.
+        def _wrapped(snap: MarketSnapshot):
+            return strategy_eval(dict(snap.raw_data))
+
+        pure_strategy_evaluator = _wrapped
+
+    evaluator = DecisionDAGEvaluator(
+        strategy_candidates=strategy_candidates,
+        strategy_evaluator=pure_strategy_evaluator,
+    )
     return evaluator.evaluate(snapshot)
+
+
+__all__ = [
+    "Decision",
+    "DecisionDAGEvaluator",
+    "MarketSnapshot",
+    "NodeResult",
+    "StrategyCandidate",
+    "NODE_N1_MARKET_OPEN",
+    "NODE_N2_FEED_FRESH",
+    "NODE_N3_WARMUP_DONE",
+    "NODE_N4_QUOTE_OK",
+    "NODE_N5_REGIME_OK",
+    "NODE_N6_RISK_OK",
+    "NODE_N7_GOVERNANCE_LOCKS_OK",
+    "NODE_N8_STRATEGY_SELECT",
+    "NODE_N9_STRATEGY_ELIGIBLE",
+    "NODE_N10_DECISION_READY",
+    "NODE_N11_FINAL_DECISION",
+    "NODE_N9_FINAL_DECISION",
+    "_synth_index_bid_ask",
+    "build_market_snapshot",
+    "evaluate_decision",
+]

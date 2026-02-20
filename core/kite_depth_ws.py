@@ -47,6 +47,7 @@ _DEPTH_WS_LOCK: RunLock | None = None
 _DEPTH_WS_LOCK_ACQUIRED = False
 _STOP_REQUESTED = False
 _SCHEMA_LOG_TS = 0.0
+_INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 
 
 def _extract_tick_epoch(tick: dict) -> float:
@@ -108,6 +109,10 @@ def _update_index_quote_cache(symbol: str, bid, ask, mid, ts_epoch: float, last_
         )
     except Exception as exc:
         _log_ws("FEED_INDEX_CACHE_ERROR", {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"})
+
+
+def _is_index_symbol(symbol: str | None) -> bool:
+    return str(symbol or "").upper() in _INDEX_SYMBOLS
 
 
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):
@@ -674,6 +679,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             tick_epoch = _extract_tick_epoch(t)
             if token_int is not None and token_int in _UNDERLYING_TOKEN_TO_SYMBOL:
                 symbol = _UNDERLYING_TOKEN_TO_SYMBOL.get(token_int) or symbol
+            if _is_index_symbol(symbol):
                 if isinstance(depth, dict) and depth:
                     buy_book = depth.get("buy", [])
                     sell_book = depth.get("sell", [])

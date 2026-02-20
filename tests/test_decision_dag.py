@@ -1,16 +1,20 @@
 import importlib
+import json
 from unittest.mock import Mock
 
 from config import config as cfg
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
+    NODE_N10_DECISION_READY,
+    NODE_N11_FINAL_DECISION,
     NODE_N2_FEED_FRESH,
     NODE_N3_WARMUP_DONE,
-    NODE_N8_STRATEGY_SELECT,
     NODE_N4_QUOTE_OK,
     NODE_N5_REGIME_OK,
     NODE_N6_RISK_OK,
     NODE_N7_GOVERNANCE_LOCKS_OK,
+    NODE_N8_STRATEGY_SELECT,
+    NODE_N9_STRATEGY_ELIGIBLE,
     NODE_N9_FINAL_DECISION,
     DecisionDAGEvaluator,
     build_market_snapshot,
@@ -69,7 +73,7 @@ def test_feed_stale_never_emitted_when_snapshot_is_fresh(monkeypatch):
     assert "FEED_STALE" not in decision.blockers
 
 
-def test_index_no_depth_with_fresh_ltp_passes_feed_gate(monkeypatch):
+def test_index_no_depth_with_fresh_ltp_live_fails_quote_gate_not_feed(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     now_epoch = 2_000.0
     md = _base_market_data(now_epoch)
@@ -85,13 +89,14 @@ def test_index_no_depth_with_fresh_ltp_passes_feed_gate(monkeypatch):
         }
     )
     decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
-    assert decision.allowed is True
+    assert decision.allowed is False
+    assert "QUOTE_INVALID" in decision.blockers
     assert "FEED_STALE" not in decision.blockers
     feed_rows = [row for row in decision.explain if row["node"] == NODE_N2_FEED_FRESH]
     quote_rows = [row for row in decision.explain if row["node"] == NODE_N4_QUOTE_OK]
     assert feed_rows and feed_rows[0]["ok"] is True
-    assert quote_rows and quote_rows[0]["ok"] is True
-    assert quote_rows[0]["facts"]["quote_source"] == "ltp_mid"
+    assert quote_rows and quote_rows[0]["ok"] is False
+    assert quote_rows[0]["facts"]["quote_source"] == "missing_depth"
 
 
 def test_index_sim_mode_uses_synthetic_bidask_when_depth_missing(monkeypatch):
@@ -138,6 +143,44 @@ def test_node_caching_executes_each_node_once(monkeypatch):
     assert all(v == 1 for v in call_counts.values())
 
 
+def test_same_snapshot_produces_identical_decision_report(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    now_epoch = 4_100.0
+    md = _base_market_data(now_epoch)
+    md["symbol"] = "BANKNIFTY"
+    snapshot = build_market_snapshot(md, now_epoch=now_epoch)
+    evaluator = DecisionDAGEvaluator(strategy_candidates=_default_candidates())
+    d1 = evaluator.evaluate(snapshot)
+    d2 = evaluator.evaluate(snapshot)
+    payload1 = json.dumps(
+        {
+            "allowed": d1.allowed,
+            "blockers": list(d1.blockers),
+            "primary_blocker": d1.primary_blocker,
+            "stage": d1.stage,
+            "selected_strategy": d1.selected_strategy,
+            "risk_params": dict(d1.risk_params),
+            "explain": list(d1.explain),
+            "facts": dict(d1.facts),
+        },
+        sort_keys=True,
+    )
+    payload2 = json.dumps(
+        {
+            "allowed": d2.allowed,
+            "blockers": list(d2.blockers),
+            "primary_blocker": d2.primary_blocker,
+            "stage": d2.stage,
+            "selected_strategy": d2.selected_strategy,
+            "risk_params": dict(d2.risk_params),
+            "explain": list(d2.explain),
+            "facts": dict(d2.facts),
+        },
+        sort_keys=True,
+    )
+    assert payload1 == payload2
+
+
 def test_authoritative_linear_dag_wiring():
     evaluator = DecisionDAGEvaluator(strategy_candidates=_default_candidates())
     assert evaluator._nodes[NODE_N1_MARKET_OPEN].deps == ()
@@ -148,7 +191,10 @@ def test_authoritative_linear_dag_wiring():
     assert evaluator._nodes[NODE_N6_RISK_OK].deps == (NODE_N5_REGIME_OK,)
     assert evaluator._nodes[NODE_N7_GOVERNANCE_LOCKS_OK].deps == (NODE_N6_RISK_OK,)
     assert evaluator._nodes[NODE_N8_STRATEGY_SELECT].deps == (NODE_N7_GOVERNANCE_LOCKS_OK,)
-    assert evaluator._nodes[NODE_N9_FINAL_DECISION].deps == (NODE_N8_STRATEGY_SELECT,)
+    assert evaluator._nodes[NODE_N9_STRATEGY_ELIGIBLE].deps == (NODE_N8_STRATEGY_SELECT,)
+    assert evaluator._nodes[NODE_N10_DECISION_READY].deps == (NODE_N9_STRATEGY_ELIGIBLE,)
+    assert evaluator._nodes[NODE_N11_FINAL_DECISION].deps == (NODE_N10_DECISION_READY,)
+    assert NODE_N9_FINAL_DECISION == NODE_N11_FINAL_DECISION
 
 
 def test_dag_does_not_invoke_strategy_eval_when_candidates_precomputed(monkeypatch):
