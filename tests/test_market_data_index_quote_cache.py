@@ -75,13 +75,34 @@ def test_resolve_index_quote_sim_ltp100_depth_none_synthetic(monkeypatch):
     assert out["ask"] > out["bid"]
 
 
-def test_resolve_index_quote_live_ltp_only_fails_closed(monkeypatch):
+def test_resolve_index_quote_live_ltp_only_synthesizes_when_depth_optional(monkeypatch):
     monkeypatch.setattr(md.cfg, "PREMARKET_INDICES_LTP", {"NIFTY": "NSE:NIFTY 50"}, raising=False)
+    monkeypatch.setattr(md.cfg, "INDEX_REQUIRE_DEPTH_LIVE", False, raising=False)
     out = md.resolve_index_quote(
         symbol="NIFTY",
         mode="LIVE",
         ltp=25000.0,
         depth=None,
+        market_open=True,
+        ltp_age_sec=1.0,
+    )
+    assert out["quote_ok"] is True
+    assert out["quote_source"] == "synthetic_index"
+    assert out["bid"] is not None
+    assert out["ask"] is not None
+    assert out["ask"] > out["bid"]
+
+
+def test_resolve_index_quote_live_ltp100_depth_none_fails_when_depth_required(monkeypatch):
+    monkeypatch.setattr(md.cfg, "PREMARKET_INDICES_LTP", {"NIFTY": "NSE:NIFTY 50"}, raising=False)
+    monkeypatch.setattr(md.cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)
+    out = md.resolve_index_quote(
+        symbol="NIFTY",
+        mode="LIVE",
+        ltp=100.0,
+        depth=None,
+        market_open=True,
+        ltp_age_sec=1.0,
     )
     assert out["quote_ok"] is False
     assert out["quote_source"] == "missing_depth"
@@ -89,16 +110,38 @@ def test_resolve_index_quote_live_ltp_only_fails_closed(monkeypatch):
     assert out["ask"] is None
 
 
-def test_resolve_index_quote_live_ltp100_depth_none_fails_closed(monkeypatch):
+def test_resolve_index_quote_live_market_closed_allows_synthetic_with_fresh_ltp(monkeypatch):
     monkeypatch.setattr(md.cfg, "PREMARKET_INDICES_LTP", {"NIFTY": "NSE:NIFTY 50"}, raising=False)
+    monkeypatch.setattr(md.cfg, "OFFHOURS_MAX_LTP_AGE_SEC", 3600.0, raising=False)
+    monkeypatch.setattr(md.cfg, "OFFHOURS_SYNTH_INDEX_SPREAD_BPS", 0.5, raising=False)
     out = md.resolve_index_quote(
         symbol="NIFTY",
         mode="LIVE",
-        ltp=100.0,
+        ltp=25000.0,
         depth=None,
+        market_open=False,
+        ltp_age_sec=12.0,
+    )
+    assert out["quote_ok"] is True
+    assert out["quote_source"] == "synthetic_index"
+    assert out["bid"] is not None
+    assert out["ask"] is not None
+    assert out["ask"] > out["bid"]
+
+
+def test_resolve_index_quote_live_market_closed_rejects_stale_ltp(monkeypatch):
+    monkeypatch.setattr(md.cfg, "PREMARKET_INDICES_LTP", {"NIFTY": "NSE:NIFTY 50"}, raising=False)
+    monkeypatch.setattr(md.cfg, "OFFHOURS_MAX_LTP_AGE_SEC", 60.0, raising=False)
+    out = md.resolve_index_quote(
+        symbol="NIFTY",
+        mode="LIVE",
+        ltp=25000.0,
+        depth=None,
+        market_open=False,
+        ltp_age_sec=120.0,
     )
     assert out["quote_ok"] is False
-    assert out["quote_source"] == "missing_depth"
+    assert out["quote_source"] == "stale_ltp"
     assert out["bid"] is None
     assert out["ask"] is None
 
@@ -308,6 +351,7 @@ def test_index_depth_missing_live_keeps_quote_false(monkeypatch, tmp_path):
     monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(md.cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(md.cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)
     monkeypatch.setattr(md, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
     monkeypatch.setattr(md, "_NEWS_CAL", _DummyNewsCal(), raising=False)
     monkeypatch.setattr(md, "_NEWS_TEXT", _DummyNewsText(), raising=False)
@@ -316,6 +360,7 @@ def test_index_depth_missing_live_keeps_quote_false(monkeypatch, tmp_path):
     monkeypatch.setattr(md, "check_market_data_time_sanity", lambda **kwargs: {"ok": True, "reasons": []})
     monkeypatch.setattr(md, "now_utc_epoch", lambda: fixed_epoch)
     monkeypatch.setattr(md, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(md, "is_open", lambda now_dt=None, segment="NSE_FNO": True)
     monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda symbol, force=False: False)
 
     def _fake_get_ltp(sym: str):
@@ -332,6 +377,60 @@ def test_index_depth_missing_live_keeps_quote_false(monkeypatch, tmp_path):
     assert snap["quote_source"] == "missing_depth"
     assert snap["bid"] is None
     assert snap["ask"] is None
+    assert snap["chain_source"] == "empty"
+
+
+def test_index_depth_missing_live_offhours_allows_synthetic_and_offhours_chain(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    md._DATA_CACHE.clear()
+    fixed_epoch = 1710000000.0
+    fixed_now = md.now_ist().replace(hour=6, minute=0, second=0, microsecond=0)
+
+    monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
+    monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(md.cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(md.cfg, "ALLOW_SYNTHETIC_CHAIN", True, raising=False)
+    monkeypatch.setattr(md.cfg, "OFFHOURS_MAX_LTP_AGE_SEC", 3600.0, raising=False)
+    monkeypatch.setattr(md, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(md, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(md, "check_market_data_time_sanity", lambda **kwargs: {"ok": True, "reasons": []})
+    monkeypatch.setattr(md, "now_utc_epoch", lambda: fixed_epoch)
+    monkeypatch.setattr(md, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(md, "is_open", lambda now_dt=None, segment="NSE_FNO": False)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda symbol, force=False: False)
+
+    def _fake_get_ltp(sym: str):
+        md._DATA_CACHE.setdefault(sym, {})
+        md._DATA_CACHE[sym]["ltp_source"] = "live"
+        md._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_epoch
+        return 25000.0
+
+    def _fake_chain(_symbol, _ltp, force_synthetic=False, **_kwargs):
+        if not force_synthetic:
+            return []
+        return [
+            {
+                "type": "CE",
+                "strike": 25000,
+                "ltp": 100.0,
+                "bid": 99.0,
+                "ask": 101.0,
+                "quote_ok": True,
+                "quote_live": False,
+            }
+        ]
+
+    monkeypatch.setattr(md, "get_ltp", _fake_get_ltp)
+    monkeypatch.setattr(md, "fetch_option_chain", _fake_chain)
+
+    rows = md.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("symbol") == "NIFTY" and r.get("instrument") == "OPT")
+    assert snap["quote_ok"] is True
+    assert snap["quote_source"] == "synthetic_index"
+    assert snap["chain_source"] == "synthetic_offhours"
+    assert snap["market_open"] is False
 
 
 def test_non_index_depth_missing_keeps_quote_false(monkeypatch, tmp_path):

@@ -1,3 +1,6 @@
+# Migration note:
+# Readiness feed state now exposes OFFHOURS fields and SLA thresholds for market-closed mode.
+
 from __future__ import annotations
 
 import json
@@ -11,6 +14,7 @@ from core import risk_halt
 from core.audit_log import verify_chain as verify_audit_chain
 from core.auth_health import get_kite_auth_health
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
+from core.offhours import is_offhours
 from core.time_utils import now_ist, is_market_open_ist
 from core.market_calendar import IN_HOLIDAYS
 from core.trade_store import init_db
@@ -206,6 +210,7 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
     now = now_ist()
     is_holiday = now.date() in IN_HOLIDAYS
     market_open = is_market_open_ist(now=now) and not is_holiday
+    offhours_mode = is_offhours({"market_open": market_open})
 
     blockers = []
     warnings = []
@@ -283,15 +288,28 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
         "reasons": feed_reasons,
         "ltp_age_sec": decision_health.get("ltp_age_sec"),
         "depth_age_sec": decision_health.get("depth_age_sec"),
-        "state": "OK" if feed_ok else "STALE",
+        "state": "MARKET_CLOSED" if offhours_mode else ("OK" if feed_ok else "STALE"),
         "market_open": market_open,
+        "offhours_mode": bool(offhours_mode),
         "ltp": {
             "age_sec": decision_health.get("ltp_age_sec"),
-            "max_age_sec": float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+            "max_age_sec": float(
+                getattr(
+                    cfg,
+                    "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if offhours_mode else "SLA_MAX_LTP_AGE_SEC",
+                    900.0 if offhours_mode else 2.5,
+                )
+            ),
         },
         "depth": {
             "age_sec": decision_health.get("depth_age_sec"),
-            "max_age_sec": float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
+            "max_age_sec": float(
+                getattr(
+                    cfg,
+                    "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if offhours_mode else "SLA_MAX_DEPTH_AGE_SEC",
+                    900.0 if offhours_mode else 6.0,
+                )
+            ),
         },
         "source": "decision_dag",
     }

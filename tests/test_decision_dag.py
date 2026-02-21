@@ -75,6 +75,7 @@ def test_feed_stale_never_emitted_when_snapshot_is_fresh(monkeypatch):
 
 def test_index_no_depth_with_fresh_ltp_live_fails_quote_gate_not_feed(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)
     now_epoch = 2_000.0
     md = _base_market_data(now_epoch)
     md.update(
@@ -98,6 +99,31 @@ def test_index_no_depth_with_fresh_ltp_live_fails_quote_gate_not_feed(monkeypatc
     assert quote_rows and quote_rows[0]["ok"] is False
     assert quote_rows[0]["facts"]["quote_source"] == "missing_depth"
     assert quote_rows[0]["facts"]["quote_ok"] is False
+
+
+def test_index_no_depth_with_fresh_ltp_live_passes_when_depth_not_required(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", False, raising=False)
+    now_epoch = 2_050.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "symbol": "SENSEX",
+            "instrument": "INDEX",
+            "quote_ok": False,
+            "quote_source": "missing_depth",
+            "depth_age_sec": None,
+            "bid": None,
+            "ask": None,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.allowed is True
+    assert "index_bidask_missing" not in decision.blockers
+    quote_rows = [row for row in decision.explain if row["node"] == NODE_N4_QUOTE_OK]
+    assert quote_rows and quote_rows[0]["ok"] is True
+    assert quote_rows[0]["facts"]["quote_source"] == "synthetic_index"
+
 
 
 def test_index_sim_mode_uses_synthetic_bidask_when_depth_missing(monkeypatch):

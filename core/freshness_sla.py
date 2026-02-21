@@ -1,13 +1,22 @@
+# Migration note:
+# Freshness SLA now derives runtime mode from core.market_context and uses compute_age_sec.
+
 import json
 import sqlite3
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from config import config as cfg
 from core.depth_store import depth_store
+from core.market_context import derive_market_context
 from core.tick_store import last_tick_epoch as _mem_last_tick_epoch
-from core.time_utils import is_market_open_ist, normalize_epoch_seconds, now_ist
+from core.time_utils import (
+    compute_age_sec,
+    is_market_open_ist,
+    normalize_epoch_seconds,
+    now_ist,
+    now_utc_epoch,
+)
 from core.paths import logs_dir
 
 LOG_PATH = logs_dir() / "freshness_sla.jsonl"
@@ -107,15 +116,34 @@ def _depth_store_tokens() -> List[int]:
 
 
 def get_freshness_status(force: bool = False) -> Dict[str, Any]:
-    now_epoch = time.time()
+    now_epoch = now_utc_epoch()
     ttl_sec = float(getattr(cfg, "FEED_FRESHNESS_TTL_SEC", 5.0))
     if not force and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
         return dict(_CACHE["payload"])
 
-    market_open = bool(is_market_open_ist())
-    exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
-    max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
-    max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0))
+    market_ctx = derive_market_context(
+        {
+            "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+            "market_open": bool(is_market_open_ist()),
+        }
+    )
+    market_open = bool(market_ctx.is_market_open)
+    offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+    exec_mode = str(market_ctx.mode)
+    max_ltp_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if offhours_mode else "SLA_MAX_LTP_AGE_SEC",
+            900.0 if offhours_mode else 2.5,
+        )
+    )
+    max_depth_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if offhours_mode else "SLA_MAX_DEPTH_AGE_SEC",
+            900.0 if offhours_mode else 6.0,
+        )
+    )
     require_depth_live = bool(getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
     require_depth_non_live = bool(getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_NON_LIVE", False))
     depth_required = require_depth_live if exec_mode == "LIVE" else require_depth_non_live
@@ -173,12 +201,8 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
             ltp_last_epoch = mem_tick_epoch
             ltp_source = "tick_store_memory"
 
-    ltp_age = (now_epoch - ltp_last_epoch) if ltp_last_epoch is not None else None
-    depth_age = (now_epoch - depth_last_epoch) if depth_last_epoch is not None else None
-    if ltp_age is not None and ltp_age < 0:
-        ltp_age = 0.0
-    if depth_age is not None and depth_age < 0:
-        depth_age = 0.0
+    ltp_age = compute_age_sec(ltp_last_epoch, now_epoch) if ltp_last_epoch is not None else None
+    depth_age = compute_age_sec(depth_last_epoch, now_epoch) if depth_last_epoch is not None else None
 
     reasons: List[str] = []
 
@@ -223,6 +247,7 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
         "ok": ok,
         "state": state,
         "market_open": market_open,
+        "offhours_mode": bool(offhours_mode),
         "ts_epoch": now_epoch,
         "ltp": {
             "ok": ltp_ok if market_open else True,
@@ -252,6 +277,7 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
             "state": state,
             "ok": ok,
             "market_open": market_open,
+            "offhours_mode": bool(offhours_mode),
             "reasons": reasons,
             "ltp_age_sec": ltp_age,
             "depth_age_sec": depth_age,

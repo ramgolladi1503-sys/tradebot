@@ -1,3 +1,6 @@
+# Migration note:
+# Option-chain strictness now follows core.market_context.derive_market_context.
+
 from datetime import datetime, date
 from config import config as cfg
 from core.market_calendar import (
@@ -5,8 +8,10 @@ from core.market_calendar import (
     next_expiry_by_type,
     next_expiry_after,
 )
+from core.market_context import derive_market_context
 from core.kite_client import kite_client
 from core.greeks import implied_vol, greeks
+from core.time_utils import compute_age_sec, now_utc_epoch
 
 def _infer_atm_strike(ltp, step):
     if not ltp or step <= 0:
@@ -170,14 +175,26 @@ def _annotate_iv_oi(chain):
                 c["oi_build"] = "FLAT"
     return chain
 
-def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool = False):
+def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool = False, market_context: dict | None = None):
     """
     Build a lightweight option chain around ATM (fallback-friendly).
     This is a placeholder until live option chain is wired from broker API.
     """
     try:
-        # No synthetic chains in LIVE mode
-        if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE" and force_synthetic:
+        exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+        ctx = derive_market_context(
+            market_context
+            or {
+                "execution_mode": exec_mode,
+                "segment": getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO"),
+            }
+        )
+        offhours_mode = ctx.mode == "OFFHOURS"
+        strict_live_market_open = bool(ctx.mode == "LIVE")
+        synthetic_chain_source = "synthetic_offhours" if (ctx.mode != "LIVE") else "synthetic"
+
+        # Keep strict behavior only during live market hours.
+        if strict_live_market_open and force_synthetic:
             return []
         step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {})
         step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))
@@ -333,7 +350,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     quote_ts_epoch = None
                 quote_age_sec = None
                 if quote_ts_epoch is not None:
-                    quote_age_sec = max(0.0, (datetime.utcnow().timestamp() - float(quote_ts_epoch)))
+                    quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
                 else:
                     quote_age_sec = 10**9
                 # quote_ok requires bid/ask and freshness under strict live mode
@@ -384,7 +401,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     "days_to_expiry": dte,
                     **g,
                     "expiry": str(expiry_date),
-                    "timestamp": datetime.now().timestamp()
+                    "timestamp": datetime.now().timestamp(),
+                    "planning_only": False,
                 })
             # term structure iv: compare with next expiry for same strike/type
             if cfg.ENABLE_TERM_STRUCTURE and next_candidates:
@@ -412,6 +430,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         if not getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
             return []
         chain = []
+        synthetic_expiry = str(_coerce_expiry_date(fallback_expiry) or date.today())
         strikes = [atm + i * step for i in range(-strikes_around, strikes_around + 1)]
         for strike in strikes:
             for opt_type in ("CE", "PE"):
@@ -430,14 +449,15 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "volume": 1000,
                         "oi": 0,
                         "quote_ok": True,
-                        "quote_source": "synthetic",
+                        "quote_source": synthetic_chain_source,
                         "quote_live": False,
-                        "chain_source": "synthetic",
+                        "chain_source": synthetic_chain_source,
                         "instrument_token": None,
                         "moneyness": 0,
                         "days_to_expiry": 1,
-                        "expiry": str(expiry),
-                        "timestamp": datetime.now().timestamp()
+                        "expiry": synthetic_expiry,
+                        "timestamp": datetime.now().timestamp(),
+                        "planning_only": True,
                     })
         chain = _annotate_iv_oi(chain)
         _write_chain_snapshot(chain, symbol=symbol)
@@ -447,7 +467,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True) and not force_synthetic:
                 return []
             # fallback to synthetic chain when live chain is unavailable
-            if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE":
+            if strict_live_market_open:
                 return []
             if not getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
                 return []
@@ -476,14 +496,15 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "volume": 1000,
                         "oi": 0,
                         "quote_ok": True,
-                        "quote_source": "synthetic",
+                        "quote_source": synthetic_chain_source,
                         "quote_live": False,
-                        "chain_source": "synthetic",
+                        "chain_source": synthetic_chain_source,
                         "instrument_token": None,
                         "moneyness": 0,
                         "days_to_expiry": 1,
                         "expiry": str(datetime.now().date()),
-                        "timestamp": datetime.now().timestamp()
+                        "timestamp": datetime.now().timestamp(),
+                        "planning_only": True,
                     })
             chain = _annotate_iv_oi(chain)
             _write_chain_snapshot(chain, symbol=symbol)

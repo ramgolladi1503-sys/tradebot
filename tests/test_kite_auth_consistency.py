@@ -142,7 +142,7 @@ def test_start_depth_ws_seeds_ohlc_before_ws_start(monkeypatch):
     def _start(tokens, **kwargs):
         call_order.append(("start", tuple(tokens), kwargs.get("profile_verified")))
 
-    monkeypatch.setattr(orchestrator_mod, "seed_ohlc_buffers_on_startup", _seed)
+    monkeypatch.setattr(orchestrator_mod, "ensure_startup_warmup_bootstrap", _seed)
     monkeypatch.setattr(orchestrator_mod, "start_depth_ws", _start)
     monkeypatch.setattr(orchestrator_mod.kite_client, "ensure", lambda: None)
     monkeypatch.setattr(orchestrator_mod.kite_client, "kite", _KiteOk("api_key_1234"), raising=False)

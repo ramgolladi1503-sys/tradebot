@@ -1,3 +1,6 @@
+# Migration note:
+# Trade suggestions now carry planning_only/execution_allowed tags for OFFHOURS handling.
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Tuple
@@ -50,6 +53,9 @@ class Trade:
     tradable: bool = True
     tradable_reasons_blocking: list[str] = field(default_factory=list)
     source_flags: dict = field(default_factory=dict)
+    planning_only: bool = False
+    execution_allowed: bool = True
+    reason: str | None = None
     stop_distance: float | None = None
 
     def __post_init__(self):

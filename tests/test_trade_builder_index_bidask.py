@@ -14,6 +14,7 @@ class _PredictorStub:
 def _base_market_data():
     return {
         "symbol": "NIFTY",
+        "market_open": True,
         "valid": True,
         "ltp": 25000.0,
         "vwap": 24990.0,
@@ -90,8 +91,15 @@ def test_paper_missing_index_bid_ask_uses_synthetic(monkeypatch, tmp_path):
     payload = rows[-1]["payload"]
     assert payload.get("quote_kind") == "synthetic"
     assert payload.get("last_price") == 25000.0
-    assert payload.get("bid") == 24999.375
-    assert payload.get("ask") == 25000.625
+    spread = min(
+        max(
+            25000.0 * (float(getattr(cfg, "OFFHOURS_SYNTH_INDEX_SPREAD_BPS", 20.0)) / 10000.0),
+            float(getattr(cfg, "INDEX_SYNTH_MIN_TICK", 0.05)),
+        ),
+        float(getattr(cfg, "SYNTH_INDEX_SPREAD_CAP", 5.0)),
+    )
+    assert payload.get("bid") == round(25000.0 - (spread / 2.0), 4)
+    assert payload.get("ask") == round(25000.0 + (spread / 2.0), 4)
 
 
 def test_live_missing_index_bid_ask_rejects(monkeypatch, tmp_path, capsys):
@@ -126,3 +134,54 @@ def test_live_missing_index_bid_ask_rejects(monkeypatch, tmp_path, capsys):
     assert "has_depth=" in out
     assert "has_quote=" in out
     assert "ws_subscribed=" in out
+
+
+def test_live_market_open_non_live_chain_rejects(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder_for_deterministic_pass(monkeypatch, builder)
+    blocked_reasons = []
+    monkeypatch.setattr(
+        builder,
+        "_log_blocked_candidate",
+        lambda symbol, reason_code, reason_text, market_data=None, extra=None: blocked_reasons.append(str(reason_code)),
+    )
+    md = _base_market_data()
+    md.update(
+        {
+            "market_open": True,
+            "chain_source": "synthetic_offhours",
+            "quote_ok": True,
+            "bid": 24999.0,
+            "ask": 25001.0,
+        }
+    )
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+    assert trade is None
+    assert "non_live_option_chain" in blocked_reasons
+
+
+def test_live_market_closed_allows_synthetic_offhours_chain(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OFFHOURS_MAX_LTP_AGE_SEC", 3600.0, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder_for_deterministic_pass(monkeypatch, builder)
+    md = _base_market_data()
+    md.update(
+        {
+            "market_open": False,
+            "chain_source": "synthetic_offhours",
+            "quote_ok": False,
+            "bid": None,
+            "ask": None,
+        }
+    )
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+    assert trade is not None
+    assert trade.planning_only is True
+    assert trade.execution_allowed is False
+    assert trade.reason == "OFFHOURS_PLANNING"

@@ -1,3 +1,6 @@
+# Migration note:
+# Trade logger now resolves canonical trade-log path through core.trade_log_paths.
+
 import json
 from datetime import datetime
 from core.trade_store import (
@@ -13,10 +16,15 @@ from core import log_lock
 from pathlib import Path
 from core.trade_schema import build_instrument_id, validate_trade_identity
 from core.post_trade_labeler import PostTradeLabeler
+from core.trade_log_paths import ensure_trade_log_file
 import time
 
 
 _POST_TRADE_LABELER = PostTradeLabeler()
+
+
+def _trade_log_path() -> Path:
+    return ensure_trade_log_file(create_if_missing=True)
 
 
 def _safe_emit_post_trade_label(entry: dict) -> None:
@@ -111,7 +119,8 @@ def log_trade(trade, extra=None):
     if extra:
         log_entry.update(extra)
 
-    with open("data/trade_log.json", "a") as f:
+    trade_log_path = _trade_log_path()
+    with trade_log_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry) + "\n")
     try:
         insert_trade(log_entry)
@@ -188,7 +197,7 @@ def update_trade_outcome(
     avg_exit=None,
     exit_reason_final=None,
 ):
-    path = "data/trade_log.json"
+    path = _trade_log_path()
     from core.strategy_tracker import StrategyTracker
     tracker = StrategyTracker()
     tracker.load("logs/strategy_perf.json")
@@ -211,7 +220,7 @@ def update_trade_outcome(
         }
         # Compute R-multiple only if we can read the original entry
         try:
-            with open(path, "r") as f:
+            with path.open("r", encoding="utf-8") as f:
                 for line in f:
                     if not line.strip():
                         continue
@@ -287,7 +296,7 @@ def update_trade_outcome(
     lines = []
     updated_entry = None
 
-    with open(path, "r") as f:
+    with path.open("r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
@@ -326,7 +335,7 @@ def update_trade_outcome(
             lines.append(json.dumps(entry))
 
     if updated:
-        with open(path, "w") as f:
+        with path.open("w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
     if updated_entry:
         try:
@@ -367,7 +376,7 @@ def update_trade_outcome(
     return updated_entry if updated else None
 
 def update_trade_fill(trade_id, fill_price, latency_ms=None, slippage=None):
-    path = "data/trade_log.json"
+    path = _trade_log_path()
     if getattr(cfg, "APPEND_ONLY_LOG", False) or log_lock.is_locked():
         entry = {
             "trade_id": trade_id,
@@ -390,7 +399,7 @@ def update_trade_fill(trade_id, fill_price, latency_ms=None, slippage=None):
     lines = []
     updated_entry = None
 
-    with open(path, "r") as f:
+    with path.open("r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
@@ -406,7 +415,7 @@ def update_trade_fill(trade_id, fill_price, latency_ms=None, slippage=None):
             lines.append(json.dumps(entry))
 
     if updated:
-        with open(path, "w") as f:
+        with path.open("w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
     if updated_entry:
         try:

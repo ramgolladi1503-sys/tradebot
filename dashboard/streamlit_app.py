@@ -32,8 +32,9 @@ from dashboard.ui import (
 from core.trade_store import fetch_recent_trades, fetch_recent_outcomes, fetch_pnl_series, fetch_execution_stats, fetch_depth_snapshots, fetch_depth_imbalance
 from core.scorecard import compute_scorecard
 from core.gpt_advisor import get_trade_advice, save_advice, get_day_summary
-from core.market_data import fetch_live_market_data
+from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap
 from core.day_type_history import load_day_type_events, day_type_events_dataframe
+from core.offhours import is_offhours
 from core.time_utils import is_today_local, age_minutes_local, now_local, parse_ts_local
 import time
 
@@ -257,6 +258,8 @@ def _should_show_quote_errors(readiness_state: str) -> bool:
             return True
         st.session_state["force_show_quote_errors"] = False
         st.session_state["force_show_quote_errors_ts"] = 0.0
+    if is_offhours({"state": readiness_state}):
+        return False
     return readiness_state in ("READY", "DEGRADED", "BLOCKED", "BOOTING")
 
 
@@ -392,12 +395,16 @@ def _render_market_snapshot():
         freshness = get_freshness_status(force=False)
         ltp_age = (freshness.get("ltp") or {}).get("age_sec")
         depth_age = (freshness.get("depth") or {}).get("age_sec")
-        max_ltp = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
-        max_depth = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 2.0))
+        max_ltp = float((freshness.get("ltp") or {}).get("max_age_sec") or getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+        max_depth = float((freshness.get("depth") or {}).get("max_age_sec") or getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 2.0))
         market_open = bool(freshness.get("market_open", True))
+        offhours_mode = is_offhours(freshness)
         stale = (ltp_age is None) or (isinstance(ltp_age, (int, float)) and ltp_age > max_ltp)
-        if not market_open:
-            st.info(f"Market closed: LTP age {ltp_age}s, depth age {depth_age}s")
+        if offhours_mode:
+            st.warning(
+                f"OFFHOURS MODE — market closed; live quote checks relaxed. "
+                f"LTP age {ltp_age}s, depth age {depth_age}s"
+            )
         elif stale:
             st.error(f"Feeds stale: LTP age {ltp_age}s (max {max_ltp}s)")
         elif isinstance(depth_age, (int, float)) and depth_age > max_depth:
@@ -1213,6 +1220,7 @@ if nav == "Home":
                 "ok": bool(feed.get("ok", False)),
                 "state": str(feed.get("state") or "UNKNOWN"),
                 "market_open": bool(readiness.get("market_open", False)),
+                "offhours_mode": bool(feed.get("offhours_mode", False)),
                 "reasons": list(feed.get("reasons") or []),
                 "ltp": dict(feed.get("ltp") or {}),
                 "depth": dict(feed.get("depth") or {}),
@@ -1266,18 +1274,25 @@ if nav == "Home":
                     chain_health = json.loads(health_path.read_text())
                 except Exception:
                     chain_health = {}
+            offhours_mode = is_offhours(
+                {
+                    "state": state,
+                    "market_open": feed_freshness.get("market_open"),
+                    "offhours_mode": feed_freshness.get("offhours_mode"),
+                }
+            )
             status = "OK"
             notes = []
             auth_ok = bool(auth_health.get("ok", False))
             auth_reason = auth_health.get("error") or auth_health.get("reason")
-            if not auth_ok:
+            if (not offhours_mode) and (not auth_ok):
                 status = "ERROR"
                 notes.append(f"Auth unhealthy: {auth_reason}")
             feed_ok = bool(feed_freshness.get("ok", True))
-            if bool(feed_freshness.get("market_open", False)) and not feed_ok:
+            if (not offhours_mode) and bool(feed_freshness.get("market_open", False)) and not feed_ok:
                 status = "ERROR"
                 notes.append("Feed stale (market open)")
-            if quote_err and status == "OK":
+            if quote_err and status == "OK" and (not offhours_mode):
                 status = "WARN"
                 quote_event = (
                     quote_err.get("event_code")
@@ -1286,13 +1301,26 @@ if nav == "Home":
                     or "live_quote_error"
                 )
                 notes.append(f"Live quote fetch failed ({quote_event})")
-            if chain_health:
+            if chain_health and (not offhours_mode):
                 bad = [k for k, v in chain_health.items() if isinstance(v, dict) and v.get("status") in ("ERROR", "WARN")]
                 if bad:
                     status = "WARN" if status == "OK" else status
                     notes.append(f"Chain health issues: {', '.join(bad)}")
             show_errors = _should_show_quote_errors(state)
-            if state == "MARKET_CLOSED" and not show_errors:
+            if offhours_mode:
+                st.warning("OFFHOURS MODE — live quote and bid/ask errors are suppressed while market is closed.")
+                try:
+                    ltp_age = (feed_freshness.get("ltp") or {}).get("age_sec")
+                    depth_age = (feed_freshness.get("depth") or {}).get("age_sec")
+                    ltp_max = (feed_freshness.get("ltp") or {}).get("max_age_sec")
+                    depth_max = (feed_freshness.get("depth") or {}).get("max_age_sec")
+                    st.caption(
+                        f"OFFHOURS SLA: LTP age={ltp_age}s (max {ltp_max}) | "
+                        f"Depth age={depth_age}s (max {depth_max})"
+                    )
+                except Exception:
+                    pass
+            elif state == "MARKET_CLOSED" and not show_errors:
                 st.info("Market closed — no trading. Live quote errors hidden off-hours.")
             else:
                 if status == "OK":
@@ -1508,6 +1536,16 @@ if nav == "Home":
         pass
     section_header("Market Snapshot")
     try:
+        if "startup_warmup_bootstrap_done" not in st.session_state:
+            st.session_state["startup_warmup_bootstrap_done"] = True
+            warmup_rows = ensure_startup_warmup_bootstrap()
+            warmup_fail = [
+                row for row in (warmup_rows or [])
+                if str((row or {}).get("warmup_reason") or (row or {}).get("seed_reason") or "").upper() == "HIST_FETCH_FAILED"
+            ]
+            if warmup_fail:
+                syms = ", ".join(sorted(str(r.get("symbol") or "").upper() for r in warmup_fail if r.get("symbol")))
+                st.warning(f"Warmup bootstrap: HIST_FETCH_FAILED ({syms or 'symbols'})")
         # Refresh only the market snapshot during market hours to avoid dimming the whole app
         if _is_market_hours():
             _market_snapshot_fragment()

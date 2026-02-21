@@ -5,6 +5,7 @@ from core import risk_halt
 from core.security_guard import enforce_startup_security
 from core.session_guard import auto_clear_risk_halt_if_safe
 from core.db_guard import ensure_db_ready
+from core.trade_log_paths import ensure_trade_log_exists
 from config import config as cfg
 from pathlib import Path
 
@@ -37,6 +38,10 @@ def main():
     if token:
         cfg.KITE_ACCESS_TOKEN = token
     _check_env()
+    try:
+        ensure_trade_log_exists()
+    except Exception as exc:
+        print(f"[STARTUP_WARN] trade log init failed: {exc}")
     guard_result = auto_clear_risk_halt_if_safe()
     if guard_result.get("cleared"):
         print("[SessionGuard] auto-cleared stale risk halt (market closed, no open positions).")

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# Migration note:
+# Use compute_age_sec(ts_epoch, now_epoch) for deterministic age calculations.
+
 from datetime import datetime, timedelta, timezone, time as dt_time
 from zoneinfo import ZoneInfo
 from typing import Any, Optional
@@ -40,6 +43,21 @@ def normalize_epoch_seconds(value: Any) -> Optional[float]:
     elif abs_raw >= 1e12:
         raw = raw / 1_000.0
     return raw
+
+
+def compute_age_sec(ts_epoch: Any, now_epoch: Any) -> Optional[float]:
+    """
+    Deterministically compute non-negative age in seconds from epoch-like inputs.
+    Returns None when either side cannot be normalized.
+    """
+    ts_norm = normalize_epoch_seconds(ts_epoch)
+    now_norm = normalize_epoch_seconds(now_epoch)
+    if ts_norm is None or now_norm is None:
+        return None
+    age = float(now_norm) - float(ts_norm)
+    if age < 0:
+        return 0.0
+    return age
 
 
 def now_ist() -> datetime:

@@ -1,3 +1,6 @@
+# Migration note:
+# Decision DAG now derives runtime mode from core.market_context and uses compute_age_sec helper.
+
 from __future__ import annotations
 
 import copy
@@ -8,7 +11,8 @@ from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
 from core.market_data import resolve_index_quote
-from core.time_utils import now_utc_epoch
+from core.market_context import derive_market_context
+from core.time_utils import compute_age_sec, now_utc_epoch
 
 ReasonCode = str
 
@@ -83,7 +87,8 @@ def _to_bool(value: Any, default: bool = False) -> bool:
 
 
 def _normalized_mode(raw_mode: Any) -> str:
-    return str(raw_mode or getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    mode = str(raw_mode or getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    return "LIVE" if mode == "LIVE" else "SIM"
 
 
 def _is_index_symbol(symbol: str, instrument: str | None = None) -> bool:
@@ -124,6 +129,8 @@ class MarketSnapshot:
     ts_epoch: float
     mode: str
     market_open: bool
+    offhours_mode: bool
+    market_context: Mapping[str, Any]
     ltp: float | None
     ltp_ts_epoch: float | None
     ltp_source: str | None
@@ -244,8 +251,19 @@ def build_market_snapshot(
         now_value = float(now_utc_epoch())
 
     symbol = str(data.get("symbol") or "").upper() or "UNKNOWN"
-    mode = _normalized_mode(data.get("execution_mode"))
-    market_open = _to_bool(data.get("market_open"), default=False)
+    ctx_payload = dict(data.get("market_context") or {}) if isinstance(data.get("market_context"), Mapping) else {}
+    if "execution_mode" not in ctx_payload:
+        ctx_payload["execution_mode"] = data.get("execution_mode")
+    if "market_open" not in ctx_payload and "market_open" in data:
+        ctx_payload["market_open"] = data.get("market_open")
+    if "segment" not in ctx_payload:
+        ctx_payload["segment"] = data.get("segment")
+    if "state" not in ctx_payload:
+        ctx_payload["state"] = data.get("state")
+    market_ctx = derive_market_context(ctx_payload)
+    mode = str(market_ctx.mode)
+    market_open = bool(market_ctx.is_market_open)
+    offhours_mode = bool(market_ctx.mode == "OFFHOURS")
 
     ltp = _to_float(data.get("ltp"))
     ltp_ts_epoch = _to_float(data.get("ltp_ts_epoch"))
@@ -289,7 +307,7 @@ def build_market_snapshot(
     never_computed_age = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
     if indicators_age_sec is None:
         if indicator_last_update_epoch is not None:
-            indicators_age_sec = max(0.0, float(now_value) - float(indicator_last_update_epoch))
+            indicators_age_sec = compute_age_sec(indicator_last_update_epoch, now_value) or 0.0
         else:
             indicators_age_sec = never_computed_age
 
@@ -336,24 +354,39 @@ def build_market_snapshot(
         quote_ok_input = None
     quote_source_input = str(data.get("quote_source") or "").strip() or None
 
-    max_ltp_age = _to_float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", None))
+    max_ltp_age = _to_float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if offhours_mode else "SLA_MAX_LTP_AGE_SEC",
+            None,
+        )
+    )
     if max_ltp_age is None:
-        max_ltp_age = _to_float(getattr(cfg, "MAX_LTP_AGE_SEC", 2.5))
+        max_ltp_age = _to_float(
+            getattr(
+                cfg,
+                "OFFHOURS_MAX_LTP_AGE_SEC" if offhours_mode else "MAX_LTP_AGE_SEC",
+                900.0 if offhours_mode else 2.5,
+            )
+        )
     if max_ltp_age is None:
         max_ltp_age = 2.5
     if ltp_ts_epoch is None:
         ltp_age_sec = float("inf")
     else:
-        ltp_age_sec = max(0.0, float(now_value) - float(ltp_ts_epoch))
+        ltp_age_sec = compute_age_sec(ltp_ts_epoch, now_value)
+        if ltp_age_sec is None:
+            ltp_age_sec = float("inf")
     if depth_ts_epoch is None:
         depth_age_sec = depth_age_from_row
     else:
-        depth_age_sec = max(0.0, float(now_value) - float(depth_ts_epoch))
+        depth_age_sec = compute_age_sec(depth_ts_epoch, now_value)
     feed_health = {
         "ltp_age_sec": ltp_age_sec,
         "depth_age_sec": depth_age_sec,
-        "is_fresh": bool(ltp is not None and ltp > 0 and ltp_age_sec <= float(max_ltp_age)),
+        "is_fresh": bool(offhours_mode or (ltp is not None and ltp > 0 and ltp_age_sec <= float(max_ltp_age))),
         "source": ltp_source or "unknown",
+        "offhours_mode": bool(offhours_mode),
         "ts_epoch": float(now_value),
     }
 
@@ -362,6 +395,8 @@ def build_market_snapshot(
         ts_epoch=float(now_value),
         mode=mode,
         market_open=market_open,
+        offhours_mode=bool(offhours_mode),
+        market_context=MappingProxyType(market_ctx.to_dict()),
         ltp=ltp,
         ltp_ts_epoch=ltp_ts_epoch,
         ltp_source=ltp_source,
@@ -400,6 +435,9 @@ def _node_market_open(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
 
 def _node_feed_fresh(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     feed = dict(snapshot.feed_health or {})
+    if snapshot.offhours_mode:
+        feed["offhours_mode"] = True
+        return NodeResult(ok=True, facts=feed)
     if bool(feed.get("is_fresh")):
         return NodeResult(ok=True, facts=feed)
     return NodeResult(ok=False, reasons=(REASON_FEED_STALE,), facts=feed)
@@ -448,7 +486,21 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
     is_index = _is_index_symbol(symbol, snapshot.instrument)
 
     if is_index:
-        resolved = resolve_index_quote(symbol=symbol, mode=mode, ltp=snapshot.ltp, depth=snapshot.depth)
+        ltp_age_sec = None
+        try:
+            if snapshot.ltp_ts_epoch is not None:
+                ltp_age_sec = compute_age_sec(snapshot.ltp_ts_epoch, snapshot.ts_epoch)
+        except Exception:
+            ltp_age_sec = None
+        resolved = resolve_index_quote(
+            symbol=symbol,
+            mode=mode,
+            ltp=snapshot.ltp,
+            depth=snapshot.depth,
+            market_open=bool(snapshot.market_open),
+            ltp_age_sec=ltp_age_sec,
+            market_context=dict(snapshot.market_context or {}),
+        )
         facts = {
             "quote_ok": bool(resolved.get("quote_ok")),
             "quote_source": resolved.get("quote_source"),
@@ -457,7 +509,10 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
             "mid": resolved.get("mid"),
             "mode": mode,
             "instrument": snapshot.instrument,
+            "offhours_mode": bool(snapshot.offhours_mode),
         }
+        if snapshot.offhours_mode:
+            return NodeResult(ok=True, value=resolved, facts=facts)
         if bool(resolved.get("quote_ok")):
             return NodeResult(ok=True, value=resolved, facts=facts)
         return NodeResult(ok=False, reasons=(REASON_INDEX_BIDASK_MISSING,), facts=facts)

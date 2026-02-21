@@ -1,3 +1,6 @@
+# Migration note:
+# Auto-retrain now ensures canonical trade-log path exists and returns structured skip reasons.
+
 import json
 import time
 from pathlib import Path
@@ -13,6 +16,7 @@ from core import model_registry
 from core import ml_governance
 from core.strategy_decay import compute_decay
 from core.retrain_manager import RetrainManager
+from core.trade_log_paths import ensure_trade_log_exists, ensure_trade_log_file, resolve_trade_log_path
 
 
 class AutoRetrain:
@@ -29,10 +33,15 @@ class AutoRetrain:
         self.segment_cols = ["seg_regime", "seg_bucket", "seg_expiry", "seg_vol_q"]
         self.retrain_manager = RetrainManager()
 
-    def update_model(self, trade_log_path="data/trade_log.json"):
-        live_df = self._load_trade_log(trade_log_path)
+    def update_model(self, trade_log_path=None):
+        resolved_log_path = (
+            ensure_trade_log_file(trade_log_path, create_if_missing=True)
+            if trade_log_path is not None
+            else ensure_trade_log_exists()
+        )
+        live_df = self._load_trade_log(resolved_log_path)
         if live_df is None or live_df.empty:
-            print("[AutoRetrain] Trade log not found or unreadable.")
+            print(f"[AutoRetrain] Trade log not found/unreadable/empty: {resolved_log_path}")
             try:
                 self.research.run(tracker=self.strategy_tracker, retrainer=self, risk_state=self.risk_state)
             except Exception:
@@ -46,7 +55,7 @@ class AutoRetrain:
                             self.risk_state.quarantine_strategy(strat, reason="strategy_decay")
             except Exception:
                 pass
-            return
+            return {"status": "skipped", "reason": "trade_log_missing_or_empty", "path": str(resolved_log_path)}
 
         drift = self._compute_drift(live_df)
         try:
@@ -75,7 +84,7 @@ class AutoRetrain:
                     "rolling_metrics": trigger.metrics,
                 },
             )
-            return
+            return {"status": "skipped", "reason": "retrain_not_required"}
 
         # cooldown guard
         cooldown = getattr(cfg, "RETRAIN_COOLDOWN_MIN", 180) * 60
@@ -88,13 +97,13 @@ class AutoRetrain:
                 last_ts = 0
         if time.time() - last_ts < cooldown:
             self._log_decision("skip", {"reason": "cooldown", "cooldown_sec": cooldown})
-            return
+            return {"status": "skipped", "reason": "cooldown"}
 
         # Train challenger
         train_df = self._load_training_dataset()
         if train_df is None or train_df.empty:
             self._log_decision("skip", {"reason": "no_train_data"})
-            return
+            return {"status": "skipped", "reason": "no_train_data"}
 
         train_df = self._add_segments_train(train_df)
         baseline = self._load_or_init_baseline(live_df)
@@ -124,7 +133,7 @@ class AutoRetrain:
                             self.risk_state.quarantine_strategy(strat, reason="strategy_decay")
             except Exception:
                 pass
-            return
+            return {"status": "skipped", "reason": "gates_not_met"}
 
         # Split holdout
         holdout_frac = float(getattr(cfg, "ML_HOLDOUT_FRAC", 0.2))
@@ -291,6 +300,7 @@ class AutoRetrain:
                         self.risk_state.quarantine_strategy(strat, reason="strategy_decay")
         except Exception:
             pass
+        return {"status": "ok", "reason": "completed"}
 
     def _split_holdout(self, df, frac):
         if df.empty:
@@ -317,7 +327,7 @@ class AutoRetrain:
         return df.dropna().reset_index(drop=True)
 
     def _load_trade_log(self, path):
-        p = Path(path)
+        p = resolve_trade_log_path(path)
         if not p.exists():
             return None
         rows = []

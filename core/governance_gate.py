@@ -1,3 +1,6 @@
+# Migration note:
+# Governance gate now derives market mode via core.market_context and uses compute_age_sec for snapshot ages.
+
 from __future__ import annotations
 
 import json
@@ -10,8 +13,9 @@ from core import risk_halt
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
 from core.freshness_sla import get_freshness_status
 from core.gate_status_log import gate_status_path
+from core.market_context import derive_market_context
 from core.paths import logs_dir
-from core.time_utils import now_utc_epoch, is_market_open_ist
+from core.time_utils import compute_age_sec, now_utc_epoch, is_market_open_ist
 
 
 @dataclass(frozen=True)
@@ -152,6 +156,7 @@ def _load_latest_decision_for_symbol(symbol: str, now_epoch: float) -> Dict[str,
     if not path.exists():
         return {}
     max_age = float(getattr(cfg, "GOV_DECISION_MAX_AGE_SEC", 45.0))
+    max_future_skew = float(getattr(cfg, "MAX_CLOCK_SKEW_SEC", 5.0))
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except Exception:
@@ -173,6 +178,8 @@ def _load_latest_decision_for_symbol(symbol: str, now_epoch: float) -> Dict[str,
             ts_epoch = float(payload.get("ts_epoch"))
         except Exception:
             continue
+        if ts_epoch > (now_epoch + max_future_skew):
+            continue
         if (now_epoch - ts_epoch) > max_age:
             continue
         return payload
@@ -193,12 +200,26 @@ def _snapshot_feed_health(
         return None
 
     instrument = str(market_data.get("instrument") or "OPT").upper()
-    max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
-    max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0))
+    market_ctx = derive_market_context({"execution_mode": mode, "market_open": market_open})
+    offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+    max_ltp_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if offhours_mode else "SLA_MAX_LTP_AGE_SEC",
+            900.0 if offhours_mode else 2.5,
+        )
+    )
+    max_depth_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if offhours_mode else "SLA_MAX_DEPTH_AGE_SEC",
+            900.0 if offhours_mode else 6.0,
+        )
+    )
 
     ltp_ts = market_data.get("ltp_ts_epoch")
     try:
-        ltp_age_sec = max(0.0, now_epoch - float(ltp_ts)) if ltp_ts is not None else None
+        ltp_age_sec = compute_age_sec(ltp_ts, now_epoch)
     except Exception:
         ltp_age_sec = None
 
@@ -215,7 +236,7 @@ def _snapshot_feed_health(
 
     ltp_ok = ltp_age_sec is not None and ltp_age_sec <= max_ltp_age
     reasons: List[str] = []
-    if market_open:
+    if market_open and (not offhours_mode):
         if ltp_age_sec is None:
             reasons.append("ltp_missing")
         elif ltp_age_sec > max_ltp_age:
@@ -223,12 +244,17 @@ def _snapshot_feed_health(
 
     # FEED_STALE is strictly time-based on LTP freshness.
     # Depth quality is tracked as diagnostics/quote-quality, not feed freshness.
-    ok = (not market_open) or ltp_ok
-    state = "MARKET_CLOSED" if not market_open else ("OK" if ok else "STALE")
+    if offhours_mode:
+        ok = True
+        state = "OFFHOURS"
+    else:
+        ok = (not market_open) or ltp_ok
+        state = "MARKET_CLOSED" if not market_open else ("OK" if ok else "STALE")
     return {
         "ok": ok,
         "state": state,
         "market_open": market_open,
+        "offhours_mode": bool(offhours_mode),
         "reasons": reasons,
         "ltp": {"age_sec": ltp_age_sec, "max_age_sec": max_ltp_age},
         "depth": {
@@ -249,10 +275,23 @@ def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> Tr
     """
     now_epoch = now_utc_epoch()
     reasons: List[str] = []
-    mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     symbol = str((market_data or {}).get("symbol") or "").upper() if isinstance(market_data, dict) else ""
 
-    snapshot_market_open = bool(market_data.get("market_open")) if isinstance(market_data, dict) and ("market_open" in market_data) else bool(is_market_open_ist())
+    ctx_payload = {}
+    if isinstance(market_data, dict):
+        if isinstance(market_data.get("market_context"), dict):
+            ctx_payload.update(dict(market_data.get("market_context") or {}))
+        if "market_open" in market_data and "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" in market_data and "segment" not in ctx_payload:
+            ctx_payload["segment"] = market_data.get("segment")
+    if "execution_mode" not in ctx_payload:
+        ctx_payload["execution_mode"] = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    if "market_open" not in ctx_payload:
+        ctx_payload["market_open"] = bool(is_market_open_ist())
+    market_ctx = derive_market_context(ctx_payload)
+    mode = str(market_ctx.mode)
+    snapshot_market_open = bool(market_ctx.is_market_open)
     decision_row = _load_latest_decision_for_symbol(symbol=symbol, now_epoch=now_epoch)
     snapshot_freshness = _snapshot_feed_health(
         market_data=market_data,

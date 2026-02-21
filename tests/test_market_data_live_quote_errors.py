@@ -95,11 +95,61 @@ def test_live_index_missing_depth_appends_live_quote_error(monkeypatch, tmp_path
     assert row["details"]["market_open"] is True
     assert row["details"]["quote_source"] == "missing_depth"
     assert row["details"]["ltp_source"] == "live"
+    assert row["level"] == "ERROR"
+
+
+def test_live_index_missing_depth_with_usable_ltp_logs_warn(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
+    market_data._LIVE_QUOTE_ERROR_LAST_TS.clear()
+
+    market_data._maybe_log_index_bidask_missing(
+        "NIFTY",
+        quote_ok=False,
+        quote_source="missing_depth",
+        ltp_source="live",
+        market_open=True,
+        ltp=25000.0,
+        ltp_age_sec=1.0,
+    )
+
+    out_path = Path("logs/live_quote_errors.jsonl")
+    rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert rows
+    row = rows[-1]
+    assert row["event_code"] == "index_bidask_missing"
+    assert row["level"] == "WARN"
+
+
+
+def test_live_index_missing_depth_offhours_does_not_append_live_quote_error(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
+    market_data._LIVE_QUOTE_ERROR_LAST_TS.clear()
+
+    market_data._maybe_log_index_bidask_missing(
+        "NIFTY",
+        quote_ok=False,
+        quote_source="missing_depth",
+        ltp_source="live",
+        market_open=False,
+    )
+
+    out_path = Path("logs/live_quote_errors.jsonl")
+    if not out_path.exists():
+        return
+    rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert all(row.get("event_code") != "index_bidask_missing" for row in rows)
 
 
 def test_get_ltp_logs_kite_not_initialized_with_canonical_schema(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cfg, "KITE_USE_API", True, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
     market_data._LIVE_QUOTE_ERROR_LAST_TS.clear()
@@ -128,6 +178,7 @@ def test_get_ltp_logs_kite_not_initialized_with_canonical_schema(monkeypatch, tm
 def test_get_ltp_logs_ltp_fetch_failed_with_canonical_schema(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cfg, "KITE_USE_API", True, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
     market_data._LIVE_QUOTE_ERROR_LAST_TS.clear()

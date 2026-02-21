@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dataclasses import replace
 from strategies.trade_builder import TradeBuilder
-from core.market_data import fetch_live_market_data, seed_ohlc_buffers_on_startup
+from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap
 from core.risk_engine import RiskEngine
 from core.execution_guard import ExecutionGuard
 from core.trade_logger import log_trade, update_trade_outcome, update_trade_fill
@@ -62,6 +62,7 @@ from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
 from core.review_packet import build_review_packet, format_review_packet
 from core.gate_status_log import append_gate_status, build_gate_status_record
+from core.trade_log_paths import ensure_trade_log_exists
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
     NODE_N2_FEED_FRESH,
@@ -84,6 +85,10 @@ class Orchestrator:
             auto_clear_risk_halt_if_safe()
         except Exception as exc:
             print(f"[SessionGuard] startup check error: {exc}")
+        try:
+            ensure_trade_log_exists()
+        except Exception as exc:
+            print(f"[Startup] trade log init failed: {exc}")
         self.total_capital = total_capital
         self.poll_interval = poll_interval
 
@@ -1701,7 +1706,7 @@ class Orchestrator:
                         pass
 
                 # Phase F: Check and retrain model if needed
-                self.retrainer.update_model("data/trade_log.json")
+                self.retrainer.update_model()
 
                 # Evaluate blocked paper trades
                 try:
@@ -1963,14 +1968,15 @@ class Orchestrator:
         user_id = str((auth_payload or {}).get("user_id", "") or "")
         print(f"[KITE_WS] profile verified user_last4={user_id[-4:] if user_id else 'NONE'}")
         try:
-            warmup_rows = seed_ohlc_buffers_on_startup(list(getattr(cfg, "SYMBOLS", []) or []))
+            warmup_rows = ensure_startup_warmup_bootstrap(list(getattr(cfg, "SYMBOLS", []) or []))
             for row in warmup_rows:
                 print(
                     "[WARMUP] "
                     f"{row.get('symbol')} bars={row.get('seeded_bars_count')} "
                     f"last_candle_ts={row.get('last_candle_ts')} "
                     f"indicator_last_update_ts={row.get('indicator_last_update_ts')} "
-                    f"ok={row.get('indicators_ok_after_seed')}"
+                    f"ok={row.get('warmup_ok', row.get('indicators_ok_after_seed'))} "
+                    f"reason={row.get('warmup_reason') or row.get('seed_reason')}"
                 )
         except Exception as exc:
             print(f"[WARMUP] startup seeding failed: {exc}")

@@ -1,4 +1,6 @@
 # config/config.py
+# Migration note:
+# Added market-context/depth-policy config keys for deterministic LIVE vs OFFHOURS behavior.
 
 # -------------------------------
 # Env loader (optional)
@@ -227,10 +229,27 @@ STRICT_LIVE_QUOTES = os.getenv("STRICT_LIVE_QUOTES", "true").lower() == "true"
 PAPER_STRICT_QUOTES = os.getenv("PAPER_STRICT_QUOTES", "true").lower() == "true"
 MAX_LTP_AGE_SEC = float(os.getenv("MAX_LTP_AGE_SEC", "8"))
 MAX_CANDLE_AGE_SEC = float(os.getenv("MAX_CANDLE_AGE_SEC", "120"))
+OFFHOURS_MAX_OPTION_QUOTE_AGE_SEC = float(
+    os.getenv("OFFHOURS_MAX_OPTION_QUOTE_AGE_SEC", str(max(MAX_OPTION_QUOTE_AGE_SEC, 60.0)))
+)
+OFFHOURS_MAX_LTP_AGE_SEC = float(
+    os.getenv("OFFHOURS_MAX_LTP_AGE_SEC", str(max(MAX_LTP_AGE_SEC, 900.0)))
+)
+OFFHOURS_MAX_CANDLE_AGE_SEC = float(
+    os.getenv("OFFHOURS_MAX_CANDLE_AGE_SEC", str(max(MAX_CANDLE_AGE_SEC, 1800.0)))
+)
 INDEX_BIDASK_MISSING_LOG_SEC = float(os.getenv("INDEX_BIDASK_MISSING_LOG_SEC", "60"))
 INDEX_REST_QUOTE_REFRESH_SEC = float(os.getenv("INDEX_REST_QUOTE_REFRESH_SEC", "5"))
 SYNTH_INDEX_SPREAD_PCT = float(os.getenv("SYNTH_INDEX_SPREAD_PCT", "0.00005"))
 SYNTH_INDEX_SPREAD_ABS = float(os.getenv("SYNTH_INDEX_SPREAD_ABS", "0.5"))
+INDEX_SYNTH_MIN_TICK = float(os.getenv("INDEX_SYNTH_MIN_TICK", "0.05"))
+INDEX_SYNTH_SPREAD_BPS_LIVE = float(
+    os.getenv("INDEX_SYNTH_SPREAD_BPS_LIVE", "5.0")
+)
+OFFHOURS_SYNTH_INDEX_SPREAD_BPS = float(
+    os.getenv("OFFHOURS_SYNTH_INDEX_SPREAD_BPS", "20.0")
+)
+INDEX_REQUIRE_DEPTH_LIVE = os.getenv("INDEX_REQUIRE_DEPTH_LIVE", "false").lower() == "true"
 
 # -------------------------------
 # Synthetic option chain
@@ -804,6 +823,7 @@ KITE_AUTH_RETRY_BACKOFF_SEC = float(os.getenv("KITE_AUTH_RETRY_BACKOFF_SEC", "0.
 # Risk governance / scorecard
 DAILY_LOSS_LIMIT = CAPITAL * MAX_DAILY_LOSS_PCT
 PORTFOLIO_MAX_DRAWDOWN = MAX_DRAWDOWN_PCT
+TRADE_LOG_PATH = os.getenv("TRADE_LOG_PATH", f"{LOGS_ROOT}/trade_log.jsonl")
 RISK_HALT_FILE = os.getenv("RISK_HALT_FILE", f"{LOGS_ROOT}/risk_halt.json")
 LOG_LOCK_FILE = os.getenv("LOG_LOCK_FILE", f"{LOGS_ROOT}/trade_log.lock")
 APPEND_ONLY_LOG = True
@@ -889,6 +909,9 @@ SCAN_INTERVAL = 60  # check for trades every 60 seconds
 # -------------------------------
 KITE_USE_API = os.getenv("KITE_USE_API", "true").lower() == "true"
 REQUIRE_LIVE_QUOTES = os.getenv("REQUIRE_LIVE_QUOTES", "true").lower() == "true"
+OFFHOURS_FORCE_ENABLE = os.getenv("OFFHOURS_FORCE_ENABLE", "false").lower() == "true"
+OFFHOURS_FORCE_DISABLE = os.getenv("OFFHOURS_FORCE_DISABLE", "false").lower() == "true"
+OFFHOURS_DEBUG_INDEX_BIDASK_MISSING = os.getenv("OFFHOURS_DEBUG_INDEX_BIDASK_MISSING", "false").lower() == "true"
 INVALID_LTP_ACTION = os.getenv("INVALID_LTP_ACTION", "skip_symbol")
 OUTCOME_PNL_EPSILON = float(os.getenv("OUTCOME_PNL_EPSILON", "0.000001"))
 
@@ -913,6 +936,15 @@ INDICATOR_STALE_SEC = int(os.getenv("INDICATOR_STALE_SEC", "120"))
 OHLC_BUFFER_MAX_BARS = int(os.getenv("OHLC_BUFFER_MAX_BARS", "500"))
 OHLC_MIN_BARS = int(os.getenv("OHLC_MIN_BARS", "30"))
 OHLC_WARM_SEED_WINDOWS_MIN = os.getenv("OHLC_WARM_SEED_WINDOWS_MIN", "120,240")
+OHLC_WARM_SEED_INTERVAL = os.getenv("OHLC_WARM_SEED_INTERVAL", "minute")
+STARTUP_WARMUP_ENABLE = os.getenv("STARTUP_WARMUP_ENABLE", "true").lower() == "true"
+STARTUP_WARMUP_INTERVAL = os.getenv("STARTUP_WARMUP_INTERVAL", "5minute")
+STARTUP_WARMUP_TARGET_BARS = int(os.getenv("STARTUP_WARMUP_TARGET_BARS", "200"))
+STARTUP_WARMUP_SYMBOLS = [
+    s.strip().upper()
+    for s in os.getenv("STARTUP_WARMUP_SYMBOLS", "NIFTY,BANKNIFTY,SENSEX").split(",")
+    if s.strip()
+]
 INDICATORS_NEVER_COMPUTED_AGE_SEC = float(os.getenv("INDICATORS_NEVER_COMPUTED_AGE_SEC", "1000000000"))
 VWAP_WINDOW = int(os.getenv("VWAP_WINDOW", "20"))
 VWAP_SLOPE_WINDOW = int(os.getenv("VWAP_SLOPE_WINDOW", "10"))
@@ -949,6 +981,12 @@ DEPTH_SUBSCRIPTION_MAX_TOKENS = int(os.getenv("DEPTH_SUBSCRIPTION_MAX_TOKENS", "
 DEPTH_SUBSCRIPTION_VALIDATE_TOKENS = os.getenv("DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", "true").lower() == "true"
 SLA_MAX_LTP_AGE_SEC = float(os.getenv("SLA_MAX_LTP_AGE_SEC", "2.5"))
 SLA_MAX_DEPTH_AGE_SEC = float(os.getenv("SLA_MAX_DEPTH_AGE_SEC", "6.0"))
+OFFHOURS_SLA_MAX_LTP_AGE_SEC = float(
+    os.getenv("OFFHOURS_SLA_MAX_LTP_AGE_SEC", str(max(SLA_MAX_LTP_AGE_SEC, 900.0)))
+)
+OFFHOURS_SLA_MAX_DEPTH_AGE_SEC = float(
+    os.getenv("OFFHOURS_SLA_MAX_DEPTH_AGE_SEC", str(max(SLA_MAX_DEPTH_AGE_SEC, 900.0)))
+)
 
 # -------------------------------
 # Cross-asset features

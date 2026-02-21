@@ -1,4 +1,6 @@
 # core/market_data.py
+# Migration note:
+# Runtime mode and quote strictness now flow through core.market_context.derive_market_context.
 
 import os
 import json
@@ -17,7 +19,8 @@ from core.ohlc_buffer import ohlc_buffer
 from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
-from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
+from core.market_context import derive_market_context, is_offhours
+from core.time_utils import compute_age_sec, now_ist, now_utc_epoch, is_market_open_ist
 from core.session_calendar import minutes_since_open as session_minutes_since_open, is_open
 from core.time_sanity import check_market_data_time_sanity
 from core.day_type_history import append_day_type_event
@@ -56,6 +59,8 @@ _NEWS_ENCODER = None
 _NEWS_CAL = None
 _NEWS_TEXT = None
 _CROSS_ASSET = None
+_STARTUP_WARMUP_DONE = False
+_STARTUP_WARMUP_ROWS = []
 
 # -------------------------------
 # Market Data Functions
@@ -93,14 +98,31 @@ def _indicator_freshness_status(
 def _should_require_live_ltp(
     execution_mode: str | None = None,
     require_live_quotes: bool | None = None,
+    snapshot: dict | None = None,
 ) -> bool:
-    mode = str(execution_mode if execution_mode is not None else getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
-    require_quotes = bool(
-        getattr(cfg, "REQUIRE_LIVE_QUOTES", True)
-        if require_live_quotes is None
-        else require_live_quotes
+    return _effective_require_live_quotes(
+        snapshot,
+        require_live_quotes=require_live_quotes,
+        execution_mode=execution_mode,
     )
-    return (mode == "LIVE") or require_quotes
+
+
+def _effective_require_live_quotes(
+    snapshot: dict | None = None,
+    *,
+    require_live_quotes: bool | None = None,
+    execution_mode: str | None = None,
+) -> bool:
+    if require_live_quotes is False:
+        return False
+    base = dict(snapshot or {})
+    if execution_mode is not None:
+        base["execution_mode"] = execution_mode
+    ctx = derive_market_context(base)
+    if require_live_quotes is True:
+        return bool(ctx.require_live_quotes)
+    configured = bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
+    return bool(configured and ctx.require_live_quotes)
 
 
 def _apply_indicator_quote_policy(
@@ -109,6 +131,7 @@ def _apply_indicator_quote_policy(
     ltp_source: str | None,
     execution_mode: str | None = None,
     require_live_quotes: bool | None = None,
+    snapshot: dict | None = None,
 ) -> bool:
     """
     Final indicator gate policy:
@@ -126,6 +149,7 @@ def _apply_indicator_quote_policy(
     require_live_ltp = _should_require_live_ltp(
         execution_mode=execution_mode,
         require_live_quotes=require_live_quotes,
+        snapshot=snapshot,
     )
     if require_live_ltp and str(ltp_source or "").lower() != "live":
         return False
@@ -305,9 +329,20 @@ def is_index(symbol: str) -> bool:
     return _is_index_symbol(symbol)
 
 
-def _index_depth_required(symbol: str, execution_mode: str | None = None) -> bool:
-    mode = str(execution_mode if execution_mode is not None else getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
-    return bool(is_index(symbol) and mode == "LIVE")
+def _index_depth_required(
+    symbol: str,
+    *,
+    execution_mode: str | None = None,
+    market_open: bool | None = None,
+) -> bool:
+    if not is_index(symbol):
+        return False
+    ctx = derive_market_context(
+        {"execution_mode": execution_mode, "market_open": market_open}
+    )
+    if ctx.mode != "LIVE":
+        return False
+    return bool(getattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", False))
 
 
 def _classify_index_feed_health(
@@ -315,6 +350,7 @@ def _classify_index_feed_health(
     symbol: str,
     execution_mode: str | None,
     now_epoch: float,
+    market_open: bool | None,
     ltp,
     ltp_ts_epoch,
     quote_ok: bool,
@@ -328,15 +364,27 @@ def _classify_index_feed_health(
     - SIM/PAPER: missing depth does not become STALE and does not require depth.
     - LIVE: missing depth is MISSING (strict), not STALE.
     """
-    max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
-    max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0))
+    ctx = derive_market_context(
+        {"execution_mode": execution_mode, "market_open": market_open}
+    )
+    offhours = ctx.mode == "OFFHOURS"
+    max_ltp_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if offhours else "SLA_MAX_LTP_AGE_SEC",
+            900.0 if offhours else 2.5,
+        )
+    )
+    max_depth_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if offhours else "SLA_MAX_DEPTH_AGE_SEC",
+            900.0 if offhours else 6.0,
+        )
+    )
 
-    ltp_age_sec = None
-    if isinstance(ltp_ts_epoch, (int, float)):
-        ltp_age_sec = max(0.0, float(now_epoch) - float(ltp_ts_epoch))
-    depth_age_sec = None
-    if isinstance(quote_ts_epoch, (int, float)):
-        depth_age_sec = max(0.0, float(now_epoch) - float(quote_ts_epoch))
+    ltp_age_sec = compute_age_sec(ltp_ts_epoch, now_epoch)
+    depth_age_sec = compute_age_sec(quote_ts_epoch, now_epoch)
 
     stale_reasons = []
     missing_reasons = []
@@ -347,26 +395,34 @@ def _classify_index_feed_health(
     elif float(ltp_age_sec) > max_ltp_age:
         stale_reasons.append(f"ltp_stale age={float(ltp_age_sec):.2f} max={max_ltp_age:.2f}")
 
-    depth_required = _index_depth_required(symbol, execution_mode=execution_mode)
+    depth_required = _index_depth_required(
+        symbol,
+        execution_mode=execution_mode,
+        market_open=market_open,
+    )
     if not bool(quote_ok):
         missing_reasons.append("depth_missing")
         missing_reasons.append(str(quote_source or "missing_depth"))
 
-    if stale_reasons:
-        state = "STALE"
-    elif missing_reasons:
-        state = "MISSING"
-    else:
-        state = "OK"
-
-    if state == "MISSING" and not depth_required:
+    if offhours:
+        state = "OFFHOURS"
         feed_ok = True
     else:
-        feed_ok = state == "OK"
+        if stale_reasons:
+            state = "STALE"
+        elif missing_reasons:
+            state = "MISSING"
+        else:
+            state = "OK"
+        if state == "MISSING" and not depth_required:
+            feed_ok = True
+        else:
+            feed_ok = state == "OK"
 
     return {
         "state": state,
         "ok": bool(feed_ok),
+        "offhours_mode": bool(offhours),
         "ltp_age_sec": ltp_age_sec,
         "depth_age_sec": depth_age_sec,
         "max_ltp_age_sec": max_ltp_age,
@@ -378,15 +434,23 @@ def _classify_index_feed_health(
     }
 
 
-def _synthesize_index_bid_ask(mid_price) -> tuple[float | None, float | None, float | None]:
+def _synthesize_index_bid_ask(
+    mid_price,
+    *,
+    spread_bps: float | None = None,
+) -> tuple[float | None, float | None, float | None]:
     try:
         mid = float(mid_price)
         if mid <= 0:
             return None, None, None
-        spread = max(
-            float(mid) * float(getattr(cfg, "SYNTH_INDEX_SPREAD_PCT", 0.00005)),
-            float(getattr(cfg, "SYNTH_INDEX_SPREAD_ABS", 0.5)),
-        )
+        if spread_bps is not None:
+            spread = float(mid) * (abs(float(spread_bps)) / 10000.0)
+            spread = max(spread, float(getattr(cfg, "INDEX_SYNTH_MIN_TICK", 0.05)))
+        else:
+            spread = max(
+                float(mid) * float(getattr(cfg, "SYNTH_INDEX_SPREAD_PCT", 0.00005)),
+                float(getattr(cfg, "SYNTH_INDEX_SPREAD_ABS", 0.5)),
+            )
         spread_cap = float(getattr(cfg, "SYNTH_INDEX_SPREAD_CAP", 5.0))
         spread = min(spread, spread_cap)
         half = spread / 2.0
@@ -397,7 +461,16 @@ def _synthesize_index_bid_ask(mid_price) -> tuple[float | None, float | None, fl
         return None, None, None
 
 
-def resolve_index_quote(symbol: str, mode: str, ltp, depth) -> dict:
+def resolve_index_quote(
+    symbol: str,
+    mode: str,
+    ltp,
+    depth,
+    *,
+    market_open: bool | None = None,
+    ltp_age_sec: float | None = None,
+    market_context: dict | None = None,
+) -> dict:
     """
     Resolve index quote in a single deterministic path.
 
@@ -445,18 +518,72 @@ def resolve_index_quote(symbol: str, mode: str, ltp, depth) -> dict:
             "quote_source": "depth",
         }
 
-    if str(mode or "").upper() in {"SIM", "PAPER"} and is_index(symbol):
+    ctx_payload = dict(market_context or {})
+    if "execution_mode" not in ctx_payload:
+        ctx_payload["execution_mode"] = mode
+    if market_open is not None and "market_open" not in ctx_payload:
+        ctx_payload["market_open"] = market_open
+    ctx = derive_market_context(ctx_payload)
+    depth_required = _index_depth_required(
+        symbol,
+        execution_mode=mode,
+        market_open=ctx.is_market_open,
+    )
+
+    if is_index(symbol):
         ltp_price = _as_price(ltp)
-        if ltp_price is not None:
-            synth_bid, synth_ask, synth_mid = _synthesize_index_bid_ask(ltp_price)
-            if synth_bid is not None and synth_ask is not None and synth_mid is not None:
-                return {
-                    "bid": synth_bid,
-                    "ask": synth_ask,
-                    "mid": synth_mid,
-                    "quote_ok": True,
-                    "quote_source": "synthetic_index",
-                }
+        if ltp_price is None:
+            return {
+                "bid": None,
+                "ask": None,
+                "mid": None,
+                "quote_ok": False,
+                "quote_source": "missing_ltp" if ctx.require_live_quotes else "missing_depth",
+            }
+
+        max_ltp_age = float(
+            getattr(
+                cfg,
+                "MAX_LTP_AGE_SEC" if ctx.mode == "LIVE" else "OFFHOURS_MAX_LTP_AGE_SEC",
+                8.0 if ctx.mode == "LIVE" else 3600.0,
+            )
+        )
+        if ltp_age_sec is None:
+            age_ok = not ctx.require_live_quotes
+        else:
+            age_ok = float(max(0.0, ltp_age_sec)) <= max_ltp_age
+        if not age_ok:
+            return {
+                "bid": None,
+                "ask": None,
+                "mid": None,
+                "quote_ok": False,
+                "quote_source": "stale_ltp",
+            }
+        if depth_required:
+            return {
+                "bid": None,
+                "ask": None,
+                "mid": None,
+                "quote_ok": False,
+                "quote_source": "missing_depth",
+            }
+        spread_bps = float(
+            getattr(
+                cfg,
+                "INDEX_SYNTH_SPREAD_BPS_LIVE" if ctx.mode == "LIVE" else "OFFHOURS_SYNTH_INDEX_SPREAD_BPS",
+                5.0 if ctx.mode == "LIVE" else 20.0,
+            )
+        )
+        synth_bid, synth_ask, synth_mid = _synthesize_index_bid_ask(ltp_price, spread_bps=spread_bps)
+        if synth_bid is not None and synth_ask is not None and synth_mid is not None:
+            return {
+                "bid": synth_bid,
+                "ask": synth_ask,
+                "mid": synth_mid,
+                "quote_ok": True,
+                "quote_source": "synthetic_index",
+            }
 
     return {
         "bid": None,
@@ -557,6 +684,7 @@ def _append_live_quote_error(
     symbol: str,
     *,
     category: str,
+    level: str = "WARN",
     source: str | None = None,
     details: dict | None = None,
 ) -> None:
@@ -578,6 +706,7 @@ def _append_live_quote_error(
             "ts_epoch": float(now_epoch),
             "event_code": event,
             "category": cat,
+            "level": str(level or "WARN").upper(),
             "symbol": sym,
             "source": str(source) if source is not None else None,
             "details": details if isinstance(details, dict) else {},
@@ -594,6 +723,7 @@ def _log_index_bidask_missing(
     symbol: str,
     source: str | None = None,
     *,
+    level: str = "WARN",
     details: dict | None = None,
 ):
     payload_details = {
@@ -606,18 +736,19 @@ def _log_index_bidask_missing(
         event_code="index_bidask_missing",
         symbol=symbol,
         category="missing",
+        level=level,
         source=source,
         details=payload_details,
     )
 
 
 def _should_log_index_bidask_missing(*, execution_mode: str, require_live_quotes: bool, market_open: bool) -> bool:
-    mode = str(execution_mode or "").upper()
-    if not bool(market_open):
+    ctx = derive_market_context({"execution_mode": execution_mode, "market_open": market_open})
+    if ctx.mode == "OFFHOURS":
         return False
-    if mode in {"SIM", "PAPER"}:
+    if ctx.mode != "LIVE":
         return False
-    return mode == "LIVE" or bool(require_live_quotes)
+    return bool(require_live_quotes)
 
 
 def _maybe_log_index_bidask_missing(
@@ -627,25 +758,53 @@ def _maybe_log_index_bidask_missing(
     quote_source: str | None,
     ltp_source: str | None,
     market_open: bool,
+    ltp=None,
+    ltp_age_sec: float | None = None,
 ) -> None:
     if quote_ok:
         return
     execution_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
-    require_live_quotes = bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
+    ctx = derive_market_context({"execution_mode": execution_mode, "market_open": market_open})
+    if ctx.mode == "OFFHOURS":
+        if bool(getattr(cfg, "OFFHOURS_DEBUG_INDEX_BIDASK_MISSING", False)):
+            print(
+                f"[OFFHOURS] index bid/ask missing suppressed symbol={symbol} "
+                f"quote_source={quote_source} ltp_source={ltp_source}"
+            )
+        return
+    require_live_quotes = _effective_require_live_quotes(
+        {"market_open": market_open},
+        execution_mode=execution_mode,
+    )
     if not _should_log_index_bidask_missing(
         execution_mode=execution_mode,
         require_live_quotes=require_live_quotes,
         market_open=market_open,
     ):
         return
+    ltp_usable = False
+    try:
+        ltp_ok = ltp is not None and float(ltp) > 0.0
+    except Exception:
+        ltp_ok = False
+    if ltp_ok:
+        if ltp_age_sec is None:
+            ltp_usable = not bool(require_live_quotes)
+        else:
+            max_ltp_age = float(getattr(cfg, "MAX_LTP_AGE_SEC", 8.0))
+            ltp_usable = float(max(0.0, ltp_age_sec)) <= max_ltp_age
+    level = "ERROR" if (require_live_quotes and (not ltp_usable)) else "WARN"
     _log_index_bidask_missing(
         symbol,
+        level=level,
         source=quote_source,
         details={
             "mode": execution_mode,
             "market_open": bool(market_open),
             "quote_source": str(quote_source) if quote_source is not None else None,
             "ltp_source": str(ltp_source) if ltp_source is not None else None,
+            "ltp_usable": bool(ltp_usable),
+            "ltp_age_sec": ltp_age_sec,
         },
     )
 
@@ -717,7 +876,16 @@ def _derive_unstable_reasons(
     return list(dict.fromkeys(reasons))
 
 
-def _log_insufficient_ohlc_warning(symbol: str, bars_count: int, min_bars: int, reason: str) -> None:
+def _log_insufficient_ohlc_warning(
+    symbol: str,
+    bars_count: int,
+    min_bars: int,
+    reason: str,
+    *,
+    detail: str | None = None,
+    interval: str | None = None,
+    target_bars: int | None = None,
+) -> None:
     """
     Emit a single warning per symbol/reason per process to avoid log spam.
     """
@@ -732,6 +900,9 @@ def _log_insufficient_ohlc_warning(symbol: str, bars_count: int, min_bars: int, 
         "bars_count": int(bars_count),
         "min_bars": int(min_bars),
         "reason": reason,
+        "detail": str(detail) if detail is not None else None,
+        "interval": str(interval) if interval is not None else None,
+        "target_bars": int(target_bars) if target_bars is not None else None,
         "ts_epoch": now_utc_epoch(),
         "ts_ist": now_ist().isoformat(),
     }
@@ -744,8 +915,12 @@ def _log_insufficient_ohlc_warning(symbol: str, bars_count: int, min_bars: int, 
         pass
 
 
-def _warm_seed_windows_minutes() -> list[int]:
-    raw = str(getattr(cfg, "OHLC_WARM_SEED_WINDOWS_MIN", "120,240") or "120,240")
+def _warm_seed_windows_minutes(raw_windows: str | None = None) -> list[int]:
+    raw = str(
+        raw_windows
+        if raw_windows is not None
+        else getattr(cfg, "OHLC_WARM_SEED_WINDOWS_MIN", "120,240")
+    )
     out = []
     for part in raw.split(","):
         part = part.strip()
@@ -760,13 +935,48 @@ def _warm_seed_windows_minutes() -> list[int]:
     return out or [120, 240]
 
 
-def _warm_seed_ohlc_from_history(symbol: str, bars: list, min_bars: int):
+def _interval_to_minutes(interval: str | None) -> int:
+    val = str(interval or "minute").strip().lower()
+    mapping = {
+        "minute": 1,
+        "1minute": 1,
+        "3minute": 3,
+        "5minute": 5,
+        "10minute": 10,
+        "15minute": 15,
+        "30minute": 30,
+        "60minute": 60,
+        "hour": 60,
+        "day": 390,
+    }
+    return int(mapping.get(val, 1))
+
+
+def _startup_seed_windows_minutes(interval: str, target_bars: int) -> list[int]:
+    interval_min = max(1, _interval_to_minutes(interval))
+    base = max(interval_min * max(int(target_bars), 1), interval_min * 30)
+    fallback = int(base * 2)
+    return [base, fallback]
+
+
+def _warm_seed_ohlc_from_history(
+    symbol: str,
+    bars: list,
+    min_bars: int,
+    *,
+    interval: str | None = None,
+    windows_minutes: list[int] | None = None,
+    required_seed_bars: int | None = None,
+):
     """
     Warm-seed minute OHLC bars when current buffer is insufficient.
     Returns (bars, seeded_ok, reason_code).
     """
-    if len(bars) >= int(min_bars):
+    seed_interval = str(interval or getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute")).strip() or "minute"
+    required_bars = int(required_seed_bars if required_seed_bars is not None else min_bars)
+    if len(bars) >= required_bars:
         return bars, True, None
+    reason_code = "HIST_FETCH_FAILED"
     try:
         kite_client.ensure()
     except Exception:
@@ -777,9 +987,12 @@ def _warm_seed_ohlc_from_history(symbol: str, bars: list, min_bars: int):
             symbol=symbol,
             bars_count=len(bars),
             min_bars=min_bars,
-            reason="kite_api_unavailable",
+            reason=reason_code,
+            detail="kite_api_unavailable",
+            interval=seed_interval,
+            target_bars=required_bars,
         )
-        return bars, False, "kite_api_unavailable"
+        return bars, False, reason_code
     try:
         token = kite_client.resolve_index_token(symbol)
         if not token:
@@ -787,56 +1000,86 @@ def _warm_seed_ohlc_from_history(symbol: str, bars: list, min_bars: int):
                 symbol=symbol,
                 bars_count=len(bars),
                 min_bars=min_bars,
-                reason="missing_index_token",
+                reason=reason_code,
+                detail="missing_index_token",
+                interval=seed_interval,
+                target_bars=required_bars,
             )
-            return bars, False, "missing_index_token"
+            return bars, False, reason_code
         last_reason = "historical_empty"
-        for window_min in _warm_seed_windows_minutes():
+        window_list = windows_minutes or _warm_seed_windows_minutes()
+        for window_min in window_list:
             from_dt = now_ist() - timedelta(minutes=int(window_min))
             to_dt = now_ist()
-            hist = kite_client.historical_data(token, from_dt, to_dt, interval="minute")
+            hist = kite_client.historical_data(token, from_dt, to_dt, interval=seed_interval)
             if not hist:
                 last_reason = "historical_empty"
                 continue
             ohlc_buffer.seed_bars(symbol, hist)
             bars = ohlc_buffer.get_bars(symbol)
-            if len(bars) >= int(min_bars):
+            if len(bars) >= required_bars:
                 return bars, True, None
             last_reason = "seeded_but_still_insufficient"
-        if len(bars) < int(min_bars):
+        if len(bars) < required_bars:
             _log_insufficient_ohlc_warning(
                 symbol=symbol,
                 bars_count=len(bars),
                 min_bars=min_bars,
-                reason=last_reason,
+                reason=reason_code,
+                detail=last_reason,
+                interval=seed_interval,
+                target_bars=required_bars,
             )
-            return bars, False, last_reason
+            return bars, False, reason_code
         return bars, True, None
     except Exception:
         _log_insufficient_ohlc_warning(
             symbol=symbol,
             bars_count=len(bars),
             min_bars=min_bars,
-            reason="historical_seed_error",
+            reason=reason_code,
+            detail="historical_seed_error",
+            interval=seed_interval,
+            target_bars=required_bars,
         )
-        return bars, False, "historical_seed_error"
+        return bars, False, reason_code
 
 
-def seed_ohlc_buffers_on_startup(symbols: list[str] | None = None) -> list[dict]:
+def _startup_warmup_symbols(symbols: list[str] | None = None) -> list[str]:
+    if symbols:
+        return list(dict.fromkeys(str(s).upper() for s in symbols if str(s).strip()))
+    configured = list(getattr(cfg, "STARTUP_WARMUP_SYMBOLS", []) or [])
+    if configured:
+        return list(dict.fromkeys(str(s).upper() for s in configured if str(s).strip()))
+    return list(dict.fromkeys(str(s).upper() for s in (getattr(cfg, "SYMBOLS", []) or []) if str(s).strip()))
+
+
+def seed_ohlc_buffers_on_startup(
+    symbols: list[str] | None = None,
+    *,
+    market_context: dict | None = None,
+) -> list[dict]:
     """
     Seed OHLC buffers from historical minute candles at process startup.
     This runs before live ticks and writes structured observability logs.
     """
-    symbol_list = symbols or list(getattr(cfg, "SYMBOLS", []) or [])
+    symbol_list = _startup_warmup_symbols(symbols)
     min_bars = int(getattr(cfg, "SYSTEM_WARMUP_MIN_BARS", getattr(cfg, "OHLC_MIN_BARS", 30)))
+    seed_interval = str(getattr(cfg, "STARTUP_WARMUP_INTERVAL", "5minute") or "5minute").strip() or "5minute"
+    target_bars = max(int(getattr(cfg, "STARTUP_WARMUP_TARGET_BARS", 200)), min_bars)
+    startup_windows = _startup_seed_windows_minutes(seed_interval, target_bars)
+    warmup_ctx = derive_market_context(market_context or {})
     rows = []
-    for symbol in list(dict.fromkeys(str(s).upper() for s in symbol_list if str(s).strip())):
+    for symbol in symbol_list:
         pre_bars = ohlc_buffer.get_bars(symbol)
         pre_count = int(len(pre_bars))
         bars, seeded_ok, seed_reason = _warm_seed_ohlc_from_history(
             symbol=symbol,
             bars=pre_bars,
             min_bars=min_bars,
+            interval=seed_interval,
+            windows_minutes=startup_windows,
+            required_seed_bars=target_bars,
         )
         seeded_count = int(len(bars))
         indicators_ok = False
@@ -867,12 +1110,16 @@ def seed_ohlc_buffers_on_startup(symbols: list[str] | None = None) -> list[dict]
             indicator_last_update_ts = datetime.fromtimestamp(
                 float(indicator_last_update_epoch), tz=timezone.utc
             ).astimezone(now_ist().tzinfo).isoformat()
+        warmup_ok = bool((seeded_count >= min_bars) and indicators_ok)
+        warmup_reason = "HIST_FETCH_FAILED" if str(seed_reason or "").upper() == "HIST_FETCH_FAILED" else None
         row = {
             "event": "OHLC_STARTUP_SEED",
             "ts_epoch": now_utc_epoch(),
             "ts_ist": now_ist().isoformat(),
             "symbol": symbol,
             "min_bars": min_bars,
+            "target_bars": target_bars,
+            "seed_interval": seed_interval,
             "pre_seed_bars_count": pre_count,
             "seeded_bars_count": seeded_count,
             "seeded_ok": bool(seeded_ok),
@@ -882,6 +1129,9 @@ def seed_ohlc_buffers_on_startup(symbols: list[str] | None = None) -> list[dict]
             "indicators_ok_after_seed": indicators_ok,
             "indicator_last_update_ts": indicator_last_update_ts,
             "indicator_last_update_epoch": indicator_last_update_epoch,
+            "warmup_ok": warmup_ok,
+            "warmup_reason": warmup_reason,
+            "market_context": warmup_ctx.to_dict(),
         }
         rows.append(row)
         try:
@@ -892,6 +1142,24 @@ def seed_ohlc_buffers_on_startup(symbols: list[str] | None = None) -> list[dict]
         except Exception:
             pass
     return rows
+
+
+def ensure_startup_warmup_bootstrap(
+    symbols: list[str] | None = None,
+    *,
+    force: bool = False,
+    market_context: dict | None = None,
+) -> list[dict]:
+    global _STARTUP_WARMUP_DONE
+    global _STARTUP_WARMUP_ROWS
+    if not bool(getattr(cfg, "STARTUP_WARMUP_ENABLE", True)):
+        return []
+    if _STARTUP_WARMUP_DONE and (not force):
+        return list(_STARTUP_WARMUP_ROWS)
+    rows = seed_ohlc_buffers_on_startup(symbols=symbols, market_context=market_context)
+    _STARTUP_WARMUP_ROWS = list(rows)
+    _STARTUP_WARMUP_DONE = True
+    return list(rows)
 
 def get_current_regime(symbol: str | None = None):
     """
@@ -939,7 +1207,18 @@ def get_ltp(symbol: str):
     """
     Fetch latest market price from Kite or fallback.
     """
-    live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+    segment = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+    market_open = bool(is_market_open_ist(segment=segment))
+    market_ctx = derive_market_context(
+        {
+            "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+            "market_open": bool(market_open),
+            "segment": segment,
+        }
+    )
+    offhours = market_ctx.mode == "OFFHOURS"
+    require_live_quotes = bool(market_ctx.require_live_quotes and getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
+    live_mode = market_ctx.mode == "LIVE"
     _refresh_index_quote_from_rest(symbol, force=False)
     ws_quote = get_index_quote_snapshot(symbol)
     if ws_quote:
@@ -959,13 +1238,13 @@ def get_ltp(symbol: str):
             pass
     if cfg.KITE_USE_API:
         kite_client.ensure()
-        if not kite_client.kite and getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
+        if not kite_client.kite and require_live_quotes:
             _append_live_quote_error(
                 event_code="kite_not_initialized",
                 symbol=symbol,
                 category="auth",
                 source="rest",
-                details={"require_live_quotes": bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))},
+                details={"require_live_quotes": bool(require_live_quotes)},
             )
         if is_index(symbol):
             failures = []
@@ -983,7 +1262,7 @@ def get_ltp(symbol: str):
                         return price
                 except Exception as e:
                     failures.append(f"{ksym}:{e}")
-            if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
+            if require_live_quotes:
                 _append_live_quote_error(
                     event_code="ltp_fetch_failed",
                     symbol=symbol,
@@ -1006,7 +1285,7 @@ def get_ltp(symbol: str):
                     cache["ltp_ts_epoch"] = now_utc_epoch()
                     return price
             except Exception as e:
-                if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
+                if require_live_quotes:
                     _append_live_quote_error(
                         event_code="ltp_fetch_failed",
                         symbol=symbol,
@@ -1023,11 +1302,9 @@ def get_ltp(symbol: str):
             return cached
 
     # Fallback
-    segment = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
-    market_open = bool(is_market_open_ist(segment=segment))
-    if getattr(cfg, "REQUIRE_LIVE_QUOTES", True):
+    if require_live_quotes:
         _DATA_CACHE.setdefault(symbol, {})["ltp_source"] = "none"
-        if market_open:
+        if market_open and (not offhours):
             return None
         if (not live_mode) and getattr(cfg, "ALLOW_CLOSE_FALLBACK", True):
             close_map = getattr(cfg, "PREMARKET_INDICES_CLOSE", {})
@@ -1045,22 +1322,65 @@ get_nifty_ltp = get_ltp
 # Option Chain
 # -------------------------------
 
-def fetch_option_chain(symbol: str, ltp: float, force_synthetic: bool = False):
-    return fetch_option_chain_impl(symbol, ltp, force_synthetic=force_synthetic)
+def fetch_option_chain(
+    symbol: str,
+    ltp: float,
+    force_synthetic: bool = False,
+    market_context: dict | None = None,
+):
+    return fetch_option_chain_impl(
+        symbol,
+        ltp,
+        force_synthetic=force_synthetic,
+        market_context=market_context,
+    )
 
-def _option_chain_health(symbol: str, chain: list, ltp: float):
+def _fetch_option_chain_with_context(
+    symbol: str,
+    ltp: float,
+    *,
+    force_synthetic: bool,
+    market_context: dict | None,
+):
+    """
+    Backward-compatible option-chain call path.
+    Some tests/integrations monkeypatch fetch_option_chain with legacy
+    signature (without market_context). Fallback keeps API compatibility.
+    """
+    try:
+        return fetch_option_chain(
+            symbol,
+            ltp,
+            force_synthetic=force_synthetic,
+            market_context=market_context,
+        )
+    except TypeError as exc:
+        if "market_context" not in str(exc):
+            raise
+        return fetch_option_chain(
+            symbol,
+            ltp,
+            force_synthetic=force_synthetic,
+        )
+
+def _option_chain_health(symbol: str, chain: list, ltp: float, require_live_quotes: bool | None = None):
+    quotes_required = bool(
+        getattr(cfg, "REQUIRE_LIVE_QUOTES", True)
+        if require_live_quotes is None
+        else require_live_quotes
+    )
     total = len(chain)
     if total == 0:
         return {
             "symbol": symbol,
-            "status": "ERROR" if getattr(cfg, "REQUIRE_LIVE_QUOTES", True) else "EMPTY",
+            "status": "ERROR" if quotes_required else "EMPTY",
             "total": 0,
             "missing_iv_pct": 1.0,
             "missing_quote_pct": 1.0,
             "strike_min": None,
             "strike_max": None,
             "ltp": ltp,
-            "note": "No live option chain" if getattr(cfg, "REQUIRE_LIVE_QUOTES", True) else "Empty chain",
+            "note": "No live option chain" if quotes_required else "Empty chain",
             "timestamp": now_ist().isoformat(),
         }
     missing_iv = sum(1 for c in chain if c.get("iv") is None)
@@ -1140,14 +1460,26 @@ def fetch_live_market_data():
     for symbol in symbols:
         segment = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
         market_open_for_segment = bool(is_open(now_dt=now_ist(), segment=segment))
+        market_ctx = derive_market_context(
+            {
+                "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+                "market_open": bool(market_open_for_segment),
+                "segment": segment,
+            }
+        )
+        offhours_mode = market_ctx.mode == "OFFHOURS"
+        require_live_quotes = bool(market_ctx.require_live_quotes and getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
         ltp = get_ltp(symbol)
         ltp_source = _DATA_CACHE.get(symbol, {}).get("ltp_source", "none")
         ltp_ts_epoch = _DATA_CACHE.get(symbol, {}).get("ltp_ts_epoch")
-        if bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True)) and market_open_for_segment and (ltp is None or float(ltp) <= 0):
+        if require_live_quotes and market_ctx.is_market_open and (ltp is None or float(ltp) <= 0):
             results.append(
                 {
                     "symbol": symbol,
                     "segment": segment,
+                    "market_open": bool(market_ctx.is_market_open),
+                    "offhours_mode": bool(offhours_mode),
+                    "market_context": market_ctx.to_dict(),
                     "ltp": ltp,
                     "ltp_source": ltp_source,
                     "ltp_ts_epoch": ltp_ts_epoch,
@@ -1163,8 +1495,8 @@ def fetch_live_market_data():
                             "reasons": ["invalid_ltp"],
                             "ltp_ts_epoch": ltp_ts_epoch,
                             "candle_ts_epoch": None,
-                            "market_open": market_open_for_segment,
-                            "require_live_quotes": bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True)),
+                            "market_open": market_ctx.is_market_open,
+                            "require_live_quotes": bool(require_live_quotes),
                         }
                     },
                 }
@@ -1243,6 +1575,7 @@ def fetch_live_market_data():
                     symbol=symbol,
                     bars=bars,
                     min_bars=min_bars,
+                    interval=str(getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute") or "minute"),
                 )
                 ohlc_seeded = bool(_seeded_ok)
             ohlc_bars_count = len(bars)
@@ -1312,9 +1645,8 @@ def fetch_live_market_data():
             if float(indicator_last_update_epoch) <= 0.0:
                 missing_inputs.append("indicators_never_computed")
                 missing_inputs.append("never_computed")
-        if ohlc_seed_reason == "kite_api_unavailable" and ohlc_bars_count == 0:
-            # Explicit fail-closed reason when REST warm-start is not available.
-            missing_inputs = ["ohlc_buffer_empty"]
+        if str(ohlc_seed_reason or "").upper() == "HIST_FETCH_FAILED":
+            missing_inputs = ["HIST_FETCH_FAILED"]
         missing_inputs = list(dict.fromkeys(str(x) for x in missing_inputs if x))
 
         # Cross-asset data quality fail-safe (only in LIVE when required)
@@ -1404,8 +1736,8 @@ def fetch_live_market_data():
                     except Exception:
                         pass
                 if quote_ts_epoch is not None:
-                    quote_ts = datetime.utcfromtimestamp(quote_ts_epoch).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-                    quote_age_sec = max(0.0, now_utc_epoch() - quote_ts_epoch)
+                    quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+                    quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
                 if bid and ask:
                     quote_ok = True
                     quote_source = "depth"
@@ -1431,8 +1763,8 @@ def fetch_live_market_data():
                         except Exception:
                             pass
                     if quote_ts_epoch is not None:
-                        quote_ts = datetime.utcfromtimestamp(quote_ts_epoch).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-                        quote_age_sec = max(0.0, now_utc_epoch() - quote_ts_epoch)
+                        quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+                        quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
                         if ltp_source == "live":
                             ltp_ts_epoch = quote_ts_epoch
                     if bid and ask:
@@ -1444,11 +1776,15 @@ def fetch_live_market_data():
                     quote_ok = False
         if is_index(symbol):
             exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+            ltp_age_for_quote = compute_age_sec(ltp_ts_epoch, now_utc_epoch())
             resolved_quote = resolve_index_quote(
                 symbol=symbol,
                 mode=exec_mode,
                 ltp=ltp,
                 depth={"bid": bid, "ask": ask},
+                market_open=bool(market_ctx.is_market_open),
+                ltp_age_sec=ltp_age_for_quote,
+                market_context=market_ctx.to_dict(),
             )
             bid = resolved_quote.get("bid")
             ask = resolved_quote.get("ask")
@@ -1462,8 +1798,8 @@ def fetch_live_market_data():
                         quote_ts_epoch = float(ltp_ts_epoch)
                     else:
                         quote_ts_epoch = now_utc_epoch()
-                quote_ts = datetime.utcfromtimestamp(float(quote_ts_epoch)).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-                quote_age_sec = max(0.0, now_utc_epoch() - float(quote_ts_epoch))
+                quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+                quote_age_sec = compute_age_sec(float(quote_ts_epoch), now_utc_epoch())
                 if ltp:
                     spread_pct = (ask - bid) / ltp
         if quote_ts_epoch is not None:
@@ -1482,7 +1818,9 @@ def fetch_live_market_data():
                 quote_ok=bool(quote_ok),
                 quote_source=quote_source,
                 ltp_source=ltp_source,
-                market_open=bool(market_open_for_segment),
+                market_open=bool(market_ctx.is_market_open),
+                ltp=ltp,
+                ltp_age_sec=ltp_age_for_quote,
             )
         index_quote_cache = dict(get_index_quote_snapshot(symbol) or {})
         quote_feed_health = None
@@ -1491,6 +1829,7 @@ def fetch_live_market_data():
                 symbol=symbol,
                 execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
                 now_epoch=now_utc_epoch(),
+                market_open=bool(market_ctx.is_market_open),
                 ltp=ltp,
                 ltp_ts_epoch=ltp_ts_epoch,
                 quote_ok=bool(quote_ok),
@@ -1501,10 +1840,18 @@ def fetch_live_market_data():
         time_sanity = check_market_data_time_sanity(
             ltp_ts_epoch=ltp_ts_epoch,
             candle_ts_epoch=candle_ts_epoch,
-            market_open=market_open_for_segment,
-            require_live_quotes=bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True)),
-            max_ltp_age_sec=getattr(cfg, "MAX_LTP_AGE_SEC", 8),
-            max_candle_age_sec=getattr(cfg, "MAX_CANDLE_AGE_SEC", 120),
+            market_open=market_ctx.is_market_open,
+            require_live_quotes=bool(require_live_quotes),
+            max_ltp_age_sec=getattr(
+                cfg,
+                "OFFHOURS_MAX_LTP_AGE_SEC" if offhours_mode else "MAX_LTP_AGE_SEC",
+                900 if offhours_mode else 8,
+            ),
+            max_candle_age_sec=getattr(
+                cfg,
+                "OFFHOURS_MAX_CANDLE_AGE_SEC" if offhours_mode else "MAX_CANDLE_AGE_SEC",
+                1800 if offhours_mode else 120,
+            ),
             now_epoch=now_utc_epoch(),
         )
         if synthetic_index_quote:
@@ -1518,6 +1865,9 @@ def fetch_live_market_data():
                 {
                     "symbol": symbol,
                     "segment": segment,
+                    "market_open": bool(market_ctx.is_market_open),
+                    "offhours_mode": bool(offhours_mode),
+                    "market_context": market_ctx.to_dict(),
                     "ltp": ltp,
                     "ltp_source": ltp_source,
                     "ltp_ts_epoch": ltp_ts_epoch,
@@ -1568,14 +1918,36 @@ def fetch_live_market_data():
         except Exception:
             orb_bias = "NEUTRAL"
 
-        option_chain = fetch_option_chain(symbol, ltp, force_synthetic=False)
+        exec_mode_for_policy = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+        strict_live_market_open = bool(market_ctx.mode == "LIVE")
+        option_chain = _fetch_option_chain_with_context(
+            symbol,
+            ltp,
+            force_synthetic=False,
+            market_context=market_ctx.to_dict(),
+        )
         chain_source = "live" if option_chain else "empty"
-        if not option_chain and getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False) and str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() != "LIVE":
-            option_chain = fetch_option_chain(symbol, ltp, force_synthetic=True)
-            chain_source = "synthetic" if option_chain else "empty"
+        if (not strict_live_market_open) and (not option_chain) and getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
+            option_chain = _fetch_option_chain_with_context(
+                symbol,
+                ltp,
+                force_synthetic=True,
+                market_context=market_ctx.to_dict(),
+            )
+            chain_source = "synthetic_offhours" if option_chain else "empty"
+        if option_chain and chain_source == "synthetic_offhours":
+            for opt in option_chain:
+                if isinstance(opt, dict):
+                    opt["chain_source"] = "synthetic_offhours"
+                    opt["planning_only"] = True
         # Option chain health validation (live NFO/BFO)
         try:
-            health = _option_chain_health(symbol, option_chain, ltp)
+            health = _option_chain_health(
+                symbol,
+                option_chain,
+                ltp,
+                require_live_quotes=require_live_quotes,
+            )
             health_path = Path("logs/option_chain_health.json")
             health_path.parent.mkdir(exist_ok=True)
             existing = {}
@@ -1602,7 +1974,7 @@ def fetch_live_market_data():
                 if ts_epoch is not None:
                     latest_depth_ts = ts_epoch if latest_depth_ts is None else max(latest_depth_ts, float(ts_epoch))
             if latest_depth_ts is not None:
-                depth_age_sec = max(0.0, now_utc_epoch() - float(latest_depth_ts))
+                depth_age_sec = compute_age_sec(float(latest_depth_ts), now_utc_epoch())
         except Exception:
             depth_age_sec = None
 
@@ -1802,8 +2174,14 @@ def fetch_live_market_data():
         if regime == "UNKNOWN":
             warmup_reasons.append("regime_missing")
         for reason in missing_inputs:
-            warmup_reasons.append(f"missing_input:{reason}")
+            if str(reason).upper() == "HIST_FETCH_FAILED":
+                warmup_reasons.append("HIST_FETCH_FAILED")
+            else:
+                warmup_reasons.append(f"missing_input:{reason}")
         warmup_reasons = list(dict.fromkeys(warmup_reasons))
+        if "HIST_FETCH_FAILED" in warmup_reasons:
+            # Single explicit root-cause reason for UI/operator clarity.
+            warmup_reasons = ["HIST_FETCH_FAILED"]
         system_state = "WARMUP" if warmup_reasons else "READY"
 
         # Day-type classifier (first 30–60 min decisive)
@@ -1988,6 +2366,9 @@ def fetch_live_market_data():
 
         results.append({
             "symbol": symbol,
+            "market_open": bool(market_ctx.is_market_open),
+            "offhours_mode": bool(offhours_mode),
+            "market_context": market_ctx.to_dict(),
             "ltp": ltp,
             "ltp_source": ltp_source,
             "ltp_ts_epoch": ltp_ts_epoch,
@@ -2079,6 +2460,7 @@ def fetch_live_market_data():
             "timestamp_ist": now_ist().isoformat(),
             "option_chain": option_chain,
             "chain_source": chain_source,
+            "planning_only": bool(market_ctx.mode != "LIVE" and chain_source != "live"),
             "option_chain_health": health,
             "instrument": "OPT",
             "seq_buffer": seq_buffer,
@@ -2093,6 +2475,9 @@ def fetch_live_market_data():
         if getattr(cfg, "ENABLE_FUTURES", False):
             results.append({
                 "symbol": symbol,
+                "market_open": bool(market_ctx.is_market_open),
+                "offhours_mode": bool(offhours_mode),
+                "market_context": market_ctx.to_dict(),
                 "ltp": ltp,
                 "ltp_source": ltp_source,
                 "ltp_ts_epoch": ltp_ts_epoch,
@@ -2174,6 +2559,9 @@ def fetch_live_market_data():
         if getattr(cfg, "ENABLE_EQUITIES", False):
             results.append({
                 "symbol": symbol,
+                "market_open": bool(market_ctx.is_market_open),
+                "offhours_mode": bool(offhours_mode),
+                "market_context": market_ctx.to_dict(),
                 "ltp": ltp,
                 "ltp_source": ltp_source,
                 "ltp_ts_epoch": ltp_ts_epoch,

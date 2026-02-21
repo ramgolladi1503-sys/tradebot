@@ -1,3 +1,6 @@
+# Migration note:
+# Trade builder now consumes central market context for LIVE/OFFHOURS/SIM gating.
+
 from datetime import datetime
 from pathlib import Path
 import json
@@ -15,7 +18,8 @@ from core.feature_builder import build_trade_features, validate_trade_features
 from core.trade_scoring import compute_trade_score
 from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
-from core.time_utils import is_market_open_ist, now_ist, now_utc_epoch
+from core.market_context import derive_market_context
+from core.time_utils import compute_age_sec, is_market_open_ist, now_ist, now_utc_epoch
 from core.regime import RegimeClassifier, normalize_regime
 import time as _time
 import time
@@ -203,6 +207,11 @@ class TradeBuilder:
         bid = _as_valid_price(market_data.get("bid"))
         ask = _as_valid_price(market_data.get("ask"))
         ltp = _as_valid_price(market_data.get("ltp"))
+        ltp_ts_epoch = market_data.get("ltp_ts_epoch")
+        now_epoch_for_age = market_data.get("timestamp")
+        if now_epoch_for_age is None:
+            now_epoch_for_age = now_utc_epoch()
+        ltp_age_sec = compute_age_sec(ltp_ts_epoch, now_epoch_for_age)
         last_price = _as_valid_price(
             quote_cache.get("last_price")
             if isinstance(quote_cache, dict)
@@ -220,6 +229,9 @@ class TradeBuilder:
                 mode=exec_mode,
                 ltp=(ltp if ltp is not None else last_price),
                 depth={"bid": bid, "ask": ask},
+                market_open=bool(market_data.get("market_open", True)),
+                ltp_age_sec=ltp_age_sec,
+                market_context=market_data.get("market_context"),
             )
             bid = _as_valid_price(resolved.get("bid"))
             ask = _as_valid_price(resolved.get("ask"))
@@ -227,7 +239,7 @@ class TradeBuilder:
             synthetic = source == "synthetic_index"
             market_data["quote_ok"] = bool(resolved.get("quote_ok", False))
             if synthetic:
-                market_data["quote_ts_epoch"] = float(time.time())
+                market_data["quote_ts_epoch"] = float(now_epoch_for_age)
                 market_data["quote_age_sec"] = 0.0
         except Exception:
             pass
@@ -269,9 +281,19 @@ class TradeBuilder:
         additional_blockers: list[str] | None = None,
     ) -> dict:
         segment = market_data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
-        market_open = bool(is_market_open_ist(segment=segment))
+        inferred_market_open = bool(market_data.get("market_open")) if ("market_open" in market_data) else bool(is_market_open_ist(segment=segment))
+        ctx_payload = dict(market_data.get("market_context") or {}) if isinstance(market_data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = getattr(cfg, "EXECUTION_MODE", "SIM")
+        if "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = inferred_market_open
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = segment
+        market_ctx = derive_market_context(ctx_payload)
+        market_open = bool(market_ctx.is_market_open)
+        offhours_mode = bool(market_ctx.mode == "OFFHOURS")
         chain_source = market_data.get("chain_source", "empty")
-        require_live_quotes = bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
+        require_live_quotes = bool(market_ctx.require_live_quotes and getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
         quote_ok = market_data.get("quote_ok", True)
         quote_age_sec = market_data.get("quote_age_sec")
         index_quote_source = market_data.get("index_quote_source", "real")
@@ -287,32 +309,48 @@ class TradeBuilder:
             reasons.append(str(market_data.get("invalid_reason") or "invalid_snapshot"))
         if not market_open:
             reasons.append("market_closed")
-        if chain_source != "live":
+        if (not offhours_mode) and chain_source != "live":
             reasons.append("chain_not_live")
-        if quote_ok is not True:
+        if (not offhours_mode) and quote_ok is not True:
             reasons.append("quote_not_ok")
-        max_quote_age = float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8))
-        if quote_age_sec is None:
+        max_quote_age = float(
+            getattr(
+                cfg,
+                "OFFHOURS_MAX_OPTION_QUOTE_AGE_SEC" if offhours_mode else "MAX_OPTION_QUOTE_AGE_SEC",
+                60 if offhours_mode else 8,
+            )
+        )
+        if (not offhours_mode) and quote_age_sec is None:
             reasons.append("quote_age_missing")
-        elif float(quote_age_sec) > max_quote_age:
+        elif (not offhours_mode) and float(quote_age_sec) > max_quote_age:
             reasons.append("stale_option_quote")
-        if ltp_source != "live":
+        if (not offhours_mode) and ltp_source != "live":
             reasons.append("ltp_not_live")
-        if ltp is None or float(ltp) <= 0:
+        if (not offhours_mode) and (ltp is None or float(ltp) <= 0):
             reasons.append("invalid_ltp")
         if risk_guard_passed is False:
             reasons.append("risk_guard_failed")
         for blocker in additional_blockers or []:
             if blocker and blocker not in reasons:
                 reasons.append(str(blocker))
+
+        planning_only = bool((market_ctx.mode in {"OFFHOURS", "SIM"}) and chain_source != "live") or (not market_open)
+        execution_allowed = bool((market_ctx.mode == "LIVE") and market_open and (len(reasons) == 0))
+        execution_reason = "OFFHOURS_PLANNING" if planning_only else (reasons[0] if reasons else None)
+
         return {
             "tradable": len(reasons) == 0,
             "tradable_reasons_blocking": reasons,
+            "planning_only": planning_only,
+            "execution_allowed": execution_allowed,
+            "execution_reason": execution_reason,
             "source_flags": {
+                "runtime_mode": market_ctx.mode,
                 "chain_source": chain_source,
                 "quote_ok": bool(quote_ok),
                 "quote_age_sec": quote_age_sec,
                 "market_open": market_open,
+                "offhours_mode": bool(offhours_mode),
                 "require_live_quotes": require_live_quotes,
                 "ltp_source": ltp_source,
                 "snapshot_valid": bool(market_data.get("valid", True)),
@@ -320,6 +358,8 @@ class TradeBuilder:
                 "index_quote_source": index_quote_source,
                 "index_bidask_synthetic": index_bidask_synthetic,
                 "index_quote_kind": index_quote_kind,
+                "planning_only": planning_only,
+                "execution_allowed": execution_allowed,
             },
         }
 
@@ -765,6 +805,21 @@ class TradeBuilder:
         if debug_mode:
             debug_reasons = True
         exec_mode = getattr(cfg, "EXECUTION_MODE", "SIM").upper()
+        segment = market_data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        ctx_payload = dict(market_data.get("market_context") or {}) if isinstance(market_data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = exec_mode
+        if "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = market_data.get("market_open", True)
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = segment
+        market_ctx = derive_market_context(ctx_payload)
+        market_open = bool(market_ctx.is_market_open)
+        offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+        strict_live_market_open = bool(market_ctx.mode == "LIVE")
+        market_data["market_context"] = market_ctx.to_dict()
+        market_data["market_open"] = bool(market_open)
+        market_data["offhours_mode"] = bool(offhours_mode)
         # Hard disable quick/baseline paths in LIVE mode
         if exec_mode == "LIVE":
             if quick_mode:
@@ -825,6 +880,7 @@ class TradeBuilder:
             gate_reasons = ["missing_live_bidask", "quote_api_issue"] if exec_mode == "LIVE" else [reject_reason]
             reject_payload = {
                 "mode": exec_mode,
+                "offhours_mode": bool(offhours_mode),
                 "ltp": ltp,
                 "ltp_source": ltp_source,
                 "has_depth": has_depth,
@@ -832,23 +888,31 @@ class TradeBuilder:
                 "ws_subscribed": ws_subscribed,
                 "gate_reasons": list(gate_reasons),
             }
-            self._reject_ctx = {"symbol": symbol, "reason": reject_reason, **reject_payload}
-            _log_signal_event(f"trade_reject_{reject_reason}", symbol, reject_payload)
-            self._log_blocked_candidate(
-                symbol,
-                reject_reason,
-                "Missing index bid/ask quote",
-                market_data=market_data,
-                extra=reject_payload,
-            )
-            if debug_reasons:
-                print(
-                    f"[TradeBuilder] Reject {symbol}: {reject_reason} "
-                    f"ltp={ltp} ltp_source={ltp_source} has_depth={has_depth} "
-                    f"has_quote={has_quote} ws_subscribed={ws_subscribed} "
-                    f"gate_reasons={gate_reasons}"
+            if offhours_mode:
+                _log_signal_event("trade_offhours_missing_bidask", symbol, reject_payload)
+                if debug_reasons:
+                    print(
+                        f"[TradeBuilder][OFFHOURS] Missing bid/ask for {symbol}; "
+                        "suppressing live quote rejection."
+                    )
+            else:
+                self._reject_ctx = {"symbol": symbol, "reason": reject_reason, **reject_payload}
+                _log_signal_event(f"trade_reject_{reject_reason}", symbol, reject_payload)
+                self._log_blocked_candidate(
+                    symbol,
+                    reject_reason,
+                    "Missing index bid/ask quote",
+                    market_data=market_data,
+                    extra=reject_payload,
                 )
-            return None
+                if debug_reasons:
+                    print(
+                        f"[TradeBuilder] Reject {symbol}: {reject_reason} "
+                        f"ltp={ltp} ltp_source={ltp_source} has_depth={has_depth} "
+                        f"has_quote={has_quote} ws_subscribed={ws_subscribed} "
+                        f"gate_reasons={gate_reasons}"
+                    )
+                return None
 
         signal = self._signal_for_symbol(market_data, force_family=force_family)
         relax_reason = "" if exec_mode == "LIVE" else (getattr(cfg, "RELAX_BLOCK_REASON", "") or "")
@@ -982,7 +1046,7 @@ class TradeBuilder:
         direction = signal["direction"]
         # Require live option chain by default (no synthetic trades)
         try:
-            if market_data.get("chain_source") != "live":
+            if strict_live_market_open and market_data.get("chain_source") != "live":
                 self._log_blocked_candidate(
                     symbol,
                     "non_live_option_chain",
@@ -1382,6 +1446,9 @@ class TradeBuilder:
                         quote_ok=opt.get("quote_ok", True),
                         tradable=False,
                         tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                        planning_only=bool(intent["planning_only"]),
+                        execution_allowed=bool(intent["execution_allowed"]),
+                        reason=intent["execution_reason"],
                         source_flags=dict(intent["source_flags"]),
                     )
                     candidates.append(blocked_trade)
@@ -1616,6 +1683,9 @@ class TradeBuilder:
                 size_mult=size_mult,
                 tradable=bool(intent["tradable"]),
                 tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                planning_only=bool(intent["planning_only"]),
+                execution_allowed=bool(intent["execution_allowed"]),
+                reason=intent["execution_reason"],
                 source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
@@ -1644,7 +1714,7 @@ class TradeBuilder:
                 return None
             # Quick fallback: synthesize ATM option if chain is empty
             if quick_mode and market_data.get("ltp", 0):
-                if market_data.get("chain_source") != "live":
+                if strict_live_market_open and market_data.get("chain_source") != "live":
                     self._log_blocked_candidate(
                         symbol,
                         "non_live_option_chain",
@@ -1734,6 +1804,9 @@ class TradeBuilder:
                         size_mult=1.0,
                         tradable=bool(intent["tradable"]),
                         tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                        planning_only=bool(intent["planning_only"]),
+                        execution_allowed=bool(intent["execution_allowed"]),
+                        reason=intent["execution_reason"],
                         source_flags=dict(intent["source_flags"]),
                     )
                     return trade
@@ -1819,6 +1892,9 @@ class TradeBuilder:
                     size_mult=decay_size_mult,
                     tradable=bool(intent["tradable"]),
                     tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                    planning_only=bool(intent["planning_only"]),
+                    execution_allowed=bool(intent["execution_allowed"]),
+                    reason=intent["execution_reason"],
                     source_flags=dict(intent["source_flags"]),
                 )
                 if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
@@ -2042,6 +2118,9 @@ class TradeBuilder:
                 size_mult=size_mult,
                 tradable=bool(intent["tradable"]),
                 tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                planning_only=bool(intent["planning_only"]),
+                execution_allowed=bool(intent["execution_allowed"]),
+                reason=intent["execution_reason"],
                 source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
@@ -2198,6 +2277,9 @@ class TradeBuilder:
                 size_mult=size_mult,
                 tradable=bool(intent["tradable"]),
                 tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                planning_only=bool(intent["planning_only"]),
+                execution_allowed=bool(intent["execution_allowed"]),
+                reason=intent["execution_reason"],
                 source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
@@ -2623,6 +2705,9 @@ class TradeBuilder:
                 size_mult=size_mult,
                 tradable=bool(intent["tradable"]),
                 tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                planning_only=bool(intent["planning_only"]),
+                execution_allowed=bool(intent["execution_allowed"]),
+                reason=intent["execution_reason"],
                 source_flags=dict(intent["source_flags"]),
             )
             candidates.append(trade)
