@@ -1,16 +1,231 @@
 import json
 import time
 import hashlib
+from datetime import datetime
 from pathlib import Path
 
 from core.orders.order_intent import OrderIntent
+from core.learning_paths import suggestion_log_paths
+from core.paths import logs_dir
+from core.upstox_resolver import resolve_upstox_key
+from core.market_calendar import choose_nearest_available_expiry
+from core.trade_schema import build_instrument_id
 
-QUEUE_PATH = Path("logs/review_queue.json")
-QUICK_QUEUE_PATH = Path("logs/quick_review_queue.json")
-ZERO_HERO_QUEUE_PATH = Path("logs/zero_hero_queue.json")
-SCALP_QUEUE_PATH = Path("logs/scalp_queue.json")
-TARGET_POINTS_QUEUE_PATH = Path("logs/target_points_queue.json")
-APPROVED_PATH = Path("logs/approved_trades.json")
+try:
+    from config import config as cfg
+except Exception:
+    cfg = None
+
+
+def _runtime_path(cfg_key: str, filename: str) -> Path:
+    try:
+        raw = str(getattr(cfg, cfg_key, "") or "").strip()
+    except Exception:
+        raw = ""
+    if raw:
+        return Path(raw)
+    return logs_dir() / filename
+
+
+QUEUE_PATH = _runtime_path("REVIEW_QUEUE_PATH", "review_queue.json")
+QUICK_QUEUE_PATH = _runtime_path("QUICK_REVIEW_QUEUE_PATH", "quick_review_queue.json")
+ZERO_HERO_QUEUE_PATH = _runtime_path("ZERO_HERO_QUEUE_PATH", "zero_hero_queue.json")
+SCALP_QUEUE_PATH = _runtime_path("SCALP_QUEUE_PATH", "scalp_queue.json")
+TARGET_POINTS_QUEUE_PATH = _runtime_path("TARGET_POINTS_QUEUE_PATH", "target_points_queue.json")
+APPROVED_PATH = _runtime_path("APPROVED_TRADES_PATH", "approved_trades.json")
+
+_META_CACHE = {"ts": 0.0, "data": {}}
+_CHAIN_CACHE = {"ts": 0.0, "data": {"by_token": {}, "by_contract": {}, "by_symbol_strike_type": {}}}
+
+
+def _coerce_expiry(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.upper() in {"NONE", "NA", "N/A", "NAN"}:
+        return None
+    if "T" in text:
+        text = text.split("T", 1)[0]
+    try:
+        return datetime.fromisoformat(text).date().isoformat()
+    except Exception:
+        return None
+
+
+def _coerce_option_type(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    if text in ("CE", "CALL"):
+        return "CE"
+    if text in ("PE", "PUT"):
+        return "PE"
+    return None
+
+
+def _coerce_strike(value) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _option_chain_meta_map(ttl_sec: int = 300) -> dict:
+    now = time.time()
+    cache = _CHAIN_CACHE.get("data") or {}
+    ts = float(_CHAIN_CACHE.get("ts") or 0.0)
+    if cache and (now - ts) < ttl_sec:
+        return cache
+    path = Path("data/option_chain_latest.json")
+    if not path.exists():
+        return cache if isinstance(cache, dict) else {}
+    try:
+        raw = json.loads(path.read_text())
+    except Exception:
+        return cache if isinstance(cache, dict) else {}
+    by_token = {}
+    by_contract = {}
+    by_symbol_strike_type: dict[tuple, list] = {}
+    if isinstance(raw, dict):
+        for symbol, rows in raw.items():
+            if not isinstance(rows, (list, tuple)):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                token = row.get("instrument_token")
+                expiry = _coerce_expiry(row.get("expiry") or row.get("expiry_date"))
+                strike = _coerce_strike(row.get("strike"))
+                opt_type = _coerce_option_type(row.get("type") or row.get("option_type") or row.get("right"))
+                tradingsymbol = row.get("tradingsymbol")
+                meta = {
+                    "symbol": symbol,
+                    "expiry": expiry,
+                    "strike": strike,
+                    "type": opt_type,
+                    "tradingsymbol": tradingsymbol,
+                    "instrument_token": token,
+                }
+                if token:
+                    by_token[token] = meta
+                if symbol and expiry and strike is not None and opt_type:
+                    by_contract[(symbol, expiry, float(strike), opt_type)] = meta
+                if symbol and strike is not None and opt_type:
+                    key = (symbol, float(strike), opt_type)
+                    by_symbol_strike_type.setdefault(key, []).append(meta)
+    _CHAIN_CACHE["ts"] = now
+    _CHAIN_CACHE["data"] = {
+        "by_token": by_token,
+        "by_contract": by_contract,
+        "by_symbol_strike_type": by_symbol_strike_type,
+    }
+    return _CHAIN_CACHE["data"]
+
+
+def _instrument_meta_map(ttl_sec: int = 3600) -> dict:
+    now = time.time()
+    cache = _META_CACHE.get("data") or {}
+    ts = float(_META_CACHE.get("ts") or 0.0)
+    if cache and (now - ts) < ttl_sec:
+        return cache
+    try:
+        from core.kite_client import kite_client
+        meta = {}
+        for exchange in ("NFO", "BFO"):
+            for inst in kite_client.instruments_cached(exchange, ttl_sec=ttl_sec) or []:
+                tok = inst.get("instrument_token")
+                if not tok:
+                    continue
+                meta[tok] = {
+                    "tradingsymbol": inst.get("tradingsymbol"),
+                    "symbol": inst.get("name"),
+                    "strike": inst.get("strike"),
+                    "type": inst.get("instrument_type"),
+                    "expiry": str(inst.get("expiry")) if inst.get("expiry") else None,
+                    "segment": inst.get("segment"),
+                }
+        _META_CACHE["ts"] = now
+        _META_CACHE["data"] = meta
+        return meta
+    except Exception:
+        return cache if isinstance(cache, dict) else {}
+
+
+def _parse_timestamp(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def _dedupe_queue_entries(entries: list[dict], new_entry: dict, window_min: int) -> list[dict]:
+    symbol = new_entry.get("symbol")
+    strike = new_entry.get("strike")
+    expiry = new_entry.get("expiry_date") or new_entry.get("expiry")
+    if not symbol or strike in (None, ""):
+        return entries + [new_entry]
+    new_ts = _parse_timestamp(new_entry.get("timestamp")) or datetime.now()
+    window_sec = max(int(window_min), 1) * 60
+
+    def _key(entry):
+        return (
+            entry.get("symbol"),
+            entry.get("expiry_date") or entry.get("expiry"),
+            entry.get("strike"),
+        )
+
+    def _score(entry):
+        score = entry.get("trade_score")
+        conf = entry.get("confidence")
+        try:
+            score_val = float(score) if score is not None else None
+        except Exception:
+            score_val = None
+        try:
+            conf_val = float(conf) if conf is not None else None
+        except Exception:
+            conf_val = None
+        ts_val = _parse_timestamp(entry.get("timestamp")) or datetime.min
+        return (
+            score_val if score_val is not None else -1e9,
+            conf_val if conf_val is not None else -1e9,
+            ts_val.timestamp(),
+        )
+
+    dupes = []
+    survivors = []
+    for entry in entries:
+        if _key(entry) == (symbol, expiry, strike):
+            ts = _parse_timestamp(entry.get("timestamp")) or new_ts
+            if abs((new_ts - ts).total_seconds()) <= window_sec:
+                dupes.append(entry)
+                continue
+        survivors.append(entry)
+    if not dupes:
+        return survivors + [new_entry]
+    candidates = dupes + [new_entry]
+    best = sorted(candidates, key=_score, reverse=True)[0]
+    survivors.append(best)
+    return survivors
+
+
+def _append_jsonl(paths, payload):
+    for path in paths:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a") as f:
+                f.write(json.dumps(payload) + "\n")
+        except Exception:
+            continue
 
 
 def _cfg_bool(name, default=False):
@@ -39,7 +254,7 @@ def _read_json(path: Path, default):
 
 
 def _write_json(path: Path, payload):
-    path.parent.mkdir(exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2))
 
 
@@ -116,7 +331,7 @@ def add_to_queue(trade, queue_path=None, extra=None):
     except Exception:
         pass
     path = queue_path or QUEUE_PATH
-    path.parent.mkdir(exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     data = []
     if path.exists():
         data = json.loads(path.read_text())
@@ -131,15 +346,37 @@ def add_to_queue(trade, queue_path=None, extra=None):
     entry = {
         "trade_id": trade_id,
         "symbol": get_attr(trade, "symbol"),
+        "underlying": get_attr(trade, "underlying") or get_attr(trade, "symbol"),
+        "instrument_id": get_attr(trade, "instrument_id"),
+        "tradingsymbol": get_attr(trade, "tradingsymbol"),
         "strike": strike_val,
         "instrument": get_attr(trade, "instrument"),
         "instrument_token": get_attr(trade, "instrument_token"),
+        "expiry": get_attr(trade, "expiry"),
+        "expiry_date": get_attr(trade, "expiry_date"),
+        "type": get_attr(trade, "right") or get_attr(trade, "option_type"),
+        "option_type": get_attr(trade, "option_type") or get_attr(trade, "right"),
         "side": get_attr(trade, "side"),
         "entry": get_attr(trade, "entry_price"),
-        "entry_condition": get_attr(trade, "entry_condition"),
+        "entry_condition": get_attr(trade, "entry_condition") or "BREAKOUT",
         "entry_ref_price": get_attr(trade, "entry_ref_price"),
         "stop": get_attr(trade, "stop_loss"),
         "target": get_attr(trade, "target"),
+        "original_stop": get_attr(trade, "original_stop") or get_attr(trade, "stop_loss"),
+        "current_stop": get_attr(trade, "current_stop") or get_attr(trade, "stop_loss"),
+        "trail_enabled": get_attr(trade, "trail_enabled"),
+        "trail_rule": get_attr(trade, "trail_rule") or getattr(cfg, "TRAIL_RULE_DEFAULT", "MFE_MINUS_OFFSET"),
+        "trail_offset": get_attr(trade, "trail_offset"),
+        "trail_start": get_attr(trade, "trail_start") or getattr(cfg, "TRAIL_START_DEFAULT", "AFTER_1R"),
+        "mfe_price": get_attr(trade, "mfe_price"),
+        "trail_stop": get_attr(trade, "trail_stop"),
+        "last_update_ts": get_attr(trade, "last_update_ts"),
+        "exit_signal": get_attr(trade, "exit_signal"),
+        "exit_reason": get_attr(trade, "exit_reason"),
+        "status": get_attr(trade, "status") or "PLANNING",
+        "activated_ts": get_attr(trade, "activated_ts"),
+        "fill_price": get_attr(trade, "fill_price"),
+        "ltp_at_activation": get_attr(trade, "ltp_at_activation"),
         "qty": get_attr(trade, "qty"),
         "confidence": get_attr(trade, "confidence"),
         "strategy": get_attr(trade, "strategy"),
@@ -157,23 +394,132 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "opt_bid": get_attr(trade, "opt_bid", None),
         "opt_ask": get_attr(trade, "opt_ask", None),
         "quote_ok": get_attr(trade, "quote_ok", None),
+        "underlying_spot": get_attr(trade, "underlying_spot", None),
+        "spot_source": get_attr(trade, "spot_source", None),
+        "option_ltp_source": get_attr(trade, "option_ltp_source", None),
+        "chain_source": get_attr(trade, "chain_source", None),
         "trade_score": get_attr(trade, "trade_score", None),
         "trade_alignment": get_attr(trade, "trade_alignment", None),
         "trade_score_detail": get_attr(trade, "trade_score_detail", None),
-        "timestamp": str(get_attr(trade, "timestamp"))
+        "timestamp": str(get_attr(trade, "timestamp")),
+        "upstox_instrument_key": get_attr(trade, "upstox_instrument_key"),
     }
     if extra:
         entry.update(extra)
-    data.append(entry)
+    if entry.get("instrument") == "OPT":
+        if not entry.get("expiry_date") and entry.get("expiry"):
+            entry["expiry_date"] = _coerce_expiry(entry.get("expiry")) or entry.get("expiry")
+        if entry.get("expiry_date"):
+            entry["expiry_date"] = _coerce_expiry(entry.get("expiry_date")) or entry.get("expiry_date")
+        opt_type = _coerce_option_type(entry.get("option_type") or entry.get("type") or entry.get("right"))
+        if opt_type:
+            entry["option_type"] = opt_type
+            entry["type"] = opt_type
+        strike_val = _coerce_strike(entry.get("strike"))
+        if strike_val is not None:
+            entry["strike"] = strike_val
+        chain_meta = _option_chain_meta_map()
+        if entry.get("instrument_token") and (not entry.get("expiry_date") or not entry.get("tradingsymbol")):
+            meta = _instrument_meta_map().get(entry.get("instrument_token"), {})
+            if not meta and chain_meta:
+                meta = (chain_meta.get("by_token") or {}).get(entry.get("instrument_token"), {})
+            if meta:
+                entry.setdefault("expiry_date", meta.get("expiry"))
+                entry.setdefault("expiry", meta.get("expiry"))
+                entry.setdefault("tradingsymbol", meta.get("tradingsymbol"))
+                entry.setdefault("option_type", _coerce_option_type(meta.get("type")))
+                entry.setdefault("type", _coerce_option_type(meta.get("type")))
+                if meta.get("strike") is not None:
+                    entry.setdefault("strike", meta.get("strike"))
+        if (not entry.get("instrument_token")) and entry.get("symbol") and strike_val is not None and opt_type:
+            meta = None
+            expiry_date = entry.get("expiry_date")
+            if expiry_date:
+                meta = (chain_meta.get("by_contract") or {}).get((entry.get("symbol"), expiry_date, float(strike_val), opt_type))
+            if meta is None:
+                candidates = (chain_meta.get("by_symbol_strike_type") or {}).get(
+                    (entry.get("symbol"), float(strike_val), opt_type),
+                    [],
+                )
+                if candidates:
+                    exp_dates = []
+                    meta_by_exp = {}
+                    for cand in candidates:
+                        exp = _coerce_expiry(cand.get("expiry"))
+                        if not exp:
+                            continue
+                        try:
+                            exp_dt = datetime.fromisoformat(exp).date()
+                        except Exception:
+                            continue
+                        exp_dates.append(exp_dt)
+                        meta_by_exp[exp_dt.isoformat()] = cand
+                    if exp_dates:
+                        chosen = choose_nearest_available_expiry(exp_dates, today=datetime.now().date())
+                        if chosen is not None:
+                            meta = meta_by_exp.get(chosen.isoformat())
+            if meta:
+                entry.setdefault("expiry_date", meta.get("expiry"))
+                entry.setdefault("expiry", meta.get("expiry"))
+                entry.setdefault("tradingsymbol", meta.get("tradingsymbol"))
+                entry.setdefault("instrument_token", meta.get("instrument_token"))
+                entry.setdefault("option_type", _coerce_option_type(meta.get("type")))
+                entry.setdefault("type", _coerce_option_type(meta.get("type")))
+        if not entry.get("instrument_id"):
+            if entry.get("tradingsymbol"):
+                entry["instrument_id"] = entry.get("tradingsymbol")
+            elif entry.get("instrument_token"):
+                entry["instrument_id"] = str(entry.get("instrument_token"))
+            else:
+                entry["instrument_id"] = build_instrument_id(
+                    entry.get("underlying") or entry.get("symbol"),
+                    "OPT",
+                    entry.get("expiry_date"),
+                    entry.get("strike"),
+                    entry.get("option_type") or entry.get("type"),
+                )
+        unresolved_contract = False
+        if not entry.get("instrument_id"):
+            unresolved_contract = True
+        if not entry.get("expiry_date"):
+            unresolved_contract = True
+        if not entry.get("tradingsymbol"):
+            unresolved_contract = True
+        if unresolved_contract:
+            entry["tradable"] = False
+            entry["tradable_reasons_blocking"] = list(
+                dict.fromkeys(list(entry.get("tradable_reasons_blocking") or []) + ["unresolved_contract"])
+            )
+            entry.setdefault("execution_allowed", False)
+            entry.setdefault("hard_reason", "unresolved_contract")
+            entry.setdefault("approval_blocked", True)
+            entry["stop"] = None
+            entry["current_stop"] = None
+            entry["target"] = None
+        else:
+            if not entry.get("upstox_instrument_key"):
+                try:
+                    entry["upstox_instrument_key"] = resolve_upstox_key(entry)
+                except Exception:
+                    entry["upstox_instrument_key"] = None
+            try:
+                entry_val = float(entry.get("entry") or 0.0)
+                target_val = float(entry.get("target") or 0.0)
+                stop_val = float(entry.get("stop") or 0.0)
+                if entry_val > 0 and target_val > 0:
+                    entry["target_premium"] = round(abs(target_val - entry_val), 2)
+                if entry_val > 0 and stop_val > 0:
+                    entry["stop_premium"] = round(abs(entry_val - stop_val), 2)
+            except Exception:
+                pass
+    if entry.get("instrument") == "OPT":
+        window_min = int(getattr(cfg, "QUEUE_DEDUPE_WINDOW_MIN", 5) or 5) if cfg else 5
+        data = _dedupe_queue_entries(data, entry, window_min)
+    else:
+        data.append(entry)
     path.write_text(json.dumps(data, indent=2))
     # Log suggestion for evaluation
-    try:
-        sug_path = Path("logs/suggestions.jsonl")
-        sug_path.parent.mkdir(exist_ok=True)
-        with open(sug_path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass
+    _append_jsonl(suggestion_log_paths(), entry)
 
 def is_approved(trade_id, payload_hash=None):
     ok, _reason = approval_status(trade_id, payload_hash=payload_hash)
