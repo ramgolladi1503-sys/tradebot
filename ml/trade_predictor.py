@@ -3,7 +3,13 @@ import time
 import joblib
 import numpy as np
 import pandas as pd
-from xgboost import XGBClassifier
+try:
+    from xgboost import XGBClassifier as _XGBClassifier
+    _XGB_IMPORT_ERROR = ""
+except Exception as exc:  # pragma: no cover - runtime dependency failure path
+    _XGBClassifier = None
+    _XGB_IMPORT_ERROR = f"{type(exc).__name__}:{exc}"
+from sklearn.dummy import DummyClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from config import config as cfg
@@ -38,32 +44,64 @@ class TradePredictor:
         self.shadow_meta = {}
         self.shadow_version = None
         self.shadow_governance = {}
+        self.xgb_available = _XGBClassifier is not None
+        self.model_runtime = "xgboost" if self.xgb_available else "dummy"
+        self._xgb_warned = False
         shadow = get_shadow_entry("xgb")
         if shadow and shadow.get("path"):
             self.shadow_path = shadow.get("path")
             self.shadow_version = shadow.get("hash")
             self.shadow_governance = shadow.get("governance") or {}
             if load_existing and os.path.exists(self.shadow_path):
-                self._load_shadow(self.shadow_path)
+                try:
+                    self._load_shadow(self.shadow_path)
+                except Exception as exc:
+                    print(f"[TradePredictor][WARN] shadow_load_failed path={self.shadow_path} err={type(exc).__name__}:{exc}")
+                    self.shadow_models = {}
+                    self.shadow_feature_list = None
+                    self.shadow_meta = {}
         if load_existing and os.path.exists(self.model_path):
-            self.load(self.model_path)
-            print(f"[TradePredictor] Loaded model from {self.model_path}")
+            try:
+                self.load(self.model_path)
+                print(f"[TradePredictor] Loaded model from {self.model_path}")
+            except Exception as exc:
+                self.models = {"GLOBAL": self._new_model()}
+                self.feature_list = None
+                self.meta = {"degraded_reason": f"model_load_failed:{type(exc).__name__}:{exc}"}
+                print(
+                    f"[TradePredictor][DEGRADED] model_load_failed path={self.model_path} "
+                    f"err={type(exc).__name__}:{exc}"
+                )
         else:
             self.models = {"GLOBAL": self._new_model()}
             self.feature_list = None
             self.meta = {}
-            print("[TradePredictor] No model found. Initialized new XGBClassifier.")
+            if self.xgb_available:
+                print("[TradePredictor] No model found. Initialized new XGBClassifier.")
+            else:
+                print(
+                    "[TradePredictor][DEGRADED] No model found and xgboost runtime unavailable. "
+                    "Initialized DummyClassifier."
+                )
         self.feature_contract = self._build_feature_contract()
 
     def _new_model(self):
-        return XGBClassifier(
-            n_estimators=100,
-            max_depth=5,
-            learning_rate=0.1,
-            subsample=0.9,
-            colsample_bytree=0.9,
-            eval_metric="logloss",
-        )
+        if _XGBClassifier is not None:
+            return _XGBClassifier(
+                n_estimators=100,
+                max_depth=5,
+                learning_rate=0.1,
+                subsample=0.9,
+                colsample_bytree=0.9,
+                eval_metric="logloss",
+            )
+        if not self._xgb_warned:
+            self._xgb_warned = True
+            print(
+                "[TradePredictor][DEGRADED] xgboost runtime unavailable; "
+                f"fallback=DummyClassifier reason={_XGB_IMPORT_ERROR}"
+            )
+        return DummyClassifier(strategy="prior")
 
     def load(self, path):
         loaded = joblib.load(path)
@@ -394,4 +432,8 @@ class TradePredictor:
     def update_model_online(self, new_trades_df: pd.DataFrame, target_col="actual"):
         print("[TradePredictor] Online model update started...")
         self.train_new_model(new_trades_df, target_col=target_col)
+        try:
+            self.save(self.model_path)
+        except Exception as exc:
+            print(f"[TradePredictor][WARN] Online update save failed: {exc}")
         print("[TradePredictor] Online model update complete.")

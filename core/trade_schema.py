@@ -47,6 +47,8 @@ class Trade:
     instrument_type: str | None = None
     right: str | None = None
     instrument_id: str | None = None
+    tradingsymbol: str | None = None
+    expiry_date: str | None = None
     qty_lots: int | None = None
     qty_units: int | None = None
     validity_sec: int | None = None
@@ -57,6 +59,10 @@ class Trade:
     execution_allowed: bool = True
     reason: str | None = None
     stop_distance: float | None = None
+    underlying_spot: float | None = None
+    spot_source: str | None = None
+    option_ltp_source: str | None = None
+    chain_source: str | None = None
 
     def __post_init__(self):
         if self.stop_distance is not None:

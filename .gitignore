@@ -20,6 +20,7 @@ venv/
 
 # App runtime
 logs/
+.runtime/
 
 # Local caches / large files
 .codex/

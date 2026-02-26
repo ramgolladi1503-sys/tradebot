@@ -29,6 +29,8 @@ def test_blocked_candidate_logged_for_missing_quote(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "DESK_LOG_DIR", str(desk_log_dir), raising=False)
     monkeypatch.setattr(cfg, "DESK_ID", "DEFAULT", raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
 
     builder = TradeBuilder(predictor=_PredictorStub())
     trade = builder.build(
@@ -55,7 +57,7 @@ def test_blocked_candidate_logged_for_missing_quote(monkeypatch, tmp_path):
     assert blocked_path.exists()
     rows = _load_blocked_rows(blocked_path)
     assert rows
-    assert rows[-1]["reason_code"] == "missing_index_bid_ask"
+    assert rows[-1]["reason_code"] == "no_signal"
     assert rows[-1]["stage"] == "trade_builder"
     assert rows[-1]["symbol"] == "NIFTY"
 
@@ -95,3 +97,84 @@ def test_blocked_candidate_logged_for_no_signal(monkeypatch, tmp_path):
     assert rows[-1]["reason_code"] == "no_signal"
     assert rows[-1]["stage"] == "trade_builder"
     assert rows[-1]["symbol"] == "NIFTY"
+
+
+def test_blocked_candidate_records_top_option_reject_reason(monkeypatch, tmp_path):
+    desk_log_dir = tmp_path / "logs" / "desks" / "DEFAULT"
+    monkeypatch.setattr(cfg, "DESK_LOG_DIR", str(desk_log_dir), raising=False)
+    monkeypatch.setattr(cfg, "DESK_ID", "DEFAULT", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    monkeypatch.setattr(
+        builder,
+        "_signal_for_symbol",
+        lambda *_args, **_kwargs: {
+            "direction": "BUY_CALL",
+            "reason": "unit_test_signal",
+            "score": 0.9,
+            "regime_day": "TREND",
+        },
+    )
+    trade = builder.build(
+        {
+            "symbol": "NIFTY",
+            "valid": True,
+            "ltp": 25000.0,
+            "vwap": 24995.0,
+            "atr": 20.0,
+            "instrument": "OPT",
+            "chain_source": "live",
+            "quote_ok": True,
+            "bid": 24999.0,
+            "ask": 25001.0,
+            "orb_bias": "UP",
+            "htf_dir": "UP",
+            "option_chain": [
+                {
+                    "type": "CE",
+                    "strike": 25000.0,
+                    "ltp": 120.0,
+                    "quote_ok": False,
+                    "bid": None,
+                    "ask": None,
+                }
+            ],
+        },
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is None
+    blocked_path = desk_log_dir / "blocked_candidates.jsonl"
+    rows = _load_blocked_rows(blocked_path)
+    row = rows[-1]
+    assert row["reason_code"] == "no_viable_candidates"
+    top_reason = row["top_option_reject_reasons"][0]
+    assert top_reason in {"no_quote", "missing_contract_fields", "unresolved_contract"}
+    counts = row.get("option_reject_reason_counts") or {}
+    assert any(key in counts for key in ("no_quote", "missing_contract_fields", "unresolved_contract"))
+
+
+def test_option_expiry_resolves_from_alias_or_chain(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    builder = TradeBuilder(predictor=_PredictorStub())
+
+    assert (
+        builder._option_expiry(
+            {"expiry_date": "2026-03-05"},
+            {"option_chain": []},
+        )
+        == "2026-03-05"
+    )
+
+    assert (
+        builder._option_expiry(
+            {"expiry": ""},
+            {"option_chain": [{"expiryDate": "2026-03-12"}]},
+        )
+        == "2026-03-12"
+    )

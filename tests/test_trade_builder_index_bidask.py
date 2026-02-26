@@ -33,6 +33,7 @@ def _base_market_data():
                 "type": "CE",
                 "strike": 25000,
                 "expiry": "2026-02-26",
+                "tradingsymbol": "NIFTY26FEB25000CE",
                 "instrument_token": 123456,
                 "ltp": 100.0,
                 "bid": 99.0,
@@ -102,7 +103,7 @@ def test_paper_missing_index_bid_ask_uses_synthetic(monkeypatch, tmp_path):
     assert payload.get("ask") == round(25000.0 + (spread / 2.0), 4)
 
 
-def test_live_missing_index_bid_ask_rejects(monkeypatch, tmp_path, capsys):
+def test_live_missing_index_bid_ask_soft_vetoes_and_marks_non_executable(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     events = []
@@ -118,22 +119,19 @@ def test_live_missing_index_bid_ask_rejects(monkeypatch, tmp_path, capsys):
         allow_baseline=False,
     )
 
-    assert trade is None
-    assert builder._reject_ctx.get("reason") == "missing_live_bidask"
-    assert builder._reject_ctx.get("gate_reasons") == ["missing_live_bidask", "quote_api_issue"]
+    assert trade is not None
+    assert trade.execution_allowed is False
+    soft_codes = set(trade.source_flags.get("soft_veto_codes") or [])
+    gate_codes = set(trade.source_flags.get("gates_failed") or [])
+    assert "missing_live_bidask" in soft_codes or "missing_live_bidask" in gate_codes
     assert any(e["kind"] == "index_bidask_source" and e["payload"].get("source") == "missing_depth" for e in events)
-    reject_rows = [e for e in events if e["kind"] == "trade_reject_missing_live_bidask"]
-    assert reject_rows
-    reject_payload = reject_rows[-1]["payload"]
-    assert set(["ltp", "ltp_source", "has_depth", "has_quote", "ws_subscribed"]).issubset(reject_payload.keys())
-    assert reject_payload.get("gate_reasons") == ["missing_live_bidask", "quote_api_issue"]
+    soft_rows = [e for e in events if e["kind"] == "trade_offhours_missing_bidask"]
+    assert soft_rows
+    soft_payload = soft_rows[-1]["payload"]
+    assert set(["ltp", "ltp_source", "has_depth", "has_quote", "ws_subscribed"]).issubset(soft_payload.keys())
+    assert soft_payload.get("gate_reasons") == ["missing_live_bidask", "quote_api_issue"]
     out = capsys.readouterr().out
-    assert "missing_live_bidask" in out
-    assert "ltp=" in out
-    assert "ltp_source=" in out
-    assert "has_depth=" in out
-    assert "has_quote=" in out
-    assert "ws_subscribed=" in out
+    assert "SOFT_VETO" in out
 
 
 def test_live_market_open_non_live_chain_rejects(monkeypatch, tmp_path):

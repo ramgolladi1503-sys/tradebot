@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dataclasses import replace
 from strategies.trade_builder import TradeBuilder
-from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap
+from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap, refresh_index_quote_from_rest
 from core.risk_engine import RiskEngine
 from core.execution_guard import ExecutionGuard
 from core.trade_logger import log_trade, update_trade_outcome, update_trade_fill
@@ -51,13 +51,12 @@ from core.meta_model import MetaModel
 from core.decision_trace import decision_config_snapshot
 from core.reports.daily_audit import build_daily_audit, write_daily_audit_placeholder
 from core.reports.execution_report import build_execution_report, write_execution_report_placeholder
+from core.reject_logger import append_reject_reasons
 from core.orchestrator_parts.cycle import run_live_monitoring
 from core.orchestrator_parts import data as orchestrator_data
 from core.orchestrator_parts import decisions as orchestrator_decisions
 from core.orchestrator_parts import finalize as orchestrator_finalize
 from core.session_guard import auto_clear_risk_halt_if_safe
-from core.decision_store import DecisionStore
-from core.decision_builder import build_decision
 from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
 from core.review_packet import build_review_packet, format_review_packet
@@ -75,6 +74,40 @@ from core.decision_dag import (
     evaluate_decision,
 )
 from core.decision_side_effects import handle_post_decision_side_effects
+from core.market_context import derive_market_context
+from core.slo_guard import evaluate_slo_status
+from core.slippage_guard import evaluate_slippage_budget
+from core.suggestion_reliability import (
+    evaluate_suggestion_reliability,
+    persist_suggestion_reliability,
+)
+from core.auth_manager import is_auth_error
+from core.learning_paths import (
+    canonical_suggestion_eval_log_path,
+    suggestion_eval_log_paths,
+    suggestion_log_paths,
+)
+
+
+def resolve_global_halt_reason(circuit_breaker) -> str | None:
+    """
+    Authoritative runtime halt resolution.
+    Priority: manual kill switch -> persisted risk halt -> circuit breaker.
+    """
+    if bool(getattr(cfg, "KILL_SWITCH", False)):
+        return "KILL_SWITCH"
+    try:
+        if risk_halt.is_halted():
+            return "RISK_HALT"
+    except Exception:
+        return "RISK_HALT_STATE_ERROR"
+    try:
+        if circuit_breaker and circuit_breaker.is_halted():
+            return str(circuit_breaker.halt_reason or "CB_ACTIVE")
+    except Exception:
+        return "CB_STATE_ERROR"
+    return None
+
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
@@ -89,6 +122,27 @@ class Orchestrator:
             ensure_trade_log_exists()
         except Exception as exc:
             print(f"[Startup] trade log init failed: {exc}")
+        try:
+            intents_path = Path(
+                str(
+                    getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", "logs/execution_intents.jsonl")
+                    or "logs/execution_intents.jsonl"
+                )
+            )
+            intents_path.parent.mkdir(parents=True, exist_ok=True)
+            intents_path.touch(exist_ok=True)
+            for raw_path in (
+                getattr(cfg, "DECISION_LOG_PATH", None),
+                getattr(cfg, "REJECT_REASONS_LOG_PATH", None),
+            ):
+                if not raw_path:
+                    continue
+                p = Path(str(raw_path))
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.touch(exist_ok=True)
+        except Exception as exc:
+            print(f"[Startup] intent log init failed: {exc}")
+        self._auth_runtime_guard = self._run_preopen_auth_warm_check()
         self.total_capital = total_capital
         self.poll_interval = poll_interval
 
@@ -134,13 +188,6 @@ class Orchestrator:
             except Exception as exc:
                 print(f"[DecisionStore] init failed: {exc}")
                 self.decision_store = None
-        self.decision_store = None
-        if getattr(cfg, "DECISION_LOG_ENABLED", False):
-            try:
-                self.decision_store = DecisionStore(getattr(cfg, "DECISION_DB_PATH", cfg.TRADE_DB_PATH))
-            except Exception as exc:
-                print(f"[DecisionStore] init failed: {exc}")
-                self.decision_store = None
 
         # Portfolio tracking
         self.portfolio = {
@@ -161,6 +208,10 @@ class Orchestrator:
         self._pilot_unlock_used_day = None
         self._audit_chain_ok = True
         self._audit_chain_status = None
+        self._last_global_halt_reason = None
+        self._regime_unstable_streak_by_symbol: dict[str, int] = {}
+        self._feed_auto_repair_state: dict[str, dict] = {}
+        self._last_suggestion_reliability_eval_ts = 0.0
         try:
             ok, status, _ = verify_audit_chain()
             self._audit_chain_ok = ok
@@ -172,6 +223,7 @@ class Orchestrator:
                     pass
         except Exception:
             pass
+        self._startup_warmup_rows = self._run_startup_warmup_bootstrap()
         if start_depth_ws_enabled:
             self._start_depth_ws()
         self.eps_history = []
@@ -226,6 +278,69 @@ class Orchestrator:
             append_gate_status(record, desk_id=getattr(cfg, "DESK_ID", "DEFAULT"))
         except Exception:
             pass
+
+    def _emit_global_halt_events(self, reason: str):
+        reason = str(reason or "UNKNOWN_HALT")
+        if reason == str(getattr(self, "_last_global_halt_reason", "")):
+            return
+        self._last_global_halt_reason = reason
+        veto_reason = reason.lower()
+        try:
+            event = self._build_decision_event(
+                None,
+                {"symbol": "GLOBAL"},
+                gatekeeper_allowed=False,
+                veto_reasons=[veto_reason],
+            )
+            self._log_decision_safe(event)
+        except Exception:
+            pass
+        try:
+            audit_append(
+                {
+                    "event": "GLOBAL_HALT",
+                    "reason": reason,
+                    "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                }
+            )
+        except Exception:
+            pass
+        if reason == "KILL_SWITCH":
+            try:
+                create_incident("SEV1", "KILL_SWITCH", {"desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
+            except Exception:
+                pass
+
+    def _allocator_seed_date_iso(self, market_data: dict) -> str:
+        ts_val = None
+        if isinstance(market_data, dict):
+            ts_val = market_data.get("timestamp")
+        try:
+            if ts_val is not None:
+                return datetime.fromtimestamp(float(ts_val)).date().isoformat()
+        except Exception:
+            pass
+        return now_ist().date().isoformat()
+
+    def _allocator_context_seed(self, market_data: dict, symbol: str, strategy: str) -> str | None:
+        ctx_payload = {}
+        if isinstance(market_data, dict) and isinstance(market_data.get("market_context"), dict):
+            ctx_payload.update(dict(market_data.get("market_context") or {}))
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = getattr(cfg, "EXECUTION_MODE", "SIM")
+        if "market_open" not in ctx_payload and isinstance(market_data, dict):
+            if "market_open" in market_data:
+                ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" not in ctx_payload:
+            if isinstance(market_data, dict) and market_data.get("segment"):
+                ctx_payload["segment"] = market_data.get("segment")
+            else:
+                ctx_payload["segment"] = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        market_ctx = derive_market_context(ctx_payload)
+        if market_ctx.mode not in {"PAPER", "SIM", "OFFHOURS"}:
+            return None
+        seed_day = self._allocator_seed_date_iso(market_data)
+        return f"{seed_day}|{str(symbol)}|{str(strategy)}"
 
     def _build_cycle_market_data(self, market_data_list: list[dict] | None) -> list[dict]:
         """
@@ -292,12 +407,235 @@ class Orchestrator:
         except Exception:
             return MappingProxyType(dict(market_data or {}))
 
+    def _regime_unstable_block_after(self, market_data: dict) -> int:
+        ctx_payload = dict(market_data.get("market_context") or {}) if isinstance(market_data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = market_data.get("execution_mode")
+        if "market_open" not in ctx_payload and ("market_open" in market_data):
+            ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = market_data.get("segment")
+        market_ctx = derive_market_context(ctx_payload)
+        default_block_after = max(1, int(getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1)))
+        if bool(market_ctx.allow_stale_quotes):
+            return max(
+                1,
+                int(
+                    getattr(
+                        cfg,
+                        "PAPER_REGIME_UNSTABLE_CONSECUTIVE_BLOCK",
+                        default_block_after,
+                    )
+                ),
+            )
+        return default_block_after
+
+    def _is_regime_unstable_hint(self, market_data: dict) -> bool:
+        unstable_reasons = list(market_data.get("unstable_reasons") or [])
+        if (not unstable_reasons) and bool(market_data.get("unstable_regime_flag", False)):
+            unstable_reasons = ["legacy_unstable_flag"]
+
+        ctx_payload = dict(market_data.get("market_context") or {}) if isinstance(market_data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = market_data.get("execution_mode")
+        if "market_open" not in ctx_payload and ("market_open" in market_data):
+            ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = market_data.get("segment")
+        market_ctx = derive_market_context(ctx_payload)
+        live_mode = str(market_ctx.mode).upper() == "LIVE"
+
+        regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
+        regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
+        if (not live_mode) and bool(getattr(cfg, "PAPER_RELAX_GATES", True)):
+            regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
+            regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
+
+        regime_prob_max = market_data.get("regime_prob_max")
+        if regime_prob_max is None:
+            regime_probs = market_data.get("regime_probs") or {}
+            if isinstance(regime_probs, dict) and regime_probs:
+                try:
+                    regime_prob_max = max(float(v) for v in regime_probs.values())
+                except Exception:
+                    regime_prob_max = None
+        if regime_prob_max is not None and float(regime_prob_max) < regime_prob_min:
+            unstable_reasons.append("prob_too_low")
+
+        regime_entropy = market_data.get("regime_entropy")
+        if regime_entropy is not None:
+            try:
+                if float(regime_entropy) > regime_entropy_max:
+                    unstable_reasons.append("entropy_too_high")
+            except Exception:
+                pass
+        return bool(unstable_reasons)
+
+    def _annotate_regime_unstable_debounce(self, market_data: dict) -> dict:
+        row = dict(market_data or {})
+        symbol = str(row.get("symbol") or "UNKNOWN").upper()
+        streaks = getattr(self, "_regime_unstable_streak_by_symbol", None)
+        if not isinstance(streaks, dict):
+            streaks = {}
+            self._regime_unstable_streak_by_symbol = streaks
+        unstable_now = self._is_regime_unstable_hint(row)
+        if unstable_now:
+            streak = int(streaks.get(symbol, 0)) + 1
+        else:
+            streak = 0
+        streaks[symbol] = streak
+        block_after = self._regime_unstable_block_after(row)
+        row["regime_unstable_streak"] = int(streak)
+        row["regime_unstable_block_after"] = int(block_after)
+        row["regime_unstable_debounced"] = bool(unstable_now and streak < block_after)
+        return row
+
+    def _maybe_run_suggestion_reliability_check(self) -> None:
+        if not bool(getattr(cfg, "SUGGESTION_RELIABILITY_CHECK_ENABLE", True)):
+            return
+        now_ts = now_utc_epoch()
+        interval_sec = float(getattr(cfg, "SUGGESTION_RELIABILITY_INTERVAL_SEC", 900.0))
+        last_ts = float(getattr(self, "_last_suggestion_reliability_eval_ts", 0.0) or 0.0)
+        if last_ts and (now_ts - last_ts) < interval_sec:
+            return
+        self._last_suggestion_reliability_eval_ts = now_ts
+        payload = evaluate_suggestion_reliability(
+            market_context={
+                "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+                "market_open": bool(is_market_open_ist()),
+            },
+            now_epoch=now_ts,
+        )
+        persist_suggestion_reliability(payload)
+        if str(payload.get("status") or "").upper() == "DEGRADED":
+            print(
+                "[SUGGESTION_SLO][DEGRADED] "
+                f"ratio={payload.get('allowed_to_candidate_ratio'):.3f} "
+                f"allowed={payload.get('allowed_count')} "
+                f"candidates={payload.get('candidate_count')} "
+                f"top_reject_reasons={payload.get('top_reject_reasons')}"
+            )
+            try:
+                create_incident("SEV3", "SUGGESTION_RELIABILITY_DEGRADED", payload)
+            except Exception:
+                pass
+
+    def _maybe_auto_repair_live_feed(self, market_data: dict, gate_reasons: list[str] | None = None) -> dict:
+        result = {"action": "noop"}
+        if not bool(getattr(cfg, "FEED_AUTO_REPAIR_ENABLE", True)):
+            result["action"] = "disabled"
+            return result
+        ctx_payload = dict(market_data.get("market_context") or {}) if isinstance(market_data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = market_data.get("execution_mode")
+        if "market_open" not in ctx_payload and ("market_open" in market_data):
+            ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = market_data.get("segment")
+        market_ctx = derive_market_context(ctx_payload)
+        if not (str(market_ctx.mode).upper() == "LIVE" and bool(market_ctx.is_market_open)):
+            result["action"] = "skipped_non_live"
+            return result
+
+        symbol = str(market_data.get("symbol") or "UNKNOWN").upper()
+        reason_values = [str(x or "").strip().upper() for x in (gate_reasons or []) if str(x or "").strip()]
+        for code in market_data.get("invalid_reason_codes") or []:
+            reason_values.append(str(code or "").strip().upper())
+        quote_health = market_data.get("quote_health") or {}
+        for code in quote_health.get("stale_reasons") or []:
+            reason_values.append(str(code or "").strip().upper())
+        if market_data.get("quote_ok") is False:
+            reason_values.append("QUOTE_INVALID")
+        normalized = {r for r in reason_values if r}
+        repair_triggers = {
+            "FEED_STALE",
+            "QUOTE_INVALID",
+            "INDEX_BIDASK_MISSING",
+            "LTP_STALE",
+            "QUOTE_API_ISSUE",
+            "MISSING_LIVE_BIDASK",
+        }
+        needs_repair = bool(normalized & repair_triggers)
+        state = self._feed_auto_repair_state.setdefault(
+            symbol,
+            {"streak": 0, "retries": 0, "last_attempt_ts": 0.0, "last_auth_check_ts": 0.0},
+        )
+        if not needs_repair:
+            state["streak"] = 0
+            state["retries"] = 0
+            result["action"] = "healthy"
+            return result
+
+        now_ts = now_utc_epoch()
+        state["streak"] = int(state.get("streak", 0)) + 1
+        result["reasons"] = sorted(list(normalized))
+        result["streak"] = int(state["streak"])
+
+        quote_refreshed = False
+        try:
+            quote_refreshed = bool(refresh_index_quote_from_rest(symbol, force=True))
+        except Exception:
+            quote_refreshed = False
+        result["quote_refreshed"] = quote_refreshed
+
+        trigger_strikes = max(1, int(getattr(cfg, "FEED_AUTO_REPAIR_TRIGGER_STRIKES", 2)))
+        if int(state["streak"]) < trigger_strikes:
+            result["action"] = "waiting_streak"
+            return result
+
+        cooldown_sec = float(getattr(cfg, "FEED_AUTO_REPAIR_COOLDOWN_SEC", 60.0))
+        if (now_ts - float(state.get("last_attempt_ts") or 0.0)) < cooldown_sec:
+            result["action"] = "cooldown"
+            return result
+
+        max_retries = max(1, int(getattr(cfg, "FEED_AUTO_REPAIR_MAX_RETRIES", 3)))
+        if int(state.get("retries", 0)) >= max_retries:
+            result["action"] = "max_retries_reached"
+            return result
+
+        auth_recheck_sec = float(getattr(cfg, "FEED_AUTO_REPAIR_AUTH_RECHECK_SEC", 90.0))
+        auth_check_due = (now_ts - float(state.get("last_auth_check_ts") or 0.0)) >= auth_recheck_sec
+        if auth_check_due:
+            from core.auth_health import get_kite_auth_health
+
+            auth_payload = dict(get_kite_auth_health(force=True) or {})
+            state["last_auth_check_ts"] = now_ts
+            auth_ok = bool(auth_payload.get("ok", False))
+            auth_err = str(auth_payload.get("error") or auth_payload.get("auth_state") or "")
+            if (not auth_ok) and is_auth_error(reason_text=auth_err):
+                result["action"] = "auth_required"
+                result["auth_error"] = auth_err
+                print(f"[FEED_AUTO_REPAIR] blocked symbol={symbol} auth_error={auth_err}")
+                try:
+                    create_incident(
+                        "SEV2",
+                        "AUTH_REQUIRED_AUTO_REPAIR_BLOCKED",
+                        {"symbol": symbol, "error": auth_err, "reasons": sorted(list(normalized))},
+                    )
+                except Exception:
+                    pass
+                return result
+
+        primary_reason = sorted(list(normalized))[0] if normalized else "unknown"
+        restarted = bool(restart_depth_ws(reason=f"auto_repair:{symbol}:{primary_reason.lower()}"))
+        state["last_attempt_ts"] = now_ts
+        state["retries"] = int(state.get("retries", 0)) + 1
+        result["action"] = "restart_attempted"
+        result["restarted"] = restarted
+        print(
+            "[FEED_AUTO_REPAIR] "
+            f"symbol={symbol} restarted={restarted} streak={state['streak']} retries={state['retries']} "
+            f"reasons={sorted(list(normalized))} quote_refreshed={quote_refreshed}"
+        )
+        return result
+
     def _strategy_gate_for_symbol(self, market_data: dict):
         """
         Evaluate one pure decision DAG per symbol per cycle and log once.
         """
         snapshot = self._immutable_cycle_snapshot(market_data)
-        symbol = str((snapshot or {}).get("symbol") or "").upper()
+        snapshot_data = self._annotate_regime_unstable_debounce(dict(snapshot))
+        symbol = str((snapshot_data or {}).get("symbol") or "").upper()
         cache = getattr(self, "_gatekeeper_cycle_cache", None)
         if not isinstance(cache, dict):
             cache = {}
@@ -315,11 +653,15 @@ class Orchestrator:
             NODE_N6_RISK_OK,
             NODE_N7_GOVERNANCE_LOCKS_OK,
         }
-        precheck = evaluate_decision(snapshot, strategy_candidates=())
+        precheck = evaluate_decision(snapshot_data, strategy_candidates=())
         if (not precheck.allowed) and (precheck.stage in precondition_blocking_nodes):
             decision = precheck
         else:
-            gate = self.gatekeeper.evaluate(snapshot, mode="MAIN")
+            try:
+                gate_input = MappingProxyType(copy.deepcopy(snapshot_data))
+            except Exception:
+                gate_input = MappingProxyType(dict(snapshot_data))
+            gate = self.gatekeeper.evaluate(gate_input, mode="MAIN")
             strategy_candidates = [
                 {
                     "family": getattr(gate, "family", None),
@@ -331,19 +673,19 @@ class Orchestrator:
                     },
                 }
             ]
-            decision = evaluate_decision(snapshot, strategy_candidates=strategy_candidates)
+            decision = evaluate_decision(snapshot_data, strategy_candidates=strategy_candidates)
 
         try:
             handle_post_decision_side_effects(
                 decision=decision,
                 explain=decision.explain,
-                snapshot=build_market_snapshot(snapshot),
+                snapshot=build_market_snapshot(snapshot_data),
             )
         except Exception:
             pass
         cache[symbol] = decision
 
-        log_snapshot = dict(snapshot)
+        log_snapshot = dict(snapshot_data)
         log_snapshot["decision_allowed"] = bool(decision.allowed)
         log_snapshot["decision_stage"] = decision.stage
         log_snapshot["decision_blockers"] = list(decision.blockers)
@@ -363,6 +705,25 @@ class Orchestrator:
 
     def _is_live_mode(self):
         return str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
+
+    def _allow_planning_no_signal_fallback(self, market_data: dict) -> bool:
+        if not bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
+            return False
+        ctx_payload = {}
+        if isinstance(market_data, dict) and isinstance(market_data.get("market_context"), dict):
+            ctx_payload.update(dict(market_data.get("market_context") or {}))
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = getattr(cfg, "EXECUTION_MODE", "SIM")
+        if "market_open" not in ctx_payload and isinstance(market_data, dict):
+            if "market_open" in market_data:
+                ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" not in ctx_payload:
+            if isinstance(market_data, dict) and market_data.get("segment"):
+                ctx_payload["segment"] = market_data.get("segment")
+            else:
+                ctx_payload["segment"] = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        market_ctx = derive_market_context(ctx_payload)
+        return bool(market_ctx.allow_stale_quotes)
 
     def _latest_decision_rows(self, max_age_sec: float | None = None) -> dict:
         """
@@ -627,6 +988,7 @@ class Orchestrator:
                     "category": "target_points",
                     "tier": "OPPORTUNITY",
                     "target_points": round(target_points, 2),
+                    "target_premium": round(target_points, 2),
                     "target_points_min": min_points,
                 },
             )
@@ -835,24 +1197,25 @@ class Orchestrator:
                     importlib.reload(cfg)
                 except Exception:
                     pass
-                if getattr(cfg, "KILL_SWITCH", False):
-                    try:
-                        self._log_decision_safe(self._build_decision_event(None, {"symbol": "GLOBAL"}, gatekeeper_allowed=False, veto_reasons=["kill_switch"]))
-                        audit_append({"event": "KILL_SWITCH", "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
-                        create_incident("SEV1", "KILL_SWITCH", {"desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
-                    except Exception:
-                        pass
+                global_halt_reason = resolve_global_halt_reason(self.circuit_breaker)
+                if global_halt_reason:
+                    cycle_reason = global_halt_reason
+                    self._emit_global_halt_events(global_halt_reason)
                     time.sleep(self.poll_interval)
                     continue
-                if risk_halt.is_halted():
+                self._last_global_halt_reason = None
+                slo_guard = evaluate_slo_status(enforce_failover=True)
+                if self._is_live_mode() and str(slo_guard.get("status") or "").upper() in {"BREACH", "FAILOVER"}:
+                    cycle_reason = "slo_guard_blocked"
+                    if bool(slo_guard.get("failover_triggered", False)):
+                        self._emit_global_halt_events("SLO_FAILOVER")
+                    else:
+                        print(
+                            "[SLO_GUARD] live cycle blocked reasons="
+                            + ",".join(list(slo_guard.get("reasons") or []) or ["unknown"])
+                        )
                     time.sleep(self.poll_interval)
                     continue
-                try:
-                    if self.circuit_breaker.is_halted():
-                        cycle_reason = self.circuit_breaker.halt_reason or "CB_ACTIVE"
-                        continue
-                except Exception as cb_exc:
-                    print(f"[CircuitBreaker] state_error:{type(cb_exc).__name__}")
                 # Feed freshness is now evaluated only in the Decision DAG from the
                 # immutable market snapshot. Do not recompute readiness here.
                 # Daily decay report / strategy gating
@@ -860,6 +1223,10 @@ class Orchestrator:
                 market_data_list = self._build_cycle_market_data(fetch_live_market_data())
                 self._update_pilot_unlock_clean_cycles()
                 self._evaluate_suggestions(market_data_list)
+                try:
+                    self._maybe_run_suggestion_reliability_check()
+                except Exception as exc:
+                    print(f"[SUGGESTION_SLO] check failed: {exc}")
                 try:
                     # Update consolidated loss streak (max across symbols)
                     try:
@@ -913,6 +1280,18 @@ class Orchestrator:
                     market_snapshot = self._immutable_cycle_snapshot(market_data)
                     snap_ok, halt_cycle = self._validate_market_snapshot(market_data)
                     if not snap_ok:
+                        try:
+                            invalid_reasons = [str(x) for x in (market_data.get("invalid_reason_codes") or []) if str(x)]
+                            invalid_reason = str(market_data.get("invalid_reason") or "").strip()
+                            if invalid_reason:
+                                invalid_reasons.append(invalid_reason)
+                            repair = self._maybe_auto_repair_live_feed(market_data, gate_reasons=invalid_reasons)
+                            if str(repair.get("action") or "").upper() == "AUTH_REQUIRED":
+                                cycle_reason = "auth_required"
+                                self._emit_global_halt_events("AUTH_REQUIRED")
+                                break
+                        except Exception:
+                            pass
                         if halt_cycle:
                             break
                         continue
@@ -920,6 +1299,11 @@ class Orchestrator:
                     if instrument != "OPT":
                         # Execution suggestion pipeline is option-centric. Skip non-OPT snapshots.
                         continue
+                    try:
+                        if isinstance(market_data, dict):
+                            market_data["allow_planning_no_signal_fallback"] = self._allow_planning_no_signal_fallback(market_data)
+                    except Exception:
+                        pass
                     try:
                         self.risk_state.update_market(market_data.get("symbol"), market_data)
                     except Exception:
@@ -974,6 +1358,14 @@ class Orchestrator:
                         if debug_flag:
                             print(f"[Gatekeeper] Blocked {sym}: {','.join(gate.reasons)}")
                         try:
+                            repair = self._maybe_auto_repair_live_feed(market_data, gate_reasons=list(gate.reasons or []))
+                            if str(repair.get("action") or "").upper() == "AUTH_REQUIRED":
+                                cycle_reason = "auth_required"
+                                self._emit_global_halt_events("AUTH_REQUIRED")
+                                break
+                        except Exception:
+                            pass
+                        try:
                             event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=gate.reasons)
                             self._log_decision_safe(event)
                             audit_append({"event": "GATEKEEPER_BLOCK", "symbol": sym, "reasons": gate.reasons, "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
@@ -1022,6 +1414,14 @@ class Orchestrator:
                                 gate_reasons=reject_gate_reasons,
                                 stage="trade_builder_gate",
                             )
+                        try:
+                            repair = self._maybe_auto_repair_live_feed(market_data, gate_reasons=reject_gate_reasons)
+                            if str(repair.get("action") or "").upper() == "AUTH_REQUIRED":
+                                cycle_reason = "auth_required"
+                                self._emit_global_halt_events("AUTH_REQUIRED")
+                                break
+                        except Exception:
+                            pass
                         self._maybe_queue_target_points_idea(
                             market_data,
                             debug_flag=debug_flag,
@@ -1099,13 +1499,13 @@ class Orchestrator:
                         try:
                             if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE" and not getattr(cfg, "ALLOW_AUX_TRADES_LIVE", False):
                                 continue
-                            if gate.allowed and gate.family == "TREND":
+                            if gate.allowed and gate.family in ("TREND", "EVENT"):
                                 zero_trade = self.trade_builder.build_zero_hero(
                                     market_data,
                                     debug_reasons=debug_flag
                                 )
                                 if zero_trade:
-                                    add_to_queue(zero_trade, queue_path=ZERO_HERO_QUEUE_PATH, extra={"category": "zero_hero", "tier": "EXPLORATION"})
+                                    add_to_queue(zero_trade, queue_path=ZERO_HERO_QUEUE_PATH, extra={"category": "zero_to_hero", "tier": "EXPLORATION"})
                             if gate.allowed and gate.family == "MEAN_REVERT":
                                 scalp_trade = self.trade_builder.build_scalp(
                                     market_data,
@@ -1238,22 +1638,27 @@ class Orchestrator:
                             except Exception:
                                 pass
                             continue
-                    # Adjust epsilon by regime (lower in choppy regimes)
-                    base_eps = self.symbol_epsilon.get(sym, cfg.STRATEGY_EPSILON)
+                    # Adjust epsilon by regime (lower in choppy regimes) without mutating global config.
+                    base_eps = float(self.symbol_epsilon.get(sym, cfg.STRATEGY_EPSILON))
                     regime = market_data.get("primary_regime") or market_data.get("regime") or "NEUTRAL"
+                    adjusted_eps = base_eps
                     if regime == "CHOPPY":
-                        cfg.STRATEGY_EPSILON = max(0.02, base_eps * 0.5)
+                        adjusted_eps = max(0.02, base_eps * 0.5)
                     elif regime == "TREND":
-                        cfg.STRATEGY_EPSILON = min(0.2, base_eps * 1.2)
-                    if not self.strategy_allocator.should_trade(trade.strategy):
+                        adjusted_eps = min(0.2, base_eps * 1.2)
+                    allocator_seed = self._allocator_context_seed(market_data, sym, trade.strategy)
+                    if not self.strategy_allocator.should_trade(
+                        trade.strategy,
+                        epsilon=adjusted_eps,
+                        context_seed=allocator_seed,
+                    ):
                         try:
                             update_execution(trade.trade_id, {"veto_reasons": ["strategy_allocator"]})
                         except Exception:
                             pass
                         continue
-                    self.symbol_epsilon[sym] = cfg.STRATEGY_EPSILON
+                    self.symbol_epsilon[sym] = adjusted_eps
                     self._save_symbol_eps()
-                    cfg.STRATEGY_EPSILON = base_eps
 
                     # A/B paper trading log (shadow model)
                     try:
@@ -1350,11 +1755,14 @@ class Orchestrator:
 
                     # Phase B: Risk validation
                     exposure_snapshot = self._refresh_exposure_snapshot()
-                    allowed, reason = self.risk_engine.allow_trade(
+                    risk_decision = self.risk_engine.evaluate_trade(
                         self.portfolio,
                         trade=trade,
                         exposure_state=exposure_snapshot,
                     )
+                    allowed = bool(risk_decision.allowed)
+                    reason = str(risk_decision.reason)
+                    reason_code = str(risk_decision.reason_code)
                     if not allowed:
                         print(f"[RiskEngine] Trade blocked: {reason}")
                         if reason.lower().startswith("daily loss"):
@@ -1386,13 +1794,28 @@ class Orchestrator:
                         except Exception:
                             pass
                         try:
-                            update_execution(trade.trade_id, {"risk_allowed": 0, "veto_reasons": [reason]})
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "risk_allowed": 0,
+                                    "risk_reason": reason,
+                                    "risk_reason_code": reason_code,
+                                    "veto_reasons": [reason_code],
+                                },
+                            )
                         except Exception:
                             pass
                         continue
                     else:
                         try:
-                            update_execution(trade.trade_id, {"risk_allowed": 1})
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "risk_allowed": 1,
+                                    "risk_reason": reason,
+                                    "risk_reason_code": reason_code,
+                                },
+                            )
                         except Exception:
                             pass
 
@@ -1470,12 +1893,21 @@ class Orchestrator:
                                 continue
                     trade = replace(trade, qty=final_qty, capital_at_risk=round((trade.entry_price - trade.stop_loss) * final_qty * lot_size, 2))
                     # Phase B: Execution guard (after sizing)
-                    approved, reason = self.execution_guard.validate(trade, self.portfolio, trade.regime)
+                    guard_decision = self.execution_guard.evaluate(
+                        trade,
+                        self.portfolio,
+                        trade.regime,
+                        market_data=market_data,
+                        mode=getattr(cfg, "EXECUTION_MODE", "SIM"),
+                    )
+                    approved = bool(guard_decision.allowed)
+                    reason = str(guard_decision.reason)
+                    reason_code = str(guard_decision.reason_code)
                     if not approved:
                         print(f"[ExecutionGuard] Trade blocked: {reason}")
                         try:
                             blocked_reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
-                            blocked_reasons.append(f"risk_guard_failed:{reason}")
+                            blocked_reasons.append(f"risk_guard_failed:{reason_code}")
                             source_flags = dict(getattr(trade, "source_flags", {}) or {})
                             source_flags["risk_guard_passed"] = False
                             blocked_trade = replace(
@@ -1489,21 +1921,85 @@ class Orchestrator:
                         except Exception:
                             pass
                         try:
-                            update_execution(trade.trade_id, {"exec_guard_allowed": 0, "veto_reasons": [reason]})
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "exec_guard_allowed": 0,
+                                    "exec_guard_reason": reason,
+                                    "exec_guard_reason_code": reason_code,
+                                    "veto_reasons": [reason_code],
+                                },
+                            )
                         except Exception:
                             pass
                         continue
                     else:
                         try:
-                            update_execution(trade.trade_id, {"exec_guard_allowed": 1})
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "exec_guard_allowed": 1,
+                                    "exec_guard_reason": reason,
+                                    "exec_guard_reason_code": reason_code,
+                                    "planning_only": bool(guard_decision.planning_only),
+                                },
+                            )
                         except Exception:
                             pass
                         try:
                             source_flags = dict(getattr(trade, "source_flags", {}) or {})
                             source_flags["risk_guard_passed"] = True
+                            source_flags["execution_guard_mode"] = guard_decision.mode
+                            source_flags["execution_guard_planning_only"] = bool(guard_decision.planning_only)
                             trade = replace(trade, source_flags=source_flags)
                         except Exception:
                             pass
+
+                    slippage_decision = evaluate_slippage_budget(
+                        trade,
+                        market_data,
+                        self.execution_engine,
+                    )
+                    if not bool(slippage_decision.allowed):
+                        print(f"[SlippageGuard] Trade blocked: {slippage_decision.reason_code}")
+                        try:
+                            append_reject_reasons(
+                                symbol=trade.symbol,
+                                strategy=trade.strategy,
+                                reasons=[str(slippage_decision.reason_code)],
+                                mode=getattr(cfg, "EXECUTION_MODE", "SIM"),
+                                source="slippage_guard",
+                                extra={
+                                    "expected_slippage_bps": slippage_decision.expected_slippage_bps,
+                                    "budget_bps": slippage_decision.budget_bps,
+                                },
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "slippage_budget_allowed": 0,
+                                    "slippage_budget_reason": str(slippage_decision.reason_code),
+                                    "veto_reasons": [str(slippage_decision.reason_code)],
+                                },
+                            )
+                        except Exception:
+                            pass
+                        continue
+                    try:
+                        update_execution(
+                            trade.trade_id,
+                            {
+                                "slippage_budget_allowed": 1,
+                                "slippage_budget_reason": str(slippage_decision.reason_code),
+                                "slippage_budget_bps": slippage_decision.budget_bps,
+                                "slippage_expected_bps": slippage_decision.expected_slippage_bps,
+                            },
+                        )
+                    except Exception:
+                        pass
 
                     # Price confirmation entry (avoid false starts)
                     if getattr(cfg, "PRICE_CONFIRM_ENABLE", True):
@@ -1675,7 +2171,12 @@ class Orchestrator:
                         extra["size_mult"] = getattr(trade, "size_mult", None)
                     # Paper strict: mark aux/quick/scalp/zero-hero so they don't affect main perf stats
                     if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "PAPER" and getattr(cfg, "PAPER_STRICT_MODE", False):
-                        if getattr(trade, "tier", "MAIN") != "MAIN" or trade.strategy in ("SCALP", "ZERO_HERO", "ZERO_HERO_EXPIRY") or trade.strategy.startswith("QUICK"):
+                        if getattr(trade, "tier", "MAIN") != "MAIN" or trade.strategy in (
+                            "SCALP",
+                            "ZERO_HERO",
+                            "ZERO_HERO_EXPIRY",
+                            getattr(cfg, "STRATEGY_ZERO_TO_HERO", "ZERO_TO_HERO"),
+                        ) or trade.strategy.startswith("QUICK"):
                             extra["paper_aux"] = True
                     if fill_report:
                         extra["fill_quality"] = fill_report
@@ -1831,12 +2332,13 @@ class Orchestrator:
             pass
 
     def _load_suggestion_eval(self):
-        from pathlib import Path
-        self.suggestion_eval_path = Path("logs/suggestion_eval.jsonl")
+        self.suggestion_eval_path = canonical_suggestion_eval_log_path()
         self.suggestion_evaluated = set()
-        if self.suggestion_eval_path.exists():
+        for path in suggestion_eval_log_paths():
+            if not path.exists():
+                continue
             try:
-                with open(self.suggestion_eval_path, "r") as f:
+                with path.open("r") as f:
                     for line in f:
                         if not line.strip():
                             continue
@@ -1848,29 +2350,28 @@ class Orchestrator:
                         except Exception:
                             continue
             except Exception:
-                pass
+                continue
 
     def _evaluate_suggestions(self, market_data_list):
         """
         Evaluate suggested trades vs live option prices to see if targets/stops are hit.
         """
-        from pathlib import Path
         import re
-        sug_path = Path("logs/suggestions.jsonl")
-        if not sug_path.exists():
-            return
-        try:
-            suggestions = []
-            with open(sug_path, "r") as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        suggestions.append(json.loads(line))
-                    except Exception:
-                        continue
-        except Exception:
-            return
+        suggestions = []
+        for sug_path in suggestion_log_paths():
+            if not sug_path.exists():
+                continue
+            try:
+                with sug_path.open("r") as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        try:
+                            suggestions.append(json.loads(line))
+                        except Exception:
+                            continue
+            except Exception:
+                continue
         if not suggestions:
             return
         # Build map for quick lookup
@@ -1937,17 +2438,24 @@ class Orchestrator:
                 "ltp": ltp_opt,
                 "outcome": outcome,
                 "strategy": s.get("strategy"),
+                "category": s.get("category"),
+                "tier": s.get("tier"),
             }
-            try:
-                self.suggestion_eval_path.parent.mkdir(exist_ok=True)
-                with open(self.suggestion_eval_path, "a") as f:
-                    f.write(json.dumps(payload) + "\n")
-            except Exception:
-                pass
+            for eval_path in suggestion_eval_log_paths():
+                try:
+                    eval_path.parent.mkdir(parents=True, exist_ok=True)
+                    with eval_path.open("a") as f:
+                        f.write(json.dumps(payload) + "\n")
+                except Exception:
+                    continue
             self.suggestion_evaluated.add(tid)
             # update strategy evaluator (hit target = +1, stop = -1)
             pnl = 1 if outcome == "target" else -1
-            tracker.record(s.get("strategy"), pnl)
+            strategy_name = s.get("strategy") or "UNKNOWN"
+            tracker.record(strategy_name, pnl)
+            category = str(s.get("category") or "").strip()
+            if category:
+                tracker.record(f"{category.upper()}::{strategy_name}", pnl)
             tracker.save("logs/suggestion_strategy_perf.json")
 
     def _start_depth_ws(self):
@@ -1967,19 +2475,6 @@ class Orchestrator:
             )
         user_id = str((auth_payload or {}).get("user_id", "") or "")
         print(f"[KITE_WS] profile verified user_last4={user_id[-4:] if user_id else 'NONE'}")
-        try:
-            warmup_rows = ensure_startup_warmup_bootstrap(list(getattr(cfg, "SYMBOLS", []) or []))
-            for row in warmup_rows:
-                print(
-                    "[WARMUP] "
-                    f"{row.get('symbol')} bars={row.get('seeded_bars_count')} "
-                    f"last_candle_ts={row.get('last_candle_ts')} "
-                    f"indicator_last_update_ts={row.get('indicator_last_update_ts')} "
-                    f"ok={row.get('warmup_ok', row.get('indicators_ok_after_seed'))} "
-                    f"reason={row.get('warmup_reason') or row.get('seed_reason')}"
-                )
-        except Exception as exc:
-            print(f"[WARMUP] startup seeding failed: {exc}")
         # Resolve a minimal depth subscription universe (index + ATM window).
         from core.kite_depth_ws import build_depth_subscription_tokens
         tokens, _resolution = build_depth_subscription_tokens(list(cfg.SYMBOLS))
@@ -1995,6 +2490,40 @@ class Orchestrator:
         if not tokens:
             raise RuntimeError("kite_depth_ws_init_failed:no_tokens_resolved")
         start_depth_ws(tokens, profile_verified=True)
+
+    def _run_preopen_auth_warm_check(self):
+        try:
+            from core.auth_health import run_preopen_auth_warm_check
+
+            payload = run_preopen_auth_warm_check(force=True)
+            if bool(payload.get("degrade_to_planning")):
+                print(
+                    "[AUTH_GUARD] pre-open auth unhealthy; runtime downgraded to planning mode "
+                    f"reason={payload.get('reason')}"
+                )
+            return payload
+        except Exception as exc:
+            print(f"[AUTH_GUARD] pre-open warm check failed: {exc}")
+            return {}
+
+    def _run_startup_warmup_bootstrap(self):
+        try:
+            warmup_rows = ensure_startup_warmup_bootstrap(
+                list(getattr(cfg, "SYMBOLS", []) or [])
+            )
+            for row in warmup_rows:
+                print(
+                    "[WARMUP] "
+                    f"{row.get('symbol')} bars={row.get('seeded_bars_count')} "
+                    f"last_candle_ts={row.get('last_candle_ts')} "
+                    f"indicator_last_update_ts={row.get('indicator_last_update_ts')} "
+                    f"ok={row.get('warmup_ok', row.get('indicators_ok_after_seed'))} "
+                    f"reason={row.get('warmup_reason') or row.get('seed_reason')}"
+                )
+            return warmup_rows
+        except Exception as exc:
+            print(f"[WARMUP] startup seeding failed: {exc}")
+            return []
 
     def _track_open_trade(self, trade, market_data):
         key = f"{trade.symbol}:{trade.instrument}"
@@ -2254,7 +2783,12 @@ class Orchestrator:
             # Skip aux trades in PAPER_STRICT_MODE from main perf stats
             if not (str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "PAPER"
                     and getattr(cfg, "PAPER_STRICT_MODE", False)
-                    and (getattr(tr, "tier", "MAIN") != "MAIN" or tr.strategy in ("SCALP", "ZERO_HERO", "ZERO_HERO_EXPIRY") or tr.strategy.startswith("QUICK"))):
+                    and (getattr(tr, "tier", "MAIN") != "MAIN" or tr.strategy in (
+                        "SCALP",
+                        "ZERO_HERO",
+                        "ZERO_HERO_EXPIRY",
+                        getattr(cfg, "STRATEGY_ZERO_TO_HERO", "ZERO_TO_HERO"),
+                    ) or tr.strategy.startswith("QUICK"))):
                 self.strategy_tracker.record(tr.strategy, pnl)
                 self.strategy_tracker.record_symbol(tr.symbol, pnl)
                 self.strategy_tracker.save("logs/strategy_perf.json")

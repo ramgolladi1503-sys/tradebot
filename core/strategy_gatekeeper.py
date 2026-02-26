@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from config import config as cfg
+from core.market_context import derive_market_context
 
 
 @dataclass
@@ -17,16 +18,65 @@ class StrategyGatekeeper:
       EVENT -> defined-risk only or NO TRADE
       NEUTRAL -> NO TRADE
     """
+    def __init__(self) -> None:
+        self._unstable_streak_by_symbol: dict[str, int] = {}
+
     def evaluate(self, market_data, mode="MAIN") -> GateResult:
         reasons = []
+        symbol = str(market_data.get("symbol") or "UNKNOWN").upper()
         regime_probs = market_data.get("regime_probs") or {}
         if "unstable_reasons" in market_data:
             unstable_reasons = [str(x) for x in (market_data.get("unstable_reasons") or []) if str(x)]
         else:
             unstable_reasons = ["legacy_unstable_flag"] if bool(market_data.get("unstable_regime_flag", False)) else []
         regime = (market_data.get("primary_regime") or market_data.get("regime") or "NEUTRAL").upper()
-        live_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"
-        paper_relax = (not live_mode) and bool(getattr(cfg, "PAPER_RELAX_GATES", True))
+        ctx_payload = {}
+        if isinstance(market_data.get("market_context"), dict):
+            ctx_payload.update(dict(market_data.get("market_context") or {}))
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = market_data.get("execution_mode")
+        if "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = market_data.get("segment")
+        mode_hint = str(
+            ctx_payload.get("execution_mode") or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).upper()
+        if ("market_open" not in ctx_payload) or (ctx_payload.get("market_open") is None):
+            # Backward compatibility: historical callsites expected LIVE mode to
+            # run strict gates even without explicit market_open context.
+            if mode_hint == "LIVE":
+                ctx_payload["market_open"] = True
+        market_ctx = derive_market_context(ctx_payload)
+        live_mode = str(market_ctx.mode).upper() == "LIVE"
+        paper_relax = bool(market_ctx.allow_stale_quotes) and bool(
+            getattr(cfg, "PAPER_RELAX_GATES", True)
+        )
+        unstable_block_after_default = int(getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1))
+        unstable_block_after = unstable_block_after_default
+        if paper_relax:
+            unstable_block_after = int(
+                getattr(
+                    cfg,
+                    "PAPER_REGIME_UNSTABLE_CONSECUTIVE_BLOCK",
+                    unstable_block_after_default,
+                )
+            )
+        unstable_block_after = max(1, int(unstable_block_after))
+        explicit_streak = None
+        try:
+            explicit_streak = int(market_data.get("regime_unstable_streak"))
+        except Exception:
+            explicit_streak = None
+        if unstable_reasons:
+            if explicit_streak is not None and explicit_streak > 0:
+                unstable_streak = explicit_streak
+            else:
+                unstable_streak = int(self._unstable_streak_by_symbol.get(symbol, 0)) + 1
+            self._unstable_streak_by_symbol[symbol] = unstable_streak
+        else:
+            self._unstable_streak_by_symbol[symbol] = 0
+            unstable_streak = 0
         regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
         if paper_relax:
             regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
@@ -104,25 +154,39 @@ class StrategyGatekeeper:
 
         if regime_probs:
             max_prob = max(regime_probs.values()) if regime_probs else 0.0
+            paper_soft_unblock_enabled = bool(getattr(cfg, "PAPER_SOFT_UNBLOCK_ENABLE", True))
+            paper_soft_unblock_conf_min = float(getattr(cfg, "PAPER_SOFT_UNBLOCK_CONF_MIN", 0.80))
+            contradictory_reasons = set(
+                str(x).strip()
+                for x in (getattr(cfg, "PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS", ["entropy_too_high", "prob_too_low"]) or [])
+                if str(x).strip()
+            )
+            soft_unblock_ok = bool(
+                unstable_reasons
+                and paper_relax
+                and paper_soft_unblock_enabled
+                and bool(indicators_ok)
+                and max_prob >= paper_soft_unblock_conf_min
+                and not (set(unstable_reasons) & contradictory_reasons)
+            )
             if unstable_reasons:
-                paper_soft_unblock_enabled = bool(getattr(cfg, "PAPER_SOFT_UNBLOCK_ENABLE", True))
-                paper_soft_unblock_conf_min = float(getattr(cfg, "PAPER_SOFT_UNBLOCK_CONF_MIN", 0.80))
-                contradictory_reasons = set(
-                    str(x).strip()
-                    for x in (getattr(cfg, "PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS", ["entropy_too_high", "prob_too_low"]) or [])
-                    if str(x).strip()
-                )
-                if (
-                    paper_relax
-                    and paper_soft_unblock_enabled
-                    and bool(indicators_ok)
-                    and max_prob >= paper_soft_unblock_conf_min
-                    and not (set(unstable_reasons) & contradictory_reasons)
-                ):
+                if soft_unblock_ok:
+                    return GateResult(True, "DEFINED_RISK", reasons + ["paper_soft_unblock"])
+                if unstable_block_after > 1 and unstable_streak < unstable_block_after:
+                    reasons.append(
+                        f"regime_unstable_debounced:{int(unstable_streak)}/{int(unstable_block_after)}"
+                    )
+                    unstable_reasons = []
+                else:
+                    reasons.append("regime_unstable")
+                    if unstable_reasons:
+                        reasons.extend(f"unstable:{r}" for r in unstable_reasons)
+                    return GateResult(False, None, reasons)
+            if unstable_reasons:
+                if soft_unblock_ok:
                     return GateResult(True, "DEFINED_RISK", reasons + ["paper_soft_unblock"])
                 reasons.append("regime_unstable")
-                if unstable_reasons:
-                    reasons.extend(f"unstable:{r}" for r in unstable_reasons)
+                reasons.extend(f"unstable:{r}" for r in unstable_reasons)
                 return GateResult(False, None, reasons)
             if max_prob < regime_prob_min:
                 reasons.append("regime_low_confidence")

@@ -130,6 +130,7 @@ class MarketSnapshot:
     mode: str
     market_open: bool
     offhours_mode: bool
+    allow_stale_quotes: bool
     market_context: Mapping[str, Any]
     ltp: float | None
     ltp_ts_epoch: float | None
@@ -264,6 +265,7 @@ def build_market_snapshot(
     mode = str(market_ctx.mode)
     market_open = bool(market_ctx.is_market_open)
     offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+    allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
 
     ltp = _to_float(data.get("ltp"))
     ltp_ts_epoch = _to_float(data.get("ltp_ts_epoch"))
@@ -384,9 +386,10 @@ def build_market_snapshot(
     feed_health = {
         "ltp_age_sec": ltp_age_sec,
         "depth_age_sec": depth_age_sec,
-        "is_fresh": bool(offhours_mode or (ltp is not None and ltp > 0 and ltp_age_sec <= float(max_ltp_age))),
+        "is_fresh": bool(allow_stale_quotes or (ltp is not None and ltp > 0 and ltp_age_sec <= float(max_ltp_age))),
         "source": ltp_source or "unknown",
         "offhours_mode": bool(offhours_mode),
+        "allow_stale_quotes": bool(allow_stale_quotes),
         "ts_epoch": float(now_value),
     }
 
@@ -396,6 +399,7 @@ def build_market_snapshot(
         mode=mode,
         market_open=market_open,
         offhours_mode=bool(offhours_mode),
+        allow_stale_quotes=bool(allow_stale_quotes),
         market_context=MappingProxyType(market_ctx.to_dict()),
         ltp=ltp,
         ltp_ts_epoch=ltp_ts_epoch,
@@ -435,8 +439,9 @@ def _node_market_open(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
 
 def _node_feed_fresh(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     feed = dict(snapshot.feed_health or {})
-    if snapshot.offhours_mode:
-        feed["offhours_mode"] = True
+    if snapshot.allow_stale_quotes:
+        feed["offhours_mode"] = bool(snapshot.offhours_mode)
+        feed["allow_stale_quotes"] = True
         return NodeResult(ok=True, facts=feed)
     if bool(feed.get("is_fresh")):
         return NodeResult(ok=True, facts=feed)
@@ -477,6 +482,13 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
         "indicators_age_sec": snapshot.indicators_age_sec,
         "indicators_ok": snapshot.indicators_ok,
     }
+    hist_fetch_failed_only = bool(warmup_reasons) and all(
+        str(reason).upper() == "HIST_FETCH_FAILED" for reason in warmup_reasons
+    )
+    if snapshot.allow_stale_quotes and hist_fetch_failed_only:
+        facts["warmup_degraded"] = True
+        facts["warmup_degraded_reason"] = "HIST_FETCH_FAILED"
+        return NodeResult(ok=True, reasons=(), facts=facts)
     return NodeResult(ok=not bool(reasons_tuple), reasons=reasons_tuple, facts=facts)
 
 
@@ -511,7 +523,7 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
             "instrument": snapshot.instrument,
             "offhours_mode": bool(snapshot.offhours_mode),
         }
-        if snapshot.offhours_mode:
+        if snapshot.allow_stale_quotes:
             return NodeResult(ok=True, value=resolved, facts=facts)
         if bool(resolved.get("quote_ok")):
             return NodeResult(ok=True, value=resolved, facts=facts)
@@ -578,10 +590,40 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
         unstable_reasons = [r for r in unstable_reasons if r not in {"prob_too_low", "entropy_too_high"}]
 
     unstable_reasons = list(_clean_reasons(unstable_reasons))
-    if unstable_reasons:
+    debounce_block_after = 1
+    debounce_streak = 0
+    try:
+        debounce_block_after = max(
+            1,
+            int(snapshot.raw_data.get("regime_unstable_block_after") or 1),
+        )
+    except Exception:
+        debounce_block_after = 1
+    try:
+        debounce_streak = max(
+            0,
+            int(snapshot.raw_data.get("regime_unstable_streak") or 0),
+        )
+    except Exception:
+        debounce_streak = 0
+    debounced_unstable = bool(
+        unstable_reasons
+        and debounce_block_after > 1
+        and debounce_streak > 0
+        and debounce_streak < debounce_block_after
+    )
+    if unstable_reasons and (not debounced_unstable):
         reasons.append(REASON_REGIME_UNSTABLE)
 
     reasons_tuple = _clean_reasons(reasons)
+    warmup_reasons = _clean_reasons(
+        snapshot.raw_data.get("warmup_reasons")
+        if isinstance(snapshot.raw_data.get("warmup_reasons"), Sequence)
+        else ()
+    )
+    hist_fetch_failed_only = bool(warmup_reasons) and all(
+        str(reason).upper() == "HIST_FETCH_FAILED" for reason in warmup_reasons
+    )
     facts = {
         "primary_regime": primary_regime,
         "regime_prob_max": snapshot.regime_prob_max,
@@ -589,7 +631,14 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
         "unstable_reasons": unstable_reasons,
         "regime_prob_min": regime_prob_min,
         "regime_entropy_max": regime_entropy_max,
+        "regime_unstable_streak": debounce_streak,
+        "regime_unstable_block_after": debounce_block_after,
+        "regime_unstable_debounced": debounced_unstable,
     }
+    if snapshot.allow_stale_quotes and hist_fetch_failed_only:
+        facts["regime_degraded"] = True
+        facts["regime_degraded_reason"] = "HIST_FETCH_FAILED"
+        return NodeResult(ok=True, reasons=(), facts=facts)
     return NodeResult(ok=not bool(reasons_tuple), reasons=reasons_tuple, facts=facts)
 
 

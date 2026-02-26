@@ -17,7 +17,8 @@ def _token_path() -> Path:
     override = os.getenv("TRADING_BOT_TOKEN_PATH", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return (Path.home() / ".trading_bot" / "kite_access_token").resolve()
+    repo = Path(__file__).resolve().parents[1]
+    return (repo / ".runtime" / "kite_access_token").resolve()
 
 
 def token_storage_dir() -> Path:
@@ -99,7 +100,7 @@ def _token_artifact_message(repo_root: Path, artifacts: list[Path]) -> str:
         f"  1) Remove files: rm {rm_cmd}\n"
         "  2) Rotate token in Kite dashboard\n"
         "  3) Re-create token via models/generate_kite_token.py or "
-        "scripts/generate_kite_access_token.py (stores outside repo)\n"
+        "scripts/generate_kite_access_token.py (stores in .runtime/kite_access_token)\n"
         "  4) Re-run startup"
     )
 
@@ -112,41 +113,17 @@ def enforce_no_repo_token_artifacts(repo_root: Path | str) -> None:
 
 
 def resolve_kite_access_token(repo_root: Path | str, require_token: bool = True) -> str:
-    enforce_no_repo_token_artifacts(repo_root)
-    env_token = os.getenv("KITE_ACCESS_TOKEN", "").strip()
-    local_token = read_local_kite_access_token().strip()
-    if env_token and local_token:
-        if env_token != local_token:
-            raise RuntimeError(
-                "[SECURITY_GUARD] kite_token_source_conflict\n"
-                "Both KITE_ACCESS_TOKEN and local token store are set with different values.\n"
-                "Use a single source of truth.\n"
-                "Remediation:\n"
-                f"  1) Preferred: keep local token at {local_token_path()}\n"
-                "  2) Unset shell/env KITE_ACCESS_TOKEN or update it to match local token\n"
-                "  3) Re-run startup"
-            )
-        return local_token
-    if local_token:
-        return local_token
-    if env_token:
-        return env_token
-    if require_token:
-        raise RuntimeError(
-            "[SECURITY_GUARD] missing_kite_access_token\n"
-            "KITE_ACCESS_TOKEN is not set and no local token exists.\n"
-            "Remediation:\n"
-            "  1) export KITE_ACCESS_TOKEN=<token>\n"
-            "  2) OR run scripts/generate_kite_access_token.py --prompt-token --update-env\n"
-            f"  3) Local token path: {local_token_path()}"
-        )
-    return ""
+    from core.auth_manager import resolve_access_token
+
+    return resolve_access_token(
+        repo_root_path=repo_root,
+        require_token=require_token,
+        enforce_artifact_check=True,
+    )
 
 
 def enforce_startup_security(repo_root: Path | str, require_token: bool = True) -> str:
     token = resolve_kite_access_token(repo_root=repo_root, require_token=require_token)
-    if token:
-        os.environ["KITE_ACCESS_TOKEN"] = token
     _write_guard_event(repo_root, token_present=bool(token))
     return token
 
@@ -159,7 +136,7 @@ def _write_guard_event(repo_root: Path | str, token_present: bool) -> None:
         "ts_epoch": time.time(),
         "event": "startup_guard_pass" if token_present else "startup_guard_no_token",
         "repo_root": str(root),
-        "token_source": "env_or_local" if token_present else "none",
+        "token_source": "repo_or_env_ci" if token_present else "none",
     }
     serialized = (
         "{"

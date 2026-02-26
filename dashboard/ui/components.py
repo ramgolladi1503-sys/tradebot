@@ -15,25 +15,29 @@ def apply_global_style():
 
 
 def app_shell(title: str, nav_items: list[str], default_tab: str | None, on_change=None):
-    with st.sidebar:
-        st.markdown("### Navigation")
-        if "nav_choice" not in st.session_state and default_tab:
-            st.session_state["nav_choice"] = default_tab
-        nav = st.radio(
-            "Sections",
-            nav_items,
-            index=nav_items.index(st.session_state.get("nav_choice", default_tab or nav_items[0])),
-            key="nav_choice",
-            on_change=on_change,
-        )
+    if "nav_choice" not in st.session_state and default_tab:
+        st.session_state["nav_choice"] = default_tab
+    current_choice = st.session_state.get("nav_choice", default_tab or nav_items[0])
+    if current_choice not in nav_items:
+        current_choice = default_tab if default_tab in nav_items else nav_items[0]
+        st.session_state["nav_choice"] = current_choice
     st.markdown(
         f"""
         <div class="app-shell-header">
           <div class="app-shell-title">{title}</div>
-          <div class="breadcrumbs">{title} / {nav}</div>
+          <div class="breadcrumbs">{title} / {current_choice}</div>
         </div>
         """,
         unsafe_allow_html=True,
+    )
+    nav = st.radio(
+        "Sections",
+        nav_items,
+        index=nav_items.index(current_choice),
+        key="nav_choice",
+        on_change=on_change,
+        horizontal=True,
+        label_visibility="collapsed",
     )
     st.markdown("<div class='app-container'>", unsafe_allow_html=True)
     return nav

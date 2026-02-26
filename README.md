@@ -60,6 +60,11 @@ Check Kite auth:
 python scripts/check_kite_auth.py
 ```
 
+Feed self-test (no broker required):
+```bash
+python -m core.feed_self_test
+```
+
 Validate Kite session from .env (safe):
 ```bash
 python scripts/validate_kite_session.py

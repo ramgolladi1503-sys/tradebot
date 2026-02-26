@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 import json
@@ -169,7 +169,7 @@ def run_walk_forward(
     if write_outputs:
         out_dir = Path(cfg.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        ts_label = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts_label = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         json_path = out_dir / f"walk_forward_{ts_label}.json"
         csv_path = out_dir / f"walk_forward_{ts_label}.csv"
         latest_json_path = out_dir / "walk_forward_latest.json"

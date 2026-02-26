@@ -12,10 +12,10 @@ from typing import Dict, Tuple, List, Any
 from config import config as cfg
 from core import risk_halt
 from core.audit_log import verify_chain as verify_audit_chain
-from core.auth_health import get_kite_auth_health
+from core.auth_health import get_kite_auth_health, run_preopen_auth_warm_check
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
-from core.offhours import is_offhours
-from core.time_utils import now_ist, is_market_open_ist
+from core.market_context import derive_market_context
+from core.time_utils import compute_age_sec, is_market_open_ist, normalize_epoch_seconds, now_ist
 from core.market_calendar import IN_HOLIDAYS
 from core.trade_store import init_db
 from core.readiness_state import ReadinessResult, ReadinessState
@@ -73,6 +73,13 @@ def _check_trade_identity_schema() -> Tuple[bool, str]:
     return True, "ok"
 
 
+def check_trade_identity_schema() -> Tuple[bool, str]:
+    """
+    Public wrapper for schema audit callers.
+    """
+    return _check_trade_identity_schema()
+
+
 def _load_recent_decision_rows(now_epoch: float) -> Dict[str, Dict[str, Any]]:
     desk = getattr(cfg, "DESK_ID", "DEFAULT")
     path = gate_status_path(desk_id=desk)
@@ -83,6 +90,7 @@ def _load_recent_decision_rows(now_epoch: float) -> Dict[str, Dict[str, Any]]:
     except Exception:
         return {}
     max_age = float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 45.0))
+    max_future_skew = float(getattr(cfg, "MAX_CLOCK_SKEW_SEC", 5.0))
     out: Dict[str, Dict[str, Any]] = {}
     for raw in reversed(lines[-500:]):
         row = raw.strip()
@@ -97,12 +105,15 @@ def _load_recent_decision_rows(now_epoch: float) -> Dict[str, Dict[str, Any]]:
             continue
         if symbol in out:
             continue
-        ts = payload.get("ts_epoch")
-        try:
-            ts_epoch = float(ts)
-        except Exception:
+        ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
+        if ts_epoch is None:
             continue
-        if (now_epoch - ts_epoch) > max_age:
+        if ts_epoch > (now_epoch + max_future_skew):
+            continue
+        age_sec = compute_age_sec(ts_epoch, now_epoch)
+        if age_sec is None:
+            continue
+        if age_sec > max_age:
             continue
         # Ignore non-decision rows (for example trade-builder reject rows) so
         # readiness is sourced from the Decision DAG output only.
@@ -210,7 +221,16 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
     now = now_ist()
     is_holiday = now.date() in IN_HOLIDAYS
     market_open = is_market_open_ist(now=now) and not is_holiday
-    offhours_mode = is_offhours({"market_open": market_open})
+    market_ctx = derive_market_context(
+        {
+            "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+            "market_open": bool(market_open),
+            "segment": getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO"),
+        }
+    )
+    offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+    require_live_quotes = bool(market_ctx.require_live_quotes)
+    allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
 
     blockers = []
     warnings = []
@@ -249,13 +269,34 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
     kite_ok = True
     kite_reason = "ok"
     kite_state = "OK"
+    auth_guard: Dict[str, Any] = {}
     if getattr(cfg, "READINESS_REQUIRE_KITE_AUTH", True):
         kite_ok, kite_reason, kite_state = _check_kite_auth()
+        try:
+            auth_guard = run_preopen_auth_warm_check(
+                force=False,
+                market_context={
+                    "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+                    "market_open": bool(market_open),
+                },
+            )
+        except Exception:
+            auth_guard = {}
+        degrade_to_planning = bool(auth_guard.get("degrade_to_planning", False))
         if not kite_ok:
-            blockers.append(kite_reason)
+            if degrade_to_planning and bool(market_ctx.planning_only):
+                warnings.append(f"auth_degraded_planning:{kite_reason}")
+            else:
+                blockers.append(kite_reason)
         elif kite_state == "UNKNOWN_NETWORK":
             warnings.append("kite_auth_unknown_network")
-    checks["kite_auth"] = {"ok": kite_ok, "reason": kite_reason, "state": kite_state}
+    checks["kite_auth"] = {
+        "ok": kite_ok,
+        "reason": kite_reason,
+        "state": kite_state,
+        "degraded_to_planning": bool(auth_guard.get("degrade_to_planning", False)),
+    }
+    checks["auth_guard"] = auth_guard
 
     # Trade schema readiness
     schema_ok = True
@@ -281,16 +322,22 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
     }
     feed_ok = bool(decision_health.get("feed_ok", True))
     feed_reasons = list(decision_health.get("reasons") or [])
-    if market_open and not feed_ok:
+    if require_live_quotes and (not feed_ok):
         blockers.append(f"feed_health:{','.join(feed_reasons) or 'feed_stale'}")
     checks["feed_health"] = {
-        "ok": feed_ok,
+        "ok": bool(feed_ok or allow_stale_quotes),
         "reasons": feed_reasons,
         "ltp_age_sec": decision_health.get("ltp_age_sec"),
         "depth_age_sec": decision_health.get("depth_age_sec"),
-        "state": "MARKET_CLOSED" if offhours_mode else ("OK" if feed_ok else "STALE"),
+        "state": (
+            "OFFHOURS"
+            if offhours_mode
+            else ("PLANNING" if allow_stale_quotes else ("OK" if feed_ok else "STALE"))
+        ),
         "market_open": market_open,
         "offhours_mode": bool(offhours_mode),
+        "allow_stale_quotes": bool(allow_stale_quotes),
+        "require_live_quotes": bool(require_live_quotes),
         "ltp": {
             "age_sec": decision_health.get("ltp_age_sec"),
             "max_age_sec": float(
@@ -352,15 +399,19 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
     )
 
     if write_log:
-        out = Path("logs") / f"readiness_{now.date().isoformat()}.json"
-        out.parent.mkdir(exist_ok=True)
         payload = {
             "ts_epoch": checks["ts_epoch"],
             "ts_ist": checks["ts_ist"],
             **res.to_payload(),
         }
-        out.write_text(json.dumps(payload, indent=2))
-        _log_state_transition(payload)
+        try:
+            out = Path("logs") / f"readiness_{now.date().isoformat()}.json"
+            out.parent.mkdir(exist_ok=True)
+            out.write_text(json.dumps(payload, indent=2))
+            _log_state_transition(payload)
+        except Exception as exc:
+            warnings.append("readiness_log_write_failed")
+            checks["readiness_log_error"] = str(exc)
     return res
 
 

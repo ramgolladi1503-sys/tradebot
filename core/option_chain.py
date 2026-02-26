@@ -378,6 +378,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     moneyness = (ltp - inst["strike"]) / ltp
                 chain.append({
                     "symbol": symbol,
+                    "tradingsymbol": inst.get("tradingsymbol"),
                     "strike": inst["strike"],
                     "type": inst.get("instrument_type"),
                     "ltp": ltp_opt,
@@ -389,6 +390,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     "oi": oi,
                     "quote_ok": quote_ok,
                     "quote_source": quote_source,
+                    "option_ltp_source": quote_source,
                     "quote_live": quote_live,
                     "quote_ts": quote_ts,
                     "quote_ts_epoch": quote_ts_epoch,
@@ -401,6 +403,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     "days_to_expiry": dte,
                     **g,
                     "expiry": str(expiry_date),
+                    "expiry_date": str(expiry_date),
                     "timestamp": datetime.now().timestamp(),
                     "planning_only": False,
                 })
@@ -430,6 +433,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         if not getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
             return []
         chain = []
+        synthetic_quote_epoch = now_utc_epoch()
         synthetic_expiry = str(_coerce_expiry_date(fallback_expiry) or date.today())
         strikes = [atm + i * step for i in range(-strikes_around, strikes_around + 1)]
         for strike in strikes:
@@ -441,6 +445,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 ask = round(ltp_opt * 1.005, 2)
                 chain.append({
                         "symbol": symbol,
+                        "tradingsymbol": None,
                         "strike": strike,
                         "type": opt_type,
                         "ltp": round(ltp_opt, 2),
@@ -450,12 +455,16 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "oi": 0,
                         "quote_ok": True,
                         "quote_source": synthetic_chain_source,
+                        "option_ltp_source": synthetic_chain_source,
                         "quote_live": False,
+                        "quote_ts_epoch": synthetic_quote_epoch,
+                        "quote_age_sec": 0.0,
                         "chain_source": synthetic_chain_source,
                         "instrument_token": None,
                         "moneyness": 0,
                         "days_to_expiry": 1,
                         "expiry": synthetic_expiry,
+                        "expiry_date": synthetic_expiry,
                         "timestamp": datetime.now().timestamp(),
                         "planning_only": True,
                     })
@@ -480,6 +489,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             max_prem = getattr(cfg, "MAX_PREMIUM", 150)
             strikes = [atm + i * step for i in range(-strikes_around, strikes_around + 1)]
             chain = []
+            synthetic_quote_epoch = now_utc_epoch()
             for strike in strikes:
                 for opt_type in ("CE", "PE"):
                     base = max(min_prem, min(max_prem, (ltp * 0.004)))
@@ -488,6 +498,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     ask = round(ltp_opt * 1.005, 2)
                     chain.append({
                         "symbol": symbol,
+                        "tradingsymbol": None,
                         "strike": strike,
                         "type": opt_type,
                         "ltp": round(ltp_opt, 2),
@@ -497,12 +508,16 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "oi": 0,
                         "quote_ok": True,
                         "quote_source": synthetic_chain_source,
+                        "option_ltp_source": synthetic_chain_source,
                         "quote_live": False,
+                        "quote_ts_epoch": synthetic_quote_epoch,
+                        "quote_age_sec": 0.0,
                         "chain_source": synthetic_chain_source,
                         "instrument_token": None,
                         "moneyness": 0,
                         "days_to_expiry": 1,
                         "expiry": str(datetime.now().date()),
+                        "expiry_date": str(datetime.now().date()),
                         "timestamp": datetime.now().timestamp(),
                         "planning_only": True,
                     })

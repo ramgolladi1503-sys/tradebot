@@ -1,0 +1,77 @@
+{
+  "name": "gap_move_up",
+  "expected_min_candidates": 1,
+  "require_builder_path": true,
+  "snapshots": [
+    {
+      "symbol": "NIFTY",
+      "market_open": false,
+      "valid": true,
+      "ltp": 25680.0,
+      "vwap": 25320.0,
+      "bias": "Bullish",
+      "chain_source": "synthetic_offhours",
+      "quote_ok": true,
+      "ltp_source": "live",
+      "regime": "TREND",
+      "regime_day": "TREND",
+      "day_type": "TREND_DAY",
+      "orb_bias": "UP",
+      "htf_dir": "UP",
+      "replay_signal": {
+        "direction": "BUY_CALL",
+        "reason": "gap_up_followthrough",
+        "score": 0.94,
+        "regime_day": "TREND"
+      },
+      "option_chain": [
+        {
+          "symbol": "NIFTY",
+          "type": "CE",
+          "strike": 25700,
+          "expiry": "2026-02-26",
+          "instrument_token": 3234501,
+          "ltp": 138.0,
+          "bid": 137.5,
+          "ask": 138.5,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1771742400.0,
+          "quote_age_sec": 0.0,
+          "depth_ok": true,
+          "volume": 9900,
+          "oi": 42000,
+          "oi_change": 1600,
+          "iv": 0.23,
+          "delta": 0.37,
+          "moneyness": 0.0008,
+          "tradingsymbol": "NIFTY26FEB25700CE"
+        },
+        {
+          "symbol": "NIFTY",
+          "type": "PE",
+          "strike": 25700,
+          "expiry": "2026-02-26",
+          "instrument_token": 3234502,
+          "ltp": 96.0,
+          "bid": 95.5,
+          "ask": 96.5,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1771742400.0,
+          "quote_age_sec": 0.0,
+          "depth_ok": true,
+          "volume": 8700,
+          "oi": 39000,
+          "oi_change": 1500,
+          "iv": 0.2,
+          "delta": -0.29,
+          "moneyness": -0.0008,
+          "tradingsymbol": "NIFTY26FEB25700PE"
+        }
+      ]
+    }
+  ]
+}

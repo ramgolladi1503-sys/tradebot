@@ -4,12 +4,18 @@ import threading
 import json
 import re
 import atexit
-import os
 from pathlib import Path
 from core.kite_client import kite_client
 from core.depth_store import depth_store
 from core.tick_store import insert_tick, record_tick_epoch
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
+from core.auth_manager import (
+    clear_auth_required_state,
+    invalidate_cache,
+    is_auth_error,
+    resolve_access_token,
+    set_auth_required_state,
+)
 from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
@@ -17,7 +23,6 @@ from core import risk_halt
 from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer
 from core.run_lock import RunLock
-from core.security_guard import resolve_kite_access_token
 
 try:
     from kiteconnect import KiteTicker
@@ -48,6 +53,49 @@ _DEPTH_WS_LOCK_ACQUIRED = False
 _STOP_REQUESTED = False
 _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
+_AUTH_REQUIRED_LATCH = False
+_AUTH_REQUIRED_LOGGED = False
+
+
+def _is_underlying_token(token: int | None) -> bool:
+    if token is None:
+        return False
+    return (int(token) in _UNDERLYING_TOKENS) or (int(token) in _UNDERLYING_TOKEN_TO_SYMBOL)
+
+
+def _auth_error_text(code, reason) -> str:
+    parts = []
+    if code is not None:
+        parts.append(f"code={code}")
+    if reason:
+        parts.append(str(reason))
+    return " ".join(parts).strip()
+
+
+def _mark_auth_required(reason: str, code=None, *, source: str = "kite_depth_ws") -> None:
+    global _AUTH_REQUIRED_LATCH, _AUTH_REQUIRED_LOGGED
+    if _AUTH_REQUIRED_LATCH:
+        return
+    _AUTH_REQUIRED_LATCH = True
+    invalidate_cache(reason=f"ws_auth_failure:{reason}")
+    try:
+        set_auth_required_state(reason=reason, source=source, code=code, repo_root_path=repo_root())
+    except Exception:
+        pass
+    if not _AUTH_REQUIRED_LOGGED:
+        _AUTH_REQUIRED_LOGGED = True
+        _log_ws("FEED_AUTH_REQUIRED", {"code": code, "reason": reason})
+    stop_depth_ws(reason="auth_required")
+
+
+def _clear_auth_required_latch() -> None:
+    global _AUTH_REQUIRED_LATCH, _AUTH_REQUIRED_LOGGED
+    _AUTH_REQUIRED_LATCH = False
+    _AUTH_REQUIRED_LOGGED = False
+    try:
+        clear_auth_required_state(source="kite_depth_ws", repo_root_path=repo_root())
+    except Exception:
+        pass
 
 
 def _extract_tick_epoch(tick: dict) -> float:
@@ -364,6 +412,10 @@ def restart_depth_ws(reason: str = "unknown"):
     """
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES
 
+    if _AUTH_REQUIRED_LATCH:
+        _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
+        return False
+
     tokens = list(_LAST_TOKENS or [])
     if not tokens:
         _log_ws("FEED_RESTART_SKIPPED", {"reason": reason, "detail": "no_tokens_cached"})
@@ -467,22 +519,22 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     if not auth_payload.get("ok"):
         err = auth_payload.get("error") or "unknown_auth_error"
         _log_ws("FEED_AUTH_BLOCKED", {"error": err})
+        if is_auth_error(reason_text=str(err)):
+            _mark_auth_required(str(err), source="kite_depth_ws_start")
         print(f"Missing/invalid Kite access token: {err}")
         return
     try:
-        access_token = str(
-            resolve_kite_access_token(repo_root=repo_root(), require_token=True)
-            or ""
-        ).strip()
+        access_token = str(resolve_access_token(repo_root_path=repo_root(), require_token=True) or "").strip()
     except Exception as exc:
         _log_ws("FEED_AUTH_BLOCKED", {"error": f"token_resolve_failed:{type(exc).__name__}:{exc}"})
+        _mark_auth_required(f"token_resolve_failed:{type(exc).__name__}:{exc}", source="kite_depth_ws_start")
         print(f"Missing/invalid Kite access token: token_resolve_failed:{exc}")
         return
     if not access_token:
         _log_ws("FEED_AUTH_BLOCKED", {"error": "missing_access_token:empty"})
+        _mark_auth_required("missing_access_token:empty", source="kite_depth_ws_start")
         print("Missing/invalid Kite access token: empty")
         return
-    os.environ["KITE_ACCESS_TOKEN"] = access_token
 
     tokens = list(dict.fromkeys(instrument_tokens or []))
     if not tokens:
@@ -493,6 +545,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _WARMUP_PENDING = True
     _STOP_REQUESTED = False
     _LAST_WS_TICK_EPOCH = 0.0
+    _clear_auth_required_latch()
 
     computed_profile_verified = False
     profile_error = ""
@@ -588,24 +641,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         reason_text = str(reason)
         _log_ws("FEED_ERROR", {"code": code, "reason": reason_text, "profile_verified": bool(computed_profile_verified)})
         print(f"[KITE_WS][ERROR] code={code} reason={reason}")
-        if computed_profile_verified and ("403" in reason_text or "Forbidden" in reason_text):
-            hint = "Profile auth succeeded but websocket is 403. Check Kite app websocket entitlement/access."
-            _log_ws("FEED_ERROR_HINT", {"hint": hint})
-            print(f"[KITE_WS][HINT] {hint}")
-        if ("403" in reason_text or "Forbidden" in reason_text) and getattr(cfg, "FEED_TRIP_ON_WS_403", True):
-            _log_ws("FEED_WS_403_TRIP", {"code": code, "reason": reason_text})
-            try:
-                trip_feed_breaker(
-                    reason="ws_403_forbidden",
-                    meta={"code": code, "reason": reason_text},
-                )
-            except Exception:
-                pass
-            try:
-                risk_halt.trigger("ws_403_forbidden")
-            except Exception:
-                pass
-            stop_depth_ws(reason="ws_403_forbidden")
+        code_int = None
+        try:
+            code_int = int(code) if code is not None else None
+        except Exception:
+            code_int = None
+        if is_auth_error(code=code_int, reason_text=reason_text):
+            _mark_auth_required(_auth_error_text(code, reason_text), code=code_int, source="kite_depth_ws_error")
             return
         reason_lower = reason_text.lower()
         handshake_error = (str(code) == "1006" or code == 1006) and "opening handshake" in reason_lower
@@ -624,13 +666,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             fatal = True
         if "connection" in reason_lower and "closed" in reason_lower:
             fatal = True
-        if "403" in reason_text or "Forbidden" in reason_text:
-            fatal = True
         stop_set = bool(_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set())
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
             restart_depth_ws(reason=f"ws_error:{code}")
 
     def on_close(ws, code, reason):
+        if _AUTH_REQUIRED_LATCH:
+            _log_ws("FEED_CLOSE_AUTH_REQUIRED", {"code": code, "reason": str(reason)})
+            return
         if (_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set()) or _STOP_REQUESTED:
             _log_ws("FEED_CLOSE_STOP_REQUESTED", {"code": code, "reason": str(reason)})
             return
@@ -673,13 +716,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 except Exception:
                     token_int = None
             symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
+            underlying_tick = _is_underlying_token(token_int)
             has_depth = _depth_has_bid_ask(depth)
             if token is not None and depth:
                 depth_store.update(token, depth)
             tick_epoch = _extract_tick_epoch(t)
             if token_int is not None and token_int in _UNDERLYING_TOKEN_TO_SYMBOL:
                 symbol = _UNDERLYING_TOKEN_TO_SYMBOL.get(token_int) or symbol
-            if _is_index_symbol(symbol):
+            if underlying_tick and _is_index_symbol(symbol):
                 if isinstance(depth, dict) and depth:
                     buy_book = depth.get("buy", [])
                     sell_book = depth.get("sell", [])
@@ -705,7 +749,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         ts_epoch=tick_epoch,
                         last_price=last_price,
                     )
-            _update_symbol_freshness(symbol, tick_epoch, has_ltp=last_price is not None, has_depth=has_depth)
+            freshness_symbol = symbol
+            # Never let option ticks masquerade as index-underlying freshness.
+            if _is_index_symbol(symbol) and not underlying_tick:
+                freshness_symbol = None
+            _update_symbol_freshness(freshness_symbol, tick_epoch, has_ltp=last_price is not None, has_depth=has_depth)
             if last_price is not None or has_depth:
                 record_tick_epoch(tick_epoch)
                 if not _UNDERLYING_TOKENS and not _UNDERLYING_LOGGED_MISSING:

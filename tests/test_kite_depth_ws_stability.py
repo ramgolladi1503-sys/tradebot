@@ -65,14 +65,21 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_WARMUP_PENDING", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LOGGED", False, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_LTP_TS", {}, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_DEPTH_TS", {}, raising=False)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     monkeypatch.setattr(ws, "repo_root", lambda: Path("/tmp"))
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: False)
     monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True})
-    monkeypatch.setattr(ws, "resolve_kite_access_token", lambda **kwargs: "TOKEN123")
+    monkeypatch.setattr(ws, "resolve_access_token", lambda **kwargs: "TOKEN123")
+    monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: {"status": "AUTH_REQUIRED"})
+    monkeypatch.setattr(ws, "clear_auth_required_state", lambda **kwargs: {"status": "OK"})
+    monkeypatch.setattr(ws, "invalidate_cache", lambda **kwargs: None)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
@@ -139,6 +146,7 @@ def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
 
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
     monkeypatch.setattr(
         ws,
@@ -192,7 +200,8 @@ def test_on_ticks_updates_symbol_ltp_and_depth_timestamps(monkeypatch):
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
-    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
     monkeypatch.setattr(ws, "record_tick_epoch", lambda ts: None)
 
     ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
@@ -232,7 +241,7 @@ def test_on_ticks_updates_symbol_ltp_and_depth_timestamps(monkeypatch):
     assert ws._SYMBOL_LAST_DEPTH_TS.get("NIFTY") == depth_ts.timestamp()
 
 
-def test_on_ticks_updates_index_quote_cache_from_index_ltp_without_underlying_map(monkeypatch):
+def test_on_ticks_does_not_update_index_quote_cache_from_non_underlying_tick(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
     cache_updates = []
@@ -245,6 +254,7 @@ def test_on_ticks_updates_index_quote_cache_from_index_ltp_without_underlying_ma
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
     monkeypatch.setattr(
         ws,
@@ -275,9 +285,61 @@ def test_on_ticks_updates_index_quote_cache_from_index_ltp_without_underlying_ma
         ],
     )
 
-    assert cache_updates
-    row = cache_updates[-1]
-    assert row["symbol"] == "NIFTY"
-    assert row["last_price"] == 25123.5
-    assert row["bid"] is None
-    assert row["ask"] is None
+    assert cache_updates == []
+
+
+def test_auth_failure_sets_auth_required_and_blocks_restarts(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    auth_marks = []
+    restarts = {"count": 0}
+    stops = {"count": 0}
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    def _stop(reason="manual_stop"):
+        stops["count"] += 1
+        ws._STOP_REQUESTED = True
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "restart_depth_ws", lambda reason="unknown": restarts.__setitem__("count", restarts["count"] + 1))
+    monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: auth_marks.append(kwargs) or {"status": "AUTH_REQUIRED"})
+    monkeypatch.setattr(ws, "stop_depth_ws", _stop)
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_error(ticker, 403, "invalid session")
+
+    assert ws._AUTH_REQUIRED_LATCH is True
+    assert auth_marks
+    assert stops["count"] == 1
+    assert restarts["count"] == 0
+
+
+def test_network_error_restarts_without_auth_required(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    auth_marks = []
+    restarts = {"count": 0}
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: auth_marks.append(kwargs) or {"status": "AUTH_REQUIRED"})
+    monkeypatch.setattr(ws, "restart_depth_ws", lambda reason="unknown": restarts.__setitem__("count", restarts["count"] + 1) or True)
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_error(ticker, 1006, "connection closed by peer")
+
+    assert restarts["count"] == 1
+    assert auth_marks == []
+    assert ws._AUTH_REQUIRED_LATCH is False

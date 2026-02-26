@@ -9,9 +9,9 @@ import re
 import sys
 
 from config import config as cfg
+from core.auth_manager import resolve_access_token
 from core import risk_halt
 from core.kite_client import kite_client
-from core.security_guard import resolve_kite_access_token
 from core.auth_health import get_kite_auth_health
 from core.time_utils import now_ist, now_utc_epoch
 
@@ -43,8 +43,7 @@ def main() -> int:
     }
 
     try:
-        token = resolve_kite_access_token(repo_root=Path(__file__).resolve().parents[1], require_token=True).strip()
-        cfg.KITE_ACCESS_TOKEN = token
+        token = resolve_access_token(repo_root_path=Path(__file__).resolve().parents[1], require_token=True).strip()
         payload["details"].update(_masked_stats("access_token", token))
         payload["details"].update(_masked_stats("api_key", str(getattr(cfg, "KITE_API_KEY", ""))))
 

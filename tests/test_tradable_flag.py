@@ -1,3 +1,4 @@
+from config import config as cfg
 from strategies.trade_builder import TradeBuilder
 
 
@@ -20,16 +21,19 @@ def _base_opt():
     }
 
 
-def test_tradable_false_when_market_closed(monkeypatch):
+def test_planning_mode_when_market_closed(monkeypatch):
     monkeypatch.setattr("strategies.trade_builder.is_market_open_ist", lambda *args, **kwargs: False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
     builder = TradeBuilder()
     intent = builder.trade_intent_flags(_base_market_data(), opt=_base_opt())
-    assert intent["tradable"] is False
-    assert "market_closed" in intent["tradable_reasons_blocking"]
+    assert intent["tradable"] is True
+    assert intent["planning_only"] is True
+    assert intent["execution_allowed"] is False
 
 
-def test_tradable_false_when_quote_stale(monkeypatch):
+def test_tradable_false_when_quote_stale_live_open(monkeypatch):
     monkeypatch.setattr("strategies.trade_builder.is_market_open_ist", lambda *args, **kwargs: True)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     builder = TradeBuilder()
     stale_opt = _base_opt()
     stale_opt["quote_age_sec"] = 30.0
@@ -40,6 +44,7 @@ def test_tradable_false_when_quote_stale(monkeypatch):
 
 def test_tradable_true_when_all_conditions_good(monkeypatch):
     monkeypatch.setattr("strategies.trade_builder.is_market_open_ist", lambda *args, **kwargs: True)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     builder = TradeBuilder()
     intent = builder.trade_intent_flags(_base_market_data(), opt=_base_opt(), risk_guard_passed=True)
     assert intent["tradable"] is True
@@ -52,6 +57,7 @@ def test_tradable_true_when_all_conditions_good(monkeypatch):
 
 def test_tradable_false_when_risk_guard_fails(monkeypatch):
     monkeypatch.setattr("strategies.trade_builder.is_market_open_ist", lambda *args, **kwargs: True)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     builder = TradeBuilder()
     intent = builder.trade_intent_flags(_base_market_data(), opt=_base_opt(), risk_guard_passed=False)
     assert intent["tradable"] is False
@@ -59,8 +65,9 @@ def test_tradable_false_when_risk_guard_fails(monkeypatch):
     assert intent["source_flags"]["risk_guard_passed"] is False
 
 
-def test_tradable_false_when_ltp_not_live(monkeypatch):
+def test_tradable_false_when_ltp_not_live_live_open(monkeypatch):
     monkeypatch.setattr("strategies.trade_builder.is_market_open_ist", lambda *args, **kwargs: True)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     builder = TradeBuilder()
     md = _base_market_data()
     md["ltp_source"] = "fallback"

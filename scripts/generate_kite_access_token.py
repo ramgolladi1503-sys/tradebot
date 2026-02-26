@@ -94,7 +94,6 @@ def generate_token_flow(api_key, api_secret, request_token, update_store, kite_c
     token_path = None
     if update_store:
         token_path = persist_fn(access_token)
-        cfg.KITE_ACCESS_TOKEN = access_token
     auth_payload = {"user_id": (profile or {}).get("user_id", ""), "user_name": (profile or {}).get("user_name", "")}
     return {
         "kite": kite,

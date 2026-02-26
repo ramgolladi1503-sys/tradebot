@@ -1,95 +1,163 @@
+"""Track blocked candidates and feed outcomes back into strategy/ML learning.
+
+Migration note:
+- Canonical runtime paths are resolved via `core.learning_paths`.
+- Legacy `./logs/*` files are still read for backward compatibility.
+"""
+
+from __future__ import annotations
+
 import json
 import time
-from pathlib import Path
 from datetime import datetime
-from config import config as cfg
-from core.kite_client import kite_client
-from core.strategy_tracker import StrategyTracker
+from pathlib import Path
+
 import pandas as pd
 
-REJECTED_PATH = Path("logs/rejected_candidates.jsonl")
-TRACK_PATH = Path("logs/blocked_tracking.jsonl")
-OUTCOME_PATH = Path("logs/blocked_outcomes.jsonl")
-PROCESSED_PATH = Path("logs/blocked_outcomes_processed.json")
+from config import config as cfg
+from core.kite_client import kite_client
+from core.learning_paths import (
+    blocked_outcomes_path,
+    blocked_outcomes_processed_path,
+    blocked_tracking_path,
+    feedback_train_state_path,
+    rejected_candidates_paths,
+    suggestion_eval_log_paths,
+)
+from core.strategy_tracker import StrategyTracker
 
 
-class BlockedTradeTracker:
-    def __init__(self):
-        self._last_reject_ts = 0
+def _safe_float(value):
+    try:
+        return float(value)
+    except Exception:
+        return None
 
-    def _read_rejections(self):
-        if not REJECTED_PATH.exists():
-            return []
-        rows = []
-        with REJECTED_PATH.open() as f:
+
+def _read_jsonl(path: Path) -> list[dict]:
+    rows: list[dict] = []
+    if not path.exists():
+        return rows
+    try:
+        with path.open() as f:
             for line in f:
                 if not line.strip():
                     continue
                 try:
-                    rows.append(json.loads(line))
+                    obj = json.loads(line)
+                    if isinstance(obj, dict):
+                        rows.append(obj)
                 except Exception:
                     continue
+    except Exception:
+        return []
+    return rows
+
+
+class BlockedTradeTracker:
+    def __init__(self):
+        self._last_reject_ts = 0.0
+
+    def _parse_ts_epoch(self, raw, default_epoch: float) -> float:
+        if raw in (None, ""):
+            return default_epoch
+        try:
+            return float(raw)
+        except Exception:
+            pass
+        try:
+            return datetime.fromisoformat(str(raw)).timestamp()
+        except Exception:
+            return default_epoch
+
+    def _read_rejections(self) -> list[dict]:
+        rows: list[dict] = []
+        seen: set[str] = set()
+        for path in rejected_candidates_paths():
+            for rec in _read_jsonl(path):
+                key = str(
+                    rec.get("blocked_id")
+                    or rec.get("trade_id")
+                    or f"{rec.get('symbol')}|{rec.get('strike')}|{rec.get('type')}|{rec.get('timestamp')}"
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(rec)
+        now = time.time()
+        rows.sort(key=lambda r: self._parse_ts_epoch(r.get("timestamp"), now))
         return rows
 
     def capture_from_log(self):
         if not getattr(cfg, "BLOCKED_TRACK_ENABLE", True):
             return
         now = time.time()
-        if now - getattr(self, "_last_update", 0) < getattr(cfg, "BLOCKED_TRACK_POLL_SEC", 15):
+        if now - getattr(self, "_last_update", 0.0) < getattr(cfg, "BLOCKED_TRACK_POLL_SEC", 15):
             return
         self._last_update = now
+
         rows = self._read_rejections()
         if not rows:
             return
-        # avoid duplicates by blocked_id already in tracking file
+
+        track_path = blocked_tracking_path()
         existing_ids = set()
-        if TRACK_PATH.exists():
-            try:
-                with TRACK_PATH.open() as f:
-                    for line in f:
-                        if not line.strip():
-                            continue
-                        try:
-                            r = json.loads(line)
-                            if r.get("blocked_id"):
-                                existing_ids.add(r.get("blocked_id"))
-                        except Exception:
-                            continue
-            except Exception:
-                pass
-        # capture only the most recent items (last 5)
-        for rec in rows[-5:]:
-            ts = rec.get("timestamp")
-            try:
-                ts_dt = datetime.fromisoformat(ts)
-                ts_epoch = ts_dt.timestamp()
-            except Exception:
-                ts_epoch = now
+        for rec in _read_jsonl(track_path):
+            bid = rec.get("blocked_id")
+            if bid:
+                existing_ids.add(str(bid))
+
+        capture_n = max(1, int(getattr(cfg, "BLOCKED_CAPTURE_BATCH", 5)))
+        for rec in rows[-capture_n:]:
+            ts_epoch = self._parse_ts_epoch(rec.get("timestamp"), now)
             if ts_epoch <= self._last_reject_ts:
                 continue
-            self._last_reject_ts = ts_epoch
-            trade_id = f"BLK-{rec.get('symbol')}-{rec.get('strike')}-{rec.get('type')}-{int(ts_epoch)}"
+            self._last_reject_ts = max(self._last_reject_ts, ts_epoch)
+
+            symbol = rec.get("symbol")
+            strike = rec.get("strike")
+            opt_type = rec.get("type") or rec.get("opt_type")
+            trade_id = rec.get("trade_id")
+            blocked_id = str(
+                rec.get("blocked_id")
+                or trade_id
+                or f"BLK-{symbol}-{strike}-{opt_type}-{int(ts_epoch)}"
+            )
+            if blocked_id in existing_ids:
+                continue
+
+            entry_price = (
+                rec.get("ltp")
+                if rec.get("ltp") is not None
+                else rec.get("entry")
+                if rec.get("entry") is not None
+                else rec.get("entry_price")
+            )
+            entry_f = _safe_float(entry_price)
+            if entry_f is None:
+                continue
+
+            existing_ids.add(blocked_id)
             entry = {
-                "blocked_id": trade_id,
+                "blocked_id": blocked_id,
+                "trade_id": trade_id,
                 "timestamp": datetime.now().isoformat(),
-                "symbol": rec.get("symbol"),
-                "strike": rec.get("strike"),
-                "type": rec.get("type"),
-                "reason": rec.get("reason"),
-                "entry": rec.get("ltp"),
-                "stop": rec.get("stop"),
-                "target": rec.get("target"),
-                "atr": rec.get("atr"),
+                "symbol": symbol,
+                "strike": strike,
+                "type": opt_type,
+                "reason": rec.get("reason") or rec.get("reasons") or "UNKNOWN",
+                "entry": entry_f,
+                "stop": _safe_float(rec.get("stop")),
+                "target": _safe_float(rec.get("target")),
+                "atr": _safe_float(rec.get("atr")) or 0.0,
                 "start_ts": now,
-                "end_ts": now + getattr(cfg, "BLOCKED_TRACK_SECONDS", 3600),
+                "end_ts": now + float(getattr(cfg, "BLOCKED_TRACK_SECONDS", 3600)),
                 "mfe": 0.0,
                 "mae": 0.0,
                 "status": "TRACKING",
             }
-            if trade_id in existing_ids:
-                continue
-            TRACK_PATH.parent.mkdir(exist_ok=True)
-            with TRACK_PATH.open("a") as f:
+            track_path.parent.mkdir(parents=True, exist_ok=True)
+            with track_path.open("a") as f:
                 f.write(json.dumps(entry) + "\n")
 
     def _ltp_for_blocked(self, rec):
@@ -117,72 +185,73 @@ class BlockedTradeTracker:
     def update(self, predictor=None):
         if not getattr(cfg, "BLOCKED_TRACK_ENABLE", True):
             return
-        if not TRACK_PATH.exists():
-            return
-        rows = []
-        with TRACK_PATH.open() as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
-                    rows.append(json.loads(line))
-                except Exception:
-                    continue
-        if not rows:
-            return
+
+        track_path = blocked_tracking_path()
+        rows = _read_jsonl(track_path)
+
         now = time.time()
-        updated = []
-        outcomes = []
+        updated: list[dict] = []
+        outcomes: list[dict] = []
+
         for rec in rows:
             if rec.get("status") != "TRACKING":
                 updated.append(rec)
                 continue
-            if now > rec.get("end_ts", 0):
+            if now > float(rec.get("end_ts", 0) or 0):
                 rec["status"] = "NO_HIT"
                 outcomes.append(self._finalize(rec, outcome="NO_HIT"))
                 continue
+
             ltp = self._ltp_for_blocked(rec)
-            if ltp is None or rec.get("entry") is None:
+            entry = _safe_float(rec.get("entry"))
+            if ltp is None or entry is None:
                 updated.append(rec)
                 continue
-            entry = rec.get("entry")
-            mfe = max(rec.get("mfe", 0.0), ltp - entry)
-            mae = min(rec.get("mae", 0.0), ltp - entry)
-            rec["mfe"] = round(mfe, 3)
-            rec["mae"] = round(mae, 3)
-            # First-hit logic
-            if rec.get("target") is not None and ltp >= rec["target"]:
+
+            mfe = max(_safe_float(rec.get("mfe")) or 0.0, float(ltp) - entry)
+            mae = min(_safe_float(rec.get("mae")) or 0.0, float(ltp) - entry)
+            rec["mfe"] = round(float(mfe), 3)
+            rec["mae"] = round(float(mae), 3)
+
+            target = _safe_float(rec.get("target"))
+            stop = _safe_float(rec.get("stop"))
+            if target is not None and float(ltp) >= target:
                 rec["status"] = "TARGET_HIT"
-                rec["exit"] = rec["target"]
+                rec["exit"] = target
                 outcomes.append(self._finalize(rec, outcome="TARGET_HIT"))
                 continue
-            if rec.get("stop") is not None and ltp <= rec["stop"]:
+            if stop is not None and float(ltp) <= stop:
                 rec["status"] = "STOP_HIT"
-                rec["exit"] = rec["stop"]
+                rec["exit"] = stop
                 outcomes.append(self._finalize(rec, outcome="STOP_HIT"))
                 continue
             updated.append(rec)
 
-        # persist tracking state
-        TRACK_PATH.write_text("")
-        with TRACK_PATH.open("a") as f:
-            for r in updated:
-                f.write(json.dumps(r) + "\n")
+        if rows:
+            track_path.parent.mkdir(parents=True, exist_ok=True)
+            track_path.write_text("")
+            if updated:
+                with track_path.open("a") as f:
+                    for row in updated:
+                        f.write(json.dumps(row) + "\n")
+
         if outcomes:
-            OUTCOME_PATH.parent.mkdir(exist_ok=True)
-            with OUTCOME_PATH.open("a") as f:
-                for o in outcomes:
-                    f.write(json.dumps(o) + "\n")
-            # Merge into strategy performance
+            out_path = blocked_outcomes_path()
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with out_path.open("a") as f:
+                for out in outcomes:
+                    f.write(json.dumps(out) + "\n")
             self._merge_strategy_perf(outcomes)
-            # Auto-train ML using blocked outcomes
-            if predictor:
-                self._train_ml_from_blocked(outcomes, predictor)
+
+        if predictor is not None:
+            self._train_ml_feedback(predictor)
 
     def _finalize(self, rec, outcome):
-        entry = rec.get("entry") or 0
-        exit_px = rec.get("exit", entry)
-        pnl = exit_px - entry
+        entry = _safe_float(rec.get("entry")) or 0.0
+        exit_px = _safe_float(rec.get("exit"))
+        if exit_px is None:
+            exit_px = entry
+        pnl = float(exit_px) - float(entry)
         return {
             "blocked_id": rec.get("blocked_id"),
             "timestamp": datetime.now().isoformat(),
@@ -191,79 +260,185 @@ class BlockedTradeTracker:
             "type": rec.get("type"),
             "reason": rec.get("reason"),
             "entry": entry,
-            "exit": exit_px,
+            "exit": float(exit_px),
             "pnl": round(pnl, 3),
             "outcome": outcome,
-            "mfe": rec.get("mfe", 0.0),
-            "mae": rec.get("mae", 0.0),
-            "atr": rec.get("atr"),
+            "mfe": _safe_float(rec.get("mfe")) or 0.0,
+            "mae": _safe_float(rec.get("mae")) or 0.0,
+            "atr": _safe_float(rec.get("atr")) or 0.0,
         }
 
     def _processed_ids(self):
-        if not PROCESSED_PATH.exists():
+        path = blocked_outcomes_processed_path()
+        if not path.exists():
             return set()
         try:
-            data = json.loads(PROCESSED_PATH.read_text())
+            data = json.loads(path.read_text())
             return set(data)
         except Exception:
             return set()
 
     def _save_processed(self, ids):
-        PROCESSED_PATH.parent.mkdir(exist_ok=True)
-        PROCESSED_PATH.write_text(json.dumps(sorted(list(ids))))
+        path = blocked_outcomes_processed_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sorted(list(ids))))
+
+    def _strategy_perf_path(self) -> str:
+        return str(getattr(cfg, "STRATEGY_PERF_PATH", "logs/strategy_perf.json"))
 
     def _merge_strategy_perf(self, outcomes):
         tracker = StrategyTracker()
-        tracker.load("logs/strategy_perf.json")
+        tracker.load(self._strategy_perf_path())
         processed = self._processed_ids()
-        for o in outcomes:
-            bid = o.get("blocked_id")
+        for out in outcomes:
+            bid = out.get("blocked_id")
             if bid in processed:
                 continue
-            pnl = o.get("pnl", 0.0) or 0.0
-            reason = o.get("reason") or "UNKNOWN"
+            pnl = _safe_float(out.get("pnl")) or 0.0
+            reason = out.get("reason") or "UNKNOWN"
             tracker.record("BLOCKED_ALL", pnl)
             tracker.record(f"BLOCKED::{reason}", pnl)
             processed.add(bid)
-        tracker.save("logs/strategy_perf.json")
+        tracker.save(self._strategy_perf_path())
         self._save_processed(processed)
 
-    def _train_ml_from_blocked(self, outcomes, predictor):
-        if not getattr(cfg, "BLOCKED_TRAIN_ENABLE", True):
-            return
-        if len(outcomes) < getattr(cfg, "BLOCKED_TRAIN_MIN", 20):
-            return
+    def _load_feedback_state(self) -> dict:
+        path = feedback_train_state_path()
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text())
+            if isinstance(data, dict):
+                return data
+            return {}
+        except Exception:
+            return {}
+
+    def _save_feedback_state(self, state: dict):
+        path = feedback_train_state_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+    def _build_blocked_training_rows(self, window: int) -> tuple[list[dict], int]:
+        outcomes = _read_jsonl(blocked_outcomes_path())
+        total = len(outcomes)
+        if window > 0:
+            outcomes = outcomes[-window:]
+
         weight = float(getattr(cfg, "BLOCKED_TRAIN_WEIGHT", 0.5))
-        rows = []
-        for o in outcomes:
-            entry = o.get("entry")
+        rows: list[dict] = []
+        for out in outcomes:
+            entry = _safe_float(out.get("entry"))
             if entry is None:
                 continue
-            is_call = 1 if str(o.get("type", "")).upper() == "CE" else 0
-            rows.append({
-                "ltp": entry,
-                "bid": entry * 0.999,
-                "ask": entry * 1.001,
-                "spread_pct": 0.002,
-                "volume": 0,
-                "atr": o.get("atr") or 0,
-                "vwap_dist": 0,
-                "moneyness": 0,
-                "vwap_slope": 0,
-                "rsi_mom": 0,
-                "vol_z": 0,
-                "is_call": is_call,
-                "actual": 1 if o.get("outcome") == "TARGET_HIT" else 0,
-                "sample_weight": weight,
-            })
-        if not rows:
-            return
-        df = pd.DataFrame(rows)
-        predictor.update_model_online(df, target_col="actual")
-        # Also train blocked-only model
-        try:
-            from ml.trade_predictor import TradePredictor
-            blocked_model = TradePredictor(model_path=getattr(cfg, "BLOCKED_ML_MODEL_PATH", "models/xgb_blocked_model.pkl"))
-            blocked_model.update_model_online(df, target_col="actual")
-        except Exception:
-            pass
+            is_call = 1 if str(out.get("type", "")).upper() == "CE" else 0
+            outcome = str(out.get("outcome", "")).upper()
+            rows.append(
+                {
+                    "ltp": entry,
+                    "bid": entry * 0.999,
+                    "ask": entry * 1.001,
+                    "spread_pct": 0.002,
+                    "volume": 0,
+                    "atr": _safe_float(out.get("atr")) or 0.0,
+                    "vwap_dist": 0,
+                    "moneyness": 0,
+                    "vwap_slope": 0,
+                    "rsi_mom": 0,
+                    "vol_z": 0,
+                    "is_call": is_call,
+                    "actual": 1 if outcome in {"TARGET_HIT", "TARGET"} else 0,
+                    "sample_weight": weight,
+                }
+            )
+        return rows, total
+
+    def _build_suggestion_training_rows(self, window: int) -> tuple[list[dict], int]:
+        records: list[dict] = []
+        seen: set[str] = set()
+        for path in suggestion_eval_log_paths():
+            for rec in _read_jsonl(path):
+                key = str(
+                    rec.get("trade_id")
+                    or f"{rec.get('symbol')}|{rec.get('strike')}|{rec.get('opt_type')}|{rec.get('outcome')}|{rec.get('timestamp')}"
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                records.append(rec)
+        total = len(records)
+        if window > 0:
+            records = records[-window:]
+
+        weight = float(getattr(cfg, "SUGGESTION_TRAIN_WEIGHT", 0.35))
+        rows: list[dict] = []
+        for rec in records:
+            ltp = _safe_float(rec.get("ltp"))
+            if ltp is None:
+                continue
+            opt_type = str(rec.get("opt_type") or "").upper()
+            outcome = str(rec.get("outcome") or "").lower()
+            rows.append(
+                {
+                    "ltp": ltp,
+                    "bid": ltp * 0.999,
+                    "ask": ltp * 1.001,
+                    "spread_pct": 0.002,
+                    "volume": 0,
+                    "atr": 0.0,
+                    "vwap_dist": 0,
+                    "moneyness": 0,
+                    "vwap_slope": 0,
+                    "rsi_mom": 0,
+                    "vol_z": 0,
+                    "is_call": 1 if opt_type == "CE" else 0,
+                    "actual": 1 if outcome in {"target", "target_hit"} else 0,
+                    "sample_weight": weight,
+                }
+            )
+        return rows, total
+
+    def _train_ml_feedback(self, predictor):
+        state = self._load_feedback_state()
+        window = max(1, int(getattr(cfg, "BLOCKED_TRAIN_WINDOW", 300)))
+        changed = False
+
+        if bool(getattr(cfg, "BLOCKED_TRAIN_ENABLE", True)):
+            blocked_rows, blocked_total = self._build_blocked_training_rows(window)
+            prev_total = int(state.get("blocked_total", 0) or 0)
+            min_rows = max(1, int(getattr(cfg, "BLOCKED_TRAIN_MIN", 20)))
+            if blocked_total > prev_total and len(blocked_rows) >= min_rows:
+                df = pd.DataFrame(blocked_rows)
+                predictor.update_model_online(df, target_col="actual")
+                try:
+                    from ml.trade_predictor import TradePredictor
+
+                    blocked_model = TradePredictor(
+                        model_path=str(
+                            getattr(cfg, "BLOCKED_ML_MODEL_PATH", "models/xgb_blocked_model.pkl")
+                        )
+                    )
+                    blocked_model.update_model_online(df, target_col="actual")
+                except Exception:
+                    pass
+            if blocked_total > prev_total:
+                state["blocked_total"] = blocked_total
+                state["blocked_rows"] = len(blocked_rows)
+                state["blocked_seen_at"] = time.time()
+                changed = True
+
+        if bool(getattr(cfg, "SUGGESTION_TRAIN_ENABLE", True)):
+            suggestion_rows, suggestion_total = self._build_suggestion_training_rows(window)
+            prev_total = int(state.get("suggestion_total", 0) or 0)
+            min_rows = max(1, int(getattr(cfg, "SUGGESTION_TRAIN_MIN", 5)))
+            if suggestion_total > prev_total and len(suggestion_rows) >= min_rows:
+                df = pd.DataFrame(suggestion_rows)
+                predictor.update_model_online(df, target_col="actual")
+            if suggestion_total > prev_total:
+                state["suggestion_total"] = suggestion_total
+                state["suggestion_rows"] = len(suggestion_rows)
+                state["suggestion_seen_at"] = time.time()
+                changed = True
+
+        if changed:
+            self._save_feedback_state(state)

@@ -4,9 +4,15 @@ import os
 from pathlib import Path
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
 def _resolve_data_root() -> Path:
-    raw = os.getenv("DATA_ROOT", "~/.trading_bot")
-    return Path(raw).expanduser()
+    raw = str(os.getenv("DATA_ROOT", "")).strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (_repo_root() / ".runtime").resolve()
 
 
 DATA_ROOT: Path = _resolve_data_root()

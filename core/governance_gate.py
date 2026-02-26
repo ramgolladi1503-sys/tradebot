@@ -15,7 +15,12 @@ from core.freshness_sla import get_freshness_status
 from core.gate_status_log import gate_status_path
 from core.market_context import derive_market_context
 from core.paths import logs_dir
-from core.time_utils import compute_age_sec, now_utc_epoch, is_market_open_ist
+from core.time_utils import (
+    compute_age_sec,
+    is_market_open_ist,
+    normalize_epoch_seconds,
+    now_utc_epoch,
+)
 
 
 @dataclass(frozen=True)
@@ -83,12 +88,12 @@ def _load_recent_auth_health(now_epoch: float) -> Dict[str, Any]:
             "reason": "auth_health_missing",
             "auth_state": "MISSING",
         }
-    ts_epoch = payload.get("ts_epoch")
-    try:
-        ts_epoch_f = float(ts_epoch)
-    except Exception:
-        ts_epoch_f = None
-    age_sec = None if ts_epoch_f is None else max(0.0, now_epoch - ts_epoch_f)
+    ts_epoch_f = normalize_epoch_seconds(payload.get("ts_epoch"))
+    if ts_epoch_f is None:
+        ts_epoch_f = normalize_epoch_seconds(payload.get("timestamp_epoch"))
+    if ts_epoch_f is None:
+        ts_epoch_f = normalize_epoch_seconds(payload.get("timestamp"))
+    age_sec = compute_age_sec(ts_epoch_f, now_epoch)
     max_age = float(
         getattr(
             cfg,
@@ -148,6 +153,26 @@ def _quote_health(market_data: Optional[Dict[str, Any]]) -> str:
     return "ERROR"
 
 
+def _coerce_age_from_age_or_epoch(value: Any, now_epoch: float) -> Optional[float]:
+    """
+    Accept either precomputed age seconds or epoch-like timestamps.
+    """
+    if value is None:
+        return None
+    try:
+        raw = float(value)
+    except Exception:
+        return None
+    if raw < 0:
+        return 0.0
+    normalized = normalize_epoch_seconds(raw)
+    if normalized is not None and normalized >= 100_000_000:
+        age_from_epoch = compute_age_sec(normalized, now_epoch)
+        if age_from_epoch is not None:
+            return age_from_epoch
+    return raw
+
+
 def _load_latest_decision_for_symbol(symbol: str, now_epoch: float) -> Dict[str, Any]:
     sym = str(symbol or "").upper()
     if not sym:
@@ -174,13 +199,15 @@ def _load_latest_decision_for_symbol(symbol: str, now_epoch: float) -> Dict[str,
         decision_stage = str(payload.get("decision_stage") or "").strip()
         if not decision_stage:
             continue
-        try:
-            ts_epoch = float(payload.get("ts_epoch"))
-        except Exception:
+        ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
+        if ts_epoch is None:
             continue
         if ts_epoch > (now_epoch + max_future_skew):
             continue
-        if (now_epoch - ts_epoch) > max_age:
+        age_sec = compute_age_sec(ts_epoch, now_epoch)
+        if age_sec is None:
+            continue
+        if age_sec > max_age:
             continue
         return payload
     return {}
@@ -202,18 +229,19 @@ def _snapshot_feed_health(
     instrument = str(market_data.get("instrument") or "OPT").upper()
     market_ctx = derive_market_context({"execution_mode": mode, "market_open": market_open})
     offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+    allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
     max_ltp_age = float(
         getattr(
             cfg,
-            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if offhours_mode else "SLA_MAX_LTP_AGE_SEC",
-            900.0 if offhours_mode else 2.5,
+            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if allow_stale_quotes else "SLA_MAX_LTP_AGE_SEC",
+            900.0 if allow_stale_quotes else 2.5,
         )
     )
     max_depth_age = float(
         getattr(
             cfg,
-            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if offhours_mode else "SLA_MAX_DEPTH_AGE_SEC",
-            900.0 if offhours_mode else 6.0,
+            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if allow_stale_quotes else "SLA_MAX_DEPTH_AGE_SEC",
+            900.0 if allow_stale_quotes else 6.0,
         )
     )
 
@@ -223,20 +251,22 @@ def _snapshot_feed_health(
     except Exception:
         ltp_age_sec = None
 
+    depth_ts = market_data.get("depth_ts_epoch")
+    if depth_ts is None:
+        depth_ts = market_data.get("depth_last_epoch")
     depth_age_raw = market_data.get("depth_age_sec")
     if depth_age_raw is None:
         try:
             depth_age_raw = ((market_data.get("feed_health") or {}).get("depth_age_sec"))
         except Exception:
             depth_age_raw = None
-    try:
-        depth_age_sec = max(0.0, float(depth_age_raw)) if depth_age_raw is not None else None
-    except Exception:
-        depth_age_sec = None
+    depth_age_sec = compute_age_sec(depth_ts, now_epoch)
+    if depth_age_sec is None:
+        depth_age_sec = _coerce_age_from_age_or_epoch(depth_age_raw, now_epoch)
 
     ltp_ok = ltp_age_sec is not None and ltp_age_sec <= max_ltp_age
     reasons: List[str] = []
-    if market_open and (not offhours_mode):
+    if market_open and (not allow_stale_quotes):
         if ltp_age_sec is None:
             reasons.append("ltp_missing")
         elif ltp_age_sec > max_ltp_age:
@@ -244,9 +274,9 @@ def _snapshot_feed_health(
 
     # FEED_STALE is strictly time-based on LTP freshness.
     # Depth quality is tracked as diagnostics/quote-quality, not feed freshness.
-    if offhours_mode:
+    if allow_stale_quotes:
         ok = True
-        state = "OFFHOURS"
+        state = "OFFHOURS" if offhours_mode else "PLANNING"
     else:
         ok = (not market_open) or ltp_ok
         state = "MARKET_CLOSED" if not market_open else ("OK" if ok else "STALE")
@@ -255,6 +285,7 @@ def _snapshot_feed_health(
         "state": state,
         "market_open": market_open,
         "offhours_mode": bool(offhours_mode),
+        "allow_stale_quotes": bool(allow_stale_quotes),
         "reasons": reasons,
         "ltp": {"age_sec": ltp_age_sec, "max_age_sec": max_ltp_age},
         "depth": {
@@ -292,6 +323,7 @@ def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> Tr
     market_ctx = derive_market_context(ctx_payload)
     mode = str(market_ctx.mode)
     snapshot_market_open = bool(market_ctx.is_market_open)
+    allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
     decision_row = _load_latest_decision_for_symbol(symbol=symbol, now_epoch=now_epoch)
     snapshot_freshness = _snapshot_feed_health(
         market_data=market_data,
@@ -329,7 +361,7 @@ def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> Tr
     if not market_open:
         reasons.append("MARKET_CLOSED")
 
-    if market_open and not bool(freshness.get("ok")):
+    if market_open and (not allow_stale_quotes) and not bool(freshness.get("ok")):
         reasons.append("FEED_STALE")
 
     auth_check = _load_recent_auth_health(now_epoch)
@@ -364,8 +396,12 @@ def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> Tr
             reasons.append("REGIME_CONFIDENCE_LOW")
 
     quote_health = _quote_health(market_data)
-    require_live_quotes = bool(getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
-    quote_enforced = require_live_quotes and (mode == "LIVE" or bool(getattr(cfg, "GOV_GATE_ENFORCE_PAPER", False)))
+    require_live_quotes = bool(
+        market_ctx.require_live_quotes and getattr(cfg, "REQUIRE_LIVE_QUOTES", True)
+    )
+    quote_enforced = require_live_quotes and (
+        mode == "LIVE" or bool(getattr(cfg, "GOV_GATE_ENFORCE_PAPER", False))
+    )
     if market_open and quote_enforced and quote_health == "ERROR":
         reasons.append("LIVE_QUOTES_UNHEALTHY")
 

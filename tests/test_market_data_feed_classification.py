@@ -16,6 +16,7 @@ def test_sim_index_fresh_ltp_missing_depth_is_missing_not_stale(monkeypatch):
         quote_ok=False,
         quote_source="missing_depth",
         quote_ts_epoch=None,
+        market_open=True,
     )
     assert out["state"] == "MISSING"
     assert out["ok"] is True
@@ -27,6 +28,7 @@ def test_sim_index_fresh_ltp_missing_depth_is_missing_not_stale(monkeypatch):
 def test_live_index_fresh_ltp_missing_depth_blocks_not_stale_and_logs_missing(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)
     monkeypatch.setattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5, raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
     md._LIVE_QUOTE_ERROR_LAST_TS.clear()

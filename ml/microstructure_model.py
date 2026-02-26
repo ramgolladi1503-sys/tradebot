@@ -1,20 +1,22 @@
 import numpy as np
 
-from core.tf_utils import configure_tensorflow
-configure_tensorflow()
+def _load_tf():
+    from core.tf_utils import configure_tensorflow
 
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, Input
+    configure_tensorflow()
+    import tensorflow as tf
+
+    return tf
 
 def build_microstructure_model(input_dim):
-    model = Sequential(
+    tf = _load_tf()
+    model = tf.keras.Sequential(
         [
-            Input(shape=(input_dim,)),
-            Dense(64, activation="relu"),
-            Dropout(0.2),
-            Dense(32, activation="relu"),
-            Dense(1, activation="sigmoid"),
+            tf.keras.layers.Input(shape=(input_dim,)),
+            tf.keras.layers.Dense(64, activation="relu"),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(32, activation="relu"),
+            tf.keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
     model.compile(

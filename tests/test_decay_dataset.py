@@ -90,3 +90,22 @@ def test_regime_js_divergence(tmp_path):
     )
 
     assert (df["regime_js"] > 0).any()
+
+
+def test_decay_dataset_empty_input_writes_schema_parquet(tmp_path):
+    pytest.importorskip("pyarrow")
+    decision_path = tmp_path / "decision_events.jsonl"
+    out_path = tmp_path / "decay.parquet"
+    _write_jsonl(decision_path, [])
+
+    df = build_decay_dataset(
+        decision_jsonl=decision_path,
+        trade_log_path=tmp_path / "missing_trade_log.json",
+        window=3,
+        out_path=out_path,
+    )
+
+    assert df.empty
+    assert "strategy_id" in df.columns
+    assert "window_end_ts" in df.columns
+    assert out_path.exists()

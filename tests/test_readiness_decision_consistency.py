@@ -6,6 +6,7 @@ from core.readiness_state import ReadinessState
 
 
 def _patch_common_ok(monkeypatch):
+    monkeypatch.setattr(readiness_gate.cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(readiness_gate.risk_halt, "is_halted", lambda: False)
     monkeypatch.setattr(readiness_gate, "verify_audit_chain", lambda: (True, "ok", 0))
     monkeypatch.setattr(readiness_gate, "_check_kite_auth", lambda: (True, "ok", "OK"))

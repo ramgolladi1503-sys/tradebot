@@ -1,11 +1,27 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Tuple
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any, Optional, Tuple
 
 from config import config as cfg
 from core.approval_store import consume_valid_approval
+from core.market_context import derive_market_context
 from core.orders.order_intent import OrderIntent
+
+
+@dataclass(frozen=True)
+class ExecutionGuardDecision:
+    allowed: bool
+    reason_code: str
+    reason: str
+    mode: str
+    planning_only: bool
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def as_tuple(self):
+        return bool(self.allowed), str(self.reason)
 
 
 def _required_approval_modes() -> set[str]:
@@ -53,31 +69,166 @@ def must_have_valid_approval(order_intent_hash: str, approver: Optional[str] = N
 class ExecutionGuard:
     def __init__(self, risk_state=None):
         self.risk_state = risk_state
+        self.last_decision = None
 
     def _min_conf(self, regime):
         min_conf = getattr(cfg, "ML_MIN_PROBA", 0.6)
         mult = getattr(cfg, "REGIME_PROBA_MULT", {}).get(regime or "NEUTRAL", 1.0)
         return min_conf * mult
 
-    def validate(self, trade, portfolio, regime):
+    @staticmethod
+    def _reason_code(reason: str) -> str:
+        text = str(reason or "").strip()
+        if not text:
+            return "UNKNOWN"
+        mapping = {
+            "Approved": "APPROVED",
+            "Planning only": "PLANNING_ONLY_MODE",
+            "Market closed": "MARKET_CLOSED",
+            "Execution not allowed": "EXECUTION_NOT_ALLOWED",
+            "Low confidence": "LOW_CONFIDENCE",
+            "Insufficient capital": "INSUFFICIENT_CAPITAL",
+            "Regime mismatch": "REGIME_MISMATCH",
+        }
+        return mapping.get(text, text.upper().replace(" ", "_"))
+
+    def _market_context(self, *, market_data=None, mode=None):
+        payload = {}
+        if isinstance(market_data, Mapping):
+            nested = market_data.get("market_context")
+            if isinstance(nested, Mapping):
+                payload.update(dict(nested))
+            if "market_open" in market_data:
+                payload["market_open"] = market_data.get("market_open")
+            if "execution_mode" in market_data:
+                payload["execution_mode"] = market_data.get("execution_mode")
+            if "segment" in market_data:
+                payload["segment"] = market_data.get("segment")
+        if mode is not None:
+            payload["execution_mode"] = mode
+        if "execution_mode" not in payload:
+            payload["execution_mode"] = getattr(cfg, "EXECUTION_MODE", "SIM")
+        return derive_market_context(payload)
+
+    def _requested_mode(self, *, market_data=None, mode=None) -> str:
+        if mode is not None:
+            return str(mode).strip().upper()
+        if isinstance(market_data, Mapping):
+            nested = market_data.get("market_context")
+            if isinstance(nested, Mapping) and nested.get("execution_mode") is not None:
+                return str(nested.get("execution_mode")).strip().upper()
+            if market_data.get("execution_mode") is not None:
+                return str(market_data.get("execution_mode")).strip().upper()
+        return str(getattr(cfg, "EXECUTION_MODE", "SIM")).strip().upper()
+
+    def _decision(self, *, allowed: bool, reason: str, mode: str, planning_only: bool, context=None):
+        decision = ExecutionGuardDecision(
+            allowed=bool(allowed),
+            reason_code=self._reason_code(reason),
+            reason=str(reason),
+            mode=str(mode),
+            planning_only=bool(planning_only),
+            context=dict(context or {}),
+        )
+        self.last_decision = decision
+        return decision
+
+    def evaluate(self, trade, portfolio, regime, *, market_data=None, mode=None):
+        market_ctx = self._market_context(market_data=market_data, mode=mode)
+        requested_mode = self._requested_mode(market_data=market_data, mode=mode)
+        planning_only = bool(
+            market_ctx.planning_only
+            or getattr(trade, "planning_only", False)
+            or (not bool(getattr(trade, "execution_allowed", True)))
+        )
+        if requested_mode == "LIVE":
+            if bool(getattr(cfg, "LIVE_FAIL_CLOSED_ON_MARKET_CLOSED", True)) and (not bool(market_ctx.is_market_open)):
+                return self._decision(
+                    allowed=False,
+                    reason="Market closed",
+                    mode=requested_mode,
+                    planning_only=False,
+                    context={"require_live_quotes": bool(market_ctx.require_live_quotes)},
+                )
+            if bool(getattr(cfg, "ENFORCE_EXECUTION_ALLOWED_FLAG", True)) and (
+                not bool(getattr(trade, "execution_allowed", True))
+            ):
+                return self._decision(
+                    allowed=False,
+                    reason="Execution not allowed",
+                    mode=requested_mode,
+                    planning_only=False,
+                    context={"trade_reason": getattr(trade, "reason", None)},
+                )
         if getattr(trade, "tradable", True) is False:
             reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
             msg = "non_tradable"
             if reasons:
                 msg = f"non_tradable:{'|'.join(reasons)}"
-            return False, msg
+            return self._decision(
+                allowed=False,
+                reason=msg,
+                mode=market_ctx.mode,
+                planning_only=planning_only,
+                context={"tradable_reasons_blocking": reasons},
+            )
         if self.risk_state:
             ok, reason = self.risk_state.approve(trade)
             if not ok:
-                return False, f"RiskState: {reason}"
+                return self._decision(
+                    allowed=False,
+                    reason=f"RiskState: {reason}",
+                    mode=market_ctx.mode,
+                    planning_only=planning_only,
+                )
         min_conf = self._min_conf(regime)
         if trade.confidence < min_conf:
-            return False, "Low confidence"
+            return self._decision(
+                allowed=False,
+                reason="Low confidence",
+                mode=market_ctx.mode,
+                planning_only=planning_only,
+                context={"trade_confidence": trade.confidence, "min_confidence": min_conf},
+            )
 
         if trade.capital_at_risk > portfolio.get("capital", 0):
-            return False, "Insufficient capital"
+            return self._decision(
+                allowed=False,
+                reason="Insufficient capital",
+                mode=market_ctx.mode,
+                planning_only=planning_only,
+                context={"capital_at_risk": trade.capital_at_risk, "capital": portfolio.get("capital", 0)},
+            )
 
         if regime == "RANGE" and trade.strategy == "TREND":
-            return False, "Regime mismatch"
+            return self._decision(
+                allowed=False,
+                reason="Regime mismatch",
+                mode=market_ctx.mode,
+                planning_only=planning_only,
+                context={"regime": regime, "strategy": trade.strategy},
+            )
 
-        return True, "Approved"
+        if planning_only and bool(getattr(cfg, "EXECUTION_GUARD_ALLOW_PLANNING", True)):
+            return self._decision(
+                allowed=True,
+                reason="Planning only",
+                mode=market_ctx.mode,
+                planning_only=True,
+                context={"execution_allowed": bool(getattr(trade, "execution_allowed", True))},
+            )
+        return self._decision(
+            allowed=True,
+            reason="Approved",
+            mode=market_ctx.mode,
+            planning_only=planning_only,
+        )
+
+    def validate(self, trade, portfolio, regime, *, market_data=None, mode=None):
+        return self.evaluate(
+            trade,
+            portfolio,
+            regime,
+            market_data=market_data,
+            mode=mode,
+        ).as_tuple()

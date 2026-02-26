@@ -115,8 +115,24 @@ def _depth_store_tokens() -> List[int]:
     return tokens
 
 
+def _fallback_index_tokens() -> List[int]:
+    tokens: List[int] = []
+    try:
+        mapping = getattr(cfg, "INDEX_TOKEN_BY_SYMBOL", {}) or {}
+        for tok in mapping.values():
+            try:
+                tok_val = int(tok)
+            except Exception:
+                continue
+            if tok_val > 0:
+                tokens.append(tok_val)
+    except Exception:
+        return tokens
+    return tokens
+
+
 def get_freshness_status(force: bool = False) -> Dict[str, Any]:
-    now_epoch = now_utc_epoch()
+    now_epoch = float(now_utc_epoch())
     ttl_sec = float(getattr(cfg, "FEED_FRESHNESS_TTL_SEC", 5.0))
     if not force and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
         return dict(_CACHE["payload"])
@@ -129,19 +145,20 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
     )
     market_open = bool(market_ctx.is_market_open)
     offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+    allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
     exec_mode = str(market_ctx.mode)
     max_ltp_age = float(
         getattr(
             cfg,
-            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if offhours_mode else "SLA_MAX_LTP_AGE_SEC",
-            900.0 if offhours_mode else 2.5,
+            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if allow_stale_quotes else "SLA_MAX_LTP_AGE_SEC",
+            900.0 if allow_stale_quotes else 2.5,
         )
     )
     max_depth_age = float(
         getattr(
             cfg,
-            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if offhours_mode else "SLA_MAX_DEPTH_AGE_SEC",
-            900.0 if offhours_mode else 6.0,
+            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if allow_stale_quotes else "SLA_MAX_DEPTH_AGE_SEC",
+            900.0 if allow_stale_quotes else 6.0,
         )
     )
     require_depth_live = bool(getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
@@ -152,6 +169,7 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
     depth_last_epoch = None
     ltp_source = "none"
     depth_source = "none"
+    data_available = False
 
     db_path = Path(cfg.TRADE_DB_PATH)
     if db_path.exists():
@@ -160,6 +178,7 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
                 token_map = _load_token_map()
                 nifty_tokens = [int(t) for t in (token_map.get("NIFTY") or []) if t is not None]
                 store_tokens = _depth_store_tokens()
+                fallback_tokens = _fallback_index_tokens()
                 tokens_for_ltp: List[int] = []
                 if store_tokens:
                     if nifty_tokens:
@@ -176,6 +195,9 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
                 elif nifty_tokens:
                     tokens_for_ltp = nifty_tokens
                     ltp_source = "token_map_nifty"
+                elif fallback_tokens:
+                    tokens_for_ltp = fallback_tokens
+                    ltp_source = "index_token_fallback"
 
                 if tokens_for_ltp:
                     ltp_last_epoch = _query_max_epoch_chunked(conn, "ticks", tokens_for_ltp)
@@ -201,6 +223,9 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
             ltp_last_epoch = mem_tick_epoch
             ltp_source = "tick_store_memory"
 
+    if ltp_last_epoch is not None:
+        data_available = True
+
     ltp_age = compute_age_sec(ltp_last_epoch, now_epoch) if ltp_last_epoch is not None else None
     depth_age = compute_age_sec(depth_last_epoch, now_epoch) if depth_last_epoch is not None else None
 
@@ -209,9 +234,11 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
     ltp_ok = ltp_age is not None and ltp_age <= max_ltp_age
     depth_ok = depth_age is not None and depth_age <= max_depth_age
 
-    if market_open:
-        if ltp_age is None:
-            reasons.append("ltp_missing")
+    no_ticks_yet = ltp_last_epoch is None
+
+    if market_open and (not allow_stale_quotes):
+        if no_ticks_yet:
+            reasons.append("no_ticks_yet")
         elif ltp_age > max_ltp_age:
             reasons.append(f"ltp_stale:NIFTY age={ltp_age:.2f} max={max_ltp_age:.2f}")
 
@@ -221,11 +248,20 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
             elif depth_age > max_depth_age:
                 reasons.append(f"depth_stale age={depth_age:.2f} max={max_depth_age:.2f}")
 
-    if not market_open:
+    if allow_stale_quotes:
+        if market_open and no_ticks_yet:
+            state = "IDLE"
+        else:
+            state = "OFFHOURS" if offhours_mode else "PLANNING"
+        ok = True
+    elif not market_open:
         state = "MARKET_CLOSED"
         ok = True
     else:
-        if depth_required:
+        if no_ticks_yet:
+            state = "STALE"
+            ok = False
+        elif depth_required:
             if ltp_ok and depth_ok:
                 state = "OK"
             elif ltp_ok or depth_ok:
@@ -248,6 +284,8 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
         "state": state,
         "market_open": market_open,
         "offhours_mode": bool(offhours_mode),
+        "allow_stale_quotes": bool(allow_stale_quotes),
+        "data_available": bool(data_available),
         "ts_epoch": now_epoch,
         "ltp": {
             "ok": ltp_ok if market_open else True,

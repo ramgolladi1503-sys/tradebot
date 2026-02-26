@@ -8,10 +8,25 @@ import time
 
 from config import config as cfg
 from core.kite_depth_ws import start_depth_ws, build_depth_subscription_tokens
+from core.instance_lock import InstanceLock
 from core.run_lock import RunLock
 
 
 if __name__ == "__main__":
+    kite_lock = InstanceLock(repo_root_path=Path(__file__).resolve().parents[1])
+    try:
+        kite_ok, kite_holder = kite_lock.acquire()
+    except RuntimeError as exc:
+        print(f"[INSTANCE_LOCK] {exc}")
+        raise SystemExit(2)
+    if not kite_ok:
+        print(
+            "[INSTANCE_LOCK] Kite session already active "
+            f"pid={kite_holder.get('pid') or 'unknown'} path={kite_holder.get('lock_path') or kite_lock.lock_path}"
+        )
+        raise SystemExit(2)
+    atexit.register(kite_lock.release)
+
     lock = RunLock(
         name=getattr(cfg, "DEPTH_WS_LOCK_NAME", "depth_ws.lock"),
         max_age_sec=getattr(cfg, "DEPTH_WS_LOCK_MAX_AGE_SEC", 3600),

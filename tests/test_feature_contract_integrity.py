@@ -60,6 +60,8 @@ def _market_data():
                 "quote_ts_epoch": 1.0,
                 "depth_ok": True,
                 "expiry": "2026-02-27",
+                "tradingsymbol": "NIFTY26FEB25000CE",
+                "instrument_token": 123456,
                 "oi_build": "LONG",
                 "iv_z": 0.0,
                 "iv": 0.2,

@@ -73,6 +73,93 @@ def test_feed_stale_never_emitted_when_snapshot_is_fresh(monkeypatch):
     assert "FEED_STALE" not in decision.blockers
 
 
+def test_paper_stale_feed_is_allowed_without_offhours_relabel(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    now_epoch = 1_100.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "PAPER", "market_open": True},
+            "market_open": True,
+            "ltp_ts_epoch": now_epoch - 500.0,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.allowed is True
+    assert "FEED_STALE" not in decision.blockers
+    feed_rows = [row for row in decision.explain if row["node"] == NODE_N2_FEED_FRESH]
+    assert feed_rows and feed_rows[0]["ok"] is True
+    assert feed_rows[0]["facts"]["allow_stale_quotes"] is True
+    assert feed_rows[0]["facts"]["offhours_mode"] is False
+
+
+def test_paper_feed_dropout_missing_ltp_timestamp_does_not_block_feed(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    now_epoch = 1_120.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "PAPER", "market_open": True},
+            "market_open": True,
+            "ltp": None,
+            "ltp_source": "none",
+            "ltp_ts_epoch": None,
+            "quote_ok": True,
+            "bid": None,
+            "ask": None,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert "FEED_STALE" not in decision.blockers
+    feed_rows = [row for row in decision.explain if row["node"] == NODE_N2_FEED_FRESH]
+    assert feed_rows and feed_rows[0]["ok"] is True
+    assert feed_rows[0]["facts"]["allow_stale_quotes"] is True
+
+
+def test_paper_hist_fetch_failed_is_degraded_not_blocking(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    now_epoch = 1_125.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "PAPER", "market_open": True},
+            "market_open": True,
+            "system_state": "DEGRADED",
+            "warmup_reasons": ["HIST_FETCH_FAILED"],
+            "indicators_ok": False,
+            "indicators_age_sec": 1e9,
+            "primary_regime": "UNKNOWN",
+            "regime_probs": {},
+            "regime_entropy": 0.0,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.allowed is True
+    assert "WARMUP_INCOMPLETE" not in decision.blockers
+    assert "REGIME_UNKNOWN" not in decision.blockers
+    n3 = next(row for row in decision.explain if row["node"] == NODE_N3_WARMUP_DONE)
+    n5 = next(row for row in decision.explain if row["node"] == NODE_N5_REGIME_OK)
+    assert n3["ok"] is True
+    assert n5["ok"] is True
+
+
+def test_live_future_ltp_timestamp_clock_skew_does_not_false_block_feed(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    now_epoch = 1_130.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "ltp_ts_epoch": now_epoch + 300.0,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert "FEED_STALE" not in decision.blockers
+    feed_rows = [row for row in decision.explain if row["node"] == NODE_N2_FEED_FRESH]
+    assert feed_rows and feed_rows[0]["ok"] is True
+    assert float(feed_rows[0]["facts"]["ltp_age_sec"]) == 0.0
+
+
 def test_index_no_depth_with_fresh_ltp_live_fails_quote_gate_not_feed(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)

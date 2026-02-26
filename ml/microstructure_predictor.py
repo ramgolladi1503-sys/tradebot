@@ -2,6 +2,12 @@ import os
 import numpy as np
 from config import config as cfg
 from core.model_registry import get_active_entry, get_shadow_entry
+from pathlib import Path
+
+try:
+    import joblib
+except Exception:
+    joblib = None
 
 try:
     from core.tf_utils import configure_tensorflow
@@ -43,6 +49,9 @@ class MicrostructurePredictor:
         active = get_active_entry("microstructure")
         self.model_path = model_path or (active.get("path") if active else None) or cfg.MICRO_MODEL_PATH
         self.model = None
+        self.model_backend = "none"
+        self.sklearn_model = None
+        self.sklearn_features = None
         self.segment_models = {}
         self.model_version = active.get("hash") if active else None
         self.model_governance = active.get("governance") if active else {}
@@ -50,7 +59,37 @@ class MicrostructurePredictor:
         self.shadow_version = shadow.get("hash") if shadow else None
         self.shadow_governance = shadow.get("governance") if shadow else {}
         if load_model and os.path.exists(self.model_path):
-            self.model = load_model(self.model_path, compile=False)
+            try:
+                self.model = load_model(self.model_path, compile=False)
+                self.model_backend = "tensorflow"
+            except Exception:
+                self.model = None
+        if self.model is None:
+            self._try_load_sklearn_fallback()
+
+    def _try_load_sklearn_fallback(self):
+        if joblib is None:
+            return
+        raw = Path(self.model_path)
+        candidates = [raw]
+        if raw.suffix.lower() in {".h5", ".keras"}:
+            candidates.append(raw.with_suffix(".pkl"))
+        for path in candidates:
+            if not path.exists():
+                continue
+            try:
+                payload = joblib.load(str(path))
+                if isinstance(payload, dict) and "model" in payload:
+                    self.sklearn_model = payload.get("model")
+                    self.sklearn_features = list(payload.get("features") or [])
+                else:
+                    self.sklearn_model = payload
+                    self.sklearn_features = []
+                if self.sklearn_model is not None:
+                    self.model_backend = "sklearn"
+                    return
+            except Exception:
+                continue
 
     def _segment_path(self, key: str) -> str:
         base, ext = os.path.splitext(self.model_path)
@@ -72,6 +111,27 @@ class MicrostructurePredictor:
         return self.model
 
     def predict_confidence(self, features, context=None):
+        if self.sklearn_model is not None:
+            try:
+                x = np.asarray([features], dtype=float)
+                expected = None
+                if self.sklearn_features:
+                    expected = len(self.sklearn_features)
+                elif hasattr(self.sklearn_model, "n_features_in_"):
+                    expected = int(getattr(self.sklearn_model, "n_features_in_"))
+                if expected and x.shape[1] != expected:
+                    if x.shape[1] < expected:
+                        pad = np.zeros((1, expected - x.shape[1]), dtype=float)
+                        x = np.concatenate([x, pad], axis=1)
+                    else:
+                        x = x[:, :expected]
+                proba = self.sklearn_model.predict_proba(x)
+                if proba.ndim == 2 and proba.shape[1] > 1:
+                    return float(proba[0][1])
+                return float(proba[0][0])
+            except Exception:
+                return 0.5
+
         model = self._get_model(context=context)
         if model is None:
             return 0.5

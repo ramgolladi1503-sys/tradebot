@@ -42,6 +42,7 @@ def test_build_decision_event_includes_shadow_fields():
     )
     market_data = {
         "symbol": "NIFTY",
+        "market_context": {"execution_mode": "PAPER", "market_open": False},
         "regime": "TREND",
         "regime_probs": {"TREND": 0.7, "RANGE": 0.3},
         "shock_score": 0.1,
@@ -73,3 +74,34 @@ def test_build_decision_event_includes_shadow_fields():
     assert event["qty_lots"] == 1
     assert event["qty_units"] == 50
     assert event["quote_age_sec"] is not None
+    assert event["mode"] == "PAPER"
+    assert event["planning_only"] is True
+    assert event["allow_stale_quotes"] is True
+    assert event["require_live_quotes"] is False
+
+
+def test_build_decision_event_non_trade_uses_fallback_instrument_id():
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.portfolio = {
+        "capital": 100000.0,
+        "equity_high": 100000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+    }
+    orch.loss_streak = {}
+    orch.risk_state = SimpleNamespace(daily_max_drawdown=0.0)
+    orch._open_risk = lambda: 0.0
+
+    market_data = {
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "market_context": {"execution_mode": "SIM", "market_open": True},
+        "quote_age_sec": 1.0,
+    }
+
+    event = orch._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=["no_signal"])
+
+    assert str(event["instrument_id"]).startswith("MISSING_CONTRACT::NIFTY:OPT:")
+    assert event["quote_age_sec"] == 1.0

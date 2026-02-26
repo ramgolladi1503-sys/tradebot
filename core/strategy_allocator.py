@@ -1,14 +1,26 @@
 import random
+import hashlib
 from config import config as cfg
 
 class StrategyAllocator:
     """
     Bandit-style allocator: epsilon-greedy and weights by Sharpe (fallback to profit factor).
     """
-    def __init__(self, tracker, risk_state=None):
+    def __init__(self, tracker, risk_state=None, rng=None):
         self.tracker = tracker
         self.risk_state = risk_state
+        self.rng = rng or random.Random()
         self._wf_cache = {"ts": 0, "allowed": None}
+
+    def _rng_for_context(self, context_seed=None):
+        if context_seed is None:
+            return self.rng
+        try:
+            digest = hashlib.sha256(str(context_seed).encode("utf-8")).hexdigest()
+            seed = int(digest[:16], 16)
+            return random.Random(seed)
+        except Exception:
+            return self.rng
 
     def _load_wf_allowed(self):
         try:
@@ -65,7 +77,8 @@ class StrategyAllocator:
             pass
         return max(cfg.STRATEGY_MIN_WEIGHT, min(cfg.STRATEGY_MAX_WEIGHT, weight))
 
-    def should_trade(self, strategy_name):
+    def should_trade(self, strategy_name, *, epsilon=None, context_seed=None):
+        rng = self._rng_for_context(context_seed=context_seed)
         if self.risk_state:
             if self.risk_state.mode == "HARD_HALT":
                 return False
@@ -75,7 +88,12 @@ class StrategyAllocator:
                 if "SPREAD" not in str(strategy_name):
                     return False
             if self.risk_state.mode == "SOFT_HALT":
-                if strategy_name in ("SCALP", "ZERO_HERO", "ZERO_HERO_EXPIRY") or str(strategy_name).startswith("QUICK"):
+                if strategy_name in (
+                    "SCALP",
+                    "ZERO_HERO",
+                    "ZERO_HERO_EXPIRY",
+                    getattr(cfg, "STRATEGY_ZERO_TO_HERO", "ZERO_TO_HERO"),
+                ) or str(strategy_name).startswith("QUICK"):
                     return False
         if getattr(cfg, "STRATEGY_WF_LOCK_ENABLE", False):
             allowed = self._load_wf_allowed()
@@ -95,7 +113,7 @@ class StrategyAllocator:
             wins = roll.get("wins", 0) + 1
             losses = roll.get("losses", 0) + 1
             # Thompson sampling with rolling window
-            sample = random.betavariate(wins, losses)
+            sample = rng.betavariate(wins, losses)
             util = stats.get("utility", 1.0)
             score = sample * (1 + cfg.BANDIT_UTILITY_WEIGHT * float(util))
             self._record_weight(strategy_name, score)
@@ -111,14 +129,15 @@ class StrategyAllocator:
             ucb = mean + math.sqrt(2 * math.log(total + 1) / n)
             self._record_weight(strategy_name, ucb)
             return ucb > 0.5
-        if random.random() < cfg.STRATEGY_EPSILON:
+        eps = float(cfg.STRATEGY_EPSILON if epsilon is None else epsilon)
+        if rng.random() < max(0.0, min(1.0, eps)):
             return True
         w = self._weight(strategy_name)
         temp = max(0.1, getattr(cfg, "ALLOC_TEMPERATURE", 1.0))
         # Softmax-like acceptance
         prob = min(1.0, max(0.0, (w / cfg.STRATEGY_MAX_WEIGHT) ** (1.0 / temp)))
         self._record_weight(strategy_name, prob)
-        return random.random() < prob
+        return rng.random() < prob
 
     def _record_weight(self, strategy_name, weight):
         try:

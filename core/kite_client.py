@@ -4,6 +4,7 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 from config import config as cfg
+from core.auth_manager import access_token_path, resolve_access_token
 
 try:
     from kiteconnect import KiteConnect
@@ -46,18 +47,15 @@ class KiteClient:
             return
         token = ""
         try:
-            from core.security_guard import resolve_kite_access_token
             repo_root = Path(__file__).resolve().parents[1]
             # Always resolve via security guard to avoid stale env/config token drift.
-            token = resolve_kite_access_token(repo_root=repo_root, require_token=False).strip()
-            if token:
-                cfg.KITE_ACCESS_TOKEN = token
+            token = resolve_access_token(repo_root_path=repo_root, require_token=False).strip()
         except RuntimeError as exc:
             print(str(exc))
             self.last_init_error = str(exc)
             return
         if not token:
-            self.last_init_error = "missing_access_token:~/.trading_bot/kite_access_token"
+            self.last_init_error = f"missing_access_token:{access_token_path(repo_root)}"
             return
         self.kite = KiteConnect(api_key=api_key)
         self.kite.set_access_token(token)

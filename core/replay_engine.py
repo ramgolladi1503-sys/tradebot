@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-import random
 import sqlite3
 import time
 from dataclasses import asdict
@@ -13,7 +12,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from config import config as cfg
 from core.indicators_live import compute_indicators
 from core.option_chain import fetch_option_chain
-from core.ohlc_buffer import ohlc_buffer
+from core.ohlc_buffer import OhlcBuffer
 from core.regime_prob_model import RegimeProbModel
 from core.strategy_gatekeeper import StrategyGatekeeper
 from core.trade_scoring import compute_trade_score
@@ -108,24 +107,18 @@ class ReplayEngine:
         return rows
 
     def replay_day(self, date_str: str, symbols: List[str], speed: float = 1.0) -> Path:
-        random.seed(self.seed)
         symbol_set = {s.upper() for s in symbols}
         inst_map = _load_instruments_map(Path("data/kite_instruments.csv"))
         start_epoch, end_epoch = _date_bounds(date_str)
         ticks = self._load_ticks(start_epoch, end_epoch)
         depth = self._load_depth(start_epoch, end_epoch)
+        local_ohlc_buffer = OhlcBuffer()
 
         # index depth by time
         depth_idx = 0
         latest_depth = {}
         out_path = Path(f"logs/decisions_replay_{date_str}.json")
         out_path.parent.mkdir(exist_ok=True)
-
-        # temporarily disable cross-asset gating for replay
-        prev_require = getattr(cfg, "REQUIRE_CROSS_ASSET", True)
-        cfg.REQUIRE_CROSS_ASSET = False
-        prev_mode = getattr(cfg, "EXECUTION_MODE", "SIM")
-        cfg.EXECUTION_MODE = "SIM"
 
         trace_counter = 0
         with out_path.open("w") as f:
@@ -140,8 +133,8 @@ class ReplayEngine:
                     continue
                 if price is None:
                     continue
-                ohlc_buffer.update_tick(sym, price, volume or 0, ts=ts_epoch)
-                bars = ohlc_buffer.get_bars(sym)
+                local_ohlc_buffer.update_tick(sym, price, volume or 0, ts=ts_epoch)
+                bars = local_ohlc_buffer.get_bars(sym)
                 indicators_ok = len(bars) >= getattr(cfg, "OHLC_MIN_BARS", 30)
                 ind = compute_indicators(
                     bars,
@@ -204,6 +197,11 @@ class ReplayEngine:
                     "shock_score": 0.0,
                     "uncertainty_index": 0.0,
                     "cross_asset_quality": {"stale_feeds": [], "missing": {}},
+                    "execution_mode": "SIM",
+                    "market_context": {
+                        "execution_mode": "SIM",
+                        "market_open": False,
+                    },
                 }
 
                 # option chain (synthetic)
@@ -267,7 +265,4 @@ class ReplayEngine:
                 trace_counter += 1
                 if speed > 0:
                     time.sleep(1.0 / speed)
-
-        cfg.REQUIRE_CROSS_ASSET = prev_require
-        cfg.EXECUTION_MODE = prev_mode
         return out_path

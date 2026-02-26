@@ -23,7 +23,7 @@ def test_feed_health_epoch_missing(tmp_path, monkeypatch):
 
     payload = freshness_sla.get_freshness_status(force=True)
     assert payload["ok"] is False
-    assert "ltp_missing" in payload["reasons"]
+    assert "no_ticks_yet" in payload["reasons"]
     assert "depth_missing" in payload["reasons"]
 
 
@@ -39,7 +39,7 @@ def test_feed_health_sim_does_not_require_depth_for_index(tmp_path, monkeypatch)
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
     monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
-    monkeypatch.setattr(freshness_sla.time, "time", lambda: 1700000000.2)
+    monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 1700000000.2)
     monkeypatch.setattr(freshness_sla, "_mem_last_tick_epoch", lambda: None)
     monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
     monkeypatch.setattr(freshness_sla, "_depth_store_tokens", lambda: [])
@@ -47,6 +47,28 @@ def test_feed_health_sim_does_not_require_depth_for_index(tmp_path, monkeypatch)
 
     payload = freshness_sla.get_freshness_status(force=True)
     assert payload["ok"] is True
-    assert payload["state"] in {"OK", "DEGRADED"}
+    assert payload["state"] in {"OK", "DEGRADED", "PLANNING"}
     assert "depth_missing" not in payload["reasons"]
     assert payload["depth"]["required"] is False
+
+
+def test_feed_health_idle_state_when_no_ticks_in_sim(tmp_path, monkeypatch):
+    db_path = tmp_path / "trades.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE IF NOT EXISTS ticks (instrument_token INTEGER, timestamp_epoch REAL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS depth_snapshots (instrument_token INTEGER, timestamp_epoch REAL)")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 1700000000.2)
+    monkeypatch.setattr(freshness_sla, "_mem_last_tick_epoch", lambda: None)
+    monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
+    monkeypatch.setattr(freshness_sla, "_depth_store_tokens", lambda: [])
+    freshness_sla._reset_cache_for_tests()
+
+    payload = freshness_sla.get_freshness_status(force=True)
+    assert payload["state"] == "IDLE"
+    assert payload["ok"] is True

@@ -1,10 +1,25 @@
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
 from config import config as cfg
-from core.risk_utils import to_pct
 from core.exposure_ledger import estimate_trade_exposure, estimate_trade_greeks
 from core.position_sizer import PositionSizer
-import logging
+from core.risk_utils import to_pct
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RiskDecision:
+    allowed: bool
+    reason_code: str
+    reason: str
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def as_tuple(self):
+        return bool(self.allowed), str(self.reason)
+
 
 class RiskEngine:
     def __init__(self, risk_state=None):
@@ -22,6 +37,27 @@ class RiskEngine:
         self.position_sizer = PositionSizer()
         self.last_size_reason = "UNINITIALIZED"
         self.last_size_meta = {}
+        self.last_decision = None
+
+    @staticmethod
+    def _reason_code(reason: str) -> str:
+        text = str(reason or "").strip()
+        if not text:
+            return "UNKNOWN"
+        if text.startswith("RISK_DATA_UNAVAILABLE:"):
+            return text
+        if text.startswith("PORTFOLIO_LIMIT:"):
+            return text
+        mapping = {
+            "OK": "OK",
+            "RiskState hard halt": "RISKSTATE_HARD_HALT",
+            "Daily profit lock hit": "DAILY_PROFIT_LOCK_HIT",
+            "Daily loss limit hit": "DAILY_LOSS_LIMIT_HIT",
+            "Trade count exceeded": "TRADE_COUNT_EXCEEDED",
+            "Open risk limit hit": "OPEN_RISK_LIMIT_HIT",
+            "Daily drawdown lock hit": "DAILY_DRAWDOWN_LOCK_HIT",
+        }
+        return mapping.get(text, text.upper().replace(" ", "_"))
 
     def _resolve_regime(self, portfolio, regime=None, trade=None):
         if regime:
@@ -257,6 +293,26 @@ class RiskEngine:
             return False, portfolio_reason
 
         return True, "OK"
+
+    def evaluate_trade(self, portfolio, regime=None, trade=None, exposure_state=None) -> RiskDecision:
+        allowed, reason = self.allow_trade(
+            portfolio,
+            regime=regime,
+            trade=trade,
+            exposure_state=exposure_state,
+        )
+        decision = RiskDecision(
+            allowed=bool(allowed),
+            reason_code=self._reason_code(str(reason)),
+            reason=str(reason),
+            context={
+                "regime": self._resolve_regime(portfolio if isinstance(portfolio, dict) else {}, regime=regime, trade=trade),
+                "has_trade": bool(trade is not None),
+                "has_exposure_state": bool(isinstance(exposure_state, dict)),
+            },
+        )
+        self.last_decision = decision
+        return decision
 
     def size_trade(self, trade, capital, lot_size, current_vol=None, loss_streak=0, vol_target=None):
         self.last_size_reason = "UNINITIALIZED"

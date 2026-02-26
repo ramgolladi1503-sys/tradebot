@@ -39,7 +39,7 @@ def _patch_common(monkeypatch, *, now_epoch: float, ltp_ts_epoch: float, last_ts
     monkeypatch.setattr(cfg, "MAX_LTP_AGE_SEC", 8.0, raising=False)
     monkeypatch.setattr(cfg, "MAX_CANDLE_AGE_SEC", 120.0, raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_API", False, raising=False)
-    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
 
     fixed_now = now_ist().replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=ZoneInfo("Asia/Kolkata"))
     monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)

@@ -1,0 +1,70 @@
+{
+  "name": "range_dead",
+  "expected_min_candidates": 0,
+  "snapshots": [
+    {
+      "symbol": "NIFTY",
+      "market_open": false,
+      "valid": true,
+      "ltp": 24980.0,
+      "vwap": 24982.0,
+      "bias": "NEUTRAL",
+      "chain_source": "synthetic_offhours",
+      "quote_ok": true,
+      "ltp_source": "live",
+      "regime": "RANGE",
+      "regime_day": "RANGE",
+      "day_type": "RANGE_DAY",
+      "option_chain": [
+        {
+          "symbol": "NIFTY",
+          "type": "CE",
+          "strike": 25000,
+          "expiry": "2026-02-26",
+          "instrument_token": 2234501,
+          "ltp": 82.0,
+          "bid": 81.5,
+          "ask": 82.5,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1771742400.0,
+          "quote_age_sec": 0.0,
+          "depth_ok": true,
+          "volume": 6200,
+          "oi": 25000,
+          "oi_change": 900,
+          "iv": 0.19,
+          "iv_z": 0.0,
+          "iv_skew": 0.0,
+          "delta": 0.31,
+          "moneyness": -0.0008
+        },
+        {
+          "symbol": "NIFTY",
+          "type": "PE",
+          "strike": 25000,
+          "expiry": "2026-02-26",
+          "instrument_token": 2234502,
+          "ltp": 84.0,
+          "bid": 83.5,
+          "ask": 84.5,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1771742400.0,
+          "quote_age_sec": 0.0,
+          "depth_ok": true,
+          "volume": 6100,
+          "oi": 25500,
+          "oi_change": 940,
+          "iv": 0.20,
+          "iv_z": 0.0,
+          "iv_skew": 0.0,
+          "delta": -0.30,
+          "moneyness": 0.0008
+        }
+      ]
+    }
+  ]
+}

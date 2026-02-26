@@ -17,6 +17,36 @@ DEFAULT_WINDOW = int(getattr(cfg, "DECAY_WINDOW_TRADES", 50))
 DEFAULT_DRAWNDOWN_THRESHOLD = float(getattr(cfg, "DECAY_DRAWDOWN_THRESHOLD", -100.0))
 
 
+def _empty_decay_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "strategy_id",
+            "window_end_ts",
+            "expectancy",
+            "win_rate",
+            "avg_R",
+            "sharpe_proxy",
+            "worst_run",
+            "drawdown",
+            "drawdown_slope",
+            "fill_rate",
+            "avg_spread_pct",
+            "avg_slippage_vs_mid",
+            "cancel_rate",
+            "stale_quote_rate",
+            "regime_dist",
+            "regime_js",
+            "shock_score_freq",
+            "psi_max",
+            "calibration_error_trend",
+            "next_expectancy",
+            "next_drawdown",
+            "decayed",
+            "time_to_failure_sec",
+        ]
+    )
+
+
 def _load_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
@@ -155,9 +185,10 @@ def build_decay_dataset(
 ) -> pd.DataFrame:
     df = _load_decision_events(decision_jsonl, db_path)
     if df.empty:
+        out_df = _empty_decay_frame()
         out_path.parent.mkdir(exist_ok=True)
-        pd.DataFrame().to_parquet(out_path, index=False)
-        return pd.DataFrame()
+        out_df.to_parquet(out_path, index=False)
+        return out_df
 
     if "ts" not in df.columns:
         if "timestamp" in df.columns:
@@ -284,6 +315,12 @@ def build_decay_dataset(
                 "next_drawdown": next_dd,
                 "decayed": decayed,
             })
+
+    if not rows:
+        out_df = _empty_decay_frame()
+        out_path.parent.mkdir(exist_ok=True)
+        out_df.to_parquet(out_path, index=False)
+        return out_df
 
     out_df = pd.DataFrame(rows).sort_values(["strategy_id", "window_end_ts"]).reset_index(drop=True)
 

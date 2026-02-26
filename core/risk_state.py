@@ -156,7 +156,12 @@ class RiskState:
                 return True, "recovery_ok"
             return False, "recovery_mode_only_spreads"
         if self.mode == "SOFT_HALT":
-            if strategy in ("SCALP", "ZERO_HERO", "ZERO_HERO_EXPIRY") or str(strategy).startswith("QUICK"):
+            if strategy in (
+                "SCALP",
+                "ZERO_HERO",
+                "ZERO_HERO_EXPIRY",
+                getattr(cfg, "STRATEGY_ZERO_TO_HERO", "ZERO_TO_HERO"),
+            ) or str(strategy).startswith("QUICK"):
                 return False, "soft_halt_block_aggressive"
         return True, "ok"
 

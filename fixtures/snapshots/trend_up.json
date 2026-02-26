@@ -1,0 +1,81 @@
+{
+  "name": "trend_up",
+  "expected_min_candidates": 1,
+  "require_builder_path": true,
+  "snapshots": [
+    {
+      "symbol": "NIFTY",
+      "market_open": false,
+      "valid": true,
+      "ltp": 25120.0,
+      "vwap": 25040.0,
+      "bias": "Bullish",
+      "chain_source": "synthetic_offhours",
+      "quote_ok": true,
+      "ltp_source": "live",
+      "regime": "TREND",
+      "regime_day": "TREND",
+      "day_type": "TREND_DAY",
+      "orb_bias": "UP",
+      "htf_dir": "UP",
+      "replay_signal": {
+        "direction": "BUY_CALL",
+        "reason": "fixture_trend_signal",
+        "score": 0.96,
+        "regime_day": "TREND"
+      },
+      "option_chain": [
+        {
+          "symbol": "NIFTY",
+          "type": "CE",
+          "strike": 25100,
+          "expiry": "2026-02-26",
+          "instrument_token": 1234501,
+          "ltp": 124.0,
+          "bid": 123.5,
+          "ask": 124.5,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1771742400.0,
+          "quote_age_sec": 0.0,
+          "depth_ok": true,
+          "volume": 8500,
+          "oi": 32000,
+          "oi_change": 1400,
+          "iv": 0.22,
+          "iv_z": 0.0,
+          "iv_skew": 0.0,
+          "delta": 0.36,
+          "moneyness": 0.0008,
+          "tradingsymbol": "NIFTY26FEB25100CE"
+        },
+        {
+          "symbol": "NIFTY",
+          "type": "PE",
+          "strike": 25100,
+          "expiry": "2026-02-26",
+          "instrument_token": 1234502,
+          "ltp": 117.0,
+          "bid": 116.5,
+          "ask": 117.5,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1771742400.0,
+          "quote_age_sec": 0.0,
+          "depth_ok": true,
+          "volume": 7800,
+          "oi": 30000,
+          "oi_change": 1200,
+          "iv": 0.21,
+          "iv_z": 0.0,
+          "iv_skew": 0.0,
+          "delta": -0.34,
+          "moneyness": -0.0008,
+          "tradingsymbol": "NIFTY26FEB25100PE"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "name": "stale_feed_burst",
+  "expected_min_candidates": 1,
+  "require_builder_path": true,
+  "snapshots": [
+    {
+      "symbol": "NIFTY",
+      "market_open": false,
+      "valid": true,
+      "ltp": 25240.0,
+      "vwap": 25190.0,
+      "bias": "Bullish",
+      "chain_source": "synthetic_offhours",
+      "quote_ok": true,
+      "ltp_source": "cache",
+      "ltp_ts_epoch": 1710000000.0,
+      "timestamp": 1771742400.0,
+      "regime": "TREND",
+      "regime_day": "TREND",
+      "day_type": "TREND_DAY",
+      "orb_bias": "UP",
+      "htf_dir": "UP",
+      "replay_signal": {
+        "direction": "BUY_CALL",
+        "reason": "stale_burst_planning_only",
+        "score": 0.91,
+        "regime_day": "TREND"
+      },
+      "option_chain": [
+        {
+          "symbol": "NIFTY",
+          "type": "CE",
+          "strike": 25200,
+          "expiry": "2026-02-26",
+          "instrument_token": 4234501,
+          "ltp": 118.0,
+          "bid": 117.3,
+          "ask": 118.7,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1710000000.0,
+          "quote_age_sec": 43200.0,
+          "depth_ok": true,
+          "volume": 7600,
+          "oi": 35500,
+          "oi_change": 1200,
+          "iv": 0.22,
+          "delta": 0.34,
+          "moneyness": 0.0007,
+          "tradingsymbol": "NIFTY26FEB25200CE"
+        },
+        {
+          "symbol": "NIFTY",
+          "type": "PE",
+          "strike": 25200,
+          "expiry": "2026-02-26",
+          "instrument_token": 4234502,
+          "ltp": 109.0,
+          "bid": 108.4,
+          "ask": 109.6,
+          "quote_ok": true,
+          "quote_live": false,
+          "quote_source": "synthetic_offhours",
+          "quote_ts_epoch": 1710000000.0,
+          "quote_age_sec": 43200.0,
+          "depth_ok": true,
+          "volume": 7300,
+          "oi": 34900,
+          "oi_change": 1110,
+          "iv": 0.21,
+          "delta": -0.32,
+          "moneyness": -0.0007,
+          "tradingsymbol": "NIFTY26FEB25200PE"
+        }
+      ]
+    }
+  ]
+}

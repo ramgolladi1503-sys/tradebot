@@ -1,6 +1,6 @@
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,7 +69,7 @@ def build_report(events):
         rec["day"] = day
         daily.append(rec)
     return {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "min_days_shadow": getattr(cfg, "RL_MIN_DAYS_SHADOW", 7),
         "promotion_rules": getattr(cfg, "RL_PROMOTION_RULES", "brier_improve_and_tail_ok"),
         "days": daily,

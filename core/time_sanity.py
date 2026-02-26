@@ -4,24 +4,23 @@ from datetime import datetime
 from typing import Any
 
 from config import config as cfg
-from core.time_utils import now_utc_epoch
+from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
 
 
 def to_epoch(value: Any) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
+    normalized = normalize_epoch_seconds(value)
+    if normalized is not None:
+        return float(normalized)
     if hasattr(value, "timestamp"):
         try:
-            return float(value.timestamp())
+            return normalize_epoch_seconds(float(value.timestamp()))
         except Exception:
             return None
     try:
         text = str(value)
         if text.endswith("Z"):
             text = text.replace("Z", "+00:00")
-        return float(datetime.fromisoformat(text).timestamp())
+        return normalize_epoch_seconds(float(datetime.fromisoformat(text).timestamp()))
     except Exception:
         return None
 
@@ -36,9 +35,9 @@ def check_market_data_time_sanity(
     max_candle_age_sec: float | None = None,
     now_epoch: float | None = None,
 ) -> dict:
-    now_ts = float(now_epoch if now_epoch is not None else now_utc_epoch())
-    ltp_age_sec = None if ltp_ts_epoch is None else max(0.0, now_ts - float(ltp_ts_epoch))
-    candle_age_sec = None if candle_ts_epoch is None else max(0.0, now_ts - float(candle_ts_epoch))
+    now_ts = float(normalize_epoch_seconds(now_epoch) if now_epoch is not None else now_utc_epoch())
+    ltp_age_sec = compute_age_sec(ltp_ts_epoch, now_ts)
+    candle_age_sec = compute_age_sec(candle_ts_epoch, now_ts)
 
     reasons: list[str] = []
     if market_open and require_live_quotes:

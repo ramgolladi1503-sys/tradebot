@@ -3,6 +3,8 @@ import time
 from pathlib import Path
 
 from config import config as cfg
+from core.market_context import derive_market_context
+from core.reject_logger import append_reject_reasons
 from core.time_utils import now_ist, now_utc_epoch
 from core.trade_schema import build_instrument_id, validate_trade_identity
 from core.trade_ticket import TradeTicket
@@ -45,13 +47,45 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         right = getattr(trade, "right", None) or getattr(trade, "option_type", None)
         expiry = getattr(trade, "expiry", None)
         strike = getattr(trade, "strike", None)
-    instrument_id = None
-    if trade and instrument_type:
+    symbol = (trade.symbol if trade else market_data.get("symbol"))
+    trade_instrument_id = getattr(trade, "instrument_id", None) if trade else None
+    instrument_id = trade_instrument_id
+    if instrument_id is None and trade and instrument_type:
         instrument_id = build_instrument_id(trade.symbol, instrument_type, expiry, strike, right)
+    if instrument_id is None:
+        fb_symbol = str(symbol or "UNKNOWN")
+        fb_instrument_type = str(instrument_type or market_data.get("instrument") or "UNKNOWN")
+        fb_expiry = str(expiry or market_data.get("expiry") or "NA")
+        fb_strike = str(strike if strike not in (None, "") else market_data.get("strike") or "NA")
+        fb_right = str(right or market_data.get("option_type") or "NA")
+        instrument_id = f"MISSING_CONTRACT::{fb_symbol}:{fb_instrument_type}:{fb_expiry}:{fb_strike}:{fb_right}"
+    ctx_payload = {}
+    raw_ctx = market_data.get("market_context")
+    if isinstance(raw_ctx, dict):
+        nested_ctx = raw_ctx.get("market_context")
+        if isinstance(nested_ctx, dict):
+            ctx_payload.update(dict(nested_ctx))
+        ctx_payload.update(dict(raw_ctx))
+    if "execution_mode" not in ctx_payload:
+        raw_exec_mode = market_data.get("execution_mode")
+        if raw_exec_mode is not None:
+            ctx_payload["execution_mode"] = raw_exec_mode
+    if "market_open" not in ctx_payload and ("market_open" in market_data):
+        ctx_payload["market_open"] = market_data.get("market_open")
+    if "segment" not in ctx_payload:
+        raw_segment = market_data.get("segment")
+        if raw_segment is not None:
+            ctx_payload["segment"] = raw_segment
+    market_ctx = derive_market_context(ctx_payload or {"execution_mode": getattr(cfg, "EXECUTION_MODE", "SIM")})
     event = {
         "trade_id": trade.trade_id if trade else None,
         "ts": now_text,
-        "symbol": (trade.symbol if trade else market_data.get("symbol")),
+        "symbol": symbol,
+        "mode": market_ctx.mode,
+        "market_open": bool(market_ctx.is_market_open),
+        "planning_only": bool(market_ctx.planning_only),
+        "allow_stale_quotes": bool(market_ctx.allow_stale_quotes),
+        "require_live_quotes": bool(market_ctx.require_live_quotes),
         "strategy_id": trade.strategy if trade else None,
         "regime": market_data.get("regime") or (trade.regime if trade else None),
         "regime_probs": market_data.get("regime_probs"),
@@ -61,10 +95,23 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "instrument_id": instrument_id,
         "strike": strike,
         "expiry": expiry,
+        "expiry_date": getattr(trade, "expiry_date", None) if trade else (market_data.get("expiry_date") or expiry),
+        "tradingsymbol": getattr(trade, "tradingsymbol", None) if trade else (opt or {}).get("tradingsymbol"),
         "option_type": getattr(trade, "option_type", None) if trade else None,
         "right": right,
         "instrument_type": instrument_type,
         "underlying": trade.symbol if trade else None,
+        "underlying_spot": (getattr(trade, "underlying_spot", None) if trade else None) or market_data.get("underlying_spot") or market_data.get("ltp"),
+        "spot_source": (getattr(trade, "spot_source", None) if trade else None)
+        or market_data.get("spot_source")
+        or market_data.get("ltp_source")
+        or market_data.get("index_quote_source"),
+        "option_ltp_source": (getattr(trade, "option_ltp_source", None) if trade else None)
+        or (opt or {}).get("option_ltp_source")
+        or (opt or {}).get("quote_source"),
+        "chain_source": (getattr(trade, "chain_source", None) if trade else None)
+        or market_data.get("chain_source")
+        or (opt or {}).get("chain_source"),
         "qty_lots": getattr(trade, "qty_lots", None) if trade else None,
         "qty_units": getattr(trade, "qty_units", None) if trade else None,
         "validity_sec": getattr(trade, "validity_sec", None) if trade else None,
@@ -128,6 +175,11 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
             if reason not in veto_reasons:
                 veto_reasons.append(reason)
         event["veto_reasons"] = veto_reasons
+    if trade and str(instrument_type or "").upper() == "OPT":
+        if (getattr(trade, "instrument_id", None) is None) or (not getattr(trade, "expiry_date", None)):
+            if "unresolved_contract" not in veto_reasons:
+                veto_reasons.append("unresolved_contract")
+            event["veto_reasons"] = veto_reasons
     if event.get("instrument_id") is None and trade:
         ok, _reason = validate_trade_identity(
             trade.symbol,
@@ -171,6 +223,12 @@ def log_identity_error(_orch, trade, extra: dict | None = None) -> None:
         }
         if extra:
             payload.update(extra)
+        reason_code = payload.get("reason_code") or payload.get("reason")
+        if reason_code is not None:
+            reason_text = str(reason_code).strip()
+            if reason_text:
+                payload["reason_code"] = reason_text
+                payload["reason"] = str(payload.get("reason") or reason_text)
         with path.open("a") as handle:
             handle.write(json.dumps(payload, default=str) + "\n")
     except Exception:
@@ -178,9 +236,56 @@ def log_identity_error(_orch, trade, extra: dict | None = None) -> None:
 
 
 def log_decision_safe(orch, event: dict, trade=None, log_decision_fn=None):
+    event = dict(event or {})
+    veto_reasons = [str(x).strip() for x in (event.get("veto_reasons") or []) if str(x).strip()]
+    if veto_reasons:
+        append_reject_reasons(
+            symbol=event.get("symbol"),
+            strategy=event.get("strategy_id"),
+            reasons=veto_reasons,
+            mode=(event.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM")),
+            source="decision_event",
+            extra={
+                "trade_id": event.get("trade_id"),
+                "gatekeeper_allowed": event.get("gatekeeper_allowed"),
+            },
+        )
     if event.get("instrument_id") is None:
-        log_identity_error(orch, trade or event, {"reason": "missing_contract_fields"})
-        return None
+        symbol = str(event.get("symbol") or (getattr(trade, "symbol", None) if trade is not None else None) or "UNKNOWN")
+        instrument_type = str(
+            event.get("instrument_type")
+            or (getattr(trade, "instrument_type", None) if trade is not None else None)
+            or (getattr(trade, "instrument", None) if trade is not None else None)
+            or event.get("instrument")
+            or "UNKNOWN"
+        )
+        expiry = str(event.get("expiry") or (getattr(trade, "expiry", None) if trade is not None else None) or "NA")
+        strike = str(event.get("strike") or (getattr(trade, "strike", None) if trade is not None else None) or "NA")
+        right = str(
+            event.get("right")
+            or (getattr(trade, "right", None) if trade is not None else None)
+            or event.get("option_type")
+            or (getattr(trade, "option_type", None) if trade is not None else None)
+            or "NA"
+        )
+        fallback_instrument_id = f"MISSING_CONTRACT::{symbol}:{instrument_type}:{expiry}:{strike}:{right}"
+        event["instrument_id"] = fallback_instrument_id
+        if "missing_contract_fields" not in veto_reasons:
+            veto_reasons.append("missing_contract_fields")
+            event["veto_reasons"] = veto_reasons
+        if trade is not None:
+            log_identity_error(orch, trade or event, {"reason": "missing_contract_fields"})
+        append_reject_reasons(
+            symbol=event.get("symbol"),
+            strategy=event.get("strategy_id"),
+            reasons=["missing_contract_fields"],
+            mode=(event.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM")),
+            source="identity",
+            extra={
+                "trade_id": event.get("trade_id"),
+                "fallback_instrument_id": fallback_instrument_id,
+            },
+        )
     if log_decision_fn is None:
         raise RuntimeError("log_decision_fn is required")
     return log_decision_fn(event)

@@ -41,6 +41,7 @@ def test_append_live_quote_error_rate_limited(monkeypatch, tmp_path):
     assert len(rows) == 1
     row = rows[0]
     assert row["event_code"] == "index_bidask_missing"
+    assert row["reason_code"] == "index_bidask_missing"
     assert row["category"] == "missing"
     assert row["symbol"] == "NIFTY"
     assert row["source"] == "ws"
@@ -90,6 +91,7 @@ def test_live_index_missing_depth_appends_live_quote_error(monkeypatch, tmp_path
     assert rows
     row = rows[-1]
     assert row["event_code"] == "index_bidask_missing"
+    assert row["reason_code"] == "index_bidask_missing"
     assert row["category"] == "missing"
     assert row["details"]["mode"] == "LIVE"
     assert row["details"]["market_open"] is True
@@ -203,3 +205,39 @@ def test_get_ltp_logs_ltp_fetch_failed_with_canonical_schema(monkeypatch, tmp_pa
     assert row["symbol"] == "NIFTY"
     assert row["source"] == "rest"
     assert isinstance(row.get("details"), dict)
+
+
+def test_get_ltp_rejects_implausible_ws_index_price_and_uses_rest(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "KITE_USE_API", True, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "INDEX_LTP_SANITY_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "INDEX_LTP_SANITY_MIN_BY_SYMBOL", {"NIFTY": 5000.0}, raising=False)
+    market_data._LIVE_QUOTE_ERROR_LAST_TS.clear()
+    market_data._DATA_CACHE.clear()
+    market_data._LAST_GOOD_LTP.clear()
+
+    monkeypatch.setattr(market_data, "_refresh_index_quote_from_rest", lambda symbol, force=False: False)
+    monkeypatch.setattr(
+        market_data,
+        "get_index_quote_snapshot",
+        lambda symbol: {"last_price": 68.0, "ts_epoch": 1_000.0, "source": "depth"},
+    )
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", object())
+    monkeypatch.setattr(
+        market_data.kite_client,
+        "ltp",
+        lambda keys: {keys[0]: {"last_price": 25950.0}},
+    )
+    monkeypatch.setattr(market_data, "is_market_open_ist", lambda segment="NSE_FNO": True)
+
+    price = market_data.get_ltp("NIFTY")
+    assert price == 25950.0
+
+    out_path = Path("logs/live_quote_errors.jsonl")
+    rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    sanity_rows = [row for row in rows if row.get("event_code") == "index_ltp_sanity_reject"]
+    assert sanity_rows

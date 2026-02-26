@@ -201,7 +201,6 @@ def main():
         raise SystemExit("Kite session validation failed (margins_missing).")
 
     token_path = write_local_kite_access_token(access_token)
-    cfg.KITE_ACCESS_TOKEN = access_token
     auth_payload = get_kite_auth_health(force=True)
     if not auth_payload.get("ok"):
         try:

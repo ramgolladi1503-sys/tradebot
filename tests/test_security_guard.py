@@ -34,6 +34,7 @@ def test_missing_token_has_clear_error(tmp_path: Path, monkeypatch):
 def test_env_token_passes_guard(tmp_path: Path, monkeypatch):
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("KITE_ALLOW_ENV_TOKEN_FOR_CI", "true")
     monkeypatch.setenv("KITE_ACCESS_TOKEN", "env_token_123")
     monkeypatch.setenv("TRADING_BOT_TOKEN_PATH", str(tmp_path / "local" / "kite_access_token"))
     token = security_guard.enforce_startup_security(repo_root=repo_root, require_token=True)

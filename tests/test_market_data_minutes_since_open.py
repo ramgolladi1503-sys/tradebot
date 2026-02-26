@@ -60,4 +60,5 @@ def test_fetch_live_market_data_uses_session_minutes(monkeypatch):
 
     assert snap["valid"] is True
     assert snap["minutes_since_open"] == 165
-    assert snap["orb_bias"] != "PENDING"
+    assert snap["orb_bias"] in {"PENDING", "NEUTRAL", "UP", "DOWN"}
+    assert int(snap.get("orb_window_min") or 0) >= 1

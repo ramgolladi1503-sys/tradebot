@@ -2,7 +2,24 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOKEN_PATH="$HOME/.trading_bot/kite_access_token"
+TOKEN_PATH="$ROOT_DIR/.runtime/kite_access_token"
+
+export DATA_ROOT="${DATA_ROOT:-$ROOT_DIR/.runtime}"
+export DESKS_ROOT="${DESKS_ROOT:-$DATA_ROOT/desks}"
+export LOGS_ROOT="${LOGS_ROOT:-$DATA_ROOT/logs}"
+export REPORTS_ROOT="${REPORTS_ROOT:-$DATA_ROOT/reports}"
+export LOCKS_ROOT="${LOCKS_ROOT:-$DATA_ROOT/locks}"
+export DB_ROOT="${DB_ROOT:-$DATA_ROOT/db}"
+
+ensure_runtime_dirs() {
+  local d=""
+  for d in "$DATA_ROOT" "$DESKS_ROOT" "$LOGS_ROOT" "$REPORTS_ROOT" "$LOCKS_ROOT" "$DB_ROOT" "$ROOT_DIR/.runtime"; do
+    if ! mkdir -p "$d" 2>/dev/null; then
+      echo "[RUN_LIVE][ERROR] runtime_dir_not_writable path=$d"
+      exit 2
+    fi
+  done
+}
 
 SKIP_LOGIN=0
 FORCE_LOGIN=0
@@ -32,6 +49,67 @@ done
 
 echo "[RUN_LIVE] Project: $ROOT_DIR"
 echo "[RUN_LIVE] Token file: $TOKEN_PATH"
+ensure_runtime_dirs
+
+configure_openmp_runtime() {
+  local py_arch=""
+  local conda_lib=""
+  local selected_dir=""
+  local candidate=""
+  local info=""
+  local checked_any=0
+
+  py_arch="$(python -c "import platform; print(platform.machine())" 2>/dev/null || uname -m)"
+  if [[ -n "${CONDA_PREFIX:-}" ]]; then
+    conda_lib="${CONDA_PREFIX}/lib"
+    candidate="${conda_lib}/libomp.dylib"
+    if [[ -f "$candidate" ]]; then
+      checked_any=1
+      info="$(file "$candidate" 2>/dev/null || true)"
+      if [[ "$py_arch" == "arm64" && "$info" == *"arm64"* ]]; then
+        selected_dir="$conda_lib"
+      elif [[ "$py_arch" != "arm64" && "$info" == *"x86_64"* ]]; then
+        selected_dir="$conda_lib"
+      fi
+    fi
+  fi
+
+  if [[ -z "$selected_dir" ]]; then
+    for candidate in "/opt/homebrew/opt/libomp/lib/libomp.dylib" "/usr/local/opt/libomp/lib/libomp.dylib"; do
+      if [[ ! -f "$candidate" ]]; then
+        continue
+      fi
+      checked_any=1
+      info="$(file "$candidate" 2>/dev/null || true)"
+      if [[ "$py_arch" == "arm64" && "$info" == *"arm64"* ]]; then
+        selected_dir="$(dirname "$candidate")"
+        break
+      fi
+      if [[ "$py_arch" != "arm64" && "$info" == *"x86_64"* ]]; then
+        selected_dir="$(dirname "$candidate")"
+        break
+      fi
+    done
+  fi
+
+  if [[ -n "$selected_dir" ]]; then
+    export DYLD_LIBRARY_PATH="$selected_dir:${DYLD_LIBRARY_PATH:-}"
+    export DYLD_FALLBACK_LIBRARY_PATH="$selected_dir:${DYLD_FALLBACK_LIBRARY_PATH:-}"
+    echo "[RUN_LIVE] OpenMP runtime path configured: $selected_dir (py_arch=$py_arch)"
+    return 0
+  fi
+
+  if [[ "$checked_any" -eq 1 ]]; then
+    echo "[RUN_LIVE][WARN] libomp found but architecture mismatched for py_arch=$py_arch; xgboost may run in degraded mode."
+  else
+    echo "[RUN_LIVE][WARN] libomp.dylib not found; xgboost may run in degraded mode."
+  fi
+  if [[ -n "${CONDA_PREFIX:-}" ]]; then
+    echo "[RUN_LIVE][HINT] Install ARM-compatible runtime in conda:"
+    echo "  conda install -n ${CONDA_DEFAULT_ENV:-tradebot} -c conda-forge llvm-openmp py-xgboost"
+  fi
+  return 0
+}
 
 if [[ "$LOGIN_ONLY" -eq 1 && "$VALIDATE_ONLY" -eq 1 ]]; then
   echo "[RUN_LIVE] ERROR: --login-only and --validate-only cannot be used together."
@@ -49,11 +127,14 @@ if [[ -z "${KITE_API_KEY:-}" ]]; then
   exit 1
 fi
 
+configure_openmp_runtime
+
 TOKEN_VAL=""
 if [[ -f "$TOKEN_PATH" ]]; then
-  TOKEN_VAL="$(python - <<'PY'
+TOKEN_VAL="$(TOKEN_PATH="$TOKEN_PATH" python - <<'PY'
+import os
 from pathlib import Path
-p = Path.home()/".trading_bot"/"kite_access_token"
+p = Path(os.environ["TOKEN_PATH"])
 print(p.read_text().strip() if p.exists() else "")
 PY
 )"
