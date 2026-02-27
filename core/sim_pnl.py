@@ -101,6 +101,80 @@ def simulate_pnl(entry: float, side: str, lot_size: int, deltas: Iterable[float]
     return results
 
 
+def compute_live_pnl(entry_price: float, current_ltp: float, side: str, qty: float) -> float | None:
+    try:
+        entry_val = float(entry_price)
+        ltp_val = float(current_ltp)
+        qty_val = float(qty)
+    except Exception:
+        return None
+    side_val = str(side or "").upper()
+    if side_val not in ("BUY", "SELL"):
+        return None
+    if side_val == "SELL":
+        return (entry_val - ltp_val) * qty_val
+    return (ltp_val - entry_val) * qty_val
+
+
+def _resolve_current_price(row: dict) -> float | None:
+    if row is None:
+        return None
+    live = _to_float(row.get("live_ltp"))
+    if live is not None:
+        return live
+    opt_ltp = _to_float(row.get("opt_ltp"))
+    if opt_ltp is not None:
+        return opt_ltp
+    bid = _to_float(row.get("opt_bid"))
+    ask = _to_float(row.get("opt_ask"))
+    if bid is not None and ask is not None:
+        return (bid + ask) / 2.0
+    return None
+
+
+def compute_row_live_pnl(row: dict, meta_map: dict | None = None) -> dict:
+    out = {
+        "pnl_1qty": None,
+        "pnl_1lot": None,
+        "lot_size": None,
+        "lot_size_source": None,
+        "lot_fallback_used": False,
+        "live_ltp": None,
+        "pnl_reason": None,
+    }
+    if not isinstance(row, dict):
+        out["pnl_reason"] = "invalid_row"
+        return out
+    status = str(row.get("status") or "PLANNING").upper()
+    if status != "ACTIVE":
+        out["pnl_reason"] = "inactive"
+        return out
+    fill = _to_float(row.get("fill_price"))
+    if fill is None:
+        out["pnl_reason"] = "missing_fill_price"
+        return out
+    ltp = _resolve_current_price(row)
+    if ltp is None:
+        out["pnl_reason"] = "missing_ltp"
+        return out
+    out["live_ltp"] = ltp
+    side = str(row.get("side") or "").upper()
+    pnl_1qty = compute_live_pnl(fill, ltp, side, 1.0)
+    if pnl_1qty is None:
+        out["pnl_reason"] = "invalid_side"
+        return out
+    out["pnl_1qty"] = round(float(pnl_1qty), 2)
+    lot_size, source, fallback_used = resolve_lot_size(row, meta_map=meta_map)
+    out["lot_size"] = lot_size
+    out["lot_size_source"] = source
+    out["lot_fallback_used"] = fallback_used
+    if lot_size:
+        pnl_1lot = compute_live_pnl(fill, ltp, side, float(lot_size))
+        if pnl_1lot is not None:
+            out["pnl_1lot"] = round(float(pnl_1lot), 2)
+    return out
+
+
 def simulate_row(row: dict, meta_map: dict | None = None, deltas: Iterable[float] = DEFAULT_DELTAS) -> dict:
     out = {"sim_reason": None}
     ok, reason = is_contract_resolved(row)

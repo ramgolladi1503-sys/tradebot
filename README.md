@@ -81,6 +81,16 @@ Download instruments (fallback CSV):
 python scripts/download_instruments.py
 ```
 
+Fetch Upstox instruments (for dashboard deep links/search):
+```bash
+python scripts/fetch_upstox_instruments.py --url <upstox_instruments_url>
+```
+Upstox config keys (defaults in `config/config.py`):
+- `UPSTOX_ENABLE_DEEPLINK` (default false)
+- `UPSTOX_CONTRACT_URL_TEMPLATE`
+- `UPSTOX_SEARCH_URL_TEMPLATE`
+- `UPSTOX_INSTRUMENTS_PATH`
+
 Manual approval (when enabled):
 ```bash
 python scripts/approve_trade.py <trade_id>

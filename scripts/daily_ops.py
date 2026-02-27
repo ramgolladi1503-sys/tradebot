@@ -23,6 +23,8 @@ STEPS: list[tuple[list[str], bool]] = [
     (["scripts/hash_trade_log.py"], True),
     (["scripts/data_manifest.py"], True),
     (["scripts/run_execution_analytics.py"], False),
+    (["scripts/eval_shadow_outcomes.py"], False),
+    (["scripts/report_gate_quality.py"], False),
     (["scripts/data_qc.py"], False),
     (["scripts/sla_check.py"], False),
     (["scripts/daily_rollup.py"], False),

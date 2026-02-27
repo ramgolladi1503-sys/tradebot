@@ -1,4 +1,5 @@
 from strategies.trade_builder import TradeBuilder
+from config import config as cfg
 
 
 def _market_data_empty_chain(chain_source="empty"):
@@ -17,14 +18,18 @@ def _market_data_empty_chain(chain_source="empty"):
 
 
 def test_no_trade_when_live_chain_missing():
+    cfg.EXECUTION_MODE = "LIVE"
     tb = TradeBuilder()
     md = _market_data_empty_chain(chain_source="empty")
+    md["market_open"] = True
     trade = tb.build(md, quick_mode=True)
     assert trade is None
 
 
 def test_analysis_only_synthetic_marks_not_tradable():
+    cfg.EXECUTION_MODE = "LIVE"
     tb = TradeBuilder()
     md = _market_data_empty_chain(chain_source="synthetic")
+    md["market_open"] = True
     trade = tb.build(md, quick_mode=True)
     assert trade is None

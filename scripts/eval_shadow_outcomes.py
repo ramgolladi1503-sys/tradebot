@@ -81,6 +81,15 @@ def _mark_no_data(candidate) -> dict:
     }
 
 
+def _write_status(payload: dict) -> None:
+    path = Path(getattr(cfg, "SHADOW_EVAL_STATUS_PATH", "logs/shadow_eval_status_latest.json"))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    except Exception:
+        pass
+
+
 def run_eval(*, desk: str, limit: int, db_path: str | None = None) -> dict:
     blocked_path = _blocked_candidates_path(desk)
     rows = _read_last_jsonl(blocked_path, limit=max(1, int(limit)))
@@ -190,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     payload = run_eval(desk=str(args.desk), limit=int(args.limit), db_path=args.db_path)
     print(json.dumps(payload, indent=2, sort_keys=True))
+    _write_status(payload)
     return 0
 
 

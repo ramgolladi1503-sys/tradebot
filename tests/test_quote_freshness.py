@@ -1,6 +1,5 @@
-import types
-
 from strategies.trade_builder import TradeBuilder
+from config import config as cfg
 
 
 def _base_market_data():
@@ -18,6 +17,7 @@ def _base_market_data():
 
 
 def test_stale_quote_blocks_trade(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     tb = TradeBuilder()
     opt = {
         "type": "CE",
@@ -30,12 +30,14 @@ def test_stale_quote_blocks_trade(monkeypatch):
         "quote_ts_epoch": 1.0,
     }
     md = _base_market_data()
+    md["market_open"] = True
     md["option_chain"] = [opt]
     trade = tb.build(md, quick_mode=True)
     assert trade is None
 
 
 def test_fresh_quote_not_blocked(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     tb = TradeBuilder()
     opt = {
         "type": "CE",
@@ -48,6 +50,7 @@ def test_fresh_quote_not_blocked(monkeypatch):
         "quote_ts_epoch": 1.0,
     }
     md = _base_market_data()
+    md["market_open"] = True
     md["option_chain"] = [opt]
     trade = tb.build(md, quick_mode=True)
     # Signal or other filters may still block, but stale-quote veto must not.

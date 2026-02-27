@@ -191,6 +191,25 @@ ENFORCE_EXECUTION_ALLOWED_FLAG = os.getenv("ENFORCE_EXECUTION_ALLOWED_FLAG", "tr
 EXECUTION_GUARD_ALLOW_PLANNING = os.getenv("EXECUTION_GUARD_ALLOW_PLANNING", "true").lower() == "true"
 
 # -------------------------------
+# Suggested trade target fallback
+# -------------------------------
+TARGET_RR_DEFAULT = float(os.getenv("TARGET_RR_DEFAULT", "1.5"))
+
+# -------------------------------
+# Upstox deep-linking (manual confirmation only)
+# -------------------------------
+UPSTOX_ENABLE_DEEPLINK = os.getenv("UPSTOX_ENABLE_DEEPLINK", "false").lower() == "true"
+UPSTOX_CONTRACT_URL_TEMPLATE = os.getenv(
+    "UPSTOX_CONTRACT_URL_TEMPLATE",
+    "https://pro.upstox.com/instruments/{instrument_key}",
+)
+UPSTOX_SEARCH_URL_TEMPLATE = os.getenv(
+    "UPSTOX_SEARCH_URL_TEMPLATE",
+    "https://pro.upstox.com/search?query={query}",
+)
+UPSTOX_INSTRUMENTS_PATH = os.getenv("UPSTOX_INSTRUMENTS_PATH", "data/upstox_instruments.json.gz")
+
+# -------------------------------
 # Strategy lifecycle governance
 # -------------------------------
 STRATEGY_LIFECYCLE_PATH = os.getenv("STRATEGY_LIFECYCLE_PATH", f"{LOGS_ROOT}/strategy_lifecycle.json")
@@ -1397,6 +1416,11 @@ EXEC_ADAPTIVE_RETRY_LIMIT_REASON = os.getenv(
 )
 ORDER_STORE_STARTUP_LOAD_LIMIT = int(os.getenv("ORDER_STORE_STARTUP_LOAD_LIMIT", "2000"))
 ORDER_RECONCILE_ON_STARTUP = os.getenv("ORDER_RECONCILE_ON_STARTUP", "true").lower() == "true"
+ORDER_RECON_DAEMON_ENABLE = os.getenv("ORDER_RECON_DAEMON_ENABLE", "true").lower() == "true"
+ORDER_RECON_INTERVAL_SEC = float(os.getenv("ORDER_RECON_INTERVAL_SEC", "5.0"))
+RUNTIME_HEALTH_PATH = os.getenv("RUNTIME_HEALTH_PATH", f"{LOGS_ROOT}/runtime_health_latest.json")
+SHADOW_EVAL_STATUS_PATH = os.getenv("SHADOW_EVAL_STATUS_PATH", f"{LOGS_ROOT}/shadow_eval_status_latest.json")
+GATE_QUALITY_STATUS_PATH = os.getenv("GATE_QUALITY_STATUS_PATH", f"{LOGS_ROOT}/gate_quality_status_latest.json")
 PRETRADE_RISK_ENABLE = os.getenv("PRETRADE_RISK_ENABLE", "true").lower() == "true"
 PRETRADE_MARGIN_BUFFER_PCT = float(os.getenv("PRETRADE_MARGIN_BUFFER_PCT", "0.05"))
 PRETRADE_MAX_EXPOSURE_PER_INSTRUMENT = float(

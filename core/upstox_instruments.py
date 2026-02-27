@@ -22,6 +22,15 @@ _CACHE: dict[str, Any] = {"path": None, "index": {}}
 
 
 def default_instruments_path() -> Path | None:
+    try:
+        from config import config as cfg
+        raw = str(getattr(cfg, "UPSTOX_INSTRUMENTS_PATH", "") or "").strip()
+        if raw:
+            cfg_path = Path(raw)
+            if cfg_path.exists():
+                return cfg_path
+    except Exception:
+        pass
     for name in (
         "data/upstox_instruments.json.gz",
         "data/upstox_instruments.json",

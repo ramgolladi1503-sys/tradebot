@@ -145,11 +145,17 @@ class OrderReconciliationDaemon:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._last_cycle_ts_epoch: float | None = None
 
     @property
     def is_running(self) -> bool:
         thread = self._thread
         return bool(thread and thread.is_alive())
+
+    @property
+    def last_cycle_ts_epoch(self) -> float | None:
+        with self._state_lock:
+            return self._last_cycle_ts_epoch
 
     def set_broker_api(self, broker_api: Any) -> None:
         with self._state_lock:
@@ -386,6 +392,8 @@ class OrderReconciliationDaemon:
                 level="ERROR",
             )
             ended = time.time()
+            with self._state_lock:
+                self._last_cycle_ts_epoch = ended
             return ReconciliationCycleResult(
                 scanned_orders=0,
                 corrections=0,
@@ -534,6 +542,8 @@ class OrderReconciliationDaemon:
             },
             level="INFO" if errors == 0 else "WARN",
         )
+        with self._state_lock:
+            self._last_cycle_ts_epoch = summary.ended_at
         return summary
 
     def _write_log(self, event: str, payload: dict[str, Any], *, level: str) -> None:

@@ -447,6 +447,15 @@ class ExecutionEngine:
             )
         return self._reconciliation_daemon.run_cycle_once()
 
+    def get_reconciliation_status(self) -> dict:
+        daemon = self._reconciliation_daemon
+        if daemon is None:
+            return {"daemon_running": False, "last_cycle_ts_epoch": None}
+        return {
+            "daemon_running": bool(daemon.is_running),
+            "last_cycle_ts_epoch": getattr(daemon, "last_cycle_ts_epoch", None),
+        }
+
     @staticmethod
     def build_idempotency_key(*, signal_id, instrument, side, timestamp):
         sid = str(signal_id or "").strip()

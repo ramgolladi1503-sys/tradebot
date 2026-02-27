@@ -111,6 +111,15 @@ def run_report(*, desk: str, db_path: str | None = None) -> dict:
     }
 
 
+def _write_status(payload: dict) -> None:
+    path = Path(getattr(cfg, "GATE_QUALITY_STATUS_PATH", "logs/gate_quality_status_latest.json"))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    except Exception:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Report blocked-gate quality from shadow outcomes.")
     parser.add_argument("--desk", default=getattr(cfg, "DESK_ID", "DEFAULT"))
@@ -132,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             f"mfe15={row['avg_mfe_15m']} mae15={row['avg_mae_15m']} pnl15={row['avg_pnl_15m']}"
         )
     print(json.dumps(payload, indent=2, sort_keys=True))
+    _write_status(payload)
     return 0
 
 

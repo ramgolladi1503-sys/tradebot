@@ -244,6 +244,26 @@ def _cfg_int(name, default=0):
         return int(default)
 
 
+def _derive_target(entry_val, stop_val, side, rr_default: float):
+    try:
+        entry_f = float(entry_val)
+        stop_f = float(stop_val)
+        rr_f = float(rr_default)
+    except Exception:
+        return None
+    risk = abs(entry_f - stop_f)
+    if risk <= 0:
+        return None
+    side_val = str(side or "").upper()
+    if side_val == "SELL":
+        target = entry_f - (risk * rr_f)
+    else:
+        target = entry_f + (risk * rr_f)
+    if target <= 0:
+        return None
+    return round(float(target), 2)
+
+
 def _read_json(path: Path, default):
     if not path.exists():
         return default
@@ -478,6 +498,13 @@ def add_to_queue(trade, queue_path=None, extra=None):
                     entry.get("strike"),
                     entry.get("option_type") or entry.get("type"),
                 )
+        if entry.get("target") in (None, "", "None"):
+            rr_default = float(getattr(cfg, "TARGET_RR_DEFAULT", 1.5)) if cfg else 1.5
+            derived_target = _derive_target(entry.get("entry"), entry.get("stop"), entry.get("side"), rr_default)
+            if derived_target is not None:
+                entry["target"] = derived_target
+                entry["target_derived"] = True
+                entry["target_rr"] = rr_default
         unresolved_contract = False
         if not entry.get("instrument_id"):
             unresolved_contract = True

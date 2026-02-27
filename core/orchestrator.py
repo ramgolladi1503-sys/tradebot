@@ -62,6 +62,7 @@ from core.decision_builder import build_decision
 from core.review_packet import build_review_packet, format_review_packet
 from core.gate_status_log import append_gate_status, build_gate_status_record
 from core.trade_log_paths import ensure_trade_log_exists
+from core.runtime_health import write_runtime_health_snapshot
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
     NODE_N2_FEED_FRESH,
@@ -155,6 +156,35 @@ class Orchestrator:
         self.execution_router = ExecutionRouter()
         self.gatekeeper = StrategyGatekeeper()
         self.trade_builder = None
+
+        # Start reconciliation daemon + one-shot reconcile
+        self._recon_daemon_started = False
+        try:
+            if bool(getattr(cfg, "ORDER_RECON_DAEMON_ENABLE", True)):
+                interval_sec = float(getattr(cfg, "ORDER_RECON_INTERVAL_SEC", 5.0))
+                broker_api = getattr(kite_client, "kite", None)
+                self.execution_engine.start_reconciliation_daemon(
+                    broker_api=broker_api,
+                    interval_sec=interval_sec,
+                )
+                try:
+                    self.execution_engine.reconcile_orders_once()
+                except Exception as exc:
+                    print(f"[Recon] startup reconcile failed: {exc}")
+                self._recon_daemon_started = True
+                try:
+                    audit_append(
+                        {
+                            "event": "EXEC_RECONCILIATION_STARTED",
+                            "interval_sec": interval_sec,
+                            "has_broker_api": bool(broker_api),
+                            "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                        }
+                    )
+                except Exception:
+                    pass
+        except Exception as exc:
+            print(f"[Recon] startup failed: {exc}")
 
         # Phase B: Risk and execution
         self.risk_engine = RiskEngine(risk_state=self.risk_state)
@@ -2251,6 +2281,10 @@ class Orchestrator:
                     )
                 except Exception as report_exc:
                     print(f"[Orchestrator REPORT ERROR] {report_exc}")
+                try:
+                    write_runtime_health_snapshot(orchestrator=self)
+                except Exception as health_exc:
+                    print(f"[RuntimeHealth] snapshot_error:{health_exc}")
                 if run_once:
                     break
                 time.sleep(self.poll_interval)

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from config import config as cfg
 from strategies.trade_builder import TradeBuilder
+from config import config as cfg
 
 
 class _PredictorStub:
@@ -28,7 +29,7 @@ def test_blocked_candidate_logged_for_missing_quote(monkeypatch, tmp_path):
     desk_log_dir = tmp_path / "logs" / "desks" / "DEFAULT"
     monkeypatch.setattr(cfg, "DESK_LOG_DIR", str(desk_log_dir), raising=False)
     monkeypatch.setattr(cfg, "DESK_ID", "DEFAULT", raising=False)
-    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
     monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
 
@@ -103,9 +104,10 @@ def test_blocked_candidate_records_top_option_reject_reason(monkeypatch, tmp_pat
     desk_log_dir = tmp_path / "logs" / "desks" / "DEFAULT"
     monkeypatch.setattr(cfg, "DESK_LOG_DIR", str(desk_log_dir), raising=False)
     monkeypatch.setattr(cfg, "DESK_ID", "DEFAULT", raising=False)
-    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
     monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setenv("LIVE_SUGGEST_REQUIRE_LIVE_QUOTES", "true")
 
     builder = TradeBuilder(predictor=_PredictorStub())
     monkeypatch.setattr(
@@ -142,6 +144,7 @@ def test_blocked_candidate_records_top_option_reject_reason(monkeypatch, tmp_pat
                     "ask": None,
                 }
             ],
+            "market_open": True,
         },
         quick_mode=False,
         allow_fallbacks=False,
@@ -154,9 +157,9 @@ def test_blocked_candidate_records_top_option_reject_reason(monkeypatch, tmp_pat
     row = rows[-1]
     assert row["reason_code"] == "no_viable_candidates"
     top_reason = row["top_option_reject_reasons"][0]
-    assert top_reason in {"no_quote", "missing_contract_fields", "unresolved_contract"}
+    assert top_reason in {"no_quote", "missing_contract_fields", "unresolved_contract", "stale_option_quote"}
     counts = row.get("option_reject_reason_counts") or {}
-    assert any(key in counts for key in ("no_quote", "missing_contract_fields", "unresolved_contract"))
+    assert any(key in counts for key in ("no_quote", "missing_contract_fields", "unresolved_contract", "stale_option_quote"))
 
 
 def test_option_expiry_resolves_from_alias_or_chain(monkeypatch):
