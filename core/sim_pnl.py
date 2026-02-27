@@ -151,6 +151,8 @@ def compute_row_live_pnl(row: dict, meta_map: dict | None = None) -> dict:
         return out
     fill = _to_float(row.get("fill_price"))
     if fill is None:
+        fill = _to_float(row.get("activation_price"))
+    if fill is None:
         out["pnl_reason"] = "missing_fill_price"
         return out
     ltp = _resolve_current_price(row)

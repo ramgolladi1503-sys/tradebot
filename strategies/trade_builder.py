@@ -3,6 +3,7 @@
 # Zero-to-hero (lotto) ideas are PAPER-only with explicit OTM + premium-band filters.
 
 from datetime import datetime, date
+from dataclasses import replace
 from pathlib import Path
 import hashlib
 import json
@@ -10,10 +11,11 @@ import os
 import sys
 import pandas as pd
 from config import config as cfg
-from config.profile import get_runtime_profile
+from config.profile import get_runtime_profile, get_option_filter_profile
 from core.execution_engine import ExecutionEngine
 from core.alpha_ensemble import AlphaEnsemble
 from core.decision_trace import build_trade_decision_trace
+from core.decision_telemetry import build_scan_summary, emit_scan_summary
 from core.reject_shadow import record_candidate_decision
 from core.trade_schema import Trade, build_instrument_id, validate_trade_identity
 from typing import Optional
@@ -96,6 +98,27 @@ class TradeBuilder:
         self._zero_to_hero_daily_count = 0
         self._zero_to_hero_last_day = None
         self._reject_ctx = {}
+        self._scan_reject_counts = {}
+        self._scan_total_candidates = 0
+        self._scan_accepted = 0
+        self._scan_profile_name = ""
+        self._last_scan_summary = {}
+
+    def _decorate_trade_context(self, trade: Trade | None, market_data: dict | None, raw_conf: float | None):
+        if trade is None:
+            return trade
+        data = market_data if isinstance(market_data, dict) else {}
+        try:
+            conf = raw_conf if raw_conf is not None else getattr(trade, "confidence", None)
+            return replace(
+                trade,
+                regime_confidence=data.get("regime_confidence"),
+                day_confidence=data.get("day_confidence"),
+                orb_bias=data.get("orb_bias"),
+                raw_signal_confidence=conf,
+            )
+        except Exception:
+            return trade
 
     def _blocked_candidates_path(self) -> Path:
         desk_log_dir = getattr(cfg, "DESK_LOG_DIR", None)
@@ -114,6 +137,12 @@ class TradeBuilder:
     ) -> None:
         data = market_data or {}
         meta = extra if isinstance(extra, dict) else {}
+        try:
+            code = str(reason_code or "").strip()
+            if code:
+                self._scan_reject_counts[code] = int(self._scan_reject_counts.get(code, 0)) + 1
+        except Exception:
+            pass
         ts_epoch = float(now_utc_epoch())
         reason_codes = list(meta.get("reason_codes") or [])
         if not reason_codes:
@@ -375,6 +404,93 @@ class TradeBuilder:
                         return px
         return None
 
+    def _derive_option_price_fields(self, opt: dict):
+        provided_mark = self._coerce_positive_float(opt.get("mark_price"))
+        provided_source = str(opt.get("price_source") or "").strip().lower()
+        last_price = (
+            self._coerce_positive_float(opt.get("last_price"))
+            or self._coerce_positive_float(opt.get("ltp"))
+            or self._coerce_positive_float(opt.get("close"))
+            or self._coerce_positive_float(opt.get("price"))
+        )
+        best_bid = self._extract_depth_price(opt, "bid")
+        best_ask = self._extract_depth_price(opt, "ask")
+        mid_price = None
+        if best_bid is not None and best_ask is not None:
+            mid_price = (best_bid + best_ask) / 2.0
+        quote_age = opt.get("quote_age_sec")
+        stale_quote = False
+        try:
+            stale_quote = quote_age is None or float(quote_age) > float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8))
+        except Exception:
+            stale_quote = quote_age is None
+        outside_tol = float(getattr(cfg, "OPTION_LAST_OUTSIDE_BAND_PCT", 0.01))
+        outside_band = False
+        if last_price is not None and best_bid is not None and best_ask is not None:
+            lo = min(best_bid, best_ask) * max(0.0, 1.0 - outside_tol)
+            hi = max(best_bid, best_ask) * (1.0 + outside_tol)
+            outside_band = bool(last_price < lo or last_price > hi)
+        if provided_mark is not None:
+            mark_price = provided_mark
+            price_source = provided_source or "mark"
+        elif mid_price is not None and (outside_band or stale_quote or last_price is None):
+            mark_price = mid_price
+            price_source = "mid"
+        elif last_price is not None:
+            mark_price = last_price
+            price_source = "last"
+        elif best_ask is not None:
+            mark_price = best_ask
+            price_source = "ask"
+        elif best_bid is not None:
+            mark_price = best_bid
+            price_source = "bid"
+        elif mid_price is not None:
+            mark_price = mid_price
+            price_source = "mid"
+        else:
+            mark_price = None
+            price_source = "none"
+        entry_buy = best_ask if best_ask is not None else mark_price
+        entry_sell = best_bid if best_bid is not None else mark_price
+        spread_pct = None
+        if mark_price and mark_price > 0 and best_bid is not None and best_ask is not None:
+            spread_pct = (best_ask - best_bid) / mark_price
+        return {
+            "last_price": last_price,
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "mid_price": mid_price,
+            "mark_price": mark_price,
+            "price_source": price_source,
+            "entry_price_proxy_buy": entry_buy,
+            "entry_price_proxy_sell": entry_sell,
+            "spread_pct": spread_pct,
+        }
+
+    def _entry_price_proxy(self, opt: dict, side: str = "BUY"):
+        if not isinstance(opt, dict):
+            return None
+        side_val = str(side or "BUY").upper()
+        key = "entry_price_proxy_sell" if side_val == "SELL" else "entry_price_proxy_buy"
+        direct = self._coerce_positive_float(opt.get(key))
+        if direct is not None:
+            return direct
+        if side_val == "SELL":
+            bid = self._coerce_positive_float(opt.get("best_bid")) or self._coerce_positive_float(opt.get("bid"))
+            if bid is not None:
+                return bid
+        else:
+            ask = self._coerce_positive_float(opt.get("best_ask")) or self._coerce_positive_float(opt.get("ask"))
+            if ask is not None:
+                return ask
+        return (
+            self._coerce_positive_float(opt.get("mark_price"))
+            or self._coerce_positive_float(opt.get("mid_price"))
+            or self._coerce_positive_float(opt.get("last_price"))
+            or self._coerce_positive_float(opt.get("ltp"))
+        )
+
     def _normalize_option_row(self, opt_raw, expected_type: str):
         if not isinstance(opt_raw, dict):
             return None, "malformed_option_row"
@@ -396,14 +512,26 @@ class TradeBuilder:
             return None, "missing_strike"
         opt["type"] = opt_side
         opt["strike"] = strike
+        price_fields = self._derive_option_price_fields(opt)
+        opt["last_price"] = price_fields.get("last_price")
+        opt["best_bid"] = price_fields.get("best_bid")
+        opt["best_ask"] = price_fields.get("best_ask")
+        opt["mid_price"] = price_fields.get("mid_price")
+        opt["mark_price"] = price_fields.get("mark_price")
+        opt["price_source"] = price_fields.get("price_source")
+        opt["entry_price_proxy_buy"] = price_fields.get("entry_price_proxy_buy")
+        opt["entry_price_proxy_sell"] = price_fields.get("entry_price_proxy_sell")
         opt["ltp"] = (
-            self._coerce_positive_float(opt.get("ltp"))
+            self._coerce_positive_float(opt.get("mark_price"))
+            or self._coerce_positive_float(opt.get("ltp"))
             or self._coerce_positive_float(opt.get("last_price"))
             or self._coerce_positive_float(opt.get("close"))
             or self._coerce_positive_float(opt.get("price"))
         )
-        opt["bid"] = self._extract_depth_price(opt, "bid")
-        opt["ask"] = self._extract_depth_price(opt, "ask")
+        opt["bid"] = self._coerce_positive_float(opt.get("best_bid")) or self._extract_depth_price(opt, "bid")
+        opt["ask"] = self._coerce_positive_float(opt.get("best_ask")) or self._extract_depth_price(opt, "ask")
+        if opt.get("spread_pct") is None:
+            opt["spread_pct"] = price_fields.get("spread_pct")
         if opt.get("quote_ts_epoch") is None:
             qts = opt.get("quote_timestamp_epoch")
             if qts is None:
@@ -941,7 +1069,7 @@ class TradeBuilder:
         intent["planning_only"] = True
         intent["execution_allowed"] = False
         intent["execution_reason"] = "NO_SIGNAL_PLANNING_FALLBACK"
-        return Trade(
+        trade = Trade(
             trade_id=f"{symbol}-PLAN-{ts}",
             timestamp=datetime.now(),
             symbol=symbol,
@@ -976,6 +1104,7 @@ class TradeBuilder:
             reason="NO_SIGNAL_PLANNING_FALLBACK",
             source_flags=dict(intent.get("source_flags") or {}),
         )
+        return self._decorate_trade_context(trade, market_data, float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56)))
 
     def _resolve_index_bid_ask(self, market_data: dict, exec_mode: str) -> dict:
         """
@@ -1652,6 +1781,20 @@ class TradeBuilder:
         strict_live_market_open = bool(market_ctx.mode == "LIVE" and market_ctx.is_market_open)
         profile_mode = "LIVE" if market_ctx.mode == "LIVE" else ("PAPER" if market_ctx.mode == "PAPER" else "SIM")
         runtime_profile = get_runtime_profile(mode=profile_mode)
+        filter_profile_main = get_option_filter_profile(
+            mode=profile_mode,
+            base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.03),
+            base_min_volume_filter=getattr(cfg, "MIN_VOLUME_FILTER", 500),
+        )
+        filter_profile_quick = get_option_filter_profile(
+            mode=profile_mode,
+            base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT_QUICK", getattr(cfg, "MAX_SPREAD_PCT", 0.03)),
+            base_min_volume_filter=getattr(cfg, "MIN_VOLUME_FILTER", 500),
+        )
+        self._scan_reject_counts = {}
+        self._scan_total_candidates = 0
+        self._scan_accepted = 0
+        self._scan_profile_name = str(filter_profile_quick.name if quick_mode else filter_profile_main.name)
         planning_mode = bool(market_ctx.planning_only)
         paper_strict_mode = exec_mode == "PAPER" and bool(getattr(cfg, "PAPER_STRICT_MODE", False))
         planning_relaxed = planning_mode and not paper_strict_mode
@@ -1659,6 +1802,9 @@ class TradeBuilder:
         market_data["market_open"] = bool(market_open)
         market_data["offhours_mode"] = bool(offhours_mode)
         market_data["runtime_profile"] = runtime_profile.to_dict()
+        market_data["option_filter_profile"] = (
+            filter_profile_quick.to_dict() if quick_mode else filter_profile_main.to_dict()
+        )
         pre_soft_veto_codes: list[str] = []
         pre_execution_blockers: list[str] = []
         # Hard disable quick/baseline paths in LIVE mode
@@ -2057,6 +2203,7 @@ class TradeBuilder:
             if not code:
                 return
             option_reject_counts[code] = int(option_reject_counts.get(code, 0)) + 1
+            self._scan_reject_counts[code] = int(self._scan_reject_counts.get(code, 0)) + 1
 
         def _option_reject_summary() -> dict:
             if not option_reject_counts:
@@ -2106,6 +2253,8 @@ class TradeBuilder:
                 if debug_reasons and opt_row_error not in {"type_mismatch"}:
                     rejected.append(self._reject_record(symbol, {}, opt_type, opt_row_error, atr=atr))
                 continue
+            self._scan_total_candidates += 1
+            current_filter_profile = filter_profile_quick if quick_mode else filter_profile_main
             soft_veto_codes = list(orb_soft_veto_codes) + list(pre_soft_veto_codes)
             execution_blockers = list(pre_execution_blockers)
             premium_soft_veto = False
@@ -2241,7 +2390,7 @@ class TradeBuilder:
                     execution_blockers.append("option_volume_missing")
             # Liquidity guard
             spread_pct = (float(opt.get("ask") or 0.0) - float(opt.get("bid") or 0.0)) / opt_ltp if opt_ltp else 1
-            max_spread = getattr(cfg, "MAX_SPREAD_PCT_QUICK", getattr(cfg, "MAX_SPREAD_PCT", 0.015)) if quick_mode else getattr(cfg, "MAX_SPREAD_PCT", 0.015)
+            max_spread = float(current_filter_profile.max_spread_pct)
             toxic_spread = max(float(getattr(cfg, "MAX_SPREAD_PCT_TOXIC", 0.08)), float(max_spread) * 3.0)
             if exec_mode == "PAPER" and getattr(cfg, "PAPER_STRICT_MODE", False):
                 if not opt.get("quote_ok", False):
@@ -2256,7 +2405,8 @@ class TradeBuilder:
                     continue
             if not quick_mode:
                 vol = opt.get("volume", 0)
-                if vol and vol < getattr(cfg, "MIN_VOLUME_FILTER", 500) and not _relax("low_volume"):
+                min_volume_filter = int(max(0, current_filter_profile.min_volume_filter))
+                if vol and vol < min_volume_filter and not _relax("low_volume"):
                     if runtime_profile.suggestion_require_volume:
                         _count_option_reject("low_volume")
                         if debug_reasons:
@@ -2396,6 +2546,10 @@ class TradeBuilder:
 
             # Premium gate: hard only for poor liquidity, otherwise soft-veto.
             min_p, max_p = premium_band_used
+            premium_relax_pct = float(max(0.0, current_filter_profile.premium_relax_pct))
+            if premium_relax_pct > 0:
+                min_p = max(0.0, float(min_p) * max(0.0, 1.0 - premium_relax_pct))
+                max_p = float(max_p) * (1.0 + premium_relax_pct)
             if (opt_ltp < min_p or opt_ltp > max_p) and not _relax("premium"):
                 spread_bad = bool(spread_pct > toxic_spread)
                 volume_bad = bool((opt.get("volume") or 0) < int(getattr(cfg, "MIN_VOLUME_FILTER", 500)) * 0.25)
@@ -2557,6 +2711,7 @@ class TradeBuilder:
                         reason=intent["execution_reason"],
                         source_flags=dict(intent["source_flags"]),
                     )
+                    blocked_trade = self._decorate_trade_context(blocked_trade, market_data, 0.0)
                     candidates.append(blocked_trade)
                     if debug_reasons:
                         rec = self._reject_record(symbol, opt, opt_type, feature_reason, atr=atr)
@@ -2640,7 +2795,13 @@ class TradeBuilder:
 
             # Slippage adjustment for limit
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
-            entry_price = opt["ask"] + slippage
+            base_entry_price = self._entry_price_proxy(opt, side="BUY")
+            if base_entry_price is None or base_entry_price <= 0:
+                _count_option_reject("invalid_entry_proxy")
+                if debug_reasons:
+                    rejected.append(self._reject_record(symbol, opt, opt_type, "invalid_entry_proxy", atr=atr))
+                continue
+            entry_price = base_entry_price + slippage
             entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                 entry_price, side="BUY", quick_mode=quick_mode
             )
@@ -2831,6 +2992,17 @@ class TradeBuilder:
                 "gates_failed": list(dict.fromkeys(execution_blockers)),
                 "exec_allowed": bool(intent["execution_allowed"]),
             }
+            source_flags.update(
+                {
+                    "price_source": opt.get("price_source") or opt.get("quote_source"),
+                    "quote_age_sec": opt.get("quote_age_sec"),
+                    "best_bid": opt.get("best_bid", opt.get("bid")),
+                    "best_ask": opt.get("best_ask", opt.get("ask")),
+                    "mid_price": opt.get("mid_price"),
+                    "mark_price": opt.get("mark_price", opt.get("ltp")),
+                    "entry_price_proxy": base_entry_price,
+                }
+            )
             trade = Trade(
                 trade_id=f"{symbol}-{opt['strike']}-{opt['type']}-{int(datetime.now().timestamp())}",
                 timestamp=datetime.now(),
@@ -2849,6 +3021,14 @@ class TradeBuilder:
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),
                 target=round(target, 2),
+                entry_price_proxy=round(float(base_entry_price), 4) if base_entry_price is not None else None,
+                stop_price=round(stop_loss, 2),
+                target_price=round(target, 2),
+                price_source=opt.get("price_source") or opt.get("quote_source"),
+                quote_age_sec=opt.get("quote_age_sec"),
+                best_bid=opt.get("best_bid", opt.get("bid")),
+                best_ask=opt.get("best_ask", opt.get("ask")),
+                mark_price=opt.get("mark_price", opt.get("ltp")),
                 qty=1,
                 qty_lots=1,
                 qty_units=qty_units,
@@ -2887,6 +3067,7 @@ class TradeBuilder:
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
             )
+            trade = self._decorate_trade_context(trade, market_data, confidence)
             candidates.append(trade)
 
         if debug_reasons and rejected:
@@ -2990,8 +3171,9 @@ class TradeBuilder:
                     ltp_opt = max(min_p, min(max_p, float(underlying_spot) * 0.004))
                     bid = round(ltp_opt * 0.995, 2)
                     ask = round(ltp_opt * 1.005, 2)
+                    mark_price = round((bid + ask) / 2.0, 2)
                     slippage = self.execution.estimate_slippage(bid, ask, 1000)
-                    entry_price = ask + slippage
+                    entry_price = (ask if ask > 0 else mark_price) + slippage
                     entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                         entry_price, side="BUY", quick_mode=True
                     )
@@ -3056,6 +3238,11 @@ class TradeBuilder:
                         spot_source=spot_source,
                         option_ltp_source="synthetic_offhours",
                         chain_source=market_data.get("chain_source") or "synthetic",
+                    )
+                    trade = self._decorate_trade_context(
+                        trade,
+                        market_data,
+                        float(max(0.5, getattr(cfg, "ML_MIN_PROBA", 0.5))),
                     )
                     return trade
                 except Exception:
@@ -3145,6 +3332,7 @@ class TradeBuilder:
                     reason=intent["execution_reason"],
                     source_flags=dict(intent["source_flags"]),
                 )
+                trade = self._decorate_trade_context(trade, market_data, base_conf)
                 if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
                     return trade
                 self._log_blocked_candidate(
@@ -3203,6 +3391,7 @@ class TradeBuilder:
                 pass
 
         # Choose highest-confidence candidate
+        self._scan_accepted = int(len(candidates))
         best_trade = sorted(
             candidates,
             key=lambda t: (1 if getattr(t, "tradable", True) else 0, t.confidence),
@@ -3233,6 +3422,28 @@ class TradeBuilder:
             reject_ctx=dict(self._reject_ctx or {}),
             run_id=(market_data or {}).get("run_id"),
         )
+        try:
+            symbol = str((market_data or {}).get("symbol") or "")
+            reject_ctx = dict(self._reject_ctx or {})
+            reject_counts = dict(self._scan_reject_counts or {})
+            reject_reason = str(reject_ctx.get("reason") or "").strip()
+            if trade is None and reject_reason:
+                reject_counts[reject_reason] = int(reject_counts.get(reject_reason, 0)) + 1
+            accepted = int(self._scan_accepted or (1 if trade is not None else 0))
+            summary = build_scan_summary(
+                symbol=symbol,
+                total_candidates=int(self._scan_total_candidates or 0),
+                accepted=accepted,
+                rejected_by_reason=reject_counts,
+                mode=(market_data or {}).get("market_context", {}).get("mode")
+                if isinstance((market_data or {}).get("market_context"), dict)
+                else str(getattr(cfg, "EXECUTION_MODE", "SIM")),
+                profile_name=str(self._scan_profile_name or ""),
+            )
+            self._last_scan_summary = dict(summary)
+            emit_scan_summary(summary)
+        except Exception:
+            pass
         return trade, trace
 
     def build_zero_hero(self, market_data, debug_reasons=False):
@@ -3397,7 +3608,8 @@ class TradeBuilder:
 
         bid = float(opt.get("bid") or 0.0)
         ask = float(opt.get("ask") or 0.0)
-        entry_price = float(ask) if ask and ask > 0 else premium
+        entry_proxy = self._entry_price_proxy(opt, side="BUY")
+        entry_price = float(entry_proxy) if entry_proxy and entry_proxy > 0 else premium
         slippage = self.execution.estimate_slippage(bid, ask, opt.get("volume", 0))
         if slippage:
             entry_price = entry_price + slippage
@@ -3495,6 +3707,7 @@ class TradeBuilder:
             option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
             chain_source=market_data.get("chain_source") or opt.get("chain_source"),
         )
+        trade = self._decorate_trade_context(trade, market_data, float(chosen["confidence"]))
 
         trade.source_flags.update(
             {
@@ -3618,7 +3831,10 @@ class TradeBuilder:
                 continue
 
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
-            entry_price = opt["ask"] + slippage
+            base_entry_price = self._entry_price_proxy(opt, side="BUY")
+            if base_entry_price is None or base_entry_price <= 0:
+                continue
+            entry_price = base_entry_price + slippage
             entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                 entry_price, side="BUY", quick_mode=True
             )
@@ -3720,6 +3936,7 @@ class TradeBuilder:
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
             )
+            trade = self._decorate_trade_context(trade, market_data, confidence)
             candidates.append(trade)
         if not candidates:
             return None
@@ -4077,7 +4294,10 @@ class TradeBuilder:
             if confidence < getattr(cfg, "SCALP_MIN_PROBA", 0.58):
                 continue
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
-            entry_price = opt["ask"] + slippage
+            base_entry_price = self._entry_price_proxy(opt, side="BUY")
+            if base_entry_price is None or base_entry_price <= 0:
+                continue
+            entry_price = base_entry_price + slippage
             entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                 entry_price, side="BUY", quick_mode=True
             )
@@ -4148,6 +4368,7 @@ class TradeBuilder:
                 reason=intent["execution_reason"],
                 source_flags=dict(intent["source_flags"]),
             )
+            trade = self._decorate_trade_context(trade, market_data, confidence)
             candidates.append(trade)
         if not candidates:
             return None

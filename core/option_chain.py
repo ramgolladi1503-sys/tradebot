@@ -9,9 +9,93 @@ from core.market_calendar import (
     next_expiry_after,
 )
 from core.market_context import derive_market_context
+from config.profile import get_option_filter_profile
 from core.kite_client import kite_client
 from core.greeks import implied_vol, greeks
 from core.time_utils import compute_age_sec, now_utc_epoch
+
+
+def _to_pos_float(value):
+    try:
+        out = float(value)
+    except Exception:
+        return None
+    if out <= 0:
+        return None
+    return out
+
+
+def _top_depth_price(depth: dict, side: str):
+    if not isinstance(depth, dict):
+        return None
+    book = depth.get(side)
+    if isinstance(book, list) and book:
+        top = book[0]
+        if isinstance(top, dict):
+            return _to_pos_float(top.get("price"))
+    return None
+
+
+def _derive_option_price_fields(last_price, best_bid, best_ask, quote_age_sec, max_quote_age_sec):
+    last_val = _to_pos_float(last_price)
+    bid_val = _to_pos_float(best_bid)
+    ask_val = _to_pos_float(best_ask)
+    mid_val = None
+    if bid_val is not None and ask_val is not None:
+        mid_val = (bid_val + ask_val) / 2.0
+    stale_quote = quote_age_sec is None or float(quote_age_sec) > float(max_quote_age_sec)
+    outside_tol = float(getattr(cfg, "OPTION_LAST_OUTSIDE_BAND_PCT", 0.01))
+    outside_band = False
+    if (
+        last_val is not None
+        and bid_val is not None
+        and ask_val is not None
+    ):
+        lo = min(bid_val, ask_val) * max(0.0, 1.0 - outside_tol)
+        hi = max(bid_val, ask_val) * (1.0 + outside_tol)
+        outside_band = bool(last_val < lo or last_val > hi)
+
+    if mid_val is not None and (outside_band or stale_quote or last_val is None):
+        mark_price = mid_val
+        price_source = "mid"
+    elif last_val is not None:
+        mark_price = last_val
+        price_source = "last"
+    elif ask_val is not None:
+        mark_price = ask_val
+        price_source = "ask"
+    elif bid_val is not None:
+        mark_price = bid_val
+        price_source = "bid"
+    elif mid_val is not None:
+        mark_price = mid_val
+        price_source = "mid"
+    else:
+        mark_price = 0.0
+        price_source = "none"
+
+    entry_buy = ask_val if ask_val is not None else mark_price
+    entry_sell = bid_val if bid_val is not None else mark_price
+    spread_pct = None
+    if (
+        bid_val is not None
+        and ask_val is not None
+        and mark_price is not None
+        and mark_price > 0
+    ):
+        spread_pct = (ask_val - bid_val) / mark_price
+    return {
+        "last_price": last_val,
+        "best_bid": bid_val,
+        "best_ask": ask_val,
+        "mid_price": mid_val,
+        "mark_price": mark_price,
+        "price_source": price_source,
+        "entry_price_proxy_buy": entry_buy,
+        "entry_price_proxy_sell": entry_sell,
+        "spread_pct": spread_pct,
+    }
+
 
 def _infer_atm_strike(ltp, step):
     if not ltp or step <= 0:
@@ -192,6 +276,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         offhours_mode = ctx.mode == "OFFHOURS"
         strict_live_market_open = bool(ctx.mode == "LIVE")
         synthetic_chain_source = "synthetic_offhours" if (ctx.mode != "LIVE") else "synthetic"
+        filter_profile = get_option_filter_profile(mode=ctx.mode, base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.03))
 
         # Keep strict behavior only during live market hours.
         if strict_live_market_open and force_synthetic:
@@ -315,17 +400,17 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             for inst in opt_rows:
                 ts = f"{exchange}:{inst['tradingsymbol']}"
                 q = quotes.get(ts, {})
-                ltp_opt = q.get("last_price", 0) or 0
+                ltp_opt_raw = q.get("last_price", 0) or 0
                 quote_source = "live"
                 quote_live = True
-                if not ltp_opt:
+                if not ltp_opt_raw:
                     quote_source = "missing"
                     quote_live = False
                     if getattr(cfg, "REQUIRE_LIVE_OPTION_QUOTES", False):
                         continue
                 depth = q.get("depth") or {}
-                bid = depth.get("buy", [{}])[0].get("price")
-                ask = depth.get("sell", [{}])[0].get("price")
+                bid = _top_depth_price(depth, "buy")
+                ask = _top_depth_price(depth, "sell")
                 depth_ok = bool(bid) and bool(ask)
                 if not depth_ok and quote_source == "live":
                     quote_source = "no_depth"
@@ -353,16 +438,27 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
                 else:
                     quote_age_sec = 10**9
+                price_fields = _derive_option_price_fields(
+                    ltp_opt_raw,
+                    bid,
+                    ask,
+                    quote_age_sec,
+                    getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8),
+                )
+                ltp_opt = float(price_fields.get("mark_price") or 0.0)
                 # quote_ok requires bid/ask and freshness under strict live mode
                 quote_ok = bool(ltp_opt > 0 and bid and ask)
                 if getattr(cfg, "STRICT_LIVE_QUOTES", True) and quote_age_sec is not None:
                     if quote_age_sec > getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8):
                         quote_ok = False
-                spread_pct = None
-                if bid and ask:
-                    base = ltp_opt or ((bid + ask) / 2.0)
-                    if base:
-                        spread_pct = (ask - bid) / base
+                spread_pct = price_fields.get("spread_pct")
+                quote_tradable = bool(
+                    price_fields.get("best_bid") is not None
+                    and price_fields.get("best_ask") is not None
+                    and quote_age_sec is not None
+                    and float(quote_age_sec) <= float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8))
+                    and (spread_pct is not None and float(spread_pct) <= float(filter_profile.max_spread_pct))
+                )
                 volume = q.get("volume", 0)
                 oi = q.get("oi", 0)
                 dte = max((expiry_date - date.today()).days, 1)
@@ -382,8 +478,16 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     "strike": inst["strike"],
                     "type": inst.get("instrument_type"),
                     "ltp": ltp_opt,
-                    "bid": bid,
-                    "ask": ask,
+                    "last_price": price_fields.get("last_price"),
+                    "best_bid": price_fields.get("best_bid"),
+                    "best_ask": price_fields.get("best_ask"),
+                    "mid_price": price_fields.get("mid_price"),
+                    "mark_price": price_fields.get("mark_price"),
+                    "entry_price_proxy_buy": price_fields.get("entry_price_proxy_buy"),
+                    "entry_price_proxy_sell": price_fields.get("entry_price_proxy_sell"),
+                    "price_source": price_fields.get("price_source"),
+                    "bid": price_fields.get("best_bid"),
+                    "ask": price_fields.get("best_ask"),
                     "bid_qty": depth.get("buy", [{}])[0].get("quantity") if depth else None,
                     "ask_qty": depth.get("sell", [{}])[0].get("quantity") if depth else None,
                     "volume": volume,
@@ -396,6 +500,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     "quote_ts_epoch": quote_ts_epoch,
                     "quote_age_sec": quote_age_sec,
                     "spread_pct": spread_pct,
+                    "quote_tradable": quote_tradable,
+                    "filter_profile": str(filter_profile.name),
                     "depth_ok": depth_ok,
                     "instrument_token": inst.get("instrument_token"),
                     "iv": vol,
@@ -443,14 +549,29 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 ltp_opt = max(min_prem, min(max_prem, base * (1 + (abs(strike - atm) / (10 * step)))))
                 bid = round(ltp_opt * 0.995, 2)
                 ask = round(ltp_opt * 1.005, 2)
+                price_fields = _derive_option_price_fields(
+                    ltp_opt,
+                    bid,
+                    ask,
+                    quote_age_sec=0.0,
+                    max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8),
+                )
                 chain.append({
                         "symbol": symbol,
                         "tradingsymbol": None,
                         "strike": strike,
                         "type": opt_type,
-                        "ltp": round(ltp_opt, 2),
-                        "bid": bid,
-                        "ask": ask,
+                        "ltp": round(float(price_fields.get("mark_price") or ltp_opt), 2),
+                        "last_price": round(float(price_fields.get("last_price") or ltp_opt), 2),
+                        "best_bid": price_fields.get("best_bid"),
+                        "best_ask": price_fields.get("best_ask"),
+                        "mid_price": price_fields.get("mid_price"),
+                        "mark_price": price_fields.get("mark_price"),
+                        "entry_price_proxy_buy": price_fields.get("entry_price_proxy_buy"),
+                        "entry_price_proxy_sell": price_fields.get("entry_price_proxy_sell"),
+                        "price_source": price_fields.get("price_source"),
+                        "bid": price_fields.get("best_bid"),
+                        "ask": price_fields.get("best_ask"),
                         "volume": 1000,
                         "oi": 0,
                         "quote_ok": True,
@@ -459,6 +580,12 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "quote_live": False,
                         "quote_ts_epoch": synthetic_quote_epoch,
                         "quote_age_sec": 0.0,
+                        "quote_tradable": bool(
+                            price_fields.get("best_bid") is not None
+                            and price_fields.get("best_ask") is not None
+                            and (price_fields.get("spread_pct") is not None and float(price_fields.get("spread_pct")) <= float(filter_profile.max_spread_pct))
+                        ),
+                        "filter_profile": str(filter_profile.name),
                         "chain_source": synthetic_chain_source,
                         "instrument_token": None,
                         "moneyness": 0,
@@ -490,20 +617,39 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             strikes = [atm + i * step for i in range(-strikes_around, strikes_around + 1)]
             chain = []
             synthetic_quote_epoch = now_utc_epoch()
+            fallback_filter_profile = get_option_filter_profile(
+                mode=str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+                base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.03),
+            )
             for strike in strikes:
                 for opt_type in ("CE", "PE"):
                     base = max(min_prem, min(max_prem, (ltp * 0.004)))
                     ltp_opt = max(min_prem, min(max_prem, base * (1 + (abs(strike - atm) / (10 * step)))))
                     bid = round(ltp_opt * 0.995, 2)
                     ask = round(ltp_opt * 1.005, 2)
+                    price_fields = _derive_option_price_fields(
+                        ltp_opt,
+                        bid,
+                        ask,
+                        quote_age_sec=0.0,
+                        max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8),
+                    )
                     chain.append({
                         "symbol": symbol,
                         "tradingsymbol": None,
                         "strike": strike,
                         "type": opt_type,
-                        "ltp": round(ltp_opt, 2),
-                        "bid": bid,
-                        "ask": ask,
+                        "ltp": round(float(price_fields.get("mark_price") or ltp_opt), 2),
+                        "last_price": round(float(price_fields.get("last_price") or ltp_opt), 2),
+                        "best_bid": price_fields.get("best_bid"),
+                        "best_ask": price_fields.get("best_ask"),
+                        "mid_price": price_fields.get("mid_price"),
+                        "mark_price": price_fields.get("mark_price"),
+                        "entry_price_proxy_buy": price_fields.get("entry_price_proxy_buy"),
+                        "entry_price_proxy_sell": price_fields.get("entry_price_proxy_sell"),
+                        "price_source": price_fields.get("price_source"),
+                        "bid": price_fields.get("best_bid"),
+                        "ask": price_fields.get("best_ask"),
                         "volume": 1000,
                         "oi": 0,
                         "quote_ok": True,
@@ -512,6 +658,12 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         "quote_live": False,
                         "quote_ts_epoch": synthetic_quote_epoch,
                         "quote_age_sec": 0.0,
+                        "quote_tradable": bool(
+                            price_fields.get("best_bid") is not None
+                            and price_fields.get("best_ask") is not None
+                            and (price_fields.get("spread_pct") is not None and float(price_fields.get("spread_pct")) <= float(fallback_filter_profile.max_spread_pct))
+                        ),
+                        "filter_profile": str(fallback_filter_profile.name),
                         "chain_source": synthetic_chain_source,
                         "instrument_token": None,
                         "moneyness": 0,
@@ -524,6 +676,6 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             chain = _annotate_iv_oi(chain)
             _write_chain_snapshot(chain, symbol=symbol)
             return chain
-        except Exception:
-            print(f"Option chain error: {e}")
+        except Exception as inner_exc:
+            print(f"Option chain error: {e} | fallback_error: {inner_exc}")
             return []
