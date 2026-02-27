@@ -1,3 +1,4 @@
+import core.runtime_guard
 from core.orchestrator import Orchestrator
 from core.readiness_gate import run_readiness_check
 from core.audit_log import append_event as audit_append
