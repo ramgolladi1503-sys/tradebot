@@ -1,5 +1,8 @@
 import os
 import time
+import tempfile
+import threading
+import logging
 import joblib
 import numpy as np
 import pandas as pd
@@ -18,6 +21,7 @@ from core.model_registry import get_active_entry, get_shadow_entry
 
 _SEGMENT_FIELDS = ["seg_regime", "seg_bucket", "seg_expiry", "seg_vol_q"]
 _ALT_SEGMENT_FIELDS = ["regime", "time_bucket", "is_expiry", "vol_quartile"]
+logger = logging.getLogger(__name__)
 
 
 def _safe_float(val, default=None):
@@ -83,7 +87,35 @@ class TradePredictor:
                     "[TradePredictor][DEGRADED] No model found and xgboost runtime unavailable. "
                     "Initialized DummyClassifier."
                 )
+        self._model_lock = threading.RLock()
+        self._online_update_lock = threading.Lock()
+        self._online_update_thread = None
+        self._online_update_state = {
+            "running": False,
+            "duration_ms": None,
+            "success": None,
+            "failure": None,
+            "last_started_epoch_ms": None,
+            "last_completed_epoch_ms": None,
+        }
         self.feature_contract = self._build_feature_contract()
+
+    def _ensure_runtime_state(self):
+        if not hasattr(self, "_model_lock"):
+            self._model_lock = threading.RLock()
+        if not hasattr(self, "_online_update_lock"):
+            self._online_update_lock = threading.Lock()
+        if not hasattr(self, "_online_update_thread"):
+            self._online_update_thread = None
+        if not hasattr(self, "_online_update_state"):
+            self._online_update_state = {
+                "running": False,
+                "duration_ms": None,
+                "success": None,
+                "failure": None,
+                "last_started_epoch_ms": None,
+                "last_completed_epoch_ms": None,
+            }
 
     def _new_model(self):
         if _XGBClassifier is not None:
@@ -152,12 +184,27 @@ class TradePredictor:
 
     def save(self, path=None):
         out_path = path or self.model_path
-        payload = {
-            "models": self.models,
-            "features": self.feature_list,
-            "meta": self.meta,
-        }
-        joblib.dump(payload, out_path)
+        self._ensure_runtime_state()
+        with self._model_lock:
+            payload = {
+                "models": self.models,
+                "features": self.feature_list,
+                "meta": self.meta,
+            }
+        out_file = str(out_path)
+        out_dir = os.path.dirname(out_file) or "."
+        os.makedirs(out_dir, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(prefix=".model_tmp_", suffix=".pkl", dir=out_dir)
+        os.close(fd)
+        try:
+            joblib.dump(payload, tmp_path)
+            os.replace(tmp_path, out_file)
+        finally:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
         return out_path
 
     def _segment_key(self, context=None):
@@ -197,23 +244,29 @@ class TradePredictor:
         return ctx
 
     def _select_model(self, features: pd.DataFrame, context=None):
+        self._ensure_runtime_state()
+        with self._model_lock:
+            models = dict(self.models or {})
         ctx = context or self._extract_context(features)
         key = self._segment_key(ctx)
-        if key and key in self.models:
-            return self.models[key], key
-        if "GLOBAL" in self.models:
-            return self.models["GLOBAL"], "GLOBAL"
-        if self.models:
-            k = next(iter(self.models.keys()))
-            return self.models[k], k
+        if key and key in models:
+            return models[key], key
+        if "GLOBAL" in models:
+            return models["GLOBAL"], "GLOBAL"
+        if models:
+            k = next(iter(models.keys()))
+            return models[k], k
         # Fallback
         m = self._new_model()
-        self.models = {"GLOBAL": m}
+        with self._model_lock:
+            self.models = {"GLOBAL": m}
         return m, "GLOBAL"
 
     def align_features(self, features: pd.DataFrame, model=None) -> pd.DataFrame:
         features = features.copy()
-        expected = self.feature_list
+        self._ensure_runtime_state()
+        with self._model_lock:
+            expected = list(self.feature_list) if self.feature_list is not None else None
         try:
             if expected is None and model is not None:
                 expected = getattr(model, "feature_names_in_", None)
@@ -236,7 +289,9 @@ class TradePredictor:
 
     def align_features_shadow(self, features: pd.DataFrame, model=None) -> pd.DataFrame:
         features = features.copy()
-        expected = self.shadow_feature_list
+        self._ensure_runtime_state()
+        with self._model_lock:
+            expected = list(self.shadow_feature_list) if self.shadow_feature_list is not None else None
         try:
             if expected is None and model is not None:
                 expected = getattr(model, "feature_names_in_", None)
@@ -308,16 +363,19 @@ class TradePredictor:
         return float(max(0.0, min(1.0, calibrated)))
 
     def _select_shadow_model(self, features: pd.DataFrame, context=None):
-        if not self.shadow_models:
+        self._ensure_runtime_state()
+        with self._model_lock:
+            shadow_models = dict(self.shadow_models or {})
+        if not shadow_models:
             return None, None
         ctx = context or self._extract_context(features)
         key = self._segment_key(ctx)
-        if key and key in self.shadow_models:
-            return self.shadow_models[key], key
-        if "GLOBAL" in self.shadow_models:
-            return self.shadow_models["GLOBAL"], "GLOBAL"
-        k = next(iter(self.shadow_models.keys()))
-        return self.shadow_models[k], k
+        if key and key in shadow_models:
+            return shadow_models[key], key
+        if "GLOBAL" in shadow_models:
+            return shadow_models["GLOBAL"], "GLOBAL"
+        k = next(iter(shadow_models.keys()))
+        return shadow_models[k], k
 
     def predict_confidence_shadow(self, features: pd.DataFrame, context=None) -> float | None:
         try:
@@ -345,38 +403,33 @@ class TradePredictor:
     def train_new_model(self, trade_history_df: pd.DataFrame, target_col="actual"):
         self.train_segmented(trade_history_df, target_col=target_col, segment_cols=None)
 
-    def train_segmented(self, df: pd.DataFrame, target_col="target", segment_cols=None, min_samples=None):
+    def _train_segmented_payload(self, df: pd.DataFrame, target_col="target", segment_cols=None, min_samples=None):
         if df is None or df.empty:
-            print("[TradePredictor] No data to train on.")
             return None
         segment_cols = segment_cols or []
         min_samples = min_samples or getattr(cfg, "ML_SEGMENT_MIN_SAMPLES", 200)
 
-        # Prepare features
         drop_cols = [target_col, "predicted", "pl", "sample_weight"]
         drop_cols += segment_cols
         X = df.drop(columns=drop_cols, errors="ignore")
         y = df[target_col]
 
         if X.empty or y.empty:
-            print("[TradePredictor] No data to train on.")
             return None
 
-        self.feature_list = list(X.columns)
-
-        # Train global model
+        feature_list = list(X.columns)
         global_model = self._new_model()
         global_model.fit(X, y)
         models = {"GLOBAL": global_model}
         meta = {
             "trained_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "segments": {},
-            "features": self.feature_list,
+            "features": feature_list,
         }
 
-        # Train segment models (keyed to match _segment_key format)
         if segment_cols:
-            df = df.copy()
+            df_seg = df.copy()
+
             def _row_key(row):
                 ctx = {
                     "seg_regime": row.get("seg_regime"),
@@ -385,25 +438,58 @@ class TradePredictor:
                     "seg_vol_q": row.get("seg_vol_q"),
                 }
                 return self._segment_key(ctx)
-            df["__seg_key"] = df.apply(_row_key, axis=1)
-            for seg_key, grp in df.groupby("__seg_key"):
+
+            df_seg["__seg_key"] = df_seg.apply(_row_key, axis=1)
+            for seg_key, grp in df_seg.groupby("__seg_key"):
                 try:
                     n = len(grp)
                     if n < min_samples or not seg_key:
                         continue
                     Xs = grp.drop(columns=drop_cols + ["__seg_key"], errors="ignore")
                     ys = grp[target_col]
+                    if Xs.empty or ys.empty:
+                        continue
                     model = self._new_model()
                     model.fit(Xs, ys)
                     models[seg_key] = model
                     meta["segments"][seg_key] = {"n": n}
                 except Exception:
                     continue
+        return {"models": models, "features": feature_list, "meta": meta}
 
-        self.models = models
-        self.meta = meta
-        self.feature_contract = self._build_feature_contract()
-        return meta
+    def _validate_payload_predict(self, payload: dict, df: pd.DataFrame, target_col: str):
+        models = payload.get("models") or {}
+        if not models:
+            raise ValueError("trained_models_empty")
+        model = models.get("GLOBAL") or next(iter(models.values()))
+        drop_cols = [target_col, "predicted", "pl", "sample_weight"]
+        X = df.drop(columns=drop_cols, errors="ignore")
+        if X.empty:
+            raise ValueError("validation_features_empty")
+        feat = X.head(1).copy()
+        expected = payload.get("features") or []
+        if expected:
+            for col in expected:
+                if col not in feat.columns:
+                    feat[col] = 0.0
+            feat = feat[list(expected)]
+        feat = feat.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        _ = model.predict(feat)
+
+    def train_segmented(self, df: pd.DataFrame, target_col="target", segment_cols=None, min_samples=None):
+        payload = self._train_segmented_payload(
+            df, target_col=target_col, segment_cols=segment_cols, min_samples=min_samples
+        )
+        if payload is None:
+            print("[TradePredictor] No data to train on.")
+            return None
+        self._ensure_runtime_state()
+        with self._model_lock:
+            self.models = payload.get("models") or {"GLOBAL": self._new_model()}
+            self.feature_list = payload.get("features")
+            self.meta = payload.get("meta") or {}
+            self.feature_contract = self._build_feature_contract()
+            return self.meta
 
     def evaluate(self, df: pd.DataFrame, target_col="target", segment_cols=None):
         if df is None or df.empty:
@@ -430,10 +516,118 @@ class TradePredictor:
         return {"acc": acc, "brier": brier}
 
     def update_model_online(self, new_trades_df: pd.DataFrame, target_col="actual"):
+        self._ensure_runtime_state()
+        if new_trades_df is None or new_trades_df.empty:
+            logger.info("online_model_update skipped: empty_dataset")
+            return {"started": False, "completed": True, "success": False, "reason": "empty_dataset"}
+
+        async_enabled = bool(getattr(cfg, "ML_ONLINE_UPDATE_ASYNC", True))
+        max_block_sec = float(getattr(cfg, "ML_ONLINE_UPDATE_MAX_BLOCK_SEC", 0.2) or 0.2)
+
+        def _worker():
+            start = time.perf_counter()
+            failure = None
+            success = False
+            try:
+                payload = self._train_segmented_payload(
+                    new_trades_df,
+                    target_col=target_col,
+                    segment_cols=None,
+                    min_samples=getattr(cfg, "ML_SEGMENT_MIN_SAMPLES", 200),
+                )
+                if payload is None:
+                    raise ValueError("no_training_payload")
+                self._validate_payload_predict(payload, new_trades_df, target_col=target_col)
+                with self._model_lock:
+                    self.models = payload.get("models") or {"GLOBAL": self._new_model()}
+                    self.feature_list = payload.get("features")
+                    self.meta = payload.get("meta") or {}
+                    self.feature_contract = self._build_feature_contract()
+                try:
+                    self.save(self.model_path)
+                except Exception as exc:
+                    logger.warning("online_model_update save_failed err=%s", f"{type(exc).__name__}:{exc}")
+                success = True
+            except Exception as exc:
+                failure = f"{type(exc).__name__}:{exc}"
+                logger.exception("online_model_update failed")
+            finally:
+                duration_ms = int((time.perf_counter() - start) * 1000.0)
+                with self._online_update_lock:
+                    self._online_update_state.update(
+                        {
+                            "running": False,
+                            "duration_ms": duration_ms,
+                            "success": success,
+                            "failure": failure,
+                            "last_completed_epoch_ms": int(time.time() * 1000.0),
+                        }
+                    )
+                logger.info(
+                    "online_model_update completed duration_ms=%s success=%s failure=%s",
+                    duration_ms,
+                    success,
+                    failure or "",
+                )
+
+        with self._online_update_lock:
+            thread = self._online_update_thread
+            if thread is not None and thread.is_alive():
+                logger.info("online_model_update skipped: already_running")
+                return {"started": False, "completed": False, "success": None, "reason": "already_running"}
+            self._online_update_state.update(
+                {
+                    "running": True,
+                    "duration_ms": None,
+                    "success": None,
+                    "failure": None,
+                    "last_started_epoch_ms": int(time.time() * 1000.0),
+                }
+            )
+            thread = threading.Thread(
+                target=_worker,
+                name="trade-predictor-online-update",
+                daemon=True,
+            )
+            self._online_update_thread = thread
+
+        logger.info("online_model_update started async=%s max_block_sec=%.3f", async_enabled, max_block_sec)
         print("[TradePredictor] Online model update started...")
-        self.train_new_model(new_trades_df, target_col=target_col)
-        try:
-            self.save(self.model_path)
-        except Exception as exc:
-            print(f"[TradePredictor][WARN] Online update save failed: {exc}")
-        print("[TradePredictor] Online model update complete.")
+
+        if async_enabled:
+            thread.start()
+            if max_block_sec > 0:
+                thread.join(timeout=max_block_sec)
+            completed = not thread.is_alive()
+            if completed:
+                with self._online_update_lock:
+                    state = dict(self._online_update_state)
+                return {
+                    "started": True,
+                    "completed": True,
+                    "success": bool(state.get("success")),
+                    "duration_ms": state.get("duration_ms"),
+                    "failure": state.get("failure"),
+                }
+            return {"started": True, "completed": False, "success": None}
+
+        # Synchronous bounded path (explicitly configured)
+        thread.start()
+        thread.join()
+        with self._online_update_lock:
+            state = dict(self._online_update_state)
+        return {
+            "started": True,
+            "completed": True,
+            "success": bool(state.get("success")),
+            "duration_ms": state.get("duration_ms"),
+            "failure": state.get("failure"),
+        }
+
+    def wait_for_online_update(self, timeout_sec: float = 5.0) -> bool:
+        self._ensure_runtime_state()
+        thread = self._online_update_thread
+        if thread is None:
+            return True
+        thread.join(timeout=max(0.0, float(timeout_sec)))
+        return not thread.is_alive()

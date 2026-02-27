@@ -90,6 +90,22 @@ class RuntimeProfile:
         }
 
 
+@dataclass(frozen=True)
+class OptionFilterProfile:
+    name: str
+    max_spread_pct: float
+    min_volume_filter: int
+    premium_relax_pct: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "max_spread_pct": float(self.max_spread_pct),
+            "min_volume_filter": int(self.min_volume_filter),
+            "premium_relax_pct": float(self.premium_relax_pct),
+        }
+
+
 def get_runtime_profile(*, mode: str | None = None) -> RuntimeProfile:
     resolved_mode = resolve_trading_mode(mode)
 
@@ -146,4 +162,41 @@ def get_runtime_profile(*, mode: str | None = None) -> RuntimeProfile:
         orb_hard_conflict_live=False,
         best_trade_caps_enabled=_env_bool("SIM_BEST_TRADE_CAPS_ENABLE", False),
         price_confirm_enabled=_env_bool("SIM_PRICE_CONFIRM_ENABLE", False),
+    )
+
+
+def get_option_filter_profile(
+    *,
+    mode: str | None = None,
+    base_max_spread_pct: float | None = None,
+    base_min_volume_filter: int | None = None,
+) -> OptionFilterProfile:
+    resolved_mode = resolve_trading_mode(mode)
+    spread_base = float(
+        base_max_spread_pct
+        if base_max_spread_pct is not None
+        else getattr(cfg, "MAX_SPREAD_PCT", 0.015)
+    )
+    volume_base = int(
+        base_min_volume_filter
+        if base_min_volume_filter is not None
+        else getattr(cfg, "MIN_VOLUME_FILTER", 500)
+    )
+
+    if resolved_mode == "LIVE":
+        return OptionFilterProfile(
+            name="LIVE_STRICT",
+            max_spread_pct=max(0.0, spread_base),
+            min_volume_filter=max(0, volume_base),
+            premium_relax_pct=0.0,
+        )
+
+    spread_mult = float(getattr(cfg, "PAPER_RELAXED_SPREAD_MULT", 1.25))
+    volume_mult = float(getattr(cfg, "PAPER_RELAXED_MIN_VOLUME_MULT", 0.60))
+    premium_relax_pct = float(getattr(cfg, "PAPER_RELAXED_PREMIUM_RELAX_PCT", 0.20))
+    return OptionFilterProfile(
+        name="PAPER_RELAXED",
+        max_spread_pct=max(0.0, spread_base * max(1.0, spread_mult)),
+        min_volume_filter=max(0, int(round(volume_base * max(0.0, min(1.0, volume_mult))))),
+        premium_relax_pct=max(0.0, premium_relax_pct),
     )

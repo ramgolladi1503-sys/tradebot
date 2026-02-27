@@ -189,11 +189,39 @@ PAPER_PILOT_UNLOCK_MAX_RISK = float(os.getenv("PAPER_PILOT_UNLOCK_MAX_RISK", "15
 LIVE_FAIL_CLOSED_ON_MARKET_CLOSED = os.getenv("LIVE_FAIL_CLOSED_ON_MARKET_CLOSED", "true").lower() == "true"
 ENFORCE_EXECUTION_ALLOWED_FLAG = os.getenv("ENFORCE_EXECUTION_ALLOWED_FLAG", "true").lower() == "true"
 EXECUTION_GUARD_ALLOW_PLANNING = os.getenv("EXECUTION_GUARD_ALLOW_PLANNING", "true").lower() == "true"
+ACTIVATE_SELL_RULE = os.getenv("ACTIVATE_SELL_RULE", "LE").upper()
 
 # -------------------------------
 # Suggested trade target fallback
 # -------------------------------
 TARGET_RR_DEFAULT = float(os.getenv("TARGET_RR_DEFAULT", "1.5"))
+
+# -------------------------------
+# Option entry validation
+# -------------------------------
+OPTION_LTP_SLA_SEC = float(os.getenv("OPTION_LTP_SLA_SEC", "2.0"))
+LTP_SLA_SECONDS = float(os.getenv("LTP_SLA_SECONDS", str(OPTION_LTP_SLA_SEC)))
+OPTION_ENTRY_MISMATCH_PCT = float(os.getenv("OPTION_ENTRY_MISMATCH_PCT", "0.03"))
+OPTION_ENTRY_REQUIRE_LIVE = os.getenv("OPTION_ENTRY_REQUIRE_LIVE", "true").lower() == "true"
+
+# -------------------------------
+# Trade deduplication controls
+# -------------------------------
+TRADE_DEDUP_WINDOW_SEC = int(os.getenv("TRADE_DEDUP_WINDOW_SEC", "600"))
+TRADE_DEDUP_PRICE_TOL = float(os.getenv("TRADE_DEDUP_PRICE_TOL", "0.05"))
+
+# -------------------------------
+# Trade permission / confidence dampening
+# -------------------------------
+PERMISSION_IMPULSE_ENABLE = os.getenv("PERMISSION_IMPULSE_ENABLE", "true").lower() == "true"
+PERMISSION_IMPULSE_BODY_PCT = float(os.getenv("PERMISSION_IMPULSE_BODY_PCT", "0.006"))
+PERMISSION_IMPULSE_ATR_MULT = float(os.getenv("PERMISSION_IMPULSE_ATR_MULT", "1.0"))
+PERMISSION_UNKNOWN_REGIME_MAX_PER_SYMBOL = int(
+    os.getenv("PERMISSION_UNKNOWN_REGIME_MAX_PER_SYMBOL", "2")
+)
+PERMISSION_UNKNOWN_REGIME_MAX_TOTAL = int(
+    os.getenv("PERMISSION_UNKNOWN_REGIME_MAX_TOTAL", "6")
+)
 
 # -------------------------------
 # Upstox deep-linking (manual confirmation only)
@@ -252,6 +280,7 @@ STRICT_LIVE_QUOTES = os.getenv("STRICT_LIVE_QUOTES", "true").lower() == "true"
 PAPER_STRICT_QUOTES = os.getenv("PAPER_STRICT_QUOTES", "true").lower() == "true"
 MAX_LTP_AGE_SEC = float(os.getenv("MAX_LTP_AGE_SEC", "8"))
 MAX_CANDLE_AGE_SEC = float(os.getenv("MAX_CANDLE_AGE_SEC", "120"))
+OPTION_LAST_OUTSIDE_BAND_PCT = float(os.getenv("OPTION_LAST_OUTSIDE_BAND_PCT", "0.01"))
 OFFHOURS_MAX_OPTION_QUOTE_AGE_SEC = float(
     os.getenv("OFFHOURS_MAX_OPTION_QUOTE_AGE_SEC", str(max(MAX_OPTION_QUOTE_AGE_SEC, 60.0)))
 )
@@ -401,6 +430,11 @@ MAX_HOLD_MINUTES = 60
 MIN_VOLUME_FILTER = 500
 MAX_SPREAD_PCT = 0.03
 MAX_SPREAD_PCT_QUICK = float(os.getenv("MAX_SPREAD_PCT_QUICK", "0.04"))
+# Option filter profiles
+PAPER_RELAXED_SPREAD_MULT = float(os.getenv("PAPER_RELAXED_SPREAD_MULT", "1.25"))
+PAPER_RELAXED_MIN_VOLUME_MULT = float(os.getenv("PAPER_RELAXED_MIN_VOLUME_MULT", "0.60"))
+PAPER_RELAXED_PREMIUM_RELAX_PCT = float(os.getenv("PAPER_RELAXED_PREMIUM_RELAX_PCT", "0.20"))
+UI_REFRESH_SEC = float(os.getenv("UI_REFRESH_SEC", "2.0"))
 QUOTE_FALLBACK_SPREAD_PCT = float(os.getenv("QUOTE_FALLBACK_SPREAD_PCT", "0.002"))
 NEWS_HALF_LIFE_HOURS = float(os.getenv("NEWS_HALF_LIFE_HOURS", "6.0"))
 NEWS_SHOCK_EVENT_THRESHOLD = float(os.getenv("NEWS_SHOCK_EVENT_THRESHOLD", "0.4"))
@@ -801,6 +835,8 @@ SCALP_STOP_ATR = 0.3
 SCALP_MAX_HOLD_MINUTES = 3
 ML_MODEL_PATH = "models/xgb_live_model.pkl"
 ML_CHALLENGER_MODEL_PATH = os.getenv("ML_CHALLENGER_MODEL_PATH", "models/xgb_live_model_challenger.pkl")
+ML_ONLINE_UPDATE_ASYNC = os.getenv("ML_ONLINE_UPDATE_ASYNC", "true").lower() == "true"
+ML_ONLINE_UPDATE_MAX_BLOCK_SEC = float(os.getenv("ML_ONLINE_UPDATE_MAX_BLOCK_SEC", "0.2"))
 ML_TRAIN_DATA_PATH = os.getenv("ML_TRAIN_DATA_PATH", f"{DATA_ROOT}/ml_features.csv")
 ML_TRAIN_TARGET_COL = os.getenv("ML_TRAIN_TARGET_COL", "target")
 ML_HOLDOUT_FRAC = float(os.getenv("ML_HOLDOUT_FRAC", "0.2"))
@@ -954,6 +990,15 @@ DECISION_LOG_PATH = os.getenv("DECISION_LOG_PATH", f"{DESK_LOG_DIR}/decision_eve
 REJECT_REASONS_LOG_PATH = os.getenv("REJECT_REASONS_LOG_PATH", f"{DESK_LOG_DIR}/reject_reasons.jsonl")
 DECISION_ERROR_LOG_PATH = os.getenv("DECISION_ERROR_LOG_PATH", f"{DESK_LOG_DIR}/decision_event_errors.jsonl")
 DECISION_SQLITE_PATH = os.getenv("DECISION_SQLITE_PATH", f"{DESK_LOG_DIR}/decision_events.sqlite")
+DECISION_TELEMETRY_ENABLE = os.getenv("DECISION_TELEMETRY_ENABLE", "true").lower() == "true"
+DECISION_SCAN_SUMMARY_JSONL_PATH = os.getenv(
+    "DECISION_SCAN_SUMMARY_JSONL_PATH",
+    f"{DESK_LOG_DIR}/decision_scan_summary.jsonl",
+)
+DECISION_SCAN_SUMMARY_LATEST_PATH = os.getenv(
+    "DECISION_SCAN_SUMMARY_LATEST_PATH",
+    f"{DESK_LOG_DIR}/decision_scan_summary_latest.json",
+)
 DECISION_LOG_ENABLED = os.getenv("DECISION_LOG_ENABLED", "false").lower() == "true"
 DECISION_DB_PATH = os.getenv("DECISION_DB_PATH", TRADE_DB_PATH)
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", f"{DESK_LOG_DIR}/audit_log.jsonl")
