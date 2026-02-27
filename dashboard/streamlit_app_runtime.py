@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
@@ -13,7 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+logger = logging.getLogger(__name__)
+
 import dashboard.ui as ui
+from dashboard.utils import normalize_trade_df, filter_by_permission, dedupe_by_trade_key
 from dashboard.ui import (
     apply_global_style,
     app_shell,
@@ -42,6 +46,7 @@ from core.learning_paths import canonical_suggestion_eval_log_path, suggestion_e
 from core.sim_pnl import DEFAULT_DELTAS, delta_key, simulate_row, compute_row_live_pnl
 from core.trailing_display import apply_trailing_display_df
 from core.trade_activation import should_activate, activate_trade
+from core.trade_state_engine import run_state_engine_once
 from core.trailing import init_trailing, update_trailing, check_exit
 from core.upstox_resolver import ensure_upstox_columns, resolve_upstox_key
 from core.feed_debug import get_feed_debug
@@ -50,8 +55,20 @@ from dashboard.upstox_links import (
     build_upstox_search_query,
     build_upstox_search_url,
 )
+from dashboard.ui.table_model import (
+    normalize_df as normalize_table_df,
+    compute_trade_key as compute_table_trade_key,
+    dedupe as dedupe_table_df,
+    select_display_df,
+    filter_non_active,
+)
 from config import config as cfg
 import time
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:  # pragma: no cover
+    def st_autorefresh(*args, **kwargs):
+        return 0
 
 try:
     from core.review_queue import (
@@ -61,6 +78,8 @@ try:
         SCALP_QUEUE_PATH,
         TARGET_POINTS_QUEUE_PATH,
         ZERO_HERO_QUEUE_PATH,
+        load_queue_rows,
+        write_queue_rows,
     )
 except Exception:
     REVIEW_QUEUE_PATH = Path("logs/review_queue.json")
@@ -69,6 +88,63 @@ except Exception:
     SCALP_QUEUE_PATH = Path("logs/scalp_queue.json")
     TARGET_POINTS_QUEUE_PATH = Path("logs/target_points_queue.json")
     REVIEW_APPROVED_PATH = Path("logs/approved_trades.json")
+    def _fallback_epoch_ms(value):
+        try:
+            if value is None:
+                return None
+            if isinstance(value, (int, float)):
+                v = float(value)
+                if v <= 0:
+                    return None
+                if v >= 10_000_000_000:
+                    return int(v)
+                return int(v * 1000.0)
+            text = str(value).strip()
+            if not text:
+                return None
+            try:
+                return _fallback_epoch_ms(float(text))
+            except Exception:
+                pass
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            dt = datetime.fromisoformat(text)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return int(dt.timestamp() * 1000.0)
+        except Exception:
+            return None
+
+    def load_queue_rows(path: Path):
+        try:
+            raw = json.loads(Path(path).read_text())
+            if not isinstance(raw, list):
+                return []
+            out = []
+            for row in raw:
+                if not isinstance(row, dict):
+                    continue
+                ts_ms = _fallback_epoch_ms(row.get("timestamp_epoch_ms"))
+                if ts_ms is None:
+                    ts_ms = _fallback_epoch_ms(row.get("timestamp_utc_iso"))
+                if ts_ms is None:
+                    ts_ms = _fallback_epoch_ms(row.get("timestamp"))
+                if ts_ms is None:
+                    ts_ms = int(time.time() * 1000.0)
+                row = dict(row)
+                row["timestamp_epoch_ms"] = int(ts_ms)
+                row["timestamp_utc_iso"] = datetime.fromtimestamp(
+                    float(ts_ms) / 1000.0, tz=timezone.utc
+                ).isoformat()
+                out.append(row)
+            return out
+        except Exception:
+            pass
+        return []
+    def write_queue_rows(path: Path, rows: list[dict]):
+        Path(path).write_text(json.dumps([r for r in rows if isinstance(r, dict)], indent=2))
 
 
 def fmt_conf(conf) -> str:
@@ -87,10 +163,54 @@ except Exception:
     pass
 
 st.set_page_config(page_title="Axiom Quant Console", layout="wide")
+if "auto_refresh_enabled" not in st.session_state:
+    st.session_state.auto_refresh_enabled = True
 
 LOG_PATH = ensure_trade_log_exists()
 STRAT_PATH = Path("logs/strategy_perf.json")
 apply_global_style()
+
+
+def _refresh_trade_state():
+    try:
+        desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT")
+        run_state_engine_once(desk_id=desk_id)
+    except Exception as exc:
+        logger.warning("trade_state_engine_failed: %s", exc)
+
+
+_refresh_trade_state()
+
+SPEED_TRADER_COLS = [
+    "timestamp",
+    "trade_status",
+    "first_seen",
+    "last_seen",
+    "update_count",
+    "symbol",
+    "instrument_id",
+    "expiry_date",
+    "tradingsymbol",
+    "strike",
+    "option_type",
+    "side",
+    "direction",
+    "permission",
+    "entry",
+    "signal_price",
+    "current_ltp",
+    "suggested_entry",
+    "price_age_sec",
+    "entry_status",
+    "target",
+    "stop",
+    "status",
+    "activation_price",
+    "activated_ts",
+    "pnl_points",
+    "pnl_cash",
+    "confidence",
+]
 
 
 def _desk_log_path(filename: str) -> Path:
@@ -174,6 +294,157 @@ def _load_approved_trades(path: Path):
         if exp_val is None or exp_val > now_epoch:
             active.append(rec)
     return rows, active
+
+
+def _safe_sort_by_last_seen(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    work = df.copy()
+    if "last_seen_ts" not in work.columns:
+        if "timestamp" in work.columns:
+            work["last_seen_ts"] = work["timestamp"]
+        else:
+            work["last_seen_ts"] = datetime.now(timezone.utc).isoformat()
+    work["last_seen_ts"] = pd.to_datetime(work["last_seen_ts"], errors="coerce")
+    work["last_seen_ts"] = work["last_seen_ts"].fillna(pd.Timestamp.utcnow())
+    return work.sort_values("last_seen_ts", ascending=False)
+
+
+def _prepare_trade_display_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    return dedupe_table_df(work := _safe_sort_by_last_seen(df))
+
+
+def _queue_sources() -> list[tuple[str, Path]]:
+    return [
+        # Source: manual review queue file
+        ("review_queue", REVIEW_QUEUE_PATH),
+        # Source: quick suggestion queue file
+        ("suggested_quick", QUICK_REVIEW_QUEUE_PATH),
+        # Source: 20-point advisory queue file
+        ("advisory_20", TARGET_POINTS_QUEUE_PATH),
+        # Source: zero-to-hero advisory queue file
+        ("advisory_zh", ZERO_HERO_QUEUE_PATH),
+        # Source: scalp queue file
+        ("suggested_scalp", SCALP_QUEUE_PATH),
+    ]
+
+
+def _load_trade_universe_df() -> pd.DataFrame:
+    frames = []
+    meta_map = _get_instrument_meta_map()
+    for source, path in _queue_sources():
+        try:
+            p = Path(path)
+            if not p.exists():
+                continue
+            rows = load_queue_rows(p)
+            if not rows:
+                continue
+            tmp = pd.DataFrame(rows)
+            if tmp.empty:
+                continue
+            tmp["source_bucket"] = source
+            tmp = normalize_trade_df(tmp, meta_map)
+            frames.append(tmp)
+        except Exception as exc:
+            logger.warning("trade_universe_load_failed source=%s path=%s err=%s", source, path, exc)
+    if not frames:
+        return pd.DataFrame()
+    merged = pd.concat(frames, axis=0, ignore_index=True)
+    merged = normalize_table_df(merged)
+    merged = compute_table_trade_key(merged)
+    merged = dedupe_table_df(merged)
+    return _safe_sort_by_last_seen(merged)
+
+
+def filter_trades_for_panel(trades, panel_name: str) -> pd.DataFrame:
+    """
+    Strict, unit-testable panel filter contract.
+    - active: status == ACTIVE
+    - suggested: status in {PLANNING, PROPOSED}
+    - review: status == QUEUED_REVIEW
+    """
+    panel = str(panel_name or "").strip().lower()
+    allowed = {
+        "active": {"ACTIVE"},
+        "suggested": {"PLANNING", "PROPOSED"},
+        "review": {"QUEUED_REVIEW"},
+    }.get(panel)
+    if allowed is None:
+        raise ValueError(f"unsupported panel_name={panel_name!r}")
+
+    if trades is None:
+        return pd.DataFrame()
+    if isinstance(trades, pd.DataFrame):
+        df = trades.copy()
+    else:
+        rows = list(trades or [])
+        df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    if "status" not in df.columns:
+        df["status"] = "PLANNING"
+    status = df["status"].astype(str).str.upper().str.strip()
+    return df[status.isin(allowed)].copy()
+
+
+def _partition_trade_universe(df_all: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    if df_all is None or df_all.empty:
+        empty = pd.DataFrame()
+        return empty, empty, empty, empty
+    active = filter_trades_for_panel(df_all, "active")
+    review = filter_trades_for_panel(df_all, "review")
+    planning = filter_trades_for_panel(df_all, "suggested")
+
+    review_source = review.get("source_bucket", pd.Series([""] * len(review), index=review.index)).astype(str)
+    review = review[review_source == "review_queue"].copy()
+
+    planning_source = planning.get("source_bucket", pd.Series([""] * len(planning), index=planning.index)).astype(str)
+    advisory = planning[planning_source.str.startswith("advisory_")].copy()
+    suggested = planning[planning_source.str.startswith("suggested_")].copy()
+    if suggested.empty:
+        suggested = planning[~planning_source.str.startswith("advisory_")].copy()
+    return (
+        _safe_sort_by_last_seen(active),
+        _safe_sort_by_last_seen(review),
+        _safe_sort_by_last_seen(suggested),
+        _safe_sort_by_last_seen(advisory),
+    )
+
+
+def _with_active_runtime_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for col in ("mark_price", "bid", "ask", "ltp", "pnl_unrealized"):
+        if col not in out.columns:
+            out[col] = None
+    if "opt_bid" in out.columns:
+        out["bid"] = out["bid"].where(out["bid"].notna(), out["opt_bid"])
+    if "opt_ask" in out.columns:
+        out["ask"] = out["ask"].where(out["ask"].notna(), out["opt_ask"])
+    if "live_ltp" in out.columns:
+        out["ltp"] = out["ltp"].where(out["ltp"].notna(), out["live_ltp"])
+    if "opt_ltp" in out.columns:
+        out["ltp"] = out["ltp"].where(out["ltp"].notna(), out["opt_ltp"])
+    if "current_ltp" in out.columns:
+        out["ltp"] = out["ltp"].where(out["ltp"].notna(), out["current_ltp"])
+    mid = (pd.to_numeric(out.get("bid"), errors="coerce") + pd.to_numeric(out.get("ask"), errors="coerce")) / 2.0
+    out["mark_price"] = out["mark_price"].where(pd.to_numeric(out["mark_price"], errors="coerce").notna(), mid)
+    out["mark_price"] = out["mark_price"].where(pd.to_numeric(out["mark_price"], errors="coerce").notna(), out["ltp"])
+    if "pnl_cash" in out.columns:
+        out["pnl_unrealized"] = out["pnl_unrealized"].where(
+            pd.to_numeric(out["pnl_unrealized"], errors="coerce").notna(),
+            out["pnl_cash"],
+        )
+    if "pnl_1lot" in out.columns:
+        out["pnl_unrealized"] = out["pnl_unrealized"].where(
+            pd.to_numeric(out["pnl_unrealized"], errors="coerce").notna(),
+            out["pnl_1lot"],
+        )
+    return out
 
 
 rows = _load_trade_log_rows(LOG_PATH)
@@ -575,6 +846,18 @@ def _feed_status_summary(feed: dict, feed_debug: dict):
     if sla_state == "OK":
         return "OK", "healthy", ltp_age, depth_age
     return "IDLE", (reasons[0] if reasons else "unknown"), ltp_age, depth_age
+
+
+def _compute_trade_refresh_gate(snapshot: dict) -> tuple[bool, str, str]:
+    feed = snapshot.get("feed_freshness") or {}
+    feed_debug = snapshot.get("feed_debug") or {}
+    feed_state, _reason, _ltp_age, _depth_age = _feed_status_summary(feed, feed_debug)
+    market_open = bool(feed.get("market_open", False))
+    state = str(feed.get("state") or "").upper()
+    market_status = "OPEN" if market_open and state != "MARKET_CLOSED" else "CLOSED"
+    feed_status = "ACTIVE" if feed_state in ("OK", "DEGRADED") else "INACTIVE"
+    should_refresh = bool(st.session_state.get("auto_refresh_enabled", True)) and feed_status == "ACTIVE" and market_status == "OPEN"
+    return should_refresh, feed_status, market_status
 
 
 def _render_status_row(snapshot: dict):
@@ -1089,7 +1372,7 @@ def _ensure_activation_fields(df):
         df["entry_condition"] = "BREAKOUT"
     else:
         df["entry_condition"] = df["entry_condition"].fillna("BREAKOUT")
-    for col in ("activated_ts", "fill_price", "ltp_at_activation"):
+    for col in ("activated_ts", "fill_price", "ltp_at_activation", "activation_price", "activation_reason", "invalidation_reason"):
         if col not in df.columns:
             df[col] = None
     return df
@@ -1105,6 +1388,8 @@ def _contract_resolved(row: dict) -> bool:
     reasons = row.get("tradable_reasons_blocking") or []
     if isinstance(reasons, str):
         reasons = [reasons]
+    elif not isinstance(reasons, (list, tuple, set)):
+        reasons = []
     if "unresolved_contract" in reasons:
         return False
     if not row.get("instrument_token") and not row.get("instrument_id"):
@@ -1138,7 +1423,13 @@ def _mask_unresolved_prices(df, fields=None):
 
 
 def _resolve_opt_ltp(row: dict):
-    ltp = row.get("opt_ltp")
+    ltp = row.get("current_ltp")
+    if ltp is None:
+        ltp = row.get("opt_ltp")
+    if ltp is None:
+        ltp = row.get("mark_price")
+    if ltp is None:
+        ltp = row.get("suggested_entry")
     if ltp is None:
         bid = row.get("opt_bid")
         ask = row.get("opt_ask")
@@ -1225,7 +1516,7 @@ def _persist_queue_targets(path: Path, q_all: list[dict], derived_targets: dict[
 def _add_live_pnl_columns(df, meta_map=None):
     if df is None or df.empty:
         return df
-    for col in ("live_ltp", "pnl_1qty", "pnl_1lot", "pnl_reason"):
+    for col in ("live_ltp", "pnl_1qty", "pnl_1lot", "pnl_reason", "pnl_status_reason", "pnl_points", "pnl_cash"):
         if col not in df.columns:
             df[col] = None
     for idx, row in df.iterrows():
@@ -1235,20 +1526,34 @@ def _add_live_pnl_columns(df, meta_map=None):
             df.at[idx, "pnl_1qty"] = "N/A"
             df.at[idx, "pnl_1lot"] = "N/A"
             df.at[idx, "pnl_reason"] = "unresolved_contract"
+            df.at[idx, "pnl_status_reason"] = "unresolved_contract"
             continue
         ltp = row_dict.get("live_ltp")
         if ltp is None:
             ltp = _resolve_opt_ltp(row_dict)
+        if ltp is None and row_dict.get("current_ltp") is not None:
+            ltp = row_dict.get("current_ltp")
         df.at[idx, "live_ltp"] = ltp
         status = str(row_dict.get("status") or "PLANNING").upper()
         if status != "ACTIVE":
             df.at[idx, "pnl_1qty"] = "—"
             df.at[idx, "pnl_1lot"] = "—"
             df.at[idx, "pnl_reason"] = "inactive"
+            df.at[idx, "pnl_status_reason"] = "inactive"
+            df.at[idx, "pnl_points"] = "—"
+            df.at[idx, "pnl_cash"] = "—"
             continue
         row_dict["live_ltp"] = ltp
         pnl = compute_row_live_pnl(row_dict, meta_map=meta_map)
         df.at[idx, "pnl_reason"] = pnl.get("pnl_reason")
+        reason_map = {
+            "missing_ltp": "no_ltp",
+            "missing_fill_price": "no_fill_price",
+            "invalid_side": "invalid_side",
+            "inactive": "inactive",
+        }
+        pnl_reason = pnl.get("pnl_reason")
+        df.at[idx, "pnl_status_reason"] = reason_map.get(pnl_reason, pnl_reason)
         if pnl.get("pnl_1qty") is None:
             df.at[idx, "pnl_1qty"] = "—"
         else:
@@ -1257,6 +1562,24 @@ def _add_live_pnl_columns(df, meta_map=None):
             df.at[idx, "pnl_1lot"] = "—"
         else:
             df.at[idx, "pnl_1lot"] = pnl.get("pnl_1lot")
+        try:
+            fill = float(row_dict.get("activation_price") or row_dict.get("fill_price"))
+            ltp_val = float(ltp) if ltp is not None else None
+        except Exception:
+            fill = None
+            ltp_val = None
+        side_val = str(row_dict.get("side") or "").upper()
+        if fill is None or ltp_val is None or side_val not in ("BUY", "SELL"):
+            df.at[idx, "pnl_points"] = "—"
+            df.at[idx, "pnl_cash"] = "—"
+        else:
+            pnl_points = (ltp_val - fill) if side_val == "BUY" else (fill - ltp_val)
+            df.at[idx, "pnl_points"] = round(float(pnl_points), 2)
+            lot_size = pnl.get("lot_size")
+            if lot_size:
+                df.at[idx, "pnl_cash"] = round(float(pnl_points) * float(lot_size), 2)
+            else:
+                df.at[idx, "pnl_cash"] = "—"
     return df
 
 
@@ -1264,6 +1587,7 @@ def _add_upstox_links(df):
     df = ensure_upstox_columns(df)
     if df is None or df.empty:
         return df
+    deeplink_enabled = bool(getattr(cfg, "UPSTOX_ENABLE_DEEPLINK", False))
     for idx, row in df.iterrows():
         row_dict = row.to_dict()
         unresolved = not _contract_resolved(row_dict)
@@ -1278,7 +1602,7 @@ def _add_upstox_links(df):
         query = build_upstox_search_query(row_dict)
         df.at[idx, "upstox_query"] = query
         df.at[idx, "upstox_search_url"] = build_upstox_search_url(query) if query else None
-        if key and not unresolved:
+        if key and not unresolved and deeplink_enabled:
             url = build_upstox_contract_url(key)
             df.at[idx, "upstox_contract_url"] = url
         else:
@@ -1286,15 +1610,94 @@ def _add_upstox_links(df):
     return df
 
 
+def _upstox_master_available() -> bool:
+    try:
+        from core.upstox_instruments import default_instruments_path
+        return default_instruments_path() is not None
+    except Exception:
+        return False
+
+
+def _safe_link_button(container, label: str, url: str, note: str | None = None):
+    if not url:
+        container.write("—")
+        return
+    try:
+        container.link_button(label, url, use_container_width=True)
+        return
+    except TypeError as exc:
+        logger.warning("link_button failed: %s", exc)
+    try:
+        html = f'<a href="{url}" target="_blank">{label}</a>'
+        container.markdown(html, unsafe_allow_html=True)
+        if note:
+            container.caption(note)
+    except Exception as exc:
+        logger.warning("link_button fallback failed: %s", exc)
+        container.write(label)
+
+
+def _select_speed_trader_cols(df: pd.DataFrame, extra_cols: list[str] | None = None) -> list[str]:
+    cols = [c for c in SPEED_TRADER_COLS if c in df.columns]
+    if extra_cols:
+        for col in extra_cols:
+            if col in df.columns and col not in cols:
+                cols.append(col)
+    return cols
+
+
+def _cap_unknown_regime_advisory(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    if "regime" not in df.columns:
+        return df
+    max_per_symbol = int(getattr(cfg, "PERMISSION_UNKNOWN_REGIME_MAX_PER_SYMBOL", 2))
+    max_total = int(getattr(cfg, "PERMISSION_UNKNOWN_REGIME_MAX_TOTAL", 6))
+    if max_per_symbol <= 0 or max_total <= 0:
+        return df.head(0)
+    regime_series = df["regime"].fillna("").astype(str).str.upper()
+    regime_conf = pd.to_numeric(df.get("regime_confidence"), errors="coerce").fillna(
+        pd.to_numeric(df.get("day_confidence"), errors="coerce").fillna(0.0)
+    )
+    mask = (regime_series == "UNKNOWN") & (regime_conf < 0.35)
+    if not mask.any():
+        return df
+    subset = df[mask].copy()
+    if "permission" in subset.columns:
+        subset = subset[subset["permission"].fillna("").astype(str).str.upper() == "ADVISORY_ONLY"]
+    if "global_confidence" in subset.columns:
+        subset = subset.sort_values("global_confidence", ascending=False)
+    if "symbol" in subset.columns:
+        subset = subset.groupby("symbol", as_index=False).head(max_per_symbol)
+    subset = subset.head(max_total)
+    other = df[~mask]
+    if other.empty:
+        return subset
+    merged = pd.concat([other, subset], axis=0)
+    if "timestamp" in merged.columns:
+        return merged.sort_values("timestamp", ascending=False)
+    return merged
+
+
 def _render_upstox_table(table_df: pd.DataFrame, display_cols: list[str], key_prefix: str):
     table_df = ensure_upstox_columns(table_df)
     if table_df is None or table_df.empty:
         return
+    deeplink_enabled = bool(getattr(cfg, "UPSTOX_ENABLE_DEEPLINK", False))
+    master_ok = _upstox_master_available()
+    if not deeplink_enabled:
+        st.caption("Upstox deep link disabled; showing search only.")
+    elif not master_ok:
+        st.caption("Upstox instrument master not found; showing search only.")
     cols = [c for c in display_cols if c in table_df.columns]
     header_cols = st.columns(len(cols) + 1)
     for i, col in enumerate(cols + ["Upstox"]):
         header_cols[i].markdown(f"**{col}**")
-    rows = table_df[cols + ["upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"]].to_dict("records")
+    required = cols + ["upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"]
+    for col in required:
+        if col not in table_df.columns:
+            table_df[col] = None
+    rows = table_df[required].to_dict("records")
     for ridx, row in enumerate(rows):
         row_cols = st.columns(len(cols) + 1)
         for i, col in enumerate(cols):
@@ -1304,12 +1707,11 @@ def _render_upstox_table(table_df: pd.DataFrame, display_cols: list[str], key_pr
         contract_url = row.get("upstox_contract_url")
         search_url = row.get("upstox_search_url")
         query = row.get("upstox_query")
-        deeplink_enabled = bool(getattr(cfg, "UPSTOX_ENABLE_DEEPLINK", False))
-        if contract_url and not unresolved and deeplink_enabled:
-            row_cols[-1].link_button("Open", contract_url, use_container_width=True)
+        if contract_url and not unresolved and deeplink_enabled and master_ok:
+            _safe_link_button(row_cols[-1], "Open", contract_url)
         else:
             if search_url:
-                row_cols[-1].link_button("Search", search_url, use_container_width=True)
+                _safe_link_button(row_cols[-1], "Search", search_url)
             else:
                 row_cols[-1].write("—")
         if query:
@@ -1322,21 +1724,16 @@ def _render_upstox_table(table_df: pd.DataFrame, display_cols: list[str], key_pr
 
 
 def _zero_to_hero_display_columns(df):
-    base_cols = [
-        "symbol",
-        "expiry_date",
-        "strike",
-        "option_type",
-        "entry",
-        "stop",
-        "target",
-        "premium",
-        "confidence",
-        "status",
-        "pnl_1lot",
-        "note",
-    ]
-    return [c for c in base_cols if c in df.columns]
+    return _select_speed_trader_cols(
+        df,
+        [
+            "premium",
+            "pnl_1lot",
+            "pnl_status_reason",
+            "ui_warning",
+            "note",
+        ],
+    )
 
 def _ensure_trailing_fields(df):
     if df is None or df.empty:
@@ -1389,6 +1786,8 @@ def _activate_planning_rows(df, auto_activate=False):
     updated = False
     activated_rows = []
     now_ts = datetime.now(timezone.utc).isoformat()
+    max_quote_age = float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0))
+    max_spread_pct = float(getattr(cfg, "MAX_SPREAD_PCT", 0.03))
     for idx, row in df.iterrows():
         status = str(row.get("status") or "PLANNING").upper()
         if status != "PLANNING":
@@ -1396,6 +1795,9 @@ def _activate_planning_rows(df, auto_activate=False):
         if not row.get("instrument_token"):
             continue
         ltp = row.get("opt_ltp")
+        mark_price = row.get("mark_price")
+        if ltp is None:
+            ltp = mark_price
         if ltp is None:
             bid = row.get("opt_bid")
             ask = row.get("opt_ask")
@@ -1405,6 +1807,29 @@ def _activate_planning_rows(df, auto_activate=False):
             except Exception:
                 ltp = None
         if ltp is None:
+            continue
+        try:
+            age_sec = _safe_float(row.get("price_age_sec"))
+            if age_sec is None or age_sec > max_quote_age:
+                continue
+        except Exception:
+            continue
+        try:
+            bid_val = _safe_float(row.get("opt_bid"))
+            ask_val = _safe_float(row.get("opt_ask"))
+            base_val = _safe_float(mark_price) or _safe_float(ltp)
+            if (
+                bid_val is not None
+                and ask_val is not None
+                and base_val is not None
+                and base_val > 0
+            ):
+                spread_pct = (ask_val - bid_val) / base_val
+                if spread_pct > max_spread_pct:
+                    continue
+        except Exception:
+            pass
+        if _safe_float(mark_price) in (None, 0.0) and _safe_float(ltp) in (None, 0.0):
             continue
         if should_activate(row.get("side"), row.get("entry_condition"), row.get("entry"), ltp):
             updated_row = activate_trade(row.to_dict(), ltp, ts=now_ts)
@@ -1444,8 +1869,12 @@ def _persist_queue_activation(path: Path, rows: list[dict], df: pd.DataFrame):
             "status",
             "entry_condition",
             "activated_ts",
+            "activation_price",
             "fill_price",
             "ltp_at_activation",
+            "current_ltp",
+            "current_ltp_ts",
+            "price_age_sec",
             "original_stop",
             "trail_enabled",
             "trail_offset",
@@ -1457,6 +1886,8 @@ def _persist_queue_activation(path: Path, rows: list[dict], df: pd.DataFrame):
             "exit_price",
             "exit_ts",
             "pnl_estimate_1lot",
+            "pnl_points",
+            "pnl_cash",
         ):
             if rec.get(field) is None:
                 continue
@@ -1745,6 +2176,38 @@ def _set_quote_cache(cache):
     except Exception:
         pass
 
+
+def _derive_mark_price(last_price, bid, ask, quote_age_sec=None):
+    last_val = _safe_float(last_price)
+    bid_val = _safe_float(bid)
+    ask_val = _safe_float(ask)
+    mid_val = None
+    if bid_val is not None and ask_val is not None:
+        mid_val = (bid_val + ask_val) / 2.0
+    outside_tol = float(getattr(cfg, "OPTION_LAST_OUTSIDE_BAND_PCT", 0.01))
+    outside_band = False
+    if last_val is not None and bid_val is not None and ask_val is not None:
+        lo = min(bid_val, ask_val) * max(0.0, 1.0 - outside_tol)
+        hi = max(bid_val, ask_val) * (1.0 + outside_tol)
+        outside_band = bool(last_val < lo or last_val > hi)
+    stale = False
+    try:
+        stale = quote_age_sec is None or float(quote_age_sec) > float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8))
+    except Exception:
+        stale = quote_age_sec is None
+    if mid_val is not None and (outside_band or stale or last_val is None):
+        return mid_val, "mid"
+    if last_val is not None:
+        return last_val, "last"
+    if ask_val is not None:
+        return ask_val, "ask"
+    if bid_val is not None:
+        return bid_val, "bid"
+    if mid_val is not None:
+        return mid_val, "mid"
+    return None, "none"
+
+
 def _hydrate_option_quotes(df, chain_map, cache_ttl=8):
     try:
         if df is None or df.empty:
@@ -1755,6 +2218,12 @@ def _hydrate_option_quotes(df, chain_map, cache_ttl=8):
             df["opt_bid"] = None
         if "opt_ask" not in df.columns:
             df["opt_ask"] = None
+        if "mark_price" not in df.columns:
+            df["mark_price"] = None
+        if "price_source" not in df.columns:
+            df["price_source"] = None
+        if "quote_age_sec" not in df.columns:
+            df["quote_age_sec"] = None
         if "quote_note" not in df.columns:
             df["quote_note"] = None
         cache, cache_ts = _get_quote_cache()
@@ -1883,14 +2352,28 @@ def _hydrate_option_quotes(df, chain_map, cache_ttl=8):
                         df.at[idx, "opt_ltp"] = cached.get("ltp")
                         df.at[idx, "opt_bid"] = cached.get("bid")
                         df.at[idx, "opt_ask"] = cached.get("ask")
+                        df.at[idx, "mark_price"] = cached.get("mark_price")
+                        df.at[idx, "price_source"] = cached.get("price_source")
                     else:
                         pending.append((idx, quote_symbol))
                 else:
                     df.at[idx, "quote_note"] = "strike not in live chain"
                 continue
             df.at[idx, "opt_ltp"] = match.get("ltp")
-            df.at[idx, "opt_bid"] = match.get("bid")
-            df.at[idx, "opt_ask"] = match.get("ask")
+            bid = match.get("best_bid", match.get("bid"))
+            ask = match.get("best_ask", match.get("ask"))
+            quote_age_sec = match.get("quote_age_sec")
+            mark_price = match.get("mark_price")
+            if mark_price in (None, "", 0):
+                mark_price, source = _derive_mark_price(match.get("last_price", match.get("ltp")), bid, ask, quote_age_sec)
+            else:
+                source = match.get("price_source") or "mark"
+            df.at[idx, "opt_ltp"] = mark_price if mark_price is not None else match.get("ltp")
+            df.at[idx, "opt_bid"] = bid
+            df.at[idx, "opt_ask"] = ask
+            df.at[idx, "mark_price"] = mark_price
+            df.at[idx, "price_source"] = source
+            df.at[idx, "quote_age_sec"] = quote_age_sec
         if pending:
             try:
                 from core.kite_client import kite_client
@@ -1905,10 +2388,20 @@ def _hydrate_option_quotes(df, chain_map, cache_ttl=8):
                     depth = q.get("depth") or {}
                     bid = depth.get("buy", [{}])[0].get("price")
                     ask = depth.get("sell", [{}])[0].get("price")
-                    df.at[idx, "opt_ltp"] = ltp
+                    mark_price, source = _derive_mark_price(ltp, bid, ask, quote_age_sec=None)
+                    df.at[idx, "opt_ltp"] = mark_price if mark_price is not None else ltp
                     df.at[idx, "opt_bid"] = bid
                     df.at[idx, "opt_ask"] = ask
-                    cache[sym] = {"ltp": ltp, "bid": bid, "ask": ask}
+                    df.at[idx, "mark_price"] = mark_price
+                    df.at[idx, "price_source"] = source
+                    df.at[idx, "quote_age_sec"] = None
+                    cache[sym] = {
+                        "ltp": mark_price if mark_price is not None else ltp,
+                        "bid": bid,
+                        "ask": ask,
+                        "mark_price": mark_price,
+                        "price_source": source,
+                    }
                 _set_quote_cache(cache)
             except Exception:
                 pass
@@ -1951,17 +2444,22 @@ def _add_entry_mismatch(df, threshold=None):
 
 def _filter_rows_today(rows, ts_key="timestamp"):
     try:
+        if not isinstance(rows, (list, tuple)):
+            return []
         now = now_local()
         filtered = []
         for r in rows:
+            if not isinstance(r, dict):
+                continue
             ts = r.get(ts_key)
             if not ts:
-                continue
+                ts = datetime.now(timezone.utc).isoformat()
+                r[ts_key] = ts
             if is_today_local(ts, now=now):
                 filtered.append(r)
         return filtered
     except Exception:
-        return rows
+        return []
 
 def _load_gpt_advice():
     path = Path("logs/gpt_advice.jsonl")
@@ -2512,13 +3010,81 @@ if nav == "Home":
         except Exception as e:
             st.caption(f"Gate status error: {e}")
 
-    section_header("Main Trades (High Accuracy)")
-    section_header("Manual Review Queue")
+    st.checkbox("Live update trades", value=True, key="auto_refresh_enabled")
+    try:
+        should_refresh, feed_status, market_status = _compute_trade_refresh_gate(readiness_snapshot)
+        if should_refresh:
+            refresh_ms = max(1000, int(float(getattr(cfg, "UI_REFRESH_SEC", 2.0)) * 1000))
+            st_autorefresh(interval=refresh_ms, limit=None, key="trades_autorefresh")
+    except Exception as exc:
+        logger.exception("trades_autorefresh_failed: %s", exc)
+        st.session_state["auto_refresh_enabled"] = False
+        st.warning("Live update paused due to data issue")
+
+    trade_universe_df = _load_trade_universe_df()
+    df_active_all, df_review_all, df_suggested_all, df_advisory_all = _partition_trade_universe(trade_universe_df)
+    if _is_ops_research_mode():
+        st.caption(
+            "Trade partitions "
+            f"(deduped={len(trade_universe_df)}, active={len(df_active_all)}, "
+            f"planning={len(df_suggested_all) + len(df_advisory_all)}, review={len(df_review_all)})"
+        )
+
+    section_header("Active Trades")
+    try:
+        active_df = _prepare_trade_display_df(df_active_all)
+        active_df = _with_active_runtime_metrics(active_df)
+        active_display = select_display_df(active_df, "active")
+        active_display = _prepare_trade_display_df(active_display)
+        if not active_display.empty and "trade_key" in active_display.columns and "trade_key" in active_df.columns:
+            active_extras = [
+                c
+                for c in ["trade_key", "mark_price", "bid", "ask", "ltp", "pnl_unrealized"]
+                if c in active_df.columns
+            ]
+            if len(active_extras) > 1:
+                active_display = active_display.merge(
+                    active_df[active_extras].drop_duplicates(subset=["trade_key"], keep="last"),
+                    on="trade_key",
+                    how="left",
+                )
+        active_cols = [
+            c
+            for c in [
+                "last_seen_ts",
+                "identity",
+                "status",
+                "side",
+                "entry",
+                "stop",
+                "target",
+                "mark_price",
+                "bid",
+                "ask",
+                "ltp",
+                "pnl_unrealized",
+                "live_ltp",
+                "pnl_points",
+                "pnl_cash",
+                "qty",
+                "confidence",
+            ]
+            if c in active_display.columns
+        ]
+        if not active_display.empty:
+            _render_upstox_table(active_display, active_cols, "active_trades")
+        else:
+            empty_state("No active trades right now.")
+    except Exception as exc:
+        logger.exception("active_trades_render_failed: %s", exc)
+        st.info("No active trades right now.")
+
+    section_header("Review Queue (Latest)")
     try:
         from core.review_queue import approve, remove_from_queue
         q_path = REVIEW_QUEUE_PATH
         if q_path.exists():
-            q_all = json.loads(q_path.read_text())
+            q_all = load_queue_rows(q_path)
             q = _filter_rows_today(q_all)
             if q:
                 show_quotes = st.checkbox("Show bid/ask/ltp", value=False, key="show_quotes_main")
@@ -2578,20 +3144,22 @@ if nav == "Home":
                     _log_activation_events(activated_rows, "review_queue")
                 if derived_targets:
                     _persist_queue_targets(q_path, q_all, derived_targets, rr_default)
-                q_df = _add_upstox_links(q_df)
+                has_active = False
+                try:
+                    has_active = (q_df["status"].astype(str).str.upper() == "ACTIVE").any()
+                except Exception:
+                    has_active = False
+                if has_active and not need_chain:
+                    chain_map = _get_chain_map()
+                    q_df = _hydrate_option_quotes(q_df, chain_map)
                 q_df = _add_live_pnl_columns(q_df, meta_map)
                 if show_sim:
-                    has_active = False
-                    try:
-                        has_active = (q_df["status"].astype(str).str.upper() == "ACTIVE").any()
-                    except Exception:
-                        has_active = False
                     if has_active:
                         try:
                             sim_rows = q_df.apply(lambda r: pd.Series(simulate_row(r.to_dict(), meta_map)), axis=1)
                             q_df = pd.concat([q_df, sim_rows], axis=1)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("review_queue sim failed: %s", exc)
                 min_offset = float(getattr(cfg, "TRAIL_OFFSET_MIN", 5.0))
                 risk_mult = float(getattr(cfg, "TRAIL_OFFSET_RISK_MULT", 0.5))
                 q_df, _trail_updated = _apply_trailing(
@@ -2605,109 +3173,39 @@ if nav == "Home":
                     is_live_mode,
                 )
                 q_df = apply_trailing_display_df(q_df)
-                q_display = q_df.drop(columns=["trade_id"], errors="ignore")
-                display_cols = [
-                    c for c in [
-                        "timestamp",
-                        "symbol",
-                        "instrument_id",
-                        "expiry_date",
-                        "strike",
-                        "type",
-                        "status",
-                        "side",
-                        "entry",
-                        "stop",
-                        "target",
-                        "live_ltp",
-                        "pnl_1qty",
-                        "pnl_1lot",
-                        "qty",
-                        "qty_lots",
-                        "qty_units",
-                        "tradable",
-                        "tradable_reasons_blocking",
-                        "confidence",
-                    ] if c in q_df.columns
-                ]
-                if show_sim:
-                    sim_cols = ["lot_size", "sim_reason"] + [delta_key(d) for d in DEFAULT_DELTAS]
-                    display_cols += [c for c in sim_cols if c in q_df.columns]
-                if show_trailing:
-                    trail_preview_cols = [c for c in ["trail_enabled", "trail_rule", "trail_offset", "trail_start"] if c in q_df.columns]
-                    trail_live_cols = [c for c in ["mfe_price", "trail_stop", "current_stop", "profit_locked"] if c in q_df.columns]
-                    display_cols += [c for c in trail_preview_cols + trail_live_cols if c not in display_cols]
-                if show_quotes:
-                    display_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q_df.columns]
-                    display_cols += [c for c in ["quote_note"] if c in q_df.columns]
-                    display_cols += [c for c in ["entry_mismatch_pct", "entry_mismatch_note"] if c in q_df.columns]
-                if display_cols:
+                q_df = normalize_trade_df(q_df, meta_map)
+                q_df = _mask_unresolved_prices(q_df)
+                q_df = _add_upstox_links(q_df)
+                q_df = normalize_table_df(q_df)
+                q_df = _prepare_trade_display_df(q_df)
+                if "status" not in q_df.columns:
+                    q_df["status"] = "QUEUED_REVIEW"
+                else:
+                    q_df["status"] = q_df["status"].fillna("QUEUED_REVIEW")
+                q_df_queue_raw = filter_trades_for_panel(q_df, "review")
+                q_df_queue = _prepare_trade_display_df(select_display_df(q_df_queue_raw, "review"))
+                if "trade_key" not in q_df_queue.columns:
+                    q_df_queue["trade_key"] = None
+                link_cols = [c for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"] if c in q_df.columns]
+                if link_cols and "trade_key" in link_cols:
+                    link_map = q_df[link_cols].drop_duplicates(subset=["trade_key"], keep="last")
+                    q_df_queue = q_df_queue.merge(link_map, on="trade_key", how="left")
+                display_cols = [c for c in q_df_queue.columns if c not in {"trade_key", "tradingsymbol", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"}]
+                if display_cols and not q_df_queue.empty:
                     st.caption("Opens Upstox for manual confirmation (no auto-order).")
-                    table_df = _add_upstox_links(q_display.copy())
                     last_query = st.session_state.get("last_upstox_query")
                     if last_query:
                         st.text_input("Last Upstox query", value=str(last_query), key="upstox_last_query", disabled=True)
-                    _render_upstox_table(table_df, display_cols, "review_queue")
+                    _render_upstox_table(q_df_queue.copy(), display_cols, "review_queue")
                 else:
-                    ui.table(q_display, use_container_width=True)
-                q_rows = q_df.to_dict("records")
+                    empty_state("No pending trades in review queue for today.")
+                q_rows = q_df_queue_raw.to_dict("records")
                 if st.button("Clear Queue"):
-                    q_path.write_text(json.dumps([], indent=2))
+                    write_queue_rows(q_path, [])
                     st.success("Queue cleared.")
                     q = []
                     q_df = pd.DataFrame(q)
                     q_rows = []
-                st.subheader("Suggested Trades (Latest)")
-                show_cols = [
-                    c for c in [
-                        "timestamp",
-                        "symbol",
-                        "instrument_id",
-                        "expiry_date",
-                        "strike",
-                        "type",
-                        "status",
-                        "side",
-                        "entry",
-                        "stop",
-                        "target",
-                        "live_ltp",
-                        "pnl_1qty",
-                        "pnl_1lot",
-                        "qty",
-                        "qty_lots",
-                        "qty_units",
-                        "tradable",
-                        "tradable_reasons_blocking",
-                        "confidence",
-                    ] if c in q_df.columns
-                ]
-                if show_sim and "sim_reason" in q_df.columns:
-                    sim_cols = ["lot_size", "sim_reason"] + [delta_key(d) for d in DEFAULT_DELTAS]
-                    show_cols += [c for c in sim_cols if c in q_df.columns]
-                if show_trailing:
-                    trail_preview_cols = [c for c in ["trail_enabled", "trail_rule", "trail_offset", "trail_start"] if c in q_df.columns]
-                    trail_live_cols = [c for c in ["mfe_price", "trail_stop", "current_stop", "profit_locked"] if c in q_df.columns]
-                    show_cols += [c for c in trail_preview_cols + trail_live_cols if c not in show_cols]
-                if show_quotes:
-                    show_cols += [c for c in ["opt_ltp", "opt_bid", "opt_ask", "quote_ok"] if c in q_df.columns]
-                    show_cols += [c for c in ["quote_note"] if c in q_df.columns]
-                    show_cols += [c for c in ["entry_mismatch_pct", "entry_mismatch_note"] if c in q_df.columns]
-                show_df = _add_upstox_links(
-                    q_df.sort_values("timestamp", ascending=False)[show_cols].head(20).copy()
-                )
-                last_query = st.session_state.get("last_upstox_query")
-                if last_query:
-                    st.text_input("Last Upstox query", value=str(last_query), key="upstox_last_query_suggested", disabled=True)
-                _render_upstox_table(show_df, show_cols, "suggested_trades")
-                with st.expander("Pre‑Trade Validation Report", expanded=False):
-                    val_cols = [c for c in ["trade_id", "pretrade_conf_ok", "pretrade_rr", "pretrade_rr_ok", "pretrade_time"] if c in q_df.columns]
-                    if val_cols:
-                        sort_col = "pretrade_time" if "pretrade_time" in q_df.columns else ("timestamp" if "timestamp" in q_df.columns else None)
-                        if sort_col:
-                            ui.table(q_df[val_cols].sort_values(sort_col, ascending=False).head(20), use_container_width=True)
-                        else:
-                            ui.table(q_df[val_cols].head(20), use_container_width=True)
                 for i, row in enumerate(q_rows):
                     tid = row.get("trade_id")
                     if not tid:
@@ -2785,7 +3283,51 @@ if nav == "Home":
         else:
             empty_state("No review queue file yet.")
     except Exception as e:
-        st.warning(f"Review queue error: {e}")
+        logger.exception("review_queue_render_failed: %s", e)
+        st.info("No trades pending manual review.")
+
+    section_header("Suggested Trades (Latest)")
+    try:
+        # Source: suggested persistent queues (quick/scalp buckets), not manual review/advisory queues.
+        suggested_source_df = filter_trades_for_panel(df_suggested_all, "suggested")
+        suggested_df = _prepare_trade_display_df(filter_by_permission(suggested_source_df, "EXECUTE"))
+        if suggested_df.empty:
+            suggested_df = _prepare_trade_display_df(filter_by_permission(suggested_source_df, "QUEUE_ONLY"))
+        suggested_df = _add_upstox_links(suggested_df)
+        suggested_display = _prepare_trade_display_df(select_display_df(suggested_df, "advisory")).head(25)
+        if "trade_key" not in suggested_display.columns:
+            suggested_display["trade_key"] = None
+        link_cols = [
+            c
+            for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"]
+            if c in suggested_df.columns
+        ]
+        if link_cols and "trade_key" in link_cols:
+            suggested_display = suggested_display.merge(
+                suggested_df[link_cols].drop_duplicates(subset=["trade_key"], keep="last"),
+                on="trade_key",
+                how="left",
+            )
+        show_cols = [
+            c
+            for c in suggested_display.columns
+            if c
+            not in {
+                "trade_key",
+                "tradingsymbol",
+                "upstox_contract_url",
+                "upstox_search_url",
+                "upstox_query",
+                "unresolved_contract",
+            }
+        ]
+        if show_cols and not suggested_display.empty:
+            _render_upstox_table(suggested_display, show_cols, "suggested_trades")
+        else:
+            empty_state("No suggested trades right now.")
+    except Exception as exc:
+        logger.exception("suggested_render_failed: %s", exc)
+        st.info("No suggested trades right now.")
 
     if _is_trader_mode():
         st.caption("Trader mode active: research/admin panels are hidden. Switch Dashboard Mode to Ops/Research to view them.")
@@ -2796,7 +3338,7 @@ if nav == "Home":
         try:
             q2_path = QUICK_REVIEW_QUEUE_PATH
             if q2_path.exists():
-                q2_all = json.loads(q2_path.read_text())
+                q2_all = load_queue_rows(q2_path)
                 q2 = _filter_rows_today(q2_all)
                 if q2:
                     show_quotes_q = st.checkbox("Show bid/ask/ltp", value=False, key="show_quotes_quick")
@@ -2833,9 +3375,31 @@ if nav == "Home":
                     meta_map_q = _get_instrument_meta_map()
                     q2_df = _with_expiry_dte(q2_df, meta_map_q)
                     q2_df = _ensure_activation_fields(q2_df)
+                    q2_df = normalize_trade_df(q2_df, meta_map_q2)
+                    q2_df = filter_by_permission(q2_df, "QUEUE_ONLY")
+                    q2_df = _mask_unresolved_prices(q2_df)
                     q2_df = apply_trailing_display_df(q2_df)
                     q2_display = q2_df.drop(columns=["trade_id"], errors="ignore")
-                    show_cols = [c for c in ["symbol", "instrument_id", "tradingsymbol", "expiry", "expiry_date", "dte", "strike", "type", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "trail_stop_last", "trail_updates", "exit_reason", "tradable", "tradable_reasons_blocking", "confidence", "lot", "regime", "tier", "timestamp"] if c in q2_df.columns]
+                    show_cols = _select_speed_trader_cols(
+                        q2_df,
+                        [
+                            "tradable",
+                            "tradable_reasons_blocking",
+                            "ui_warning",
+                            "entry_condition",
+                            "entry_ref_price",
+                        ],
+                    )
+                    if _is_ops_research_mode():
+                        show_cols += [
+                            c
+                            for c in [
+                                "raw_signal_confidence",
+                                "permission_reason",
+                                "countertrend",
+                            ]
+                            if c in q2_df.columns and c not in show_cols
+                        ]
                     if show_trailing_q:
                         trail_preview_cols = [c for c in ["trail_enabled", "trail_rule", "trail_offset", "trail_start"] if c in q2_df.columns]
                         trail_live_cols = [c for c in ["mfe_price", "trail_stop", "current_stop", "profit_locked"] if c in q2_df.columns]
@@ -2856,7 +3420,7 @@ if nav == "Home":
     try:
         t20_path = TARGET_POINTS_QUEUE_PATH
         if t20_path.exists():
-            t20_all = json.loads(t20_path.read_text())
+            t20_all = load_queue_rows(t20_path)
             t20 = _filter_rows_today(t20_all)
             if t20:
                 t20_df = pd.DataFrame(t20)
@@ -2894,6 +3458,8 @@ if nav == "Home":
                     t20_df["target_points"] = None
                 if "target_premium" not in t20_df.columns:
                     t20_df["target_premium"] = None
+                if "target" not in t20_df.columns:
+                    t20_df["target"] = None
                 try:
                     def _calc_points(row):
                         if row.get("target_points") is not None:
@@ -2909,9 +3475,46 @@ if nav == "Home":
                             return row.get("target_premium")
                         return row.get("target_points")
                     t20_df["target_premium"] = t20_df.apply(_calc_premium, axis=1)
-                except Exception:
-                    pass
-                t20_df = _mask_unresolved_prices(t20_df)
+                except Exception as exc:
+                    logger.warning("t20 target_points calc failed: %s", exc)
+                derived_t20 = {}
+                try:
+                    def _derive_target(row):
+                        if row.get("target") not in (None, "", "None"):
+                            return row.get("target")
+                        entry_val = _safe_float(row.get("entry"))
+                        points_val = _safe_float(row.get("target_points_min") or row.get("target_points"))
+                        if entry_val is None or points_val is None:
+                            return None
+                        side_val = str(row.get("side") or "BUY").upper()
+                        if side_val == "SELL":
+                            return round(entry_val - points_val, 2)
+                        return round(entry_val + points_val, 2)
+                    t20_df["target"] = t20_df.apply(_derive_target, axis=1)
+                    for _, row in t20_df.iterrows():
+                        tid = row.get("trade_id")
+                        target_val = row.get("target")
+                        if tid and target_val not in (None, "", "None"):
+                            derived_t20[str(tid)] = float(target_val)
+                except Exception as exc:
+                    logger.warning("t20 target derivation failed: %s", exc)
+                if derived_t20:
+                    updated = False
+                    for entry in t20_all:
+                        tid = entry.get("trade_id")
+                        if not tid or str(tid) not in derived_t20:
+                            continue
+                        if entry.get("target") not in (None, "", "None"):
+                            continue
+                        entry["target"] = derived_t20[str(tid)]
+                        entry["target_derived"] = True
+                        entry["target_source"] = "target_points_min"
+                        updated = True
+                    if updated:
+                        try:
+                            t20_path.write_text(json.dumps(t20_all, indent=2))
+                        except Exception as exc:
+                            logger.warning("t20 target persist failed: %s", exc)
                 show_sim_t20 = False
                 if _is_ops_research_mode():
                     show_sim_t20 = st.checkbox("Show Simulation Columns", value=False, key="show_sim_t20")
@@ -2926,8 +3529,8 @@ if nav == "Home":
                         try:
                             sim_rows = t20_df.apply(lambda r: pd.Series(simulate_row(r.to_dict(), meta_map_t20)), axis=1)
                             t20_df = pd.concat([t20_df, sim_rows], axis=1)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("t20 sim failed: %s", exc)
                 exec_mode = str(getattr(cfg, "EXECUTION_MODE", "PAPER") or "PAPER").upper()
                 is_live_mode = exec_mode == "LIVE"
                 trail_enabled = bool(getattr(cfg, "TRAIL_ENABLE", False)) if is_live_mode else bool(getattr(cfg, "TRAIL_ENABLE_PAPER", True))
@@ -2944,50 +3547,41 @@ if nav == "Home":
                     is_live_mode,
                 )
                 t20_df = apply_trailing_display_df(t20_df)
-                show_cols = [
-                    c
-                    for c in [
-                        "timestamp",
-                        "symbol",
-                        "instrument_id",
-                        "tradingsymbol",
-                        "expiry_date",
-                        "strike",
-                        "type",
-                        "status",
-                        "side",
-                        "entry",
-                        "target_points",
-                        "stop",
-                        "confidence",
-                    ]
-                    if c in t20_df.columns
-                ]
-                show_trailing_t20 = bool(st.session_state.get("show_trailing_cols", False))
-                if show_trailing_t20:
-                    trail_preview_cols = [c for c in ["trail_enabled", "trail_rule", "trail_offset", "trail_start"] if c in t20_df.columns]
-                    trail_live_cols = [c for c in ["mfe_price", "trail_stop", "current_stop", "profit_locked"] if c in t20_df.columns]
-                    show_cols += [c for c in trail_preview_cols + trail_live_cols if c not in show_cols]
-                if show_sim_t20:
-                    sim_cols = ["lot_size", "sim_reason"] + [delta_key(d) for d in DEFAULT_DELTAS]
-                    show_cols += [c for c in sim_cols if c in t20_df.columns]
-                if show_cols:
-                    ui.table(t20_df.sort_values("timestamp", ascending=False)[show_cols].head(20), use_container_width=True)
+                t20_df = normalize_trade_df(t20_df, meta_map_t20)
+                t20_df = filter_non_active(filter_by_permission(t20_df, "ADVISORY_ONLY"))
+                t20_df = dedupe_by_trade_key(t20_df, sort_by="global_confidence")
+                t20_df = _cap_unknown_regime_advisory(t20_df)
+                t20_df = _mask_unresolved_prices(t20_df)
+                t20_df = _add_upstox_links(t20_df)
+                t20_df = normalize_table_df(t20_df)
+                t20_df = _prepare_trade_display_df(t20_df)
+                t20_display = _prepare_trade_display_df(select_display_df(t20_df, "advisory"))
+                link_cols_t20 = [c for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"] if c in t20_df.columns]
+                if link_cols_t20 and "trade_key" in t20_display.columns:
+                    t20_display = t20_display.merge(
+                        t20_df[link_cols_t20].drop_duplicates(subset=["trade_key"], keep="last"),
+                        on="trade_key",
+                        how="left",
+                    )
+                t20_cols = [c for c in t20_display.columns if c not in {"trade_key", "tradingsymbol", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"}]
+                if t20_cols and not t20_display.empty:
+                    _render_upstox_table(t20_display, t20_cols, "t20_advisory")
                 else:
-                    ui.table(t20_df.sort_values("timestamp", ascending=False).head(20), use_container_width=True)
+                    empty_state("No 20-point ideas yet for today.")
                 st.caption("Advisory queue only. Trades are still blocked unless readiness and approval gates pass.")
             else:
                 empty_state("No 20-point ideas yet for today.")
         else:
             empty_state("No 20-point ideas generated yet.")
     except Exception as e:
-        st.warning(f"20-point ideas error: {e}")
+        logger.exception("t20_render_failed: %s", e)
+        st.info("No 20-point ideas available.")
 
     with st.expander("Zero-to-Hero (Lotto) Ideas", expanded=False):
         try:
             zh_path = ZERO_HERO_QUEUE_PATH
             if zh_path.exists():
-                zh_all = json.loads(zh_path.read_text())
+                zh_all = load_queue_rows(zh_path)
                 zh = _filter_rows_today(zh_all)
                 if zh:
                     zh_df = pd.DataFrame(zh)
@@ -3021,6 +3615,11 @@ if nav == "Home":
                             _persist_queue_activation(zh_path, zh_all, zh_df)
                             _log_activation_events(activated_rows, "zero_to_hero")
                     zh_df = _add_live_pnl_columns(zh_df, meta_map_zh)
+                    zh_df = normalize_trade_df(zh_df, meta_map_zh)
+                    zh_df = filter_non_active(filter_by_permission(zh_df, "ADVISORY_ONLY"))
+                    zh_df = dedupe_by_trade_key(zh_df, sort_by="global_confidence")
+                    zh_df = _cap_unknown_regime_advisory(zh_df)
+                    zh_df = _mask_unresolved_prices(zh_df)
                     if "option_type" not in zh_df.columns and "type" in zh_df.columns:
                         zh_df["option_type"] = zh_df["type"]
                     if "premium" not in zh_df.columns:
@@ -3031,25 +3630,37 @@ if nav == "Home":
                         else:
                             zh_df["premium"] = None
                     zh_df["note"] = "PAPER only, non-executable"
-                    show_cols = _zero_to_hero_display_columns(zh_df)
-                    if show_cols:
-                        ui.table(zh_df.sort_values("timestamp", ascending=False)[show_cols].head(20), use_container_width=True)
+                    zh_df = _add_upstox_links(zh_df)
+                    zh_df = normalize_table_df(zh_df)
+                    zh_df = _prepare_trade_display_df(zh_df)
+                    zh_display = _prepare_trade_display_df(select_display_df(zh_df, "advisory"))
+                    link_cols_zh = [c for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"] if c in zh_df.columns]
+                    if link_cols_zh and "trade_key" in zh_display.columns:
+                        zh_display = zh_display.merge(
+                            zh_df[link_cols_zh].drop_duplicates(subset=["trade_key"], keep="last"),
+                            on="trade_key",
+                            how="left",
+                        )
+                    zh_cols = [c for c in zh_display.columns if c not in {"trade_key", "tradingsymbol", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"}]
+                    if zh_cols and not zh_display.empty:
+                        _render_upstox_table(zh_display, zh_cols, "zero_to_hero")
                     else:
-                        ui.table(zh_df.sort_values("timestamp", ascending=False).head(20), use_container_width=True)
+                        empty_state("No Zero-to-Hero ideas yet for today.")
                     st.caption("PAPER-only advisory ideas. No auto-execution.")
                 else:
                     empty_state("No Zero-to-Hero ideas yet for today.")
             else:
                 empty_state("No Zero-to-Hero ideas generated yet.")
         except Exception as e:
-            st.warning(f"Zero-to-Hero error: {e}")
+            logger.exception("zero_to_hero_render_failed: %s", e)
+            st.info("No Zero-to-Hero ideas available.")
 
     if _is_ops_research_mode():
         section_header("Scalp Trades (Range / Low Momentum)")
         try:
             sc_path = SCALP_QUEUE_PATH
             if sc_path.exists():
-                sc_all = json.loads(sc_path.read_text())
+                sc_all = load_queue_rows(sc_path)
                 sc = _filter_rows_today(sc_all)
                 if sc:
                     show_quotes_sc = st.checkbox("Show bid/ask/ltp", value=False, key="show_quotes_sc")
@@ -3081,9 +3692,22 @@ if nav == "Home":
                         sc_df = _hydrate_option_quotes(sc_df, chain_map)
                         sc_df = _add_entry_mismatch(sc_df)
                     sc_df = _ensure_activation_fields(sc_df)
+                    sc_df = normalize_trade_df(sc_df, meta_map_sc)
+                    sc_df = filter_by_permission(sc_df, "QUEUE_ONLY")
+                    sc_df = _mask_unresolved_prices(sc_df)
                     sc_df = apply_trailing_display_df(sc_df)
                     sc_display = sc_df.drop(columns=["trade_id"], errors="ignore")
-                    show_cols = [c for c in ["timestamp", "symbol", "strike", "type", "expiry", "side", "entry", "entry_condition", "entry_ref_price", "stop", "target", "qty", "confidence", "strategy", "tier"] if c in sc_df.columns]
+                    show_cols = _select_speed_trader_cols(
+                        sc_df,
+                        [
+                            "qty",
+                            "tradable",
+                            "tradable_reasons_blocking",
+                            "ui_warning",
+                            "entry_condition",
+                            "entry_ref_price",
+                        ],
+                    )
                     if show_trailing_sc:
                         trail_preview_cols = [c for c in ["trail_enabled", "trail_rule", "trail_offset", "trail_start"] if c in sc_df.columns]
                         trail_live_cols = [c for c in ["mfe_price", "trail_stop", "current_stop", "profit_locked"] if c in sc_df.columns]
@@ -4158,11 +4782,9 @@ if nav == "Gemini":
             if approved_ids:
                 tid = st.text_input("Trade ID to re-queue")
                 if st.button("Re-queue"):
-                    data = []
-                    if q_path.exists():
-                        data = json.loads(q_path.read_text())
+                    data = load_queue_rows(q_path) if q_path.exists() else []
                     data.append({"trade_id": tid, "timestamp": str(pd.Timestamp.now())})
-                    q_path.write_text(json.dumps(data, indent=2))
+                    write_queue_rows(q_path, data)
                     st.success(f"Re-queued {tid}")
     except _SkipSection:
         pass

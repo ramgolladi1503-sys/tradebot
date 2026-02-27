@@ -1,7 +1,9 @@
 import json
 import time
 import hashlib
-from datetime import datetime
+import logging
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from core.orders.order_intent import OrderIntent
@@ -10,11 +12,19 @@ from core.paths import logs_dir
 from core.upstox_resolver import resolve_upstox_key
 from core.market_calendar import choose_nearest_available_expiry
 from core.trade_schema import build_instrument_id
+from core.trade_permission import build_permission_payload
+from core.trade_identity import compute_trade_key, derive_strategy_id
+from core.option_token_resolver import resolve_option_token
+from core.option_entry import validate_live_entry
+from core.tick_store import get_last_tick
+from core.kite_depth_ws import ensure_subscribed_tokens
 
 try:
     from config import config as cfg
 except Exception:
     cfg = None
+
+logger = logging.getLogger(__name__)
 
 
 def _runtime_path(cfg_key: str, filename: str) -> Path:
@@ -243,6 +253,120 @@ def _cfg_int(name, default=0):
     except Exception:
         return int(default)
 
+def _safe_float(value):
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _perm_rank(value: str | None) -> int:
+    mapping = {
+        "BLOCK": 0,
+        "ADVISORY_ONLY": 1,
+        "QUEUE_ONLY": 2,
+        "EXECUTE": 3,
+    }
+    if value is None:
+        return -1
+    return mapping.get(str(value).strip().upper(), -1)
+
+
+def _material_change(old_entry: dict, new_entry: dict, tol: float) -> bool:
+    for key in ("entry", "target", "stop"):
+        old_val = _safe_float(old_entry.get(key))
+        new_val = _safe_float(new_entry.get(key))
+        if old_val is None and new_val is None:
+            continue
+        if old_val is None or new_val is None:
+            return True
+        if abs(old_val - new_val) > float(tol):
+            return True
+    return False
+
+
+def _find_existing_by_key(data: list[dict], trade_key: str) -> tuple[int | None, dict | None]:
+    if not trade_key:
+        return None, None
+    for idx, row in enumerate(data):
+        if not isinstance(row, dict):
+            continue
+        key = row.get("trade_key")
+        if not key:
+            key = compute_trade_key(
+                row.get("symbol"),
+                row.get("expiry_date") or row.get("expiry"),
+                row.get("strike"),
+                row.get("option_type") or row.get("type"),
+                row.get("side"),
+                row.get("strategy_id") or row.get("strategy") or row.get("generator"),
+            )
+            row["trade_key"] = key
+        if key == trade_key:
+            return idx, row
+    return None, None
+
+
+def _merge_trade_entry(data: list[dict], entry: dict) -> list[dict]:
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    trade_key = entry.get("trade_key")
+    if not trade_key:
+        entry["first_seen"] = entry.get("first_seen") or now_iso
+        entry["last_seen"] = now_iso
+        entry["trade_status"] = entry.get("trade_status") or "NEW"
+        entry["update_count"] = int(entry.get("update_count") or 0)
+        data.append(entry)
+        return data
+
+    idx, existing = _find_existing_by_key(data, trade_key)
+    if existing is None:
+        entry["first_seen"] = entry.get("first_seen") or now_iso
+        entry["last_seen"] = now_iso
+        entry["trade_status"] = entry.get("trade_status") or "NEW"
+        entry["update_count"] = int(entry.get("update_count") or 0)
+        data.append(entry)
+        return data
+
+    existing_status = str(existing.get("trade_status") or "").upper()
+    if existing_status in {"INVALIDATED", "EXPIRED"}:
+        entry["first_seen"] = entry.get("first_seen") or now_iso
+        entry["last_seen"] = now_iso
+        entry["trade_status"] = entry.get("trade_status") or "NEW"
+        entry["update_count"] = int(entry.get("update_count") or 0)
+        data.append(entry)
+        return data
+
+    tol = float(getattr(cfg, "TRADE_DEDUP_PRICE_TOL", 0.05)) if cfg else 0.05
+    old_perm = existing.get("permission")
+    new_perm = entry.get("permission")
+    perm_escalated = _perm_rank(new_perm) > _perm_rank(old_perm)
+    changed = _material_change(existing, entry, tol)
+    if perm_escalated:
+        trade_status = "UPDATED_PERMISSION"
+    elif changed:
+        trade_status = "UPDATED"
+    else:
+        trade_status = "REVALIDATED"
+
+    existing_lifecycle = str(existing.get("status") or "").upper()
+    incoming_lifecycle = str(entry.get("status") or "").upper()
+    if existing_lifecycle in {"ACTIVE", "RESOLVED"} and incoming_lifecycle in {"PLANNING", "NEW", ""}:
+        entry["status"] = existing_lifecycle
+
+    update_count = int(existing.get("update_count") or 0) + 1
+    first_seen = existing.get("first_seen") or entry.get("first_seen") or now_iso
+
+    existing.update(entry)
+    existing["first_seen"] = first_seen
+    existing["last_seen"] = now_iso
+    existing["update_count"] = update_count
+    existing["trade_status"] = trade_status
+    data[idx] = existing
+    return data
+
 
 def _derive_target(entry_val, stop_val, side, rr_default: float):
     try:
@@ -275,7 +399,134 @@ def _read_json(path: Path, default):
 
 def _write_json(path: Path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2))
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2))
+    os.replace(tmp_path, path)
+
+
+def _looks_like_trade(payload: dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("symbol") or payload.get("trade_id"):
+        return True
+    if payload.get("strike") is not None:
+        return True
+    if payload.get("type") or payload.get("option_type"):
+        return True
+    return False
+
+
+def _normalize_queue_row(row: dict) -> dict:
+    out = dict(row or {})
+    out.setdefault("symbol", out.get("underlying"))
+    if out.get("expiry_date") in (None, "", "None"):
+        out["expiry_date"] = _coerce_expiry(out.get("expiry")) or out.get("expiry")
+    if out.get("expiry") in (None, "", "None"):
+        out["expiry"] = out.get("expiry_date")
+    opt_type = _coerce_option_type(out.get("option_type") or out.get("type") or out.get("right"))
+    if opt_type:
+        out["option_type"] = opt_type
+        out["type"] = opt_type
+    strike = out.get("strike")
+    strike_val = _coerce_strike(strike)
+    if strike_val is not None:
+        out["strike"] = strike_val
+    out.setdefault("status", "PLANNING")
+    out.setdefault("entry", out.get("entry_price"))
+    for key in ("symbol", "expiry_date", "strike", "type", "status"):
+        out.setdefault(key, None)
+    ts_ms = _coerce_timestamp_epoch_ms(out)
+    out["timestamp_epoch_ms"] = int(ts_ms)
+    out["timestamp_utc_iso"] = _epoch_ms_to_utc_iso(ts_ms)
+    # Backward-compatible timestamp field
+    if out.get("timestamp") in (None, "", "None"):
+        out["timestamp"] = out["timestamp_utc_iso"]
+    else:
+        out["timestamp"] = str(out.get("timestamp"))
+    return out
+
+
+def _epoch_ms_to_utc_iso(epoch_ms: int) -> str:
+    return datetime.fromtimestamp(float(epoch_ms) / 1000.0, tz=timezone.utc).isoformat()
+
+
+def _coerce_epoch_ms(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        val = float(value)
+        if val <= 0:
+            return None
+        # If already in ms, keep as-is; otherwise treat as seconds.
+        if val >= 10_000_000_000:
+            return int(val)
+        return int(val * 1000.0)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return _coerce_epoch_ms(float(text))
+    except Exception:
+        pass
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return int(dt.timestamp() * 1000.0)
+
+
+def _coerce_timestamp_epoch_ms(row: dict) -> int:
+    for key in ("timestamp_epoch_ms", "timestamp_utc_iso", "timestamp"):
+        ts_ms = _coerce_epoch_ms(row.get(key))
+        if ts_ms is not None:
+            return int(ts_ms)
+    return int(time.time() * 1000.0)
+
+
+def load_queue_rows(path: Path, rewrite_healed: bool = True) -> list[dict]:
+    if not path.exists():
+        return []
+    raw = _read_json(path, [])
+    if not isinstance(raw, list):
+        logger.warning("queue_load_invalid_shape path=%s type=%s", path, type(raw).__name__)
+        return []
+    rows: list[dict] = []
+    modified = False
+    for item in raw:
+        if not isinstance(item, dict):
+            logger.warning("queue_load_skip_non_dict path=%s item_type=%s", path, type(item).__name__)
+            modified = True
+            continue
+        try:
+            normalized = _normalize_queue_row(item)
+        except Exception:
+            logger.warning("queue_load_row_normalize_failed path=%s", path)
+            modified = True
+            continue
+        if normalized != item:
+            modified = True
+        rows.append(normalized)
+    if rewrite_healed and modified:
+        try:
+            write_queue_rows(path, rows)
+        except Exception:
+            logger.warning("queue_heal_write_failed path=%s", path)
+    return rows
+
+
+def write_queue_rows(path: Path, rows: list[dict]) -> None:
+    safe_rows = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        safe_rows.append(_normalize_queue_row(row))
+    _write_json(path, safe_rows)
 
 
 def _load_approvals():
@@ -352,9 +603,7 @@ def add_to_queue(trade, queue_path=None, extra=None):
         pass
     path = queue_path or QUEUE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = []
-    if path.exists():
-        data = json.loads(path.read_text())
+    data = load_queue_rows(path)
     def get_attr(obj, name, default=None):
         if isinstance(obj, dict):
             return obj.get(name, default)
@@ -363,6 +612,7 @@ def add_to_queue(trade, queue_path=None, extra=None):
     trade_id = get_attr(trade, "trade_id")
     if strike_val in (None, 0) and trade_id and "ATM" in str(trade_id):
         strike_val = "ATM"
+    strategy_id = get_attr(trade, "strategy_id") or get_attr(trade, "strategy") or get_attr(trade, "generator")
     entry = {
         "trade_id": trade_id,
         "symbol": get_attr(trade, "symbol"),
@@ -378,10 +628,14 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "option_type": get_attr(trade, "option_type") or get_attr(trade, "right"),
         "side": get_attr(trade, "side"),
         "entry": get_attr(trade, "entry_price"),
+        "entry_price": get_attr(trade, "entry_price"),
         "entry_condition": get_attr(trade, "entry_condition") or "BREAKOUT",
         "entry_ref_price": get_attr(trade, "entry_ref_price"),
+        "signal_price": get_attr(trade, "entry_price"),
         "stop": get_attr(trade, "stop_loss"),
+        "stop_price": get_attr(trade, "stop_price") or get_attr(trade, "stop_loss"),
         "target": get_attr(trade, "target"),
+        "target_price": get_attr(trade, "target_price") or get_attr(trade, "target"),
         "original_stop": get_attr(trade, "original_stop") or get_attr(trade, "stop_loss"),
         "current_stop": get_attr(trade, "current_stop") or get_attr(trade, "stop_loss"),
         "trail_enabled": get_attr(trade, "trail_enabled"),
@@ -395,12 +649,17 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "exit_reason": get_attr(trade, "exit_reason"),
         "status": get_attr(trade, "status") or "PLANNING",
         "activated_ts": get_attr(trade, "activated_ts"),
+        "activation_price": get_attr(trade, "activation_price"),
         "fill_price": get_attr(trade, "fill_price"),
         "ltp_at_activation": get_attr(trade, "ltp_at_activation"),
         "qty": get_attr(trade, "qty"),
         "confidence": get_attr(trade, "confidence"),
         "strategy": get_attr(trade, "strategy"),
+        "strategy_id": strategy_id,
         "regime": get_attr(trade, "regime"),
+        "regime_confidence": get_attr(trade, "regime_confidence"),
+        "day_confidence": get_attr(trade, "day_confidence"),
+        "orb_bias": get_attr(trade, "orb_bias"),
         "tier": get_attr(trade, "tier", None),
         "legs": get_attr(trade, "legs", None),
         "max_profit": get_attr(trade, "max_profit", None),
@@ -417,10 +676,30 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "underlying_spot": get_attr(trade, "underlying_spot", None),
         "spot_source": get_attr(trade, "spot_source", None),
         "option_ltp_source": get_attr(trade, "option_ltp_source", None),
+        "option_ltp_timestamp": get_attr(trade, "option_ltp_timestamp", None),
+        "current_ltp": get_attr(trade, "current_ltp", None),
+        "suggested_entry": get_attr(trade, "suggested_entry", None),
+        "price_age_sec": get_attr(trade, "price_age_sec", None),
+        "quote_age_sec": get_attr(trade, "quote_age_sec", None),
+        "entry_status": get_attr(trade, "entry_status", None),
+        "price_source": get_attr(trade, "price_source", None),
+        "mark_price": get_attr(trade, "mark_price", None),
+        "mid_price": get_attr(trade, "mid_price", None),
+        "best_bid": get_attr(trade, "best_bid", None),
+        "best_ask": get_attr(trade, "best_ask", None),
+        "entry_price_proxy": get_attr(trade, "entry_price_proxy", None),
+        "entry_price_proxy_buy": get_attr(trade, "entry_price_proxy_buy", None),
+        "entry_price_proxy_sell": get_attr(trade, "entry_price_proxy_sell", None),
         "chain_source": get_attr(trade, "chain_source", None),
         "trade_score": get_attr(trade, "trade_score", None),
         "trade_alignment": get_attr(trade, "trade_alignment", None),
         "trade_score_detail": get_attr(trade, "trade_score_detail", None),
+        "direction": get_attr(trade, "direction", None),
+        "global_confidence": get_attr(trade, "global_confidence", None),
+        "permission": get_attr(trade, "permission", None),
+        "permission_reason": get_attr(trade, "permission_reason", None),
+        "countertrend": get_attr(trade, "countertrend", None),
+        "raw_signal_confidence": get_attr(trade, "raw_signal_confidence", None),
         "timestamp": str(get_attr(trade, "timestamp")),
         "upstox_instrument_key": get_attr(trade, "upstox_instrument_key"),
     }
@@ -485,6 +764,16 @@ def add_to_queue(trade, queue_path=None, extra=None):
                 entry.setdefault("instrument_token", meta.get("instrument_token"))
                 entry.setdefault("option_type", _coerce_option_type(meta.get("type")))
                 entry.setdefault("type", _coerce_option_type(meta.get("type")))
+        if (not entry.get("instrument_token")) and entry.get("symbol") and entry.get("expiry_date") and strike_val is not None and opt_type:
+            resolved = resolve_option_token(
+                entry.get("symbol"),
+                entry.get("expiry_date"),
+                strike_val,
+                opt_type,
+            )
+            if resolved:
+                entry.setdefault("instrument_token", resolved.get("instrument_token"))
+                entry.setdefault("tradingsymbol", resolved.get("tradingsymbol"))
         if not entry.get("instrument_id"):
             if entry.get("tradingsymbol"):
                 entry["instrument_id"] = entry.get("tradingsymbol")
@@ -520,10 +809,41 @@ def add_to_queue(trade, queue_path=None, extra=None):
             entry.setdefault("execution_allowed", False)
             entry.setdefault("hard_reason", "unresolved_contract")
             entry.setdefault("approval_blocked", True)
-            entry["stop"] = None
-            entry["current_stop"] = None
-            entry["target"] = None
+            if not entry.get("entry_status"):
+                entry["entry_status"] = "NO_TOKEN"
+            entry["entry"] = None
         else:
+            token_val = entry.get("instrument_token")
+            if token_val is not None:
+                try:
+                    ensure_subscribed_tokens([int(token_val)], reason="trade_created", symbol=entry.get("symbol"))
+                except Exception:
+                    pass
+            tick = None
+            try:
+                tick = get_last_tick(entry.get("instrument_token"))
+            except Exception:
+                tick = None
+            current_ltp = tick.get("ltp") if isinstance(tick, dict) else None
+            ltp_ts_epoch = tick.get("ts_epoch") if isinstance(tick, dict) else None
+            validation = validate_live_entry(
+                signal_price=entry.get("signal_price"),
+                current_ltp=current_ltp,
+                ltp_ts_epoch=ltp_ts_epoch,
+            )
+            entry["current_ltp"] = validation.get("current_ltp")
+            entry["option_ltp_timestamp"] = ltp_ts_epoch
+            entry["price_age_sec"] = validation.get("price_age_sec")
+            entry["entry_status"] = validation.get("entry_status")
+            entry["suggested_entry"] = validation.get("suggested_entry")
+            if validation.get("valid"):
+                entry["entry"] = validation.get("suggested_entry")
+                entry["option_ltp_source"] = tick.get("source") if isinstance(tick, dict) else entry.get("option_ltp_source")
+            else:
+                entry["entry"] = None
+                entry.setdefault("execution_allowed", False)
+                entry["permission"] = "ADVISORY_ONLY"
+                entry["permission_reason"] = entry.get("permission_reason") or validation.get("entry_status")
             if not entry.get("upstox_instrument_key"):
                 try:
                     entry["upstox_instrument_key"] = resolve_upstox_key(entry)
@@ -539,12 +859,58 @@ def add_to_queue(trade, queue_path=None, extra=None):
                     entry["stop_premium"] = round(abs(entry_val - stop_val), 2)
             except Exception:
                 pass
-    if entry.get("instrument") == "OPT":
-        window_min = int(getattr(cfg, "QUEUE_DEDUPE_WINDOW_MIN", 5) or 5) if cfg else 5
-        data = _dedupe_queue_entries(data, entry, window_min)
-    else:
-        data.append(entry)
-    path.write_text(json.dumps(data, indent=2))
+    try:
+        raw_conf = entry.get("raw_signal_confidence")
+        if raw_conf is None:
+            raw_conf = entry.get("confidence")
+        regime = entry.get("regime") or "UNKNOWN"
+        regime_conf = entry.get("regime_confidence")
+        if regime_conf is None:
+            regime_conf = entry.get("day_confidence")
+        orb_bias = entry.get("orb_bias")
+        if not orb_bias and isinstance(entry.get("source_flags"), dict):
+            orb_bias = entry.get("source_flags", {}).get("orb_bias")
+        option_type = entry.get("option_type") or entry.get("type")
+        side = entry.get("side")
+        last_candle = entry.get("last_candle")
+        atr_ratio = entry.get("atr_ratio") or entry.get("atr_pct")
+        perm = build_permission_payload(
+            signal_score=raw_conf,
+            regime=regime,
+            regime_conf=regime_conf,
+            orb_bias=orb_bias,
+            option_type=option_type,
+            side=side,
+            last_candle=last_candle if isinstance(last_candle, dict) else None,
+            atr_ratio=atr_ratio,
+        )
+        entry["direction"] = perm.get("direction")
+        entry["global_confidence"] = perm.get("global_confidence")
+        entry["permission"] = perm.get("permission")
+        entry["permission_reason"] = perm.get("permission_reason")
+        entry["countertrend"] = perm.get("countertrend")
+        entry["raw_signal_confidence"] = raw_conf
+        if perm.get("global_confidence") is not None:
+            entry["confidence"] = perm.get("global_confidence")
+        if perm.get("regime_confidence") is not None:
+            entry["regime_confidence"] = perm.get("regime_confidence")
+        entry_status = str(entry.get("entry_status") or "")
+        if entry_status and entry_status != "OK":
+            entry["permission"] = "ADVISORY_ONLY"
+            entry["permission_reason"] = entry.get("permission_reason") or entry_status
+    except Exception as exc:
+        logger.warning("permission_compute_failed: %s", exc)
+        entry["permission_reason"] = f"permission_compute_failed:{type(exc).__name__}"
+    entry["trade_key"] = compute_trade_key(
+        entry.get("symbol"),
+        entry.get("expiry_date") or entry.get("expiry"),
+        entry.get("strike"),
+        entry.get("option_type") or entry.get("type"),
+        entry.get("side"),
+        entry.get("strategy_id") or entry.get("strategy"),
+    )
+    data = _merge_trade_entry(data, entry)
+    write_queue_rows(path, data)
     # Log suggestion for evaluation
     _append_jsonl(suggestion_log_paths(), entry)
 
@@ -574,9 +940,7 @@ def approve(trade_id, payload_hash=None, ttl_sec=None, approver=None):
 def get_queue_entry(trade_id, queue_paths=None):
     queue_paths = queue_paths or [QUEUE_PATH, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH, TARGET_POINTS_QUEUE_PATH]
     for path in queue_paths:
-        rows = _read_json(path, [])
-        if not isinstance(rows, list):
-            continue
+        rows = load_queue_rows(path)
         for row in rows:
             if isinstance(row, dict) and str(row.get("trade_id")) == str(trade_id):
                 return row
@@ -585,6 +949,6 @@ def get_queue_entry(trade_id, queue_paths=None):
 def remove_from_queue(trade_id):
     if not QUEUE_PATH.exists():
         return
-    data = json.loads(QUEUE_PATH.read_text())
+    data = load_queue_rows(QUEUE_PATH)
     data = [d for d in data if d.get("trade_id") != trade_id]
-    QUEUE_PATH.write_text(json.dumps(data, indent=2))
+    write_queue_rows(QUEUE_PATH, data)
