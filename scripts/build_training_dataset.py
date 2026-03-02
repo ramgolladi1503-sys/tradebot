@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import argparse
 import json
 import runpy
@@ -63,8 +64,8 @@ def _validate_rows(rows: list[dict]) -> tuple[bool, str]:
 
 
 def build_training_dataset(
-    input_dir: str = "data/training",
-    output_path: str = "data/training/trade_labels_training.jsonl",
+    input_dir: str = str(data_root() / "training"),
+    output_path: str = str(data_root() / "training" / "trade_labels_training.jsonl"),
 ) -> tuple[bool, str, int]:
     in_dir = Path(input_dir)
     if not in_dir.exists():
@@ -83,10 +84,10 @@ def build_training_dataset(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build merged training dataset from post-trade labels.")
-    parser.add_argument("--input-dir", default="data/training", help="Directory containing trade_labels_*.jsonl")
+    parser.add_argument("--input-dir", default=str(data_root() / "training"), help="Directory containing trade_labels_*.jsonl")
     parser.add_argument(
         "--output",
-        default="data/training/trade_labels_training.jsonl",
+        default=str(data_root() / "training" / "trade_labels_training.jsonl"),
         help="Merged output JSONL path",
     )
     args = parser.parse_args()

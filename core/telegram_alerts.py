@@ -4,11 +4,12 @@ from pathlib import Path
 import requests
 from config import config as cfg
 from core.trade_ticket import TradeTicket
+from core.paths import logs_dir
 
 
 def _log_blocked(reason: str, payload: dict | None = None) -> None:
     try:
-        path = Path("logs/telegram_blocked.jsonl")
+        path = logs_dir() / "telegram_blocked.jsonl"
         path.parent.mkdir(exist_ok=True)
         row = {"ts_epoch": time.time(), "reason": reason}
         if payload:

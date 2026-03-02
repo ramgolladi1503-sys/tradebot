@@ -31,3 +31,18 @@ def test_active_filtered_out_of_advisory():
     symbols = set(filtered["symbol"].astype(str).tolist())
     assert "NIFTY" not in symbols
     assert "BANKNIFTY" in symbols
+
+
+def test_normalize_df_handles_duplicate_last_seen_columns():
+    df = pd.DataFrame(
+        [
+            {"timestamp": None, "created_at": "2026-02-27T10:00:00Z", "symbol": "NIFTY"},
+            {"timestamp": "2026-02-27T10:05:00Z", "created_at": None, "symbol": "BANKNIFTY"},
+        ]
+    )
+
+    out = normalize_df(df)
+
+    assert list(out.columns).count("last_seen_ts") == 1
+    assert pd.notna(out.iloc[0]["last_seen_ts"])
+    assert pd.notna(out.iloc[1]["last_seen_ts"])

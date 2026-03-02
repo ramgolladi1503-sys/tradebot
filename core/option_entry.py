@@ -6,6 +6,7 @@ Ensures suggested entry is derived from live option LTP and blocks stale prices.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from config import config as cfg
@@ -21,6 +22,16 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
+def get_option_ltp_sla_sec(mode: str | None, default_live: float) -> float:
+    mode_key = str(mode or "").strip().upper()
+    if mode_key in {"PAPER", "SIM", "BACKTEST"}:
+        try:
+            return float(os.getenv("PAPER_OPTION_LTP_SLA_SEC", "6"))
+        except Exception:
+            return 6.0
+    return float(default_live)
+
+
 def validate_live_entry(
     *,
     signal_price: float | None,
@@ -29,10 +40,12 @@ def validate_live_entry(
     now_epoch: float | None = None,
     mismatch_pct: float | None = None,
     max_age_sec: float | None = None,
+    mode: str | None = None,
 ) -> dict[str, Any]:
     now_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     mismatch_pct = float(mismatch_pct if mismatch_pct is not None else getattr(cfg, "OPTION_ENTRY_MISMATCH_PCT", 0.03))
-    max_age_sec = float(max_age_sec if max_age_sec is not None else getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0))
+    live_sla = float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0))
+    max_age_sec = float(max_age_sec if max_age_sec is not None else get_option_ltp_sla_sec(mode, live_sla))
 
     out: dict[str, Any] = {
         "signal_price": signal_price,
@@ -64,4 +77,3 @@ def validate_live_entry(
     out["entry_status"] = "OK"
     out["valid"] = True
     return out
-

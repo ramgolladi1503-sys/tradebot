@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 from pathlib import Path
 from config import config as cfg
@@ -15,8 +16,8 @@ def _load(path):
 
 
 def main():
-    exec_analytics = _load("logs/execution_analytics.json") or {}
-    fill_daily = _load("logs/fill_quality_daily.json") or {}
+    exec_analytics = _load(str(logs_dir() / "execution_analytics.json")) or {}
+    fill_daily = _load(str(logs_dir() / "fill_quality_daily.json")) or {}
     latest_exec_q = get_latest_exec_quality()
     print("Execution diagnostics:")
     print(f"- slippage_bps (config): {getattr(cfg, 'SLIPPAGE_BPS', None)}")

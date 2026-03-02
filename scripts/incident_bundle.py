@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import argparse
 import json
 import hashlib
@@ -12,7 +13,7 @@ def _sha256_bytes(b: bytes) -> str:
 
 
 def _load_incident(incident_id: str):
-    path = Path(getattr(cfg, "INCIDENTS_LOG_PATH", "logs/incidents.jsonl"))
+    path = Path(getattr(cfg, "INCIDENTS_LOG_PATH", str(logs_dir() / "incidents.jsonl")))
     if not path.exists():
         return None
     for line in path.read_text().splitlines():
@@ -27,7 +28,7 @@ def _load_incident(incident_id: str):
     return None
 
 
-def build_bundle(incident_id: str, out_dir: str = "logs/incident_bundles") -> Path:
+def build_bundle(incident_id: str, out_dir: str = str(logs_dir() / "incident_bundles")) -> Path:
     incident = _load_incident(incident_id)
     if not incident:
         raise SystemExit(f"incident_id not found: {incident_id}")
@@ -39,8 +40,8 @@ def build_bundle(incident_id: str, out_dir: str = "logs/incident_bundles") -> Pa
         "files": [],
     }
     files = [
-        Path(getattr(cfg, "INCIDENTS_LOG_PATH", "logs/incidents.jsonl")),
-        Path(getattr(cfg, "AUDIT_LOG_PATH", "logs/audit_log.jsonl")),
+        Path(getattr(cfg, "INCIDENTS_LOG_PATH", str(logs_dir() / "incidents.jsonl"))),
+        Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl"))),
         Path(getattr(cfg, "DESK_LOG_DIR", "logs")) / "sla_check.json",
         Path(getattr(cfg, "DESK_LOG_DIR", "logs")) / "config_snapshot.json",
         Path(cfg.TRADE_DB_PATH),
@@ -61,7 +62,7 @@ def build_bundle(incident_id: str, out_dir: str = "logs/incident_bundles") -> Pa
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--incident-id", required=True)
-    parser.add_argument("--out-dir", default="logs/incident_bundles")
+    parser.add_argument("--out-dir", default=str(logs_dir() / "incident_bundles"))
     args = parser.parse_args()
     path = build_bundle(args.incident_id, out_dir=args.out_dir)
     print(f"Bundle created: {path}")

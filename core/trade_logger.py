@@ -17,6 +17,7 @@ from pathlib import Path
 from core.trade_schema import build_instrument_id, validate_trade_identity
 from core.post_trade_labeler import PostTradeLabeler
 from core.trade_log_paths import ensure_trade_log_file
+from core.paths import logs_dir
 import time
 
 
@@ -128,17 +129,19 @@ def log_trade(trade, extra=None):
         _log_error({"error": "insert_trade_failed", "detail": str(exc), "trade_id": trade.trade_id})
 
 def _append_update(update_entry):
-    with open("data/trade_updates.json", "a") as f:
-        f.write(json.dumps(update_entry) + "\n")
+    path = logs_dir() / "trade_updates.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(update_entry, default=str) + "\n")
 
 
 def _log_error(payload: dict) -> None:
     try:
-        path = Path("logs/trade_logger_errors.jsonl")
-        path.parent.mkdir(exist_ok=True)
+        path = logs_dir() / "trade_logger_errors.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
         payload = dict(payload)
         payload.setdefault("ts", time.time())
-        with path.open("a") as f:
+        with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, default=str) + "\n")
     except Exception:
         print("[TRADE_LOGGER_ERROR] failed to write error log")
@@ -200,7 +203,7 @@ def update_trade_outcome(
     path = _trade_log_path()
     from core.strategy_tracker import StrategyTracker
     tracker = StrategyTracker()
-    tracker.load("logs/strategy_perf.json")
+    tracker.load(str(logs_dir() / "strategy_perf.json"))
     strategy = None
     symbol = None
     side = None
@@ -287,7 +290,7 @@ def update_trade_outcome(
                     pnl *= -1
                 tracker.record(strategy, pnl)
                 tracker.record_symbol(symbol, pnl)
-                tracker.save("logs/strategy_perf.json")
+                tracker.save(str(logs_dir() / "strategy_perf.json"))
         except Exception:
             pass
         return entry
@@ -370,7 +373,7 @@ def update_trade_outcome(
                     pnl *= -1
                 tracker.record(strategy, pnl)
                 tracker.record_symbol(symbol, pnl)
-                tracker.save("logs/strategy_perf.json")
+                tracker.save(str(logs_dir() / "strategy_perf.json"))
         except Exception:
             pass
     return updated_entry if updated else None

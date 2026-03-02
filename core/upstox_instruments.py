@@ -11,6 +11,7 @@ It returns an empty index when no data is present.
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import csv
 import gzip
 import json
@@ -32,9 +33,9 @@ def default_instruments_path() -> Path | None:
     except Exception:
         pass
     for name in (
-        "data/upstox_instruments.json.gz",
-        "data/upstox_instruments.json",
-        "data/upstox_instruments.csv",
+        str(data_root() / "upstox_instruments.json.gz"),
+        str(data_root() / "upstox_instruments.json"),
+        str(data_root() / "upstox_instruments.csv"),
     ):
         path = Path(name)
         if path.exists():

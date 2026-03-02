@@ -3,12 +3,13 @@ import time
 import hashlib
 from pathlib import Path
 from typing import Optional
+from core.paths import data_root, logs_dir
 
 import numpy as np
 import pandas as pd
 
-AB_PATH = Path("logs/model_ab_trials.jsonl")
-AB_SUMMARY_PATH = Path("logs/model_ab_summary.json")
+AB_PATH = logs_dir() / "model_ab_trials.jsonl"
+AB_SUMMARY_PATH = logs_dir() / "model_ab_summary.json"
 
 
 def file_hash(path: str | Path | None) -> Optional[str]:
@@ -125,7 +126,7 @@ def log_ab_trial(trade_id: str,
         pass
 
 
-def attach_outcomes(trade_log_path: str = "data/trade_log.json", ab_path: Path | None = None) -> Path | None:
+def attach_outcomes(trade_log_path: str = str(data_root() / "trade_log.json"), ab_path: Path | None = None) -> Path | None:
     ab_path = ab_path or AB_PATH
     if not ab_path.exists():
         return None
@@ -186,4 +187,3 @@ def bootstrap_pvalue(y, champ, chall, metric: str = "brier", n: int = 500, seed:
     p_value = float(np.mean(boot <= 0.0))
     effect = float(np.mean(diff))
     return {"p_value": p_value, "effect": effect}
-

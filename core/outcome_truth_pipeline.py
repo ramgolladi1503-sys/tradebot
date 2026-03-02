@@ -5,6 +5,7 @@ This module keeps data-truth checks deterministic and mode-aware.
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -39,7 +40,7 @@ def _coerce_int(value: Any) -> int | None:
 
 
 def _status_paths(day: str) -> tuple[Path, Path]:
-    latest = Path(getattr(cfg, "OUTCOME_TRUTH_STATUS_PATH", "logs/outcome_truth_status_latest.json"))
+    latest = Path(getattr(cfg, "OUTCOME_TRUTH_STATUS_PATH", str(logs_dir() / "outcome_truth_status_latest.json")))
     if latest.name.endswith(".json") and "latest" in latest.name:
         day_path = latest.with_name(f"outcome_truth_status_{day}.json")
         return day_path, latest
@@ -436,8 +437,8 @@ def assess_outcome_truth(
     now_ts = float(now_epoch if now_epoch is not None else now_utc_epoch())
     window_days = max(1, int(getattr(cfg, "ACCEPTANCE_WINDOW_DAYS", 30)))
     start_epoch = now_ts - float(window_days * 86400.0)
-    db = Path(db_path or getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
-    truth = Path(truth_path or getattr(cfg, "TRUTH_DATASET_PATH", "data/truth_dataset.parquet"))
+    db = Path(db_path or getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
+    truth = Path(truth_path or getattr(cfg, "TRUTH_DATASET_PATH", str(data_root() / "truth_dataset.parquet")))
 
     min_outcome_rows = max(
         1,
@@ -522,9 +523,9 @@ def run_outcome_truth_pipeline(
     now_ts = float(now_epoch if now_epoch is not None else now_utc_epoch())
     window_days = max(1, int(getattr(cfg, "ACCEPTANCE_WINDOW_DAYS", 30)))
     start_epoch = now_ts - float(window_days * 86400.0)
-    db = Path(db_path or getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
-    truth = Path(truth_path or getattr(cfg, "TRUTH_DATASET_PATH", "data/truth_dataset.parquet"))
-    decision_jsonl = Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"))
+    db = Path(db_path or getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
+    truth = Path(truth_path or getattr(cfg, "TRUTH_DATASET_PATH", str(data_root() / "truth_dataset.parquet")))
+    decision_jsonl = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
 
     reconcile_meta = {
         "ok": True,

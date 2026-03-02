@@ -6,6 +6,8 @@ import os
 import json
 import time
 import math
+import sqlite3
+import pandas as pd
 from datetime import timezone
 from datetime import datetime, timedelta
 from config import config as cfg
@@ -21,6 +23,7 @@ from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
 from core.market_context import derive_market_context, is_offhours
+from core.paths import logs_dir
 from core.time_utils import (
     compute_age_sec,
     is_market_open_ist,
@@ -470,7 +473,7 @@ def _log_index_quote_request(symbol: str, endpoint: str, requested_symbols: list
             "ts_epoch": now_epoch,
             "ts_ist": now_ist().isoformat(),
         }
-        p = Path("logs/index_quote_requests.jsonl")
+        p = logs_dir() / "index_quote_requests.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=True) + "\n")
@@ -881,7 +884,7 @@ def _append_live_quote_error(
             "source": str(source) if source is not None else None,
             "details": details if isinstance(details, dict) else {},
         }
-        p = Path("logs/live_quote_errors.jsonl")
+        p = logs_dir() / "live_quote_errors.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=True) + "\n")
@@ -1078,7 +1081,7 @@ def _log_insufficient_ohlc_warning(
         "ts_ist": now_ist().isoformat(),
     }
     try:
-        p = Path("logs/market_data_warnings.jsonl")
+        p = logs_dir() / "market_data_warnings.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=True) + "\n")
@@ -1341,7 +1344,7 @@ def seed_ohlc_buffers_on_startup(
         }
         rows.append(row)
         try:
-            p = Path("logs/market_data_warmup.jsonl")
+            p = logs_dir() / "market_data_warmup.jsonl"
             p.parent.mkdir(parents=True, exist_ok=True)
             with p.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(row, ensure_ascii=True) + "\n")
@@ -1575,6 +1578,353 @@ def get_ltp(symbol: str):
 
 # Alias for backward compatibility
 get_nifty_ltp = get_ltp
+
+
+_CANDLE_COLUMNS = ("time_ms", "open", "high", "low", "close", "volume")
+_OPTION_SERIES_COLUMNS = (
+    "time_ms",
+    "ltp",
+    "bid",
+    "ask",
+    "mark_price",
+    "quote_age_sec",
+    "spread_pct",
+    "source",
+)
+
+
+def _empty_candles_df() -> pd.DataFrame:
+    return pd.DataFrame(columns=list(_CANDLE_COLUMNS))
+
+
+def _coerce_epoch_ms(value) -> int | None:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            dt = value
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return int(dt.timestamp() * 1000.0)
+        if isinstance(value, (int, float)):
+            num = float(value)
+            if num <= 0:
+                return None
+            if num >= 10_000_000_000:
+                return int(num)
+            return int(num * 1000.0)
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return _coerce_epoch_ms(float(text))
+        except Exception:
+            pass
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return int(dt.timestamp() * 1000.0)
+    except Exception:
+        return None
+
+
+def get_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+    """
+    Fetch OHLCV candles for index underlyings using existing Kite integration.
+    Returns a schema-stable DataFrame with columns:
+      time_ms, open, high, low, close, volume
+    """
+    empty = _empty_candles_df()
+    try:
+        sym = str(symbol or "").upper().strip()
+        iv = str(interval or "minute").strip() or "minute"
+        start_epoch_ms = _coerce_epoch_ms(start_ms)
+        end_epoch_ms = _coerce_epoch_ms(end_ms)
+        if not sym or start_epoch_ms is None or end_epoch_ms is None or end_epoch_ms <= start_epoch_ms:
+            return empty
+        token = kite_client.resolve_index_token(sym)
+        if token is None:
+            return empty
+        ist = timezone(timedelta(hours=5, minutes=30))
+        from_dt = datetime.fromtimestamp(float(start_epoch_ms) / 1000.0, tz=timezone.utc).astimezone(ist)
+        to_dt = datetime.fromtimestamp(float(end_epoch_ms) / 1000.0, tz=timezone.utc).astimezone(ist)
+        candles = kite_client.historical_data(int(token), from_dt, to_dt, interval=iv) or []
+        rows = []
+        for candle in candles:
+            if not isinstance(candle, dict):
+                continue
+            ts_ms = _coerce_epoch_ms(candle.get("date") or candle.get("ts"))
+            open_px = _as_bar_float(candle.get("open"))
+            high_px = _as_bar_float(candle.get("high"))
+            low_px = _as_bar_float(candle.get("low"))
+            close_px = _as_bar_float(candle.get("close"))
+            volume = _as_bar_float(candle.get("volume"))
+            if ts_ms is None or open_px is None or high_px is None or low_px is None or close_px is None:
+                continue
+            rows.append(
+                {
+                    "time_ms": int(ts_ms),
+                    "open": float(open_px),
+                    "high": float(high_px),
+                    "low": float(low_px),
+                    "close": float(close_px),
+                    "volume": float(volume if volume is not None else 0.0),
+                }
+            )
+        if not rows:
+            return empty
+        out = pd.DataFrame(rows)
+        out = out.sort_values("time_ms").drop_duplicates(subset=["time_ms"], keep="last")
+        for col in _CANDLE_COLUMNS:
+            if col not in out.columns:
+                out[col] = None
+        return out[list(_CANDLE_COLUMNS)]
+    except Exception:
+        return empty
+
+
+def _empty_option_series_df() -> pd.DataFrame:
+    return pd.DataFrame(columns=list(_OPTION_SERIES_COLUMNS))
+
+
+def get_underlying_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+    """Explicit wrapper for underlying index candles."""
+    return get_candles(symbol=symbol, interval=interval, start_ms=start_ms, end_ms=end_ms)
+
+
+def _top_price(levels) -> float | None:
+    if not isinstance(levels, list) or not levels:
+        return None
+    level0 = levels[0] if isinstance(levels[0], dict) else None
+    if not isinstance(level0, dict):
+        return None
+    for key in ("price", "p"):
+        val = _as_bar_float(level0.get(key))
+        if val is not None:
+            return float(val)
+    return None
+
+
+def _parse_depth_snapshot(depth_json_text: str | None) -> tuple[float | None, float | None]:
+    try:
+        payload = json.loads(depth_json_text or "{}")
+    except Exception:
+        return None, None
+    if not isinstance(payload, dict):
+        return None, None
+    depth = payload.get("depth")
+    if isinstance(depth, dict):
+        source = depth
+    else:
+        source = payload
+    bid = _top_price(source.get("buy") or source.get("bids"))
+    ask = _top_price(source.get("sell") or source.get("asks"))
+    return bid, ask
+
+
+def _load_option_snapshots_from_db(instrument_token: int, start_ms: int, end_ms: int, max_rows: int = 4000) -> pd.DataFrame:
+    out = _empty_option_series_df()
+    if instrument_token <= 0:
+        return out
+    db_path = Path(str(getattr(cfg, "TRADE_DB_PATH", "") or ""))
+    if not db_path.exists():
+        return out
+    start_sec = float(start_ms) / 1000.0
+    end_sec = float(end_ms) / 1000.0
+    if end_sec <= start_sec:
+        return out
+
+    by_time: dict[int, dict] = {}
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            try:
+                tick_rows = conn.execute(
+                    """
+                    SELECT timestamp_epoch, last_price
+                    FROM ticks
+                    WHERE instrument_token=? AND timestamp_epoch BETWEEN ? AND ?
+                    ORDER BY timestamp_epoch ASC
+                    LIMIT ?
+                    """,
+                    (int(instrument_token), float(start_sec), float(end_sec), int(max_rows)),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                tick_rows = []
+            for ts_epoch, last_price in tick_rows:
+                ts_ms = _coerce_epoch_ms(ts_epoch)
+                ltp = _as_bar_float(last_price)
+                if ts_ms is None or ltp is None:
+                    continue
+                rec = by_time.setdefault(
+                    int(ts_ms),
+                    {
+                        "time_ms": int(ts_ms),
+                        "ltp": None,
+                        "bid": None,
+                        "ask": None,
+                        "mark_price": None,
+                        "quote_age_sec": None,
+                        "spread_pct": None,
+                        "source": "option_snapshot",
+                    },
+                )
+                rec["ltp"] = float(ltp)
+            try:
+                depth_rows = conn.execute(
+                    """
+                    SELECT timestamp_epoch, depth_json
+                    FROM depth_snapshots
+                    WHERE instrument_token=? AND timestamp_epoch BETWEEN ? AND ?
+                    ORDER BY timestamp_epoch ASC
+                    LIMIT ?
+                    """,
+                    (int(instrument_token), float(start_sec), float(end_sec), int(max_rows)),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                depth_rows = []
+            for ts_epoch, depth_json in depth_rows:
+                ts_ms = _coerce_epoch_ms(ts_epoch)
+                if ts_ms is None:
+                    continue
+                bid, ask = _parse_depth_snapshot(depth_json)
+                if bid is None and ask is None:
+                    continue
+                rec = by_time.setdefault(
+                    int(ts_ms),
+                    {
+                        "time_ms": int(ts_ms),
+                        "ltp": None,
+                        "bid": None,
+                        "ask": None,
+                        "mark_price": None,
+                        "quote_age_sec": None,
+                        "spread_pct": None,
+                        "source": "option_snapshot",
+                    },
+                )
+                if bid is not None:
+                    rec["bid"] = float(bid)
+                if ask is not None:
+                    rec["ask"] = float(ask)
+    except Exception:
+        return out
+
+    if not by_time:
+        return out
+    out = pd.DataFrame(list(by_time.values()))
+    out["ltp"] = pd.to_numeric(out.get("ltp"), errors="coerce")
+    out["bid"] = pd.to_numeric(out.get("bid"), errors="coerce")
+    out["ask"] = pd.to_numeric(out.get("ask"), errors="coerce")
+    mid = (out["bid"] + out["ask"]) / 2.0
+    out["mark_price"] = pd.to_numeric(out.get("mark_price"), errors="coerce")
+    out["mark_price"] = out["mark_price"].where(out["mark_price"].notna(), mid)
+    out["mark_price"] = out["mark_price"].where(out["mark_price"].notna(), out["ltp"])
+    base = pd.to_numeric(out["mark_price"], errors="coerce")
+    base = base.where(base > 0, out["ltp"])
+    spread_calc = (out["ask"] - out["bid"]) / base
+    out["spread_pct"] = pd.to_numeric(out.get("spread_pct"), errors="coerce")
+    out["spread_pct"] = out["spread_pct"].where(out["spread_pct"].notna(), spread_calc)
+    out = out.sort_values("time_ms").drop_duplicates(subset=["time_ms"], keep="last")
+    for col in _OPTION_SERIES_COLUMNS:
+        if col not in out.columns:
+            out[col] = None
+    return out[list(_OPTION_SERIES_COLUMNS)]
+
+
+def get_option_candles_or_snapshots(trade, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+    """
+    Tier-1: option historical candles by instrument_token.
+    Tier-2 fallback: sparse snapshots from ticks/depth telemetry in trade DB.
+    """
+    empty = _empty_option_series_df()
+    try:
+        trade_row = dict(trade or {})
+        start_epoch_ms = _coerce_epoch_ms(start_ms)
+        end_epoch_ms = _coerce_epoch_ms(end_ms)
+        if start_epoch_ms is None or end_epoch_ms is None or end_epoch_ms <= start_epoch_ms:
+            return empty
+        token_raw = trade_row.get("instrument_token")
+        if token_raw in (None, "", "None"):
+            token_raw = trade_row.get("token")
+        try:
+            token = int(token_raw) if token_raw is not None else None
+        except Exception:
+            token = None
+        if token in (None, 0):
+            tsym = str(trade_row.get("tradingsymbol") or "").strip().upper()
+            if tsym:
+                sym_hint = str(trade_row.get("symbol") or "").upper()
+                ex_list = ["BFO", "NFO"] if sym_hint == "SENSEX" else ["NFO", "BFO"]
+                for exchange in ex_list:
+                    try:
+                        instruments = kite_client.instruments_cached(
+                            exchange,
+                            ttl_sec=int(getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600)),
+                        )
+                    except Exception:
+                        instruments = []
+                    match = next(
+                        (inst for inst in (instruments or []) if str(inst.get("tradingsymbol") or "").upper() == tsym),
+                        None,
+                    )
+                    if match and match.get("instrument_token") is not None:
+                        try:
+                            token = int(match.get("instrument_token"))
+                        except Exception:
+                            token = None
+                        break
+        if token is None or token <= 0:
+            return empty
+
+        iv = str(interval or "minute").strip() or "minute"
+        ist = timezone(timedelta(hours=5, minutes=30))
+        from_dt = datetime.fromtimestamp(float(start_epoch_ms) / 1000.0, tz=timezone.utc).astimezone(ist)
+        to_dt = datetime.fromtimestamp(float(end_epoch_ms) / 1000.0, tz=timezone.utc).astimezone(ist)
+
+        try:
+            candles = kite_client.historical_data(int(token), from_dt, to_dt, interval=iv) or []
+        except Exception:
+            candles = []
+        rows = []
+        for candle in candles:
+            if not isinstance(candle, dict):
+                continue
+            ts_ms = _coerce_epoch_ms(candle.get("date") or candle.get("ts"))
+            close_px = _as_bar_float(candle.get("close"))
+            if ts_ms is None or close_px is None:
+                continue
+            rows.append(
+                {
+                    "time_ms": int(ts_ms),
+                    "ltp": float(close_px),
+                    "bid": None,
+                    "ask": None,
+                    "mark_price": None,
+                    "quote_age_sec": None,
+                    "spread_pct": None,
+                    "source": "option_candle",
+                }
+            )
+        if rows:
+            out = pd.DataFrame(rows).sort_values("time_ms").drop_duplicates(subset=["time_ms"], keep="last")
+            for col in _OPTION_SERIES_COLUMNS:
+                if col not in out.columns:
+                    out[col] = None
+            return out[list(_OPTION_SERIES_COLUMNS)]
+
+        return _load_option_snapshots_from_db(
+            instrument_token=int(token),
+            start_ms=int(start_epoch_ms),
+            end_ms=int(end_epoch_ms),
+        )
+    except Exception:
+        return empty
 
 # -------------------------------
 # Option Chain
@@ -2240,7 +2590,7 @@ def fetch_live_market_data():
                 ltp,
                 require_live_quotes=require_live_quotes,
             )
-            health_path = Path("logs/option_chain_health.json")
+            health_path = logs_dir() / "option_chain_health.json"
             health_path.parent.mkdir(exist_ok=True)
             existing = {}
             if health_path.exists():

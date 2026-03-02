@@ -33,6 +33,7 @@ logs/
 
 # Data + models (exclude from repo)
 /data/
+/.trading_bot/
 /models/*
 !/models/__init__.py
 !/models/*.py

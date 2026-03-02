@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import argparse
 
 from config import config as cfg
@@ -9,7 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run ML retrain with gating and promotion rules.")
     parser.add_argument(
         "--trade-log",
-        default=str(getattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl")),
+        default=str(getattr(cfg, "TRADE_LOG_PATH", str(logs_dir() / "trade_log.jsonl"))),
         help="Path to trade log JSON/JSONL.",
     )
     args = parser.parse_args()

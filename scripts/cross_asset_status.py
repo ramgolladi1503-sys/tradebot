@@ -2,6 +2,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from core.paths import data_root
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -11,7 +12,7 @@ from config import config as cfg
 
 
 def _load_payload():
-    path = Path("data/cross_asset.json")
+    path = data_root() / "cross_asset.json"
     if not path.exists():
         return None
     try:

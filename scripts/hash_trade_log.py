@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -10,7 +11,7 @@ import hashlib
 import json
 from datetime import datetime
 
-OUT = Path("logs/log_hashes.json")
+OUT = logs_dir() / "log_hashes.json"
 
 from core.trade_log_paths import ensure_trade_log_exists
 

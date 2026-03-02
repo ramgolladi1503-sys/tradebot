@@ -5,11 +5,12 @@ from datetime import datetime, timezone
 from config import config as cfg
 from pathlib import Path
 from core.incidents import trigger_db_write_fail
+from core.fs_utils import ensure_parent_dir
 
 
 def _conn():
-    Path(cfg.TRADE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(cfg.TRADE_DB_PATH)
+    db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
+    return sqlite3.connect(str(db_path))
 
 
 def classify_outcome_label(realized_pnl: float, epsilon: float = 1e-6) -> str:
@@ -448,9 +449,45 @@ def insert_trade(entry):
                     entry.get("timestamp_iso") or now_iso,
                 ),
             )
+        try:
+            from core.storage import emit_trade_accepted_event
+
+            emit_trade_accepted_event(entry)
+        except Exception:
+            pass
     except Exception as exc:
         trigger_db_write_fail({"table": "trades", "error": str(exc)})
         raise
+
+
+def _lookup_trade_for_outcome(trade_id: str | None) -> dict:
+    if not trade_id:
+        return {}
+    try:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                SELECT symbol, underlying, instrument_token, instrument_id, option_type, right, strike, expiry
+                FROM trades
+                WHERE trade_id=?
+                ORDER BY timestamp_epoch DESC
+                LIMIT 1
+                """,
+                (trade_id,),
+            ).fetchone()
+    except Exception:
+        return {}
+    if not row:
+        return {}
+    return {
+        "symbol": row[0] or row[1],
+        "underlying": row[1],
+        "instrument_token": row[2],
+        "instrument_id": row[3],
+        "option_type": row[4] or row[5],
+        "strike": row[6],
+        "expiry": row[7],
+    }
 
 
 def insert_outcome(outcome):
@@ -484,6 +521,14 @@ def insert_outcome(outcome):
                     outcome.get("timestamp_iso") or now_iso,
                 ),
             )
+        try:
+            from core.storage import emit_trade_exited_event
+
+            enriched = dict(_lookup_trade_for_outcome(outcome.get("trade_id")))
+            enriched.update(dict(outcome or {}))
+            emit_trade_exited_event(enriched)
+        except Exception:
+            pass
     except Exception as exc:
         trigger_db_write_fail({"table": "outcomes", "error": str(exc)})
         raise
@@ -647,6 +692,28 @@ def insert_broker_fill(row):
                     row.get("timestamp_iso") or now_iso,
                 ),
             )
+        try:
+            from core.reconciliation import emit_execution_fill_event
+
+            qty_value = row.get("qty_units")
+            if qty_value is None:
+                qty_value = row.get("qty")
+            emit_execution_fill_event(
+                order_id=row.get("order_id"),
+                broker_order_id=row.get("broker_order_id"),
+                trade_id=row.get("trade_id"),
+                symbol=row.get("symbol"),
+                side=row.get("side"),
+                qty=qty_value,
+                price=row.get("price"),
+                ts_utc=row.get("timestamp_iso") or row.get("timestamp") or now_iso,
+                run_id=row.get("run_id"),
+                desk_id=row.get("desk_id") or getattr(cfg, "DESK_ID", "DEFAULT"),
+                mode=row.get("mode") or getattr(cfg, "EXECUTION_MODE", "PAPER"),
+            )
+        except Exception as exc:
+            # Reconciliation telemetry must never block broker fill persistence.
+            print(f"[EXECUTION_FILL_EVENT_WARN] {exc}")
     except Exception as exc:
         trigger_db_write_fail({"table": "broker_fills", "error": str(exc)})
         raise

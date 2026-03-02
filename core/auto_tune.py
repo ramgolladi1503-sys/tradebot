@@ -2,10 +2,11 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
+from core.paths import logs_dir, data_root
 
 from config import config as cfg
 
-AUTO_TUNE_PATH = Path("logs/auto_tune.json")
+AUTO_TUNE_PATH = logs_dir() / "auto_tune.json"
 _LAST_TUNE_TS = 0
 
 
@@ -62,7 +63,7 @@ def _clamp(val, lo, hi):
 
 
 def compute_auto_tune(window: int = 30):
-    trades = _read_recent_trades(Path("data/trade_log.json"), window)
+    trades = _read_recent_trades(data_root() / "trade_log.json", window)
     if len(trades) < max(10, window // 2):
         return {
             "enabled": False,

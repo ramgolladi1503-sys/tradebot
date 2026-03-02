@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 # core/trade_journal.py
 
 import csv
@@ -5,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 class TradeJournal:
-    def __init__(self, file_path="logs/trade_journal.csv"):
+    def __init__(self, file_path=str(logs_dir() / "trade_journal.csv")):
         self.file_path = Path(file_path)
         self.file_path.parent.mkdir(exist_ok=True)
         if not self.file_path.exists():

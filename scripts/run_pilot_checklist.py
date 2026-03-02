@@ -3,6 +3,7 @@ import json
 import argparse
 from datetime import timedelta
 from pathlib import Path
+from core.paths import logs_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -27,7 +28,7 @@ def _check_whitelist():
     wl = getattr(cfg, "LIVE_STRATEGY_WHITELIST", [])
     if not wl:
         return False, ["strategy_whitelist_empty"]
-    perf_path = Path("logs/strategy_perf.json")
+    perf_path = logs_dir() / "strategy_perf.json"
     if not perf_path.exists():
         return False, ["strategy_registry_missing"]
     try:
@@ -45,8 +46,8 @@ def _check_audit_files():
     if not getattr(cfg, "AUDIT_REQUIRED_TO_TRADE", True):
         return True, []
     day = (now_ist() - timedelta(days=1)).date().isoformat()
-    audit_path = Path(f"logs/daily_audit_{day}.json")
-    exec_path = Path(f"logs/execution_report_{day}.json")
+    audit_path = logs_dir() / f"daily_audit_{day}.json"
+    exec_path = logs_dir() / f"execution_report_{day}.json"
     missing = []
     if not audit_path.exists():
         missing.append(audit_path.name)

@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp_epoch_ms": 1740723900000,
+    "symbol": "NIFTY",
+    "bid": 99.9,
+    "ask": 100.1,
+    "ltp": 100.0,
+    "spread_pct": 0.002
+  },
+  {
+    "timestamp_epoch_ms": 1740723960000,
+    "symbol": "NIFTY",
+    "bid": 100.9,
+    "ask": 101.1,
+    "ltp": 101.0,
+    "spread_pct": 0.00198
+  },
+  {
+    "timestamp_epoch_ms": 1740724020000,
+    "symbol": "NIFTY",
+    "bid": 101.8,
+    "ask": 102.0,
+    "ltp": 101.9,
+    "spread_pct": 0.00196
+  }
+]

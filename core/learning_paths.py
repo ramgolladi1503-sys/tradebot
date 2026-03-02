@@ -38,7 +38,7 @@ def suggestion_log_paths() -> list[Path]:
     return _unique(
         [
             canonical_suggestions_log_path(),
-            Path("logs/suggestions.jsonl"),
+            logs_dir() / "suggestions.jsonl",
         ]
     )
 
@@ -51,7 +51,7 @@ def suggestion_eval_log_paths() -> list[Path]:
     return _unique(
         [
             canonical_suggestion_eval_log_path(),
-            Path("logs/suggestion_eval.jsonl"),
+            logs_dir() / "suggestion_eval.jsonl",
         ]
     )
 
@@ -68,7 +68,7 @@ def rejected_candidates_paths() -> list[Path]:
             desk_path = Path(desk_log_dir) / "blocked_candidates.jsonl"
     except Exception:
         desk_path = None
-    out = [canonical_rejected_candidates_path(), Path("logs/rejected_candidates.jsonl")]
+    out = [canonical_rejected_candidates_path(), logs_dir() / "rejected_candidates.jsonl"]
     if desk_path is not None:
         out.insert(0, desk_path)
     return _unique(out)

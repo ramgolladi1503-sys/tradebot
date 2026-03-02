@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir
 
 import json
 from pathlib import Path
@@ -67,7 +68,7 @@ def auto_clear_risk_halt_if_safe() -> Dict[str, Any]:
 
 
 def _write_guard_log(payload: Dict[str, Any]) -> Dict[str, Any]:
-    path = Path("logs/session_guard.jsonl")
+    path = logs_dir() / "session_guard.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")

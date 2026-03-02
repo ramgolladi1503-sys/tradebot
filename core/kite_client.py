@@ -1,15 +1,19 @@
 import time
 import json
 import os
+import logging
 from datetime import date, datetime
 from pathlib import Path
 from config import config as cfg
 from core.auth_manager import access_token_path, resolve_access_token
+from core.paths import data_root
 
 try:
     from kiteconnect import KiteConnect
 except Exception:
     KiteConnect = None
+
+logger = logging.getLogger(__name__)
 
 class KiteClient:
     def __init__(self):
@@ -88,7 +92,7 @@ class KiteClient:
         return self.kite.instruments(exchange) if exchange else self.kite.instruments()
 
     def instruments_cached(self, exchange=None, ttl_sec=3600):
-        cache_path = Path("data/kite_instruments.json")
+        cache_path = data_root() / "kite_instruments.json"
         now = time.time()
         key = exchange or "ALL"
 
@@ -113,7 +117,7 @@ class KiteClient:
             data = None
         if not data:
             # fallback to local CSV
-            csv_path = Path("data/kite_instruments.csv")
+            csv_path = data_root() / "kite_instruments.csv"
             if csv_path.exists():
                 try:
                     import pandas as pd
@@ -221,47 +225,34 @@ class KiteClient:
                 tokens.append(tok)
         return list(set(tokens))
 
-    def next_available_expiry(self, symbol, exchange="NFO"):
+    def next_available_expiry(self, symbol, exchange="NFO", selection_mode=None):
         seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
         data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
         expiries = []
         for inst in data:
-            if inst.get("segment") != seg:
+            if str(inst.get("segment") or "").upper() != seg:
                 continue
-            if inst.get("name") != symbol:
+            if str(inst.get("name") or "").upper() != str(symbol or "").upper():
                 continue
-            exp = inst.get("expiry")
-            if exp:
+            exp = self._coerce_expiry_date(inst.get("expiry"))
+            if exp is not None:
                 expiries.append(exp)
         if not expiries:
             return None
-        try:
-            from core.market_calendar import choose_nearest_available_expiry
-
-            chosen = choose_nearest_available_expiry(expiries, today=date.today())
-            if chosen is not None:
-                return chosen
-        except Exception:
-            pass
-
-        normalized = []
-        for exp in expiries:
-            if isinstance(exp, datetime):
-                normalized.append(exp.date())
-                continue
-            if isinstance(exp, date):
-                normalized.append(exp)
-                continue
-            try:
-                text = str(exp).split("T", 1)[0]
-                normalized.append(datetime.fromisoformat(text).date())
-            except Exception:
-                continue
-        if not normalized:
-            return None
-        normalized = sorted(set(normalized))
+        normalized = sorted(set(expiries))
+        mode = str(selection_mode or getattr(cfg, "OPTION_EXPIRY_SELECTION", "NEAREST") or "NEAREST").upper()
+        if mode == "MONTHLY":
+            last_by_month = {}
+            for exp in normalized:
+                key = (exp.year, exp.month)
+                prev = last_by_month.get(key)
+                if prev is None or exp > prev:
+                    last_by_month[key] = exp
+            monthly = [last_by_month[key] for key in sorted(last_by_month)]
+            future = [d for d in monthly if d >= date.today()]
+            return future[0] if future else monthly[-1]
         future = [d for d in normalized if d >= date.today()]
-        return future[0] if future else normalized[0]
+        return future[0] if future else normalized[-1]
 
     def token_symbol_map(self, exchange="NFO"):
         data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
@@ -297,7 +288,9 @@ class KiteClient:
         seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
         data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
         strike_val = float(strike)
-        exp_str = str(expiry)
+        exp_norm = self._coerce_expiry_date(expiry)
+        exp_str = str(expiry) if expiry is not None else ""
+        available_expiries = set()
         for inst in data:
             if inst.get("segment") != seg:
                 continue
@@ -309,11 +302,24 @@ class KiteClient:
                 continue
             if inst.get("instrument_type") != opt_type:
                 continue
-            if exp_str and str(inst.get("expiry")) != exp_str:
+            inst_exp = self._coerce_expiry_date(inst.get("expiry"))
+            if inst_exp is not None:
+                available_expiries.add(inst_exp.isoformat())
+            if exp_norm is not None:
+                if inst_exp != exp_norm:
+                    continue
+            elif exp_str and str(inst.get("expiry")) != exp_str:
                 continue
             ts = inst.get("tradingsymbol")
             if ts:
                 return f"{exchange}:{ts}"
+        if exp_norm is not None and available_expiries and exp_norm.isoformat() not in available_expiries:
+            logger.warning(
+                "[EXPIRY_RESOLUTION_MISS] context=find_option_symbol_with_expiry symbol=%s requested_expiry=%s available_expiries=%s",
+                str(symbol or "").upper(),
+                exp_norm.isoformat(),
+                sorted(available_expiries),
+            )
         return None
 
     def quote(self, symbols):

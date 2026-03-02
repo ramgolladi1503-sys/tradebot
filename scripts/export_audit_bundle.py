@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import argparse
 import json
 import shutil
@@ -21,7 +22,7 @@ def _copy_if_exists(src: Path, dst_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", default="logs/audit_bundle")
+    parser.add_argument("--out", default=str(logs_dir() / "audit_bundle"))
     args = parser.parse_args()
 
     out_dir = Path(args.out)
@@ -34,8 +35,8 @@ def main():
     }
 
     logs = Path(getattr(cfg, "DESK_LOG_DIR", "logs"))
-    _copy_if_exists(Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl")), out_dir)
-    _copy_if_exists(Path(getattr(cfg, "AUDIT_LOG_PATH", "logs/audit_log.jsonl")), out_dir)
+    _copy_if_exists(Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl"))), out_dir)
+    _copy_if_exists(Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl"))), out_dir)
     _copy_if_exists(logs / "model_registry.json", out_dir)
     for file in logs.glob("daily_audit_*.json"):
         _copy_if_exists(file, out_dir)

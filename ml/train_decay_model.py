@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root
 
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from ml.strategy_decay_predictor import _select_features
 MODEL_PATH = Path(getattr(cfg, "DECAY_MODEL_PATH", "models/decay_model.pkl"))
 
 
-def train_decay_model(features_path: Path = Path("data/decay_features.parquet")) -> dict:
+def train_decay_model(features_path: Path = data_root() / "decay_features.parquet") -> dict:
     if not features_path.exists():
         raise FileNotFoundError(f"Decay features not found: {features_path}")
 

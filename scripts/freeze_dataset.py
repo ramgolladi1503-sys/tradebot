@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import data_root
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -12,8 +13,8 @@ from datetime import datetime
 from config import config as cfg
 
 SRC = {
-    "trade_log": Path("data/trade_log.json"),
-    "trades_db": Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db")),
+    "trade_log": data_root() / "trade_log.json",
+    "trades_db": Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db"))),
 }
 
 def _hash_file(path):
@@ -25,7 +26,7 @@ def _hash_file(path):
 
 if __name__ == "__main__":
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    snap_dir = Path("data/snapshots") / ts
+    snap_dir = data_root() / "snapshots" / ts
     snap_dir.mkdir(parents=True, exist_ok=True)
 
     manifest = {"timestamp": ts, "files": []}

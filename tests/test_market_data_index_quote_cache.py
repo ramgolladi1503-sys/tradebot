@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from core import market_data as md
 
@@ -177,6 +178,7 @@ def test_resolve_index_quote_depth_present_uses_depth(monkeypatch):
 
 def test_get_ltp_index_uses_exchange_qualified_mapping(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(md.cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     md._DATA_CACHE.clear()
     md._LAST_GOOD_LTP.clear()
     md._INDEX_QUOTE_REQUEST_LOG_TS.clear()
@@ -207,7 +209,7 @@ def test_get_ltp_index_uses_exchange_qualified_mapping(monkeypatch, tmp_path):
     price = md.get_ltp("NIFTY")
     assert price == 25000.0
     assert stub.calls == [["NSE:NIFTY 50"]]
-    req_log = tmp_path / "logs" / "index_quote_requests.jsonl"
+    req_log = Path(md.cfg.LOGS_ROOT) / "index_quote_requests.jsonl"
     assert req_log.exists()
     rows = [json.loads(line) for line in req_log.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert any(
@@ -257,13 +259,14 @@ def test_update_index_quote_snapshot_latest_ltp_used(monkeypatch):
 def test_index_bidask_missing_log_rate_limited(monkeypatch, tmp_path):
     md._LIVE_QUOTE_ERROR_LAST_TS.clear()
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(md.cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(md.cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 60.0, raising=False)
     monkeypatch.setattr(md, "now_utc_epoch", lambda: 1000.0)
     md._log_index_bidask_missing("NIFTY", source="ws")
     # second call inside same minute must be suppressed
     monkeypatch.setattr(md, "now_utc_epoch", lambda: 1010.0)
     md._log_index_bidask_missing("NIFTY", source="ws")
-    p = tmp_path / "logs" / "live_quote_errors.jsonl"
+    p = Path(md.cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 1
     assert rows[0]["event_code"] == "index_bidask_missing"

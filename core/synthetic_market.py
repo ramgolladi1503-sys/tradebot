@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root
 
 import csv
 import json
@@ -37,7 +38,7 @@ def _ist_start_epoch(date_str: str) -> float:
 
 
 def _resolve_instrument_token(symbol: str) -> Optional[int]:
-    path = Path("data/kite_instruments.csv")
+    path = data_root() / "kite_instruments.csv"
     if not path.exists():
         return None
     sym = symbol.upper()

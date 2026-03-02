@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir, data_root
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -15,8 +16,8 @@ from email.mime.text import MIMEText
 from config import config as cfg
 from core.telegram_alerts import send_telegram_message
 
-LOG_PATH = Path("data/trade_log.json")
-OUT_DIR = Path("logs")
+LOG_PATH = data_root() / "trade_log.json"
+OUT_DIR = logs_dir()
 OUT_DIR.mkdir(exist_ok=True)
 
 if not LOG_PATH.exists():

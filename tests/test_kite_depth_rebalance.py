@@ -1,0 +1,79 @@
+import core.kite_depth_ws as ws
+
+
+def test_rebalance_triggers_on_second_build_when_atm_shifts():
+    first = ws._compute_rebalance_decision(
+        current_tokens={256265, 101, 102, 777001},
+        desired_tokens={256265, 101, 102},
+        sticky_tokens={777001},
+        underlying_tokens={256265},
+        last_rebalance_ts=0.0,
+        now_ts=60.0,
+        cooldown_sec=60.0,
+        threshold_steps=1.0,
+        last_atm_by_symbol={"NIFTY": 22000},
+        next_atm_by_symbol={"NIFTY": 22000},
+        step_by_symbol={"NIFTY": 50.0},
+    )
+    assert first["should_rebalance"] is False
+
+    decision = ws._compute_rebalance_decision(
+        current_tokens={256265, 101, 102, 777001},
+        desired_tokens={256265, 103, 104},
+        sticky_tokens={777001},
+        underlying_tokens={256265},
+        last_rebalance_ts=0.0,
+        now_ts=120.0,
+        cooldown_sec=60.0,
+        threshold_steps=1.0,
+        last_atm_by_symbol={"NIFTY": 22000},
+        next_atm_by_symbol={"NIFTY": 22050},
+        step_by_symbol={"NIFTY": 50.0},
+    )
+
+    assert decision["should_rebalance"] is True
+    assert decision["subscribe_tokens"] == [103, 104]
+    assert decision["unsubscribe_tokens"] == [101, 102]
+    assert 256265 in decision["final_tokens"]
+    assert 777001 in decision["final_tokens"]
+
+
+def test_rebalance_is_blocked_by_cooldown_within_ttl():
+    decision = ws._compute_rebalance_decision(
+        current_tokens={256265, 101, 102},
+        desired_tokens={256265, 103, 104},
+        sticky_tokens=set(),
+        underlying_tokens={256265},
+        last_rebalance_ts=100.0,
+        now_ts=120.0,
+        cooldown_sec=60.0,
+        threshold_steps=1.0,
+        last_atm_by_symbol={"NIFTY": 22000},
+        next_atm_by_symbol={"NIFTY": 22050},
+        step_by_symbol={"NIFTY": 50.0},
+    )
+
+    assert decision["should_rebalance"] is False
+    assert "cooldown_blocked" in decision["reason"]
+    assert decision["cooldown_ok"] is False
+
+
+def test_underlying_and_sticky_tokens_are_never_unsubscribed():
+    decision = ws._compute_rebalance_decision(
+        current_tokens={256265, 900001, 101, 102},
+        desired_tokens={103, 104},
+        sticky_tokens={900001},
+        underlying_tokens={256265},
+        last_rebalance_ts=0.0,
+        now_ts=120.0,
+        cooldown_sec=60.0,
+        threshold_steps=1.0,
+        last_atm_by_symbol={"NIFTY": 22000},
+        next_atm_by_symbol={"NIFTY": 22050},
+        step_by_symbol={"NIFTY": 50.0},
+    )
+
+    assert 256265 not in decision["unsubscribe_tokens"]
+    assert 900001 not in decision["unsubscribe_tokens"]
+    assert 256265 in decision["final_tokens"]
+    assert 900001 in decision["final_tokens"]

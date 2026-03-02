@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 import sys
 from collections import defaultdict
@@ -21,7 +22,7 @@ def _read_jsonl(path: Path):
 
 
 def main():
-    path = Path(getattr(cfg, "META_SHADOW_LOG_PATH", "logs/meta_shadow.jsonl"))
+    path = Path(getattr(cfg, "META_SHADOW_LOG_PATH", str(logs_dir() / "meta_shadow.jsonl")))
     rows = _read_jsonl(path)
     if not rows:
         print(f"Meta shadow log missing or empty: {path}")

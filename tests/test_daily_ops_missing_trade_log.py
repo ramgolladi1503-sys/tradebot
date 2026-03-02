@@ -11,7 +11,8 @@ from core.trade_log_paths import ensure_trade_log_exists
 
 def test_ensure_trade_log_exists_creates_missing_file(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl", raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
     out = ensure_trade_log_exists()
     assert out.exists()
     assert out.is_file()
@@ -20,7 +21,8 @@ def test_ensure_trade_log_exists_creates_missing_file(monkeypatch, tmp_path):
 
 def test_daily_ops_creates_missing_trade_log_and_completes(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl", raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
     monkeypatch.setattr(
         daily_ops,
         "STEPS",
@@ -41,7 +43,7 @@ def test_daily_ops_creates_missing_trade_log_and_completes(monkeypatch, tmp_path
 
     result = daily_ops.main()
 
-    assert (tmp_path / "logs" / "trade_log.jsonl").exists()
+    assert (Path(cfg.LOGS_ROOT) / "trade_log.jsonl").exists()
     assert len(calls) == 2
     assert result["status"] == "ok_with_skips"
     assert "trade_log_empty" in result["reasons"]
@@ -49,7 +51,8 @@ def test_daily_ops_creates_missing_trade_log_and_completes(monkeypatch, tmp_path
 
 def test_daily_ops_optional_step_failure_returns_ok_with_skips(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl", raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
     monkeypatch.setattr(
         daily_ops,
         "STEPS",
@@ -74,10 +77,11 @@ def test_daily_ops_optional_step_failure_returns_ok_with_skips(monkeypatch, tmp_
 
 def test_daily_ops_ingests_daily_audit_ok_with_skips_status(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl", raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
     monkeypatch.setattr(daily_ops, "STEPS", [], raising=False)
 
-    status_path = tmp_path / "logs" / "daily_audit_status_latest.json"
+    status_path = Path(cfg.LOGS_ROOT) / "daily_audit_status_latest.json"
     status_path.parent.mkdir(parents=True, exist_ok=True)
     status_path.write_text(
         json.dumps({"status": "ok_with_skips", "reason_code": "NO_DECISION_EVENTS"}),
@@ -92,11 +96,17 @@ def test_daily_ops_ingests_daily_audit_ok_with_skips_status(monkeypatch, tmp_pat
 
 def test_daily_ops_ingests_outcome_truth_degraded_status(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl", raising=False)
-    monkeypatch.setattr(cfg, "OUTCOME_TRUTH_STATUS_PATH", str(tmp_path / "logs" / "outcome_truth_status_latest.json"), raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
+    monkeypatch.setattr(
+        cfg,
+        "OUTCOME_TRUTH_STATUS_PATH",
+        str(Path(cfg.LOGS_ROOT) / "outcome_truth_status_latest.json"),
+        raising=False,
+    )
     monkeypatch.setattr(daily_ops, "STEPS", [], raising=False)
 
-    status_path = tmp_path / "logs" / "outcome_truth_status_latest.json"
+    status_path = Path(cfg.LOGS_ROOT) / "outcome_truth_status_latest.json"
     status_path.parent.mkdir(parents=True, exist_ok=True)
     status_path.write_text(
         json.dumps({"status": "DEGRADED", "blockers": ["OUTCOME_ROWS_INSUFFICIENT"]}),
@@ -111,7 +121,8 @@ def test_daily_ops_ingests_outcome_truth_degraded_status(monkeypatch, tmp_path):
 
 def test_daily_ops_executes_steps_from_repo_root(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl", raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
     monkeypatch.setattr(daily_ops, "ROOT", tmp_path / "repo_root", raising=False)
     monkeypatch.setattr(
         daily_ops,
@@ -136,7 +147,8 @@ def test_daily_ops_executes_steps_from_repo_root(monkeypatch, tmp_path):
 
 def test_backfill_trades_db_missing_log_does_not_crash(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", "logs/trade_log.jsonl", raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
     seen = {"trades": 0, "outcomes": 0}
     monkeypatch.setattr(backfill_trades_db, "insert_trade", lambda _entry: seen.__setitem__("trades", seen["trades"] + 1))
     monkeypatch.setattr(backfill_trades_db, "insert_outcome", lambda _entry: seen.__setitem__("outcomes", seen["outcomes"] + 1))

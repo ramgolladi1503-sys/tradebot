@@ -21,6 +21,7 @@ def _read_jsonl(path: Path):
 
 def test_target_points_evaluation_records_category_and_strategy_bucket(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     suggestions_path = tmp_path / "runtime" / "logs" / "suggestions.jsonl"
     eval_path = tmp_path / "runtime" / "logs" / "suggestion_eval.jsonl"
     suggestions_path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,7 +64,7 @@ def test_target_points_evaluation_records_category_and_strategy_bucket(tmp_path,
     assert rows[0]["strategy"] == "QUICK_OPT"
     assert rows[0]["outcome"] == "target"
 
-    perf_path = tmp_path / "logs" / "suggestion_strategy_perf.json"
+    perf_path = Path(cfg.LOGS_ROOT) / "suggestion_strategy_perf.json"
     perf = json.loads(perf_path.read_text())
     stats = perf.get("stats") or {}
     assert "QUICK_OPT" in stats

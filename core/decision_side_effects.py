@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir
 
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ def _blocked_candidates_path() -> Path:
     if desk_log_dir:
         return Path(str(desk_log_dir)) / "blocked_candidates.jsonl"
     desk = getattr(cfg, "DESK_ID", "DEFAULT")
-    return Path(f"logs/desks/{desk}/blocked_candidates.jsonl")
+    return logs_dir() / f"desks/{desk}/blocked_candidates.jsonl"
 
 
 def _is_potentially_eligible(candidate_summary: Mapping[str, Any]) -> bool:

@@ -2,6 +2,7 @@
 # Readiness feed state now exposes OFFHOURS fields and SLA thresholds for market-closed mode.
 
 from __future__ import annotations
+from core.paths import data_root, logs_dir
 
 import json
 import shutil
@@ -40,7 +41,7 @@ def _check_trade_identity_schema() -> Tuple[bool, str]:
         init_db()
     except Exception as exc:
         return False, f"trade_schema_init_error:{exc}"
-    db_path = Path(getattr(cfg, "TRADE_DB_PATH", "data/desks/DEFAULT/trades.db"))
+    db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "desks" / "DEFAULT" / "trades.db")))
     if not db_path.exists():
         return False, "trade_db_missing"
     try:
@@ -405,7 +406,7 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
             **res.to_payload(),
         }
         try:
-            out = Path("logs") / f"readiness_{now.date().isoformat()}.json"
+            out = logs_dir() / f"readiness_{now.date().isoformat()}.json"
             out.parent.mkdir(exist_ok=True)
             out.write_text(json.dumps(payload, indent=2))
             _log_state_transition(payload)
@@ -417,8 +418,8 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
 
 def _log_state_transition(payload: Dict[str, object]) -> None:
     try:
-        state_path = Path("logs/readiness_state.json")
-        log_path = Path("logs/readiness_state.jsonl")
+        state_path = logs_dir() / "readiness_state.json"
+        log_path = logs_dir() / "readiness_state.jsonl"
         prev = {}
         if state_path.exists():
             try:

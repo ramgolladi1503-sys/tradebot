@@ -3,10 +3,16 @@
 
 from datetime import datetime, date
 from config import config as cfg
+from core.paths import data_root
 from core.market_calendar import (
     choose_nearest_available_expiry,
-    next_expiry_by_type,
-    next_expiry_after,
+)
+from core.instruments import (
+    build_option_registry,
+    coerce_expiry_date,
+    log_requested_expiry_missing,
+    select_expiry as select_registry_expiry,
+    select_next_expiry as select_registry_next_expiry,
 )
 from core.market_context import derive_market_context
 from config.profile import get_option_filter_profile
@@ -130,11 +136,30 @@ def _choose_expiry(available_expiries, preferred_expiry):
         return chosen
     return _coerce_expiry_date(preferred_expiry)
 
+
+def _choose_expiry_by_mode(available_expiries, *, symbol: str, preferred_expiry=None):
+    available = [coerce_expiry_date(value) for value in list(available_expiries or [])]
+    available = sorted({exp for exp in available if exp is not None})
+    preferred = coerce_expiry_date(preferred_expiry)
+    if preferred is not None and preferred in available:
+        return preferred
+    if preferred is not None and preferred not in available:
+        log_requested_expiry_missing(
+            symbol=symbol,
+            requested_expiry=preferred,
+            available_expiries=available,
+            context="option_chain",
+        )
+    mode = str(getattr(cfg, "OPTION_EXPIRY_SELECTION", "NEAREST") or "NEAREST").upper()
+    if mode == "MONTHLY":
+        return select_registry_expiry(available, selection_mode="MONTHLY", today=date.today())
+    return _choose_expiry(available, preferred)
+
 def _write_chain_snapshot(chain, symbol=None):
     try:
         import json
         from pathlib import Path
-        path = Path("data/option_chain_latest.json")
+        path = data_root() / "option_chain_latest.json"
         path.parent.mkdir(exist_ok=True)
         if symbol:
             payload = {}
@@ -290,7 +315,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         if atm is None:
             return []
 
-        expiry_type = getattr(cfg, "TERM_STRUCTURE_EXPIRY", "WEEKLY")
+        expiry_type = str(getattr(cfg, "TERM_STRUCTURE_EXPIRY", "WEEKLY") or "WEEKLY").upper()
         def _exp_str(x):
             try:
                 return str(_coerce_expiry_date(x) or x)
@@ -298,13 +323,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 return ""
         # Exchange-provided expiries are source of truth.
         exchange = "BFO" if symbol.upper() == "SENSEX" else "NFO"
-        fallback_expiry = kite_client.next_available_expiry(symbol, exchange=exchange)
-        if not fallback_expiry:
-            fallback_expiry = next_expiry_by_type(expiry_type, symbol=symbol)
         next_exp = None
-        expiry_for_term = _coerce_expiry_date(fallback_expiry)
-        if expiry_for_term:
-            next_exp = next_expiry_after(expiry_for_term, expiry_type=expiry_type, symbol=symbol)
         min_prem = getattr(cfg, "MIN_PREMIUM", 40)
         max_prem = getattr(cfg, "MAX_PREMIUM", 150)
 
@@ -315,31 +334,23 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             instruments = kite_client.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
             if not instruments:
                 raise ValueError("No instruments loaded")
-            seg_name = "BFO-OPT" if exchange == "BFO" else "NFO-OPT"
-            symbol_instruments = [
-                inst
-                for inst in instruments
-                if inst.get("name") == symbol and inst.get("segment") == seg_name
-            ]
+            registry_payload = build_option_registry(
+                symbol=symbol,
+                instruments=instruments,
+                exchange=exchange,
+            )
+            seg_name = registry_payload.get("segment") or ("BFO-OPT" if exchange == "BFO" else "NFO-OPT")
+            symbol_instruments = list(registry_payload.get("instruments") or [])
             if symbol.upper() == "SENSEX" and not symbol_instruments:
                 print(
                     "[OPTION_CHAIN_WARN]"
                     f" symbol={symbol} exchange={exchange} segment={seg_name} instruments=0 -> unsupported, skipping"
                 )
                 return []
-            available_expiries = sorted(
-                {
-                    str(exp)
-                    for exp in (
-                        _coerce_expiry_date(inst.get("expiry"))
-                        for inst in symbol_instruments
-                    )
-                    if exp is not None
-                }
-            )
-            expiry_date = _choose_expiry(
-                [inst.get("expiry") for inst in symbol_instruments],
-                fallback_expiry,
+            available_expiries = list(registry_payload.get("available_expiries") or [])
+            expiry_date = _choose_expiry_by_mode(
+                available_expiries,
+                symbol=symbol,
             )
             if symbol.upper() in {"NIFTY", "BANKNIFTY", "SENSEX"}:
                 print(
@@ -347,14 +358,17 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     f" symbol={symbol}"
                     f" exchange={exchange}"
                     f" total_opt_instruments={len(symbol_instruments)}"
-                    f" available_expiries={available_expiries}"
+                    f" available_expiries={[exp.isoformat() for exp in available_expiries]}"
                     f" chosen_expiry={str(expiry_date) if expiry_date else None}"
                 )
             if expiry_date is None:
-                expiry_date = _coerce_expiry_date(fallback_expiry)
-            if expiry_date is None:
                 raise ValueError(f"No expiry available for {symbol}")
-            next_exp = next_expiry_after(expiry_date, expiry_type=expiry_type, symbol=symbol) if expiry_date else None
+            next_mode = "MONTHLY" if expiry_type == "MONTHLY" else "NEAREST"
+            next_exp = select_registry_next_expiry(
+                available_expiries,
+                expiry_date,
+                selection_mode=next_mode,
+            )
             expiry_date_str = _exp_str(expiry_date)
             opt_rows = []
             for inst in symbol_instruments:
@@ -540,7 +554,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             return []
         chain = []
         synthetic_quote_epoch = now_utc_epoch()
-        synthetic_expiry = str(_coerce_expiry_date(fallback_expiry) or date.today())
+        synthetic_expiry = str(coerce_expiry_date(kite_client.next_available_expiry(symbol, exchange=exchange)) or date.today())
         strikes = [atm + i * step for i in range(-strikes_around, strikes_around + 1)]
         for strike in strikes:
             for opt_type in ("CE", "PE"):

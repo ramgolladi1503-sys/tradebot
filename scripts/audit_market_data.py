@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -10,7 +11,7 @@ import sys
 
 from config import config as cfg
 
-OUT = Path("logs/data_audit.json")
+OUT = logs_dir() / "data_audit.json"
 
 def audit():
     db = Path(cfg.TRADE_DB_PATH)

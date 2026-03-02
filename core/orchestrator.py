@@ -63,6 +63,7 @@ from core.review_packet import build_review_packet, format_review_packet
 from core.gate_status_log import append_gate_status, build_gate_status_record
 from core.trade_log_paths import ensure_trade_log_exists
 from core.runtime_health import write_runtime_health_snapshot
+from core.paths import logs_dir
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
     NODE_N2_FEED_FRESH,
@@ -126,8 +127,8 @@ class Orchestrator:
         try:
             intents_path = Path(
                 str(
-                    getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", "logs/execution_intents.jsonl")
-                    or "logs/execution_intents.jsonl"
+                    getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", str(logs_dir() / "execution_intents.jsonl"))
+                    or str(logs_dir() / "execution_intents.jsonl")
                 )
             )
             intents_path.parent.mkdir(parents=True, exist_ok=True)
@@ -193,7 +194,7 @@ class Orchestrator:
 
         # Phase F: Strategy tracking + Auto-retraining
         self.strategy_tracker = StrategyTracker()
-        self.strategy_tracker.load("logs/strategy_perf.json")
+        self.strategy_tracker.load(str(logs_dir() / "strategy_perf.json"))
         self.trade_builder = TradeBuilder(self.predictor, self.execution_engine, strategy_tracker=self.strategy_tracker)
         self.retrainer = AutoRetrain(self.predictor, risk_state=self.risk_state, strategy_tracker=self.strategy_tracker)
         self.strategy_allocator = StrategyAllocator(self.strategy_tracker, risk_state=self.risk_state)
@@ -762,7 +763,7 @@ class Orchestrator:
         """
         if max_age_sec is None:
             max_age_sec = float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 45.0))
-        path = Path(f"logs/desks/{getattr(cfg, 'DESK_ID', 'DEFAULT')}/gate_status.jsonl")
+        path = logs_dir() / f"desks/{getattr(cfg, 'DESK_ID', 'DEFAULT')}/gate_status.jsonl"
         if not path.exists():
             return {}
         try:
@@ -869,7 +870,7 @@ class Orchestrator:
     def _pilot_exec_degradation(self):
         if not getattr(cfg, "LIVE_PILOT_MODE", False):
             return
-        path = Path("logs/fill_quality_daily.json")
+        path = logs_dir() / "fill_quality_daily.json"
         if not path.exists():
             self.risk_state.set_mode("HARD_HALT", "pilot_fill_quality_missing")
             return
@@ -1090,8 +1091,8 @@ class Orchestrator:
         if not getattr(cfg, "AUDIT_REQUIRED_TO_TRADE", True):
             return True, []
         day = (now_ist() - timedelta(days=1)).date().isoformat()
-        audit_path = Path(f"logs/daily_audit_{day}.json")
-        exec_path = Path(f"logs/execution_report_{day}.json")
+        audit_path = logs_dir() / f"daily_audit_{day}.json"
+        exec_path = logs_dir() / f"execution_report_{day}.json"
         missing = []
         if not audit_path.exists():
             missing.append(audit_path.name)
@@ -1904,7 +1905,7 @@ class Orchestrator:
                         if getattr(cfg, "RL_SHADOW_ONLY", True):
                             # log shadow decision, no sizing change
                             try:
-                                with open("logs/rl_size_shadow.jsonl", "a") as f:
+                                with open(str(logs_dir() / "rl_size_shadow.jsonl"), "a") as f:
                                     f.write(json.dumps({
                                         "timestamp": time.time(),
                                         "trade_id": trade.trade_id,
@@ -2343,7 +2344,7 @@ class Orchestrator:
     def _load_symbol_eps(self):
         import json
         from pathlib import Path
-        path = Path("logs/symbol_eps.json")
+        path = logs_dir() / "symbol_eps.json"
         if path.exists():
             try:
                 self.symbol_epsilon = json.loads(path.read_text())
@@ -2353,12 +2354,12 @@ class Orchestrator:
     def _save_symbol_eps(self):
         import json
         from pathlib import Path
-        path = Path("logs/symbol_eps.json")
+        path = logs_dir() / "symbol_eps.json"
         path.parent.mkdir(exist_ok=True)
         path.write_text(json.dumps(self.symbol_epsilon))
 
         # append history
-        hist_path = Path("logs/symbol_eps_history.json")
+        hist_path = logs_dir() / "symbol_eps_history.json"
         self.eps_history.append({"ts": time.time(), "eps": self.symbol_epsilon})
         try:
             hist_path.write_text(json.dumps(self.eps_history[-500:]))
@@ -2411,7 +2412,7 @@ class Orchestrator:
         # Build map for quick lookup
         md_map = {m.get("symbol"): m for m in market_data_list if m.get("instrument") == "OPT"}
         tracker = StrategyTracker()
-        tracker.load("logs/suggestion_strategy_perf.json")
+        tracker.load(str(logs_dir() / "suggestion_strategy_perf.json"))
         for s in suggestions:
             tid = s.get("trade_id")
             if not tid or tid in self.suggestion_evaluated:
@@ -2490,7 +2491,7 @@ class Orchestrator:
             category = str(s.get("category") or "").strip()
             if category:
                 tracker.record(f"{category.upper()}::{strategy_name}", pnl)
-            tracker.save("logs/suggestion_strategy_perf.json")
+            tracker.save(str(logs_dir() / "suggestion_strategy_perf.json"))
 
     def _start_depth_ws(self):
         if not cfg.KITE_USE_DEPTH:
@@ -2825,7 +2826,7 @@ class Orchestrator:
                     ) or tr.strategy.startswith("QUICK"))):
                 self.strategy_tracker.record(tr.strategy, pnl)
                 self.strategy_tracker.record_symbol(tr.symbol, pnl)
-                self.strategy_tracker.save("logs/strategy_perf.json")
+                self.strategy_tracker.save(str(logs_dir() / "strategy_perf.json"))
             # Expiry zero-hero: auto-disable after loss streak with cooldown
             try:
                 if tr.strategy == "ZERO_HERO_EXPIRY":
@@ -2914,7 +2915,7 @@ class Orchestrator:
                         "capital": self.portfolio["capital"]
                     })
         df_results = pd.DataFrame(results)
-        df_results.to_csv("logs/backtest_results.csv", index=False)
+        df_results.to_csv(str(logs_dir() / "backtest_results.csv"), index=False)
         print("[Orchestrator] Backtest complete, results saved.")
         return df_results
 

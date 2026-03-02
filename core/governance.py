@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 import hashlib
 from datetime import datetime
@@ -49,7 +50,7 @@ def model_hashes() -> dict:
     return out
 
 
-def append_immutable_ledger(entry: dict, ledger_path: str = "logs/trade_ledger.jsonl") -> str:
+def append_immutable_ledger(entry: dict, ledger_path: str = str(logs_dir() / "trade_ledger.jsonl")) -> str:
     path = Path(ledger_path)
     path.parent.mkdir(exist_ok=True)
     prev_hash = None

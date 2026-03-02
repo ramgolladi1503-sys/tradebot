@@ -53,7 +53,6 @@ def test_fetch_option_chain_falls_back_to_available_expiry(monkeypatch):
     monkeypatch.setattr(kite_client, "next_available_expiry", lambda symbol, exchange="NFO": "2030-01-23")
     monkeypatch.setattr(kite_client, "instruments_cached", lambda exchange, ttl_sec=3600: instruments)
     monkeypatch.setattr(kite_client, "quote", lambda symbols: {symbol: quotes.get(symbol, {}) for symbol in symbols})
-    monkeypatch.setattr("core.option_chain.next_expiry_after", lambda start_date, expiry_type="WEEKLY", symbol=None: None)
 
     chain = fetch_option_chain("NIFTY", ltp=22048.0, strikes_around=2)
 

@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 import math
 from pathlib import Path
@@ -14,7 +15,7 @@ class ResearchPipeline:
     purged CV diagnostics, calibration curves, feature importance stability,
     and overfit alarms.
     """
-    def __init__(self, trade_log_path="data/trade_log.json", out_dir="logs"):
+    def __init__(self, trade_log_path=str(data_root() / "trade_log.json"), out_dir="logs"):
         self.trade_log_path = Path(trade_log_path)
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(exist_ok=True)

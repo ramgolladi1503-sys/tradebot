@@ -2,8 +2,9 @@ import json
 import time
 import hashlib
 from pathlib import Path
+from core.paths import logs_dir
 
-REG_PATH = Path("logs/model_registry.json")
+REG_PATH = logs_dir() / "model_registry.json"
 
 
 def _hash_file(path: str | Path | None) -> str | None:

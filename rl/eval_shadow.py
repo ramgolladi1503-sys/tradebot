@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir
 
 import json
 from pathlib import Path
@@ -33,7 +34,7 @@ def evaluate(model_path: str | None = None):
         "avg_action": action_avg,
         "n": len(rewards),
     }
-    out_path = Path("logs/rl_shadow_eval.json")
+    out_path = logs_dir() / "rl_shadow_eval.json"
     out_path.parent.mkdir(exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2))
     return out

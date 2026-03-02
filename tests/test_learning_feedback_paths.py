@@ -8,6 +8,7 @@ from core.orchestrator import Orchestrator
 
 def test_add_to_queue_writes_canonical_suggestions_log(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     canonical = tmp_path / "runtime" / "logs" / "suggestions.jsonl"
     monkeypatch.setattr(cfg, "SUGGESTIONS_LOG_PATH", str(canonical), raising=False)
 
@@ -33,8 +34,9 @@ def test_add_to_queue_writes_canonical_suggestions_log(tmp_path, monkeypatch):
 
 def test_orchestrator_load_suggestion_eval_reads_canonical_and_legacy(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     canonical = tmp_path / "runtime" / "logs" / "suggestion_eval.jsonl"
-    legacy = tmp_path / "logs" / "suggestion_eval.jsonl"
+    legacy = Path(cfg.LOGS_ROOT) / "suggestion_eval.jsonl"
     canonical.parent.mkdir(parents=True, exist_ok=True)
     legacy.parent.mkdir(parents=True, exist_ok=True)
     canonical.write_text(json.dumps({"trade_id": "CANON"}) + "\n")

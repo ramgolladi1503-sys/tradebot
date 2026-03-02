@@ -1,6 +1,7 @@
 import random
 import hashlib
 from config import config as cfg
+from core.paths import logs_dir
 
 class StrategyAllocator:
     """
@@ -30,7 +31,7 @@ class StrategyAllocator:
             ttl = getattr(cfg, "STRATEGY_WF_LOCK_TTL", 300)
             if self._wf_cache["allowed"] is not None and (time.time() - self._wf_cache["ts"]) < ttl:
                 return self._wf_cache["allowed"]
-            path = Path("logs/walk_forward_strategy_summary.csv")
+            path = logs_dir() / "walk_forward_strategy_summary.csv"
             if not path.exists():
                 self._wf_cache = {"ts": time.time(), "allowed": None}
                 return None
@@ -143,7 +144,7 @@ class StrategyAllocator:
         try:
             import json, time
             from pathlib import Path
-            path = Path("logs/bandit_weights.json")
+            path = logs_dir() / "bandit_weights.json"
             data = []
             if path.exists():
                 data = json.loads(path.read_text())

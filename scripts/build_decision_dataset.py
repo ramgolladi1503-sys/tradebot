@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root, logs_dir
 
 import json
 import sqlite3
@@ -35,15 +36,15 @@ def _load_jsonl(path: str) -> pd.DataFrame:
 
 
 def main():
-    df = _load_sqlite(getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
+    df = _load_sqlite(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
     if df.empty:
-        df = _load_jsonl(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"))
+        df = _load_jsonl(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
     if df.empty:
         print("No decision events found")
         return
-    Path("data").mkdir(exist_ok=True)
-    out_parquet = Path("data/decision_dataset.parquet")
-    out_csv = Path("data/decision_dataset.csv")
+    data_root().mkdir(exist_ok=True)
+    out_parquet = data_root() / "decision_dataset.parquet"
+    out_csv = data_root() / "decision_dataset.csv"
     df.to_parquet(out_parquet, index=False)
     df.to_csv(out_csv, index=False)
     print(f"Saved {len(df)} decision rows to {out_parquet} and {out_csv}")

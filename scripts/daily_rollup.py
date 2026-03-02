@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import data_root
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -12,8 +13,8 @@ from core.trade_store import insert_daily_stats
 from config import config as cfg
 from core.telegram_alerts import send_telegram_message
 
-LOG_PATH = Path("data/trade_log.json")
-UPDATES_PATH = Path("data/trade_updates.json")
+LOG_PATH = data_root() / "trade_log.json"
+UPDATES_PATH = data_root() / "trade_updates.json"
 
 def load_log():
     if not LOG_PATH.exists():

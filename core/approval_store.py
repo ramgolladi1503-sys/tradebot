@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 
 from config import config as cfg
 from core.audit_log import append_event
+from core.fs_utils import ensure_parent_dir
 
 
 ORDER_APPROVAL_STATUS = {
@@ -20,8 +21,8 @@ ORDER_APPROVAL_STATUS = {
 
 
 def _conn(timeout: float = 5.0, isolation_level: Optional[str] = "DEFERRED"):
-    Path(cfg.TRADE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(cfg.TRADE_DB_PATH, timeout=timeout, isolation_level=isolation_level)
+    db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
+    return sqlite3.connect(str(db_path), timeout=timeout, isolation_level=isolation_level)
 
 
 def _utc_iso(epoch: float) -> str:

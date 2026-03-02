@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 import time
 from dataclasses import dataclass
@@ -42,7 +43,7 @@ def _outcome_from_pnl(realized_pnl: float, epsilon: float = 1e-6) -> str:
 
 @dataclass
 class PostTradeLabeler:
-    output_dir: str = "data/training"
+    output_dir: str = str(data_root() / "training")
 
     def _date_tag_from_epoch(self, ts_epoch: float | None) -> str:
         if ts_epoch is None:

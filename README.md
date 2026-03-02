@@ -208,6 +208,16 @@ Run unit tests:
 pytest -q
 ```
 
+Deterministic offline health gate (no network, no real broker):
+```bash
+python -m core.health_gate --desk DEFAULT --strict
+```
+Outputs:
+- `logs_dir()/events.jsonl`
+- `logs_dir()/recon.json`
+- `logs_dir()/health_gate_report.json`
+- `logs_dir()/health_gate_report.md`
+
 Automation script (logs to `logs/test_runs.log`):
 ```bash
 ./scripts/run_tests.sh

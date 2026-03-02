@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 import os
 import time
@@ -12,8 +13,8 @@ from core.time_utils import now_utc_epoch
 
 
 FLAGS_PATH = Path(getattr(cfg, "FEATURE_FLAGS_PATH", "config/feature_flags.json"))
-OVERRIDE_PATH = Path(getattr(cfg, "FEATURE_FLAGS_OVERRIDE_PATH", "logs/feature_flags_override.json"))
-SNAPSHOT_PATH = Path(getattr(cfg, "FEATURE_FLAGS_SNAPSHOT_PATH", "logs/feature_flags_snapshot.json"))
+OVERRIDE_PATH = Path(getattr(cfg, "FEATURE_FLAGS_OVERRIDE_PATH", str(logs_dir() / "feature_flags_override.json")))
+SNAPSHOT_PATH = Path(getattr(cfg, "FEATURE_FLAGS_SNAPSHOT_PATH", str(logs_dir() / "feature_flags_snapshot.json")))
 
 _FLAGS_CACHE: Dict[str, Any] | None = None
 
@@ -138,7 +139,7 @@ def canary_allowed(trace_id: str, percent: int | None = None) -> bool:
 
 
 def _read_incidents(window_sec: float) -> Dict[str, int]:
-    path = Path(getattr(cfg, "INCIDENTS_LOG_PATH", "logs/incidents.jsonl"))
+    path = Path(getattr(cfg, "INCIDENTS_LOG_PATH", str(logs_dir() / "incidents.jsonl")))
     counts = {"total": 0, "halt": 0, "error": 0}
     if not path.exists():
         return counts
@@ -163,7 +164,7 @@ def _read_incidents(window_sec: float) -> Dict[str, int]:
 
 
 def _count_decisions(window_sec: float) -> int:
-    path = Path(getattr(cfg, "AUDIT_LOG_PATH", "logs/audit_log.jsonl"))
+    path = Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl")))
     if not path.exists():
         return 0
     now_epoch = now_utc_epoch()

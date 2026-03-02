@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 from pathlib import Path
 import runpy
 import sqlite3
@@ -9,7 +10,7 @@ from config import config as cfg
 
 
 def main() -> int:
-    db_path = Path(getattr(cfg, "TRADE_DB_PATH", "data/desks/DEFAULT/trades.db"))
+    db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "desks" / "DEFAULT" / "trades.db")))
     if not db_path.exists():
         print("verify_outcome_labels: FAIL missing trades DB.")
         print("NEXT ACTION: run paper/live cycle to generate trades and outcomes.")

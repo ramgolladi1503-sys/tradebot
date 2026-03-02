@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 import time
 from pathlib import Path
@@ -7,7 +8,7 @@ from config import config as cfg
 from core.audit_log import append_event
 
 
-INCIDENTS_PATH = Path(getattr(cfg, "INCIDENTS_LOG_PATH", "logs/incidents.jsonl"))
+INCIDENTS_PATH = Path(getattr(cfg, "INCIDENTS_LOG_PATH", str(logs_dir() / "incidents.jsonl")))
 SEV1 = "SEV1"
 SEV2 = "SEV2"
 SEV3 = "SEV3"
@@ -27,6 +28,16 @@ def create_incident(sev: str, code: str, context: Dict) -> str:
     with INCIDENTS_PATH.open("a") as f:
         f.write(json.dumps(record) + "\n")
     append_event({"event": "INCIDENT", "sev": sev, "code": code, "context": context})
+    try:
+        from core.storage import emit_sla_violation_event
+
+        emit_sla_violation_event(
+            code=str(code or ""),
+            context=dict(context or {}),
+            severity=str(sev or ""),
+        )
+    except Exception:
+        pass
     return incident_id
 
 

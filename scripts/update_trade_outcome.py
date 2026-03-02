@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 from pathlib import Path
 import runpy
 
@@ -17,7 +18,7 @@ exit_price = float(sys.argv[2])
 actual = int(sys.argv[3]) if len(sys.argv) > 3 else None
 updated_entry = None
 
-path = "data/trade_log.json"
+path = str(data_root() / "trade_log.json")
 updated = False
 lines = []
 
@@ -61,11 +62,11 @@ print("Trade outcome updated.")
 try:
     from core.strategy_tracker import StrategyTracker
     tracker = StrategyTracker()
-    tracker.load("logs/strategy_perf.json")
+    tracker.load(str(logs_dir() / "strategy_perf.json"))
     outcome = 1 if actual == 1 else -1
     if updated_entry:
         tracker.record(updated_entry.get("strategy"), outcome)
-    tracker.save("logs/strategy_perf.json")
+    tracker.save(str(logs_dir() / "strategy_perf.json"))
     print("Strategy performance updated.")
 except Exception:
     pass

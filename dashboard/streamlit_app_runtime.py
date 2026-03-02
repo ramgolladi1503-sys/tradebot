@@ -1,10 +1,14 @@
 import json
 import os
 import logging
+import signal
+import subprocess
 from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 import altair as alt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from pathlib import Path
 import sys
 from zoneinfo import ZoneInfo
@@ -17,7 +21,26 @@ if str(ROOT) not in sys.path:
 logger = logging.getLogger(__name__)
 
 import dashboard.ui as ui
+from dashboard.loaders import load_depth_vm, load_execution_vm, load_recon_vm
+from dashboard.renderers import render_depth_panel, render_execution_panel, render_recon_panel
+from dashboard.runtime import run_state_engine_if_due
 from dashboard.utils import normalize_trade_df, filter_by_permission, dedupe_by_trade_key
+from dashboard.ui.utils.derive_fields import (
+    parse_option_side,
+    parse_underlying,
+    map_strategy_category,
+)
+from dashboard.ui.utils.cache_utils import (
+    REFRESH_MODE_ALWAYS_UI,
+    REFRESH_MODE_FEED_ACTIVE,
+    REFRESH_MODE_MARKET_OPEN_ONLY,
+    file_sig,
+    should_trade_autorefresh,
+)
+from dashboard.ui.utils.strategy_timeline import (
+    floor_timestamp_to_bucket,
+    compute_strategy_timeline_metrics,
+)
 from dashboard.ui import (
     apply_global_style,
     app_shell,
@@ -36,7 +59,12 @@ from dashboard.ui import (
 from core.trade_store import fetch_recent_trades, fetch_recent_outcomes, fetch_pnl_series, fetch_execution_stats, fetch_depth_snapshots, fetch_depth_imbalance
 from core.scorecard import compute_scorecard
 from core.gpt_advisor import get_trade_advice, save_advice, get_day_summary
-from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap
+from core.market_data import (
+    fetch_live_market_data,
+    ensure_startup_warmup_bootstrap,
+    get_underlying_candles as market_data_get_underlying_candles,
+    get_option_candles_or_snapshots as market_data_get_option_candles_or_snapshots,
+)
 from core.auth_health import load_auth_runtime_guard
 from core.day_type_history import load_day_type_events, day_type_events_dataframe
 from core.offhours import is_offhours
@@ -48,8 +76,12 @@ from core.trailing_display import apply_trailing_display_df
 from core.trade_activation import should_activate, activate_trade
 from core.trade_state_engine import run_state_engine_once
 from core.trailing import init_trailing, update_trailing, check_exit
+from core.tf_utils import check_tf_available
 from core.upstox_resolver import ensure_upstox_columns, resolve_upstox_key
 from core.feed_debug import get_feed_debug
+from core.market_data_monitor import get_feed_health_snapshot
+from core.reject_telemetry import get_recent_reject_telemetry
+from core.paths import logs_dir, data_root, db_dir
 from dashboard.upstox_links import (
     build_upstox_contract_url,
     build_upstox_search_query,
@@ -66,7 +98,9 @@ from config import config as cfg
 import time
 try:
     from streamlit_autorefresh import st_autorefresh
+    ST_AUTORREFRESH_AVAILABLE = True
 except Exception:  # pragma: no cover
+    ST_AUTORREFRESH_AVAILABLE = False
     def st_autorefresh(*args, **kwargs):
         return 0
 
@@ -82,12 +116,12 @@ try:
         write_queue_rows,
     )
 except Exception:
-    REVIEW_QUEUE_PATH = Path("logs/review_queue.json")
-    QUICK_REVIEW_QUEUE_PATH = Path("logs/quick_review_queue.json")
-    ZERO_HERO_QUEUE_PATH = Path("logs/zero_hero_queue.json")
-    SCALP_QUEUE_PATH = Path("logs/scalp_queue.json")
-    TARGET_POINTS_QUEUE_PATH = Path("logs/target_points_queue.json")
-    REVIEW_APPROVED_PATH = Path("logs/approved_trades.json")
+    REVIEW_QUEUE_PATH = _log_path("review_queue.json")
+    QUICK_REVIEW_QUEUE_PATH = _log_path("quick_review_queue.json")
+    ZERO_HERO_QUEUE_PATH = _log_path("zero_hero_queue.json")
+    SCALP_QUEUE_PATH = _log_path("scalp_queue.json")
+    TARGET_POINTS_QUEUE_PATH = _log_path("target_points_queue.json")
+    REVIEW_APPROVED_PATH = _log_path("approved_trades.json")
     def _fallback_epoch_ms(value):
         try:
             if value is None:
@@ -165,18 +199,31 @@ except Exception:
 st.set_page_config(page_title="Axiom Quant Console", layout="wide")
 if "auto_refresh_enabled" not in st.session_state:
     st.session_state.auto_refresh_enabled = True
+if "trade_refresh_mode" not in st.session_state:
+    st.session_state["trade_refresh_mode"] = REFRESH_MODE_MARKET_OPEN_ONLY
 
 LOG_PATH = ensure_trade_log_exists()
-STRAT_PATH = Path("logs/strategy_perf.json")
+STRAT_PATH = logs_dir() / "strategy_perf.json"
 apply_global_style()
+
+
+def _log_path(*parts: str) -> Path:
+    return logs_dir().joinpath(*parts)
 
 
 def _refresh_trade_state():
     try:
         desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT")
-        run_state_engine_once(desk_id=desk_id)
+        return run_state_engine_if_due(
+            session_state=st.session_state,
+            desk_id=desk_id,
+            run_once=run_state_engine_once,
+            refresh_sec=float(getattr(cfg, "UI_STATE_ENGINE_REFRESH_SEC", 5.0)),
+            now_fn=time.time,
+        )
     except Exception as exc:
         logger.warning("trade_state_engine_failed: %s", exc)
+        return False
 
 
 _refresh_trade_state()
@@ -212,18 +259,132 @@ SPEED_TRADER_COLS = [
     "confidence",
 ]
 
+EXECUTABLE_PRICING_COLS = [
+    "ltp",
+    "bid",
+    "ask",
+    "mark_price",
+    "quote_age_sec",
+    "spread_pct",
+]
+
+EXPLORER_COLUMN_PRESETS = {
+    "Minimal": [
+        "timestamp",
+        "symbol",
+        "underlying",
+        "option_side",
+        "strategy_family",
+        "permission_bucket",
+        "final_action",
+        "final_blocker",
+        "global_conf",
+        "entry_status",
+        "feed_state",
+    ],
+    "Strategy": [
+        "timestamp",
+        "symbol",
+        "strategy_family",
+        "strategy_category",
+        "permission_bucket",
+        "global_conf",
+        "signal_score",
+        "regime_conf",
+        "orb_bias",
+        "orb_factor",
+        "reg_penalty",
+    ],
+    "Execution": [
+        "timestamp",
+        "symbol",
+        "option_side",
+        "permission_bucket",
+        "permission_reason",
+        "entry_status",
+        "entry_block_reason",
+        "final_action",
+        "final_blocker",
+    ],
+    "Strategy+Execution": [
+        "timestamp",
+        "symbol",
+        "underlying",
+        "option_side",
+        "strategy_family",
+        "strategy_category",
+        "permission_bucket",
+        "permission_reason",
+        "final_action",
+        "final_blocker",
+        "entry_status",
+        "entry_block_reason",
+        "global_conf",
+        "signal_score",
+        "regime_conf",
+        "orb_bias",
+        "orb_factor",
+        "reg_penalty",
+        "feed_state",
+        "quote_age_sec",
+        "spread_pct",
+    ],
+    "Feed/Quality": [
+        "timestamp",
+        "symbol",
+        "feed_state",
+        "quote_age_sec",
+        "spread_pct",
+        "ltp",
+        "bid",
+        "ask",
+        "mark_price",
+        "permission_bucket",
+        "final_blocker",
+    ],
+    "Debug": [
+        "timestamp",
+        "run_id",
+        "trade_key",
+        "source_bucket",
+        "symbol",
+        "tradingsymbol",
+        "underlying",
+        "option_side",
+        "strategy_family",
+        "strategy_category",
+        "permission_bucket",
+        "permission_reason",
+        "entry_status",
+        "entry_block_reason",
+        "final_action",
+        "final_blocker",
+        "global_conf",
+        "signal_score",
+        "regime_conf",
+        "orb_bias",
+        "orb_factor",
+        "reg_penalty",
+        "feed_state",
+        "quote_age_sec",
+        "spread_pct",
+    ],
+}
+
 
 def _desk_log_path(filename: str) -> Path:
     desk_log_dir = str(getattr(cfg, "DESK_LOG_DIR", "") or "").strip()
     if desk_log_dir:
         return Path(desk_log_dir) / filename
     desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT")
-    return Path(f"logs/desks/{desk_id}/{filename}")
+    return logs_dir() / f"desks/{desk_id}/{filename}"
 
 
-def _load_trade_log_rows(path: Path) -> list[dict]:
+@st.cache_data(ttl=2, show_spinner=False)
+def _load_trade_log_rows_cached(path_str: str, sig: tuple[bool, int, int]) -> list[dict]:
+    _ = sig
     try:
-        resolved = resolve_trade_log_path(path)
+        resolved = Path(path_str)
         if not resolved.exists():
             return []
         raw = resolved.read_text(encoding="utf-8").strip()
@@ -254,6 +415,11 @@ def _load_trade_log_rows(path: Path) -> list[dict]:
         if isinstance(obj, dict):
             rows.append(obj)
     return rows
+
+
+def _load_trade_log_rows(path: Path) -> list[dict]:
+    resolved = resolve_trade_log_path(path)
+    return _load_trade_log_rows_cached(str(resolved), file_sig(resolved))
 
 
 def _load_approved_trades(path: Path):
@@ -331,7 +497,16 @@ def _queue_sources() -> list[tuple[str, Path]]:
     ]
 
 
-def _load_trade_universe_df() -> pd.DataFrame:
+def _trade_universe_sources_sig() -> tuple[tuple[str, tuple[bool, int, int]], ...]:
+    sigs: list[tuple[str, tuple[bool, int, int]]] = []
+    for source, path in _queue_sources():
+        p = Path(path)
+        sigs.append((source, file_sig(p)))
+    return tuple(sigs)
+
+
+@st.cache_data(ttl=2, show_spinner=False)
+def _load_trade_universe_df_cached(_sources_sig: tuple[tuple[str, tuple[bool, int, int]], ...]) -> pd.DataFrame:
     frames = []
     meta_map = _get_instrument_meta_map()
     for source, path in _queue_sources():
@@ -357,6 +532,692 @@ def _load_trade_universe_df() -> pd.DataFrame:
     merged = compute_table_trade_key(merged)
     merged = dedupe_table_df(merged)
     return _safe_sort_by_last_seen(merged)
+
+
+def _load_trade_universe_df() -> pd.DataFrame:
+    return _load_trade_universe_df_cached(_trade_universe_sources_sig())
+
+
+def _series_first_non_null(df: pd.DataFrame, columns: list[str], default=None) -> pd.Series:
+    available = [col for col in columns if col in df.columns]
+    if not available:
+        return pd.Series([default] * len(df), index=df.index, dtype="object")
+    series = df[available].bfill(axis=1).iloc[:, 0]
+    if default is not None:
+        series = series.where(series.notna(), default)
+    return series
+
+
+def _extract_trace_field(df: pd.DataFrame, key: str) -> pd.Series:
+    if "decision_trace" not in df.columns:
+        return pd.Series([None] * len(df), index=df.index, dtype="object")
+    return df["decision_trace"].apply(
+        lambda v: v.get(key) if isinstance(v, dict) else None
+    )
+
+
+def _derive_permission_bucket(df: pd.DataFrame) -> pd.Series:
+    permission = _series_first_non_null(df, ["permission"], default="").astype(str).str.upper().str.strip()
+    final_action = _series_first_non_null(df, ["final_action"], default="").astype(str).str.upper().str.strip()
+    entry_status = _series_first_non_null(df, ["entry_status"], default="").astype(str).str.upper().str.strip()
+    global_conf = pd.to_numeric(
+        _series_first_non_null(df, ["global_conf", "global_confidence", "confidence"]),
+        errors="coerce",
+    )
+    high_threshold = float(getattr(cfg, "HIGH_EXECUTE_MIN_CONF", 0.65))
+
+    bucket = pd.Series("ADVISORY", index=df.index, dtype="object")
+    queue_mask = permission.str.startswith("QUEUE")
+    exec_mask = permission.isin(["EXECUTE", "HIGH_EXECUTE"]) | final_action.eq("EXECUTE")
+    high_mask = exec_mask & (global_conf >= high_threshold) & (~entry_status.isin(["STALE_OPTION_LTP", "STALE_PRICE", "INVALID_LTP", "NO_TOKEN"]))
+
+    bucket.loc[queue_mask] = "QUEUE"
+    bucket.loc[exec_mask] = "EXECUTE"
+    bucket.loc[high_mask] = "HIGH_EXECUTE"
+    return bucket
+
+
+def _derive_final_blocker(df: pd.DataFrame) -> pd.Series:
+    blocker = _series_first_non_null(
+        df,
+        [
+            "final_blocker",
+            "entry_block_reason",
+            "permission_reason",
+            "hard_reject_reason",
+            "reject_reason",
+        ],
+    )
+    entry_status = _series_first_non_null(df, ["entry_status"], default="")
+    blocker = blocker.where(blocker.notna(), entry_status)
+    blocker = blocker.fillna("NONE").astype(str).str.strip()
+    blocker = blocker.where(blocker.ne(""), "NONE")
+    return blocker
+
+
+def _derive_feed_state(df: pd.DataFrame) -> pd.Series:
+    base = _series_first_non_null(df, ["feed_state"])
+    from_snapshot = pd.Series([None] * len(df), index=df.index, dtype="object")
+    if "feed_health_snapshot" in df.columns:
+        from_snapshot = df["feed_health_snapshot"].apply(
+            lambda v: v.get("state") if isinstance(v, dict) else None
+        )
+    out = base.where(base.notna(), from_snapshot)
+    out = out.fillna("UNKNOWN").astype(str).str.upper()
+    return out.where(out.ne(""), "UNKNOWN")
+
+
+def _derive_trade_explorer_fields(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+    work = df.copy()
+    symbol = _series_first_non_null(work, ["symbol"], default="").astype(str)
+    tradingsymbol = _series_first_non_null(work, ["tradingsymbol"], default="").astype(str)
+    strategy_hint = _series_first_non_null(
+        work,
+        ["strategy_family", "strategy_id", "strategy", "generator", "source_bucket"],
+        default="UNKNOWN",
+    )
+    option_type = _series_first_non_null(work, ["option_type", "type"], default="")
+    option_type_norm = option_type.astype(str).str.upper()
+    option_type_norm = option_type_norm.replace({"CALL": "CE", "PUT": "PE"})
+    option_side = option_type_norm.where(option_type_norm.isin(["CE", "PE"]), "UNKNOWN")
+    option_side = option_side.where(
+        option_side.isin(["CE", "PE"]),
+        tradingsymbol.map(parse_option_side),
+    )
+    option_side = option_side.where(
+        option_side.isin(["CE", "PE"]),
+        symbol.map(parse_option_side),
+    )
+    option_side = option_side.fillna("UNKNOWN").astype(str).str.upper()
+    option_side = option_side.where(option_side.isin(["CE", "PE"]), "UNKNOWN")
+
+    underlying = symbol.map(parse_underlying)
+    underlying = underlying.where(
+        underlying.ne("UNKNOWN"),
+        tradingsymbol.map(parse_underlying),
+    ).fillna("UNKNOWN")
+
+    strategy_family = strategy_hint.fillna("UNKNOWN").astype(str).str.strip().str.upper()
+    strategy_family = strategy_family.where(strategy_family.ne(""), "UNKNOWN")
+    strategy_category = strategy_family.map(map_strategy_category).fillna("UNKNOWN")
+
+    global_conf = pd.to_numeric(
+        _series_first_non_null(work, ["global_conf", "global_confidence", "confidence"]),
+        errors="coerce",
+    )
+    spread_pct = pd.to_numeric(_series_first_non_null(work, ["spread_pct"]), errors="coerce")
+    quote_age_sec = pd.to_numeric(_series_first_non_null(work, ["quote_age_sec", "price_age_sec"]), errors="coerce")
+    signal_score = pd.to_numeric(
+        _series_first_non_null(work, ["signal_score"], default=None).where(
+            _series_first_non_null(work, ["signal_score"]).notna(),
+            _extract_trace_field(work, "signal_score"),
+        ),
+        errors="coerce",
+    )
+    regime_conf = pd.to_numeric(
+        _series_first_non_null(work, ["regime_conf"], default=None).where(
+            _series_first_non_null(work, ["regime_conf"]).notna(),
+            _extract_trace_field(work, "regime_conf"),
+        ),
+        errors="coerce",
+    )
+    orb_bias = _series_first_non_null(work, ["orb_bias"]).where(
+        _series_first_non_null(work, ["orb_bias"]).notna(),
+        _extract_trace_field(work, "orb_bias"),
+    )
+    orb_factor = pd.to_numeric(
+        _series_first_non_null(work, ["orb_factor"]).where(
+            _series_first_non_null(work, ["orb_factor"]).notna(),
+            _extract_trace_field(work, "orb_factor"),
+        ),
+        errors="coerce",
+    )
+    reg_penalty = pd.to_numeric(
+        _series_first_non_null(work, ["reg_penalty"]).where(
+            _series_first_non_null(work, ["reg_penalty"]).notna(),
+            _extract_trace_field(work, "reg_penalty"),
+        ),
+        errors="coerce",
+    )
+
+    final_action = _series_first_non_null(work, ["final_action"]).where(
+        _series_first_non_null(work, ["final_action"]).notna(),
+        _extract_trace_field(work, "final_action"),
+    )
+    final_action = final_action.fillna("ADVISORY_ONLY").astype(str).str.upper().str.strip()
+    final_action = final_action.where(final_action.ne(""), "ADVISORY_ONLY")
+
+    entry_block_reason = _series_first_non_null(work, ["entry_block_reason"]).where(
+        _series_first_non_null(work, ["entry_block_reason"]).notna(),
+        _extract_trace_field(work, "entry_block_reason"),
+    )
+    permission_reason = _series_first_non_null(work, ["permission_reason"]).where(
+        _series_first_non_null(work, ["permission_reason"]).notna(),
+        _extract_trace_field(work, "permission_reason"),
+    )
+    entry_status = _series_first_non_null(work, ["entry_status"]).where(
+        _series_first_non_null(work, ["entry_status"]).notna(),
+        _extract_trace_field(work, "entry_status"),
+    )
+    permission = _series_first_non_null(work, ["permission"]).where(
+        _series_first_non_null(work, ["permission"]).notna(),
+        _extract_trace_field(work, "permission"),
+    )
+
+    ts_source = _series_first_non_null(
+        work,
+        ["last_seen_ts", "timestamp_utc_iso", "timestamp", "ts_ist", "ts_utc", "first_seen"],
+        default=None,
+    )
+    ts_series = pd.to_datetime(ts_source, errors="coerce", utc=True)
+    if "timestamp_epoch_ms" in work.columns:
+        ts_epoch_ms = pd.to_numeric(work["timestamp_epoch_ms"], errors="coerce")
+        ts_from_ms = pd.to_datetime(ts_epoch_ms / 1000.0, unit="s", errors="coerce", utc=True)
+        ts_series = ts_series.where(ts_series.notna(), ts_from_ms)
+    trade_date = ts_series.dt.tz_convert("Asia/Kolkata").dt.date.astype(str)
+    trade_date = trade_date.where(trade_date.ne("NaT"), "UNKNOWN")
+
+    run_id = _series_first_non_null(work, ["run_id"], default="UNKNOWN").astype(str)
+    run_id = run_id.where(run_id.str.strip().ne(""), "UNKNOWN")
+
+    work["underlying"] = underlying
+    work["option_side"] = option_side
+    work["strategy_family"] = strategy_family
+    work["strategy_category"] = strategy_category
+    work["global_conf"] = global_conf
+    work["spread_pct"] = spread_pct
+    work["quote_age_sec"] = quote_age_sec
+    work["signal_score"] = signal_score
+    work["regime_conf"] = regime_conf
+    work["orb_bias"] = orb_bias
+    work["orb_factor"] = orb_factor
+    work["reg_penalty"] = reg_penalty
+    work["permission"] = permission
+    work["permission_reason"] = permission_reason
+    work["entry_status"] = entry_status
+    work["entry_block_reason"] = entry_block_reason
+    work["final_action"] = final_action
+    work["permission_bucket"] = _derive_permission_bucket(work)
+    work["final_blocker"] = _derive_final_blocker(work)
+    work["feed_state"] = _derive_feed_state(work)
+    work["trade_date"] = trade_date
+    work["run_id"] = run_id
+    work["ts_sort"] = ts_series
+    return work
+
+
+def _apply_trade_explorer_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = df.copy()
+    if filters.get("dates"):
+        out = out[out["trade_date"].isin(filters["dates"])]
+    if filters.get("run_ids"):
+        out = out[out["run_id"].isin(filters["run_ids"])]
+    for col, key in (
+        ("underlying", "underlyings"),
+        ("option_side", "option_sides"),
+        ("strategy_category", "strategy_categories"),
+        ("strategy_family", "strategy_families"),
+        ("permission_bucket", "permission_buckets"),
+        ("final_blocker", "final_blockers"),
+        ("feed_state", "feed_states"),
+    ):
+        vals = filters.get(key) or []
+        if vals:
+            out = out[out[col].isin(vals)]
+    text_query = str(filters.get("symbol_query") or "").strip().upper()
+    if text_query:
+        sym = out.get("symbol", pd.Series([""] * len(out), index=out.index)).fillna("").astype(str).str.upper()
+        ts = out.get("tradingsymbol", pd.Series([""] * len(out), index=out.index)).fillna("").astype(str).str.upper()
+        out = out[sym.str.contains(text_query, regex=False) | ts.str.contains(text_query, regex=False)]
+
+    for col, range_key in (
+        ("global_conf", "global_conf_range"),
+        ("spread_pct", "spread_pct_range"),
+        ("quote_age_sec", "quote_age_sec_range"),
+    ):
+        rng = filters.get(range_key)
+        if not rng:
+            continue
+        series = pd.to_numeric(out.get(col), errors="coerce")
+        out = out[(series >= float(rng[0])) & (series <= float(rng[1]))]
+    return out
+
+
+def _numeric_slider_config(df: pd.DataFrame, column: str) -> tuple[float, float] | None:
+    if column not in df.columns:
+        return None
+    values = pd.to_numeric(df[column], errors="coerce").dropna()
+    if values.empty:
+        return None
+    lo = float(values.min())
+    hi = float(values.max())
+    if lo > hi:
+        return None
+    return (lo, hi)
+
+
+def _render_trade_explorer_panel(trade_universe_df: pd.DataFrame):
+    section_header("Trade Explorer")
+    if trade_universe_df is None or trade_universe_df.empty:
+        empty_state("No rows available for explorer.")
+        return
+    explorer_df = _derive_trade_explorer_fields(trade_universe_df)
+    if explorer_df.empty:
+        empty_state("No rows available for explorer.")
+        return
+
+    with st.sidebar:
+        st.markdown("### Trade Explorer Filters")
+        date_options = sorted([d for d in explorer_df["trade_date"].dropna().unique().tolist() if d and d != "UNKNOWN"])
+        selected_dates = []
+        if len(date_options) > 1:
+            selected_dates = st.multiselect(
+                "Date",
+                options=date_options,
+                default=date_options,
+                key="explorer_filter_dates",
+            )
+
+        run_options = sorted([r for r in explorer_df["run_id"].dropna().astype(str).unique().tolist() if r and r != "UNKNOWN"])
+        selected_run_ids = []
+        if run_options:
+            selected_run_ids = st.multiselect(
+                "Run ID",
+                options=run_options,
+                default=run_options,
+                key="explorer_filter_run_ids",
+            )
+
+        def _all_multiselect(label: str, column: str, key: str):
+            options = sorted([v for v in explorer_df[column].dropna().astype(str).unique().tolist() if v])
+            if not options:
+                return []
+            selected = st.multiselect(label, options=options, default=options, key=key)
+            if len(selected) == len(options):
+                return []
+            return selected
+
+        underlyings = _all_multiselect("Underlying", "underlying", "explorer_filter_underlying")
+        option_sides = _all_multiselect("CE/PE", "option_side", "explorer_filter_option_side")
+        strategy_categories = _all_multiselect("Strategy Category", "strategy_category", "explorer_filter_strategy_category")
+        strategy_families = _all_multiselect("Strategy Family", "strategy_family", "explorer_filter_strategy_family")
+        permission_buckets = _all_multiselect("Permission Bucket", "permission_bucket", "explorer_filter_permission_bucket")
+        final_blockers = _all_multiselect("Final Blocker", "final_blocker", "explorer_filter_final_blocker")
+        feed_states = _all_multiselect("Feed State", "feed_state", "explorer_filter_feed_state")
+        symbol_query = st.text_input("Symbol Search", value="", key="explorer_filter_symbol_search")
+
+        global_range = _numeric_slider_config(explorer_df, "global_conf")
+        spread_range = _numeric_slider_config(explorer_df, "spread_pct")
+        quote_age_range = _numeric_slider_config(explorer_df, "quote_age_sec")
+
+        selected_global = None
+        if global_range is not None:
+            selected_global = st.slider(
+                "global_conf range",
+                min_value=float(global_range[0]),
+                max_value=float(global_range[1]),
+                value=(float(global_range[0]), float(global_range[1])),
+                step=0.01,
+                key="explorer_filter_global_conf",
+            )
+        selected_spread = None
+        if spread_range is not None:
+            selected_spread = st.slider(
+                "spread_pct range",
+                min_value=float(spread_range[0]),
+                max_value=float(spread_range[1]),
+                value=(float(spread_range[0]), float(spread_range[1])),
+                step=0.0005,
+                key="explorer_filter_spread_pct",
+            )
+        selected_quote_age = None
+        if quote_age_range is not None:
+            selected_quote_age = st.slider(
+                "quote_age_sec range",
+                min_value=float(quote_age_range[0]),
+                max_value=float(quote_age_range[1]),
+                value=(float(quote_age_range[0]), float(quote_age_range[1])),
+                step=0.1,
+                key="explorer_filter_quote_age_sec",
+            )
+
+        preset = st.selectbox(
+            "Column Preset",
+            options=list(EXPLORER_COLUMN_PRESETS.keys()),
+            index=0,
+            key="explorer_col_preset",
+        )
+        preset_cols = [c for c in EXPLORER_COLUMN_PRESETS[preset] if c in explorer_df.columns]
+        if st.session_state.get("explorer_col_preset_prev") != preset:
+            st.session_state["explorer_selected_cols"] = preset_cols
+            st.session_state["explorer_col_preset_prev"] = preset
+        selected_cols = st.multiselect(
+            "Columns",
+            options=list(explorer_df.columns),
+            key="explorer_selected_cols",
+        )
+        show_charts = st.checkbox("Show summary charts", value=True, key="explorer_show_charts")
+
+    filters = {
+        "dates": selected_dates if selected_dates and len(selected_dates) < len(date_options) else [],
+        "run_ids": selected_run_ids if selected_run_ids and len(selected_run_ids) < len(run_options) else [],
+        "underlyings": underlyings,
+        "option_sides": option_sides,
+        "strategy_categories": strategy_categories,
+        "strategy_families": strategy_families,
+        "permission_buckets": permission_buckets,
+        "final_blockers": final_blockers,
+        "feed_states": feed_states,
+        "symbol_query": symbol_query,
+        "global_conf_range": selected_global,
+        "spread_pct_range": selected_spread,
+        "quote_age_sec_range": selected_quote_age,
+    }
+    filtered = _apply_trade_explorer_filters(explorer_df, filters)
+    filtered = filtered.sort_values("ts_sort", ascending=False, na_position="last")
+
+    high_mask = filtered["permission_bucket"].astype(str).eq("HIGH_EXECUTE")
+    final_action = filtered["final_action"].fillna("").astype(str).str.upper()
+    total_rows = int(len(filtered))
+    high_count = int(high_mask.sum())
+    executed_count = int(final_action.eq("EXECUTE").sum())
+    demoted_count = int((high_mask & (~final_action.eq("EXECUTE"))).sum())
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Rows", total_rows)
+    c2.metric("HIGH_EXECUTE", high_count)
+    c3.metric("Executed", executed_count)
+    c4.metric("Demoted", demoted_count)
+
+    if filtered.empty:
+        empty_state("No rows match current explorer filters.")
+        return
+
+    display_cols = [col for col in selected_cols if col in filtered.columns]
+    if not display_cols:
+        display_cols = [c for c in EXPLORER_COLUMN_PRESETS["Minimal"] if c in filtered.columns]
+    display_df = filtered[display_cols].head(500).copy()
+    st.caption(f"Filtered rows: {len(filtered)} (showing top {len(display_df)} by latest timestamp)")
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    if show_charts:
+        try:
+            import matplotlib.pyplot as plt
+
+            fam = filtered["strategy_family"].fillna("UNKNOWN").astype(str).value_counts().head(12)
+            blocker = filtered["final_blocker"].fillna("NONE").astype(str).value_counts().head(12)
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                fig1, ax1 = plt.subplots(figsize=(6, 3))
+                fam.sort_values(ascending=False).plot(kind="bar", ax=ax1)
+                ax1.set_title("Count by Strategy Family")
+                ax1.set_xlabel("strategy_family")
+                ax1.set_ylabel("count")
+                plt.xticks(rotation=45, ha="right")
+                st.pyplot(fig1, clear_figure=True)
+            with cc2:
+                fig2, ax2 = plt.subplots(figsize=(6, 3))
+                blocker.sort_values(ascending=False).plot(kind="bar", ax=ax2)
+                ax2.set_title("Count by Final Blocker")
+                ax2.set_xlabel("final_blocker")
+                ax2.set_ylabel("count")
+                plt.xticks(rotation=45, ha="right")
+                st.pyplot(fig2, clear_figure=True)
+        except Exception as exc:
+            logger.warning("trade_explorer_charts_failed: %s", exc)
+
+
+def _timeline_window_bounds(
+    window_mode: str,
+    last_n_min: int,
+    custom_start_local: datetime | None,
+    custom_end_local: datetime | None,
+) -> tuple[pd.Timestamp | None, pd.Timestamp | None]:
+    now_local = pd.Timestamp.now(tz="Asia/Kolkata")
+    mode = str(window_mode or "Today").strip()
+    if mode == "Today":
+        start_local = now_local.normalize()
+        end_local = now_local
+    elif mode == "Last N minutes":
+        minutes = max(1, int(last_n_min or 60))
+        start_local = now_local - pd.Timedelta(minutes=minutes)
+        end_local = now_local
+    else:
+        if custom_start_local is None or custom_end_local is None:
+            return None, None
+        start_local = pd.Timestamp(custom_start_local)
+        end_local = pd.Timestamp(custom_end_local)
+        if start_local.tzinfo is None:
+            start_local = start_local.tz_localize("Asia/Kolkata")
+        else:
+            start_local = start_local.tz_convert("Asia/Kolkata")
+        if end_local.tzinfo is None:
+            end_local = end_local.tz_localize("Asia/Kolkata")
+        else:
+            end_local = end_local.tz_convert("Asia/Kolkata")
+    start_utc = start_local.tz_convert("UTC")
+    end_utc = end_local.tz_convert("UTC")
+    if end_utc < start_utc:
+        start_utc, end_utc = end_utc, start_utc
+    return start_utc, end_utc
+
+
+def _filter_df_time_window(
+    df: pd.DataFrame,
+    start_utc: pd.Timestamp | None,
+    end_utc: pd.Timestamp | None,
+) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if "ts_sort" not in df.columns:
+        return pd.DataFrame()
+    out = df.copy()
+    ts = pd.to_datetime(out["ts_sort"], utc=True, errors="coerce")
+    mask = ts.notna()
+    if start_utc is not None:
+        mask = mask & (ts >= start_utc)
+    if end_utc is not None:
+        mask = mask & (ts <= end_utc)
+    out = out[mask].copy()
+    out["ts_sort"] = ts[mask]
+    return out
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _compute_strategy_timeline_cached(
+    timeline_df: pd.DataFrame,
+    bucket_size: str,
+    start_epoch_ms: int | None,
+    end_epoch_ms: int | None,
+) -> pd.DataFrame:
+    if timeline_df is None or timeline_df.empty:
+        return pd.DataFrame()
+    work = timeline_df.copy()
+    if "ts_sort" not in work.columns:
+        return pd.DataFrame()
+    work["ts_sort"] = pd.to_datetime(work["ts_sort"], utc=True, errors="coerce")
+    work = work[work["ts_sort"].notna()].copy()
+    if work.empty:
+        return pd.DataFrame()
+    if start_epoch_ms is not None:
+        start = pd.Timestamp(float(start_epoch_ms) / 1000.0, unit="s", tz="UTC")
+        work = work[work["ts_sort"] >= start]
+    if end_epoch_ms is not None:
+        end = pd.Timestamp(float(end_epoch_ms) / 1000.0, unit="s", tz="UTC")
+        work = work[work["ts_sort"] <= end]
+    if work.empty:
+        return pd.DataFrame()
+    out = compute_strategy_timeline_metrics(work, bucket_size=bucket_size, ts_col="ts_sort")
+    if out is None or out.empty:
+        return pd.DataFrame()
+    out["time_bucket_local"] = pd.to_datetime(out["time_bucket"], utc=True, errors="coerce").dt.tz_convert("Asia/Kolkata")
+    out["time_bucket_label"] = out["time_bucket_local"].dt.strftime("%Y-%m-%d %H:%M")
+    return out
+
+
+def _render_strategy_timeline_tab():
+    section_header("Strategy Timeline")
+    base_df = _derive_trade_explorer_fields(_load_trade_universe_df())
+    if base_df is None or base_df.empty:
+        empty_state("No strategy timeline data available.")
+        return
+
+    controls_a, controls_b, controls_c, controls_d = st.columns(4)
+    bucket_size = controls_a.selectbox("Bucket Size", ["1m", "5m", "15m"], index=1, key="timeline_bucket_size")
+    window_mode = controls_b.selectbox(
+        "Time Window",
+        ["Today", "Last N minutes", "Custom start-end"],
+        index=0,
+        key="timeline_window_mode",
+    )
+    metric = controls_c.selectbox(
+        "Metric",
+        ["candidates", "high_execute", "executed", "demoted_rate", "execution_rate"],
+        index=0,
+        key="timeline_metric_selector",
+    )
+    if window_mode == "Last N minutes":
+        last_n = int(controls_d.number_input("Last N minutes", min_value=1, max_value=1440, value=120, step=5, key="timeline_last_n"))
+        start_utc, end_utc = _timeline_window_bounds(window_mode, last_n, None, None)
+    elif window_mode == "Custom start-end":
+        now_local = datetime.now(tz=ZoneInfo("Asia/Kolkata"))
+        start_col, end_col = st.columns(2)
+        start_date = start_col.date_input("Start date", value=now_local.date(), key="timeline_custom_start_date")
+        start_time = start_col.time_input("Start time", value=now_local.time().replace(second=0, microsecond=0), key="timeline_custom_start_time")
+        end_date = end_col.date_input("End date", value=now_local.date(), key="timeline_custom_end_date")
+        end_time = end_col.time_input("End time", value=now_local.time().replace(second=0, microsecond=0), key="timeline_custom_end_time")
+        start_local = datetime.combine(start_date, start_time).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+        end_local = datetime.combine(end_date, end_time).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+        start_utc, end_utc = _timeline_window_bounds(window_mode, 0, start_local, end_local)
+    else:
+        start_utc, end_utc = _timeline_window_bounds(window_mode, 0, None, None)
+
+    start_ms = int(start_utc.timestamp() * 1000.0) if start_utc is not None else None
+    end_ms = int(end_utc.timestamp() * 1000.0) if end_utc is not None else None
+    timeline_source = base_df[
+        [
+            c
+            for c in [
+                "ts_sort",
+                "strategy_family",
+                "permission_bucket",
+                "final_action",
+                "final_blocker",
+                "outcome",
+                "symbol",
+                "trade_key",
+                "entry_status",
+                "permission_reason",
+                "entry_block_reason",
+                "global_conf",
+                "signal_score",
+                "regime_conf",
+                "orb_bias",
+                "orb_factor",
+                "reg_penalty",
+                "feed_state",
+                "quote_age_sec",
+                "spread_pct",
+                "underlying",
+                "option_side",
+                "run_id",
+                "source_bucket",
+            ]
+            if c in base_df.columns
+        ]
+    ].copy()
+    agg_df = _compute_strategy_timeline_cached(timeline_source, bucket_size, start_ms, end_ms)
+    if agg_df is None or agg_df.empty:
+        empty_state("No timeline rows in selected window.")
+        return
+
+    scoreboard_cols = [
+        col
+        for col in [
+            "time_bucket_label",
+            "strategy_family",
+            "candidates",
+            "high_execute",
+            "executed",
+            "demoted",
+            "demoted_rate",
+            "execution_rate",
+            "top_blocker",
+            "missed_winners",
+        ]
+        if col in agg_df.columns
+    ]
+    st.caption("Aggregated scoreboard by time bucket and strategy family.")
+    st.dataframe(
+        agg_df[scoreboard_cols].sort_values(["time_bucket_label", "strategy_family"], ascending=[True, True]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    pivot = agg_df.pivot_table(
+        index="time_bucket_label",
+        columns="strategy_family",
+        values=metric,
+        aggfunc="sum",
+        fill_value=0.0,
+    ).sort_index()
+    st.markdown("**Pivot (time bucket x strategy family)**")
+    st.dataframe(pivot, use_container_width=True)
+
+    bucket_view = agg_df[["time_bucket", "time_bucket_label"]].drop_duplicates().sort_values("time_bucket", ascending=True)
+    bucket_labels = bucket_view["time_bucket_label"].tolist()
+    if not bucket_labels:
+        empty_state("No timeline buckets available.")
+        return
+    selected_bucket_label = st.selectbox(
+        "Bar Chart Bucket",
+        options=bucket_labels,
+        index=len(bucket_labels) - 1,
+        key="timeline_selected_bucket",
+    )
+    selected_bucket_ts = bucket_view.loc[
+        bucket_view["time_bucket_label"] == selected_bucket_label, "time_bucket"
+    ].iloc[0]
+    bucket_slice = agg_df[agg_df["time_bucket"] == selected_bucket_ts].copy()
+    bar_series = bucket_slice.set_index("strategy_family")["candidates"].sort_values(ascending=False)
+    st.markdown("**Counts by strategy family (selected bucket)**")
+    st.bar_chart(bar_series)
+
+    st.markdown("**Drill-down**")
+    strategy_options = sorted(bucket_slice["strategy_family"].dropna().astype(str).unique().tolist())
+    selected_strategy = st.selectbox(
+        "Strategy Family",
+        options=strategy_options,
+        key="timeline_selected_strategy_family",
+    )
+    window_df = _filter_df_time_window(base_df, start_utc, end_utc)
+    window_df = window_df.copy()
+    window_df["_time_bucket"] = window_df["ts_sort"].apply(lambda v: floor_timestamp_to_bucket(v, bucket_size))
+    drill_df = window_df[
+        (window_df["_time_bucket"] == selected_bucket_ts)
+        & (window_df["strategy_family"].astype(str) == str(selected_strategy))
+    ].copy()
+    drill_df = drill_df.sort_values("ts_sort", ascending=False)
+    preset_cols = [c for c in EXPLORER_COLUMN_PRESETS["Strategy+Execution"] if c in drill_df.columns]
+    st.caption(f"Drill-down rows: {len(drill_df)} (showing top {min(len(drill_df), 500)})")
+    if drill_df.empty:
+        empty_state("No rows for selected bucket + strategy family.")
+    else:
+        st.dataframe(drill_df[preset_cols].head(500), use_container_width=True, hide_index=True)
+        blocker_dist = (
+            drill_df["final_blocker"]
+            .fillna("NONE")
+            .astype(str)
+            .value_counts()
+            .reset_index()
+            .rename(columns={"index": "final_blocker", "final_blocker": "count"})
+        )
+        st.markdown("**Blocker distribution (drill-down subset)**")
+        st.dataframe(blocker_dist, use_container_width=True, hide_index=True)
 
 
 def filter_trades_for_panel(trades, panel_name: str) -> pd.DataFrame:
@@ -447,13 +1308,1393 @@ def _with_active_runtime_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _is_nullish(value) -> bool:
+    try:
+        return value is None or bool(pd.isna(value))
+    except Exception:
+        return value is None
+
+
+def _first_non_null(*values):
+    for value in values:
+        if not _is_nullish(value):
+            return value
+    return None
+
+
+def _extract_quote_from_trade_row(trade_row: dict | pd.Series | None) -> dict | None:
+    row = dict(trade_row or {})
+    quote = {
+        "ltp": _first_non_null(row.get("opt_ltp"), row.get("ltp"), row.get("live_ltp"), row.get("current_ltp")),
+        "bid": _first_non_null(row.get("opt_bid"), row.get("bid")),
+        "ask": _first_non_null(row.get("opt_ask"), row.get("ask")),
+        "mark_price": _first_non_null(row.get("mark_price")),
+        "quote_age_sec": _first_non_null(row.get("quote_age_sec")),
+        "spread_pct": _first_non_null(row.get("spread_pct")),
+    }
+    has_quote = any(not _is_nullish(quote.get(col)) for col in ("ltp", "bid", "ask", "mark_price", "quote_age_sec"))
+    return quote if has_quote else None
+
+
+def build_display_row(trade, quote):
+    row = dict(trade or {})
+    quote_data = dict(quote or {})
+    out = dict(row)
+    out["ltp"] = _first_non_null(quote_data.get("ltp"))
+    out["bid"] = _first_non_null(quote_data.get("bid"))
+    out["ask"] = _first_non_null(quote_data.get("ask"))
+    out["mark_price"] = _first_non_null(quote_data.get("mark_price"))
+    out["quote_age_sec"] = _first_non_null(quote_data.get("quote_age_sec"))
+    spread_pct = _safe_float(_first_non_null(quote_data.get("spread_pct")))
+    if _is_nullish(out["mark_price"]):
+        out["mark_price"], _ = _derive_mark_price(
+            out.get("ltp"),
+            out.get("bid"),
+            out.get("ask"),
+            out.get("quote_age_sec"),
+        )
+    if spread_pct is None:
+        bid_val = _safe_float(out.get("bid"))
+        ask_val = _safe_float(out.get("ask"))
+        base_val = _safe_float(out.get("mark_price"))
+        if base_val in (None, 0.0):
+            base_val = _safe_float(out.get("ltp"))
+        if bid_val is not None and ask_val is not None and base_val not in (None, 0.0):
+            spread_pct = (ask_val - bid_val) / base_val
+    out["spread_pct"] = spread_pct
+    for col in EXECUTABLE_PRICING_COLS:
+        if col not in out:
+            out[col] = None
+    return out
+
+
+def _apply_executable_pricing(df: pd.DataFrame, chain_map: dict | None = None) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    work = df.copy()
+    try:
+        priced = _hydrate_option_quotes(work.copy(), chain_map if chain_map is not None else _get_chain_map())
+        if priced is not None and not priced.empty:
+            work = priced
+    except Exception as exc:
+        logger.warning("pricing_adapter_hydrate_failed: %s", exc)
+    for col in EXECUTABLE_PRICING_COLS:
+        if col not in work.columns:
+            work[col] = None
+    for idx, trade in work.iterrows():
+        enriched = build_display_row(trade.to_dict(), _extract_quote_from_trade_row(trade))
+        for col in EXECUTABLE_PRICING_COLS:
+            work.at[idx, col] = enriched.get(col)
+    return work
+
+
+def _inject_executable_pricing_cols(display_cols: list[str]) -> list[str]:
+    if not display_cols:
+        return []
+    ordered = [c for c in display_cols if c not in EXECUTABLE_PRICING_COLS]
+    if "stop" in ordered:
+        insert_at = ordered.index("stop") + 1
+    elif "confidence" in ordered:
+        insert_at = ordered.index("confidence")
+    else:
+        insert_at = len(ordered)
+    for col in EXECUTABLE_PRICING_COLS:
+        ordered.insert(insert_at, col)
+        insert_at += 1
+    deduped = []
+    for col in ordered:
+        if col not in deduped:
+            deduped.append(col)
+    return deduped
+
+
+def _normalize_option_type(value) -> str:
+    text = str(value or "").strip().upper()
+    if text in {"CE", "CALL", "C"}:
+        return "CE"
+    if text in {"PE", "PUT", "P"}:
+        return "PE"
+    return text
+
+
+def _format_trade_strike(value) -> str:
+    strike = _safe_float(value)
+    if strike is None:
+        return ""
+    if float(strike).is_integer():
+        return str(int(strike))
+    return f"{strike:g}"
+
+
+def _coerce_epoch_ms(value) -> int | None:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, pd.Timestamp):
+            ts = value
+            if ts.tzinfo is None:
+                ts = ts.tz_localize(timezone.utc)
+            else:
+                ts = ts.tz_convert(timezone.utc)
+            return int(ts.timestamp() * 1000.0)
+        if isinstance(value, datetime):
+            dt = value
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return int(dt.timestamp() * 1000.0)
+        if isinstance(value, (int, float)):
+            val = float(value)
+            if val <= 0:
+                return None
+            if val >= 10_000_000_000:
+                return int(val)
+            return int(val * 1000.0)
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return _coerce_epoch_ms(float(text))
+        except Exception:
+            pass
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        ts = pd.to_datetime(text, errors="coerce", utc=True)
+        if pd.isna(ts):
+            return None
+        return int(ts.timestamp() * 1000.0)
+    except Exception:
+        return None
+
+
+def _infer_underlying_symbol(trade) -> str | None:
+    row = dict(trade or {})
+    haystack = " ".join(
+        [
+            str(row.get("symbol") or ""),
+            str(row.get("tradingsymbol") or ""),
+            str(row.get("instrument_id") or ""),
+            str(row.get("trade_id") or ""),
+        ]
+    ).upper()
+    if "BANKNIFTY" in haystack or "NIFTY BANK" in haystack:
+        return "BANKNIFTY"
+    if "SENSEX" in haystack:
+        return "SENSEX"
+    if "NIFTY" in haystack:
+        return "NIFTY"
+    return None
+
+
+def _stable_trade_key(trade) -> str:
+    row = dict(trade or {})
+    symbol = str(_infer_underlying_symbol(row) or row.get("symbol") or "").upper().strip()
+    expiry = str(row.get("expiry_date") or row.get("expiry") or "").strip()
+    strike = _format_trade_strike(row.get("strike"))
+    opt_type = _normalize_option_type(row.get("opt_type") or row.get("type"))
+    side = str(row.get("side") or "").upper().strip()
+    return "|".join([symbol, expiry, strike, opt_type, side])
+
+
+MICRO_TRAIN_STATUS_RUNNING = "RUNNING"
+MICRO_TRAIN_STATUS_FAILED = "FAILED"
+MICRO_TRAIN_STATUS_SUCCESS = "SUCCESS"
+
+
+def _micro_training_paths() -> dict[str, Path]:
+    model_path_raw = str(getattr(cfg, "MICRO_MODEL_PATH", "models/microstructure_model.h5") or "").strip()
+    model_path = Path(model_path_raw) if model_path_raw else Path("models/microstructure_model.h5")
+    return {
+        "log": _log_path("train_micro.log"),
+        "pid": _log_path("train_micro.pid"),
+        "lock": _log_path("train_micro.lock"),
+        "status": _log_path("train_micro.status.json"),
+        "model_artifact": model_path,
+        "feature_importance": _log_path("micro_feature_importance.csv"),
+    }
+
+
+def _read_pid(path: Path) -> int | None:
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+        pid = int(raw)
+        return pid if pid > 0 else None
+    except Exception:
+        return None
+
+
+def _is_pid_alive(pid: int | None) -> bool:
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    # Reap completed child processes to avoid zombie PIDs being treated as "running".
+    if hasattr(os, "waitpid"):
+        try:
+            waited_pid, _ = os.waitpid(pid, os.WNOHANG)
+            if int(waited_pid or 0) == int(pid):
+                return False
+        except ChildProcessError:
+            # Not a child of this process (or already reaped); fall back to kill(0).
+            pass
+        except Exception:
+            pass
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        return False
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(payload or {}), indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _append_log_line(path: Path, line: str) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(str(line).rstrip() + "\n")
+    except Exception:
+        pass
+
+
+def _resolve_micro_train_backend(value: str | None) -> str:
+    backend = str(value or getattr(cfg, "MICRO_MODEL_TRAIN_BACKEND", "auto") or "auto").strip().lower()
+    if backend not in {"auto", "tensorflow", "sklearn"}:
+        return "auto"
+    return backend
+
+
+def _micro_model_artifact_exists(paths: dict[str, Path] | None = None) -> bool:
+    work = dict(paths or _micro_training_paths())
+    model_path = Path(work["model_artifact"])
+    candidates = [model_path, Path(work["feature_importance"])]
+    if model_path.suffix.lower() in {".h5", ".keras"}:
+        candidates.append(model_path.with_suffix(".pkl"))
+    return any(path.exists() for path in candidates)
+
+
+def _micro_model_badge_state(
+    paths: dict[str, Path] | None = None,
+    state: dict | None = None,
+) -> tuple[str, bool]:
+    work = dict(paths or _micro_training_paths())
+    micro_state = dict(state or _compute_micro_training_status(work))
+    status = str(micro_state.get("status") or "").upper()
+    artifact_exists = _micro_model_artifact_exists(work)
+    stale_artifact = bool(artifact_exists and status == MICRO_TRAIN_STATUS_FAILED)
+
+    if status == MICRO_TRAIN_STATUS_RUNNING:
+        return "Training", stale_artifact
+    if status == MICRO_TRAIN_STATUS_SUCCESS and artifact_exists:
+        return "Trained", stale_artifact
+    if stale_artifact:
+        return "Not trained", True
+    return ("Trained" if artifact_exists else "Not trained"), False
+
+
+def _cleanup_micro_train_runtime_files(paths: dict[str, Path] | None = None) -> None:
+    work = dict(paths or _micro_training_paths())
+    for key in ("pid", "lock"):
+        try:
+            Path(work[key]).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _is_micro_training_running(paths: dict[str, Path] | None = None) -> tuple[bool, int | None]:
+    work = dict(paths or _micro_training_paths())
+    pid = _read_pid(Path(work["pid"]))
+    if pid is None:
+        return False, None
+    if _is_pid_alive(pid):
+        return True, pid
+    _cleanup_micro_train_runtime_files(work)
+    return False, None
+
+
+def _tail_log_lines(path: Path, limit: int = 50) -> list[str]:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return []
+    count = max(1, int(limit))
+    return lines[-count:]
+
+
+def _last_training_report(log_path: Path) -> dict:
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return {}
+    for line in reversed(lines):
+        text = str(line or "").strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            obj = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return {}
+
+
+def _compute_micro_training_status(paths: dict[str, Path] | None = None) -> dict:
+    work = dict(paths or _micro_training_paths())
+    status_path = Path(work["status"])
+    log_path = Path(work["log"])
+    running, pid = _is_micro_training_running(work)
+    status_payload = _read_json(status_path)
+    status = str(status_payload.get("status") or "").upper()
+
+    if running:
+        if status != MICRO_TRAIN_STATUS_RUNNING:
+            status_payload = {
+                "status": MICRO_TRAIN_STATUS_RUNNING,
+                "pid": int(pid),
+                "started_epoch": float(status_payload.get("started_epoch") or time.time()),
+                "log_path": str(log_path),
+                "model_artifact_path": str(work["model_artifact"]),
+            }
+            _write_json(status_path, status_payload)
+    else:
+        if status == MICRO_TRAIN_STATUS_RUNNING:
+            report = _last_training_report(log_path)
+            report_status = str(report.get("status") or "").upper()
+            final_status = MICRO_TRAIN_STATUS_SUCCESS if report_status in {"TRAINED", "DRY_RUN_OK"} else MICRO_TRAIN_STATUS_FAILED
+            status_payload = {
+                **status_payload,
+                "status": final_status,
+                "finished_epoch": float(time.time()),
+                "pid": None,
+                "last_report_status": report_status or None,
+                "last_report_reason": report.get("reason"),
+                "log_path": str(log_path),
+                "model_artifact_path": str(work["model_artifact"]),
+            }
+            _write_json(status_path, status_payload)
+        elif status not in {MICRO_TRAIN_STATUS_SUCCESS, MICRO_TRAIN_STATUS_FAILED}:
+            status_payload = {
+                "status": MICRO_TRAIN_STATUS_SUCCESS if _micro_model_artifact_exists(work) else MICRO_TRAIN_STATUS_FAILED,
+                "pid": None,
+                "log_path": str(log_path),
+                "model_artifact_path": str(work["model_artifact"]),
+            }
+            _write_json(status_path, status_payload)
+
+    status_payload = _read_json(status_path)
+    status_payload["running"] = bool(running)
+    status_payload["pid"] = int(pid) if running and pid else None
+    status_payload["log_path"] = str(log_path)
+    status_payload["model_artifact_path"] = str(work["model_artifact"])
+    status_payload["feature_importance_path"] = str(work["feature_importance"])
+    status_payload["log_tail"] = _tail_log_lines(log_path, limit=50)
+    if str(status_payload.get("status") or "").upper() not in {
+        MICRO_TRAIN_STATUS_RUNNING,
+        MICRO_TRAIN_STATUS_FAILED,
+        MICRO_TRAIN_STATUS_SUCCESS,
+    }:
+        status_payload["status"] = MICRO_TRAIN_STATUS_FAILED
+    return status_payload
+
+
+def start_micro_training_subprocess(
+    *,
+    backend_override: str | None = None,
+    paths: dict[str, Path] | None = None,
+    popen_fn=None,
+    root_dir: Path | None = None,
+) -> tuple[bool, str]:
+    work = dict(paths or _micro_training_paths())
+    runner = popen_fn or subprocess.Popen
+    running, pid = _is_micro_training_running(work)
+    if running:
+        return False, f"Micro model training already running (pid={pid})."
+
+    backend = _resolve_micro_train_backend(backend_override)
+    command = [sys.executable, "-m", "models.train_micro_model"]
+    if backend != "auto":
+        command.extend(["--backend", backend])
+
+    for key in ("log", "pid", "lock", "status", "model_artifact", "feature_importance"):
+        Path(work[key]).parent.mkdir(parents=True, exist_ok=True)
+
+    env = os.environ.copy()
+    env.setdefault("MPLBACKEND", "Agg")
+    env.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    env["PYTHONPATH"] = (
+        str(ROOT)
+        if not env.get("PYTHONPATH")
+        else str(ROOT) + os.pathsep + str(env.get("PYTHONPATH"))
+    )
+    log_path = Path(work["log"])
+    _append_log_line(log_path, f"[{datetime.now(timezone.utc).isoformat()}] START {' '.join(command)}")
+
+    log_handle = None
+    try:
+        log_handle = log_path.open("a", encoding="utf-8")
+        proc = runner(
+            command,
+            cwd=str(root_dir or ROOT),
+            env=env,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            text=True,
+        )
+        proc_pid = int(getattr(proc, "pid", 0) or 0)
+        if proc_pid <= 0:
+            raise RuntimeError("missing training process pid")
+        Path(work["pid"]).write_text(str(proc_pid), encoding="utf-8")
+        _write_json(
+            Path(work["lock"]),
+            {
+                "pid": proc_pid,
+                "started_epoch": float(time.time()),
+                "command": command,
+                "cwd": str(root_dir or ROOT),
+            },
+        )
+        _write_json(
+            Path(work["status"]),
+            {
+                "status": MICRO_TRAIN_STATUS_RUNNING,
+                "pid": proc_pid,
+                "started_epoch": float(time.time()),
+                "log_path": str(log_path),
+                "model_artifact_path": str(work["model_artifact"]),
+                "feature_importance_path": str(work["feature_importance"]),
+                "backend": backend,
+            },
+        )
+        return True, f"Micro model training started (pid={proc_pid}, backend={backend})."
+    except Exception as exc:
+        _write_json(
+            Path(work["status"]),
+            {
+                "status": MICRO_TRAIN_STATUS_FAILED,
+                "pid": None,
+                "finished_epoch": float(time.time()),
+                "error": f"{type(exc).__name__}: {exc}",
+                "log_path": str(log_path),
+                "model_artifact_path": str(work["model_artifact"]),
+            },
+        )
+        return False, "Unable to start micro model training. Check logs/train_micro.log."
+    finally:
+        try:
+            if log_handle is not None:
+                log_handle.close()
+        except Exception:
+            pass
+
+
+def cancel_micro_training(paths: dict[str, Path] | None = None) -> tuple[bool, str]:
+    work = dict(paths or _micro_training_paths())
+    running, pid = _is_micro_training_running(work)
+    if not running or pid is None:
+        return False, "No micro model training process is running."
+
+    cancelled = False
+    try:
+        if hasattr(os, "killpg"):
+            os.killpg(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+        cancelled = True
+    except ProcessLookupError:
+        cancelled = True
+    except Exception:
+        cancelled = False
+
+    if cancelled:
+        deadline = time.time() + 2.0
+        while _is_pid_alive(pid) and time.time() < deadline:
+            time.sleep(0.1)
+        if _is_pid_alive(pid):
+            try:
+                if hasattr(os, "killpg"):
+                    os.killpg(pid, signal.SIGKILL)
+                else:
+                    os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+
+    _cleanup_micro_train_runtime_files(work)
+    _append_log_line(Path(work["log"]), f"[{datetime.now(timezone.utc).isoformat()}] CANCEL pid={pid}")
+    _write_json(
+        Path(work["status"]),
+        {
+            "status": MICRO_TRAIN_STATUS_FAILED,
+            "pid": None,
+            "finished_epoch": float(time.time()),
+            "cancelled": True,
+            "log_path": str(work["log"]),
+            "model_artifact_path": str(work["model_artifact"]),
+        },
+    )
+    if not cancelled:
+        return False, f"Unable to cancel training process pid={pid}. See logs/train_micro.log."
+    return True, f"Cancelled micro model training (pid={pid})."
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def get_underlying_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+    columns = ["time_ms", "open", "high", "low", "close", "volume"]
+    empty = pd.DataFrame(columns=columns)
+    try:
+        start = _coerce_epoch_ms(start_ms)
+        end = _coerce_epoch_ms(end_ms)
+        if start is None or end is None:
+            return empty
+        out = market_data_get_underlying_candles(
+            symbol=str(symbol or ""),
+            interval=str(interval or "minute"),
+            start_ms=int(start),
+            end_ms=int(end),
+        )
+        if out is None or out.empty:
+            return empty
+        for col in columns:
+            if col not in out.columns:
+                out[col] = None
+        return out[columns]
+    except Exception as exc:
+        logger.warning("chart_view_get_candles_failed symbol=%s err=%s", symbol, exc)
+        return empty
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _get_option_candles_or_snapshots_cached(
+    trade_payload_json: str,
+    interval: str,
+    start_ms: int,
+    end_ms: int,
+) -> pd.DataFrame:
+    columns = ["time_ms", "ltp", "bid", "ask", "mark_price", "quote_age_sec", "spread_pct", "source"]
+    empty = pd.DataFrame(columns=columns)
+    try:
+        trade = json.loads(trade_payload_json or "{}")
+        out = market_data_get_option_candles_or_snapshots(
+            trade=trade,
+            interval=str(interval or "minute"),
+            start_ms=int(start_ms),
+            end_ms=int(end_ms),
+        )
+        if out is None or out.empty:
+            return empty
+        for col in columns:
+            if col not in out.columns:
+                out[col] = None
+        return out[columns]
+    except Exception as exc:
+        logger.warning("chart_view_get_option_series_failed err=%s", exc)
+        return empty
+
+
+def get_option_candles_or_snapshots(trade, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+    columns = ["time_ms", "ltp", "bid", "ask", "mark_price", "quote_age_sec", "spread_pct", "source"]
+    empty = pd.DataFrame(columns=columns)
+    try:
+        start = _coerce_epoch_ms(start_ms)
+        end = _coerce_epoch_ms(end_ms)
+        if start is None or end is None:
+            return empty
+        trade_payload = dict(trade or {})
+        trade_payload_json = json.dumps(trade_payload, sort_keys=True, default=str)
+        return _get_option_candles_or_snapshots_cached(
+            trade_payload_json=trade_payload_json,
+            interval=str(interval or "minute"),
+            start_ms=int(start),
+            end_ms=int(end),
+        )
+    except Exception:
+        return empty
+
+
+# Backward-compatible alias used by phase-1 chart view.
+def get_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+    return get_underlying_candles(symbol=symbol, interval=interval, start_ms=start_ms, end_ms=end_ms)
+
+
+def _interval_ms(interval: str) -> int:
+    mapping = {
+        "minute": 60_000,
+        "1minute": 60_000,
+        "3minute": 180_000,
+        "5minute": 300_000,
+        "10minute": 600_000,
+        "15minute": 900_000,
+        "30minute": 1_800_000,
+        "60minute": 3_600_000,
+        "day": 86_400_000,
+    }
+    key = str(interval or "5minute").strip().lower()
+    return mapping.get(key, 300_000)
+
+
+def _auto_interval_for_range(interval: str, start_ms: int, end_ms: int, max_points: int = 1500) -> str:
+    choices = ["minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute", "day"]
+    requested = str(interval or "5minute").strip().lower()
+    range_ms = max(0, int(end_ms) - int(start_ms))
+    if range_ms <= 0:
+        return requested
+    if requested in choices:
+        start_idx = choices.index(requested)
+    else:
+        start_idx = 0
+    for cand in choices[start_idx:]:
+        est = range_ms / max(1, _interval_ms(cand))
+        if est <= float(max_points):
+            return cand
+    return choices[-1]
+
+
+def _downsample_points(df: pd.DataFrame, max_points: int = 1500) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    limit = max(1, int(max_points))
+    if len(df) <= limit:
+        return df
+    stride = max(1, int(math.ceil(len(df) / float(limit))))
+    out = df.iloc[::stride].copy()
+    if out.empty:
+        return df.tail(limit).copy()
+    if "time_ms" in df.columns:
+        out = out.sort_values("time_ms")
+    return out
+
+
+def _collect_chart_marker_rows(trades_df: pd.DataFrame, underlying: str, max_markers: int = 50) -> list[dict]:
+    if trades_df is None or trades_df.empty:
+        return []
+    symbol = str(underlying or "").upper().strip()
+    if not symbol:
+        return []
+    limit = max(0, int(max_markers or 0))
+    if limit == 0:
+        return []
+    records = []
+    for _, row_obj in trades_df.iterrows():
+        row = row_obj.to_dict()
+        row_underlying = _infer_underlying_symbol(row)
+        if row_underlying != symbol:
+            continue
+        status = str(row.get("status") or "").upper().strip()
+        reject_reason = str(row.get("reject_reason") or "").strip()
+        has_reject_reason = reject_reason not in {"", "None", "none", "nan", "NaN"}
+        is_rejected = status in {"PLANNING", "PROPOSED"} or has_reject_reason
+        is_active = status == "ACTIVE"
+        if not (is_rejected or is_active):
+            continue
+        ts_ms = _coerce_epoch_ms(
+            row.get("timestamp_epoch_ms")
+            or row.get("timestamp_utc_iso")
+            or row.get("timestamp")
+            or row.get("last_seen_ts")
+        )
+        entry_val = _safe_float(row.get("entry"))
+        if ts_ms is None or entry_val is None:
+            continue
+        row["timestamp_epoch_ms"] = int(ts_ms)
+        row["entry"] = float(entry_val)
+        row["marker_kind"] = "active" if is_active else "rejected"
+        row["reject_reason"] = reject_reason if has_reject_reason else None
+        row["chart_trade_key"] = str(row.get("chart_trade_key") or _stable_trade_key(row))
+        records.append(row)
+    records.sort(key=lambda r: int(r.get("timestamp_epoch_ms") or 0), reverse=True)
+    return records[:limit]
+
+
+def build_option_series(df_or_snapshots, mode: str) -> pd.DataFrame:
+    columns = [
+        "time_ms",
+        "opt_price",
+        "ltp",
+        "bid",
+        "ask",
+        "mark_price",
+        "mid_price",
+        "quote_age_sec",
+        "spread_pct",
+        "source",
+    ]
+    empty = pd.DataFrame(columns=columns)
+    if df_or_snapshots is None:
+        return empty
+    if isinstance(df_or_snapshots, pd.DataFrame):
+        work = df_or_snapshots.copy()
+    else:
+        work = pd.DataFrame(list(df_or_snapshots or []))
+    if work.empty:
+        return empty
+
+    def _row_num(row, keys):
+        for key in keys:
+            val = _safe_float(row.get(key))
+            if val is not None:
+                return float(val)
+        return None
+
+    def _row_ts_ms(row):
+        for key in ("time_ms", "timestamp_epoch_ms", "timestamp_epoch", "ts_epoch", "timestamp_iso", "timestamp", "ts"):
+            ts = _coerce_epoch_ms(row.get(key))
+            if ts is not None:
+                return int(ts)
+        return None
+
+    work["time_ms"] = work.apply(_row_ts_ms, axis=1)
+    work = work.dropna(subset=["time_ms"]).copy()
+    if work.empty:
+        return empty
+    work["time_ms"] = pd.to_numeric(work["time_ms"], errors="coerce")
+    work = work.dropna(subset=["time_ms"]).copy()
+    work["time_ms"] = work["time_ms"].astype("int64")
+
+    work["ltp"] = work.apply(lambda r: _row_num(r, ("ltp", "last_price", "close", "opt_ltp", "current_ltp")), axis=1)
+    work["bid"] = work.apply(lambda r: _row_num(r, ("bid", "best_bid", "opt_bid")), axis=1)
+    work["ask"] = work.apply(lambda r: _row_num(r, ("ask", "best_ask", "opt_ask")), axis=1)
+    work["quote_age_sec"] = work.apply(lambda r: _row_num(r, ("quote_age_sec", "price_age_sec")), axis=1)
+    work["spread_pct"] = work.apply(lambda r: _row_num(r, ("spread_pct",)), axis=1)
+    work["source"] = work.apply(lambda r: str(r.get("source") or "option_snapshot"), axis=1)
+
+    work["mid_price"] = (pd.to_numeric(work["bid"], errors="coerce") + pd.to_numeric(work["ask"], errors="coerce")) / 2.0
+    work["mark_price"] = work.apply(lambda r: _row_num(r, ("mark_price", "mark")), axis=1)
+    work["mark_price"] = pd.to_numeric(work["mark_price"], errors="coerce")
+    work["mark_price"] = work["mark_price"].where(work["mark_price"].notna(), work["mid_price"])
+    work["mark_price"] = work["mark_price"].where(work["mark_price"].notna(), pd.to_numeric(work["ltp"], errors="coerce"))
+
+    base = pd.to_numeric(work["mark_price"], errors="coerce")
+    base = base.where(base > 0, pd.to_numeric(work["ltp"], errors="coerce"))
+    spread_calc = (pd.to_numeric(work["ask"], errors="coerce") - pd.to_numeric(work["bid"], errors="coerce")) / base
+    work["spread_pct"] = pd.to_numeric(work["spread_pct"], errors="coerce")
+    work["spread_pct"] = work["spread_pct"].where(work["spread_pct"].notna(), spread_calc)
+
+    mode_norm = str(mode or "mark").strip().lower()
+    if mode_norm == "mid":
+        work["opt_price"] = pd.to_numeric(work["mid_price"], errors="coerce")
+    elif mode_norm == "ltp":
+        work["opt_price"] = pd.to_numeric(work["ltp"], errors="coerce")
+    else:
+        work["opt_price"] = pd.to_numeric(work["mark_price"], errors="coerce")
+
+    work = work.sort_values("time_ms").drop_duplicates(subset=["time_ms"], keep="last")
+    work = _downsample_points(work, max_points=1500)
+    for col in columns:
+        if col not in work.columns:
+            work[col] = None
+    return work[columns]
+
+
+def detect_stale_points(option_df: pd.DataFrame, thresholds: dict | None = None) -> tuple[pd.Series, list[str]]:
+    if option_df is None or option_df.empty:
+        return pd.Series(dtype=bool), []
+    cfg_map = dict(thresholds or {})
+    max_quote_age = _safe_float(cfg_map.get("quote_age_sec_max"), default=float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0)))
+    outside_pct = _safe_float(cfg_map.get("ltp_outside_band_pct"), default=float(getattr(cfg, "OPTION_LAST_OUTSIDE_BAND_PCT", 0.01)))
+    max_spread_pct = _safe_float(cfg_map.get("spread_pct_max"), default=float(getattr(cfg, "MAX_SPREAD_PCT", 0.03)))
+    max_quote_age = float(max_quote_age if max_quote_age is not None else 8.0)
+    outside_pct = float(outside_pct if outside_pct is not None else 0.01)
+    max_spread_pct = float(max_spread_pct if max_spread_pct is not None else 0.03)
+
+    stale_mask: list[bool] = []
+    stale_reasons: list[str] = []
+    for _, row in option_df.iterrows():
+        reasons = []
+        quote_age = _safe_float(row.get("quote_age_sec"))
+        if quote_age is not None and quote_age > max_quote_age:
+            reasons.append(f"quote_age_sec>{max_quote_age:.2f}")
+        bid = _safe_float(row.get("bid"))
+        ask = _safe_float(row.get("ask"))
+        ltp = _safe_float(row.get("ltp"))
+        if ltp is not None and bid is not None and ask is not None:
+            lo = min(bid, ask) * max(0.0, 1.0 - outside_pct)
+            hi = max(bid, ask) * (1.0 + outside_pct)
+            if ltp < lo or ltp > hi:
+                reasons.append("ltp_outside_bid_ask_band")
+        spread_pct = _safe_float(row.get("spread_pct"))
+        if spread_pct is None and bid is not None and ask is not None:
+            base = _safe_float(row.get("mark_price"))
+            if base in (None, 0.0):
+                base = ltp
+            if base not in (None, 0.0):
+                spread_pct = (ask - bid) / base
+        if spread_pct is not None and spread_pct > max_spread_pct:
+            reasons.append(f"spread_pct>{max_spread_pct:.4f}")
+        stale_mask.append(bool(reasons))
+        stale_reasons.append("; ".join(reasons))
+    return pd.Series(stale_mask, index=option_df.index), stale_reasons
+
+
+def build_dual_axis_figure(
+    underlying_df: pd.DataFrame,
+    option_df: pd.DataFrame,
+    trade,
+    markers_df,
+    option_mode: str = "mark",
+    show_quote_diagnostics: bool = True,
+    stale_thresholds: dict | None = None,
+) -> go.Figure:
+    row = dict(trade or {})
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    required = {"time_ms", "open", "high", "low", "close", "volume"}
+
+    if isinstance(underlying_df, pd.DataFrame) and (not underlying_df.empty) and required.issubset(set(underlying_df.columns)):
+        base = underlying_df.copy()
+        base["time_ms"] = pd.to_numeric(base["time_ms"], errors="coerce")
+        base = base.dropna(subset=["time_ms"]).sort_values("time_ms")
+        if not base.empty:
+            base["time_dt"] = pd.to_datetime(base["time_ms"], unit="ms", utc=True).dt.tz_convert("Asia/Kolkata")
+            fig.add_trace(
+                go.Candlestick(
+                    x=base["time_dt"],
+                    open=base["open"],
+                    high=base["high"],
+                    low=base["low"],
+                    close=base["close"],
+                    name="Underlying",
+                ),
+                secondary_y=False,
+            )
+    if not fig.data:
+        fig.add_annotation(
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            text="No underlying candle data available.",
+        )
+        fig.update_layout(
+            title="Trade Chart",
+            xaxis_title="Time",
+            yaxis_title="Underlying",
+            yaxis2_title="Option",
+            margin=dict(l=40, r=360, t=60, b=40),
+        )
+        return fig
+
+    option_work = option_df.copy() if isinstance(option_df, pd.DataFrame) else pd.DataFrame()
+    if option_work is not None and not option_work.empty:
+        option_work["time_ms"] = pd.to_numeric(option_work.get("time_ms"), errors="coerce")
+        option_work = option_work.dropna(subset=["time_ms"]).sort_values("time_ms").copy()
+        if not option_work.empty:
+            option_work = _downsample_points(option_work, max_points=1500)
+            option_work["time_dt"] = pd.to_datetime(option_work["time_ms"], unit="ms", utc=True).dt.tz_convert("Asia/Kolkata")
+            option_work["opt_price"] = pd.to_numeric(option_work.get("opt_price"), errors="coerce")
+            plot_opt = option_work.dropna(subset=["opt_price"])
+            if not plot_opt.empty:
+                fig.add_trace(
+                    go.Scatter(
+                        x=plot_opt["time_dt"],
+                        y=plot_opt["opt_price"],
+                        mode="lines",
+                        line=dict(color="#1d4ed8", width=2),
+                        name=f"Option {str(option_mode).upper()}",
+                    ),
+                    secondary_y=True,
+                )
+
+    x_vals = []
+    try:
+        first_trace = fig.data[0]
+        x_vals = list(first_trace.x) if hasattr(first_trace, "x") else []
+    except Exception:
+        x_vals = []
+    x0 = x_vals[0] if x_vals else datetime.now(ZoneInfo("Asia/Kolkata"))
+    x1 = x_vals[-1] if x_vals else datetime.now(ZoneInfo("Asia/Kolkata"))
+
+    for field, color, name in [("entry", "#3b82f6", "Entry"), ("stop", "#ef4444", "Stop"), ("target", "#22c55e", "Target")]:
+        val = _safe_float(row.get(field))
+        if val is None:
+            continue
+        fig.add_shape(
+            type="line",
+            x0=x0,
+            x1=x1,
+            y0=float(val),
+            y1=float(val),
+            xref="x",
+            yref="y2",
+            line=dict(color=color, width=1.6, dash="dot"),
+        )
+        fig.add_annotation(
+            x=1.0,
+            y=float(val),
+            xref="paper",
+            yref="y2",
+            text=f"{name}: {val:.2f}",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=10, color=color),
+        )
+
+    activation_ts = _coerce_epoch_ms(
+        row.get("activated_ts")
+        or row.get("activation_ts")
+        or row.get("timestamp_epoch_ms")
+        or row.get("timestamp_utc_iso")
+        or row.get("timestamp")
+    )
+    activation_px = _safe_float(row.get("activation_price"))
+    if activation_px is None:
+        activation_px = _safe_float(row.get("entry"))
+    if activation_ts is not None and activation_px is not None:
+        activation_dt = datetime.fromtimestamp(float(activation_ts) / 1000.0, tz=timezone.utc).astimezone(ZoneInfo("Asia/Kolkata"))
+        fig.add_trace(
+            go.Scatter(
+                x=[activation_dt],
+                y=[float(activation_px)],
+                mode="markers",
+                marker=dict(size=10, color="#2563eb", symbol="diamond"),
+                name="Activation",
+            ),
+            secondary_y=True,
+        )
+
+    marker_rows = markers_df if isinstance(markers_df, list) else list(getattr(markers_df, "to_dict", lambda *_: [])("records") if markers_df is not None else [])
+    if marker_rows:
+        rej_x, rej_y, rej_text = [], [], []
+        act_x, act_y, act_text = [], [], []
+        for marker in marker_rows:
+            m = dict(marker or {})
+            ts_ms = _coerce_epoch_ms(m.get("timestamp_epoch_ms"))
+            price = _safe_float(m.get("entry"))
+            if ts_ms is None or price is None:
+                continue
+            dt = datetime.fromtimestamp(float(ts_ms) / 1000.0, tz=timezone.utc).astimezone(ZoneInfo("Asia/Kolkata"))
+            text = (
+                f"trade_key: {m.get('chart_trade_key') or _stable_trade_key(m)}<br>"
+                f"reject_reason: {m.get('reject_reason') or 'None'}<br>"
+                f"quote_age_sec: {m.get('quote_age_sec')}<br>"
+                f"spread_pct: {m.get('spread_pct')}"
+            )
+            if str(m.get("marker_kind") or "").lower() == "active":
+                act_x.append(dt)
+                act_y.append(float(price))
+                act_text.append(text)
+            else:
+                rej_x.append(dt)
+                rej_y.append(float(price))
+                rej_text.append(text)
+        if rej_x:
+            fig.add_trace(
+                go.Scatter(
+                    x=rej_x,
+                    y=rej_y,
+                    mode="markers",
+                    name="Rejected/Advisory",
+                    text=rej_text,
+                    hovertemplate="%{text}<extra></extra>",
+                    marker=dict(size=6, color="rgba(107,114,128,0.6)", symbol="circle"),
+                ),
+                secondary_y=True,
+            )
+        if act_x:
+            fig.add_trace(
+                go.Scatter(
+                    x=act_x,
+                    y=act_y,
+                    mode="markers",
+                    name="Active Trades",
+                    text=act_text,
+                    hovertemplate="%{text}<extra></extra>",
+                    marker=dict(size=8, color="#1d4ed8", symbol="diamond"),
+                ),
+                secondary_y=True,
+            )
+
+    if option_work is not None and not option_work.empty and "opt_price" in option_work.columns:
+        stale_mask, stale_reasons = detect_stale_points(option_work, thresholds=stale_thresholds)
+        option_work = option_work.copy()
+        option_work["stale"] = stale_mask
+        option_work["stale_reason"] = stale_reasons
+        stale_points = option_work[option_work["stale"] & option_work["opt_price"].notna()]
+        if not stale_points.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=stale_points["time_dt"],
+                    y=stale_points["opt_price"],
+                    mode="markers",
+                    name="Stale/Illiquid",
+                    text=stale_points["stale_reason"].apply(lambda r: f"STALE/ILLQ: {r}" if r else "STALE/ILLQ").tolist(),
+                    hovertemplate="%{text}<extra></extra>",
+                    marker=dict(size=7, color="#dc2626", symbol="x"),
+                ),
+                secondary_y=True,
+            )
+
+    latest = {}
+    if option_work is not None and not option_work.empty:
+        try:
+            latest = option_work.sort_values("time_ms").iloc[-1].to_dict()
+        except Exception:
+            latest = {}
+    trade_key = str(row.get("chart_trade_key") or _stable_trade_key(row))
+    diagnostics = [
+        f"trade_key: {trade_key}",
+        f"status: {row.get('status')}",
+        f"side: {row.get('side')}",
+        f"confidence: {row.get('confidence')}",
+        f"option_mode: {str(option_mode).lower()}",
+    ]
+    if show_quote_diagnostics:
+        diagnostics.extend(
+            [
+                f"ltp: {_first_non_null(latest.get('ltp'), row.get('ltp'))}",
+                f"bid: {_first_non_null(latest.get('bid'), row.get('bid'))}",
+                f"ask: {_first_non_null(latest.get('ask'), row.get('ask'))}",
+                f"mark: {_first_non_null(latest.get('mark_price'), row.get('mark_price'))}",
+                f"spread_pct: {_first_non_null(latest.get('spread_pct'), row.get('spread_pct'))}",
+                f"quote_age_sec: {_first_non_null(latest.get('quote_age_sec'), row.get('quote_age_sec'))}",
+            ]
+        )
+    fig.add_annotation(
+        x=1.01,
+        y=1.0,
+        xref="paper",
+        yref="paper",
+        align="left",
+        showarrow=False,
+        bordercolor="#6b7280",
+        borderwidth=1,
+        bgcolor="rgba(17,24,39,0.04)",
+        font=dict(size=11),
+        text="<br>".join(diagnostics),
+    )
+    if str(option_mode or "").lower() == "ltp":
+        fig.add_annotation(
+            x=0.01,
+            y=0.98,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            text="LTP may be stale",
+            font=dict(size=11, color="#dc2626"),
+            bgcolor="rgba(254,226,226,0.7)",
+        )
+
+    title_symbol = _infer_underlying_symbol(row) or str(row.get("symbol") or "UNDERLYING")
+    fig.update_layout(
+        title=f"{title_symbol} vs Option ({str(option_mode).upper()})",
+        xaxis_title="Time (IST)",
+        margin=dict(l=40, r=360, t=60, b=40),
+        xaxis_rangeslider_visible=False,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    fig.update_yaxes(title_text=f"{title_symbol} (Underlying)", secondary_y=False)
+    fig.update_yaxes(title_text="Option Price", secondary_y=True)
+    return fig
+
+
+def build_chart(trade, candles_df, marker_rows: list[dict] | None = None) -> go.Figure:
+    row = dict(trade or {})
+    fig = go.Figure()
+    required = {"time_ms", "open", "high", "low", "close", "volume"}
+    has_candles = isinstance(candles_df, pd.DataFrame) and (not candles_df.empty) and required.issubset(set(candles_df.columns))
+    if has_candles:
+        work = candles_df.copy()
+        work["time_ms"] = pd.to_numeric(work["time_ms"], errors="coerce")
+        work = work.dropna(subset=["time_ms"]).sort_values("time_ms")
+        if not work.empty:
+            work["time_dt"] = pd.to_datetime(work["time_ms"], unit="ms", utc=True).dt.tz_convert("Asia/Kolkata")
+            fig.add_trace(
+                go.Candlestick(
+                    x=work["time_dt"],
+                    open=work["open"],
+                    high=work["high"],
+                    low=work["low"],
+                    close=work["close"],
+                    name="Candles",
+                )
+            )
+    if not fig.data:
+        fig.add_annotation(
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            text="No candle data available for the selected trade.",
+        )
+        fig.update_layout(
+            title="Trade Chart",
+            xaxis_title="Time",
+            yaxis_title="Price",
+            xaxis_rangeslider_visible=False,
+            margin=dict(l=40, r=320, t=60, b=40),
+        )
+        return fig
+
+    overlays = [
+        ("entry", "Entry", "#3b82f6"),
+        ("stop", "Stop", "#ef4444"),
+        ("target", "Target", "#22c55e"),
+    ]
+    for field, label, color in overlays:
+        val = _safe_float(row.get(field))
+        if val is None:
+            continue
+        fig.add_hline(
+            y=float(val),
+            line_dash="dot",
+            line_color=color,
+            annotation_text=f"{label}: {val:.2f}",
+            annotation_position="left",
+        )
+
+    ts_ms = _coerce_epoch_ms(
+        row.get("timestamp_epoch_ms")
+        or row.get("timestamp_utc_iso")
+        or row.get("timestamp")
+        or row.get("last_seen_ts")
+    )
+    if ts_ms is not None:
+        marker_y = _safe_float(row.get("entry"))
+        if marker_y is None and has_candles and isinstance(candles_df, pd.DataFrame) and (not candles_df.empty):
+            try:
+                marker_y = _safe_float(candles_df.sort_values("time_ms")["close"].iloc[-1])
+            except Exception:
+                marker_y = None
+        if marker_y is not None:
+            marker_x = datetime.fromtimestamp(float(ts_ms) / 1000.0, tz=timezone.utc).astimezone(ZoneInfo("Asia/Kolkata"))
+            fig.add_trace(
+                go.Scatter(
+                    x=[marker_x],
+                    y=[float(marker_y)],
+                    mode="markers",
+                    marker=dict(size=11, color="#f59e0b", symbol="diamond"),
+                    name="Trade timestamp",
+                )
+            )
+
+    marker_rows = list(marker_rows or [])
+    if marker_rows:
+        rejected_x, rejected_y, rejected_text = [], [], []
+        active_x, active_y, active_text = [], [], []
+        for marker in marker_rows:
+            marker_kind = str(marker.get("marker_kind") or "").strip().lower()
+            ts_ms = _coerce_epoch_ms(marker.get("timestamp_epoch_ms"))
+            entry_val = _safe_float(marker.get("entry"))
+            if ts_ms is None or entry_val is None:
+                continue
+            ts_dt = datetime.fromtimestamp(float(ts_ms) / 1000.0, tz=timezone.utc).astimezone(ZoneInfo("Asia/Kolkata"))
+            trade_key = str(marker.get("chart_trade_key") or _stable_trade_key(marker))
+            reject_reason = marker.get("reject_reason")
+            quote_age = _safe_float(marker.get("quote_age_sec"))
+            spread_pct = _safe_float(marker.get("spread_pct"))
+            hover_text = (
+                f"trade_key: {trade_key}<br>"
+                f"reject_reason: {reject_reason if reject_reason not in (None, '') else 'None'}<br>"
+                f"quote_age_sec: {quote_age if quote_age is not None else 'None'}<br>"
+                f"spread_pct: {spread_pct if spread_pct is not None else 'None'}"
+            )
+            if marker_kind == "active":
+                active_x.append(ts_dt)
+                active_y.append(float(entry_val))
+                active_text.append(hover_text)
+            else:
+                rejected_x.append(ts_dt)
+                rejected_y.append(float(entry_val))
+                rejected_text.append(hover_text)
+        if rejected_x:
+            fig.add_trace(
+                go.Scatter(
+                    x=rejected_x,
+                    y=rejected_y,
+                    mode="markers",
+                    name="Rejected/Advisory",
+                    text=rejected_text,
+                    hovertemplate="%{text}<extra></extra>",
+                    marker=dict(size=6, color="rgba(107,114,128,0.55)", symbol="circle"),
+                )
+            )
+        if active_x:
+            fig.add_trace(
+                go.Scatter(
+                    x=active_x,
+                    y=active_y,
+                    mode="markers",
+                    name="Active Trades",
+                    text=active_text,
+                    hovertemplate="%{text}<extra></extra>",
+                    marker=dict(size=8, color="#2563eb", symbol="diamond"),
+                )
+            )
+
+    annotation_fields = [
+        ("status", row.get("status")),
+        ("side", row.get("side")),
+        ("confidence", _safe_float(row.get("confidence"))),
+        ("reject_reason", row.get("reject_reason")),
+        ("pricing_mode", row.get("pricing_mode")),
+        ("quote_age_sec", _safe_float(row.get("quote_age_sec"))),
+        ("spread_pct", _safe_float(row.get("spread_pct"))),
+        ("ltp", _safe_float(row.get("ltp"))),
+        ("bid", _safe_float(row.get("bid"))),
+        ("ask", _safe_float(row.get("ask"))),
+        ("mark_price", _safe_float(row.get("mark_price"))),
+    ]
+    lines = []
+    for key, value in annotation_fields:
+        if value is None or value == "":
+            continue
+        if isinstance(value, float):
+            lines.append(f"{key}: {value:.4f}")
+        else:
+            lines.append(f"{key}: {value}")
+    if not lines:
+        lines = ["No trade metadata available."]
+    fig.add_annotation(
+        x=1.01,
+        y=1.0,
+        xref="paper",
+        yref="paper",
+        align="left",
+        showarrow=False,
+        bordercolor="#6b7280",
+        borderwidth=1,
+        bgcolor="rgba(17,24,39,0.04)",
+        font=dict(size=11),
+        text="<br>".join(lines),
+    )
+    title_symbol = _infer_underlying_symbol(row) or str(row.get("symbol") or "UNDERLYING")
+    fig.update_layout(
+        title=f"{title_symbol} Candlestick Chart",
+        xaxis_title="Time (IST)",
+        yaxis_title="Price",
+        xaxis_rangeslider_visible=False,
+        margin=dict(l=40, r=320, t=60, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    return fig
+
+
+def _render_chart_view_panel(trade_universe_df: pd.DataFrame):
+    chart_view_enabled = st.checkbox("Chart view", value=False, key="chart_view_toggle")
+    if not chart_view_enabled:
+        return
+    section_header("Chart View")
+    try:
+        source_df = _prepare_trade_display_df(trade_universe_df)
+        if source_df is None or source_df.empty:
+            st.info("Chart view: no trades available.")
+            return
+        chart_df = _apply_executable_pricing(source_df)
+        chart_df["chart_trade_key"] = chart_df.apply(lambda r: _stable_trade_key(r.to_dict()), axis=1)
+        chart_df = chart_df[chart_df["chart_trade_key"].astype(str).str.strip().ne("")]
+        if chart_df.empty:
+            st.info("Chart view: no trades with a valid key.")
+            return
+        chart_df = _safe_sort_by_last_seen(chart_df).drop_duplicates(subset=["chart_trade_key"], keep="first")
+        options = chart_df["chart_trade_key"].tolist()
+        selected_key = st.selectbox("Select trade_key", options=options, key="chart_trade_key_select")
+        selected_row = chart_df.loc[chart_df["chart_trade_key"] == selected_key].head(1)
+        if selected_row.empty:
+            st.info("Chart view: selected trade not found.")
+            return
+        trade = selected_row.iloc[0].to_dict()
+
+        show_option_line = st.checkbox("Show option line", value=True, key="chart_show_option_line")
+        option_mode = st.selectbox("Option line mode", ["mark", "mid", "ltp"], index=0, key="chart_option_line_mode")
+        show_quote_diagnostics = st.checkbox("Show quote diagnostics", value=True, key="chart_show_quote_diagnostics")
+
+        underlying = _infer_underlying_symbol(trade)
+        if not underlying:
+            st.info("Chart view: unable to infer underlying symbol from selected trade.")
+            return
+        chart_interval = str(getattr(cfg, "DASHBOARD_CHART_INTERVAL", "5minute") or "5minute")
+        lookback_hours = int(getattr(cfg, "DASHBOARD_CHART_LOOKBACK_HOURS", 6) or 6)
+        forward_hours = int(getattr(cfg, "DASHBOARD_CHART_FORWARD_HOURS", 1) or 1)
+        now_ms = int(time.time() * 1000.0)
+        trade_ts_ms = _coerce_epoch_ms(
+            trade.get("timestamp_epoch_ms")
+            or trade.get("timestamp_utc_iso")
+            or trade.get("timestamp")
+            or trade.get("last_seen_ts")
+        ) or now_ms
+        start_ms = max(0, trade_ts_ms - (lookback_hours * 60 * 60 * 1000))
+        end_ms = max(now_ms, trade_ts_ms + (forward_hours * 60 * 60 * 1000))
+        chart_interval = _auto_interval_for_range(chart_interval, start_ms, end_ms, max_points=1500)
+
+        candles_df = get_underlying_candles(underlying, chart_interval, start_ms, end_ms)
+        if candles_df is None or candles_df.empty:
+            st.info(f"Chart view: candle data unavailable for {underlying}.")
+            return
+
+        option_df = pd.DataFrame(
+            columns=[
+                "time_ms",
+                "opt_price",
+                "ltp",
+                "bid",
+                "ask",
+                "mark_price",
+                "mid_price",
+                "quote_age_sec",
+                "spread_pct",
+                "source",
+            ]
+        )
+        if show_option_line:
+            option_raw = get_option_candles_or_snapshots(trade, chart_interval, start_ms, end_ms)
+            if option_raw is None or option_raw.empty:
+                st.warning("No option series data.")
+            else:
+                source_vals = {str(v).lower() for v in option_raw.get("source", pd.Series(dtype="object")).dropna().astype(str).tolist()}
+                if source_vals and source_vals.issubset({"option_snapshot"}):
+                    st.warning("Option history unavailable; using sparse snapshots.")
+                option_df = build_option_series(option_raw, option_mode)
+                if option_df is None or option_df.empty:
+                    st.warning("No option series data.")
+
+        marker_rows = _collect_chart_marker_rows(chart_df, underlying=underlying, max_markers=50)
+        stale_thresholds = {
+            "quote_age_sec_max": float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0)),
+            "ltp_outside_band_pct": float(getattr(cfg, "OPTION_LAST_OUTSIDE_BAND_PCT", 0.01)),
+            "spread_pct_max": float(getattr(cfg, "MAX_SPREAD_PCT", 0.03)),
+        }
+        fig = build_dual_axis_figure(
+            underlying_df=candles_df,
+            option_df=option_df if show_option_line else pd.DataFrame(),
+            trade=trade,
+            markers_df=marker_rows,
+            option_mode=option_mode,
+            show_quote_diagnostics=show_quote_diagnostics,
+            stale_thresholds=stale_thresholds,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as exc:
+        logger.exception("chart_view_panel_failed: %s", exc)
+        st.info("Chart view is temporarily unavailable. Tables continue to render.")
+
+
 rows = _load_trade_log_rows(LOG_PATH)
 df = pd.DataFrame(rows)
-updates_path = Path("data/trade_updates.json")
+updates_candidates = [
+    logs_dir() / "trade_updates.jsonl",
+    data_root() / "trade_updates.json",
+]
+updates_path = next((p for p in updates_candidates if p.exists()), updates_candidates[0])
 if updates_path.exists():
     try:
         updates = []
-        with open(updates_path, "r") as f:
+        with updates_path.open("r", encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
@@ -550,7 +2791,7 @@ df.loc[df["side"].astype(str).str.upper() == "SELL", "pnl"] *= -1
 dfm = df.copy()
 
 def _load_prefs():
-    prefs_path = Path("logs/ui_prefs.json")
+    prefs_path = _log_path("ui_prefs.json")
     if prefs_path.exists():
         try:
             return json.loads(prefs_path.read_text())
@@ -560,8 +2801,8 @@ def _load_prefs():
 
 def _save_prefs(prefs):
     try:
-        Path("logs").mkdir(exist_ok=True)
-        Path("logs/ui_prefs.json").write_text(json.dumps(prefs, indent=2))
+        logs_dir().mkdir(exist_ok=True)
+        _log_path("ui_prefs.json").write_text(json.dumps(prefs, indent=2))
     except Exception:
         pass
 
@@ -588,7 +2829,7 @@ def _wf_lock_status():
         enabled = getattr(cfg, "STRATEGY_WF_LOCK_ENABLE", False)
         allowed = None
         total = None
-        path = Path("logs/walk_forward_strategy_summary.csv")
+        path = _log_path("walk_forward_strategy_summary.csv")
         if path.exists():
             if path.stat().st_size == 0:
                 return enabled, None, None
@@ -628,7 +2869,17 @@ def _set_query_tab(tab_name: str):
 # Theme preference removed (fixed theme)
 
 # Navigation
-nav_items = ["Home", "Execution", "Reconciliation", "Risk & Governance", "Data & SLA", "ML/RL", "Market Depth", "Gemini"]
+nav_items = [
+    "Home",
+    "Strategy Timeline",
+    "Execution",
+    "Reconciliation",
+    "Risk & Governance",
+    "Data & SLA",
+    "ML/RL",
+    "Market Depth",
+    "Gemini",
+]
 query_tab = None
 try:
     qp = st.query_params if hasattr(st, "query_params") else st.experimental_get_query_params()
@@ -751,6 +3002,7 @@ def _compute_readiness_snapshot():
         "readiness": {},
         "checks": {},
         "feed_freshness": {},
+        "feed_state_machine": {},
         "feed_debug": {},
         "decision_gate": {},
         "decision_rows": {},
@@ -793,6 +3045,10 @@ def _compute_readiness_snapshot():
         except Exception:
             feed_freshness = {}
         try:
+            feed_state_machine = get_feed_health_snapshot()
+        except Exception:
+            feed_state_machine = {}
+        try:
             feed_debug = get_feed_debug()
         except Exception:
             feed_debug = {}
@@ -805,6 +3061,7 @@ def _compute_readiness_snapshot():
                 "readiness": readiness,
                 "checks": checks,
                 "feed_freshness": feed_freshness,
+                "feed_state_machine": feed_state_machine,
                 "feed_debug": feed_debug,
                 "decision_gate": decision_gate,
                 "decision_rows": decision_rows,
@@ -850,13 +3107,23 @@ def _feed_status_summary(feed: dict, feed_debug: dict):
 
 def _compute_trade_refresh_gate(snapshot: dict) -> tuple[bool, str, str]:
     feed = snapshot.get("feed_freshness") or {}
+    feed_sm = snapshot.get("feed_state_machine") or {}
     feed_debug = snapshot.get("feed_debug") or {}
-    feed_state, _reason, _ltp_age, _depth_age = _feed_status_summary(feed, feed_debug)
+    feed_state_sm = str(feed_sm.get("state") or "").upper()
+    if feed_state_sm in {"OK", "DEGRADED", "DOWN"}:
+        feed_state = feed_state_sm
+    else:
+        feed_state, _reason, _ltp_age, _depth_age = _feed_status_summary(feed, feed_debug)
     market_open = bool(feed.get("market_open", False))
     state = str(feed.get("state") or "").upper()
     market_status = "OPEN" if market_open and state != "MARKET_CLOSED" else "CLOSED"
     feed_status = "ACTIVE" if feed_state in ("OK", "DEGRADED") else "INACTIVE"
-    should_refresh = bool(st.session_state.get("auto_refresh_enabled", True)) and feed_status == "ACTIVE" and market_status == "OPEN"
+    should_refresh = should_trade_autorefresh(
+        auto_refresh_enabled=bool(st.session_state.get("auto_refresh_enabled", True)),
+        refresh_mode=str(st.session_state.get("trade_refresh_mode") or REFRESH_MODE_MARKET_OPEN_ONLY),
+        feed_status=feed_status,
+        market_status=market_status,
+    )
     return should_refresh, feed_status, market_status
 
 
@@ -865,21 +3132,30 @@ def _render_status_row(snapshot: dict):
         state = str(snapshot.get("state") or "UNKNOWN")
         can_trade = snapshot.get("can_trade")
         feed = snapshot.get("feed_freshness") or {}
+        feed_sm = snapshot.get("feed_state_machine") or {}
         feed_debug = snapshot.get("feed_debug") or {}
         auth_health = snapshot.get("auth_health") or {}
-        feed_state, feed_reason, ltp_age, depth_age = _feed_status_summary(feed, feed_debug)
+        feed_state_sm = str(feed_sm.get("state") or "").upper()
+        feed_reason_sm = str(feed_sm.get("reason") or "").strip()
+        if feed_state_sm in {"OK", "DEGRADED", "DOWN"}:
+            feed_state = feed_state_sm
+            feed_reason = feed_reason_sm or "state_machine"
+            ltp_age = feed_sm.get("ws_msg_age_sec")
+            depth_age = None
+        else:
+            feed_state, feed_reason, ltp_age, depth_age = _feed_status_summary(feed, feed_debug)
         sla_text = "LTP N/A | Depth N/A"
         if isinstance(ltp_age, (int, float)) or isinstance(depth_age, (int, float)):
             ltp_txt = f"{ltp_age:.1f}s" if isinstance(ltp_age, (int, float)) else "N/A"
             depth_txt = f"{depth_age:.1f}s" if isinstance(depth_age, (int, float)) else "N/A"
             sla_text = f"LTP {ltp_txt} | Depth {depth_txt}"
         auth_ok = bool(auth_health.get("ok", False))
-        risk_ok = Path("logs/risk_monitor.json").exists()
+        risk_ok = _log_path("risk_monitor.json").exists()
         review_ok = REVIEW_QUEUE_PATH.exists()
-        exec_ok = Path("logs/execution_analytics.json").exists()
+        exec_ok = (logs_dir() / "execution_analytics.json").exists()
         cols = st.columns(7)
         cols[0].caption(("✅" if can_trade else "❌") + f" Readiness: {state}")
-        feed_icon = {"OK": "✅", "DEGRADED": "🟠", "STALE": "❌", "IDLE": "🟡"}.get(feed_state, "⬜")
+        feed_icon = {"OK": "✅", "DEGRADED": "🟠", "DOWN": "❌", "STALE": "❌", "IDLE": "🟡"}.get(feed_state, "⬜")
         cols[1].caption(f"{feed_icon} Feed: {feed_state} ({feed_reason})")
         cols[2].caption(("✅" if auth_ok else "❌") + " Kite auth")
         cols[3].caption(("✅" if risk_ok else "⬜") + " Risk monitor")
@@ -889,12 +3165,37 @@ def _render_status_row(snapshot: dict):
     except Exception:
         pass
 
+
+def _render_feed_health_banner(snapshot: dict):
+    try:
+        feed_sm = snapshot.get("feed_state_machine") or {}
+        feed_state = str(feed_sm.get("state") or "").upper()
+        feed_reason = str(feed_sm.get("reason") or "n/a")
+        if feed_state == "DEGRADED":
+            st.markdown(
+                f"<div class='banner warn'>Feed DEGRADED: {feed_reason}. LIVE entries blocked; advisory only.</div>",
+                unsafe_allow_html=True,
+            )
+        elif feed_state == "DOWN":
+            st.markdown(
+                f"<div class='banner error'>Feed DOWN: {feed_reason}. LIVE entries blocked and reconnect requested.</div>",
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
+
 readiness_snapshot = _compute_readiness_snapshot()
 st.session_state["readiness_snapshot"] = readiness_snapshot
 _render_status_row(readiness_snapshot)
+_render_feed_health_banner(readiness_snapshot)
 with st.expander("Feed Debug", expanded=False):
     try:
-        st.json(readiness_snapshot.get("feed_debug") or {})
+        st.json(
+            {
+                "state_machine": readiness_snapshot.get("feed_state_machine") or {},
+                "legacy_debug": readiness_snapshot.get("feed_debug") or {},
+            }
+        )
     except Exception:
         st.caption("Feed debug unavailable.")
 
@@ -930,7 +3231,7 @@ def _should_show_quote_errors(readiness_state: str) -> bool:
 def _truncate_live_quote_errors_log() -> bool:
     """Best-effort truncate for live quote error log."""
     try:
-        log_path = Path("logs/live_quote_errors.jsonl")
+        log_path = _log_path("live_quote_errors.jsonl")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("w", encoding="utf-8"):
             pass
@@ -1059,7 +3360,7 @@ def _render_market_snapshot():
             import subprocess
 
             if st.button("Restart Tick Feed", key="restart_tick_feed"):
-                log_path = Path("logs/tick_feed_restart.log")
+                log_path = _log_path("tick_feed_restart.log")
                 log_path.parent.mkdir(exist_ok=True)
                 with log_path.open("a") as f:
                     subprocess.Popen([sys.executable, "scripts/start_depth_ws.py"], stdout=f, stderr=f, start_new_session=True)
@@ -1372,7 +3673,21 @@ def _ensure_activation_fields(df):
         df["entry_condition"] = "BREAKOUT"
     else:
         df["entry_condition"] = df["entry_condition"].fillna("BREAKOUT")
-    for col in ("activated_ts", "fill_price", "ltp_at_activation", "activation_price", "activation_reason", "invalidation_reason"):
+    for col in (
+        "activated_ts",
+        "fill_price",
+        "ltp_at_activation",
+        "activation_price",
+        "activation_reason",
+        "invalidation_reason",
+        "activation_feed_state",
+        "activation_quote_age_sec",
+        "activation_spread_pct",
+        "activation_gate_reason",
+        "activation_ui_flag",
+        "activation_advisory",
+        "activation_manual_override_used",
+    ):
         if col not in df.columns:
             df[col] = None
     return df
@@ -1814,6 +4129,7 @@ def _activate_planning_rows(df, auto_activate=False):
                 continue
         except Exception:
             continue
+        spread_pct = None
         try:
             bid_val = _safe_float(row.get("opt_bid"))
             ask_val = _safe_float(row.get("opt_ask"))
@@ -1831,12 +4147,42 @@ def _activate_planning_rows(df, auto_activate=False):
             pass
         if _safe_float(mark_price) in (None, 0.0) and _safe_float(ltp) in (None, 0.0):
             continue
-        if should_activate(row.get("side"), row.get("entry_condition"), row.get("entry"), ltp):
-            updated_row = activate_trade(row.to_dict(), ltp, ts=now_ts)
+        advisory_only = str(row.get("permission") or "").strip().upper() == "ADVISORY_ONLY"
+        can_activate, signal = should_activate(
+            row.get("side"),
+            row.get("entry_condition"),
+            row.get("entry"),
+            ltp,
+            execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper(),
+            advisory=bool(advisory_only),
+            quote_age_sec=age_sec,
+            spread_pct=spread_pct,
+            return_signal=True,
+        )
+        df.at[idx, "activation_feed_state"] = signal.get("feed_state")
+        df.at[idx, "activation_quote_age_sec"] = signal.get("quote_age_sec")
+        df.at[idx, "activation_spread_pct"] = signal.get("spread_pct")
+        df.at[idx, "activation_gate_reason"] = signal.get("reason")
+        df.at[idx, "activation_ui_flag"] = signal.get("ui_flag")
+        df.at[idx, "activation_advisory"] = bool(signal.get("advisory"))
+        df.at[idx, "activation_manual_override_used"] = bool(signal.get("manual_override_used"))
+        if not can_activate:
+            df.at[idx, "activation_reason"] = signal.get("reason")
+            continue
+        if can_activate:
+            updated_row = activate_trade(row.to_dict(), ltp, ts=now_ts, activation_signal=signal)
             df.at[idx, "status"] = updated_row.get("status")
             df.at[idx, "activated_ts"] = updated_row.get("activated_ts")
             df.at[idx, "fill_price"] = updated_row.get("fill_price")
             df.at[idx, "ltp_at_activation"] = updated_row.get("ltp_at_activation")
+            df.at[idx, "activation_feed_state"] = updated_row.get("activation_feed_state")
+            df.at[idx, "activation_quote_age_sec"] = updated_row.get("activation_quote_age_sec")
+            df.at[idx, "activation_spread_pct"] = updated_row.get("activation_spread_pct")
+            df.at[idx, "activation_gate_reason"] = updated_row.get("activation_gate_reason")
+            df.at[idx, "activation_ui_flag"] = updated_row.get("activation_ui_flag")
+            df.at[idx, "activation_advisory"] = updated_row.get("activation_advisory")
+            df.at[idx, "activation_manual_override_used"] = updated_row.get("activation_manual_override_used")
+            df.at[idx, "activation_reason"] = "ENTRY_TRIGGERED"
             updated = True
             activated_rows.append(updated_row)
     return df, updated, activated_rows
@@ -1872,6 +4218,14 @@ def _persist_queue_activation(path: Path, rows: list[dict], df: pd.DataFrame):
             "activation_price",
             "fill_price",
             "ltp_at_activation",
+            "activation_feed_state",
+            "activation_quote_age_sec",
+            "activation_spread_pct",
+            "activation_gate_reason",
+            "activation_ui_flag",
+            "activation_advisory",
+            "activation_manual_override_used",
+            "activation_reason",
             "current_ltp",
             "current_ltp_ts",
             "price_age_sec",
@@ -1903,7 +4257,7 @@ def _log_activation_events(rows: list[dict], queue_name: str):
     if not rows:
         return
     try:
-        path = Path("logs/activation_events.jsonl")
+        path = _log_path("activation_events.jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a") as f:
             for row in rows:
@@ -1926,7 +4280,7 @@ def _log_trailing_events(rows: list[dict], queue_name: str):
     if not rows:
         return
     try:
-        path = Path("logs/trailing_events.jsonl")
+        path = _log_path("trailing_events.jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a") as f:
             for row in rows:
@@ -2462,7 +4816,7 @@ def _filter_rows_today(rows, ts_key="timestamp"):
         return []
 
 def _load_gpt_advice():
-    path = Path("logs/gpt_advice.jsonl")
+    path = _log_path("gpt_advice.jsonl")
     if not path.exists():
         return {}
     latest = {}
@@ -2483,13 +4837,20 @@ def _load_gpt_advice():
     return latest
 
 def _load_gpt_pins():
-    path = Path("logs/gpt_pins.json")
+    path = _log_path("gpt_pins.json")
     if not path.exists():
         return set()
+    try:
+        payload = json.loads(path.read_text())
+        if isinstance(payload, list):
+            return set(str(x) for x in payload)
+    except Exception:
+        return set()
+    return set()
 
 def _load_auto_tune():
     try:
-        path = Path("logs/auto_tune.json")
+        path = _log_path("auto_tune.json")
         if not path.exists():
             return {}
         return json.loads(path.read_text())
@@ -2562,17 +4923,28 @@ def _confirm_action(key, label, confirm_label="Confirm", cancel_label="Cancel", 
         return set()
 
 def _save_gpt_pins(pins):
-    path = Path("logs/gpt_pins.json")
-    path.parent.mkdir(exist_ok=True)
+    path = _log_path("gpt_pins.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(sorted(list(pins))))
 
 def _render_gpt_panel(trade_row: dict, market_ctx: dict, key_prefix: str):
     tid = trade_row.get("trade_id")
     if not tid:
         return
+    provider = str(os.getenv("GPT_PROVIDER", "openai") or "openai").strip().lower()
+    provider_label = "Gemini" if provider == "gemini" else "OpenAI"
+    model_name = (
+        str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+        if provider == "gemini"
+        else str(os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+    )
+    st.caption(f"Provider: {provider_label} | model: {model_name}")
     advice_cache = st.session_state.get("gpt_advice_cache", {})
     if tid in advice_cache:
-        st.json(advice_cache[tid])
+        cached = advice_cache[tid]
+        if isinstance(cached, dict) and str(cached.get("error") or "").strip():
+            st.error(f"{provider_label} advice error: {cached.get('error')}")
+        st.json(cached)
     # Per-panel cooldown display
     cooldown = st.session_state.get("gpt_cooldown_sec", 10)
     last = st.session_state.get("gpt_last_call", {})
@@ -2581,13 +4953,16 @@ def _render_gpt_panel(trade_row: dict, market_ctx: dict, key_prefix: str):
     if remaining > 0:
         st.caption(f"Cooldown: {remaining:.0f}s")
         return
-    if st.button("Gemini Advice", key=f"{key_prefix}_gpt_{tid}"):
-        with st.spinner("Requesting Gemini advice..."):
+    button_label = "AI Advice (Gemini)" if provider == "gemini" else "AI Advice (OpenAI)"
+    if st.button(button_label, key=f"{key_prefix}_gpt_{tid}"):
+        with st.spinner(f"Requesting {provider_label} advice..."):
             advice = get_trade_advice(trade_row, market_ctx)
             advice_cache[tid] = advice
             st.session_state["gpt_advice_cache"] = advice_cache
             meta = {"symbol": trade_row.get("symbol"), "strategy": trade_row.get("strategy"), "tier": trade_row.get("tier")}
             save_advice(tid, advice, meta=meta)
+        if isinstance(advice, dict) and str(advice.get("error") or "").strip():
+            st.error(f"{provider_label} advice error: {advice.get('error')}")
         st.json(advice)
         last[key_prefix] = time.time()
         st.session_state["gpt_last_call"] = last
@@ -2615,6 +4990,35 @@ if nav == "Home":
     latest_decision_row = snapshot.get("latest_decision_row") or {}
     auth_health = snapshot.get("auth_health") or {}
     feed_freshness = snapshot.get("feed_freshness") or {}
+    with st.sidebar:
+        st.checkbox("Live update trades", value=True, key="auto_refresh_enabled")
+        st.radio(
+            "Refresh mode",
+            [
+                REFRESH_MODE_MARKET_OPEN_ONLY,
+                REFRESH_MODE_ALWAYS_UI,
+                REFRESH_MODE_FEED_ACTIVE,
+            ],
+            index=[
+                REFRESH_MODE_MARKET_OPEN_ONLY,
+                REFRESH_MODE_ALWAYS_UI,
+                REFRESH_MODE_FEED_ACTIVE,
+            ].index(str(st.session_state.get("trade_refresh_mode") or REFRESH_MODE_MARKET_OPEN_ONLY)),
+            key="trade_refresh_mode",
+        )
+        home_view = st.selectbox(
+            "View",
+            ["Active Trades", "Review Queue", "Advisory", "Feed / Debug", "Scorecards"],
+            index=0,
+            key="home_view_selector",
+        )
+
+    show_active_view = home_view == "Active Trades"
+    show_review_view = home_view == "Review Queue"
+    show_advisory_view = home_view == "Advisory"
+    show_feed_debug_view = home_view == "Feed / Debug"
+    show_scorecards_view = home_view == "Scorecards"
+
     if state == "MARKET_CLOSED":
         shown_ts = float(st.session_state.get("force_show_quote_errors_ts", 0.0) or 0.0)
         if shown_ts and (time.time() - shown_ts) > 300.0:
@@ -2629,7 +5033,7 @@ if nav == "Home":
         try:
             quote_err = None
             quote_err_file_missing = False
-            err_path = Path("logs/live_quote_errors.jsonl")
+            err_path = _log_path("live_quote_errors.jsonl")
             if err_path.exists():
                 lines = err_path.read_text().strip().splitlines()
                 if lines:
@@ -2658,7 +5062,7 @@ if nav == "Home":
             else:
                 quote_err_file_missing = True
             chain_health = {}
-            health_path = Path("logs/option_chain_health.json")
+            health_path = _log_path("option_chain_health.json")
             if health_path.exists():
                 try:
                     chain_health = json.loads(health_path.read_text())
@@ -2892,195 +5296,220 @@ if nav == "Home":
             pass
         _render_confidence_reliability()
 
-    with st.expander("Pre‑Market Day Plan", expanded=False):
-        try:
-            plan_path = Path("logs/premarket_plan.json")
-            if st.button("Generate Pre‑Market Plan", key="premarket_plan_btn"):
-                import subprocess, sys
-                subprocess.run([sys.executable, "scripts/premarket_plan.py"], check=False)
-            if plan_path.exists():
-                plan = json.loads(plan_path.read_text())
-                st.json(plan)
-            else:
-                empty_state("No pre‑market plan yet.")
-        except Exception:
-            pass
-    with st.expander("Market Snapshot", expanded=False):
-        try:
-            if "startup_warmup_bootstrap_done" not in st.session_state:
-                st.session_state["startup_warmup_bootstrap_done"] = True
-                warmup_rows = ensure_startup_warmup_bootstrap()
-                warmup_fail = [
-                    row for row in (warmup_rows or [])
-                    if str((row or {}).get("warmup_reason") or (row or {}).get("seed_reason") or "").upper() == "HIST_FETCH_FAILED"
-                ]
-                if warmup_fail:
-                    syms = ", ".join(sorted(str(r.get("symbol") or "").upper() for r in warmup_fail if r.get("symbol")))
-                    st.caption(f"Warmup bootstrap: HIST_FETCH_FAILED ({syms or 'symbols'})")
-            # Refresh only the market snapshot during market hours to avoid dimming the whole app
-            if _is_market_hours():
-                _market_snapshot_fragment()
-            else:
-                _render_market_snapshot()
-
-        except Exception as e:
-            st.caption(f"Market snapshot error: {e}")
-
-    with st.expander("Gate Status (Latest)", expanded=False):
-        try:
-            gate_path = _desk_log_path("gate_status.jsonl")
-            if gate_path.exists():
-                rows = []
-                with gate_path.open("r", encoding="utf-8") as f:
-                    lines = f.readlines()[-40:]
-                for line in lines:
-                    try:
-                        rows.append(json.loads(line))
-                    except Exception:
-                        continue
-                if rows:
-                    gate_df = pd.DataFrame(rows)
-                    for _json_col in ("gate_reasons", "decision_blockers", "decision_explain", "feed_health_snapshot", "node_call_counts"):
-                        if _json_col in gate_df.columns:
-                            gate_df[_json_col] = gate_df[_json_col].apply(
-                                lambda v: json.dumps(v, ensure_ascii=True) if isinstance(v, (dict, list)) else v
-                            )
-                    if "system_state" in gate_df.columns:
-                        warmup_df = gate_df[gate_df["system_state"].fillna("READY").astype(str).str.upper() == "WARMUP"]
-                        if not warmup_df.empty:
-                            st.caption("System State: WARMUP — strategy evaluation blocked until warmup contract is met.")
-                            warmup_latest = (
-                                warmup_df.sort_values("ts_ist", ascending=False)
-                                .groupby("symbol", as_index=False)
-                                .first()
-                            )
-                            for col in ("warmup_bars_by_timeframe", "warmup_min_bars_by_timeframe", "warmup_reasons"):
-                                if col in warmup_latest.columns:
-                                    warmup_latest[col] = warmup_latest[col].apply(
-                                        lambda v: json.dumps(v, ensure_ascii=True) if isinstance(v, (dict, list)) else v
-                                    )
-                            warmup_cols = [
-                                c
-                                for c in [
-                                    "ts_ist",
-                                    "symbol",
-                                    "system_state",
-                                    "warmup_bars_by_timeframe",
-                                    "warmup_min_bars_by_timeframe",
-                                    "indicator_last_update_epoch",
-                                    "warmup_reasons",
-                                ]
-                                if c in warmup_latest.columns
-                            ]
-                            if warmup_cols:
-                                ui.table(warmup_latest[warmup_cols], use_container_width=True)
-                    cols = [
-                        c
-                        for c in [
-                            "ts_ist",
-                            "symbol",
-                            "stage",
-                            "system_state",
-                            "indicators_ok",
-                            "indicators_age_sec",
-                            "ohlc_bars_count",
-                            "warmup_min_bars",
-                            "primary_regime",
-                            "regime_prob_max",
-                            "regime_entropy",
-                            "indicator_reasons",
-                            "warmup_reasons",
-                            "regime_reasons",
-                            "decision_stage",
-                            "decision_blockers",
-                            "gate_allowed",
-                            "gate_family",
-                            "gate_reasons",
-                        ]
-                        if c in gate_df.columns
-                    ]
-                    if cols:
-                        ui.table(gate_df[cols].sort_values("ts_ist", ascending=False).head(20), use_container_width=True)
-                    else:
-                        ui.table(gate_df.sort_values("ts_ist", ascending=False).head(20), use_container_width=True)
+    if show_feed_debug_view:
+        with st.expander("Pre‑Market Day Plan", expanded=False):
+            try:
+                plan_path = _log_path("premarket_plan.json")
+                if st.button("Generate Pre‑Market Plan", key="premarket_plan_btn"):
+                    import subprocess, sys
+                    subprocess.run([sys.executable, "scripts/premarket_plan.py"], check=False)
+                if plan_path.exists():
+                    plan = json.loads(plan_path.read_text())
+                    st.json(plan)
                 else:
-                    empty_state("No gate status records yet.")
-            else:
-                empty_state("No gate status file yet.")
-        except Exception as e:
-            st.caption(f"Gate status error: {e}")
+                    empty_state("No pre‑market plan yet.")
+            except Exception:
+                pass
+        with st.expander("Market Snapshot", expanded=False):
+            try:
+                if "startup_warmup_bootstrap_done" not in st.session_state:
+                    st.session_state["startup_warmup_bootstrap_done"] = True
+                    warmup_rows = ensure_startup_warmup_bootstrap()
+                    warmup_fail = [
+                        row for row in (warmup_rows or [])
+                        if str((row or {}).get("warmup_reason") or (row or {}).get("seed_reason") or "").upper() == "HIST_FETCH_FAILED"
+                    ]
+                    if warmup_fail:
+                        syms = ", ".join(sorted(str(r.get("symbol") or "").upper() for r in warmup_fail if r.get("symbol")))
+                        st.caption(f"Warmup bootstrap: HIST_FETCH_FAILED ({syms or 'symbols'})")
+                # Refresh only the market snapshot during market hours to avoid dimming the whole app
+                if _is_market_hours():
+                    _market_snapshot_fragment()
+                else:
+                    _render_market_snapshot()
 
-    st.checkbox("Live update trades", value=True, key="auto_refresh_enabled")
+            except Exception as e:
+                st.caption(f"Market snapshot error: {e}")
+
+        with st.expander("Gate Status (Latest)", expanded=False):
+            try:
+                gate_path = _desk_log_path("gate_status.jsonl")
+                if gate_path.exists():
+                    rows = []
+                    with gate_path.open("r", encoding="utf-8") as f:
+                        lines = f.readlines()[-40:]
+                    for line in lines:
+                        try:
+                            rows.append(json.loads(line))
+                        except Exception:
+                            continue
+                    if rows:
+                        gate_df = pd.DataFrame(rows)
+                        for _json_col in ("gate_reasons", "decision_blockers", "decision_explain", "feed_health_snapshot", "node_call_counts"):
+                            if _json_col in gate_df.columns:
+                                gate_df[_json_col] = gate_df[_json_col].apply(
+                                    lambda v: json.dumps(v, ensure_ascii=True) if isinstance(v, (dict, list)) else v
+                                )
+                        if "system_state" in gate_df.columns:
+                            warmup_df = gate_df[gate_df["system_state"].fillna("READY").astype(str).str.upper() == "WARMUP"]
+                            if not warmup_df.empty:
+                                st.caption("System State: WARMUP — strategy evaluation blocked until warmup contract is met.")
+                                warmup_latest = (
+                                    warmup_df.sort_values("ts_ist", ascending=False)
+                                    .groupby("symbol", as_index=False)
+                                    .first()
+                                )
+                                for col in ("warmup_bars_by_timeframe", "warmup_min_bars_by_timeframe", "warmup_reasons"):
+                                    if col in warmup_latest.columns:
+                                        warmup_latest[col] = warmup_latest[col].apply(
+                                            lambda v: json.dumps(v, ensure_ascii=True) if isinstance(v, (dict, list)) else v
+                                        )
+                                warmup_cols = [
+                                    c
+                                    for c in [
+                                        "ts_ist",
+                                        "symbol",
+                                        "system_state",
+                                        "warmup_bars_by_timeframe",
+                                        "warmup_min_bars_by_timeframe",
+                                        "indicator_last_update_epoch",
+                                        "warmup_reasons",
+                                    ]
+                                    if c in warmup_latest.columns
+                                ]
+                                if warmup_cols:
+                                    ui.table(warmup_latest[warmup_cols], use_container_width=True)
+                        cols = [
+                            c
+                            for c in [
+                                "ts_ist",
+                                "symbol",
+                                "stage",
+                                "system_state",
+                                "indicators_ok",
+                                "indicators_age_sec",
+                                "ohlc_bars_count",
+                                "warmup_min_bars",
+                                "primary_regime",
+                                "regime_prob_max",
+                                "regime_entropy",
+                                "indicator_reasons",
+                                "warmup_reasons",
+                                "regime_reasons",
+                                "decision_stage",
+                                "decision_blockers",
+                                "gate_allowed",
+                                "gate_family",
+                                "gate_reasons",
+                            ]
+                            if c in gate_df.columns
+                        ]
+                        if cols:
+                            ui.table(gate_df[cols].sort_values("ts_ist", ascending=False).head(20), use_container_width=True)
+                        else:
+                            ui.table(gate_df.sort_values("ts_ist", ascending=False).head(20), use_container_width=True)
+                    else:
+                        empty_state("No gate status records yet.")
+                else:
+                    empty_state("No gate status file yet.")
+            except Exception as e:
+                st.caption(f"Gate status error: {e}")
+
     try:
         should_refresh, feed_status, market_status = _compute_trade_refresh_gate(readiness_snapshot)
-        if should_refresh:
-            refresh_ms = max(1000, int(float(getattr(cfg, "UI_REFRESH_SEC", 2.0)) * 1000))
+        if bool(st.session_state.get("auto_refresh_enabled", True)) and not ST_AUTORREFRESH_AVAILABLE:
+            st.warning("streamlit_autorefresh is unavailable; install it to enable automatic refresh.")
+        if should_refresh and ST_AUTORREFRESH_AVAILABLE:
+            refresh_backoff = float(st.session_state.get("ui_refresh_backoff_sec", 0.0) or 0.0)
+            base_refresh_sec = max(1.0, float(getattr(cfg, "UI_REFRESH_SEC", 2.0)))
+            refresh_sec = max(base_refresh_sec, refresh_backoff)
+            refresh_ms = max(1000, int(refresh_sec * 1000))
             st_autorefresh(interval=refresh_ms, limit=None, key="trades_autorefresh")
+            if refresh_backoff > 0:
+                st.session_state["ui_refresh_backoff_sec"] = 0.0
+        elif bool(st.session_state.get("auto_refresh_enabled", True)):
+            st.caption(f"Live refresh gated ({st.session_state.get('trade_refresh_mode')}) | feed={feed_status} market={market_status}")
     except Exception as exc:
         logger.exception("trades_autorefresh_failed: %s", exc)
-        st.session_state["auto_refresh_enabled"] = False
-        st.warning("Live update paused due to data issue")
-
-    trade_universe_df = _load_trade_universe_df()
-    df_active_all, df_review_all, df_suggested_all, df_advisory_all = _partition_trade_universe(trade_universe_df)
-    if _is_ops_research_mode():
-        st.caption(
-            "Trade partitions "
-            f"(deduped={len(trade_universe_df)}, active={len(df_active_all)}, "
-            f"planning={len(df_suggested_all) + len(df_advisory_all)}, review={len(df_review_all)})"
+        st.session_state["ui_refresh_backoff_sec"] = max(
+            5.0,
+            float(getattr(cfg, "UI_REFRESH_SEC", 2.0)),
         )
+        st.warning("Live update encountered a data issue; retrying automatically.")
 
-    section_header("Active Trades")
-    try:
-        active_df = _prepare_trade_display_df(df_active_all)
-        active_df = _with_active_runtime_metrics(active_df)
-        active_display = select_display_df(active_df, "active")
-        active_display = _prepare_trade_display_df(active_display)
-        if not active_display.empty and "trade_key" in active_display.columns and "trade_key" in active_df.columns:
-            active_extras = [
+    needs_trade_universe = show_active_view or show_review_view or show_advisory_view
+    if needs_trade_universe:
+        trade_universe_df = _load_trade_universe_df()
+        df_active_all, df_review_all, df_suggested_all, df_advisory_all = _partition_trade_universe(trade_universe_df)
+        if _is_ops_research_mode():
+            st.caption(
+                "Trade partitions "
+                f"(deduped={len(trade_universe_df)}, active={len(df_active_all)}, "
+                f"planning={len(df_suggested_all) + len(df_advisory_all)}, review={len(df_review_all)})"
+            )
+    else:
+        trade_universe_df = pd.DataFrame()
+        df_active_all = pd.DataFrame()
+        df_review_all = pd.DataFrame()
+        df_suggested_all = pd.DataFrame()
+        df_advisory_all = pd.DataFrame()
+
+    if show_active_view:
+        _render_trade_explorer_panel(trade_universe_df)
+        section_header("Active Trades")
+        try:
+            active_df = _prepare_trade_display_df(df_active_all)
+            active_df = _with_active_runtime_metrics(active_df)
+            active_display = select_display_df(active_df, "active")
+            active_display = _prepare_trade_display_df(active_display)
+            if not active_display.empty and "trade_key" in active_display.columns and "trade_key" in active_df.columns:
+                active_extras = [
+                    c
+                    for c in ["trade_key", "mark_price", "bid", "ask", "ltp", "pnl_unrealized"]
+                    if c in active_df.columns
+                ]
+                if len(active_extras) > 1:
+                    active_display = active_display.merge(
+                        active_df[active_extras].drop_duplicates(subset=["trade_key"], keep="last"),
+                        on="trade_key",
+                        how="left",
+                    )
+            active_display = _apply_executable_pricing(active_display)
+            active_cols = [
                 c
-                for c in ["trade_key", "mark_price", "bid", "ask", "ltp", "pnl_unrealized"]
-                if c in active_df.columns
+                for c in [
+                    "last_seen_ts",
+                    "identity",
+                    "status",
+                    "side",
+                    "entry",
+                    "stop",
+                    "target",
+                    "pnl_unrealized",
+                    "live_ltp",
+                    "pnl_points",
+                    "pnl_cash",
+                    "qty",
+                    "confidence",
+                ]
+                if c in active_display.columns
             ]
-            if len(active_extras) > 1:
-                active_display = active_display.merge(
-                    active_df[active_extras].drop_duplicates(subset=["trade_key"], keep="last"),
-                    on="trade_key",
-                    how="left",
-                )
-        active_cols = [
-            c
-            for c in [
-                "last_seen_ts",
-                "identity",
-                "status",
-                "side",
-                "entry",
-                "stop",
-                "target",
-                "mark_price",
-                "bid",
-                "ask",
-                "ltp",
-                "pnl_unrealized",
-                "live_ltp",
-                "pnl_points",
-                "pnl_cash",
-                "qty",
-                "confidence",
-            ]
-            if c in active_display.columns
-        ]
-        if not active_display.empty:
-            _render_upstox_table(active_display, active_cols, "active_trades")
-        else:
-            empty_state("No active trades right now.")
-    except Exception as exc:
-        logger.exception("active_trades_render_failed: %s", exc)
-        st.info("No active trades right now.")
+            active_cols = [c for c in _inject_executable_pricing_cols(active_cols) if c in active_display.columns]
+            if not active_display.empty:
+                _render_upstox_table(active_display, active_cols, "active_trades")
+            else:
+                empty_state("No active trades right now.")
+        except Exception as exc:
+            logger.exception("active_trades_render_failed: %s", exc)
+            st.info("No active trades right now.")
 
-    section_header("Review Queue (Latest)")
+        _render_chart_view_panel(trade_universe_df)
+
+    if show_review_view:
+        section_header("Review Queue (Latest)")
     try:
+        if not show_review_view:
+            raise _SkipSection()
         from core.review_queue import approve, remove_from_queue
         q_path = REVIEW_QUEUE_PATH
         if q_path.exists():
@@ -3282,12 +5711,17 @@ if nav == "Home":
                 empty_state("No pending trades in review queue for today.")
         else:
             empty_state("No review queue file yet.")
+    except _SkipSection:
+        pass
     except Exception as e:
         logger.exception("review_queue_render_failed: %s", e)
         st.info("No trades pending manual review.")
 
-    section_header("Suggested Trades (Latest)")
+    if show_advisory_view:
+        section_header("Suggested Trades (Latest)")
     try:
+        if not show_advisory_view:
+            raise _SkipSection()
         # Source: suggested persistent queues (quick/scalp buckets), not manual review/advisory queues.
         suggested_source_df = filter_trades_for_panel(df_suggested_all, "suggested")
         suggested_df = _prepare_trade_display_df(filter_by_permission(suggested_source_df, "EXECUTE"))
@@ -3325,14 +5759,16 @@ if nav == "Home":
             _render_upstox_table(suggested_display, show_cols, "suggested_trades")
         else:
             empty_state("No suggested trades right now.")
+    except _SkipSection:
+        pass
     except Exception as exc:
         logger.exception("suggested_render_failed: %s", exc)
         st.info("No suggested trades right now.")
 
-    if _is_trader_mode():
+    if show_advisory_view and _is_trader_mode():
         st.caption("Trader mode active: research/admin panels are hidden. Switch Dashboard Mode to Ops/Research to view them.")
 
-    if _is_ops_research_mode():
+    if show_advisory_view and _is_ops_research_mode():
         section_header("Exploration Trades (Learning Mode)")
         section_header("Quick Trade Suggestions (Preview)")
         try:
@@ -3416,8 +5852,11 @@ if nav == "Home":
         except Exception as e:
             st.warning(f"Quick suggestions error: {e}")
 
-    section_header("20-Point Profit Ideas (Advisory)")
+    if show_advisory_view:
+        section_header("20-Point Profit Ideas (Advisory)")
     try:
+        if not show_advisory_view:
+            raise _SkipSection()
         t20_path = TARGET_POINTS_QUEUE_PATH
         if t20_path.exists():
             t20_all = load_queue_rows(t20_path)
@@ -3573,12 +6012,16 @@ if nav == "Home":
                 empty_state("No 20-point ideas yet for today.")
         else:
             empty_state("No 20-point ideas generated yet.")
+    except _SkipSection:
+        pass
     except Exception as e:
         logger.exception("t20_render_failed: %s", e)
         st.info("No 20-point ideas available.")
 
     with st.expander("Zero-to-Hero (Lotto) Ideas", expanded=False):
         try:
+            if not show_advisory_view:
+                raise _SkipSection()
             zh_path = ZERO_HERO_QUEUE_PATH
             if zh_path.exists():
                 zh_all = load_queue_rows(zh_path)
@@ -3651,11 +6094,13 @@ if nav == "Home":
                     empty_state("No Zero-to-Hero ideas yet for today.")
             else:
                 empty_state("No Zero-to-Hero ideas generated yet.")
+        except _SkipSection:
+            st.caption("Select 'Advisory' view to load this panel.")
         except Exception as e:
             logger.exception("zero_to_hero_render_failed: %s", e)
             st.info("No Zero-to-Hero ideas available.")
 
-    if _is_ops_research_mode():
+    if show_advisory_view and _is_ops_research_mode():
         section_header("Scalp Trades (Range / Low Momentum)")
         try:
             sc_path = SCALP_QUEUE_PATH
@@ -3724,11 +6169,11 @@ if nav == "Home":
         except Exception as e:
             st.warning(f"Scalp trades error: {e}")
 
-    if _is_ops_research_mode():
+    if show_advisory_view and _is_ops_research_mode():
         section_header("Top Candidates Despite Rejection")
         try:
-            reject_path = Path("logs/rejected_candidates.jsonl")
-            debug_path = Path("logs/debug_candidates.jsonl")
+            reject_path = _log_path("rejected_candidates.jsonl")
+            debug_path = _log_path("debug_candidates.jsonl")
             if reject_path.exists() or debug_path.exists():
                 rej_rows = []
                 if reject_path.exists():
@@ -3782,10 +6227,43 @@ if nav == "Home":
         except Exception as e:
             st.warning(f"Rejected candidates error: {e}")
 
-    if _is_ops_research_mode():
+    if show_scorecards_view and _is_ops_research_mode():
+        section_header("Reject Telemetry (Last 50)")
+        try:
+            reject_rows = get_recent_reject_telemetry(limit=50)
+            if reject_rows:
+                reject_df = pd.DataFrame(reject_rows)
+                reject_df["timestamp"] = pd.to_datetime(
+                    reject_df.get("timestamp_epoch_ms"),
+                    unit="ms",
+                    errors="coerce",
+                    utc=True,
+                )
+                reject_df = reject_df.sort_values("timestamp_epoch_ms", ascending=False)
+                show_cols = [
+                    col
+                    for col in [
+                        "timestamp",
+                        "symbol",
+                        "strike",
+                        "trade_side",
+                        "reject_reason",
+                        "quote_age_sec",
+                        "spread_pct",
+                        "feed_state",
+                    ]
+                    if col in reject_df.columns
+                ]
+                ui.table(reject_df[show_cols].head(50), use_container_width=True)
+            else:
+                empty_state("No reject telemetry recorded yet.")
+        except Exception as exc:
+            st.warning(f"Reject telemetry error: {exc}")
+
+    if show_scorecards_view and _is_ops_research_mode():
         section_header("Signal Path (Latest)")
         try:
-            sp_path = Path("logs/signal_path.jsonl")
+            sp_path = _log_path("signal_path.jsonl")
             if sp_path.exists():
                 rows = []
                 with sp_path.open() as f:
@@ -3860,7 +6338,7 @@ if nav == "Home":
         except Exception as e:
             st.warning(f"Suggestion quality error: {e}")
 
-    if _is_ops_research_mode():
+    if show_scorecards_view and _is_ops_research_mode():
         section_header("Advanced Controls")
         try:
             # Force regime toggle (testing)
@@ -3976,20 +6454,22 @@ if nav == "Home":
         except Exception:
             pass
 
-    if _is_ops_research_mode():
+    if show_scorecards_view and _is_ops_research_mode():
         section_header("What Blocked Trades Today")
     try:
-        if not _is_ops_research_mode():
+        if not (show_scorecards_view and _is_ops_research_mode()):
             raise _SkipSection()
         try:
             from config import config as cfg
             desk = getattr(cfg, "DESK_ID", "DEFAULT")
-            desk_log_dir = Path(str(getattr(cfg, "DESK_LOG_DIR", f"logs/desks/{desk}")))
+            desk_log_dir = Path(
+                str(getattr(cfg, "DESK_LOG_DIR", str(logs_dir() / "desks" / str(desk))))
+            )
         except Exception:
             desk = "DEFAULT"
-            desk_log_dir = Path(f"logs/desks/{desk}")
+            desk_log_dir = logs_dir() / f"desks/{desk}"
         blocked_path = desk_log_dir / "blocked_candidates.jsonl"
-        legacy_path = Path("logs/rejected_candidates.jsonl")
+        legacy_path = _log_path("rejected_candidates.jsonl")
         rej_path = blocked_path if blocked_path.exists() else legacy_path
         if rej_path.exists():
             rows = []
@@ -4079,7 +6559,7 @@ if nav == "Home":
                     except Exception:
                         pass
                     # Separate panel for blocked stats (outside expander)
-                    out_path = Path("logs/blocked_outcomes.jsonl")
+                    out_path = _log_path("blocked_outcomes.jsonl")
                     if out_path.exists():
                         out_rows = []
                         with out_path.open() as f:
@@ -4168,7 +6648,7 @@ if nav == "Home":
                             ]
                             ui.table(df_rej[df_rej["reason"] == sel_reason][detail_cols].head(200), use_container_width=True)
                         # Blocked outcomes (paper results)
-                        out_path = Path("logs/blocked_outcomes.jsonl")
+                        out_path = _log_path("blocked_outcomes.jsonl")
                         if out_path.exists():
                             out_rows = []
                             with out_path.open() as f:
@@ -4280,17 +6760,17 @@ if nav == "Home":
     except Exception as e:
         st.warning(f"Blocked summary error: {e}")
 
-    if _is_ops_research_mode():
+    if show_scorecards_view and _is_ops_research_mode():
         section_header("Day‑Type History")
     try:
-        if not _is_ops_research_mode():
+        if not (show_scorecards_view and _is_ops_research_mode()):
             raise _SkipSection()
         rows = load_day_type_events(backfill=True, max_rows=10000)
         if rows:
             df_dt = day_type_events_dataframe(rows)
             # Export CSV
             try:
-                csv_path = Path("logs/day_type_events.csv")
+                csv_path = _log_path("day_type_events.csv")
                 sort_col = "ts_epoch" if "ts_epoch" in df_dt.columns else "ts"
                 df_dt.sort_values(sort_col, ascending=True).to_csv(csv_path, index=False)
             except Exception:
@@ -4344,6 +6824,14 @@ if nav == "Home":
 if nav == "Gemini":
     section_header("Gemini Summary (Day Plan)")
     try:
+        provider = str(os.getenv("GPT_PROVIDER", "openai") or "openai").strip().lower()
+        provider_label = "Gemini" if provider == "gemini" else "OpenAI"
+        provider_model = (
+            str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+            if provider == "gemini"
+            else str(os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+        )
+        st.caption(f"AI provider: {provider_label} | model: {provider_model}")
         st.session_state.setdefault("gpt_cooldown_sec", 10)
         st.session_state["gpt_cooldown_sec"] = st.slider("Gemini Panel Cooldown (sec)", 5, 60, st.session_state["gpt_cooldown_sec"], 5, key="gpt_panel_cd")
         auto = st.checkbox("Auto‑refresh Gemini Summary", value=False, key="gpt_summary_auto")
@@ -4408,9 +6896,64 @@ if nav == "Gemini":
     except Exception as e:
         st.warning(f"Gemini summary error: {e}")
 
+    section_header("Gemini Diagnostics")
+    try:
+        provider = str(os.getenv("GPT_PROVIDER", "openai") or "openai").strip().lower()
+        provider_label = "Gemini" if provider == "gemini" else "OpenAI"
+        provider_model = (
+            str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+            if provider == "gemini"
+            else str(os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+        )
+        logs_root = logs_dir().resolve()
+        st.caption(f"CWD: {Path.cwd()}")
+        st.caption(f"Provider: {provider_label} | model: {provider_model}")
+        st.caption(f"logs_dir: {logs_root}")
+
+        tracked_files = [
+            ("gpt_advice.jsonl", logs_root / "gpt_advice.jsonl"),
+            ("gpt_pins.json", logs_root / "gpt_pins.json"),
+            ("gpt_usage.json", logs_root / "gpt_usage.json"),
+        ]
+        diag_rows = []
+        for name, file_path in tracked_files:
+            exists = file_path.exists()
+            size = file_path.stat().st_size if exists else 0
+            mtime = (
+                datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc).isoformat()
+                if exists
+                else None
+            )
+            diag_rows.append(
+                {
+                    "file": name,
+                    "path": str(file_path),
+                    "exists": exists,
+                    "size_bytes": size,
+                    "mtime_utc": mtime,
+                }
+            )
+        ui.table(pd.DataFrame(diag_rows), use_container_width=True)
+
+        advice_path = logs_root / "gpt_advice.jsonl"
+        if advice_path.exists():
+            raw_lines = advice_path.read_text(encoding="utf-8").splitlines()
+            sample = [ln for ln in raw_lines if ln.strip()][-3:]
+            parsed_rows = []
+            for ln in sample:
+                try:
+                    parsed_rows.append(json.loads(ln))
+                except Exception:
+                    parsed_rows.append({"raw": ln})
+            if parsed_rows:
+                st.caption("Last 3 advice entries")
+                st.json(parsed_rows)
+    except Exception as e:
+        st.warning(f"Gemini diagnostics error: {e}")
+
     section_header("Gemini Advice History")
     try:
-        hist_path = Path("logs/gpt_advice.jsonl")
+        hist_path = _log_path("gpt_advice.jsonl")
         if hist_path.exists():
             rows = []
             with hist_path.open() as f:
@@ -4452,7 +6995,7 @@ if nav == "Gemini":
     try:
         pins = _load_gpt_pins()
         if pins:
-            hist_path = Path("logs/gpt_advice.jsonl")
+            hist_path = _log_path("gpt_advice.jsonl")
             rows = []
             if hist_path.exists():
                 with hist_path.open() as f:
@@ -4681,7 +7224,7 @@ if nav == "Gemini":
         _analyze_queue(str(ZERO_HERO_QUEUE_PATH), "Zero Hero", "zero_tab", ltp_map=ltp_map, chain_map=chain_map)
         _analyze_queue(str(SCALP_QUEUE_PATH), "Scalp Trades", "scalp_tab", ltp_map=ltp_map, chain_map=chain_map)
         # Rejected candidates
-        rej_path = Path("logs/rejected_candidates.jsonl")
+        rej_path = _log_path("rejected_candidates.jsonl")
         if rej_path.exists():
             rows = []
             with rej_path.open() as f:
@@ -4973,7 +7516,7 @@ if nav == "Gemini":
 
             # Log scored trade
             try:
-                log_path = Path("logs/scored_trades.jsonl")
+                log_path = _log_path("scored_trades.jsonl")
                 log_path.parent.mkdir(exist_ok=True)
                 lot_size = 65 if sym == "NIFTY" else 20 if sym == "SENSEX" else 25
                 qty = int(lots) * lot_size
@@ -5019,7 +7562,7 @@ if nav == "Gemini":
     try:
         if not _is_ops_research_mode():
             raise _SkipSection()
-        scored_path = Path("logs/scored_trades.jsonl")
+        scored_path = _log_path("scored_trades.jsonl")
         if scored_path.exists():
             rows = []
             with open(scored_path, "r") as f:
@@ -5154,6 +7697,13 @@ if nav == "Gemini":
     except Exception as e:
         st.warning(f"SQLite PnL error: {e}")
 
+if nav == "Strategy Timeline":
+    try:
+        _render_strategy_timeline_tab()
+    except Exception as exc:
+        logger.exception("strategy_timeline_render_failed: %s", exc)
+        error_state("Strategy Timeline unavailable.", str(exc))
+
 if nav == "Execution":
     with st.expander("Execution Status", expanded=False):
         try:
@@ -5196,7 +7746,7 @@ if nav == "Execution":
                     if "timestamp" in df_exec.columns:
                         df_exec["timestamp"] = pd.to_datetime(df_exec["timestamp"], errors="coerce")
                         last_fill = df_exec["timestamp"].max()
-                fills_db = Path("data/trades.db")
+                fills_db = db_dir() / "trades.db"
                 if fills_db.exists() and last_fill is not None:
                     age_sec = (datetime.now() - last_fill.to_pydatetime()).total_seconds()
                     if age_sec < 300:
@@ -5215,7 +7765,7 @@ if nav == "Execution":
 
     with st.expander("Symbol Epsilon Stability", expanded=False):
         try:
-            eps_path = Path("logs/symbol_eps_history.json")
+            eps_path = logs_dir() / "symbol_eps_history.json"
             if eps_path.exists():
                 eps_hist = json.loads(eps_path.read_text())
                 eps_df = pd.DataFrame(eps_hist)
@@ -5252,12 +7802,12 @@ if nav == "Execution":
 
     with st.expander("Execution Analytics Summary", expanded=False):
         try:
-            ea_path = Path("logs/execution_analytics.json")
-            if ea_path.exists():
-                ea = json.loads(ea_path.read_text())
-                ui.table(pd.DataFrame([ea]), use_container_width=True)
-            else:
+            ea_path = logs_dir() / "execution_analytics.json"
+            execution_vm = load_execution_vm(ea_path)
+            if execution_vm.status == "missing":
                 st.caption("Run scripts/run_execution_analytics.py to generate analytics.")
+            else:
+                render_execution_panel(execution_vm)
         except Exception as e:
             st.caption(f"Execution analytics error: {e}")
 
@@ -5266,9 +7816,16 @@ if nav == "Execution":
             from config import config as cfg
 
             intents_path = Path(
-                str(getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", "logs/execution_intents.jsonl") or "logs/execution_intents.jsonl")
+                str(
+                    getattr(
+                        cfg,
+                        "EXECUTION_INTENTS_LOG_PATH",
+                        str(logs_dir() / "execution_intents.jsonl"),
+                    )
+                    or str(logs_dir() / "execution_intents.jsonl")
+                )
             )
-            fills_path = Path("logs/reconciliation_summary.json")
+            fills_path = logs_dir() / "reconciliation_summary.json"
             if intents_path.exists() and fills_path.exists():
                 intents = []
                 with open(intents_path, "r") as f:
@@ -5293,20 +7850,139 @@ if nav == "Execution":
 if nav == "Reconciliation":
     with st.expander("Reconciliation Summary", expanded=False):
         try:
-            rec_path = Path("logs/reconciliation_summary.json")
-            if rec_path.exists():
-                rec = json.loads(rec_path.read_text())
-                ui.table(pd.DataFrame([rec]), use_container_width=True)
-                if "avg_confidence" in rec:
-                    st.metric("Reconciliation Confidence", f"{rec['avg_confidence']:.2f}")
+            from core.reconciliation import reconcile_execution_fills
+            from config import config as cfg
+
+            date_filter = st.text_input(
+                "Exchange Date Filter (YYYY-MM-DD, optional)",
+                value="",
+                key="reconciliation_date_filter",
+            ).strip() or None
+            rec_summary_path = logs_dir() / "reconciliation_summary.json"
+            rec_history_path = logs_dir() / "reconciliation_history.json"
+            rec_csv_path = logs_dir() / "reconciliation_report.csv"
+            exec_analytics_path = logs_dir() / "execution_analytics.json"
+            eps_history_path = logs_dir() / "symbol_eps_history.json"
+            expected_paths = [
+                ("reconciliation_summary", rec_summary_path),
+                ("reconciliation_report_csv", rec_csv_path),
+                ("reconciliation_history", rec_history_path),
+                ("execution_analytics", exec_analytics_path),
+                ("symbol_eps_history", eps_history_path),
+            ]
+            diag_rows = []
+            for label, p in expected_paths:
+                exists = p.exists()
+                size = p.stat().st_size if exists else 0
+                mtime = (
+                    datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).isoformat()
+                    if exists
+                    else None
+                )
+                diag_rows.append(
+                    {
+                        "name": label,
+                        "path": str(p),
+                        "exists": exists,
+                        "size_bytes": size,
+                        "mtime_utc": mtime,
+                    }
+                )
+            st.caption("Reconciliation file diagnostics")
+            ui.table(pd.DataFrame(diag_rows), use_container_width=True)
+
+            auto_recon = st.checkbox(
+                "Auto-generate reconciliation (offline, safe)",
+                value=False,
+                key="auto_reconcile_safe_toggle",
+            )
+            auto_recon_interval = int(
+                st.number_input(
+                    "Auto-reconcile interval (sec)",
+                    min_value=30,
+                    max_value=3600,
+                    value=300,
+                    step=30,
+                    key="auto_reconcile_interval_sec",
+                    disabled=not auto_recon,
+                )
+            )
+            exec_mode = str(getattr(cfg, "EXECUTION_MODE", "PAPER") or "PAPER").upper()
+            readiness_state = str((st.session_state.get("readiness_snapshot") or {}).get("state") or "UNKNOWN").upper()
+            offhours_mode = is_offhours({"state": readiness_state})
+            auto_allowed = (exec_mode != "LIVE") or offhours_mode
+            if auto_recon and auto_allowed:
+                now_ts = time.time()
+                last_ts = float(st.session_state.get("auto_reconcile_last_ts", 0.0) or 0.0)
+                if (now_ts - last_ts) >= float(auto_recon_interval):
+                    cmd = [sys.executable, "scripts/reconcile_fills.py"]
+                    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                    st.session_state["auto_reconcile_last_ts"] = now_ts
+                    if result.returncode != 0:
+                        st.warning("Auto-reconciliation failed; check script output.")
+                        if result.stderr:
+                            st.caption(result.stderr.strip()[-500:])
+                    elif hasattr(st, "toast"):
+                        st.toast("Auto-reconciliation refreshed.")
+            elif auto_recon and not auto_allowed:
+                st.caption("Auto-reconciliation is restricted in LIVE during market hours.")
+
+            rows, rec = reconcile_execution_fills(trade_date=date_filter)
+            # Prefer loader contract for artifact rendering; preserve existing table shape.
+            recon_vm = load_recon_vm(rec_summary_path)
+            if recon_vm.status in {"ok", "warning", "error"} and recon_vm.payload:
+                render_recon_panel(recon_vm)
             else:
-                st.caption("Run scripts/reconcile_fills.py to generate reconciliation summary.")
+                ui.table(pd.DataFrame([rec]), use_container_width=True)
+            if rec.get("avg_confidence") is not None:
+                st.metric("Reconciliation Confidence", f"{float(rec['avg_confidence']):.2f}")
+            if rec.get("error"):
+                st.error(str(rec.get("error")))
+            if rec.get("warning"):
+                st.warning(str(rec.get("warning")))
+            missing_any = any(not row["exists"] for row in diag_rows)
+            if missing_any:
+                st.info("Missing reconciliation artifacts. Run: PYTHONPATH=. python scripts/reconcile_fills.py")
+            if rec.get("position_mismatch"):
+                st.warning(
+                    "Broker open positions do not match local trade ledger."
+                    f" broker={rec.get('broker_open_positions')} local={rec.get('local_open_positions')}"
+                )
+            if rows:
+                st.caption(f"Reconciled execution fills: {len(rows)}")
         except Exception as e:
-            st.caption(f"Reconciliation summary error: {e}")
+            st.error(f"Reconciliation summary error: {e}")
+
+    with st.expander("Execution Events Debug", expanded=False):
+        try:
+            from core.reconciliation import read_execution_fill_events
+            from config import config as cfg
+
+            events = read_execution_fill_events(limit=10)
+            storage_path = str(getattr(cfg, "ANALYTICS_RUNTIME_DIR", "runtime/analytics") or "runtime/analytics")
+            run_id = str(getattr(cfg, "RUN_ID", "") or getattr(cfg, "EXEC_RUN_ID", "") or "UNKNOWN_RUN")
+            desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT"))
+            mode = str(getattr(cfg, "EXECUTION_MODE", "PAPER")).upper()
+
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("run_id", run_id)
+            col_b.metric("desk_id", desk_id)
+            col_c.metric("mode", mode)
+            st.caption(f"Execution event storage path: {storage_path}")
+
+            if events:
+                ui.table(pd.DataFrame(events), use_container_width=True)
+            else:
+                st.error(
+                    "No EXECUTION_FILL events found. Reconciliation reads only execution-fill events "
+                    "from runtime/analytics/*/events.jsonl."
+                )
+        except Exception as e:
+            st.error(f"Execution events debug error: {e}")
 
     with st.expander("Reconciliation Match-Rate Trend", expanded=False):
         try:
-            rec_hist = Path("logs/reconciliation_history.json")
+            rec_hist = logs_dir() / "reconciliation_history.json"
             if rec_hist.exists():
                 hist = pd.read_json(rec_hist)
                 if not hist.empty:
@@ -5348,11 +8024,11 @@ if nav == "Reconciliation":
                     st.line_chart(hist.set_index("ts")["match_rate"])
                     st.line_chart(hist.set_index("ts")["match_rate_roll"])
                 else:
-                    empty_state("No reconciliation history yet.")
+                    st.error("No reconciliation history yet. Run scripts/reconcile_fills.py first.")
             else:
-                empty_state("No reconciliation history yet.")
+                st.error("No reconciliation history yet. Run scripts/reconcile_fills.py first.")
         except Exception as e:
-            st.caption(f"Reconciliation history error: {e}")
+            st.error(f"Reconciliation history error: {e}")
 
 if nav == "Risk & Governance":
     advanced = st.toggle("Advanced", value=False, key="adv_scorecard")
@@ -5383,7 +8059,7 @@ if nav == "Risk & Governance":
 
     with st.expander("Arm Live Trades", expanded=False):
         try:
-            arm_path = Path("logs/arm_live.json")
+            arm_path = logs_dir() / "arm_live.json"
             arm_state = {"armed": False}
             if arm_path.exists():
                 arm_state = json.loads(arm_path.read_text())
@@ -5429,7 +8105,7 @@ if nav == "Data & SLA":
             if st.button("Run Daily Rollup Now"):
                 with st.spinner("Running daily rollup..."):
                     result = subprocess.run([sys.executable, "scripts/daily_rollup.py"], check=False, capture_output=True, text=True)
-                    Path("logs/daily_rollup.log").write_text((result.stdout or "") + "\n" + (result.stderr or ""))
+                    _log_path("daily_rollup.log").write_text((result.stdout or "") + "\n" + (result.stderr or ""))
                 if result.returncode == 0:
                     st.caption("Daily rollup completed.")
                 else:
@@ -5447,7 +8123,7 @@ if nav == "Data & SLA":
 
         st.subheader("Option Chain Health")
         try:
-            health_path = Path("logs/option_chain_health.json")
+            health_path = _log_path("option_chain_health.json")
             if health_path.exists():
                 health = json.loads(health_path.read_text())
                 if isinstance(health, dict) and health:
@@ -5465,8 +8141,8 @@ if nav == "Data & SLA":
 
         st.subheader("Walk-Forward Risk Summary")
         try:
-            summary_path = Path("logs/walk_forward_risk_summary.json")
-            strat_path = Path("logs/walk_forward_strategy_summary.csv")
+            summary_path = _log_path("walk_forward_risk_summary.json")
+            strat_path = _log_path("walk_forward_strategy_summary.csv")
             if summary_path.exists():
                 summary = json.loads(summary_path.read_text())
                 if isinstance(summary, list) and summary:
@@ -5508,7 +8184,7 @@ if nav == "Data & SLA":
             col_t2.metric("Min PF", getattr(cfg, "WF_MIN_PF", 1.2))
             col_t3.metric("Min win rate", getattr(cfg, "WF_MIN_WIN_RATE", 0.45))
             col_t4.metric("Max drawdown", getattr(cfg, "WF_MAX_DD", -5000.0))
-            strat_path = Path("logs/walk_forward_strategy_summary.csv")
+            strat_path = _log_path("walk_forward_strategy_summary.csv")
             if strat_path.exists():
                 if strat_path.stat().st_size == 0:
                     df_s = pd.DataFrame()
@@ -5531,7 +8207,7 @@ if nav == "Data & SLA":
         st.subheader("Walk-Forward Backtest Settings")
         try:
             from config import config as cfg
-            data_files = sorted([p for p in Path("data").glob("*.csv")])
+            data_files = sorted([p for p in data_root().glob("*.csv")])
             file_opts = [str(p) for p in data_files] if data_files else []
             file_path = st.selectbox("Data file", file_opts) if file_opts else None
             train_size = st.slider("Train size", min_value=0.5, max_value=0.9, value=0.6, step=0.05)
@@ -5571,50 +8247,79 @@ if nav == "Data & SLA":
 if nav == "ML/RL":
     st.subheader("Model Training Utilities")
     try:
-        import subprocess
-        import os
-        # Status badges
-        micro_trained = Path("models/microstructure_model.h5").exists() or Path("logs/micro_feature_importance.csv").exists()
-        rl_trained = Path("logs/rl_metrics.json").exists()
-        col_s1, col_s2 = st.columns(2)
-        col_s1.metric("Micro Model", "Trained" if micro_trained else "Not trained")
+        micro_paths = _micro_training_paths()
+        micro_state = _compute_micro_training_status(micro_paths)
+        micro_label, stale_artifact = _micro_model_badge_state(micro_paths, micro_state)
+        rl_trained = _log_path("rl_metrics.json").exists()
+        col_s1, col_s2, col_s3 = st.columns(3)
+        col_s1.metric("Micro Model", micro_label)
         col_s2.metric("RL Model", "Trained" if rl_trained else "Not trained")
+        col_s3.metric("Micro Train Status", str(micro_state.get("status") or MICRO_TRAIN_STATUS_FAILED))
+        if stale_artifact:
+            st.caption("A stale micro-model artifact exists from an older run; latest training failed.")
 
-        col_a, col_b, col_c = st.columns(3)
-        if col_a.button("Train Micro Model"):
-            with st.spinner("Training microstructure model..."):
-                env = os.environ.copy()
-                env["MPLCONFIGDIR"] = "/tmp/mpl"
-                script_path = ROOT / "models" / "train_micro_model.py"
-                result = subprocess.run([sys.executable, str(script_path)], check=False, env=env, capture_output=True, text=True)
-                log_path = Path("logs/train_micro.log")
-                log_path.write_text((result.stdout or "") + "\n" + (result.stderr or ""))
-            if result.returncode == 0:
-                st.success("Micro model training completed.")
+        st.caption(f"Micro training log: {micro_state.get('log_path')}")
+        st.caption(f"Micro model artifact: {micro_state.get('model_artifact_path')}")
+        if not bool(micro_state.get("running")) and str(micro_state.get("status") or "").upper() == MICRO_TRAIN_STATUS_FAILED:
+            fail_reason = micro_state.get("last_report_reason") or micro_state.get("error")
+            if fail_reason:
+                st.warning(f"Last micro training failed: {fail_reason}")
+        micro_tail = list(micro_state.get("log_tail") or [])
+        if micro_tail:
+            st.code("\n".join(micro_tail[-50:]), language="text")
+        else:
+            st.caption("No micro training logs yet.")
+
+        col_a, col_b, col_c, col_d = st.columns(4)
+        if col_a.button("Train Micro Model", key="train_micro_model_button"):
+            tf_timeout = float(getattr(cfg, "MICRO_TF_IMPORT_TIMEOUT_SEC", 5.0) or 5.0)
+            tf_ok = check_tf_available(timeout_sec=tf_timeout)
+            backend_override = None
+            if not tf_ok:
+                st.warning(
+                    "TensorFlow not available/too slow to import in this environment. "
+                    "Install supported TF build or use separate env."
+                )
+                backend_override = "sklearn"
+            started, message = start_micro_training_subprocess(backend_override=backend_override, paths=micro_paths)
+            if started:
+                st.success(message)
             else:
-                st.error(f"Micro model training failed (exit={result.returncode}). See logs/train_micro.log")
+                st.warning(message)
+            micro_state = _compute_micro_training_status(micro_paths)
+        if col_b.button(
+            "Cancel training",
+            key="cancel_micro_model_button",
+            disabled=not bool(micro_state.get("running")),
+        ):
+            cancelled, message = cancel_micro_training(paths=micro_paths)
+            if cancelled:
+                st.warning(message)
+            else:
+                st.info(message)
+            micro_state = _compute_micro_training_status(micro_paths)
         if "rl_training" not in st.session_state:
             st.session_state["rl_training"] = False
-        if col_b.button("Train RL (Validate)", disabled=st.session_state["rl_training"]):
+        if col_c.button("Train RL (Validate)", disabled=st.session_state["rl_training"]):
             st.session_state["rl_training"] = True
             result = None
             try:
                 with st.spinner("Training RL model..."):
                     result = subprocess.run([sys.executable, "rl/train_validate_rl.py"], check=False, capture_output=True, text=True)
-                    Path("logs/train_rl.log").write_text((result.stdout or "") + "\n" + (result.stderr or ""))
+                    _log_path("train_rl.log").write_text((result.stdout or "") + "\n" + (result.stderr or ""))
             finally:
                 st.session_state["rl_training"] = False
             if result and result.returncode == 0:
                 st.success("RL training completed.")
             else:
                 st.error("RL training failed or did not finish. Check the Training Console for details.")
-        if col_c.button("Refresh IV Skew Data"):
+        if col_d.button("Refresh IV Skew Data"):
             with st.spinner("Refreshing option chain..."):
                 result = subprocess.run([sys.executable, "scripts/refresh_option_chain.py"], check=False, capture_output=True, text=True)
-                Path("logs/refresh_iv.log").write_text((result.stdout or "") + "\n" + (result.stderr or ""))
+                _log_path("refresh_iv.log").write_text((result.stdout or "") + "\n" + (result.stderr or ""))
             st.success("IV skew refresh completed.")
-    except Exception as e:
-        st.warning(f"Training utilities error: {e}")
+    except Exception:
+        st.warning("Training utilities error. Check application logs for details.")
 
     st.subheader("Training Console")
     try:
@@ -5636,16 +8341,16 @@ if nav == "ML/RL":
             except Exception:
                 pass
         log_files = {
-            "Micro Train": Path("logs/train_micro.log"),
-            "RL Train": Path("logs/train_rl.log"),
-            "IV Refresh": Path("logs/refresh_iv.log"),
+            "Micro Train": _log_path("train_micro.log"),
+            "RL Train": _log_path("train_rl.log"),
+            "IV Refresh": _log_path("refresh_iv.log"),
         }
         choice = st.selectbox("Select log", list(log_files.keys()))
         log_path = log_files[choice]
         if log_path.exists():
-            text = log_path.read_text()[-8000:]
+            lines = _tail_log_lines(log_path, limit=50)
+            text = "\n".join(lines)
             # simple color-coding for errors
-            lines = text.splitlines()
             err_lines = [ln for ln in lines if "error" in ln.lower() or "traceback" in ln.lower()]
             if err_lines:
                 st.error("Errors found in log (showing last 5):")
@@ -5660,7 +8365,7 @@ if nav == "ML/RL":
 
     st.subheader("RL Metrics")
     try:
-        rl_path = Path("logs/rl_metrics.json")
+        rl_path = _log_path("rl_metrics.json")
         if rl_path.exists():
             rld = pd.read_json(rl_path)
             rld["timestamp"] = pd.to_datetime(rld["timestamp"])
@@ -5674,6 +8379,8 @@ if nav == "ML/RL":
 if nav == "Market Depth":
     st.subheader("Depth Snapshots (SQLite)")
     try:
+        depth_vm = load_depth_vm(Path(str(getattr(cfg, "TRADE_DB_PATH", ""))))
+        render_depth_panel(depth_vm)
         cols, rows = fetch_depth_snapshots(100)
         if rows:
             ds = pd.DataFrame(rows, columns=cols)

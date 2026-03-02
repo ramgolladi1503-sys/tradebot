@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from core.paths import data_root, logs_dir
 import argparse
 import json
 import sqlite3
@@ -61,8 +62,8 @@ def main():
     ap.add_argument("--min-non-null", type=int, default=1)
     args = ap.parse_args()
 
-    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", "logs/decision_events.sqlite"))
-    jsonl_path = Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"))
+    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite")))
+    jsonl_path = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
 
     if db_path.exists():
         ok = _check_sqlite(db_path, args.min_non_null)

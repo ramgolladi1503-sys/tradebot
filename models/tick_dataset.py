@@ -10,7 +10,33 @@ import pandas as pd
 
 
 def _safe_to_datetime(series: pd.Series) -> pd.Series:
-    return pd.to_datetime(series, errors="coerce")
+    try:
+        return pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
+    except TypeError:
+        return pd.to_datetime(series, errors="coerce", utc=True)
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    except Exception:
+        return set()
+    cols = set()
+    for row in rows:
+        try:
+            cols.add(str(row[1]))
+        except Exception:
+            continue
+    return cols
+
+
+def _epoch_to_datetime_utc(series: pd.Series) -> pd.Series:
+    epoch = pd.to_numeric(series, errors="coerce")
+    if epoch.empty:
+        return pd.to_datetime(pd.Series(dtype="float64"), errors="coerce", utc=True)
+    # Support both seconds and milliseconds in legacy rows.
+    epoch_sec = epoch.where(epoch < 1_000_000_000_000, epoch / 1000.0)
+    return pd.to_datetime(epoch_sec, unit="s", errors="coerce", utc=True)
 
 
 def _parse_depth_payload(payload: str | dict | list | None) -> dict[str, Any] | None:
@@ -74,8 +100,14 @@ def build_tick_dataset(
     db_path = str(db_path)
     conn = sqlite3.connect(db_path)
     try:
+        tick_cols = _table_columns(conn, "ticks")
+        tick_select_cols = ["timestamp", "instrument_token", "last_price", "volume", "oi"]
+        if "timestamp_epoch" in tick_cols:
+            tick_select_cols.append("timestamp_epoch")
+        if "timestamp_iso" in tick_cols:
+            tick_select_cols.append("timestamp_iso")
         df_ticks = pd.read_sql_query(
-            "SELECT timestamp, instrument_token, last_price, volume, oi FROM ticks",
+            f"SELECT {', '.join(tick_select_cols)} FROM ticks",
             conn,
         )
         if df_ticks.empty:
@@ -83,8 +115,18 @@ def build_tick_dataset(
                 columns=["timestamp", "instrument_token", "last_price", "volume", "oi"]
             )
 
-        df_ticks["ts"] = _safe_to_datetime(df_ticks["timestamp"])
-        df_ticks = df_ticks.sort_values(["instrument_token", "ts"]).reset_index(drop=True)
+        ts_text = pd.Series(pd.NaT, index=df_ticks.index, dtype="datetime64[ns, UTC]")
+        if "timestamp_iso" in df_ticks.columns:
+            ts_text = _safe_to_datetime(df_ticks["timestamp_iso"])
+        elif "timestamp" in df_ticks.columns:
+            ts_text = _safe_to_datetime(df_ticks["timestamp"])
+        if "timestamp_epoch" in df_ticks.columns:
+            ts_epoch = _epoch_to_datetime_utc(df_ticks["timestamp_epoch"])
+            df_ticks["ts"] = ts_epoch.fillna(ts_text)
+        else:
+            df_ticks["ts"] = ts_text
+        df_ticks["_row_id"] = np.arange(len(df_ticks), dtype=int)
+        df_ticks = df_ticks.sort_values(["instrument_token", "ts", "_row_id"]).reset_index(drop=True)
 
         if "last_price" in df_ticks.columns:
             df_ticks["future_price"] = (
@@ -123,6 +165,9 @@ def build_tick_dataset(
             else:
                 df_ticks["depth_imbalance"] = np.nan
                 df_ticks["depth_spread_pct"] = np.nan
+
+        if "_row_id" in df_ticks.columns:
+            df_ticks = df_ticks.drop(columns=["_row_id"])
 
         if out_path is not None:
             out_path = Path(out_path)

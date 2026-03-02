@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 import time
 from pathlib import Path
@@ -10,7 +11,7 @@ STATES = ["RESEARCH", "PAPER", "PILOT", "LIVE", "QUARANTINE", "RETIRED"]
 
 class StrategyLifecycle:
     def __init__(self, path: str | None = None):
-        self.path = Path(path or getattr(cfg, "STRATEGY_LIFECYCLE_PATH", "logs/strategy_lifecycle.json"))
+        self.path = Path(path or getattr(cfg, "STRATEGY_LIFECYCLE_PATH", str(logs_dir() / "strategy_lifecycle.json")))
         self.state = {}
         self._load()
 

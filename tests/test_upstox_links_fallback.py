@@ -20,7 +20,9 @@ def test_upstox_links_fallback_search():
     assert pd.isna(out.loc[0, "upstox_contract_url"]) or out.loc[0, "upstox_contract_url"] == ""
 
 
-def test_upstox_links_contract_url():
+def test_upstox_links_contract_url(monkeypatch):
+    from config import config as cfg
+    monkeypatch.setattr(cfg, "UPSTOX_ENABLE_DEEPLINK", True, raising=False)
     df = pd.DataFrame(
         [
             {

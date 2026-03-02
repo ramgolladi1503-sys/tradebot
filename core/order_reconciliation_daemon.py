@@ -5,6 +5,7 @@ against internal order-state records and repairs deterministic mismatches.
 
 from __future__ import annotations
 
+from core.paths import logs_dir
 import asyncio
 from dataclasses import dataclass
 import json
@@ -21,6 +22,7 @@ from core.orders.state_machine import (
     OrderStateMachine,
     OrderStateTransitionError,
 )
+from core.runtime_lifecycle import lifecycle
 
 
 _OPEN_STATUSES = {
@@ -136,7 +138,7 @@ class OrderReconciliationDaemon:
         self._sm = order_state_machine or OrderStateMachine()
         self._broker_api = broker_api
         self._interval_sec = max(0.5, float(interval_sec if interval_sec is not None else getattr(cfg, "ORDER_RECON_INTERVAL_SEC", 5.0)))
-        self._log_path = Path(str(log_path or getattr(cfg, "ORDER_RECON_LOG_PATH", "logs/order_reconciliation.jsonl")))
+        self._log_path = Path(str(log_path or getattr(cfg, "ORDER_RECON_LOG_PATH", str(logs_dir() / "order_reconciliation.jsonl"))))
         self._network_retries = max(1, int(network_retries if network_retries is not None else getattr(cfg, "ORDER_RECON_NETWORK_RETRIES", 3)))
         self._retry_delay_sec = max(0.0, float(retry_delay_sec if retry_delay_sec is not None else getattr(cfg, "ORDER_RECON_RETRY_DELAY_SEC", 0.75)))
         self._scan_limit = max(1, int(getattr(cfg, "ORDER_RECON_SCAN_LIMIT", 2000)))
@@ -162,16 +164,24 @@ class OrderReconciliationDaemon:
             self._broker_api = broker_api
 
     def start(self) -> bool:
+        thread: threading.Thread | None = None
         with self._state_lock:
             if self.is_running:
                 return False
             self._stop_event.clear()
-            self._thread = threading.Thread(
+            thread = threading.Thread(
                 target=self._thread_main,
                 name="order-reconciliation-daemon",
-                daemon=True,
+                daemon=False,
             )
+            self._thread = thread
             self._thread.start()
+        if thread is not None:
+            lifecycle.register(
+                "order-reconciliation-daemon",
+                stop_fn=lambda: self.stop(timeout_sec=3.0),
+                join_fn=lambda timeout_sec=3.0: self._join_thread(timeout_sec=timeout_sec),
+            )
         self._write_log(
             "daemon_started",
             {
@@ -189,17 +199,18 @@ class OrderReconciliationDaemon:
             thread = self._thread
             if thread is None:
                 return True
+            self._write_log(
+                "daemon_stopping",
+                {"timeout_sec": float(timeout_sec)},
+                level="INFO",
+            )
             self._stop_event.set()
             loop = self._loop
             if loop and loop.is_running():
                 loop.call_soon_threadsafe(lambda: None)
-        thread.join(max(0.1, float(timeout_sec)))
+        if thread is not threading.current_thread():
+            thread.join(max(0.1, float(timeout_sec)))
         clean = not thread.is_alive()
-        self._write_log(
-            "daemon_stopped",
-            {"clean_shutdown": clean},
-            level="INFO" if clean else "WARN",
-        )
         with self._state_lock:
             if self._thread is thread:
                 self._thread = None
@@ -209,6 +220,15 @@ class OrderReconciliationDaemon:
     def close(self, timeout_sec: float = 5.0) -> bool:
         return self.stop(timeout_sec=timeout_sec)
 
+    def _join_thread(self, timeout_sec: float = 3.0) -> None:
+        with self._state_lock:
+            thread = self._thread
+        if thread is None:
+            return
+        if thread is threading.current_thread():
+            return
+        thread.join(max(0.0, float(timeout_sec)))
+
     def _thread_main(self) -> None:
         loop = asyncio.new_event_loop()
         with self._state_lock:
@@ -216,6 +236,9 @@ class OrderReconciliationDaemon:
         try:
             asyncio.set_event_loop(loop)
             loop.run_until_complete(self._run_forever())
+        except RuntimeError:
+            if not self._stop_event.is_set():
+                raise
         finally:
             try:
                 pending = asyncio.all_tasks(loop)
@@ -235,6 +258,8 @@ class OrderReconciliationDaemon:
             try:
                 self.run_cycle_once()
             except Exception as exc:
+                if self._stop_event.is_set():
+                    break
                 self._write_log(
                     "reconcile_cycle_error",
                     {"error": f"{type(exc).__name__}:{exc}"},
@@ -243,7 +268,12 @@ class OrderReconciliationDaemon:
             elapsed = time.time() - started
             wait_sec = max(0.0, self._interval_sec - elapsed)
             if wait_sec > 0:
-                await asyncio.to_thread(self._stop_event.wait, wait_sec)
+                # Avoid thread-pool scheduling during interpreter shutdown.
+                sleep_step = min(0.25, wait_sec)
+                remaining = wait_sec
+                while remaining > 0 and not self._stop_event.is_set():
+                    await asyncio.sleep(min(sleep_step, remaining))
+                    remaining -= sleep_step
 
     def _resolve_broker_api(self) -> Any:
         if self._broker_api is not None:
@@ -547,6 +577,8 @@ class OrderReconciliationDaemon:
         return summary
 
     def _write_log(self, event: str, payload: dict[str, Any], *, level: str) -> None:
+        if self._stop_event.is_set():
+            return
         record = {
             "ts_epoch": time.time(),
             "event": str(event),

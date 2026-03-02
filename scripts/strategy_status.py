@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from core.paths import logs_dir
 
 from core.strategy_lifecycle import StrategyLifecycle
 
@@ -13,7 +14,7 @@ def _load_json(path: Path):
 
 def main():
     lifecycle = StrategyLifecycle()
-    decay_path = Path("logs/strategy_decay_probs.json")
+    decay_path = logs_dir() / "strategy_decay_probs.json"
     decay = _load_json(decay_path) if decay_path.exists() else {}
 
     print("Strategy\tstate\tdecay_prob\treason")

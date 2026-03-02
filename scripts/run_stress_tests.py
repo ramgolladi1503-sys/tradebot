@@ -3,6 +3,7 @@ import json
 import argparse
 from datetime import datetime
 from pathlib import Path
+from core.paths import logs_dir, data_root
 
 import pandas as pd
 
@@ -25,7 +26,7 @@ from core.synthetic_market import SyntheticSessionConfig, generate_ohlcv_session
 
 
 def _load_truth_dataset() -> pd.DataFrame:
-    path = Path("data/truth_dataset.parquet")
+    path = data_root() / "truth_dataset.parquet"
     if path.exists():
         return pd.read_parquet(path)
     df, _ = build_truth_dataset()
@@ -252,7 +253,7 @@ def main():
         },
     }
 
-    out = Path("logs") / f"stress_report_{datetime.now().date().isoformat()}.json"
+    out = logs_dir() / f"stress_report_{datetime.now().date().isoformat()}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report, indent=2))
     print(f"Stress report: {out}")

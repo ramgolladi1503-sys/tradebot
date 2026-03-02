@@ -5,6 +5,7 @@ Produces a compact JSON snapshot for operator dashboards and CLI checks.
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 from pathlib import Path
 from typing import Any
@@ -109,6 +110,6 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
 
 def write_runtime_health_snapshot(orchestrator: Any | None = None, path: str | Path | None = None) -> dict[str, Any]:
     payload = get_runtime_health(orchestrator=orchestrator)
-    target = Path(path or getattr(cfg, "RUNTIME_HEALTH_PATH", "logs/runtime_health_latest.json"))
+    target = Path(path or getattr(cfg, "RUNTIME_HEALTH_PATH", str(logs_dir() / "runtime_health_latest.json")))
     _atomic_write(target, payload)
     return payload

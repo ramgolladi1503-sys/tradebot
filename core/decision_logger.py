@@ -10,6 +10,7 @@ from typing import Any, Dict, Tuple
 
 from config import config as cfg
 from core.audit_log import append_event as audit_append
+from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
 from core.reason_codes import normalize_reason_codes
 
@@ -136,8 +137,8 @@ def verify_decision_chain(path: Path = DECISION_JSONL) -> Tuple[bool, str, int]:
 
 
 def _conn():
-    Path(cfg.TRADE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(cfg.TRADE_DB_PATH)
+    db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
+    return sqlite3.connect(str(db_path))
 
 
 def _init_db():

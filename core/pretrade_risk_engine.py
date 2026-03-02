@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 from config import config as cfg
+from core.paths import db_dir
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -89,7 +90,8 @@ class PreTradeRiskEngine:
     _lock = threading.RLock()
 
     def __init__(self, db_path: str | Path | None = None, now_fn=None):
-        self._db_path = Path(str(db_path or getattr(cfg, "TRADE_DB_PATH", "data/trades.db")))
+        fallback_db = db_dir() / f"{getattr(cfg, 'DESK_ID', 'DEFAULT')}.sqlite"
+        self._db_path = Path(str(db_path or getattr(cfg, "TRADE_DB_PATH", str(fallback_db))))
         self._now_fn = now_fn if callable(now_fn) else time.time
         self.enabled = bool(getattr(cfg, "PRETRADE_RISK_ENABLE", True))
         self.margin_buffer_pct = max(0.0, float(getattr(cfg, "PRETRADE_MARGIN_BUFFER_PCT", 0.05)))
@@ -620,4 +622,3 @@ class PreTradeRiskEngine:
                 "trades_last_minute": trades_last_minute,
             },
         )
-

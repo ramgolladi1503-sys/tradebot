@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import data_root
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -8,7 +9,7 @@ import random
 from datetime import datetime, timedelta
 from pathlib import Path
 
-out_path = Path("data/trade_log.json")
+out_path = data_root() / "trade_log.json"
 out_path.parent.mkdir(exist_ok=True)
 
 symbols = ["NIFTY", "BANKNIFTY", "SENSEX"]

@@ -12,8 +12,12 @@ from core.session_calendar import is_open, get_session
 IST_TZ = ZoneInfo("Asia/Kolkata")
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def now_utc_epoch() -> float:
-    return datetime.now(timezone.utc).timestamp()
+    return utc_now().timestamp()
 
 
 def normalize_epoch_seconds(value: Any) -> Optional[float]:

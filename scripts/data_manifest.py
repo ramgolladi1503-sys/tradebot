@@ -1,4 +1,5 @@
 from pathlib import Path
+from core.paths import data_root, logs_dir
 
 from config import config as cfg
 import runpy
@@ -11,13 +12,13 @@ from pathlib import Path
 from datetime import datetime
 
 FILES = [
-    "data/trade_log.json",
+    str(data_root() / "trade_log.json"),
     cfg.TRADE_DB_PATH,
-    "data/ml_features.csv",
-    "data/tick_features.csv",
+    str(data_root() / "ml_features.csv"),
+    str(data_root() / "tick_features.csv"),
 ]
 
-OUT = Path("logs/data_manifest.json")
+OUT = logs_dir() / "data_manifest.json"
 
 def _hash_file(path):
     h = hashlib.sha256()

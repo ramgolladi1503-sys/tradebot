@@ -2,6 +2,7 @@ import argparse
 import json
 import sqlite3
 from pathlib import Path
+from core.paths import logs_dir
 
 from config import config as cfg
 
@@ -11,7 +12,7 @@ def main():
     parser.add_argument("--id", required=True)
     args = parser.parse_args()
 
-    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", "logs/decision_events.sqlite"))
+    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite")))
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         cur.execute("SELECT status FROM experiments WHERE experiment_id=?", (args.id,))
@@ -21,7 +22,7 @@ def main():
         if row[0] not in ("STOPPED",):
             raise SystemExit("Experiment must be STOPPED to analyze")
     report = {"experiment_id": args.id, "status": "ANALYZED", "note": "analysis_placeholder"}
-    out = Path("logs") / f"experiment_{args.id}_analysis.json"
+    out = logs_dir() / f"experiment_{args.id}_analysis.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report, indent=2))
     print(f"Experiment analysis: {out}")

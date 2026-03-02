@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root, logs_dir
 
 import argparse
 import json
@@ -11,6 +12,10 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
+# Keep training headless-safe by default for CLI and subprocess runners.
+os.environ.setdefault("MPLBACKEND", "Agg")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
 # Allow direct invocation (`python /abs/path/models/train_micro_model.py`) without
 # requiring the caller to pre-set PYTHONPATH.
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +25,7 @@ if str(ROOT) not in sys.path:
 try:
     from config import config as cfg
 except Exception:
-    cfg = SimpleNamespace(TRADE_DB_PATH="data/trades.db", MICRO_MODEL_PATH="models/microstructure_model.h5")
+    cfg = SimpleNamespace(TRADE_DB_PATH=str(data_root() / "trades.db"), MICRO_MODEL_PATH="models/microstructure_model.h5")
 
 from models.tick_dataset import build_tick_dataset
 
@@ -142,8 +147,8 @@ def _build_dataset(args) -> tuple[pd.DataFrame, str]:
 
     # Fallback deterministic local datasets
     candidates = [
-        Path("data/tick_features.csv"),
-        Path("data/NIFTY_from_ticks_5m.csv"),
+        data_root() / "tick_features.csv",
+        data_root() / "NIFTY_from_ticks_5m.csv",
     ]
     for path in candidates:
         if path.exists():
@@ -380,10 +385,10 @@ def _train(args) -> tuple[int, dict]:
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Train microstructure model from tick/depth data.")
-    parser.add_argument("--db-path", default=str(getattr(cfg, "TRADE_DB_PATH", "data/trades.db")))
+    parser.add_argument("--db-path", default=str(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db"))))
     parser.add_argument("--csv-path", default="", help="Optional CSV/Parquet dataset path.")
     parser.add_argument("--model-path", default=str(getattr(cfg, "MICRO_MODEL_PATH", "models/microstructure_model.h5")))
-    parser.add_argument("--feature-importance-path", default="logs/micro_feature_importance.csv")
+    parser.add_argument("--feature-importance-path", default=str(logs_dir() / "micro_feature_importance.csv"))
     parser.add_argument("--horizon", type=int, default=2)
     parser.add_argument("--threshold", type=float, default=0.001)
     parser.add_argument("--min-rows", type=int, default=120)

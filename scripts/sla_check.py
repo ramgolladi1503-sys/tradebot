@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -11,7 +12,7 @@ from core.incidents import trigger_feed_stale
 from core.freshness_sla import get_freshness_status
 from core.slo_guard import evaluate_slo_status
 
-OUT = Path("logs/sla_check.json")
+OUT = logs_dir() / "sla_check.json"
 
 
 if __name__ == "__main__":

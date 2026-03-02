@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable
 
 from config import config as cfg
+from core.paths import data_root, logs_dir
 from core.instrument_symbols import build_option_tradingsymbol
 
 
@@ -26,7 +27,7 @@ def _iter_option_rows(payload: dict) -> Iterable[dict]:
 
 def ensure_tradingsymbols(payload: dict, *, fixture_name: str | None = None) -> int:
     updates = 0
-    log_path = Path(getattr(cfg, "REPLAY_FIXTURE_LOG_PATH", "logs/replay_fixture_symbols.jsonl"))
+    log_path = Path(getattr(cfg, "REPLAY_FIXTURE_LOG_PATH", str(logs_dir() / "replay_fixture_symbols.jsonl")))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     for row in _iter_option_rows(payload):
         if row.get("tradingsymbol"):
@@ -70,4 +71,3 @@ def validate_fixture_payload(payload: dict) -> list[str]:
                 f"missing tradingsymbol for symbol={symbol} expiry={expiry} strike={strike} right={right} reason={result.reason}"
             )
     return errors
-

@@ -9,6 +9,7 @@ import os
 import json
 import csv
 from pathlib import Path
+from core.paths import db_dir as canonical_db_dir, desk_logs_dir as canonical_desk_logs_dir, desks_dir as canonical_desks_dir, ensure_dir as canonical_ensure_dir, trade_db_path as canonical_trade_db_path
 from core.runtime_paths import (
     DATA_ROOT as _DATA_ROOT,
     DESKS_ROOT as _DESKS_ROOT,
@@ -177,6 +178,9 @@ LIVE_MAX_LOTS = int(os.getenv("LIVE_MAX_LOTS", "1"))
 LIVE_MAX_TRADES_PER_DAY = int(os.getenv("LIVE_MAX_TRADES_PER_DAY", "2"))
 LIVE_MAX_SPREAD_PCT = float(os.getenv("LIVE_MAX_SPREAD_PCT", "0.02"))
 LIVE_MAX_QUOTE_AGE_SEC = float(os.getenv("LIVE_MAX_QUOTE_AGE_SEC", "2.0"))
+LIVE_ALLOW_MANUAL_ADVISORY_ACTIVATION = (
+    os.getenv("LIVE_ALLOW_MANUAL_ADVISORY_ACTIVATION", "false").lower() == "true"
+)
 AUDIT_REQUIRED_TO_TRADE = os.getenv("AUDIT_REQUIRED_TO_TRADE", "true").lower() == "true"
 EXEC_DEGRADATION_MAX_MISSED_FILL_RATE = float(os.getenv("EXEC_DEGRADATION_MAX_MISSED_FILL_RATE", "0.5"))
 EXEC_DEGRADATION_MAX_SLIPPAGE_MULT = float(os.getenv("EXEC_DEGRADATION_MAX_SLIPPAGE_MULT", "2.0"))
@@ -235,7 +239,7 @@ UPSTOX_SEARCH_URL_TEMPLATE = os.getenv(
     "UPSTOX_SEARCH_URL_TEMPLATE",
     "https://pro.upstox.com/search?query={query}",
 )
-UPSTOX_INSTRUMENTS_PATH = os.getenv("UPSTOX_INSTRUMENTS_PATH", "data/upstox_instruments.json.gz")
+UPSTOX_INSTRUMENTS_PATH = os.getenv("UPSTOX_INSTRUMENTS_PATH", f"{DATA_ROOT}/upstox_instruments.json.gz")
 
 # -------------------------------
 # Strategy lifecycle governance
@@ -347,6 +351,9 @@ STRIKE_STEP_BY_SYMBOL = {
     "SENSEX": 100,
 }
 EXPIRY_TYPE = "WEEKLY"
+# Option contract expiry selection based on listed expiries from instruments dump.
+# Supported: NEAREST, MONTHLY
+OPTION_EXPIRY_SELECTION = os.getenv("OPTION_EXPIRY_SELECTION", "NEAREST").upper()
 STRIKES_AROUND = 6
 STRIKES_AROUND_BY_SYMBOL = {
     "NIFTY": 40,   # +/-2000 points (40 * 50)
@@ -435,6 +442,7 @@ PAPER_RELAXED_SPREAD_MULT = float(os.getenv("PAPER_RELAXED_SPREAD_MULT", "1.25")
 PAPER_RELAXED_MIN_VOLUME_MULT = float(os.getenv("PAPER_RELAXED_MIN_VOLUME_MULT", "0.60"))
 PAPER_RELAXED_PREMIUM_RELAX_PCT = float(os.getenv("PAPER_RELAXED_PREMIUM_RELAX_PCT", "0.20"))
 UI_REFRESH_SEC = float(os.getenv("UI_REFRESH_SEC", "2.0"))
+UI_STATE_ENGINE_REFRESH_SEC = float(os.getenv("UI_STATE_ENGINE_REFRESH_SEC", "5.0"))
 QUOTE_FALLBACK_SPREAD_PCT = float(os.getenv("QUOTE_FALLBACK_SPREAD_PCT", "0.002"))
 NEWS_HALF_LIFE_HOURS = float(os.getenv("NEWS_HALF_LIFE_HOURS", "6.0"))
 NEWS_SHOCK_EVENT_THRESHOLD = float(os.getenv("NEWS_SHOCK_EVENT_THRESHOLD", "0.4"))
@@ -617,6 +625,14 @@ BLOCKED_OUTCOMES_PROCESSED_PATH = os.getenv(
 )
 FEEDBACK_TRAIN_STATE_PATH = os.getenv("FEEDBACK_TRAIN_STATE_PATH", f"{LOGS_ROOT}/feedback_train_state.json")
 BLOCKED_TRAIN_WINDOW = int(os.getenv("BLOCKED_TRAIN_WINDOW", "300"))
+REJECT_OUTCOMES_LOG_PATH = os.getenv("REJECT_OUTCOMES_LOG_PATH", f"{LOGS_ROOT}/rejected_trade_outcomes.jsonl")
+REJECT_OUTCOMES_SUMMARY_PATH = os.getenv(
+    "REJECT_OUTCOMES_SUMMARY_PATH",
+    f"{LOGS_ROOT}/rejected_trade_outcomes_summary.json",
+)
+REJECT_OUTCOME_CANDLE_SOURCE = os.getenv("REJECT_OUTCOME_CANDLE_SOURCE", "kite")
+REJECT_OUTCOME_CANDLE_INTERVAL = os.getenv("REJECT_OUTCOME_CANDLE_INTERVAL", "minute")
+REJECT_OUTCOME_ALLOW_MARKET_HOURS = os.getenv("REJECT_OUTCOME_ALLOW_MARKET_HOURS", "false").lower() == "true"
 SHADOW_EVAL_HORIZONS_SEC = []
 for _h in str(os.getenv("SHADOW_EVAL_HORIZONS_SEC", "300,900,1800")).split(","):
     _h = str(_h).strip()
@@ -982,15 +998,29 @@ TOURNAMENT_MIN_WINRATE = float(os.getenv("TOURNAMENT_MIN_WINRATE", "0.4"))
 
 # Storage
 DESK_ID = os.getenv("DESK_ID", "DEFAULT")
-DESK_DATA_DIR = os.getenv("DESK_DATA_DIR", f"{DESKS_ROOT}/{DESK_ID}")
-DESK_LOG_DIR = os.getenv("DESK_LOG_DIR", f"{LOGS_ROOT}/desks/{DESK_ID}")
-DB_PATH = os.getenv("DB_PATH", f"{DB_ROOT}/{DESK_ID}.sqlite")
+DESK_DATA_DIR = os.getenv("DESK_DATA_DIR", str(canonical_desks_dir(DESK_ID)))
+DESK_LOG_DIR = os.getenv("DESK_LOG_DIR", str(canonical_desk_logs_dir(DESK_ID)))
+DB_PATH = os.getenv("DB_PATH", str(canonical_trade_db_path(DESK_ID)))
 TRADE_DB_PATH = os.getenv("TRADE_DB_PATH", DB_PATH)
+# Ensure canonical runtime tree exists before any SQLite open attempts.
+canonical_ensure_dir(DESK_DATA_DIR)
+canonical_ensure_dir(DESK_LOG_DIR)
+canonical_ensure_dir(canonical_db_dir())
+TRADE_DB_PATH = str(Path(TRADE_DB_PATH).expanduser())
+canonical_ensure_dir(Path(TRADE_DB_PATH).parent)
+DB_PATH = str(Path(DB_PATH).expanduser())
+canonical_ensure_dir(Path(DB_PATH).parent)
 DECISION_LOG_PATH = os.getenv("DECISION_LOG_PATH", f"{DESK_LOG_DIR}/decision_events.jsonl")
 REJECT_REASONS_LOG_PATH = os.getenv("REJECT_REASONS_LOG_PATH", f"{DESK_LOG_DIR}/reject_reasons.jsonl")
 DECISION_ERROR_LOG_PATH = os.getenv("DECISION_ERROR_LOG_PATH", f"{DESK_LOG_DIR}/decision_event_errors.jsonl")
 DECISION_SQLITE_PATH = os.getenv("DECISION_SQLITE_PATH", f"{DESK_LOG_DIR}/decision_events.sqlite")
 DECISION_TELEMETRY_ENABLE = os.getenv("DECISION_TELEMETRY_ENABLE", "true").lower() == "true"
+REJECT_TELEMETRY_ENABLE = os.getenv("REJECT_TELEMETRY_ENABLE", "true").lower() == "true"
+REJECT_TELEMETRY_MAX_IN_MEMORY = int(os.getenv("REJECT_TELEMETRY_MAX_IN_MEMORY", "500"))
+REJECT_TELEMETRY_LOG_DIR = os.getenv(
+    "REJECT_TELEMETRY_LOG_DIR",
+    f"{DESK_LOG_DIR}/reject_telemetry",
+)
 DECISION_SCAN_SUMMARY_JSONL_PATH = os.getenv(
     "DECISION_SCAN_SUMMARY_JSONL_PATH",
     f"{DESK_LOG_DIR}/decision_scan_summary.jsonl",
@@ -1224,16 +1254,22 @@ FEED_RESTART_STORM_WINDOW_SEC = float(os.getenv("FEED_RESTART_STORM_WINDOW_SEC",
 FEED_RESTART_STORM_MAX = int(os.getenv("FEED_RESTART_STORM_MAX", "6"))
 FEED_RESTART_STORM_COOLDOWN_SEC = float(os.getenv("FEED_RESTART_STORM_COOLDOWN_SEC", "900"))
 FEED_TRIP_ON_WS_403 = os.getenv("FEED_TRIP_ON_WS_403", "true").lower() == "true"
-DEPTH_SUBSCRIPTION_STRIKES_AROUND = int(os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND", "10"))
+DEPTH_SUBSCRIPTION_STRIKES_AROUND = int(os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND", "6"))
 DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL = {
-    "NIFTY": int(os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND_NIFTY", str(DEPTH_SUBSCRIPTION_STRIKES_AROUND))),
-    "BANKNIFTY": int(
-        os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND_BANKNIFTY", str(DEPTH_SUBSCRIPTION_STRIKES_AROUND))
-    ),
-    "SENSEX": int(os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND_SENSEX", str(DEPTH_SUBSCRIPTION_STRIKES_AROUND))),
+    "NIFTY": int(os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND_NIFTY", "6")),
+    "BANKNIFTY": int(os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND_BANKNIFTY", "6")),
+    "SENSEX": int(os.getenv("DEPTH_SUBSCRIPTION_STRIKES_AROUND_SENSEX", "4")),
 }
 DEPTH_SUBSCRIPTION_MAX_TOKENS = int(os.getenv("DEPTH_SUBSCRIPTION_MAX_TOKENS", "150"))
 DEPTH_SUBSCRIPTION_VALIDATE_TOKENS = os.getenv("DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", "true").lower() == "true"
+DEPTH_REBALANCE_COOLDOWN_SEC = float(os.getenv("DEPTH_REBALANCE_COOLDOWN_SEC", "60"))
+DEPTH_ATM_SHIFT_THRESHOLD_STEPS = int(os.getenv("DEPTH_ATM_SHIFT_THRESHOLD_STEPS", "1"))
+FEED_WATCHDOG_POLL_SEC = float(os.getenv("FEED_WATCHDOG_POLL_SEC", "1.0"))
+FEED_SILENT_INDEX_THRESHOLD_SEC = float(os.getenv("FEED_SILENT_INDEX_THRESHOLD_SEC", "1.5"))
+FEED_SILENT_OPTION_THRESHOLD_SEC = float(os.getenv("FEED_SILENT_OPTION_THRESHOLD_SEC", "3.0"))
+FEED_SILENT_CONFIRM_CYCLES = int(os.getenv("FEED_SILENT_CONFIRM_CYCLES", "2"))
+FEED_SILENT_RECONNECT_BACKOFF_MIN_SEC = float(os.getenv("FEED_SILENT_RECONNECT_BACKOFF_MIN_SEC", "1.0"))
+FEED_SILENT_RECONNECT_BACKOFF_MAX_SEC = float(os.getenv("FEED_SILENT_RECONNECT_BACKOFF_MAX_SEC", "10.0"))
 SLA_MAX_LTP_AGE_SEC = float(os.getenv("SLA_MAX_LTP_AGE_SEC", "2.5"))
 SLA_MAX_DEPTH_AGE_SEC = float(os.getenv("SLA_MAX_DEPTH_AGE_SEC", "6.0"))
 OFFHOURS_SLA_MAX_LTP_AGE_SEC = float(
@@ -1437,6 +1473,45 @@ EXEC_MAX_REPLACE = int(os.getenv("EXEC_MAX_REPLACE", "2"))
 EXEC_REPRICE_PCT = float(os.getenv("EXEC_REPRICE_PCT", "0.002"))
 EXEC_SPREAD_WIDEN_PCT = float(os.getenv("EXEC_SPREAD_WIDEN_PCT", "0.5"))
 EXEC_MAX_SPREAD_PCT = float(os.getenv("EXEC_MAX_SPREAD_PCT", "0.015"))
+# Fill realism layer for paper/sim executions.
+_FILL_REALISM_DEFAULT = "true" if str(TRADING_MODE).upper() in {"PAPER", "SIM"} else "false"
+FILL_REALISM_ENABLED = os.getenv("FILL_REALISM_ENABLED", _FILL_REALISM_DEFAULT).lower() == "true"
+FILL_REALISM_SEED = int(os.getenv("FILL_REALISM_SEED", "20260227"))
+MAX_SPREAD_PCT_FOR_MARKET = float(os.getenv("MAX_SPREAD_PCT_FOR_MARKET", str(EXEC_MAX_SPREAD_PCT)))
+MAX_QUOTE_AGE_MS = int(os.getenv("MAX_QUOTE_AGE_MS", str(int(MAX_QUOTE_AGE_SEC * 1000.0))))
+LATENCY_MS = int(os.getenv("LATENCY_MS", "120"))
+ALLOW_PARTIAL_FILLS = os.getenv("ALLOW_PARTIAL_FILLS", "true").lower() == "true"
+DEPTH_IMPACT_K = float(os.getenv("DEPTH_IMPACT_K", "0.10"))
+VOL_IMPACT_K = float(os.getenv("VOL_IMPACT_K", "0.05"))
+LIMIT_ORDER_REJECT_ON_SLIP = os.getenv("LIMIT_ORDER_REJECT_ON_SLIP", "true").lower() == "true"
+FILL_REALISM_FILL_REMAINDER_AT_WORSE = (
+    os.getenv("FILL_REALISM_FILL_REMAINDER_AT_WORSE", "false").lower() == "true"
+)
+FILL_REALISM_METRICS_MAX_POINTS = int(os.getenv("FILL_REALISM_METRICS_MAX_POINTS", "5000"))
+_SPREAD_MULTIPLIER_RANGE_RAW = str(os.getenv("SPREAD_MULTIPLIER_RANGE", "0.25,1.0")).strip()
+try:
+    _spread_parts = [float(part.strip()) for part in _SPREAD_MULTIPLIER_RANGE_RAW.split(",") if part.strip()]
+except Exception:
+    _spread_parts = []
+if len(_spread_parts) >= 2:
+    SPREAD_MULTIPLIER_RANGE = (min(_spread_parts[0], _spread_parts[1]), max(_spread_parts[0], _spread_parts[1]))
+elif len(_spread_parts) == 1:
+    SPREAD_MULTIPLIER_RANGE = float(_spread_parts[0])
+else:
+    SPREAD_MULTIPLIER_RANGE = (0.25, 1.0)
+# Cost sensitivity / edge-after-cost readiness gate.
+COST_GATE_ENABLED = os.getenv("COST_GATE_ENABLED", "true").lower() == "true"
+COST_GATE_WINDOW_TRADES = int(os.getenv("COST_GATE_WINDOW_TRADES", "50"))
+MAX_REJECT_RATE = float(os.getenv("MAX_REJECT_RATE", "0.35"))
+MAX_P95_SLIPPAGE_BPS = float(os.getenv("MAX_P95_SLIPPAGE_BPS", "15"))
+MAX_P95_SPREAD_BPS = float(os.getenv("MAX_P95_SPREAD_BPS", "25"))
+MIN_NET_EDGE_RATIO = float(os.getenv("MIN_NET_EDGE_RATIO", "0.60"))
+MIN_NET_WINRATE = float(os.getenv("MIN_NET_WINRATE", "0.0"))
+# Approximate fee knobs (basis points + optional fixed fee per order).
+COST_BROKERAGE_BPS = float(os.getenv("COST_BROKERAGE_BPS", "2.0"))
+COST_EXCHANGE_BPS = float(os.getenv("COST_EXCHANGE_BPS", "0.6"))
+COST_TAXES_BPS = float(os.getenv("COST_TAXES_BPS", "0.4"))
+COST_FIXED_FEE_PER_ORDER = float(os.getenv("COST_FIXED_FEE_PER_ORDER", "0.0"))
 EXEC_FILL_PROB = float(os.getenv("EXEC_FILL_PROB", "0.85"))
 EXEC_ALPHA_SPREAD_MULT = float(os.getenv("EXEC_ALPHA_SPREAD_MULT", "0.6"))
 EXEC_ALPHA_VOL_Z_BPS = float(os.getenv("EXEC_ALPHA_VOL_Z_BPS", "3.0"))
@@ -1597,3 +1672,21 @@ BEST_TRADE_PER_DAY = os.getenv("BEST_TRADE_PER_DAY", "true").lower() == "true"
 PRICE_CONFIRM_ENABLE = os.getenv("PRICE_CONFIRM_ENABLE", "true").lower() == "true"
 PRICE_CONFIRM_PCT = float(os.getenv("PRICE_CONFIRM_PCT", "0.001"))
 DAYTYPE_LOCK_ENABLE = os.getenv("DAYTYPE_LOCK_ENABLE", "true").lower() == "true"
+
+# -------------------------------
+# Event/Snapshot storage subsystem
+# -------------------------------
+STORAGE_EVENTS_ENABLE = os.getenv("STORAGE_EVENTS_ENABLE", "true").lower() == "true"
+STORAGE_BASE_DIR = os.getenv("STORAGE_BASE_DIR", "~/.trading_bot/data")
+STORAGE_MIN_FREE_PCT = float(os.getenv("STORAGE_MIN_FREE_PCT", "10"))
+STORAGE_CRITICAL_FREE_PCT = float(os.getenv("STORAGE_CRITICAL_FREE_PCT", "5"))
+STORAGE_KEEP_SNAPSHOTS_DAYS = int(os.getenv("STORAGE_KEEP_SNAPSHOTS_DAYS", "7"))
+STORAGE_KEEP_EVENTS_DAYS = int(os.getenv("STORAGE_KEEP_EVENTS_DAYS", "30"))
+STORAGE_SNAPSHOT_N_BEFORE = int(os.getenv("STORAGE_SNAPSHOT_N_BEFORE", "2"))
+STORAGE_SNAPSHOT_N_AFTER = int(os.getenv("STORAGE_SNAPSHOT_N_AFTER", "2"))
+STORAGE_SNAPSHOT_INTERVAL_MS = int(os.getenv("STORAGE_SNAPSHOT_INTERVAL_MS", "500"))
+STORAGE_SNAPSHOTS_FOR_CANDIDATE_CREATED = (
+    os.getenv("STORAGE_SNAPSHOTS_FOR_CANDIDATE_CREATED", "false").lower() == "true"
+)
+STORAGE_FEATURES_SUMMARY_MAX_BYTES = int(os.getenv("STORAGE_FEATURES_SUMMARY_MAX_BYTES", "2048"))
+STORAGE_FEATURES_SUMMARY_MAX_KEYS = int(os.getenv("STORAGE_FEATURES_SUMMARY_MAX_KEYS", "96"))

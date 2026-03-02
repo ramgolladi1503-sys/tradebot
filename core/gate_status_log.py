@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from core.paths import logs_dir
 
 from config import config as cfg
 from core.time_utils import now_ist, now_utc_epoch
@@ -7,7 +8,7 @@ from core.time_utils import now_ist, now_utc_epoch
 
 def gate_status_path(desk_id: str | None = None) -> Path:
     desk = desk_id or getattr(cfg, "DESK_ID", "DEFAULT")
-    return Path(f"logs/desks/{desk}/gate_status.jsonl")
+    return logs_dir() / f"desks/{desk}/gate_status.jsonl"
 
 
 def build_gate_status_record(

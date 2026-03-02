@@ -5,6 +5,7 @@ Non-strict modes emit DEGRADED instead of failing.
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import argparse
 import json
 from pathlib import Path
@@ -21,7 +22,7 @@ from core.time_utils import now_ist, now_utc_epoch
 
 
 def _audit_paths(day: str) -> tuple[Path, Path]:
-    root = Path(getattr(cfg, "LIVE_ENABLEMENT_AUDIT_PATH", "logs/live_enablement_audit_latest.json"))
+    root = Path(getattr(cfg, "LIVE_ENABLEMENT_AUDIT_PATH", str(logs_dir() / "live_enablement_audit_latest.json")))
     if root.name.endswith(".json") and "latest" in root.name:
         day_path = root.with_name(f"live_enablement_audit_{day}.json")
         return day_path, root

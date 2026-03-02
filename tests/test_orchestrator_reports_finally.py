@@ -1,15 +1,19 @@
 import json
+from pathlib import Path
 
 import pytest
 
 import core.orchestrator as orch_mod
+from config import config as cfg
 from core.time_utils import now_ist
 
 
 def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "logs").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "DATA_ROOT", str(tmp_path / "data"), raising=False)
+    (Path(cfg.LOGS_ROOT)).mkdir(parents=True, exist_ok=True)
+    (Path(cfg.DATA_ROOT)).mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(orch_mod.Orchestrator, "_start_depth_ws", lambda self: None)
     monkeypatch.setattr(orch_mod, "fetch_live_market_data", lambda: (_ for _ in ()).throw(RuntimeError("forced_cycle_error")))
@@ -23,8 +27,8 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
         orch.live_monitoring()
 
     day = now_ist().date().isoformat()
-    audit_path = tmp_path / "logs" / f"daily_audit_{day}.json"
-    exec_path = tmp_path / "logs" / f"execution_report_{day}.json"
+    audit_path = Path(cfg.LOGS_ROOT) / f"daily_audit_{day}.json"
+    exec_path = Path(cfg.LOGS_ROOT) / f"execution_report_{day}.json"
 
     assert audit_path.exists()
     assert exec_path.exists()

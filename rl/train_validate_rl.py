@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir, data_root
 
 import csv
 import json
@@ -20,9 +21,9 @@ if str(ROOT) not in sys.path:
 
 from rl.trading_env import TradingEnv
 
-DATA_FILE = Path("data/ml_features.csv")
-TRAIN_FILE = Path("data/rl_train.csv")
-VAL_FILE = Path("data/rl_val.csv")
+DATA_FILE = data_root() / "ml_features.csv"
+TRAIN_FILE = data_root() / "rl_train.csv"
+VAL_FILE = data_root() / "rl_val.csv"
 MODEL_FILE = Path("models/ppo_trading")
 VECNORM_FILE = Path("models/ppo_trading_vecnormalize.pkl")
 
@@ -184,7 +185,7 @@ def train_and_validate():
     print("Baseline performance:")
     print(json.dumps(baselines, indent=2))
 
-    out_csv = Path("logs/rl_metrics.csv")
+    out_csv = logs_dir() / "rl_metrics.csv"
     out_csv.parent.mkdir(exist_ok=True)
     is_new = not out_csv.exists()
     with out_csv.open("a", newline="", encoding="utf-8") as handle:
@@ -223,7 +224,7 @@ def train_and_validate():
             ]
         )
 
-    json_path = Path("logs/rl_metrics.json")
+    json_path = logs_dir() / "rl_metrics.json"
     data = []
     if json_path.exists():
         try:

@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -11,7 +12,7 @@ import sys
 
 from config import config as cfg
 
-OUT = Path("logs/data_qc.json")
+OUT = logs_dir() / "data_qc.json"
 
 def _qc_table(conn, table, ts_col="timestamp"):
     try:

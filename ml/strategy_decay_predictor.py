@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir, data_root
 
 import json
 from pathlib import Path
@@ -11,8 +12,8 @@ from config import config as cfg
 
 
 MODEL_PATH = Path(getattr(cfg, "DECAY_MODEL_PATH", "models/decay_model.pkl"))
-FEATURES_PATH = Path("data/decay_features.parquet")
-REPORT_PATH = Path("logs/decay_report.json")
+FEATURES_PATH = data_root() / "decay_features.parquet"
+REPORT_PATH = logs_dir() / "decay_report.json"
 
 
 def _load_features(path: Path = FEATURES_PATH) -> pd.DataFrame:

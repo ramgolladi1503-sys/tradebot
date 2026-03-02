@@ -3,9 +3,11 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 from config import config as cfg
+from core.paths import logs_dir, data_root
+from core.fs_utils import ensure_parent_dir
 
 def _read_trade_log():
-    path = Path("data/trade_log.json")
+    path = data_root() / "trade_log.json"
     if not path.exists():
         return None
     rows = []
@@ -27,11 +29,11 @@ def _days_of_live_trading(rows):
     return (max(ts) - min(ts)).days
 
 def _db_counts():
-    db = Path(cfg.TRADE_DB_PATH)
+    db = ensure_parent_dir(Path(str(getattr(cfg, "TRADE_DB_PATH", cfg.DB_PATH))))
     if not db.exists():
         return {"ticks": 0, "depth": 0}
     try:
-        conn = sqlite3.connect(db)
+        conn = sqlite3.connect(str(db))
         ticks = conn.execute("SELECT COUNT(*) FROM ticks").fetchone()[0]
         depth = conn.execute("SELECT COUNT(*) FROM depth_snapshots").fetchone()[0]
         conn.close()
@@ -40,7 +42,7 @@ def _db_counts():
         return {"ticks": 0, "depth": 0}
 
 def _model_registry_status():
-    path = Path("logs/model_registry.json")
+    path = logs_dir() / "model_registry.json"
     if not path.exists():
         return False
     try:
@@ -95,10 +97,12 @@ def compute_scorecard():
     counts = _db_counts()
     ticks_ok = counts["ticks"] >= getattr(cfg, "SCORECARD_TICK_MIN", 50000)
     depth_ok = counts["depth"] >= getattr(cfg, "SCORECARD_DEPTH_MIN", 5000)
-    data_ok = ticks_ok and depth_ok and Path("logs/data_audit.json").exists()
+    data_ok = ticks_ok and depth_ok and (logs_dir() / "data_audit.json").exists()
 
     exec_live = bool(getattr(cfg, "EXECUTION_MODE_LIVE", False)) or getattr(cfg, "EXECUTION_MODE", "SIM") == "LIVE"
-    exec_stats = Path("logs/execution_stats.csv").exists() or Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db")).exists()
+    exec_stats = (logs_dir() / "execution_stats.csv").exists() or Path(
+        str(getattr(cfg, "TRADE_DB_PATH", cfg.DB_PATH))
+    ).exists()
     exec_status = "NEEDS"
     if exec_stats:
         exec_status = "PARTIAL"
@@ -106,7 +110,7 @@ def compute_scorecard():
         exec_status = "PASS"
     # Promote based on execution analytics evidence
     try:
-        ea_path = Path("logs/execution_analytics.json")
+        ea_path = logs_dir() / "execution_analytics.json"
         if ea_path.exists():
             ea = json.loads(ea_path.read_text())
             fill_ratio = ea.get("fill_ratio")
@@ -119,7 +123,7 @@ def compute_scorecard():
         pass
 
     # Risk governance evidence: halt file + daily monitor output
-    risk_governed = Path(cfg.RISK_HALT_FILE).exists() or Path("logs/risk_monitor.json").exists()
+    risk_governed = Path(cfg.RISK_HALT_FILE).exists() or (logs_dir() / "risk_monitor.json").exists()
     model_governed = _model_registry_status()
 
     # Progress counters
@@ -131,7 +135,7 @@ def compute_scorecard():
 
     exec_progress = "No fills"
     try:
-        ea_path = Path("logs/execution_analytics.json")
+        ea_path = logs_dir() / "execution_analytics.json"
         if ea_path.exists():
             ea = json.loads(ea_path.read_text())
             fill_ratio = ea.get("fill_ratio")
@@ -185,17 +189,17 @@ def compute_scorecard():
     ]
     return scorecard
 
-def write_scorecard(path="logs/scorecard.json"):
+def write_scorecard(path=str(logs_dir() / "scorecard.json")):
     sc = compute_scorecard()
     out = Path(path)
-    out.parent.mkdir(exist_ok=True)
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(sc, indent=2))
     return sc
 
-def append_scorecard_history(path="logs/scorecard_history.json"):
+def append_scorecard_history(path=str(logs_dir() / "scorecard_history.json")):
     sc = compute_scorecard()
     out = Path(path)
-    out.parent.mkdir(exist_ok=True)
+    out.parent.mkdir(parents=True, exist_ok=True)
     history = []
     if out.exists():
         try:
@@ -204,7 +208,7 @@ def append_scorecard_history(path="logs/scorecard_history.json"):
             history = []
     exec_metrics = {}
     try:
-        ea_path = Path("logs/execution_analytics.json")
+        ea_path = logs_dir() / "execution_analytics.json"
         if ea_path.exists():
             exec_metrics = json.loads(ea_path.read_text())
     except Exception:

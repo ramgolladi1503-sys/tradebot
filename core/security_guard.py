@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import stat
 import time
@@ -138,14 +139,7 @@ def _write_guard_event(repo_root: Path | str, token_present: bool) -> None:
         "repo_root": str(root),
         "token_source": "repo_or_env_ci" if token_present else "none",
     }
-    serialized = (
-        "{"
-        + f"\"ts_epoch\": {row['ts_epoch']:.6f}, "
-        + f"\"event\": \"{row['event']}\", "
-        + f"\"repo_root\": \"{row['repo_root']}\", "
-        + f"\"token_source\": \"{row['token_source']}\""
-        + "}\n"
-    )
+    serialized = json.dumps(row, ensure_ascii=True) + "\n"
     with log_path.open("a") as handle:
         handle.write(serialized)
     try:

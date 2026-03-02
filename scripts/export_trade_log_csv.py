@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 from pathlib import Path
 import runpy
 
@@ -6,8 +7,8 @@ runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 import json
 import pandas as pd
 
-input_path = "data/trade_log.json"
-output_path = "data/trade_log.csv"
+input_path = str(data_root() / "trade_log.json")
+output_path = str(data_root() / "trade_log.csv")
 
 rows = []
 with open(input_path, "r") as f:

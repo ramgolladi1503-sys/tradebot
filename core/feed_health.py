@@ -1,6 +1,7 @@
 import json
 import time
 from pathlib import Path
+from core.paths import logs_dir
 
 from config import config as cfg
 from core.time_utils import is_market_open_ist, now_ist
@@ -8,8 +9,8 @@ from core.freshness_sla import get_freshness_status
 from core.incidents import trigger_feed_stale
 
 
-SLA_PATH = Path("logs/sla_check.json")
-STATE_PATH = Path("logs/feed_health_state.json")
+SLA_PATH = logs_dir() / "sla_check.json"
+STATE_PATH = logs_dir() / "feed_health_state.json"
 
 
 def _load_state():

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root
 
 import argparse
 from datetime import datetime, timedelta, timezone
@@ -24,7 +25,7 @@ def _parse_dt(value: str) -> datetime:
 def _default_input_output(symbol: str, interval: str) -> Path:
     clean_symbol = str(symbol).strip().upper() or "NIFTY"
     clean_interval = str(interval).strip().lower().replace(" ", "_")
-    return Path("data") / f"{clean_symbol}_{clean_interval}_walk_forward.csv"
+    return data_root() / f"{clean_symbol}_{clean_interval}_walk_forward.csv"
 
 
 def main(argv: list[str] | None = None) -> dict:

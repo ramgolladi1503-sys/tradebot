@@ -1,5 +1,6 @@
 import time
 from pathlib import Path
+from core.paths import logs_dir
 
 from core.adaptive_risk import compute_multiplier, write_status
 
@@ -16,7 +17,7 @@ def main():
             regime_entropy=1.0,
         ),
     }
-    out = write_status(Path("logs/adaptive_risk_status.json"), payload)
+    out = write_status(logs_dir() / "adaptive_risk_status.json", payload)
     print(f"Adaptive risk status: {out}")
 
 

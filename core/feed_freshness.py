@@ -2,15 +2,16 @@ import json
 import time
 from pathlib import Path
 from typing import Any, Dict, List
+from core.paths import logs_dir
 
 from config import config as cfg
 from core.time_utils import now_ist
 from core.freshness_sla import get_freshness_status
 
-STATE_PATH = Path("logs/feed_freshness_state.json")
-LOG_PATH = Path("logs/feed_freshness.jsonl")
-TOKEN_MAP_PATH = Path("logs/token_resolution.json")
-SLA_PATH = Path("logs/sla_check.json")
+STATE_PATH = logs_dir() / "feed_freshness_state.json"
+LOG_PATH = logs_dir() / "feed_freshness.jsonl"
+TOKEN_MAP_PATH = logs_dir() / "token_resolution.json"
+SLA_PATH = logs_dir() / "sla_check.json"
 
 _CACHE: Dict[str, Any] = {}
 

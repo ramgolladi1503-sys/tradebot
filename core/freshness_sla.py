@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from config import config as cfg
 from core.depth_store import depth_store
+from core.fs_utils import ensure_parent_dir
 from core.market_context import derive_market_context
 from core.tick_store import last_tick_epoch as _mem_last_tick_epoch
 from core.time_utils import (
@@ -55,7 +56,8 @@ def _load_token_map() -> Dict[str, List[int]]:
 
 
 def _conn(db_path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(db_path)
+    safe_path = ensure_parent_dir(Path(db_path))
+    return sqlite3.connect(str(safe_path))
 
 
 def _query_max_epoch(

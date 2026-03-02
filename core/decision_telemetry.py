@@ -7,6 +7,7 @@ Migration note:
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 from datetime import datetime, timezone
 import json
 import logging
@@ -78,10 +79,10 @@ def emit_scan_summary(summary: dict) -> None:
 
     try:
         jsonl_path = Path(
-            str(getattr(cfg, "DECISION_SCAN_SUMMARY_JSONL_PATH", "logs/decision_scan_summary.jsonl"))
+            str(getattr(cfg, "DECISION_SCAN_SUMMARY_JSONL_PATH", str(logs_dir() / "decision_scan_summary.jsonl")))
         )
         latest_path = Path(
-            str(getattr(cfg, "DECISION_SCAN_SUMMARY_LATEST_PATH", "logs/decision_scan_summary_latest.json"))
+            str(getattr(cfg, "DECISION_SCAN_SUMMARY_LATEST_PATH", str(logs_dir() / "decision_scan_summary_latest.json")))
         )
         jsonl_path.parent.mkdir(parents=True, exist_ok=True)
         with jsonl_path.open("a", encoding="utf-8") as f:

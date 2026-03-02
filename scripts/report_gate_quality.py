@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import argparse
 import json
 import os
@@ -112,7 +113,7 @@ def run_report(*, desk: str, db_path: str | None = None) -> dict:
 
 
 def _write_status(payload: dict) -> None:
-    path = Path(getattr(cfg, "GATE_QUALITY_STATUS_PATH", "logs/gate_quality_status_latest.json"))
+    path = Path(getattr(cfg, "GATE_QUALITY_STATUS_PATH", str(logs_dir() / "gate_quality_status_latest.json")))
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True))

@@ -5,6 +5,7 @@ import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from core.paths import data_root, logs_dir
 
 from config import config as cfg
 
@@ -76,7 +77,7 @@ def main():
     random.seed(args.seed)
     now = time.time()
     start_epoch = now - args.days * 86400
-    db_path = Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
+    db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
 
     outcomes = _load_outcomes(db_path, start_epoch)
     trade_ids = {o["trade_id"] for o in outcomes}
@@ -111,7 +112,7 @@ def main():
                 status = "QUARANTINE_CANDIDATE"
             report["strategies"].append({"strategy": strat, **stats, "status": status})
 
-    out = Path("logs/tournament_report.json")
+    out = logs_dir() / "tournament_report.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report, indent=2))
     print(f"Tournament report: {out}")

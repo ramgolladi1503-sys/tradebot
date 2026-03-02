@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
 from core.review_queue import add_to_queue
+from core.paths import logs_dir
 
-TV_QUEUE = Path("logs/tv_queue.json")
+TV_QUEUE = logs_dir() / "tv_queue.json"
 
 def enqueue_alert(payload):
     TV_QUEUE.parent.mkdir(exist_ok=True)

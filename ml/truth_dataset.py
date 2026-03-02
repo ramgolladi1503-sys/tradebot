@@ -1,3 +1,4 @@
+from core.paths import logs_dir, data_root
 import json
 import sqlite3
 from pathlib import Path
@@ -9,7 +10,7 @@ import pandas as pd
 from config import config as cfg
 
 
-DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"))
+DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
 DECISION_SQLITE = Path(cfg.TRADE_DB_PATH)
 
 
@@ -61,8 +62,8 @@ def _safe_json(val):
 
 
 def _load_decay_state() -> tuple[dict, dict]:
-    state_path = Path("logs/strategy_decay_state.json")
-    prob_path = Path("logs/strategy_decay_probs.json")
+    state_path = logs_dir() / "strategy_decay_state.json"
+    prob_path = logs_dir() / "strategy_decay_probs.json"
     decay_state = {}
     decay_prob = {}
     if state_path.exists():
@@ -82,7 +83,7 @@ def _load_decay_state() -> tuple[dict, dict]:
 def build_truth_dataset(
     decision_jsonl: Path = DECISION_JSONL,
     decision_sqlite: Path = DECISION_SQLITE,
-    out_parquet: Path = Path("data/truth_dataset.parquet"),
+    out_parquet: Path = data_root() / "truth_dataset.parquet",
     out_csv: Optional[Path] = None,
 ) -> Tuple[pd.DataFrame, dict]:
     rows = _read_sqlite(decision_sqlite)

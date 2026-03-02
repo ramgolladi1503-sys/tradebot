@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import argparse
 import json
 import sqlite3
@@ -93,7 +94,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Explain a Decision from decision_log")
     parser.add_argument("--decision-id", help="Decision ID to load")
     parser.add_argument("--symbol", help="Symbol to load latest decision")
-    parser.add_argument("--db", default=getattr(cfg, "DECISION_DB_PATH", "data/trades.db"))
+    parser.add_argument("--db", default=getattr(cfg, "DECISION_DB_PATH", str(data_root() / "trades.db")))
     args = parser.parse_args()
 
     if not args.decision_id and not args.symbol:

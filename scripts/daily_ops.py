@@ -4,6 +4,7 @@
 import json
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -55,7 +56,7 @@ def run(cmd: list[str], *, optional: bool = False) -> str:
 
 
 def _load_daily_audit_status() -> dict | None:
-    path = Path("logs/daily_audit_status_latest.json")
+    path = logs_dir() / "daily_audit_status_latest.json"
     if not path.exists():
         return None
     try:
@@ -66,7 +67,7 @@ def _load_daily_audit_status() -> dict | None:
 
 
 def _load_outcome_truth_status() -> dict | None:
-    path = Path(getattr(cfg, "OUTCOME_TRUTH_STATUS_PATH", "logs/outcome_truth_status_latest.json"))
+    path = Path(getattr(cfg, "OUTCOME_TRUTH_STATUS_PATH", str(logs_dir() / "outcome_truth_status_latest.json")))
     if not path.exists():
         return None
     try:

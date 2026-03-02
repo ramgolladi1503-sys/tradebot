@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import argparse
 from pathlib import Path
 
@@ -13,7 +14,7 @@ def main():
     parser.add_argument("--bar-sec", type=int, default=60)
     parser.add_argument("--start-price", type=float, default=25000.0)
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--out-dir", default="data/synthetic_sessions")
+    parser.add_argument("--out-dir", default=str(data_root() / "synthetic_sessions"))
     parser.add_argument("--out-db", default="")
     args = parser.parse_args()
 

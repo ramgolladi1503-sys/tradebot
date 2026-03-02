@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 from config import config as cfg
+from core.paths import logs_dir
 
 def _read_trades_db():
     db = Path(cfg.TRADE_DB_PATH)
@@ -112,7 +113,7 @@ def compute_execution_analytics():
 
 
 def _read_fill_quality_daily():
-    path = Path("logs/fill_quality_daily.json")
+    path = logs_dir() / "fill_quality_daily.json"
     if not path.exists():
         return {}
     try:
@@ -122,7 +123,7 @@ def _read_fill_quality_daily():
 
 
 def _read_fill_quality_events(max_rows=5000):
-    path = Path("logs/fill_quality.jsonl")
+    path = logs_dir() / "fill_quality.jsonl"
     if not path.exists():
         return []
     rows = []
@@ -142,7 +143,7 @@ def _read_fill_quality_events(max_rows=5000):
     except Exception:
         return []
 
-def write_execution_analytics(json_path="logs/execution_analytics.json", csv_path="logs/execution_analytics_daily.csv"):
+def write_execution_analytics(json_path=str(logs_dir() / "execution_analytics.json"), csv_path=str(logs_dir() / "execution_analytics_daily.csv")):
     summary, daily = compute_execution_analytics()
     out = Path(json_path)
     out.parent.mkdir(exist_ok=True)

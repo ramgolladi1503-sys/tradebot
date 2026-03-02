@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.decision import Decision
+from core.fs_utils import ensure_parent_dir
 
 
 class DecisionStore:
@@ -20,6 +22,8 @@ class DecisionStore:
     def init(self, db_path: Optional[str] = None) -> None:
         if db_path is not None:
             self.db_path = db_path
+        safe_db_path = ensure_parent_dir(Path(str(self.db_path)))
+        self.db_path = str(safe_db_path)
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(

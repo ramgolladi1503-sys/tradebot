@@ -1,0 +1,4 @@
+outcomes/*
+!outcomes/.keep
+reports/*
+!reports/.keep

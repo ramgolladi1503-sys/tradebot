@@ -1,6 +1,7 @@
 import json
 import time
 from pathlib import Path
+from core.paths import logs_dir
 
 from config import config as cfg
 from core.market_context import derive_market_context
@@ -204,7 +205,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
 
 def log_identity_error(_orch, trade, extra: dict | None = None) -> None:
     try:
-        path = Path("logs/trade_identity_errors.jsonl")
+        path = logs_dir() / "trade_identity_errors.jsonl"
         path.parent.mkdir(exist_ok=True)
 
         def _get(obj, key):
@@ -238,6 +239,34 @@ def log_identity_error(_orch, trade, extra: dict | None = None) -> None:
 def log_decision_safe(orch, event: dict, trade=None, log_decision_fn=None):
     event = dict(event or {})
     veto_reasons = [str(x).strip() for x in (event.get("veto_reasons") or []) if str(x).strip()]
+    try:
+        gatekeeper_allowed = int(event.get("gatekeeper_allowed") or 0)
+    except Exception:
+        gatekeeper_allowed = 0
+    if gatekeeper_allowed == 1 and event.get("trade_id"):
+        try:
+            from core.storage import emit_candidate_created_event
+
+            emit_candidate_created_event(
+                symbol=event.get("symbol"),
+                strategy=event.get("strategy_id"),
+                mode=event.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM"),
+                confidence=event.get("champion_proba"),
+                instrument={
+                    "symbol": event.get("symbol"),
+                    "instrument_id": event.get("instrument_id"),
+                    "instrument_token": event.get("instrument_token"),
+                    "tradingsymbol": event.get("tradingsymbol"),
+                },
+                features_summary={
+                    "score_0_100": event.get("score_0_100"),
+                    "spread_pct": event.get("spread_pct"),
+                    "quote_age_sec": event.get("quote_age_sec"),
+                    "regime": event.get("regime"),
+                },
+            )
+        except Exception:
+            pass
     if veto_reasons:
         append_reject_reasons(
             symbol=event.get("symbol"),

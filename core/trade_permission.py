@@ -188,6 +188,8 @@ def build_permission_payload(
     base_score = 0.0 if signal_score is None else float(signal_score)
     reg_conf = 0.0 if regime_conf is None else float(regime_conf)
     direction = derive_direction(option_type, side)
+    orb_factor = orb_alignment_multiplier(orb_bias, direction)
+    reg_pen = regime_penalty(regime)
     global_conf = compute_global_conf(
         base_score,
         regime=regime,
@@ -216,5 +218,8 @@ def build_permission_payload(
         "permission_reason": reason,
         "countertrend": bool(is_countertrend(regime, direction)),
         "orb_bias": normalize_orb_bias(orb_bias),
+        "signal_score": clamp(base_score, 0.0, 1.0),
+        "orb_factor": float(orb_factor),
+        "regime_penalty": float(reg_pen),
         "regime_confidence": reg_conf,
     }

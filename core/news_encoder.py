@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root
 
 import json
 import math
@@ -14,7 +15,7 @@ from core import news_ingestor
 
 MODEL_PATH = Path(getattr(cfg, "NEWS_CLASSIFIER_PATH", "models/news_shock_model.pkl"))
 VEC_PATH = Path(getattr(cfg, "NEWS_VECTOR_PATH", "models/news_vectorizer.pkl"))
-OUT_PATH = Path("data/news_shock.json")
+OUT_PATH = data_root() / "news_shock.json"
 
 
 KEYWORDS_UP = {"surge", "rally", "beats", "record", "growth", "upgrade"}

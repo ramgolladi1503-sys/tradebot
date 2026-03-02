@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import runpy
+from core.paths import data_root
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -11,7 +12,7 @@ import json
 from core.trade_store import insert_trade, insert_outcome
 from core.trade_log_paths import ensure_trade_log_exists
 
-UPD_PATH = Path("data/trade_updates.json")
+UPD_PATH = data_root() / "trade_updates.json"
 
 def load_updates():
     updates = {}

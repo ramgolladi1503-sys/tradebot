@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 # setup.py
 import os
 
@@ -57,7 +58,7 @@ def generate_trade_call(symbol, ltp, bias):
 import json
 from datetime import date
 
-LOG_FILE = "data/trade_log.json"
+LOG_FILE = str(data_root() / "trade_log.json")
 
 def log_trade(trade):
     try:

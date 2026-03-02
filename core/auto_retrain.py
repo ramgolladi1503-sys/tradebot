@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 import numpy as np
 import pandas as pd
+from core.paths import data_root, logs_dir
 
 from config import config as cfg
 from ml.trade_predictor import TradePredictor
@@ -24,8 +25,8 @@ class AutoRetrain:
         self.predictor = predictor
         self.model_path = model_path or getattr(cfg, "ML_MODEL_PATH", "models/xgb_live_model.pkl")
         self.challenger_path = getattr(cfg, "ML_CHALLENGER_MODEL_PATH", "models/xgb_live_model_challenger.pkl")
-        self.baseline_path = Path(getattr(cfg, "ML_DRIFT_BASELINE_PATH", "logs/drift_baseline.json"))
-        self.decision_path = Path(getattr(cfg, "ML_MODEL_DECISIONS_PATH", "logs/model_decisions.jsonl"))
+        self.baseline_path = Path(getattr(cfg, "ML_DRIFT_BASELINE_PATH", str(logs_dir() / "drift_baseline.json")))
+        self.decision_path = Path(getattr(cfg, "ML_MODEL_DECISIONS_PATH", str(logs_dir() / "model_decisions.jsonl")))
         self.health_checker = ModelHealth()
         self.risk_state = risk_state
         self.strategy_tracker = strategy_tracker
@@ -88,7 +89,7 @@ class AutoRetrain:
 
         # cooldown guard
         cooldown = getattr(cfg, "RETRAIN_COOLDOWN_MIN", 180) * 60
-        state_path = Path("logs/last_retrain.json")
+        state_path = logs_dir() / "last_retrain.json"
         last_ts = 0
         if state_path.exists():
             try:
@@ -311,7 +312,7 @@ class AutoRetrain:
         return df.iloc[:idx].copy(), df.iloc[idx:].copy()
 
     def _load_training_dataset(self):
-        path = getattr(cfg, "ML_TRAIN_DATA_PATH", "data/ml_features.csv")
+        path = getattr(cfg, "ML_TRAIN_DATA_PATH", str(data_root() / "ml_features.csv"))
         if not path:
             return None
         p = Path(path)
@@ -530,7 +531,7 @@ class AutoRetrain:
 
         # execution quality (from daily fill quality)
         try:
-            fq_path = Path("logs/fill_quality_daily.json")
+            fq_path = logs_dir() / "fill_quality_daily.json"
             if fq_path.exists():
                 fq = json.loads(fq_path.read_text())
                 if fq:
@@ -541,8 +542,8 @@ class AutoRetrain:
 
         # Persist drift metrics
         try:
-            Path("logs").mkdir(exist_ok=True)
-            with open("logs/drift_metrics.jsonl", "a") as f:
+            logs_dir().mkdir(exist_ok=True)
+            with open(str(logs_dir() / "drift_metrics.jsonl"), "a") as f:
                 f.write(json.dumps(drift) + "\n")
         except Exception:
             pass

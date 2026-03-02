@@ -5,6 +5,7 @@ Gate stays observable in non-strict modes and fail-closed in strict LIVE enablem
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 import math
 import sqlite3
@@ -285,8 +286,8 @@ def evaluate_acceptance_gate(
     now_ts = float(now_epoch if now_epoch is not None else now_utc_epoch())
     window_days = max(1, int(getattr(cfg, "ACCEPTANCE_WINDOW_DAYS", 30)))
     start_epoch = now_ts - (window_days * 86400.0)
-    db = Path(db_path or getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
-    truth = Path(truth_path or getattr(cfg, "TRUTH_DATASET_PATH", "data/truth_dataset.parquet"))
+    db = Path(db_path or getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
+    truth = Path(truth_path or getattr(cfg, "TRUTH_DATASET_PATH", str(data_root() / "truth_dataset.parquet")))
     min_trades = max(
         1,
         int(
@@ -435,7 +436,7 @@ def evaluate_acceptance_gate(
             },
         },
     }
-    out_path = Path(getattr(cfg, "ACCEPTANCE_GATE_LATEST_PATH", "logs/acceptance_gate_latest.json"))
+    out_path = Path(getattr(cfg, "ACCEPTANCE_GATE_LATEST_PATH", str(logs_dir() / "acceptance_gate_latest.json")))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     return payload

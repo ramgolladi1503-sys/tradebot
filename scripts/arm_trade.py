@@ -10,6 +10,7 @@ from typing import Optional
 
 from config import config as cfg
 from core.approval_store import arm_order_intent
+from core.go_live_scorecard import GoLiveScorecard
 from core.review_queue import get_queue_entry, order_payload_hash
 
 
@@ -39,6 +40,17 @@ def main() -> int:
     payload_hash = _resolve_payload_hash(args.trade_id, args.payload_hash)
     if not payload_hash:
         print("Cannot arm: missing payload hash. Provide --trade-id (queued) or --payload-hash directly.")
+        return 2
+
+    scorecard = GoLiveScorecard().run(str(getattr(cfg, "DESK_ID", "DEFAULT")))
+    if str(scorecard.get("status") or "FAIL").upper() != "PASS":
+        print(
+            "ARM blocked: go-live scorecard failed. "
+            f"See {scorecard.get('report_json_path')} and {scorecard.get('report_md_path')}"
+        )
+        failed_codes = [str(item.get("code") or "") for item in list(scorecard.get("failures") or [])]
+        if failed_codes:
+            print(f"Blocking failures: {','.join(failed_codes)}")
         return 2
 
     actor = os.getenv("USER") or "manual"

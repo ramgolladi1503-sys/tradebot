@@ -8,7 +8,7 @@ from pathlib import Path
 
 from core.orders.order_intent import OrderIntent
 from core.learning_paths import suggestion_log_paths
-from core.paths import logs_dir
+from core.paths import logs_dir, data_root
 from core.upstox_resolver import resolve_upstox_key
 from core.market_calendar import choose_nearest_available_expiry
 from core.trade_schema import build_instrument_id
@@ -88,7 +88,7 @@ def _option_chain_meta_map(ttl_sec: int = 300) -> dict:
     ts = float(_CHAIN_CACHE.get("ts") or 0.0)
     if cache and (now - ts) < ttl_sec:
         return cache
-    path = Path("data/option_chain_latest.json")
+    path = data_root() / "option_chain_latest.json"
     if not path.exists():
         return cache if isinstance(cache, dict) else {}
     try:
@@ -604,6 +604,7 @@ def add_to_queue(trade, queue_path=None, extra=None):
     path = queue_path or QUEUE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     data = load_queue_rows(path)
+    runtime_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
     def get_attr(obj, name, default=None):
         if isinstance(obj, dict):
             return obj.get(name, default)
@@ -830,6 +831,7 @@ def add_to_queue(trade, queue_path=None, extra=None):
                 signal_price=entry.get("signal_price"),
                 current_ltp=current_ltp,
                 ltp_ts_epoch=ltp_ts_epoch,
+                mode=runtime_mode,
             )
             entry["current_ltp"] = validation.get("current_ltp")
             entry["option_ltp_timestamp"] = ltp_ts_epoch
@@ -859,6 +861,7 @@ def add_to_queue(trade, queue_path=None, extra=None):
                     entry["stop_premium"] = round(abs(entry_val - stop_val), 2)
             except Exception:
                 pass
+    perm = {}
     try:
         raw_conf = entry.get("raw_signal_confidence")
         if raw_conf is None:
@@ -901,6 +904,49 @@ def add_to_queue(trade, queue_path=None, extra=None):
     except Exception as exc:
         logger.warning("permission_compute_failed: %s", exc)
         entry["permission_reason"] = f"permission_compute_failed:{type(exc).__name__}"
+    entry_status = str(entry.get("entry_status") or "")
+    entry_block_reason = entry_status if entry_status and entry_status != "OK" else None
+    permission = str(entry.get("permission") or "ADVISORY_ONLY").upper()
+    permission_reason = str(entry.get("permission_reason") or "")
+    global_conf = _safe_float(entry.get("global_confidence"))
+    high_execute_threshold = float(getattr(cfg, "HIGH_EXECUTE_MIN_CONF", 0.65))
+    high_execute_eligible = bool(
+        permission == "EXECUTE"
+        and entry_block_reason is None
+        and global_conf is not None
+        and global_conf >= high_execute_threshold
+    )
+    final_action = "EXECUTE" if permission == "EXECUTE" and entry_block_reason is None else "ADVISORY_ONLY"
+    high_execute_blockers: list[str] = []
+    if global_conf is None or global_conf < high_execute_threshold:
+        high_execute_blockers.append("global_conf_below_high_execute")
+    if permission != "EXECUTE":
+        high_execute_blockers.append(f"permission_{permission}")
+    if entry_block_reason:
+        high_execute_blockers.append(f"entry_{entry_block_reason}")
+    decision_trace = {
+        "signal_score": _safe_float(perm.get("signal_score") if isinstance(perm, dict) else entry.get("raw_signal_confidence")),
+        "regime_conf": _safe_float(entry.get("regime_confidence")),
+        "orb_bias": (perm.get("orb_bias") if isinstance(perm, dict) else None) or entry.get("orb_bias"),
+        "orb_factor": _safe_float(perm.get("orb_factor") if isinstance(perm, dict) else None),
+        "reg_penalty": _safe_float(perm.get("regime_penalty") if isinstance(perm, dict) else None),
+        "global_conf": global_conf,
+        "permission": permission,
+        "permission_reason": permission_reason,
+        "entry_status": entry_status or None,
+        "entry_block_reason": entry_block_reason,
+        "high_execute_threshold": high_execute_threshold,
+        "high_execute_eligible": high_execute_eligible,
+        "high_execute_blockers": high_execute_blockers,
+        "final_action": final_action,
+    }
+    entry["decision_trace"] = decision_trace
+    entry["final_action"] = final_action
+    source_flags = entry.get("source_flags")
+    if isinstance(source_flags, dict):
+        merged_flags = dict(source_flags)
+        merged_flags["decision_trace"] = decision_trace
+        entry["source_flags"] = merged_flags
     entry["trade_key"] = compute_trade_key(
         entry.get("symbol"),
         entry.get("expiry_date") or entry.get("expiry"),

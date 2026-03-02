@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 import math
 from datetime import datetime
@@ -89,9 +90,9 @@ class NewsShockEncoder:
 
     def encode(self, now: datetime | None = None) -> dict:
         now = now or datetime.now()
-        events = _load_jsonl("logs/economic_calendar.jsonl")
-        earnings = _load_jsonl("logs/earnings_calendar.jsonl")
-        headlines = _load_jsonl("logs/news_headlines.jsonl")
+        events = _load_jsonl(str(logs_dir() / "economic_calendar.jsonl"))
+        earnings = _load_jsonl(str(logs_dir() / "earnings_calendar.jsonl"))
+        headlines = _load_jsonl(str(logs_dir() / "news_headlines.jsonl"))
 
         shock = 0.0
         macro_bias = 0.0

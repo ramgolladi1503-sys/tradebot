@@ -92,6 +92,16 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         "pnl_1lot": "pnl_cash",
     }
     out = out.rename(columns={k: v for k, v in rename_map.items() if k in out.columns})
+    if out.columns.duplicated().any():
+        # Merge duplicate columns by taking the first non-null value left-to-right.
+        deduped: dict[str, pd.Series] = {}
+        for col in pd.Index(out.columns).unique():
+            same = out.loc[:, out.columns == col]
+            if same.shape[1] == 1:
+                deduped[col] = same.iloc[:, 0]
+            else:
+                deduped[col] = same.bfill(axis=1).iloc[:, 0]
+        out = pd.DataFrame(deduped, index=out.index)
     if "target" not in out.columns and "target_points" in out.columns:
         out["target"] = out["target_points"]
     for col in CANONICAL_COLUMNS:

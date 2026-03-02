@@ -7,6 +7,7 @@ Migration note:
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 import time
 from datetime import datetime
@@ -284,7 +285,7 @@ class BlockedTradeTracker:
         path.write_text(json.dumps(sorted(list(ids))))
 
     def _strategy_perf_path(self) -> str:
-        return str(getattr(cfg, "STRATEGY_PERF_PATH", "logs/strategy_perf.json"))
+        return str(getattr(cfg, "STRATEGY_PERF_PATH", str(logs_dir() / "strategy_perf.json")))
 
     def _merge_strategy_perf(self, outcomes):
         tracker = StrategyTracker()

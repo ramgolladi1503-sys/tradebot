@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root
 
 import json
 import math
@@ -11,8 +12,8 @@ from zoneinfo import ZoneInfo
 from config import config as cfg
 
 
-CALENDAR_PATH = Path("data/calendar_events.json")
-SHOCK_PATH = Path("data/news_shock.json")
+CALENDAR_PATH = data_root() / "calendar_events.json"
+SHOCK_PATH = data_root() / "news_shock.json"
 
 
 @dataclass

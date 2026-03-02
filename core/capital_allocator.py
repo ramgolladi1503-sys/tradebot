@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import db_dir, desks_dir
 
 import math
 import sqlite3
@@ -37,7 +38,7 @@ def _utc_iso(epoch: float) -> str:
 
 def _discover_desk_dbs() -> Dict[str, Path]:
     desks: Dict[str, Path] = {}
-    base = Path("data/desks")
+    base = desks_dir()
     if base.exists():
         for entry in base.iterdir():
             if not entry.is_dir():
@@ -47,7 +48,8 @@ def _discover_desk_dbs() -> Dict[str, Path]:
                 desks[entry.name] = db
     # Always include current desk config path
     current_id = getattr(cfg, "DESK_ID", "DEFAULT")
-    current_db = Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
+    fallback_db = db_dir() / f"{current_id}.sqlite"
+    current_db = Path(str(getattr(cfg, "TRADE_DB_PATH", str(fallback_db))))
     desks.setdefault(current_id, current_db)
     return desks
 

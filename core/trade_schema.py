@@ -26,8 +26,32 @@ class Trade:
     regime: str
     tier: str = "MAIN"
     day_type: str = "UNKNOWN"
+    regime_confidence: float | None = None
+    day_confidence: float | None = None
+    orb_bias: str | None = None
     entry_condition: str | None = None   # e.g., BUY_ABOVE / SELL_BELOW
     entry_ref_price: float | None = None # original ask/ltp used before trigger
+    signal_price: float | None = None
+    entry_price_proxy: float | None = None
+    current_ltp: float | None = None
+    suggested_entry: float | None = None
+    stop_price: float | None = None
+    target_price: float | None = None
+    mark_price: float | None = None
+    best_bid: float | None = None
+    best_ask: float | None = None
+    price_source: str | None = None
+    price_age_sec: float | None = None
+    quote_age_sec: float | None = None
+    entry_status: str | None = None
+    status: str | None = None
+    activated_ts: str | None = None
+    activation_price: float | None = None
+    current_ltp_ts: float | None = None
+    pnl_points: float | None = None
+    pnl_cash: float | None = None
+    activation_reason: str | None = None
+    invalidation_reason: str | None = None
     opt_ltp: float | None = None
     opt_bid: float | None = None
     opt_ask: float | None = None
@@ -62,7 +86,19 @@ class Trade:
     underlying_spot: float | None = None
     spot_source: str | None = None
     option_ltp_source: str | None = None
+    option_ltp_timestamp: float | None = None
     chain_source: str | None = None
+    direction: str | None = None
+    global_confidence: float | None = None
+    permission: str | None = None
+    permission_reason: str | None = None
+    countertrend: bool | None = None
+    raw_signal_confidence: float | None = None
+    trade_key: str | None = None
+    trade_status: str | None = None
+    first_seen: str | None = None
+    last_seen: str | None = None
+    update_count: int | None = None
 
     def __post_init__(self):
         if self.stop_distance is not None:

@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -36,7 +37,7 @@ def build_plan():
 
 if __name__ == "__main__":
     plan = build_plan()
-    out = Path("logs/premarket_plan.json")
+    out = logs_dir() / "premarket_plan.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(plan, indent=2))
     # Export CSV
@@ -45,7 +46,7 @@ if __name__ == "__main__":
         rows = plan.get("symbols", [])
         if rows:
             df = pd.DataFrame(rows)
-            df.to_csv("logs/premarket_plan.csv", index=False)
+            df.to_csv(str(logs_dir() / "premarket_plan.csv"), index=False)
     except Exception:
         pass
     # Telegram delivery

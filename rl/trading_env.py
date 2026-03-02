@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 import random
 from pathlib import Path
@@ -23,7 +24,7 @@ class TradingEnv(gym.Env):
 
     def __init__(
         self,
-        data_csv: str = "data/ml_features.csv",
+        data_csv: str = str(data_root() / "ml_features.csv"),
         feature_cols: list[str] | None = None,
         transaction_cost_bps: float = 1.0,
         slippage_bps: float = 1.0,
@@ -31,7 +32,7 @@ class TradingEnv(gym.Env):
         volatility_floor_bps: float = 20.0,
         max_episode_steps: int | None = None,
         debug_steps: int = 0,
-        debug_log_path: str = "logs/rl_env_steps.jsonl",
+        debug_log_path: str = str(logs_dir() / "rl_env_steps.jsonl"),
         random_seed: int | None = None,
     ) -> None:
         super().__init__()

@@ -32,7 +32,8 @@ def _assert_reason_code(path: Path, *, message: str) -> None:
 
 def test_reason_code_present_across_reject_emitters(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    reject_path = tmp_path / "logs" / "reject_reasons.jsonl"
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    reject_path = Path(cfg.LOGS_ROOT) / "reject_reasons.jsonl"
     monkeypatch.setattr(cfg, "REJECT_REASONS_LOG_PATH", str(reject_path), raising=False)
 
     append_reject_reasons(
@@ -60,7 +61,7 @@ def test_reason_code_present_across_reject_emitters(monkeypatch, tmp_path):
         source="unit",
         details={"hint": "depth_missing"},
     )
-    live_path = tmp_path / "logs" / "live_quote_errors.jsonl"
+    live_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     _assert_reason_code(live_path, message="live_quote_errors.jsonl should have at least one row")
     live_row = _rows(live_path)[-1]
     assert live_row["reason_code"] == live_row["event_code"]
@@ -73,7 +74,7 @@ def test_reason_code_present_across_reject_emitters(monkeypatch, tmp_path):
         reason="HIST_FETCH_FAILED",
         detail="kite_api_unavailable",
     )
-    warn_path = tmp_path / "logs" / "market_data_warnings.jsonl"
+    warn_path = Path(cfg.LOGS_ROOT) / "market_data_warnings.jsonl"
     _assert_reason_code(warn_path, message="market_data_warnings.jsonl should have at least one row")
     warn_row = _rows(warn_path)[-1]
     assert warn_row["reason_code"] == warn_row["reason"]
@@ -90,7 +91,7 @@ def test_reason_code_present_across_reject_emitters(monkeypatch, tmp_path):
         },
         {"reason": "missing_contract_fields"},
     )
-    ident_path = tmp_path / "logs" / "trade_identity_errors.jsonl"
+    ident_path = Path(cfg.LOGS_ROOT) / "trade_identity_errors.jsonl"
     _assert_reason_code(ident_path, message="trade_identity_errors.jsonl should have at least one row")
     ident_row = _rows(ident_path)[-1]
     assert ident_row["reason_code"] == "missing_contract_fields"

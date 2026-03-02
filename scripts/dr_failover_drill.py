@@ -3,6 +3,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from core.paths import logs_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -41,7 +42,7 @@ def main():
             })
         time.sleep(1)
 
-    out = Path("logs/dr_failover_drill.json")
+    out = logs_dir() / "dr_failover_drill.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps({"events": events, "minutes": args.minutes}, indent=2))
     print(f"DR drill complete: {out}")

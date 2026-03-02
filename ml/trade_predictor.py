@@ -18,6 +18,7 @@ from sklearn.metrics import accuracy_score
 from config import config as cfg
 from core.feature_contract import FeatureContract
 from core.model_registry import get_active_entry, get_shadow_entry
+from core.runtime_lifecycle import lifecycle
 
 _SEGMENT_FIELDS = ["seg_regime", "seg_bucket", "seg_expiry", "seg_vol_q"]
 _ALT_SEGMENT_FIELDS = ["regime", "time_bucket", "is_expiry", "vol_quartile"]
@@ -90,6 +91,7 @@ class TradePredictor:
         self._model_lock = threading.RLock()
         self._online_update_lock = threading.Lock()
         self._online_update_thread = None
+        self._online_update_stop_event = threading.Event()
         self._online_update_state = {
             "running": False,
             "duration_ms": None,
@@ -107,6 +109,8 @@ class TradePredictor:
             self._online_update_lock = threading.Lock()
         if not hasattr(self, "_online_update_thread"):
             self._online_update_thread = None
+        if not hasattr(self, "_online_update_stop_event"):
+            self._online_update_stop_event = threading.Event()
         if not hasattr(self, "_online_update_state"):
             self._online_update_state = {
                 "running": False,
@@ -529,12 +533,16 @@ class TradePredictor:
             failure = None
             success = False
             try:
+                if self._online_update_stop_event.is_set():
+                    return
                 payload = self._train_segmented_payload(
                     new_trades_df,
                     target_col=target_col,
                     segment_cols=None,
                     min_samples=getattr(cfg, "ML_SEGMENT_MIN_SAMPLES", 200),
                 )
+                if self._online_update_stop_event.is_set():
+                    return
                 if payload is None:
                     raise ValueError("no_training_payload")
                 self._validate_payload_predict(payload, new_trades_df, target_col=target_col)
@@ -575,6 +583,7 @@ class TradePredictor:
             if thread is not None and thread.is_alive():
                 logger.info("online_model_update skipped: already_running")
                 return {"started": False, "completed": False, "success": None, "reason": "already_running"}
+            self._online_update_stop_event.clear()
             self._online_update_state.update(
                 {
                     "running": True,
@@ -587,12 +596,17 @@ class TradePredictor:
             thread = threading.Thread(
                 target=_worker,
                 name="trade-predictor-online-update",
-                daemon=True,
+                daemon=False,
             )
             self._online_update_thread = thread
 
         logger.info("online_model_update started async=%s max_block_sec=%.3f", async_enabled, max_block_sec)
         print("[TradePredictor] Online model update started...")
+        lifecycle.register(
+            "trade-predictor-online-update",
+            stop_fn=lambda: self.stop_background_tasks(timeout_sec=3.0),
+            join_fn=lambda timeout_sec=3.0: self.wait_for_online_update(timeout_sec=timeout_sec),
+        )
 
         if async_enabled:
             thread.start()
@@ -630,4 +644,24 @@ class TradePredictor:
         if thread is None:
             return True
         thread.join(timeout=max(0.0, float(timeout_sec)))
-        return not thread.is_alive()
+        done = not thread.is_alive()
+        if done:
+            with self._online_update_lock:
+                if self._online_update_thread is thread:
+                    self._online_update_thread = None
+        return done
+
+    def stop_background_tasks(self, timeout_sec: float = 5.0) -> bool:
+        self._ensure_runtime_state()
+        self._online_update_stop_event.set()
+        thread = self._online_update_thread
+        if thread is None:
+            return True
+        if thread.is_alive():
+            thread.join(timeout=max(0.0, float(timeout_sec)))
+        done = not thread.is_alive()
+        if done:
+            with self._online_update_lock:
+                if self._online_update_thread is thread:
+                    self._online_update_thread = None
+        return done

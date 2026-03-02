@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
 
+from config import config as cfg
 from core.day_type_history import append_day_type_event, load_day_type_events, day_type_events_dataframe
 
 
 def test_append_day_type_event_writes_epoch_and_ist(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     append_day_type_event(
         symbol="NIFTY",
         event="CHANGE",
@@ -13,7 +15,7 @@ def test_append_day_type_event_writes_epoch_and_ist(tmp_path, monkeypatch):
         confidence=0.71,
         minutes_since_open=35,
     )
-    path = Path("logs/day_type_events.jsonl")
+    path = Path(cfg.LOGS_ROOT) / "day_type_events.jsonl"
     assert path.exists()
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 1
@@ -25,7 +27,8 @@ def test_append_day_type_event_writes_epoch_and_ist(tmp_path, monkeypatch):
 
 def test_load_day_type_events_backfills_existing_file_safely(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    path = Path("logs/day_type_events.jsonl")
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    path = Path(cfg.LOGS_ROOT) / "day_type_events.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     legacy = {
         "symbol": "SENSEX",
@@ -52,7 +55,8 @@ def test_load_day_type_events_backfills_existing_file_safely(tmp_path, monkeypat
 
 def test_load_day_type_events_backfills_timestamp_key(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    path = Path("logs/day_type_events.jsonl")
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    path = Path(cfg.LOGS_ROOT) / "day_type_events.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     legacy = {
         "symbol": "NIFTY",

@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -81,13 +82,13 @@ def main():
     print(f"  halted: {halt.get('halted')}")
     print(f"  reason: {halt.get('reason')}")
 
-    decay = _read_json(Path("logs/decay_report_" + datetime.now().strftime("%Y-%m-%d") + ".json"))
+    decay = _read_json(logs_dir() / "decay_report_" + datetime.now().strftime("%Y-%m-%d" + ".json"))
     if decay:
         print("Decay")
         print(f"  decaying: {len(decay.get('decaying', []))}")
         print(f"  quarantined: {len(decay.get('quarantined', []))}")
 
-    strat_perf = _read_json(Path("logs/strategy_perf.json"))
+    strat_perf = _read_json(logs_dir() / "strategy_perf.json")
     if strat_perf and isinstance(strat_perf, dict):
         stats = strat_perf.get("stats", {})
         top = sorted(stats.items(), key=lambda x: x[1].get("trades", 0), reverse=True)[:5]
@@ -95,13 +96,13 @@ def main():
         for name, s in top:
             print(f"  {name}: trades={s.get('trades')} win_rate={s.get('win_rate')}")
 
-    decisions = _tail_jsonl(Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl")), n=5)
+    decisions = _tail_jsonl(Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl"))), n=5)
     if decisions:
         print("Recent Decisions")
         for d in decisions:
             print(f"  {d.get('ts')} {d.get('symbol')} gate={d.get('gatekeeper_allowed')} veto={d.get('veto_reasons')}")
 
-    fillq = _read_json(Path("logs/execution_analytics.json"))
+    fillq = _read_json(logs_dir() / "execution_analytics.json")
     if fillq:
         print("Execution Quality")
         print(f"  fill_ratio: {fillq.get('fill_ratio')}")

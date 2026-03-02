@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir
 
 import json
 import shutil
@@ -12,7 +13,7 @@ from core.time_utils import normalize_epoch_seconds, now_ist, now_utc_epoch, par
 
 def day_type_history_path(base_dir: Path | str | None = None) -> Path:
     if base_dir is None:
-        return Path("logs/day_type_events.jsonl")
+        return logs_dir() / "day_type_events.jsonl"
     return Path(base_dir) / "day_type_events.jsonl"
 
 

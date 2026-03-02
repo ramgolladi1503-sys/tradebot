@@ -1,6 +1,9 @@
+import os
 import numpy as np
 
 def _load_tf():
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
     from core.tf_utils import configure_tensorflow
 
     configure_tensorflow()

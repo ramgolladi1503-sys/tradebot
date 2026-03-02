@@ -3,6 +3,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 import json
+from core.paths import data_root, logs_dir
 
 import numpy as np
 import pandas as pd
@@ -111,7 +112,7 @@ def decide_promotion(report: dict, gates: dict) -> tuple[bool, list[str]]:
 def main():
     parser = argparse.ArgumentParser(description="Promote challenger model using truth dataset and gates.")
     parser.add_argument("--family", default="xgb")
-    parser.add_argument("--truth", default="data/truth_dataset.parquet")
+    parser.add_argument("--truth", default=str(data_root() / "truth_dataset.parquet"))
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -163,7 +164,7 @@ def main():
     report["drift"] = drift_report
     report["decision"] = {"promote": promote, "reasons": reasons}
 
-    out_path = Path(f"logs/models/promotion_{now_ist().date()}_{args.family}.json")
+    out_path = logs_dir() / f"models/promotion_{now_ist().date()}_{args.family}.json"
     write_promotion_report(report, out_path)
 
     if args.dry_run or not promote:

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from core.paths import logs_dir
 
 
 def _load_json(path: Path) -> dict | None:
@@ -12,8 +13,8 @@ def _load_json(path: Path) -> dict | None:
 
 
 def generate_hypotheses() -> list[dict]:
-    decay = _load_json(Path("logs/decay_report.json"))
-    exec_report = _load_json(Path("logs/execution_report.json"))
+    decay = _load_json(logs_dir() / "decay_report.json")
+    exec_report = _load_json(logs_dir() / "execution_report.json")
     if not decay and not exec_report:
         return [{"title": "insufficient_data", "trigger": "missing_reports", "expected": "run daily reports"}]
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from core.paths import data_root, logs_dir
 from pathlib import Path
 import runpy
 
@@ -27,7 +28,7 @@ def _masked_stats(name: str, value: str) -> dict:
 
 
 def _write_payload(payload: dict) -> None:
-    path = Path(getattr(cfg, "AUTH_WARMUP_LOG_PATH", "logs/auth_warmup.json"))
+    path = Path(getattr(cfg, "AUTH_WARMUP_LOG_PATH", str(logs_dir() / "auth_warmup.json")))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 

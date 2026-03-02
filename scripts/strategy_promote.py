@@ -2,13 +2,14 @@ import argparse
 import json
 from pathlib import Path
 from datetime import datetime
+from core.paths import logs_dir
 
 from config import config as cfg
 from core.strategy_lifecycle import StrategyLifecycle, STATES
 
 
 def _latest_file(pattern: str):
-    files = sorted(Path("logs").glob(pattern))
+    files = sorted(logs_dir().glob(pattern))
     return files[-1] if files else None
 
 
@@ -22,7 +23,7 @@ def _load_json(path: Path):
 def _check_backtest(strategy_id: str):
     if not getattr(cfg, "PROMOTION_REQUIRE_BACKTEST", True):
         return True, "backtest_not_required"
-    path = Path("logs/strategy_perf.json")
+    path = logs_dir() / "strategy_perf.json"
     if not path.exists():
         return False, "strategy_perf_missing"
     data = _load_json(path) or {}
@@ -60,7 +61,7 @@ def _check_stress():
 
 
 def _check_pilot_days(required_days: int):
-    files = sorted(Path("logs").glob("daily_audit_*.json"))
+    files = sorted(logs_dir().glob("daily_audit_*.json"))
     if len(files) < required_days:
         return False, "insufficient_daily_audits"
     recent = files[-required_days:]

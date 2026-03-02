@@ -1,3 +1,4 @@
+from core.paths import logs_dir, data_root
 # Migration note:
 # Trade builder now consumes central market context for LIVE/OFFHOURS/SIM gating.
 # Zero-to-hero (lotto) ideas are PAPER-only with explicit OTM + premium-band filters.
@@ -24,9 +25,10 @@ from core.feature_builder import build_trade_features, validate_trade_features
 from core.trade_scoring import compute_trade_score
 from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
+from core.instruments import select_expiry as select_registry_expiry
 from core.market_context import derive_market_context
-from core.market_calendar import choose_nearest_available_expiry
 from core.reject_logger import append_reject_reasons
+from core.reject_telemetry import append_reject_telemetry
 from core.time_utils import compute_age_sec, is_market_open_ist, now_ist, now_utc_epoch
 from core.regime import RegimeClassifier, normalize_regime
 from core.kite_client import kite_client
@@ -40,7 +42,7 @@ def _get_auto_tune():
         now = _time.time()
         if now - _AUTO_TUNE_CACHE.get("ts", 0) < 60:
             return _AUTO_TUNE_CACHE.get("data") or {}
-        path = Path("logs/auto_tune.json")
+        path = logs_dir() / "auto_tune.json"
         if not path.exists():
             _AUTO_TUNE_CACHE.update({"ts": now, "data": {}})
             return {}
@@ -57,7 +59,7 @@ class _NoopPredictor:
 
 def _log_signal_event(kind, symbol, payload=None):
     try:
-        path = Path("logs/signal_path.jsonl")
+        path = logs_dir() / "signal_path.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         obj = {"timestamp": datetime.now().isoformat(), "kind": kind, "symbol": symbol}
         if payload:
@@ -125,7 +127,7 @@ class TradeBuilder:
         if desk_log_dir:
             return Path(str(desk_log_dir)) / "blocked_candidates.jsonl"
         desk = getattr(cfg, "DESK_ID", "DEFAULT")
-        return Path(f"logs/desks/{desk}/blocked_candidates.jsonl")
+        return logs_dir() / f"desks/{desk}/blocked_candidates.jsonl"
 
     def _log_blocked_candidate(
         self,
@@ -256,6 +258,25 @@ class TradeBuilder:
         if extra:
             rec.update(extra)
         try:
+            append_reject_telemetry(
+                {
+                    "timestamp_epoch_ms": int(ts_epoch * 1000.0),
+                    "symbol": symbol,
+                    "strike": strike if strike is not None else data.get("strike"),
+                    "trade_side": direction,
+                    "reject_reason": str(reason_code),
+                    "quote_age_sec": meta.get("quote_age_sec", data.get("quote_age_sec")),
+                    "spread_pct": meta.get("spread_pct", data.get("spread_pct")),
+                    "feed_state": (
+                        meta.get("feed_state")
+                        or data.get("feed_state")
+                        or (data.get("feed_health_snapshot") or {}).get("state")
+                    ),
+                }
+            )
+        except Exception:
+            pass
+        try:
             path = self._blocked_candidates_path()
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as f:
@@ -316,6 +337,17 @@ class TradeBuilder:
                     "initial_score": meta.get("initial_score") if isinstance(meta, dict) else None,
                     "final_score": meta.get("final_score") if isinstance(meta, dict) else None,
                     "score_penalties": meta.get("score_penalties") if isinstance(meta, dict) else [],
+                    "signal_score": meta.get("signal_score") if isinstance(meta, dict) else None,
+                    "regime_conf": meta.get("regime_conf") if isinstance(meta, dict) else None,
+                    "orb_bias": meta.get("orb_bias") if isinstance(meta, dict) else data.get("orb_bias"),
+                    "orb_factor": meta.get("orb_factor") if isinstance(meta, dict) else None,
+                    "reg_penalty": meta.get("reg_penalty") if isinstance(meta, dict) else None,
+                    "global_conf": meta.get("global_conf") if isinstance(meta, dict) else None,
+                    "permission": meta.get("permission") if isinstance(meta, dict) else "ADVISORY_ONLY",
+                    "permission_reason": meta.get("permission_reason") if isinstance(meta, dict) else str(reason_code),
+                    "entry_status": meta.get("entry_status") if isinstance(meta, dict) else "INTENT_BLOCKED",
+                    "entry_block_reason": meta.get("entry_block_reason") if isinstance(meta, dict) else str(reason_code),
+                    "final_action": meta.get("final_action") if isinstance(meta, dict) else "ADVISORY_ONLY",
                 }
             )
         except Exception:
@@ -565,6 +597,27 @@ class TradeBuilder:
                 opt["expiry"] = exp_text
         return opt, None
 
+    def _validate_required_option_quote_fields(
+        self,
+        opt: dict,
+        *,
+        allow_missing_bid_ask: bool = False,
+    ) -> tuple[bool, str | None]:
+        if not isinstance(opt, dict):
+            return False, "malformed_option_row"
+        ltp = self._coerce_positive_float(opt.get("ltp"))
+        bid = self._coerce_positive_float(opt.get("bid"))
+        ask = self._coerce_positive_float(opt.get("ask"))
+        if ltp is None:
+            return False, "invalid_option_ltp"
+        if bid is None or ask is None:
+            if allow_missing_bid_ask:
+                return True, None
+            return False, "no_quote"
+        if ask < bid:
+            return False, "no_bid_ask"
+        return True, None
+
     def _option_expiry(self, opt: dict | None, market_data: dict | None = None) -> str:
         candidates = []
         if isinstance(opt, dict):
@@ -627,6 +680,7 @@ class TradeBuilder:
         return "BFO" if sym == "SENSEX" else "NFO"
 
     def _resolve_expiry_for_symbol(self, symbol: str, market_data: dict | None) -> str:
+        selection_mode = str(getattr(cfg, "OPTION_EXPIRY_SELECTION", "NEAREST") or "NEAREST").upper()
         expiries: list[date] = []
         data = market_data or {}
         chain = data.get("option_chain")
@@ -644,7 +698,11 @@ class TradeBuilder:
                 except Exception:
                     continue
         if expiries:
-            chosen = choose_nearest_available_expiry(expiries, today=now_ist().date())
+            chosen = select_registry_expiry(
+                expiries,
+                selection_mode=selection_mode,
+                today=now_ist().date(),
+            )
             if chosen is not None:
                 return chosen.isoformat()
         raw_list = data.get("expiries") or data.get("expiry_list") or data.get("available_expiries")
@@ -659,7 +717,11 @@ class TradeBuilder:
                 except Exception:
                     continue
             if exp_dates:
-                chosen = choose_nearest_available_expiry(exp_dates, today=now_ist().date())
+                chosen = select_registry_expiry(
+                    exp_dates,
+                    selection_mode=selection_mode,
+                    today=now_ist().date(),
+                )
                 if chosen is not None:
                     return chosen.isoformat()
         exchange = self._option_exchange(symbol)
@@ -1405,7 +1467,7 @@ class TradeBuilder:
             now = _time.time()
             if now - self._ml_history_cache["ts"] < 60:
                 return self._ml_history_cache["count"]
-            path = Path("data/trade_log.json")
+            path = data_root() / "trade_log.json"
             if not path.exists():
                 self._ml_history_cache = {"ts": now, "count": 0}
                 return 0
@@ -2253,6 +2315,19 @@ class TradeBuilder:
                 if debug_reasons and opt_row_error not in {"type_mismatch"}:
                     rejected.append(self._reject_record(symbol, {}, opt_type, opt_row_error, atr=atr))
                 continue
+            allow_missing_bid_ask = bool(
+                exec_mode == "PAPER"
+                and not bool(getattr(cfg, "PAPER_STRICT_MODE", False))
+            )
+            has_required_quote, quote_reason = self._validate_required_option_quote_fields(
+                opt,
+                allow_missing_bid_ask=allow_missing_bid_ask,
+            )
+            if not has_required_quote:
+                _count_option_reject(quote_reason)
+                if debug_reasons:
+                    rejected.append(self._reject_record(symbol, opt, opt_type, quote_reason, atr=atr))
+                continue
             self._scan_total_candidates += 1
             current_filter_profile = filter_profile_quick if quick_mode else filter_profile_main
             soft_veto_codes = list(orb_soft_veto_codes) + list(pre_soft_veto_codes)
@@ -2674,6 +2749,12 @@ class TradeBuilder:
                     instrument_token = contract.get("instrument_token") or opt.get("instrument_token")
                     atr = market_data.get("atr", max(1.0, ltp * 0.002))
                     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    if instrument_token is None:
+                        _count_option_reject("missing_contract_fields")
+                        if debug_reasons:
+                            rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                            rejected.append(rec)
+                        continue
                     blocked_trade = Trade(
                         trade_id=f"{symbol}-{opt['strike']}-{opt['type']}-BLOCKED-{ts}",
                         timestamp=datetime.now(),
@@ -2951,10 +3032,23 @@ class TradeBuilder:
                 )
                 continue
             if instrument_token is None:
-                if "instrument_token_missing" not in soft_veto_codes:
-                    soft_veto_codes.append("instrument_token_missing")
-                if "instrument_token_missing" not in execution_blockers:
-                    execution_blockers.append("instrument_token_missing")
+                _count_option_reject("missing_contract_fields")
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rejected.append(rec)
+                self._log_blocked_candidate(
+                    symbol,
+                    "missing_contract_fields",
+                    "Option contract missing instrument token",
+                    market_data=market_data,
+                    extra={
+                        "strike": opt.get("strike"),
+                        "option_type": opt.get("type"),
+                        "expiry": expiry_resolved,
+                        "tradingsymbol": tradingsymbol,
+                    },
+                )
+                continue
             intent = self.trade_intent_flags(
                 market_data,
                 opt=opt,
@@ -2981,6 +3075,19 @@ class TradeBuilder:
                 }
                 source_flags["premium_soft_veto"] = True
             source_flags["decision_trace"] = {
+                "signal_score": float(signal.get("score", 0.0)),
+                "regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),
+                "orb_bias": market_data.get("orb_bias"),
+                "orb_factor": None,
+                "reg_penalty": None,
+                "global_conf": None,
+                "permission": "EXECUTE" if bool(intent["execution_allowed"]) else "ADVISORY_ONLY",
+                "permission_reason": intent.get("execution_reason") or (
+                    "execution_allowed" if bool(intent["execution_allowed"]) else "intent_blocked"
+                ),
+                "entry_status": "OK" if bool(intent["execution_allowed"]) else "INTENT_BLOCKED",
+                "entry_block_reason": None if bool(intent["execution_allowed"]) else (intent.get("execution_reason") or "intent_blocked"),
+                "final_action": "EXECUTE" if bool(intent["execution_allowed"]) else "ADVISORY_ONLY",
                 "initial_score": float(signal.get("score", 0.0)) * 100.0,
                 "score_penalties": [
                     {"name": str(code), "type": "soft_veto"}
@@ -3383,6 +3490,17 @@ class TradeBuilder:
                         "initial_score": decision_trace.get("initial_score"),
                         "final_score": decision_trace.get("final_score", getattr(cand, "trade_score", None)),
                         "score_penalties": decision_trace.get("score_penalties", []),
+                        "signal_score": decision_trace.get("signal_score"),
+                        "regime_conf": decision_trace.get("regime_conf"),
+                        "orb_bias": decision_trace.get("orb_bias"),
+                        "orb_factor": decision_trace.get("orb_factor"),
+                        "reg_penalty": decision_trace.get("reg_penalty"),
+                        "global_conf": decision_trace.get("global_conf"),
+                        "permission": decision_trace.get("permission"),
+                        "permission_reason": decision_trace.get("permission_reason"),
+                        "entry_status": decision_trace.get("entry_status"),
+                        "entry_block_reason": decision_trace.get("entry_block_reason"),
+                        "final_action": decision_trace.get("final_action"),
                         "ltp": market_data.get("ltp"),
                         "atr": market_data.get("atr"),
                     }
@@ -3751,6 +3869,14 @@ class TradeBuilder:
                     "mode": exec_mode,
                     "gates_failed": [],
                     "soft_vetos": [],
+                    "signal_score": trade.confidence,
+                    "regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),
+                    "orb_bias": market_data.get("orb_bias"),
+                    "permission": "ADVISORY_ONLY",
+                    "permission_reason": "PAPER_ONLY",
+                    "entry_status": "OK",
+                    "entry_block_reason": None,
+                    "final_action": "ADVISORY_ONLY",
                 }
             )
         except Exception:
@@ -3806,6 +3932,12 @@ class TradeBuilder:
         candidates = []
         for opt in market_data.get("option_chain", []):
             if opt.get("type") != opt_type:
+                continue
+            has_required_quote, _ = self._validate_required_option_quote_fields(opt)
+            if not has_required_quote:
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "partial_option_row", atr=atr)
+                    rejected.append(rec)
                 continue
             if opt.get("ltp", 0) < min_p or opt.get("ltp", 0) > max_p:
                 continue
@@ -4320,6 +4452,11 @@ class TradeBuilder:
                     rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
                     rejected.append(rec)
                 continue
+            if opt.get("instrument_token") is None:
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rejected.append(rec)
+                continue
             intent = self.trade_intent_flags(market_data, opt=opt)
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-SCALP-{ts}",
@@ -4417,7 +4554,7 @@ class TradeBuilder:
 
     def _write_rejected(self, rejected):
         try:
-            path = Path("logs/rejected_candidates.jsonl")
+            path = logs_dir() / "rejected_candidates.jsonl"
             path.parent.mkdir(exist_ok=True)
             # Keep only top 5 by confidence then ltp
             def _score(x):
@@ -4431,7 +4568,7 @@ class TradeBuilder:
 
     def _write_debug_candidates(self, rejected, top_n=5):
         try:
-            path = Path("logs/debug_candidates.jsonl")
+            path = logs_dir() / "debug_candidates.jsonl"
             path.parent.mkdir(exist_ok=True)
             def _score(x):
                 return (x.get("confidence") or 0, x.get("ltp") or 0, x.get("volume") or 0)

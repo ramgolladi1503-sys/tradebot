@@ -1,3 +1,4 @@
+from core.paths import logs_dir, data_root
 import json
 import time
 from dataclasses import dataclass
@@ -109,10 +110,10 @@ def _evaluate_model(name: str, model, X_train, y_train, X_valid, y_valid, pnl_va
 
 
 def run_alpha_factory(
-    truth_path: Path = Path("data/truth_dataset.parquet"),
+    truth_path: Path = data_root() / "truth_dataset.parquet",
     days: int = 90,
     dry_run: bool = False,
-    out_report: Path = Path("logs/alpha_factory_report.json"),
+    out_report: Path = logs_dir() / "alpha_factory_report.json",
     min_rows: int = 200,
 ) -> AlphaFactoryResult:
     if not truth_path.exists():

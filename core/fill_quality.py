@@ -1,10 +1,11 @@
 import json
 import time
 from pathlib import Path
+from core.paths import logs_dir
 
 
-FILL_LOG_PATH = Path("logs/fill_quality.jsonl")
-FILL_DAILY_PATH = Path("logs/fill_quality_daily.json")
+FILL_LOG_PATH = logs_dir() / "fill_quality.jsonl"
+FILL_DAILY_PATH = logs_dir() / "fill_quality_daily.json"
 
 
 def _load_daily():

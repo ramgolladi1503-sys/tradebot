@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root, logs_dir
 
 import json
 import random
@@ -25,7 +26,7 @@ class SizingEnv:
     Reads DecisionEvent dataset (SQLite preferred, JSONL fallback).
     """
     def __init__(self, source: str | None = None, seed: int = 42):
-        self.source = source or getattr(cfg, "TRADE_DB_PATH", "data/trades.db")
+        self.source = source or getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db"))
         self._rows: List[Dict[str, Any]] = []
         self._idx = 0
         random.seed(seed)
@@ -39,7 +40,7 @@ class SizingEnv:
             self._rows = self._load_jsonl(path)
         else:
             # fallback to logs jsonl
-            fallback = Path("logs/decision_events.jsonl")
+            fallback = logs_dir() / "decision_events.jsonl"
             if fallback.exists():
                 self._rows = self._load_jsonl(fallback)
         if not self._rows:

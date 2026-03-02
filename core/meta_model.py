@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 import time
 from pathlib import Path
@@ -22,7 +23,7 @@ def _family_from_strategy(strategy_name: str | None) -> str:
 
 class MetaModel:
     def __init__(self, log_path: str | None = None):
-        self.log_path = Path(log_path or getattr(cfg, "META_SHADOW_LOG_PATH", "logs/meta_shadow.jsonl"))
+        self.log_path = Path(log_path or getattr(cfg, "META_SHADOW_LOG_PATH", str(logs_dir() / "meta_shadow.jsonl")))
 
     def suggest(self, strategy_name, model_type, market_data, strategy_stats: dict | None = None) -> dict:
         strategy_stats = strategy_stats or {}

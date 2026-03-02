@@ -5,6 +5,7 @@ Outputs PASS/DEGRADED/FAIL with explicit reasons and mode-aware severity.
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 import sqlite3
 import sys
@@ -39,7 +40,7 @@ def _check_config() -> tuple[bool, list[str]]:
 
 def _check_db_writable() -> tuple[bool, str]:
     try:
-        db_path = Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
+        db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
         db_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(str(db_path)) as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS __healthcheck_probe__ (id INTEGER PRIMARY KEY, ts REAL)")
@@ -83,9 +84,9 @@ def _downgrade_non_live_blockers(blockers: list[str], mode: str) -> tuple[list[s
 def run_healthcheck() -> dict:
     ensure_trade_log_exists()
     for raw_path in (
-        getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", "logs/execution_intents.jsonl"),
-        getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"),
-        getattr(cfg, "REJECT_REASONS_LOG_PATH", "logs/reject_reasons.jsonl"),
+        getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", str(logs_dir() / "execution_intents.jsonl")),
+        getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")),
+        getattr(cfg, "REJECT_REASONS_LOG_PATH", str(logs_dir() / "reject_reasons.jsonl")),
     ):
         try:
             p = Path(str(raw_path))

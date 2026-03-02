@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import data_root, logs_dir
 
 import json
 import math
@@ -12,7 +13,7 @@ import pandas as pd
 from config import config as cfg
 
 
-DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"))
+DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
 DEFAULT_WINDOW = int(getattr(cfg, "DECAY_WINDOW_TRADES", 50))
 DEFAULT_DRAWNDOWN_THRESHOLD = float(getattr(cfg, "DECAY_DRAWDOWN_THRESHOLD", -100.0))
 
@@ -176,12 +177,12 @@ def _brier(proba: pd.Series, y: pd.Series) -> float:
 
 def build_decay_dataset(
     decision_jsonl: Path = DECISION_JSONL,
-    db_path: Path = Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db")),
-    trade_log_path: Path = Path("data/trade_log.json"),
+    db_path: Path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db"))),
+    trade_log_path: Path = data_root() / "trade_log.json",
     window: int = DEFAULT_WINDOW,
     drawdown_threshold: float = DEFAULT_DRAWNDOWN_THRESHOLD,
     shock_threshold: float = 0.6,
-    out_path: Path = Path("data/decay_features.parquet"),
+    out_path: Path = data_root() / "decay_features.parquet",
 ) -> pd.DataFrame:
     df = _load_decision_events(decision_jsonl, db_path)
     if df.empty:

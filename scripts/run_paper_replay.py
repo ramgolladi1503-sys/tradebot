@@ -3,6 +3,7 @@ Deterministic PAPER replay harness for fixture-driven candidate generation tests
 """
 
 from __future__ import annotations
+from core.paths import logs_dir
 
 import argparse
 from contextlib import contextmanager
@@ -241,7 +242,7 @@ def run_replay(fixture_path: Path, *, seed: int = 7) -> dict:
         "no_trade": len(candidates) == 0,
         "top_reject_reasons": top_reasons,
     }
-    out = Path("logs") / f"paper_replay_{fixture_name}.json"
+    out = logs_dir() / f"paper_replay_{fixture_name}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 

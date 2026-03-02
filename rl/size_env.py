@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import json
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +24,7 @@ def _load_jsonl(path: str) -> List[dict]:
 
 
 def _load_updates():
-    updates = _load_jsonl("data/trade_updates.json")
+    updates = _load_jsonl(str(data_root() / "trade_updates.json"))
     m = {}
     for u in updates:
         if u.get("type") == "outcome":
@@ -58,7 +59,7 @@ def _reward(entry, outcome, mult):
 
 
 class SizeEnv:
-    def __init__(self, trade_log_path="data/trade_log.json"):
+    def __init__(self, trade_log_path=str(data_root() / "trade_log.json")):
         self.trades = _load_jsonl(trade_log_path)
         self.outcomes = _load_updates()
         self.idx = 0

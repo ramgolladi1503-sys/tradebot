@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime, date
 from collections import defaultdict
 from config import config as cfg
+from core.paths import data_root, logs_dir
 
 
 def _load_jsonl(path: str):
@@ -64,8 +65,8 @@ def _psi(dist_a, dist_b):
 
 
 def _feature_importance_instability():
-    cur = Path("logs/feature_importance.csv")
-    prev = Path("logs/feature_importance_prev.csv")
+    cur = logs_dir() / "feature_importance.csv"
+    prev = logs_dir() / "feature_importance_prev.csv"
     if not cur.exists():
         return 0.0
     if not prev.exists():
@@ -91,8 +92,8 @@ def _feature_importance_instability():
 
 
 def compute_decay(tracker, risk_state=None, window=50):
-    trade_log = _load_jsonl("data/trade_log.json")
-    updates = _load_jsonl("data/trade_updates.json")
+    trade_log = _load_jsonl(str(data_root() / "trade_log.json"))
+    updates = _load_jsonl(str(data_root() / "trade_updates.json"))
     upd_map = {u.get("trade_id"): u for u in updates if u.get("type") == "outcome"}
 
     by_strategy = defaultdict(list)
@@ -119,7 +120,7 @@ def compute_decay(tracker, risk_state=None, window=50):
         slippage = _safe_float(t.get("slippage"), 0.0)
         slippage_by_strategy[strat].append(slippage)
 
-    fill_quality = _load_jsonl("logs/fill_quality.jsonl")
+    fill_quality = _load_jsonl(str(logs_dir() / "fill_quality.jsonl"))
     fill_by_strategy = defaultdict(list)
     if fill_quality:
         # Map trade_id -> strategy
@@ -133,7 +134,7 @@ def compute_decay(tracker, risk_state=None, window=50):
 
     model_health = {}
     try:
-        mh_path = Path("logs/model_health.json")
+        mh_path = logs_dir() / "model_health.json"
         if mh_path.exists():
             model_health = json.loads(mh_path.read_text())
     except Exception:
@@ -141,7 +142,7 @@ def compute_decay(tracker, risk_state=None, window=50):
 
     cross_asset = {}
     try:
-        ca_path = Path("logs/cross_asset_features.json")
+        ca_path = logs_dir() / "cross_asset_features.json"
         if ca_path.exists():
             cross_asset = json.loads(ca_path.read_text())
     except Exception:
@@ -229,7 +230,7 @@ def compute_decay(tracker, risk_state=None, window=50):
         }
 
     # Time-to-failure estimate using history slope
-    hist_path = Path("logs/strategy_decay_history.jsonl")
+    hist_path = logs_dir() / "strategy_decay_history.jsonl"
     history = _load_jsonl(str(hist_path))
     for strat, info in decay_out.items():
         past = [h for h in history if h.get("strategy") == strat]
@@ -257,6 +258,6 @@ def compute_decay(tracker, risk_state=None, window=50):
             }) + "\n")
 
     # persist summary
-    Path("logs").mkdir(exist_ok=True)
-    Path("logs/strategy_decay.json").write_text(json.dumps(decay_out, indent=2))
+    logs_dir().mkdir(exist_ok=True)
+    logs_dir() / "strategy_decay.json".write_text(json.dumps(decay_out, indent=2))
     return decay_out

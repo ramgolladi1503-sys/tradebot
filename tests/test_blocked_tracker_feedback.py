@@ -14,6 +14,7 @@ class _PredictorStub:
 
 def test_capture_from_log_reads_desk_blocked_candidates(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     desk_dir = tmp_path / "logs" / "desks" / "DEFAULT"
     desk_dir.mkdir(parents=True, exist_ok=True)
     blocked_path = desk_dir / "blocked_candidates.jsonl"
@@ -51,6 +52,7 @@ def test_capture_from_log_reads_desk_blocked_candidates(tmp_path, monkeypatch):
 
 def test_update_trains_from_suggestion_eval_once_per_new_data(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "runtime" / "logs"), raising=False)
     suggestion_eval = tmp_path / "runtime" / "logs" / "suggestion_eval.jsonl"
     suggestion_eval.parent.mkdir(parents=True, exist_ok=True)
     suggestion_eval.write_text(

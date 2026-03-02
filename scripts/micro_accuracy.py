@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 from pathlib import Path
 import runpy
 
@@ -9,7 +10,7 @@ import pandas as pd
 from config import config as cfg
 from core.telegram_alerts import send_telegram_message
 
-path = "data/trade_log.json"
+path = str(data_root() / "trade_log.json")
 rows = []
 with open(path, "r") as f:
     for line in f:

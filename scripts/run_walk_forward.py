@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import argparse
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ from core.walk_forward import run_walk_forward
 
 def main():
     parser = argparse.ArgumentParser(description="Run rolling walk-forward evaluation.")
-    parser.add_argument("--input", default="data/NIFTY_20260123.csv", help="Input CSV with OHLCV and timestamp column")
+    parser.add_argument("--input", default=str(data_root() / "NIFTY_20260123.csv"), help="Input CSV with OHLCV and timestamp column")
     parser.add_argument("--train-window-days", type=int, default=60)
     parser.add_argument("--test-window-days", type=int, default=10)
     parser.add_argument("--step-days", type=int, default=10)

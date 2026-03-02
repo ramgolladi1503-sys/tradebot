@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +21,7 @@ def _make_eval_env(data_csv: str):
     return base_env
 
 
-def evaluate(model_path, algo="PPO", episodes=3, data_csv="data/ml_features.csv"):
+def evaluate(model_path, algo="PPO", episodes=3, data_csv=str(data_root() / "ml_features.csv")):
     env = _make_eval_env(data_csv=data_csv)
     if algo == "PPO":
         model = PPO.load(model_path)

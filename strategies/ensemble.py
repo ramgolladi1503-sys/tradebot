@@ -6,6 +6,19 @@ class StrategySignal:
     score: float
     reason: str
 
+
+def _normalize_regime(regime):
+    text = str(regime or "").strip().upper()
+    if text in ("", "UNKNOWN"):
+        return "NEUTRAL"
+    if text in ("RANGE", "NEUTRAL", "MEAN_REVERT", "MEANREVERT"):
+        return "MEAN_REVERT"
+    if text in ("EVENT", "NEWS", "SPIKE"):
+        return "EVENT"
+    if text in ("TREND", "TRENDING"):
+        return "TREND"
+    return text
+
 def trend_vwap_signal(ltp, vwap, vwap_slope, atr):
     if not ltp or not vwap:
         return None
@@ -95,17 +108,51 @@ def ensemble_signal(market_data):
     if not volatility_filter(atr, ltp):
         return None
 
-    regime = market_data.get("regime")
+    regime = _normalize_regime(market_data.get("regime"))
     signals = []
-    sig = trend_vwap_signal(ltp, vwap, vwap_slope, atr)
-    if sig and regime in (None, "TREND"):
-        signals.append(sig)
-    sig = mean_reversion_signal(ltp, vwap, rsi_mom)
-    if sig and regime in (None, "MEAN_REVERT"):
-        signals.append(sig)
-    sig = orb_breakout_signal(ltp, orb_high, orb_low, vol_z)
-    if sig and regime in (None, "TREND"):
-        signals.append(sig)
+    if regime == "EVENT":
+        sig = event_breakout_signal(ltp, atr, ltp_change_window)
+        if sig:
+            signals.append(sig)
+        sig = orb_breakout_signal(ltp, orb_high, orb_low, vol_z)
+        if sig:
+            signals.append(sig)
+    elif regime == "MEAN_REVERT":
+        sig = mean_reversion_signal(ltp, vwap, rsi_mom)
+        if sig:
+            signals.append(sig)
+        sig = micro_pattern_signal(
+            market_data.get("ltp_change_5m", 0),
+            market_data.get("ltp_change_10m", 0),
+        )
+        if sig:
+            signals.append(sig)
+    elif regime == "TREND":
+        sig = trend_vwap_signal(ltp, vwap, vwap_slope, atr)
+        if sig:
+            signals.append(sig)
+        sig = orb_breakout_signal(ltp, orb_high, orb_low, vol_z)
+        if sig:
+            signals.append(sig)
+    else:
+        sig = trend_vwap_signal(ltp, vwap, vwap_slope, atr)
+        if sig:
+            signals.append(sig)
+        sig = orb_breakout_signal(ltp, orb_high, orb_low, vol_z)
+        if sig:
+            signals.append(sig)
+        sig = mean_reversion_signal(ltp, vwap, rsi_mom)
+        if sig:
+            signals.append(sig)
+        sig = micro_pattern_signal(
+            market_data.get("ltp_change_5m", 0),
+            market_data.get("ltp_change_10m", 0),
+        )
+        if sig:
+            signals.append(sig)
+        sig = event_breakout_signal(ltp, atr, ltp_change_window)
+        if sig:
+            signals.append(sig)
 
     if not signals:
         # fallback: short-term momentum when indicators missing

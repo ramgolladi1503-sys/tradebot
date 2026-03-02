@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 from pathlib import Path
 from typing import Iterable
@@ -9,7 +10,7 @@ from core.time_utils import now_ist, now_utc_epoch
 
 
 def _reject_log_path() -> Path:
-    return Path(getattr(cfg, "REJECT_REASONS_LOG_PATH", "logs/reject_reasons.jsonl"))
+    return Path(getattr(cfg, "REJECT_REASONS_LOG_PATH", str(logs_dir() / "reject_reasons.jsonl")))
 
 
 def append_reject_reasons(
@@ -56,5 +57,23 @@ def append_reject_reasons(
                     "details": payload_extra,
                 }
                 handle.write(json.dumps(rec, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+    try:
+        from core.storage import emit_gate_rejected_event
+
+        missing_fields = payload_extra.get("missing_fields") if isinstance(payload_extra.get("missing_fields"), list) else []
+        gate_name = payload_extra.get("gate_name") if payload_extra.get("gate_name") is not None else source
+        for reason in rows:
+            emit_gate_rejected_event(
+                symbol=str(symbol or "").upper() or None,
+                strategy=str(strategy or "") or None,
+                reason_code=str(reason),
+                mode=str(mode or getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+                gate_name=str(gate_name) if gate_name is not None else None,
+                data_source=str(source),
+                missing_fields=[str(x) for x in missing_fields if str(x).strip()],
+                features_summary=payload_extra,
+            )
     except Exception:
         pass

@@ -6,6 +6,7 @@ This keeps daily_ops resilient across report API changes.
 from datetime import datetime
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -21,7 +22,7 @@ def _build_decay_report():
     build_fn = getattr(decay_report_module, "build_decay_report", None)
     if callable(build_fn):
         day = datetime.now().strftime("%Y-%m-%d")
-        out_path = Path("logs") / f"decay_report_{day}.json"
+        out_path = logs_dir() / f"decay_report_{day}.json"
         report_path = build_fn(day, out_path)
         return {"source": "build_decay_report", "path": str(report_path)}
 

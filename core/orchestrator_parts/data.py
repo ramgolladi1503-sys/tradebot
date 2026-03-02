@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from core.paths import data_root, logs_dir
 
 import pandas as pd
 
@@ -60,7 +61,7 @@ def quote_ts_epoch(quote_ts):
 
 
 def load_truth_dataset_for_reports():
-    truth_path = Path(getattr(cfg, "TRUTH_DATASET_PATH", "data/truth_dataset.parquet"))
+    truth_path = Path(getattr(cfg, "TRUTH_DATASET_PATH", str(data_root() / "truth_dataset.parquet")))
     if not truth_path.exists():
         return pd.DataFrame(), f"truth_dataset_missing:{truth_path}"
     try:
@@ -71,8 +72,8 @@ def load_truth_dataset_for_reports():
 
 def write_cycle_reports(cycle_reason=None, decision_traces=None, config_snapshot=None):
     day = now_ist().date().isoformat()
-    audit_path = Path(f"logs/daily_audit_{day}.json")
-    execution_path = Path(f"logs/execution_report_{day}.json")
+    audit_path = logs_dir() / f"daily_audit_{day}.json"
+    execution_path = logs_dir() / f"execution_report_{day}.json"
     report_reason = cycle_reason or "cycle_complete"
     decision_traces = list(decision_traces or [])
     config_snapshot = dict(config_snapshot or {})

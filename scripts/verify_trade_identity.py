@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 from pathlib import Path
 import runpy
 import sqlite3
@@ -10,7 +11,7 @@ from core.trade_store import init_db
 
 
 def main():
-    db_path = Path(getattr(cfg, "TRADE_DB_PATH", "data/trades.db"))
+    db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
     if not db_path.exists():
         init_db()
     if not db_path.exists():

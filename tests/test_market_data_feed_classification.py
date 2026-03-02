@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from config import config as cfg
 from core import market_data as md
@@ -27,6 +28,7 @@ def test_sim_index_fresh_ltp_missing_depth_is_missing_not_stale(monkeypatch):
 
 def test_live_index_fresh_ltp_missing_depth_blocks_not_stale_and_logs_missing(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)
     monkeypatch.setattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5, raising=False)
@@ -49,7 +51,7 @@ def test_live_index_fresh_ltp_missing_depth_blocks_not_stale_and_logs_missing(mo
     assert out["stale_reasons"] == []
 
     md._log_index_bidask_missing("NIFTY", source="ws")
-    p = tmp_path / "logs" / "live_quote_errors.jsonl"
+    p = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert rows
     assert rows[-1]["event_code"] == "index_bidask_missing"

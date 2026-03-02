@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import argparse
 import json
 from collections import deque
@@ -82,7 +83,7 @@ def _mark_no_data(candidate) -> dict:
 
 
 def _write_status(payload: dict) -> None:
-    path = Path(getattr(cfg, "SHADOW_EVAL_STATUS_PATH", "logs/shadow_eval_status_latest.json"))
+    path = Path(getattr(cfg, "SHADOW_EVAL_STATUS_PATH", str(logs_dir() / "shadow_eval_status_latest.json")))
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True))

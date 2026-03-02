@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from config import config as cfg
+from core.paths import db_dir, logs_dir
 
 
 _COMPLETION_STATES = {"PARTIAL", "FILLED", "REJECTED", "CANCELLED", "EXPIRED"}
@@ -67,7 +68,8 @@ class ExecutionPerformanceTracker:
     _lock = threading.RLock()
 
     def __init__(self, db_path: str | Path | None = None):
-        self._db_path = Path(str(db_path or getattr(cfg, "TRADE_DB_PATH", "data/trades.db")))
+        fallback_db = db_dir() / f"{getattr(cfg, 'DESK_ID', 'DEFAULT')}.sqlite"
+        self._db_path = Path(str(db_path or getattr(cfg, "TRADE_DB_PATH", str(fallback_db))))
         self._window_trades = max(1, int(getattr(cfg, "EXEC_PERF_WINDOW_TRADES", 100)))
         self._min_fill_rate_pct = float(getattr(cfg, "EXEC_PERF_MIN_FILL_RATE_PCT", 60.0))
         self._max_rejection_rate_pct = float(getattr(cfg, "EXEC_PERF_MAX_REJECTION_RATE_PCT", 10.0))
@@ -75,7 +77,7 @@ class ExecutionPerformanceTracker:
             1.0, float(getattr(cfg, "EXEC_PERF_DISABLE_MINUTES", 30.0)) * 60.0
         )
         self._log_path = Path(
-            str(getattr(cfg, "EXEC_PERF_LOG_PATH", "logs/execution_performance.jsonl"))
+            str(getattr(cfg, "EXEC_PERF_LOG_PATH", str(logs_dir() / "execution_performance.jsonl")))
         )
         self._init_db()
 

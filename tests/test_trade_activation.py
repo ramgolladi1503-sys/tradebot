@@ -1,7 +1,16 @@
 # Migration note:
 # Added tests for deterministic activation rules used by suggested trades.
 
+import pytest
+
+from config import config as cfg
 from core.trade_activation import should_activate, activate_trade
+
+
+@pytest.fixture(autouse=True)
+def _force_non_live_mode(monkeypatch):
+    # Keep unit tests deterministic and independent of global LIVE feed health state.
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
 
 
 def test_should_activate_buy_breakout():

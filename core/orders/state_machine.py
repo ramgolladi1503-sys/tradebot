@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Iterable
 
 from config import config as cfg
+from core.paths import db_dir
 
 
 class OrderState(str, Enum):
@@ -108,7 +109,8 @@ class OrderStateMachine:
     _write_lock = threading.RLock()
 
     def __init__(self, db_path: str | Path | None = None):
-        self._db_path = Path(str(db_path or getattr(cfg, "TRADE_DB_PATH", "data/trades.db")))
+        fallback_db = db_dir() / f"{getattr(cfg, 'DESK_ID', 'DEFAULT')}.sqlite"
+        self._db_path = Path(str(db_path or getattr(cfg, "TRADE_DB_PATH", str(fallback_db))))
         self._init_db()
 
     def _conn(self) -> sqlite3.Connection:

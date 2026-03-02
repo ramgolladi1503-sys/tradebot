@@ -5,6 +5,7 @@ Computes allowed->candidate ratio from decision events and emits DEGRADED with t
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 from collections import Counter
 from pathlib import Path
@@ -16,19 +17,19 @@ from core.time_utils import now_ist, now_utc_epoch
 
 
 def _decision_events_path() -> Path:
-    return Path(str(getattr(cfg, "DECISION_LOG_PATH", "logs/desks/DEFAULT/decision_events.jsonl")))
+    return Path(str(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "desks" / "DEFAULT" / "decision_events.jsonl"))))
 
 
 def _reject_reasons_path() -> Path:
-    return Path(str(getattr(cfg, "REJECT_REASONS_LOG_PATH", "logs/desks/DEFAULT/reject_reasons.jsonl")))
+    return Path(str(getattr(cfg, "REJECT_REASONS_LOG_PATH", str(logs_dir() / "desks" / "DEFAULT" / "reject_reasons.jsonl"))))
 
 
 def _events_path() -> Path:
-    return Path(str(getattr(cfg, "SUGGESTION_RELIABILITY_LOG_PATH", "logs/suggestion_reliability.jsonl")))
+    return Path(str(getattr(cfg, "SUGGESTION_RELIABILITY_LOG_PATH", str(logs_dir() / "suggestion_reliability.jsonl"))))
 
 
 def _latest_path() -> Path:
-    return Path(str(getattr(cfg, "SUGGESTION_RELIABILITY_LATEST_PATH", "logs/suggestion_reliability_latest.json")))
+    return Path(str(getattr(cfg, "SUGGESTION_RELIABILITY_LATEST_PATH", str(logs_dir() / "suggestion_reliability_latest.json"))))
 
 
 def _parse_ts_epoch(value: Any) -> float | None:

@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 from pathlib import Path
 import runpy
 
@@ -11,7 +12,7 @@ import pandas as pd
 
 URL = "http://localhost:8000/webhook"
 SECRET = "YOUR_TV_SHARED_SECRET"
-EXCEL_PATH = "logs/signals.xlsx"
+EXCEL_PATH = str(logs_dir() / "signals.xlsx")
 
 df = pd.read_excel(EXCEL_PATH)
 for _, row in df.iterrows():

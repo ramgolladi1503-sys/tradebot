@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -8,10 +9,10 @@ import re
 from pathlib import Path
 
 QUEUE_FILES = [
-    Path("logs/review_queue.json"),
-    Path("logs/quick_review_queue.json"),
-    Path("logs/zero_hero_queue.json"),
-    Path("logs/scalp_queue.json"),
+    logs_dir() / "review_queue.json",
+    logs_dir() / "quick_review_queue.json",
+    logs_dir() / "zero_hero_queue.json",
+    logs_dir() / "scalp_queue.json",
 ]
 
 

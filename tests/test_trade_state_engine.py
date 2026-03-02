@@ -1,6 +1,15 @@
 import time
 
+import pytest
+
+from config import config as cfg
 import core.trade_state_engine as engine
+
+
+@pytest.fixture(autouse=True)
+def _force_non_live_mode(monkeypatch):
+    # Keep state-engine tests independent of shared LIVE feed monitor state.
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
 
 
 def test_buy_activates_when_ltp_crosses_entry(monkeypatch):

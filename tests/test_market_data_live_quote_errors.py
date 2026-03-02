@@ -8,6 +8,7 @@ from core import market_data
 
 def test_append_live_quote_error_rate_limited(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 30.0, raising=False)
     market_data._LIVE_QUOTE_ERROR_LAST_TS.clear()
 
@@ -35,7 +36,7 @@ def test_append_live_quote_error_rate_limited(monkeypatch, tmp_path):
         details={"missing_fields": ["bid", "ask"]},
     )
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     assert out_path.exists()
     rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 1
@@ -50,6 +51,7 @@ def test_append_live_quote_error_rate_limited(monkeypatch, tmp_path):
 
 def test_sim_index_missing_depth_does_not_append_live_quote_error(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
@@ -63,7 +65,7 @@ def test_sim_index_missing_depth_does_not_append_live_quote_error(monkeypatch, t
         market_open=True,
     )
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     if out_path.exists():
         rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert all(row.get("event_code") != "index_bidask_missing" for row in rows)
@@ -73,6 +75,7 @@ def test_sim_index_missing_depth_does_not_append_live_quote_error(monkeypatch, t
 
 def test_live_index_missing_depth_appends_live_quote_error(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
@@ -86,7 +89,7 @@ def test_live_index_missing_depth_appends_live_quote_error(monkeypatch, tmp_path
         market_open=True,
     )
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert rows
     row = rows[-1]
@@ -102,6 +105,7 @@ def test_live_index_missing_depth_appends_live_quote_error(monkeypatch, tmp_path
 
 def test_live_index_missing_depth_with_usable_ltp_logs_warn(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
@@ -117,7 +121,7 @@ def test_live_index_missing_depth_with_usable_ltp_logs_warn(monkeypatch, tmp_pat
         ltp_age_sec=1.0,
     )
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert rows
     row = rows[-1]
@@ -128,6 +132,7 @@ def test_live_index_missing_depth_with_usable_ltp_logs_warn(monkeypatch, tmp_pat
 
 def test_live_index_missing_depth_offhours_does_not_append_live_quote_error(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "LIVE_QUOTE_ERROR_MIN_LOG_SEC", 0.0, raising=False)
@@ -141,7 +146,7 @@ def test_live_index_missing_depth_offhours_does_not_append_live_quote_error(monk
         market_open=False,
     )
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     if not out_path.exists():
         return
     rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -150,6 +155,7 @@ def test_live_index_missing_depth_offhours_does_not_append_live_quote_error(monk
 
 def test_get_ltp_logs_kite_not_initialized_with_canonical_schema(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_API", True, raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
@@ -167,7 +173,7 @@ def test_get_ltp_logs_kite_not_initialized_with_canonical_schema(monkeypatch, tm
 
     market_data.get_ltp("RELIANCE")
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     kite_rows = [row for row in rows if row.get("event_code") == "kite_not_initialized"]
     assert kite_rows
@@ -179,6 +185,7 @@ def test_get_ltp_logs_kite_not_initialized_with_canonical_schema(monkeypatch, tm
 
 def test_get_ltp_logs_ltp_fetch_failed_with_canonical_schema(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_API", True, raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
@@ -196,7 +203,7 @@ def test_get_ltp_logs_ltp_fetch_failed_with_canonical_schema(monkeypatch, tmp_pa
 
     market_data.get_ltp("NIFTY")
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     failed_rows = [row for row in rows if row.get("event_code") == "ltp_fetch_failed"]
     assert failed_rows
@@ -209,6 +216,7 @@ def test_get_ltp_logs_ltp_fetch_failed_with_canonical_schema(monkeypatch, tmp_pa
 
 def test_get_ltp_rejects_implausible_ws_index_price_and_uses_rest(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_API", True, raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
@@ -237,7 +245,7 @@ def test_get_ltp_rejects_implausible_ws_index_price_and_uses_rest(monkeypatch, t
     price = market_data.get_ltp("NIFTY")
     assert price == 25950.0
 
-    out_path = Path("logs/live_quote_errors.jsonl")
+    out_path = Path(cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     sanity_rows = [row for row in rows if row.get("event_code") == "index_ltp_sanity_reject"]
     assert sanity_rows

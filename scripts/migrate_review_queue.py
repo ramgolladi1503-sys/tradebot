@@ -1,12 +1,13 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 import json
 from pathlib import Path
 
-QUEUE_PATH = Path("logs/review_queue.json")
+QUEUE_PATH = logs_dir() / "review_queue.json"
 
 def migrate():
     if not QUEUE_PATH.exists():

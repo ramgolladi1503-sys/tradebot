@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir, data_root
 
 import json
 import math
@@ -13,7 +14,7 @@ from core.kite_client import kite_client
 
 def _log_error(payload: dict) -> None:
     try:
-        err_path = Path("logs/cross_asset_errors.jsonl")
+        err_path = logs_dir() / "cross_asset_errors.jsonl"
         err_path.parent.mkdir(exist_ok=True)
         with err_path.open("a") as f:
             f.write(json.dumps(payload, default=str) + "\n")
@@ -342,10 +343,10 @@ class CrossAsset:
         }
         self.cache = payload
         try:
-            Path("data").mkdir(exist_ok=True)
-            Path("data/cross_asset.json").write_text(json.dumps(payload, indent=2))
-            Path("logs").mkdir(exist_ok=True)
-            Path("logs/cross_asset_features.json").write_text(json.dumps(features, indent=2))
+            data_root().mkdir(exist_ok=True)
+            data_root() / "cross_asset.json".write_text(json.dumps(payload, indent=2))
+            logs_dir().mkdir(exist_ok=True)
+            logs_dir() / "cross_asset_features.json".write_text(json.dumps(features, indent=2))
         except Exception as e:
             _log_error({"ts": now, "error": "write_failed", "detail": str(e)})
         return payload

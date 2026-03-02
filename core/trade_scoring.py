@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir
 
 from pathlib import Path
 import json
@@ -17,7 +18,7 @@ def _adaptive_multiplier(strategy_name: str | None) -> float:
     if not strategy_name:
         return 1.0
     try:
-        path = Path("logs/strategy_perf.json")
+        path = logs_dir() / "strategy_perf.json"
         if not path.exists():
             return 1.0
         raw = json.loads(path.read_text())

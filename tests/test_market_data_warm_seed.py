@@ -183,6 +183,7 @@ def test_fetch_live_market_data_empty_buffer_sets_indicators_false(tmp_path, mon
 
 def test_insufficient_ohlc_warning_logged_once_when_kite_unavailable(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_API", False, raising=False)
     monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
     monkeypatch.setattr(market_data.kite_client, "kite", None, raising=False)

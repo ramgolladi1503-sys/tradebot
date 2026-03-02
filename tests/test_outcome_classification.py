@@ -11,8 +11,11 @@ def test_trailing_exit_above_entry_is_win(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     db_path = tmp_path / "trades.db"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
-    Path("data").mkdir(parents=True, exist_ok=True)
-    Path("logs").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(cfg, "DATA_ROOT", str(tmp_path / "data"), raising=False)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "TRADE_LOG_PATH", str(Path(cfg.LOGS_ROOT) / "trade_log.jsonl"), raising=False)
+    Path(cfg.DATA_ROOT).mkdir(parents=True, exist_ok=True)
+    Path(cfg.LOGS_ROOT).mkdir(parents=True, exist_ok=True)
 
     trade_store.insert_trade(
         {
@@ -42,7 +45,7 @@ def test_trailing_exit_above_entry_is_win(tmp_path, monkeypatch):
         }
     )
 
-    with open("data/trade_log.json", "w", encoding="utf-8") as f:
+    with open(Path(cfg.TRADE_LOG_PATH), "w", encoding="utf-8") as f:
         f.write(
             json.dumps(
                 {

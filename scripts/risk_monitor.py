@@ -1,5 +1,6 @@
 from pathlib import Path
 import runpy
+from core.paths import logs_dir, data_root
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
@@ -12,8 +13,8 @@ import sys
 from config import config as cfg
 from core.telegram_alerts import send_telegram_message
 
-LOG_PATH = Path("data/trade_log.json")
-OUT_PATH = Path("logs/risk_monitor.json")
+LOG_PATH = data_root() / "trade_log.json"
+OUT_PATH = logs_dir() / "risk_monitor.json"
 
 def compute_daily_pnl():
     if not LOG_PATH.exists():

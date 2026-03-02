@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import time
 import hashlib
 import json
@@ -63,7 +64,7 @@ class ExecutionEngine:
             0.0, float(getattr(cfg, "EXEC_NETWORK_RETRY_MAX_SEC", 4.0))
         )
         self._failure_log_path = Path(
-            str(getattr(cfg, "EXEC_FAILURE_LOG_PATH", "logs/execution_failures.jsonl"))
+            str(getattr(cfg, "EXEC_FAILURE_LOG_PATH", str(logs_dir() / "execution_failures.jsonl")))
         )
         self.kill_switch_triggered = False
         self.kill_switch_reason = None

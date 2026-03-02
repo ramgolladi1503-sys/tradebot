@@ -3,6 +3,7 @@ from pathlib import Path
 from collections import defaultdict, deque
 from config import config as cfg
 from core.strategy_lifecycle import StrategyLifecycle
+from core.paths import logs_dir
 
 class StrategyTracker:
     def __init__(self, max_len=200):
@@ -20,7 +21,7 @@ class StrategyTracker:
 
     def _load_degraded(self):
         try:
-            path = Path("logs/strategy_degradation.json")
+            path = logs_dir() / "strategy_degradation.json"
             if path.exists():
                 self.degraded = json.loads(path.read_text()).get("degraded", {})
         except Exception:
@@ -28,7 +29,7 @@ class StrategyTracker:
 
     def _load_decay_state(self):
         try:
-            path = Path("logs/strategy_decay_state.json")
+            path = logs_dir() / "strategy_decay_state.json"
             if path.exists():
                 raw = json.loads(path.read_text())
                 self.decay_state = raw.get("decay_state", {})
@@ -40,16 +41,16 @@ class StrategyTracker:
     def set_degraded(self, degraded: dict):
         self.degraded = degraded or {}
         try:
-            Path("logs").mkdir(exist_ok=True)
-            Path("logs/strategy_degradation.json").write_text(json.dumps({"degraded": self.degraded}, indent=2))
+            logs_dir().mkdir(exist_ok=True)
+            logs_dir() / "strategy_degradation.json".write_text(json.dumps({"degraded": self.degraded}, indent=2))
         except Exception:
             pass
 
     def set_decay(self, decay_probs: dict):
         self.decay_probs = decay_probs or {}
         try:
-            Path("logs").mkdir(exist_ok=True)
-            Path("logs/strategy_decay_probs.json").write_text(json.dumps(self.decay_probs, indent=2))
+            logs_dir().mkdir(exist_ok=True)
+            logs_dir() / "strategy_decay_probs.json".write_text(json.dumps(self.decay_probs, indent=2))
         except Exception:
             pass
 
@@ -94,8 +95,8 @@ class StrategyTracker:
             pass
         # persist state
         try:
-            Path("logs").mkdir(exist_ok=True)
-            Path("logs/strategy_decay_state.json").write_text(json.dumps({
+            logs_dir().mkdir(exist_ok=True)
+            logs_dir() / "strategy_decay_state.json".write_text(json.dumps({
                 "decay_state": self.decay_state,
                 "soft_disabled": self.soft_disabled,
             }, indent=2))

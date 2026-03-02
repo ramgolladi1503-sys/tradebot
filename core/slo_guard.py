@@ -5,6 +5,7 @@ LIVE-open can auto-trigger failover; PAPER/SIM stays observable-only.
 
 from __future__ import annotations
 
+from core.paths import data_root, logs_dir
 import json
 from pathlib import Path
 from typing import Any
@@ -19,11 +20,11 @@ from core.time_utils import compute_age_sec, now_ist, now_utc_epoch
 
 
 def _state_path() -> Path:
-    return Path(getattr(cfg, "SLO_FAILOVER_STATE_PATH", "logs/slo_failover_state.json"))
+    return Path(getattr(cfg, "SLO_FAILOVER_STATE_PATH", str(logs_dir() / "slo_failover_state.json")))
 
 
 def _events_path() -> Path:
-    return Path(getattr(cfg, "SLO_EVENT_LOG_PATH", "logs/slo_events.jsonl"))
+    return Path(getattr(cfg, "SLO_EVENT_LOG_PATH", str(logs_dir() / "slo_events.jsonl")))
 
 
 def _default_state() -> dict[str, Any]:

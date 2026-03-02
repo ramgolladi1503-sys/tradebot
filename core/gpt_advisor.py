@@ -1,9 +1,9 @@
 import json
 import os
 import requests
-from pathlib import Path
 import time
-from datetime import datetime
+from core.paths import logs_dir
+from core.time_utils import utc_now
 
 try:
     from dotenv import load_dotenv
@@ -25,7 +25,7 @@ INPUT_COST_PER_1M = float(os.getenv("OPENAI_INPUT_COST_PER_1M", "0.25"))
 OUTPUT_COST_PER_1M = float(os.getenv("OPENAI_OUTPUT_COST_PER_1M", "2.0"))
 MAX_TOKENS_EST = int(os.getenv("GPT_MAX_TOKENS_EST", "2000"))
 
-USAGE_PATH = Path("logs/gpt_usage.json")
+USAGE_PATH = logs_dir() / "gpt_usage.json"
 
 
 def _schema():
@@ -90,7 +90,7 @@ def _load_usage():
         return {"calls": [], "cost": 0.0, "day": ""}
 
 def _save_usage(usage):
-    USAGE_PATH.parent.mkdir(exist_ok=True)
+    USAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
     USAGE_PATH.write_text(json.dumps(usage))
 
 def _estimate_cost(input_tokens, output_tokens):
@@ -112,7 +112,7 @@ def _update_usage_from_response(usage, resp_usage):
 
 def _can_call():
     usage = _load_usage()
-    today = datetime.utcnow().date().isoformat()
+    today = utc_now().date().isoformat()
     if usage.get("day") != today:
         usage = {"calls": [], "cost": 0.0, "day": today, "input_tokens": 0, "output_tokens": 0}
     now = time.time()
@@ -312,8 +312,8 @@ def list_gemini_models():
 
 
 def save_advice(trade_id: str, advice: dict, meta: dict | None = None):
-    path = Path("logs/gpt_advice.jsonl")
-    path.parent.mkdir(exist_ok=True)
-    entry = {"trade_id": trade_id, "advice": advice, "meta": meta or {}, "timestamp": datetime.utcnow().isoformat()}
-    with path.open("a") as f:
+    advice_path = logs_dir() / "gpt_advice.jsonl"
+    advice_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {"trade_id": trade_id, "advice": advice, "meta": meta or {}, "timestamp": utc_now().isoformat()}
+    with advice_path.open("a") as f:
         f.write(json.dumps(entry) + "\n")

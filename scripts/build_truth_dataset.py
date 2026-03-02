@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import argparse
 import sys
 from pathlib import Path
@@ -22,9 +23,9 @@ def _missingness_report(df: pd.DataFrame) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Build the canonical truth dataset from DecisionEvents.")
-    parser.add_argument("--jsonl", default=getattr(cfg, "DECISION_LOG_PATH", "logs/decision_events.jsonl"), help="DecisionEvents JSONL path.")
-    parser.add_argument("--sqlite", default=getattr(cfg, "TRADE_DB_PATH", "data/trades.db"), help="DecisionEvents SQLite path.")
-    parser.add_argument("--out-parquet", default="data/truth_dataset.parquet", help="Output parquet path.")
+    parser.add_argument("--jsonl", default=getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")), help="DecisionEvents JSONL path.")
+    parser.add_argument("--sqlite", default=getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")), help="DecisionEvents SQLite path.")
+    parser.add_argument("--out-parquet", default=str(data_root() / "truth_dataset.parquet"), help="Output parquet path.")
     parser.add_argument("--out-csv", default="", help="Optional output CSV path.")
     args = parser.parse_args()
 

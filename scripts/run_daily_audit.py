@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 from core.time_utils import now_ist
+from core.paths import data_root, logs_dir
 
 import pandas as pd
 
@@ -23,8 +24,8 @@ from core.reports.rl_shadow_report import build_rl_shadow_report
 
 
 def _status_paths(day: str) -> tuple[Path, Path]:
-    logs_dir = Path("logs")
-    return logs_dir / f"daily_audit_status_{day}.json", logs_dir / "daily_audit_status_latest.json"
+    log_root = logs_dir()
+    return log_root / f"daily_audit_status_{day}.json", log_root / "daily_audit_status_latest.json"
 
 
 def _write_status(payload: dict) -> Path:
@@ -58,7 +59,7 @@ def _return_ok_with_skips(day: str, reason_code: str, detail: str | None = None)
 def main():
     parser = argparse.ArgumentParser(description="Run daily audit reports.")
     parser.add_argument("--date", default=None, help="YYYY-MM-DD date (default: today).")
-    parser.add_argument("--truth", default="data/truth_dataset.parquet", help="Truth dataset parquet path.")
+    parser.add_argument("--truth", default=str(data_root() / "truth_dataset.parquet"), help="Truth dataset parquet path.")
     args = parser.parse_args()
 
     day = args.date or now_ist().strftime("%Y-%m-%d")
@@ -83,10 +84,10 @@ def main():
         reason = "TRUTH_DATASET_EMPTY"
         return _return_ok_with_skips(day, reason, detail=str(truth_path))
 
-    audit_path = Path(f"logs/daily_audit_{day}.json")
-    exec_path = Path(f"logs/execution_report_{day}.json")
-    decay_path = Path(f"logs/decay_report_{day}.json")
-    rl_path = Path(f"logs/rl_shadow_report_{day}.json")
+    audit_path = logs_dir() / f"daily_audit_{day}.json"
+    exec_path = logs_dir() / f"execution_report_{day}.json"
+    decay_path = logs_dir() / f"decay_report_{day}.json"
+    rl_path = logs_dir() / f"rl_shadow_report_{day}.json"
 
     build_daily_audit(df, day, audit_path)
     build_execution_report(df, day, exec_path)

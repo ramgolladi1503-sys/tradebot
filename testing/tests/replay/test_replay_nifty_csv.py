@@ -1,3 +1,4 @@
+from core.paths import data_root
 import pandas as pd
 from pathlib import Path
 
@@ -25,7 +26,7 @@ def _build_market_data(row, symbol="NIFTY"):
 
 
 def test_replay_nifty_csv_no_crash():
-    path = Path("data/NIFTY_20260123.csv")
+    path = data_root() / "NIFTY_20260123.csv"
     assert path.exists(), "Missing NIFTY replay data"
 
     df = pd.read_csv(path)
@@ -44,7 +45,7 @@ def test_replay_nifty_csv_no_crash():
 
 
 def test_replay_nifty_deterministic_trade_count():
-    path = Path("data/NIFTY_20260123.csv")
+    path = data_root() / "NIFTY_20260123.csv"
     df = pd.read_csv(path)
     df = add_indicators(df).dropna().reset_index(drop=True)
 

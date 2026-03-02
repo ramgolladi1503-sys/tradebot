@@ -1,6 +1,8 @@
+from core.paths import data_root, logs_dir
 import time
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from config import config as cfg
 from core.execution.chokepoint import ApprovalMissingOrInvalid, require_approval_or_abort
@@ -13,18 +15,22 @@ from core.orders.order_intent import OrderIntent
 from core.orders.state_machine import OrderState
 from core.readiness_gate import run_readiness_check
 from core.freshness_sla import get_freshness_status
+from core.market_data_monitor import get_feed_health_monitor
+from core.feed.gate import check_execution_allowed
 
 class ExecutionRouter:
     """
     Routes trades to SIM/PAPER/LIVE modes.
     LIVE mode is a stub until order placement is enabled.
     """
-    def __init__(self):
+    def __init__(self, *, feed_health=None):
         self.engine = ExecutionEngine()
         self.paper_sim = PaperFillSimulator(
             timeout_sec=getattr(cfg, "EXEC_SIM_TIMEOUT_SEC", 3.0),
             poll_sec=getattr(cfg, "EXEC_SIM_POLL_SEC", 0.25),
         )
+        self.feed_health = feed_health or get_feed_health_monitor()
+        self._use_legacy_feed_gate = feed_health is not None
         self._intent_log_write_warned = False
 
     def execute(self, trade, bid, ask, volume, depth=None, snapshot_fn=None, spread_pct=None, depth_imbalance=None, vol_z=None):
@@ -241,6 +247,25 @@ class ExecutionRouter:
                     slippage=(report or {}).get("slippage"),
                     time_to_fill_sec=round(max(time.time() - start_ts, 0.0), 6),
                 )
+                try:
+                    from core.reconciliation import emit_execution_fill_event
+
+                    qty_value = fill_qty if fill_qty is not None else getattr(trade, "qty", None)
+                    emit_execution_fill_event(
+                        order_id=current_order.order_id if current_order is not None else getattr(trade, "order_id", None),
+                        broker_order_id=current_order.broker_order_id if current_order is not None else getattr(trade, "broker_order_id", None),
+                        trade_id=getattr(trade, "trade_id", None),
+                        symbol=getattr(trade, "symbol", None) or getattr(trade, "instrument", None),
+                        side=getattr(trade, "side", None),
+                        qty=qty_value,
+                        price=price,
+                        ts_utc=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                        run_id=getattr(trade, "run_id", None) or getattr(cfg, "RUN_ID", None) or getattr(cfg, "EXEC_RUN_ID", None),
+                        desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+                        mode=mode,
+                    )
+                except Exception as exc:
+                    print(f"[EXECUTION_FILL_EVENT_WARN] {exc}")
                 return filled, price, _report(report or {})
 
             abort_reason = "execution_aborted"
@@ -267,6 +292,58 @@ class ExecutionRouter:
                     extra={"approval_payload_hash": payload_hash},
                 )
             _transition(OrderState.ACKNOWLEDGED, reason="approval_consumed")
+            if self._use_legacy_feed_gate and hasattr(self.feed_health, "gate_live_entries"):
+                try:
+                    allowed, _legacy_reason, feed_snapshot = self.feed_health.gate_live_entries(
+                        advisory_only=False
+                    )
+                    state_text = str(
+                        getattr(getattr(feed_snapshot, "state", None), "value", "UNKNOWN")
+                    ).upper()
+                    gate_reason = (
+                        f"feed_state_{state_text}"
+                        if state_text in {"DEGRADED", "DOWN"}
+                        else "ok"
+                    )
+                    gate_details = {
+                        "reason": str(getattr(feed_snapshot, "reason", "") or _legacy_reason),
+                        "group_key": "LEGACY_MONITOR",
+                    }
+                except Exception:
+                    allowed, gate_reason, state_text, gate_details = (
+                        False,
+                        "feed_state_UNKNOWN",
+                        "DOWN",
+                        {"reason": "feed_gate_error"},
+                    )
+            else:
+                try:
+                    allowed, gate_reason, state_text, gate_details = check_execution_allowed(
+                        getattr(trade, "symbol", None) or getattr(trade, "instrument", None)
+                    )
+                except Exception:
+                    allowed, gate_reason, state_text, gate_details = (
+                        False,
+                        "feed_state_UNKNOWN",
+                        "DOWN",
+                        {"reason": "feed_gate_error"},
+                    )
+            if not allowed:
+                feed_reason = str(gate_details.get("reason") or gate_reason)
+                if state_text == "DOWN":
+                    try:
+                        self.feed_health.maybe_trigger_reconnect(reason_prefix="execution_router_live_block")
+                    except Exception:
+                        pass
+                return _abort(
+                    gate_reason,
+                    note=f"{gate_reason}:{feed_reason}",
+                    extra={
+                        "feed_state": state_text,
+                        "feed_reason": feed_reason,
+                        "feed_group": gate_details.get("group_key"),
+                    },
+                )
             self._record_intent(trade, bid, ask, volume, depth=depth, note="live placement requested")
             return _abort("live_not_implemented")
 
@@ -384,8 +461,8 @@ class ExecutionRouter:
         try:
             path = Path(
                 str(
-                    getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", "logs/execution_intents.jsonl")
-                    or "logs/execution_intents.jsonl"
+                    getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", str(logs_dir() / "execution_intents.jsonl"))
+                    or str(logs_dir() / "execution_intents.jsonl")
                 )
             )
             payload = {

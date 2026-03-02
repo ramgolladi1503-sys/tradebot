@@ -20,6 +20,7 @@ import urllib.request
 import gzip
 from pathlib import Path
 from datetime import datetime, timezone
+from core.paths import data_root
 
 try:
     from config import config as cfg
@@ -38,7 +39,7 @@ def _default_out_path() -> Path:
         raw = str(getattr(cfg, "UPSTOX_INSTRUMENTS_PATH", "") or "").strip()
         if raw:
             return Path(raw)
-    return Path("data/upstox_instruments.json.gz")
+    return data_root() / "upstox_instruments.json.gz"
 
 
 def _write_payload(path: Path, payload: bytes) -> int:

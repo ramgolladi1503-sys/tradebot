@@ -25,3 +25,14 @@ def test_live_pnl_sell():
     res = compute_row_live_pnl(row)
     assert res["pnl_1qty"] == 10.0
     assert res["pnl_1lot"] == 250.0
+
+
+def test_live_pnl_missing_ltp():
+    row = {
+        "status": "ACTIVE",
+        "fill_price": 100,
+        "side": "BUY",
+    }
+    res = compute_row_live_pnl(row)
+    assert res["pnl_reason"] == "missing_ltp"
+    assert res["pnl_1qty"] is None

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.paths import logs_dir, data_root
 
 import csv
 import json
@@ -108,7 +109,7 @@ class ReplayEngine:
 
     def replay_day(self, date_str: str, symbols: List[str], speed: float = 1.0) -> Path:
         symbol_set = {s.upper() for s in symbols}
-        inst_map = _load_instruments_map(Path("data/kite_instruments.csv"))
+        inst_map = _load_instruments_map(data_root() / "kite_instruments.csv")
         start_epoch, end_epoch = _date_bounds(date_str)
         ticks = self._load_ticks(start_epoch, end_epoch)
         depth = self._load_depth(start_epoch, end_epoch)
@@ -117,7 +118,7 @@ class ReplayEngine:
         # index depth by time
         depth_idx = 0
         latest_depth = {}
-        out_path = Path(f"logs/decisions_replay_{date_str}.json")
+        out_path = logs_dir() / f"decisions_replay_{date_str}.json"
         out_path.parent.mkdir(exist_ok=True)
 
         trace_counter = 0

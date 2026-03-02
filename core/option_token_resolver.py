@@ -9,10 +9,11 @@ from __future__ import annotations
 from datetime import datetime, date
 from typing import Any
 
-from config import config as cfg
+from core.instruments import build_option_registry, log_requested_expiry_missing
 from core.kite_client import kite_client
 from core.log_writer import get_jsonl_writer
 from core.paths import logs_dir
+from core.time_utils import utc_now
 
 _LOG_PATH = logs_dir() / "option_token_resolution.jsonl"
 _LOGGER = get_jsonl_writer(_LOG_PATH)
@@ -46,6 +47,10 @@ def resolve_option_token(
     exp = _coerce_expiry(expiry_date)
     if not sym or not opt_type or exp is None or strike is None:
         return None
+    try:
+        strike_val = float(strike)
+    except Exception:
+        return None
     exchange = (exchange or ("BFO" if sym == "SENSEX" else "NFO")).upper()
     segment = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
     try:
@@ -55,7 +60,7 @@ def resolve_option_token(
     if not data:
         _LOGGER.write(
             {
-                "ts": datetime.utcnow().isoformat(),
+                "ts": utc_now().isoformat(),
                 "event": "OPTION_TOKEN_RESOLUTION_EMPTY",
                 "symbol": sym,
                 "expiry": str(exp),
@@ -65,55 +70,60 @@ def resolve_option_token(
             }
         )
         return None
-    for inst in data:
-        if inst.get("segment") != segment:
-            continue
-        if _norm_text(inst.get("name")) != sym:
-            continue
-        inst_exp = _coerce_expiry(inst.get("expiry"))
-        if inst_exp != exp:
-            continue
-        try:
-            inst_strike = float(inst.get("strike"))
-        except Exception:
-            continue
-        if abs(inst_strike - float(strike)) > 1e-6:
-            continue
-        if _norm_text(inst.get("instrument_type")) != opt_type:
-            continue
-        token = inst.get("instrument_token")
-        if not token:
-            continue
+    registry_payload = build_option_registry(
+        symbol=sym,
+        instruments=data,
+        exchange=exchange,
+    )
+    registry = registry_payload.get("registry") or {}
+    key = (sym, segment, strike_val, opt_type, exp)
+    entry = registry.get(key)
+    if isinstance(entry, dict) and entry.get("instrument_token"):
+        token = int(entry.get("instrument_token"))
         payload = {
-            "instrument_token": int(token),
-            "tradingsymbol": inst.get("tradingsymbol"),
+            "instrument_token": token,
+            "tradingsymbol": entry.get("tradingsymbol"),
             "exchange": exchange,
             "segment": segment,
         }
         _LOGGER.write(
             {
-                "ts": datetime.utcnow().isoformat(),
+                "ts": utc_now().isoformat(),
                 "event": "OPTION_TOKEN_RESOLVED",
                 "symbol": sym,
                 "expiry": str(exp),
-                "strike": float(strike),
+                "strike": float(strike_val),
                 "option_type": opt_type,
-                "instrument_token": int(token),
-                "tradingsymbol": inst.get("tradingsymbol"),
+                "instrument_token": token,
+                "tradingsymbol": entry.get("tradingsymbol"),
                 "exchange": exchange,
             }
         )
         return payload
+    available_expiries = sorted(
+        {
+            k[4]
+            for k in registry.keys()
+            if k[0] == sym and k[1] == segment and k[3] == opt_type and abs(float(k[2]) - strike_val) <= 1e-6
+        }
+    )
+    if available_expiries:
+        log_requested_expiry_missing(
+            symbol=sym,
+            requested_expiry=exp,
+            available_expiries=available_expiries,
+            context="option_token_resolver",
+        )
     _LOGGER.write(
         {
-            "ts": datetime.utcnow().isoformat(),
+            "ts": utc_now().isoformat(),
             "event": "OPTION_TOKEN_NOT_FOUND",
             "symbol": sym,
             "expiry": str(exp),
-            "strike": float(strike),
+            "strike": float(strike_val),
             "option_type": opt_type,
             "exchange": exchange,
+            "available_expiries": [d.isoformat() for d in available_expiries],
         }
     )
     return None
-

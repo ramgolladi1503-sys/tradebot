@@ -4,6 +4,7 @@ import threading
 import json
 import re
 import atexit
+from datetime import date, datetime
 from pathlib import Path
 from core.kite_client import kite_client
 from core.depth_store import depth_store
@@ -19,10 +20,12 @@ from core.auth_manager import (
 from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
+from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
 from core import risk_halt
 from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer
 from core.run_lock import RunLock
+from core.runtime_lifecycle import lifecycle
 
 try:
     from kiteconnect import KiteTicker
@@ -41,6 +44,7 @@ _UNDERLYING_LOGGED_MISSING = False
 _SYMBOL_LAST_LTP_TS: dict[str, float] = {}
 _SYMBOL_LAST_DEPTH_TS: dict[str, float] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
+_LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
 _RESTART_LOCK = threading.Lock()
 _LAST_FULL_RESTART_EPOCH = 0.0
 _FULL_RESTARTS = []
@@ -224,19 +228,215 @@ def _underlying_ltp(symbol: str) -> float | None:
     return None
 
 
-def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None) -> tuple[list[int], list[dict]]:
+def _expiry_key(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value.isoformat()
+    try:
+        text = str(value).strip()
+        if not text:
+            return None
+        text = text.split("T", 1)[0]
+        return datetime.fromisoformat(text).date().isoformat()
+    except Exception:
+        return None
+
+
+def _load_option_token_meta(symbol: str, exchange: str, expiry) -> dict[int, dict]:
+    seg = "NFO-OPT" if str(exchange).upper() == "NFO" else "BFO-OPT"
+    expiry_norm = _expiry_key(expiry)
+    out: dict[int, dict] = {}
+    try:
+        data = kite_client.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
+    except Exception:
+        data = []
+    for inst in data:
+        if str(inst.get("segment") or "").upper() != seg:
+            continue
+        if str(inst.get("name") or "").upper() != str(symbol or "").upper():
+            continue
+        if expiry_norm is not None and _expiry_key(inst.get("expiry")) != expiry_norm:
+            continue
+        tok = inst.get("instrument_token")
+        if tok is None:
+            continue
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        strike = inst.get("strike")
+        try:
+            strike_val = float(strike) if strike is not None else None
+        except Exception:
+            strike_val = None
+        out[tok_int] = {
+            "strike": strike_val,
+            "instrument_type": str(inst.get("instrument_type") or "").upper(),
+        }
+    return out
+
+
+def _option_distance_rank(meta: dict | None, atm: int | None, step: float | None, token: int) -> tuple[float, int, float, int, int]:
+    if not meta or atm is None or step is None or step <= 0:
+        return (float("inf"), 1, float("inf"), 2, int(token))
+    strike = meta.get("strike")
+    if strike is None:
+        return (float("inf"), 1, float("inf"), 2, int(token))
+    try:
+        strike_val = float(strike)
+    except Exception:
+        return (float("inf"), 1, float("inf"), 2, int(token))
+    dist_abs = abs(strike_val - float(atm))
+    dist_steps = dist_abs / float(step)
+    opt_type = str(meta.get("instrument_type") or "").upper()
+    # Prefer keeping non-OTM at a given distance; when pruning, far OTM tokens get dropped first.
+    is_otm = (
+        (opt_type == "CE" and strike_val > float(atm))
+        or (opt_type == "PE" and strike_val < float(atm))
+    )
+    otm_rank = 1 if is_otm else 0
+    type_rank = 0 if opt_type == "CE" else (1 if opt_type == "PE" else 2)
+    return (dist_steps, otm_rank, dist_abs, type_rank, int(token))
+
+
+def _enforce_subscription_budget(
+    desired_tokens: list[int] | set[int],
+    *,
+    max_tokens: int | None,
+    option_rank_by_token: dict[int, tuple] | None = None,
+    underlying_tokens: set[int] | None = None,
+    sticky_tokens: set[int] | None = None,
+    active_trade_tokens: set[int] | None = None,
+) -> tuple[list[int], bool, dict]:
+    ordered = [int(t) for t in (desired_tokens or []) if t is not None and int(t) > 0]
+    ordered = list(dict.fromkeys(ordered))
+    budget = int(max_tokens or 0)
+    preserve_tokens = set(int(t) for t in (underlying_tokens or set()) if t is not None)
+    preserve_tokens.update(int(t) for t in (sticky_tokens or set()) if t is not None)
+    preserve_tokens.update(int(t) for t in (active_trade_tokens or set()) if t is not None)
+    if budget <= 0 or len(ordered) <= budget:
+        return ordered, False, {
+            "budget": budget,
+            "dropped_count": 0,
+            "dropped_tokens": [],
+            "preserved_count": len([t for t in ordered if t in preserve_tokens]),
+        }
+
+    option_rank = dict(option_rank_by_token or {})
+    preserved = [int(t) for t in ordered if int(t) in preserve_tokens]
+    candidates = [int(t) for t in ordered if int(t) not in preserve_tokens]
+    candidates.sort(
+        key=lambda tok: option_rank.get(
+            int(tok),
+            (float("inf"), 1, float("inf"), 2, int(tok)),
+        )
+    )
+    keep_budget = budget - len(preserved)
+    if keep_budget >= 0:
+        kept = preserved + candidates[:keep_budget]
+    else:
+        kept = list(preserved)
+        _log_ws(
+            "FEED_TOKEN_BUDGET_PRESERVE_EXCEEDED",
+            {
+                "max_tokens": budget,
+                "preserved_tokens": len(preserved),
+                "underlying_tokens": len(set(int(t) for t in (underlying_tokens or set()) if t is not None)),
+                "sticky_tokens": len(set(int(t) for t in (sticky_tokens or set()) if t is not None)),
+                "active_trade_tokens": len(set(int(t) for t in (active_trade_tokens or set()) if t is not None)),
+            },
+        )
+    kept = list(dict.fromkeys(int(t) for t in kept if t is not None and int(t) > 0))
+    kept_set = set(kept)
+    dropped = [int(t) for t in ordered if int(t) not in kept_set]
+    _log_ws(
+        "FEED_SUBSCRIPTION_BUDGET_ENFORCED",
+        {
+            "max_tokens": budget,
+            "desired_tokens": len(ordered),
+            "kept_tokens": len(kept),
+            "dropped_tokens": len(dropped),
+            "underlying_tokens": len(set(int(t) for t in (underlying_tokens or set()) if t is not None)),
+            "sticky_tokens": len(set(int(t) for t in (sticky_tokens or set()) if t is not None)),
+            "active_trade_tokens": len(set(int(t) for t in (active_trade_tokens or set()) if t is not None)),
+            "dropped_sample": dropped[:20],
+        },
+    )
+    return kept, True, {
+        "budget": budget,
+        "dropped_count": len(dropped),
+        "dropped_tokens": dropped,
+        "preserved_count": len(preserved),
+    }
+
+
+def get_sticky_tokens() -> set[int]:
+    """
+    Optional sticky depth subscriptions for active trades.
+
+    Falls back to an empty set when trade-state sources are unavailable.
+    """
+    out: set[int] = set()
+    try:
+        from core.trade_store import fetch_recent_trades
+
+        cols, rows = fetch_recent_trades(limit=500)
+    except Exception:
+        return out
+    if not cols or not rows:
+        return out
+    col_idx = {str(c): i for i, c in enumerate(cols)}
+    tok_idx = col_idx.get("instrument_token")
+    if tok_idx is None:
+        return out
+    status_idx = col_idx.get("status")
+    exit_idx = col_idx.get("exit_time")
+    for row in rows:
+        try:
+            tok_raw = row[tok_idx]
+            tok = int(tok_raw)
+        except Exception:
+            continue
+        if tok <= 0:
+            continue
+        is_active = False
+        if status_idx is not None:
+            try:
+                status = str(row[status_idx] or "").strip().upper()
+            except Exception:
+                status = ""
+            if status in {"ACTIVE", "OPEN", "LIVE", "ENTERED"}:
+                is_active = True
+        if not is_active and exit_idx is not None:
+            try:
+                exit_time = row[exit_idx]
+            except Exception:
+                exit_time = None
+            if exit_time in (None, "", "None"):
+                is_active = True
+        if is_active:
+            out.add(tok)
+    return out
+
+
+def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict]]:
     global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL
+    symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
     underlying_token_to_symbol: dict[int, str] = {}
     token_to_symbol: dict[int, str] = {}
+    option_rank_by_token: dict[int, tuple[float, int, float, int, int]] = {}
     if max_tokens is None:
         max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
-    strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 10))
+    strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6))
     strikes_by_symbol = getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {}
     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
     validate_tokens = bool(getattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True))
+    sticky_tokens = set(int(t) for t in get_sticky_tokens() if t is not None)
+    active_trade_tokens = set(sticky_tokens)
 
     for sym in symbols:
         sym_upper = str(sym).upper()
@@ -253,9 +453,13 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
                 ltp_source = "fallback_close"
         atm = _infer_atm_strike(ltp, step)
 
-        option_tokens: list[int] = []
+        option_meta: dict[int, dict] = {}
+        if expiry:
+            option_meta = _load_option_token_meta(sym_upper, exchange, expiry)
+
+        option_tokens_raw: list[int] = []
         if expiry and atm is not None:
-            option_tokens = kite_client.resolve_option_tokens_window(
+            option_tokens_raw = kite_client.resolve_option_tokens_window(
                 sym,
                 expiry,
                 atm,
@@ -263,6 +467,20 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
                 step,
                 exchange=exchange,
             )
+        option_tokens: list[int] = []
+        seen_option_tokens: set[int] = set()
+        for tok in option_tokens_raw or []:
+            try:
+                tok_int = int(tok)
+            except Exception:
+                continue
+            if tok_int in seen_option_tokens:
+                continue
+            seen_option_tokens.add(tok_int)
+            option_tokens.append(tok_int)
+        option_tokens.sort(key=lambda t: _option_distance_rank(option_meta.get(int(t)), atm, step, int(t)))
+        for tok in option_tokens:
+            option_rank_by_token[int(tok)] = _option_distance_rank(option_meta.get(int(tok)), atm, step, int(tok))
 
         index_token = kite_client.resolve_index_token(sym_upper)
         index_source = "instruments"
@@ -272,18 +490,33 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
             if fallback_token > 0:
                 index_token = fallback_token
                 index_source = "config"
-        per_tokens = set(option_tokens)
+        per_tokens: list[int] = []
         if index_token:
-            per_tokens.add(index_token)
-            underlying_tokens.append(int(index_token))
-            underlying_token_to_symbol[int(index_token)] = sym_upper
+            try:
+                idx_int = int(index_token)
+                per_tokens.append(idx_int)
+                underlying_tokens.append(idx_int)
+                underlying_token_to_symbol[idx_int] = sym_upper
+            except Exception:
+                index_token = None
+        for tok in option_tokens:
+            if tok not in per_tokens:
+                per_tokens.append(int(tok))
+        if index_token:
+            token_to_symbol[int(index_token)] = sym_upper
+        selected_strikes: dict[float, set[str]] = {}
         for tok in per_tokens:
+            meta = option_meta.get(int(tok)) or {}
+            strike = meta.get("strike")
+            opt_type = str(meta.get("instrument_type") or "").upper()
+            if strike is not None and opt_type in {"CE", "PE"}:
+                selected_strikes.setdefault(float(strike), set()).add(opt_type)
             try:
                 token_to_symbol[int(tok)] = sym_upper
             except Exception:
                 continue
 
-        tokens.extend(list(per_tokens))
+        tokens.extend(per_tokens)
         resolution.append(
             {
                 "symbol": sym_upper,
@@ -296,16 +529,29 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
                 "step": step,
                 "tokens": list(per_tokens),
                 "count": len(per_tokens),
+                "option_count": len(option_tokens),
+                "option_strikes_selected": sorted(selected_strikes.keys()),
+                "option_strike_count": len(selected_strikes),
+                "option_two_sided_strike_count": sum(1 for legs in selected_strikes.values() if {"CE", "PE"}.issubset(legs)),
                 "index_token": index_token,
                 "index_token_source": index_source if index_token else "missing",
             }
         )
+
+    if sticky_tokens:
+        sticky_list = sorted(int(t) for t in sticky_tokens if int(t) > 0)
+        tokens.extend(sticky_list)
+        for tok in sticky_list:
+            token_to_symbol.setdefault(int(tok), "STICKY")
 
     tokens = list(dict.fromkeys(tokens))
     _UNDERLYING_TOKENS = set(int(t) for t in underlying_tokens if t is not None)
     _UNDERLYING_TOKEN_TO_SYMBOL = dict(underlying_token_to_symbol)
     _TOKEN_TO_SYMBOL = dict(token_to_symbol)
     _UNDERLYING_LOGGED_MISSING = False
+
+    preserve_tokens: set[int] = set(int(t) for t in _UNDERLYING_TOKENS)
+    preserve_tokens.update(int(t) for t in sticky_tokens if t is not None)
 
     if validate_tokens:
         known_tokens: set[int] = set()
@@ -322,18 +568,19 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
             known_tokens = set()
         if known_tokens:
             before = len(tokens)
-            tokens = [t for t in tokens if int(t) in known_tokens or int(t) in _UNDERLYING_TOKENS]
+            tokens = [t for t in tokens if int(t) in known_tokens or int(t) in preserve_tokens]
             dropped = before - len(tokens)
             if dropped > 0:
                 _log_ws("FEED_TOKEN_FILTERED", {"dropped": dropped, "kept": len(tokens)})
-    truncated = False
-    if max_tokens and len(tokens) > max_tokens:
-        underlying_first = [t for t in tokens if int(t) in _UNDERLYING_TOKENS]
-        option_tokens = [t for t in tokens if int(t) not in _UNDERLYING_TOKENS]
-        keep_underlyings = underlying_first[: max_tokens]
-        budget = max(0, max_tokens - len(keep_underlyings))
-        tokens = keep_underlyings + option_tokens[:budget]
-        truncated = True
+
+    tokens, truncated, budget_meta = _enforce_subscription_budget(
+        tokens,
+        max_tokens=max_tokens,
+        option_rank_by_token=option_rank_by_token,
+        underlying_tokens=_UNDERLYING_TOKENS,
+        sticky_tokens=sticky_tokens,
+        active_trade_tokens=active_trade_tokens,
+    )
 
     try:
         out = logs_dir() / "token_resolution.json"
@@ -350,11 +597,336 @@ def build_subscription_tokens(symbols: list[str], max_tokens: int | None = None)
             "truncated": truncated,
             "per_symbol": {r["symbol"]: r.get("count", 0) for r in resolution},
             "underlying_tokens": list(_UNDERLYING_TOKENS),
+            "sticky_tokens": sorted(int(t) for t in sticky_tokens if t is not None),
+            "active_trade_tokens": sorted(int(t) for t in active_trade_tokens if t is not None),
             "underlying_token_to_symbol": dict(_UNDERLYING_TOKEN_TO_SYMBOL),
+            "budget_dropped_tokens": int((budget_meta or {}).get("dropped_count", 0)),
             "sample_tokens": tokens[:10],
         },
     )
     return tokens, resolution
+
+
+def _resolution_atm_step_and_underlyings(resolution: list[dict] | None) -> tuple[dict[str, int], dict[str, float], set[int]]:
+    atm_by_symbol: dict[str, int] = {}
+    step_by_symbol: dict[str, float] = {}
+    underlying_tokens: set[int] = set()
+    for row in list(resolution or []):
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get("symbol") or "").upper()
+        if symbol:
+            atm_val = row.get("atm")
+            step_val = row.get("step")
+            try:
+                if atm_val is not None:
+                    atm_by_symbol[symbol] = int(float(atm_val))
+            except Exception:
+                pass
+            try:
+                if step_val is not None:
+                    step_by_symbol[symbol] = float(step_val)
+            except Exception:
+                pass
+        try:
+            idx = int(row.get("index_token"))
+        except Exception:
+            idx = None
+        if idx is not None and idx > 0:
+            underlying_tokens.add(idx)
+    return atm_by_symbol, step_by_symbol, underlying_tokens
+
+
+def _max_atm_shift_steps(
+    prev_atm_by_symbol: dict[str, int] | None,
+    next_atm_by_symbol: dict[str, int] | None,
+    step_by_symbol: dict[str, float] | None,
+) -> float:
+    prev = dict(prev_atm_by_symbol or {})
+    nxt = dict(next_atm_by_symbol or {})
+    step_map = dict(step_by_symbol or {})
+    max_shift = 0.0
+    for symbol in set(prev.keys()) | set(nxt.keys()):
+        if symbol not in prev or symbol not in nxt:
+            continue
+        step = float(step_map.get(symbol, 0.0) or 0.0)
+        if step <= 0.0:
+            continue
+        diff = abs(float(nxt[symbol]) - float(prev[symbol]))
+        shift_steps = diff / step
+        if shift_steps > max_shift:
+            max_shift = shift_steps
+    return float(max_shift)
+
+
+def _compute_silent_reconnect_action(
+    *,
+    now_epoch: float,
+    current_tokens: set[int],
+    underlying_tokens: set[int],
+    last_global_msg_epoch: float | None,
+    last_msg_by_token: dict[int, float] | None,
+    index_threshold_sec: float,
+    option_threshold_sec: float,
+    confirm_hits: int,
+    confirm_needed: int,
+    last_reconnect_epoch: float,
+    backoff_min_sec: float,
+    backoff_max_sec: float,
+) -> dict:
+    tracked_tokens = sorted(int(t) for t in (current_tokens or set()) if int(t) > 0)
+    if not tracked_tokens:
+        return {
+            "silent_detected": False,
+            "should_reconnect": False,
+            "confirm_hits": 0,
+            "reason": "no_tokens",
+            "global_age_sec": None,
+            "stale_tokens": 0,
+            "tracked_tokens": 0,
+            "backoff_sec": None,
+        }
+    if not isinstance(last_global_msg_epoch, (int, float)) or float(last_global_msg_epoch) <= 0.0:
+        return {
+            "silent_detected": False,
+            "should_reconnect": False,
+            "confirm_hits": 0,
+            "reason": "no_messages_yet",
+            "global_age_sec": None,
+            "stale_tokens": 0,
+            "tracked_tokens": len(tracked_tokens),
+            "backoff_sec": None,
+        }
+    has_underlying = any(int(tok) in set(underlying_tokens or set()) for tok in tracked_tokens)
+    global_threshold = float(index_threshold_sec if has_underlying else option_threshold_sec)
+    global_age_sec = max(0.0, float(now_epoch) - float(last_global_msg_epoch))
+    if global_age_sec <= global_threshold:
+        return {
+            "silent_detected": False,
+            "should_reconnect": False,
+            "confirm_hits": 0,
+            "reason": "global_age_within_threshold",
+            "global_age_sec": global_age_sec,
+            "stale_tokens": 0,
+            "tracked_tokens": len(tracked_tokens),
+            "backoff_sec": None,
+        }
+    msg_map = dict(last_msg_by_token or {})
+    underlying_set = set(int(t) for t in (underlying_tokens or set()) if int(t) > 0)
+    stale_tokens = 0
+    index_stale = 0
+    option_stale = 0
+    for tok in tracked_tokens:
+        threshold = float(index_threshold_sec if tok in underlying_set else option_threshold_sec)
+        token_last = msg_map.get(int(tok), float(last_global_msg_epoch))
+        token_age = max(0.0, float(now_epoch) - float(token_last))
+        if token_age > threshold:
+            stale_tokens += 1
+            if tok in underlying_set:
+                index_stale += 1
+            else:
+                option_stale += 1
+    if stale_tokens < len(tracked_tokens):
+        return {
+            "silent_detected": False,
+            "should_reconnect": False,
+            "confirm_hits": 0,
+            "reason": "partial_activity_detected",
+            "global_age_sec": global_age_sec,
+            "stale_tokens": stale_tokens,
+            "tracked_tokens": len(tracked_tokens),
+            "backoff_sec": None,
+        }
+
+    new_hits = int(confirm_hits) + 1
+    needed = max(1, int(confirm_needed))
+    if new_hits < needed:
+        return {
+            "silent_detected": True,
+            "should_reconnect": False,
+            "confirm_hits": new_hits,
+            "reason": "awaiting_confirmation",
+            "global_age_sec": global_age_sec,
+            "stale_tokens": stale_tokens,
+            "tracked_tokens": len(tracked_tokens),
+            "backoff_sec": None,
+            "index_stale": index_stale,
+            "option_stale": option_stale,
+        }
+
+    exponent = max(0, int(new_hits) - needed)
+    backoff_sec = min(float(backoff_max_sec), float(backoff_min_sec) * (2 ** exponent))
+    should_reconnect = (float(now_epoch) - float(last_reconnect_epoch)) >= float(backoff_sec)
+    return {
+        "silent_detected": True,
+        "should_reconnect": bool(should_reconnect),
+        "confirm_hits": new_hits,
+        "reason": "silent_failure_confirmed",
+        "global_age_sec": global_age_sec,
+        "stale_tokens": stale_tokens,
+        "tracked_tokens": len(tracked_tokens),
+        "backoff_sec": float(backoff_sec),
+        "index_stale": index_stale,
+        "option_stale": option_stale,
+    }
+
+
+def _maybe_trigger_silent_reconnect(
+    *,
+    now_epoch: float,
+    current_tokens: set[int],
+    underlying_tokens: set[int],
+    last_global_msg_epoch: float | None,
+    last_msg_by_token: dict[int, float] | None,
+    state: dict,
+    index_threshold_sec: float,
+    option_threshold_sec: float,
+    confirm_needed: int,
+    backoff_min_sec: float,
+    backoff_max_sec: float,
+    restart_cb,
+) -> bool:
+    action = _compute_silent_reconnect_action(
+        now_epoch=now_epoch,
+        current_tokens=current_tokens,
+        underlying_tokens=underlying_tokens,
+        last_global_msg_epoch=last_global_msg_epoch,
+        last_msg_by_token=last_msg_by_token,
+        index_threshold_sec=index_threshold_sec,
+        option_threshold_sec=option_threshold_sec,
+        confirm_hits=int(state.get("confirm_hits", 0)),
+        confirm_needed=int(confirm_needed),
+        last_reconnect_epoch=float(state.get("last_reconnect_epoch", 0.0) or 0.0),
+        backoff_min_sec=float(backoff_min_sec),
+        backoff_max_sec=float(backoff_max_sec),
+    )
+    if not bool(action.get("silent_detected")):
+        state["confirm_hits"] = 0
+        return False
+
+    state["confirm_hits"] = int(action.get("confirm_hits", 0))
+    _log_ws(
+        "FEED_SILENT_WARNING",
+        {
+            "reason": action.get("reason"),
+            "global_age_sec": action.get("global_age_sec"),
+            "tracked_tokens": action.get("tracked_tokens"),
+            "stale_tokens": action.get("stale_tokens"),
+            "index_stale": action.get("index_stale"),
+            "option_stale": action.get("option_stale"),
+            "confirm_hits": state.get("confirm_hits", 0),
+            "confirm_needed": int(confirm_needed),
+            "backoff_sec": action.get("backoff_sec"),
+        },
+    )
+    if not bool(action.get("should_reconnect")):
+        return False
+
+    state["last_reconnect_epoch"] = float(now_epoch)
+    reason = (
+        f"silent_feed age={float(action.get('global_age_sec') or 0.0):.2f}s "
+        f"stale={int(action.get('stale_tokens') or 0)}/{int(action.get('tracked_tokens') or 0)}"
+    )
+    try:
+        restart_cb(reason=reason, ignore_cooldown=True)
+    except TypeError:
+        restart_cb(reason=reason)
+    return True
+
+
+def _compute_rebalance_decision(
+    *,
+    current_tokens: set[int],
+    desired_tokens: set[int],
+    sticky_tokens: set[int],
+    underlying_tokens: set[int],
+    last_rebalance_ts: float | None,
+    now_ts: float,
+    cooldown_sec: float,
+    threshold_steps: float,
+    last_atm_by_symbol: dict[str, int] | None,
+    next_atm_by_symbol: dict[str, int] | None,
+    step_by_symbol: dict[str, float] | None,
+) -> dict:
+    current = set(int(t) for t in (current_tokens or set()) if int(t) > 0)
+    sticky = set(int(t) for t in (sticky_tokens or set()) if int(t) > 0)
+    underlying = set(int(t) for t in (underlying_tokens or set()) if int(t) > 0)
+    desired = set(int(t) for t in (desired_tokens or set()) if int(t) > 0)
+    preserve = set(underlying) | set(sticky)
+    desired_full = set(desired) | set(preserve)
+    shift_steps = _max_atm_shift_steps(last_atm_by_symbol, next_atm_by_symbol, step_by_symbol)
+    has_shift = shift_steps >= float(threshold_steps)
+    rebalance_age = None
+    if isinstance(last_rebalance_ts, (int, float)):
+        rebalance_age = max(0.0, float(now_ts) - float(last_rebalance_ts))
+    cooldown_ok = rebalance_age is None or rebalance_age >= float(cooldown_sec)
+
+    mandatory_missing = set(preserve) - set(current)
+    first_run = not bool(current)
+    should_rebalance = False
+    reason = "rebalance_skipped"
+    if first_run:
+        should_rebalance = True
+        reason = "initial_subscribe"
+    elif mandatory_missing:
+        should_rebalance = True
+        reason = "preserve_tokens_missing"
+    elif has_shift and cooldown_ok:
+        should_rebalance = True
+        reason = f"atm_shift_steps={shift_steps:.2f}"
+    elif has_shift and (not cooldown_ok):
+        reason = f"cooldown_blocked shift_steps={shift_steps:.2f}"
+    else:
+        reason = f"atm_shift_below_threshold shift_steps={shift_steps:.2f}"
+
+    subscribe_tokens = sorted(int(t) for t in (desired_full - current))
+    unsubscribe_tokens = sorted(int(t) for t in ((current - desired_full) - preserve))
+    final_tokens = sorted((current | set(subscribe_tokens)) - set(unsubscribe_tokens))
+    if should_rebalance and not subscribe_tokens and not unsubscribe_tokens:
+        should_rebalance = False
+        reason = "no_token_delta"
+
+    return {
+        "should_rebalance": bool(should_rebalance),
+        "reason": str(reason),
+        "shift_steps": float(shift_steps),
+        "cooldown_ok": bool(cooldown_ok),
+        "cooldown_age_sec": rebalance_age,
+        "subscribe_tokens": subscribe_tokens,
+        "unsubscribe_tokens": unsubscribe_tokens,
+        "preserve_tokens": sorted(preserve),
+        "final_tokens": final_tokens,
+        "next_atm_by_symbol": dict(next_atm_by_symbol or {}),
+    }
+
+
+def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbol: str | None = None) -> bool:
+    global _LAST_TOKENS, _TOKEN_TO_SYMBOL
+    if not tokens:
+        return False
+    tokens = [int(t) for t in tokens if t is not None]
+    if not tokens:
+        return False
+    with _KITE_TICKER_LOCK:
+        if _KITE_TICKER is None:
+            _log_ws("FEED_SUBSCRIBE_SKIPPED", {"reason": reason, "detail": "ws_not_running"})
+            return False
+        existing = set(int(t) for t in (_LAST_TOKENS or []))
+        new_tokens = [t for t in tokens if t not in existing]
+        if not new_tokens:
+            return True
+        try:
+            _KITE_TICKER.subscribe(new_tokens)
+            _KITE_TICKER.set_mode(_KITE_TICKER.MODE_FULL, new_tokens)
+            _LAST_TOKENS = list(existing.union(set(new_tokens)))
+            if symbol:
+                for tok in new_tokens:
+                    _TOKEN_TO_SYMBOL.setdefault(int(tok), str(symbol))
+            _log_ws("FEED_SUBSCRIBE_OK", {"reason": reason, "tokens": len(new_tokens)})
+            return True
+        except Exception as exc:
+            _log_ws("FEED_SUBSCRIBE_ERROR", {"reason": reason, "error": str(exc)})
+            return False
 
 
 def _ensure_depth_ws_lock() -> bool:
@@ -373,6 +945,7 @@ def _ensure_depth_ws_lock() -> bool:
         return False
     _DEPTH_WS_LOCK_ACQUIRED = True
     atexit.register(_DEPTH_WS_LOCK.release)
+    lifecycle.register_resource("depth-ws-lock", _DEPTH_WS_LOCK.release)
     return True
 
 
@@ -388,24 +961,53 @@ def _close_ticker_instance(instance):
                 _log_ws("FEED_CLOSE_ERROR", {"method": method_name, "error": str(exc)})
 
 
+def _join_thread_safe(thread_obj, timeout_sec: float) -> None:
+    if thread_obj is None:
+        return
+    try:
+        if thread_obj.is_alive():
+            thread_obj.join(max(0.0, float(timeout_sec)))
+    except Exception:
+        return
+
+
+def _join_ticker_threads(instance, timeout_sec: float) -> None:
+    if instance is None:
+        return
+    for attr_name in ("ws_thread", "_ws_thread", "thread", "_thread", "_run_thread"):
+        thread_obj = getattr(instance, attr_name, None)
+        _join_thread_safe(thread_obj, timeout_sec)
+        ws_obj = getattr(thread_obj, "ws", None)
+        ws_thread = getattr(ws_obj, "thread", None)
+        _join_thread_safe(ws_thread, timeout_sec)
+
+
 def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN
+    watchdog_thread = None
+    ticker_instance = None
+    stop_timeout_sec = float(getattr(cfg, "DEPTH_WATCHDOG_STOP_TIMEOUT_SEC", 3.0))
     with _KITE_TICKER_LOCK:
         _STOP_REQUESTED = True
         _log_ws("FEED_STOP", {"reason": reason})
         if _WATCHDOG_STOP is not None:
             _WATCHDOG_STOP.set()
+        watchdog_thread = _WATCHDOG_THREAD
+        _WATCHDOG_THREAD = None
         _STALE_STRIKES = 0
         _LAST_WS_TICK_EPOCH = 0.0
-        _close_ticker_instance(_KITE_TICKER)
+        _LAST_MSG_TS_BY_TOKEN = {}
+        ticker_instance = _KITE_TICKER
+        _close_ticker_instance(ticker_instance)
         _KITE_TICKER = None
-    _WATCHDOG_THREAD = None
+    _join_thread_safe(watchdog_thread, stop_timeout_sec)
+    _join_ticker_threads(ticker_instance, stop_timeout_sec)
 
 
-def restart_depth_ws(reason: str = "unknown"):
+def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
     """
     Full restart: close existing ticker and recreate with last known tokens.
     Rate-limited to avoid restart storms.
@@ -453,7 +1055,7 @@ def restart_depth_ws(reason: str = "unknown"):
             )
             return False
 
-        if (now - _LAST_FULL_RESTART_EPOCH) < cooldown:
+        if (not bool(ignore_cooldown)) and (now - _LAST_FULL_RESTART_EPOCH) < cooldown:
             next_allowed = _LAST_FULL_RESTART_EPOCH + cooldown
             _log_ws(
                 "FEED_RESTART_RATE_LIMIT_COOLDOWN",
@@ -486,7 +1088,7 @@ def restart_depth_ws(reason: str = "unknown"):
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False):
-    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH
+    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN
     if not skip_lock:
         if not _ensure_depth_ws_lock():
             return
@@ -545,7 +1147,22 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _WARMUP_PENDING = True
     _STOP_REQUESTED = False
     _LAST_WS_TICK_EPOCH = 0.0
+    _LAST_MSG_TS_BY_TOKEN = {}
+    try:
+        get_feed_health_monitor().set_reconnect_handler(
+            lambda reason: restart_depth_ws(reason=f"feed_health:{reason}")
+        )
+    except Exception:
+        pass
     _clear_auth_required_latch()
+    rebalance_cooldown_sec = float(getattr(cfg, "DEPTH_REBALANCE_COOLDOWN_SEC", 60.0))
+    atm_shift_threshold_steps = float(getattr(cfg, "DEPTH_ATM_SHIFT_THRESHOLD_STEPS", 1))
+    rebalance_state = {
+        "last_rebalance_ts": None,
+        "last_atm_by_symbol": {},
+        "last_eval_ts": 0.0,
+        "last_reason": "",
+    }
 
     computed_profile_verified = False
     profile_error = ""
@@ -608,10 +1225,60 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     handshake_soft_reset_used = False
 
+    def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
+        global _LAST_TOKENS
+        to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
+        to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
+        try:
+            if to_subscribe:
+                ws.subscribe(to_subscribe)
+                ws.set_mode(ws.MODE_FULL, to_subscribe)
+        except Exception as exc:
+            _log_ws(
+                "FEED_REBALANCE_SUBSCRIBE_ERROR",
+                {"reason": reason, "count": len(to_subscribe), "error": str(exc)},
+            )
+            return False
+        if to_unsubscribe:
+            try:
+                if hasattr(ws, "unsubscribe"):
+                    ws.unsubscribe(to_unsubscribe)
+            except Exception as exc:
+                _log_ws(
+                    "FEED_REBALANCE_UNSUBSCRIBE_ERROR",
+                    {"reason": reason, "count": len(to_unsubscribe), "error": str(exc)},
+                )
+                return False
+        final_set = set(int(t) for t in (_LAST_TOKENS or []))
+        final_set.update(to_subscribe)
+        final_set.difference_update(to_unsubscribe)
+        _LAST_TOKENS = sorted(final_set)
+        tokens[:] = list(_LAST_TOKENS)
+        if _LAST_TOKENS:
+            try:
+                ws.set_mode(ws.MODE_FULL, _LAST_TOKENS)
+            except Exception:
+                pass
+        _log_ws(
+            "FEED_REBALANCE_APPLIED",
+            {
+                "reason": reason,
+                "subscribe_count": len(to_subscribe),
+                "unsubscribe_count": len(to_unsubscribe),
+                "total_tokens": len(_LAST_TOKENS),
+            },
+        )
+        return True
+
     def _resubscribe_full(ws, reason: str):
-        ws.subscribe(tokens)
-        ws.set_mode(ws.MODE_FULL, tokens)
+        desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
+        ws.subscribe(desired)
+        ws.set_mode(ws.MODE_FULL, desired)
+        _LAST_TOKENS[:] = desired
+        tokens[:] = desired
         _log_ws("FEED_RESUBSCRIBE", {"reason": reason, "tokens": len(tokens)})
+        if rebalance_state.get("last_rebalance_ts") is None:
+            rebalance_state["last_rebalance_ts"] = time.time()
 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING
@@ -683,10 +1350,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             restart_depth_ws(reason=f"ws_close:{code}")
 
     def on_ticks(ws, ticks):
-        global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH
+        global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN
         now_epoch = time.time()
         if ticks:
             _LAST_WS_TICK_EPOCH = now_epoch
+            try:
+                get_feed_health_monitor().on_ws_message(now_epoch=now_epoch)
+            except Exception:
+                pass
         if ticks and (now_epoch - _SCHEMA_LOG_TS) >= 30.0:
             try:
                 sample = ticks[0] if isinstance(ticks[0], dict) else {}
@@ -715,9 +1386,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     token_int = int(token)
                 except Exception:
                     token_int = None
+            if token_int is not None:
+                _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(now_epoch)
             symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
             underlying_tick = _is_underlying_token(token_int)
             has_depth = _depth_has_bid_ask(depth)
+            tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
+            tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
             if token is not None and depth:
                 depth_store.update(token, depth)
             tick_epoch = _extract_tick_epoch(t)
@@ -754,6 +1429,29 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if _is_index_symbol(symbol) and not underlying_tick:
                 freshness_symbol = None
             _update_symbol_freshness(freshness_symbol, tick_epoch, has_ltp=last_price is not None, has_depth=has_depth)
+            try:
+                record_tick(
+                    token=token_int,
+                    symbol=symbol,
+                    ts_epoch=tick_epoch,
+                    has_depth=has_depth,
+                    is_index=bool(underlying_tick and _is_index_symbol(symbol)),
+                    bid=tick_bid,
+                    ask=tick_ask,
+                    ltp=last_price,
+                    depth_ok=has_depth,
+                    now_epoch=now_epoch,
+                )
+                if has_depth:
+                    record_depth(
+                        token=token_int,
+                        symbol=symbol,
+                        ts_epoch=tick_epoch,
+                        is_index=bool(underlying_tick and _is_index_symbol(symbol)),
+                        now_epoch=now_epoch,
+                    )
+            except Exception:
+                pass
             if last_price is not None or has_depth:
                 record_tick_epoch(tick_epoch)
                 if not _UNDERLYING_TOKENS and not _UNDERLYING_LOGGED_MISSING:
@@ -798,21 +1496,57 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         max_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
         strikes_to_restart = int(getattr(cfg, "FEED_RESTART_STRIKES", 3))
+        watchdog_poll_sec = float(getattr(cfg, "FEED_WATCHDOG_POLL_SEC", 1.0))
+        silent_index_sec = float(getattr(cfg, "FEED_SILENT_INDEX_THRESHOLD_SEC", 1.5))
+        silent_option_sec = float(getattr(cfg, "FEED_SILENT_OPTION_THRESHOLD_SEC", 3.0))
+        silent_confirm_cycles = int(getattr(cfg, "FEED_SILENT_CONFIRM_CYCLES", 2))
+        silent_backoff_min_sec = float(getattr(cfg, "FEED_SILENT_RECONNECT_BACKOFF_MIN_SEC", 1.0))
+        silent_backoff_max_sec = float(getattr(cfg, "FEED_SILENT_RECONNECT_BACKOFF_MAX_SEC", 10.0))
         no_ticks_sec = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_SEC", 10.0))
         no_ticks_base_backoff = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_BACKOFF_SEC", 15.0))
         last_soft = 0.0
         last_warmup_log = 0.0
         no_tick_strikes = 0
         last_no_tick_restart = 0.0
-        while not _WATCHDOG_STOP.is_set():
-            time.sleep(5)
+        silent_state = {"confirm_hits": 0, "last_reconnect_epoch": 0.0}
+        while True:
+            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                break
+            time.sleep(max(0.5, watchdog_poll_sec))
+            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                break
+            try:
+                get_feed_health_monitor().maybe_trigger_reconnect(
+                    reason_prefix="watchdog_down",
+                    now_epoch=time.time(),
+                )
+            except Exception:
+                pass
             if not is_market_open_ist():
                 _STALE_STRIKES = 0
                 no_tick_strikes = 0
+                silent_state["confirm_hits"] = 0
+                continue
+            now_loop = time.time()
+            silent_triggered = _maybe_trigger_silent_reconnect(
+                now_epoch=now_loop,
+                current_tokens=set(int(t) for t in (_LAST_TOKENS or []) if int(t) > 0),
+                underlying_tokens=set(int(t) for t in (_UNDERLYING_TOKENS or set()) if int(t) > 0),
+                last_global_msg_epoch=_LAST_WS_TICK_EPOCH,
+                last_msg_by_token=dict(_LAST_MSG_TS_BY_TOKEN),
+                state=silent_state,
+                index_threshold_sec=silent_index_sec,
+                option_threshold_sec=silent_option_sec,
+                confirm_needed=silent_confirm_cycles,
+                backoff_min_sec=silent_backoff_min_sec,
+                backoff_max_sec=silent_backoff_max_sec,
+                restart_cb=restart_depth_ws,
+            )
+            if silent_triggered:
                 continue
             tick_age = None
             if _LAST_WS_TICK_EPOCH > 0:
-                tick_age = time.time() - _LAST_WS_TICK_EPOCH
+                tick_age = now_loop - _LAST_WS_TICK_EPOCH
             if tick_age is not None and tick_age > no_ticks_sec:
                 no_tick_strikes += 1
                 backoff = no_ticks_base_backoff * (2 ** min(no_tick_strikes - 1, 3))
@@ -825,8 +1559,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         "backoff_sec": backoff,
                     },
                 )
-                if (time.time() - last_no_tick_restart) >= backoff:
-                    last_no_tick_restart = time.time()
+                if (now_loop - last_no_tick_restart) >= backoff:
+                    last_no_tick_restart = now_loop
                     restart_depth_ws(reason=f"no_ticks_age={tick_age:.1f}s")
                 continue
             no_tick_strikes = 0
@@ -854,32 +1588,106 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if _STALE_STRIKES:
                     _log_ws("FEED_RECOVERED", {"age_sec": age, "strikes": _STALE_STRIKES})
                 _STALE_STRIKES = 0
+            else:
+                _STALE_STRIKES += 1
+                _log_ws(
+                    "FEED_STALE_DETECTED",
+                    {"age_sec": age, "strikes": _STALE_STRIKES, "max_age": max_age},
+                )
+
+                if _STALE_STRIKES >= 2:
+                    backoff = soft_cooldown * (2 ** min(_STALE_STRIKES - 2, 3))
+                    if time.time() - last_soft >= backoff:
+                        last_soft = time.time()
+                        try:
+                            _resubscribe_full(kws, reason=f"soft_reset:strikes={_STALE_STRIKES}")
+                            _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                        except Exception as exc:
+                            _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
+
+                if _STALE_STRIKES >= strikes_to_restart:
+                    restart_depth_ws(reason=f"depth_stale_age={age:.1f}s")
+                    continue
+
+            now_reb = time.time()
+            eval_interval = max(5.0, min(rebalance_cooldown_sec, 30.0))
+            if (now_reb - float(rebalance_state.get("last_eval_ts") or 0.0)) < eval_interval:
+                continue
+            rebalance_state["last_eval_ts"] = now_reb
+            try:
+                desired_tokens_raw, resolution = build_subscription_tokens(
+                    symbols=list(getattr(cfg, "SYMBOLS", []) or []),
+                    max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
+                )
+            except Exception as exc:
+                _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})
                 continue
 
-            _STALE_STRIKES += 1
-            _log_ws(
-                "FEED_STALE_DETECTED",
-                {"age_sec": age, "strikes": _STALE_STRIKES, "max_age": max_age},
+            sticky_tokens = set(int(t) for t in get_sticky_tokens() if t is not None)
+            atm_by_symbol, step_by_symbol, underlying_tokens = _resolution_atm_step_and_underlyings(resolution)
+            desired_tokens = set(int(t) for t in desired_tokens_raw if t is not None)
+            desired_tokens.update(sticky_tokens)
+            desired_tokens.update(underlying_tokens)
+
+            decision = _compute_rebalance_decision(
+                current_tokens=set(int(t) for t in (_LAST_TOKENS or [])),
+                desired_tokens=desired_tokens,
+                sticky_tokens=sticky_tokens,
+                underlying_tokens=underlying_tokens,
+                last_rebalance_ts=rebalance_state.get("last_rebalance_ts"),
+                now_ts=now_reb,
+                cooldown_sec=rebalance_cooldown_sec,
+                threshold_steps=atm_shift_threshold_steps,
+                last_atm_by_symbol=rebalance_state.get("last_atm_by_symbol"),
+                next_atm_by_symbol=atm_by_symbol,
+                step_by_symbol=step_by_symbol,
             )
-
-            if _STALE_STRIKES >= 2:
-                backoff = soft_cooldown * (2 ** min(_STALE_STRIKES - 2, 3))
-                if time.time() - last_soft >= backoff:
-                    last_soft = time.time()
-                    try:
-                        _resubscribe_full(kws, reason=f"soft_reset:strikes={_STALE_STRIKES}")
-                        _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
-                    except Exception as exc:
-                        _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
-
-            if _STALE_STRIKES >= strikes_to_restart:
-                restart_depth_ws(reason=f"depth_stale_age={age:.1f}s")
+            rebalance_state["last_atm_by_symbol"] = dict(atm_by_symbol)
+            reason = str(decision.get("reason") or "rebalance")
+            if bool(decision.get("should_rebalance")):
+                ok_apply = _apply_subscription_delta(
+                    kws,
+                    decision.get("subscribe_tokens") or [],
+                    decision.get("unsubscribe_tokens") or [],
+                    reason=reason,
+                )
+                if ok_apply:
+                    rebalance_state["last_rebalance_ts"] = now_reb
+            else:
+                if reason != str(rebalance_state.get("last_reason") or ""):
+                    _log_ws(
+                        "FEED_REBALANCE_SKIPPED",
+                        {
+                            "reason": reason,
+                            "shift_steps": decision.get("shift_steps"),
+                            "cooldown_age_sec": decision.get("cooldown_age_sec"),
+                            "current_tokens": len(_LAST_TOKENS or []),
+                            "desired_tokens": len(desired_tokens),
+                            "sticky_tokens": len(sticky_tokens),
+                            "underlying_tokens": len(underlying_tokens),
+                        },
+                    )
+                    rebalance_state["last_reason"] = reason
 
     kws.on_connect = on_connect
     kws.on_reconnect = on_reconnect
     kws.on_error = on_error
     kws.on_close = on_close
     kws.on_ticks = on_ticks
-    _WATCHDOG_THREAD = threading.Thread(target=_watchdog, daemon=True)
-    _WATCHDOG_THREAD.start()
+    watchdog_thread = threading.Thread(target=_watchdog)
+    try:
+        watchdog_thread.name = "kite-depth-watchdog"
+    except Exception:
+        pass
+    try:
+        watchdog_thread.daemon = False
+    except Exception:
+        pass
+    _WATCHDOG_THREAD = watchdog_thread
+    watchdog_thread.start()
+    lifecycle.register(
+        "kite-depth-watchdog",
+        stop_fn=lambda: stop_depth_ws(reason="lifecycle_stop"),
+        join_fn=lambda timeout_sec=3.0: _join_thread_safe(watchdog_thread, timeout_sec),
+    )
     kws.connect(threaded=True)

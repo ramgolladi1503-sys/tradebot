@@ -1,3 +1,4 @@
+from core.paths import data_root, logs_dir
 import argparse
 import sqlite3
 import time
@@ -31,7 +32,7 @@ def main():
     parser.add_argument("--metadata", default="{}")
     args = parser.parse_args()
 
-    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", "logs/decision_events.sqlite"))
+    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite")))
     _init_db(db_path)
     now = time.time()
     with sqlite3.connect(db_path) as conn:

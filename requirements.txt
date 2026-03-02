@@ -2,6 +2,7 @@ python-dotenv
 pytest
 hypothesis
 streamlit
+streamlit-autorefresh
 kiteconnect
 tensorflow
 gymnasium
