@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from config import config as cfg
+from core.option_liquidity_cache import clear_option_liquidity_cache, update_option_liquidity_cache
 import strategies.trade_builder as trade_builder_module
 from strategies.trade_builder import TradeBuilder
 
@@ -50,7 +51,14 @@ def _patch_builder(monkeypatch, builder):
     )
 
 
-def _market_data() -> dict:
+def _market_data(
+    *,
+    bid=100.0,
+    ask=102.0,
+    mark_price=101.0,
+    ltp=150.0,
+    signal_price=None,
+) -> dict:
     return {
         "symbol": "SENSEX",
         "market_open": True,
@@ -71,14 +79,14 @@ def _market_data() -> dict:
                 "expiry": "2026-03-05",
                 "tradingsymbol": "SENSEX2630582000CE",
                 "instrument_token": 556677,
-                "ltp": 150.0,
-                "last_price": 150.0,
-                "bid": 100.0,
-                "ask": 102.0,
-                "best_bid": 100.0,
-                "best_ask": 102.0,
+                "ltp": ltp,
+                "last_price": ltp,
+                "bid": bid,
+                "ask": ask,
+                "best_bid": bid,
+                "best_ask": ask,
                 "mid_price": 101.0,
-                "mark_price": 101.0,
+                "mark_price": mark_price,
                 "price_source": "mid",
                 "quote_ok": True,
                 "quote_live": True,
@@ -93,6 +101,7 @@ def _market_data() -> dict:
                 "iv_skew": 0.0,
                 "delta": 0.3,
                 "moneyness": 0.0,
+                "signal_price": signal_price,
             }
         ],
     }
@@ -114,3 +123,122 @@ def test_trade_builder_uses_depth_proxy_and_sets_price_source(monkeypatch):
     assert trade.price_source == "mid"
     assert round(float(trade.best_bid), 2) == 100.00
     assert round(float(trade.best_ask), 2) == 102.00
+    assert float(trade.volume) == 5000.0
+    assert float(trade.current_volume) == 5000.0
+    assert float(trade.oi) == 20000.0
+    assert float(trade.oi_change) == 1000.0
+
+
+def test_trade_builder_hydrates_option_liquidity_from_cache(monkeypatch):
+    clear_option_liquidity_cache()
+    try:
+        monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+        monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+        monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+        builder = TradeBuilder(predictor=_PredictorStub())
+        _patch_builder(monkeypatch, builder)
+        update_option_liquidity_cache(
+            [
+                {
+                    "symbol": "SENSEX",
+                    "expiry": "2026-03-05",
+                    "strike": 82000.0,
+                    "type": "CE",
+                    "instrument_token": 556677,
+                    "volume": 7000,
+                    "current_volume": 7000,
+                    "oi": 28000,
+                    "oi_change": 900,
+                    "snapshot_ts_epoch": 1771400005.0,
+                }
+            ],
+            source="unit_test_cache",
+        )
+        market_data = _market_data()
+        market_data["option_chain"][0].pop("volume", None)
+        market_data["option_chain"][0].pop("oi", None)
+        market_data["option_chain"][0].pop("oi_change", None)
+
+        trade = builder.build(market_data, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+        assert trade is not None
+        assert float(trade.volume) == 7000.0
+        assert float(trade.current_volume) == 7000.0
+        assert float(trade.oi) == 28000.0
+        assert float(trade.oi_change) == 900.0
+    finally:
+        clear_option_liquidity_cache()
+
+
+def test_quick_option_trade_uses_executable_premium_for_entry_and_expected(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+
+    trade = builder.build(_market_data(), quick_mode=True, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert trade.strategy == "QUICK_OPT"
+    assert round(float(trade.entry_price), 2) >= 102.00
+    assert round(float(trade.expected_entry), 2) == round(float(trade.entry_price), 2)
+    assert trade.entry_price_source == "ask"
+    assert trade.expected_entry_source == "ask"
+
+
+def test_quick_option_entry_price_prefers_ask_over_mark_and_ltp(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+
+    trade = builder.build(
+        _market_data(bid=229.85, ask=230.15, mark_price=230.0, ltp=229.9, signal_price=100.99),
+        quick_mode=True,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is not None
+    assert round(float(trade.entry_price), 2) == 230.15
+    assert round(float(trade.expected_entry), 2) == 230.15
+    assert trade.entry_price_source == "ask"
+    assert trade.expected_entry_source == "ask"
+    assert round(float(trade.signal_price), 2) == 100.99
+
+
+def test_option_executable_price_falls_back_to_mark_price_when_ask_missing(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    price, source = builder._option_executable_price(
+        {
+            "ask": None,
+            "best_ask": None,
+            "mark_price": 230.0,
+            "ltp": 229.9,
+            "signal_price": 100.99,
+        },
+        side="BUY",
+    )
+
+    assert price == 230.0
+    assert source == "mark_price"
+
+
+def test_option_executable_price_falls_back_to_ltp_when_ask_and_mark_missing(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    price, source = builder._option_executable_price(
+        {
+            "ask": None,
+            "best_ask": None,
+            "mark_price": None,
+            "ltp": 229.9,
+            "last_price": 229.9,
+            "signal_price": 100.99,
+        },
+        side="BUY",
+    )
+
+    assert price == 229.9
+    assert source == "ltp"

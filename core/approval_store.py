@@ -2,6 +2,7 @@ import sqlite3
 import time
 import os
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
@@ -9,6 +10,9 @@ from typing import Optional, Tuple
 from config import config as cfg
 from core.audit_log import append_event
 from core.fs_utils import ensure_parent_dir
+
+
+logger = logging.getLogger(__name__)
 
 
 ORDER_APPROVAL_STATUS = {
@@ -66,7 +70,7 @@ def _audit_transition(
     try:
         append_event(payload)
     except Exception as exc:
-        print(f"[ORDER_APPROVAL_AUDIT_ERROR] {exc} | payload={payload}")
+        logger.error("order_approval_audit_error err=%s payload=%s", exc, payload)
 
 
 def init_db():

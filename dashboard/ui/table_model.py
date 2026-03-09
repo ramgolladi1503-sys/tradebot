@@ -11,6 +11,37 @@ import hashlib
 
 import pandas as pd
 
+_ENTRY_STATUSES_WITH_QUOTE_BACKFILL = {
+    "",
+    "OK",
+    "LIVE_OK",
+    "VALID",
+    "NONE",
+    "PRICE_MISMATCH",
+    "REST_FALLBACK",
+}
+
+_CANONICAL_ADVISORY_FIELDS = {
+    "execution_entry",
+    "execution_entry_source",
+    "execution_entry_status",
+    "display_entry",
+    "display_entry_source",
+    "display_entry_status",
+    "entry_reason",
+    "entry_clear_reason",
+    "hard_blockers",
+    "soft_penalties",
+    "warnings",
+    "confidence_raw",
+    "confidence_penalty",
+    "confidence_final",
+    "advisory_visible",
+    "is_executable",
+    "execution_status",
+    "entry_source",
+}
+
 
 CANONICAL_COLUMNS = [
     "last_seen_ts",
@@ -21,6 +52,8 @@ CANONICAL_COLUMNS = [
     "side",
     "status",
     "entry",
+    "execution_entry",
+    "display_entry",
     "stop",
     "target",
     "live_ltp",
@@ -29,6 +62,20 @@ CANONICAL_COLUMNS = [
     "pnl_cash",
     "qty",
     "confidence",
+    "confidence_raw",
+    "confidence_penalty",
+    "confidence_final",
+    "readiness",
+    "execution_status",
+    "entry_status",
+    "entry_source",
+    "execution_entry_status",
+    "display_entry_status",
+    "execution_entry_source",
+    "display_entry_source",
+    "hard_blockers",
+    "soft_penalties",
+    "warnings",
     "trade_key",
     "tradingsymbol",
 ]
@@ -45,6 +92,9 @@ NUMERIC_COLUMNS = [
     "pnl_cash",
     "qty",
     "confidence",
+    "confidence_raw",
+    "confidence_penalty",
+    "confidence_final",
 ]
 
 
@@ -57,6 +107,10 @@ def _status_badge(value) -> str:
     mapping = {
         "ACTIVE": "ACTIVE",
         "PLANNING": "PLANNING",
+        "ADVISORY_ONLY": "ADVISORY",
+        "READY": "READY",
+        "BLOCKED_APPROVAL": "BLOCKED_APPROVAL",
+        "BLOCKED_CONTRACT": "BLOCKED_CONTRACT",
         "QUEUED_REVIEW": "REVIEW",
         "QUEUE": "REVIEW",
         "REVALIDATED": "PLANNING",
@@ -69,6 +123,10 @@ def _status_badge(value) -> str:
     icon_map = {
         "ACTIVE": "ACTIVE",
         "PLANNING": "PLANNING",
+        "ADVISORY": "ADVISORY",
+        "READY": "READY",
+        "BLOCKED_APPROVAL": "BLOCKED_APPROVAL",
+        "BLOCKED_CONTRACT": "BLOCKED_CONTRACT",
         "REVIEW": "REVIEW",
         "EXITED": "EXITED",
         "INVALID": "INVALID",
@@ -92,6 +150,7 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         "pnl_1lot": "pnl_cash",
     }
     out = out.rename(columns={k: v for k, v in rename_map.items() if k in out.columns})
+    canonical_advisory = any(col in out.columns for col in _CANONICAL_ADVISORY_FIELDS)
     if out.columns.duplicated().any():
         # Merge duplicate columns by taking the first non-null value left-to-right.
         deduped: dict[str, pd.Series] = {}
@@ -104,6 +163,33 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         out = pd.DataFrame(deduped, index=out.index)
     if "target" not in out.columns and "target_points" in out.columns:
         out["target"] = out["target_points"]
+    if "suggested_entry" in out.columns and not canonical_advisory:
+        if "entry" not in out.columns:
+            out["entry"] = None
+        suggested = pd.to_numeric(out["suggested_entry"], errors="coerce")
+        current_ltp = pd.to_numeric(out["current_ltp"], errors="coerce") if "current_ltp" in out.columns else None
+        entry_price = pd.to_numeric(out["entry_price"], errors="coerce") if "entry_price" in out.columns else None
+        if "entry_status" in out.columns:
+            status = out["entry_status"].astype(str).str.upper()
+            ok_mask = status.isin(_ENTRY_STATUSES_WITH_QUOTE_BACKFILL)
+            suggested = suggested.where(ok_mask)
+            if current_ltp is not None:
+                current_ltp = current_ltp.where(ok_mask)
+            if entry_price is not None:
+                entry_price = entry_price.where(ok_mask)
+        if current_ltp is not None:
+            suggested = suggested.where(suggested.notna(), current_ltp)
+        if entry_price is not None:
+            suggested = suggested.where(suggested.notna(), entry_price)
+        # Fail-closed: do not fill entry from signal/reference price fields.
+        out["entry"] = out.get("entry").where(out.get("entry").notna(), suggested)
+    if "confidence_final" in out.columns:
+        out["confidence_final"] = pd.to_numeric(out["confidence_final"], errors="coerce")
+        if "confidence" not in out.columns:
+            out["confidence"] = out["confidence_final"]
+        else:
+            out["confidence"] = pd.to_numeric(out["confidence"], errors="coerce")
+            out["confidence"] = out["confidence_final"].where(out["confidence_final"].notna(), out["confidence"])
     for col in CANONICAL_COLUMNS:
         if col not in out.columns:
             out[col] = None
@@ -129,15 +215,14 @@ def compute_trade_key(df: pd.DataFrame) -> pd.DataFrame:
         existing = row.get("trade_key")
         if existing not in (None, "", "None"):
             return str(existing)
+        # Stable identity key: do not include mutable price levels.
+        # This prevents duplicate rows on every re-evaluation tick.
         parts = [
             str(row.get("symbol") or "").upper(),
             str(row.get("expiry_date") or ""),
             str(row.get("strike") if pd.notna(row.get("strike")) else ""),
             str(row.get("opt_type") or "").upper(),
             str(row.get("side") or "").upper(),
-            str(row.get("entry") if pd.notna(row.get("entry")) else ""),
-            str(row.get("stop") if pd.notna(row.get("stop")) else ""),
-            str(row.get("target") if pd.notna(row.get("target")) else ""),
         ]
         raw = "|".join(parts)
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()
@@ -213,11 +298,20 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
             "last_seen_ts",
             "identity",
             "status",
+            "readiness",
+            "execution_status",
             "side",
             "entry",
+            "entry_status",
+            "entry_source",
             "stop",
             "target",
-            "confidence",
+            "confidence_raw",
+            "confidence_penalty",
+            "confidence_final",
+            "hard_blockers",
+            "soft_penalties",
+            "warnings",
             "trade_key",
             "tradingsymbol",
         ]
@@ -225,9 +319,24 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
     out = out[cols].copy()
     if "status" in out.columns:
         out["status"] = out["status"].apply(_status_badge)
-    for c in ("entry", "stop", "target", "live_ltp", "pnl_points", "pnl_cash", "confidence"):
+    for c in (
+        "entry",
+        "stop",
+        "target",
+        "live_ltp",
+        "pnl_points",
+        "pnl_cash",
+        "confidence",
+        "confidence_raw",
+        "confidence_penalty",
+        "confidence_final",
+    ):
         if c in out.columns:
             out[c] = out[c].round(2)
+    if "last_seen_ts" in out.columns:
+        ts = pd.to_datetime(out["last_seen_ts"], errors="coerce", utc=True)
+        out["last_seen_ts"] = ts.dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S IST")
+        out["last_seen_ts"] = out["last_seen_ts"].where(out["last_seen_ts"].notna(), "—")
     return out
 
 

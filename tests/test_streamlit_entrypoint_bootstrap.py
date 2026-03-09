@@ -48,3 +48,19 @@ def test_bootstrap_runtime_renders_fallback_on_failure(monkeypatch):
     assert ("error", "Dashboard render failure.") in events
     assert any(kind == "exception" and "boom" in msg for kind, msg in events)
     assert any(kind == "code" and "RuntimeError: boom" in msg for kind, msg in events)
+
+
+def test_compute_refresh_gate_prefers_local_trade_fragment():
+    app = _load_module()
+    fake_st = SimpleNamespace(
+        session_state={
+            "auto_refresh_enabled": True,
+            "ui_local_trade_refresh_enabled": True,
+            "trade_refresh_mode": "Always refresh (UI only)",
+        }
+    )
+
+    should_refresh, reason = app._compute_refresh_gate(fake_st)
+
+    assert should_refresh is False
+    assert reason == "local_trade_fragment"

@@ -68,6 +68,60 @@ def now_ist() -> datetime:
     return datetime.now(timezone.utc).astimezone(IST_TZ)
 
 
+def parse_hhmm_time(value: Any, default: dt_time | None = None) -> dt_time | None:
+    if value is None:
+        return default
+    if isinstance(value, dt_time):
+        return value
+    text = str(value).strip()
+    if not text:
+        return default
+    parts = text.split(":")
+    try:
+        hh = int(parts[0])
+        mm = int(parts[1]) if len(parts) > 1 else 0
+        ss = int(parts[2]) if len(parts) > 2 else 0
+        return dt_time(hour=hh, minute=mm, second=ss)
+    except Exception:
+        return default
+
+
+def get_market_phase_ist(
+    now: Optional[datetime] = None,
+    *,
+    premarket_start: dt_time | None = None,
+    open_time: dt_time | None = None,
+    close_time: dt_time | None = None,
+    segment: str | None = None,
+) -> str:
+    """
+    Return one of: CLOSED | PREMARKET | OPEN (IST timezone).
+    This is classification-only; execution gates should continue using market_open.
+    """
+    now_dt = now or now_ist()
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=IST_TZ)
+    else:
+        now_dt = now_dt.astimezone(IST_TZ)
+
+    if now_dt.weekday() >= 5:
+        return "CLOSED"
+
+    sess = get_session(segment)
+    open_t = open_time or sess.open_time
+    close_t = close_time or sess.close_time
+    pre_t = premarket_start or dt_time(9, 0)
+    if pre_t > open_t:
+        pre_t = open_t
+
+    cur_t = now_dt.time()
+    if pre_t <= cur_t < open_t:
+        return "PREMARKET"
+    if open_t <= cur_t <= close_t:
+        return "OPEN"
+    return "CLOSED"
+
+
 def to_ist(dt_utc: datetime) -> datetime:
     if dt_utc.tzinfo is None:
         dt_utc = dt_utc.replace(tzinfo=timezone.utc)

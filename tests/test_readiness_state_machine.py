@@ -25,7 +25,7 @@ def test_readiness_ready_market_open(monkeypatch):
     monkeypatch.setattr(
         readiness_gate,
         "_decision_gate_health",
-        lambda now_epoch, market_open: {
+        lambda now_epoch, market_open, execution_mode=None: {
             "ok": True,
             "feed_ok": True,
             "blockers": [],
@@ -54,7 +54,7 @@ def test_readiness_blocked_market_open_feed_stale(monkeypatch):
     monkeypatch.setattr(
         readiness_gate,
         "_decision_gate_health",
-        lambda now_epoch, market_open: {
+        lambda now_epoch, market_open, execution_mode=None: {
             "ok": False,
             "feed_ok": False,
             "blockers": ["decision_gate_blocked"],
@@ -83,7 +83,7 @@ def test_readiness_degraded_market_closed_feed_stale(monkeypatch):
     monkeypatch.setattr(
         readiness_gate,
         "_decision_gate_health",
-        lambda now_epoch, market_open: {
+        lambda now_epoch, market_open, execution_mode=None: {
             "ok": True,
             "feed_ok": True,
             "blockers": [],
@@ -114,7 +114,7 @@ def test_readiness_paper_market_open_does_not_hard_block_feed_stale(monkeypatch)
     monkeypatch.setattr(
         readiness_gate,
         "_decision_gate_health",
-        lambda now_epoch, market_open: {
+        lambda now_epoch, market_open, execution_mode=None: {
             "ok": False,
             "feed_ok": False,
             "blockers": ["decision_gate_blocked"],
@@ -156,7 +156,7 @@ def test_readiness_market_closed_auth_unhealthy_degrades_to_planning(monkeypatch
     monkeypatch.setattr(
         readiness_gate,
         "_decision_gate_health",
-        lambda now_epoch, market_open: {
+        lambda now_epoch, market_open, execution_mode=None: {
             "ok": True,
             "feed_ok": True,
             "blockers": [],

@@ -34,25 +34,65 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         or freshness.get("execution_mode")
         or getattr(cfg, "EXECUTION_MODE", "SIM")
     ).upper()
+    raw_sla_status = str(freshness.get("state") or "").upper()
+    sla_state = "LIVE" if (market_open and not bool(freshness.get("allow_stale_quotes", False))) else "PLANNING"
 
     ltp_age = None
     depth_age = None
     ltp_block = freshness.get("ltp") or {}
     depth_block = freshness.get("depth") or {}
+    allow_stale_quotes = bool(freshness.get("allow_stale_quotes", False))
+    ltp_required = bool(market_open and (not allow_stale_quotes))
+    depth_required = bool(market_open and bool((depth_block or {}).get("required", False)))
+    ltp_max_age_sec = None
+    depth_max_age_sec = None
     if isinstance(ltp_block, dict):
         ltp_age = ltp_block.get("age_sec")
+        if "required" in ltp_block:
+            ltp_required = bool(ltp_block.get("required"))
+        ltp_max_age_sec = ltp_block.get("max_age_sec")
     if isinstance(depth_block, dict):
         depth_age = depth_block.get("age_sec")
+        if "required" in depth_block:
+            depth_required = bool(depth_block.get("required"))
+        depth_max_age_sec = depth_block.get("max_age_sec")
 
     feed = {
         "ws_connected": feed_debug.get("ws_connected"),
         "subscriptions_count": feed_debug.get("subscribed_tokens_count"),
+        "subscribed_tokens_count": feed_debug.get("subscribed_tokens_count"),
+        "intended_tokens_count": feed_debug.get("intended_tokens_count"),
+        "subscribed_tokens_count_by_symbol": feed_debug.get("subscribed_tokens_count_by_symbol"),
+        "missing_option_tokens_count": feed_debug.get("missing_option_tokens_count"),
+        "missing_option_tokens_count_by_symbol": feed_debug.get("missing_option_tokens_count_by_symbol"),
+        "subscribed_option_tokens_count": feed_debug.get("subscribed_option_tokens_count"),
+        "option_tokens_resolved_count_by_symbol": feed_debug.get("option_tokens_resolved_count_by_symbol"),
+        "option_tokens_subscribed_count_by_symbol": feed_debug.get("option_tokens_subscribed_count_by_symbol"),
+        "option_ticks_received_count_by_symbol": feed_debug.get("option_ticks_received_count_by_symbol"),
+        "last_option_tick_ts_by_symbol": feed_debug.get("last_option_tick_ts_by_symbol"),
+        "option_last_tick_age_by_symbol": feed_debug.get("option_last_tick_age_by_symbol"),
+        "option_feed_block_reason_by_symbol": feed_debug.get("option_feed_block_reason_by_symbol"),
+        "option_active_blockers_by_symbol": feed_debug.get("option_active_blockers_by_symbol"),
+        "runtime_state": feed_debug.get("feed_runtime_state"),
+        "last_error": feed_debug.get("feed_runtime_last_error"),
         "last_tick_age_sec": feed_debug.get("last_tick_age_sec"),
         "ltp_age_sec": ltp_age,
         "depth_age_sec": depth_age,
-        "sla_status": freshness.get("state"),
+        "allow_stale_quotes": allow_stale_quotes,
+        "ltp_required": bool(ltp_required),
+        "ltp_max_age_sec": ltp_max_age_sec,
+        "depth_required": bool(depth_required),
+        "depth_max_age_sec": depth_max_age_sec,
+        "sla_state": sla_state,
+        "sla_status": raw_sla_status or freshness.get("state"),
         "reasons": list(freshness.get("reasons") or []),
     }
+    blockers = list(feed.get("reasons") or [])
+    if feed.get("runtime_state") in {"IMPORT_MISSING", "AUTH_BLOCKED", "SUBSCRIBE_FAILED"}:
+        blockers.append(f"ws_runtime:{feed.get('runtime_state')}")
+    if feed.get("last_error"):
+        blockers.append(f"ws_error:{feed.get('last_error')}")
+    feed["blockers"] = blockers
 
     execution_engine = getattr(orchestrator, "execution_engine", None)
     kill_switch_triggered = None
@@ -96,9 +136,17 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "kill_switch_reason": kill_switch_reason,
         "last_spread_decision": last_spread_decision,
     }
+    try:
+        decision_breakers = getattr(orchestrator, "decision_breakers", None)
+        if decision_breakers is not None:
+            execution["decision_breakers"] = decision_breakers.snapshot(now_ts=ts_epoch)
+    except Exception:
+        execution["decision_breakers"] = {"error": "decision_breakers_snapshot_failed"}
 
     return {
         "ts_epoch": ts_epoch,
+        "snapshot_ts_epoch": ts_epoch,
+        "snapshot_age_sec": 0.0,
         "mode": mode,
         "market_open": market_open,
         "feed": feed,

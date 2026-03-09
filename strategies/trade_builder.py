@@ -5,9 +5,11 @@ from core.paths import logs_dir, data_root
 
 from datetime import datetime, date
 from dataclasses import replace
+from functools import wraps
 from pathlib import Path
 import hashlib
 import json
+import logging
 import os
 import sys
 import pandas as pd
@@ -27,15 +29,54 @@ from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
 from core.instruments import select_expiry as select_registry_expiry
 from core.market_context import derive_market_context
+from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
 from core.reject_telemetry import append_reject_telemetry
+from core.option_entry import get_option_ltp_sla_sec
+from core.option_liquidity_cache import hydrate_option_liquidity_fields
+from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
 from core.time_utils import compute_age_sec, is_market_open_ist, now_ist, now_utc_epoch
 from core.regime import RegimeClassifier, normalize_regime
 from core.kite_client import kite_client
+from core.events import write_json_atomic
 import time as _time
 import time
 
+
+logger = logging.getLogger(__name__)
+
 _AUTO_TUNE_CACHE = {"ts": 0, "data": {}}
+
+
+def _env_debug_enabled(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _debug_option_chain_enabled() -> bool:
+    return _env_debug_enabled("TRADEBOT_DEBUG_OPTION_CHAIN")
+
+
+def _debug_freshness_enabled() -> bool:
+    return _env_debug_enabled("TRADEBOT_DEBUG_FRESHNESS")
+
+
+def _debug_advisory_enabled() -> bool:
+    return _env_debug_enabled("TRADEBOT_DEBUG_ADVISORY")
+
+
+def _log_option_chain_debug(message: str, *args) -> None:
+    if _debug_option_chain_enabled():
+        logger.debug(message, *args)
+
+
+def _log_freshness_debug(message: str, *args) -> None:
+    if _debug_freshness_enabled():
+        logger.debug(message, *args)
+
+
+def _log_advisory_debug(message: str, *args) -> None:
+    if _debug_advisory_enabled():
+        logger.debug(message, *args)
 
 def _get_auto_tune():
     try:
@@ -69,6 +110,96 @@ def _log_signal_event(kind, symbol, payload=None):
     except Exception:
         pass
 
+
+def _scan_summary_mode_from_market_data(market_data: dict | None) -> str:
+    data = dict(market_data or {})
+    market_context = data.get("market_context")
+    market_open = bool((market_context or {}).get("market_open", data.get("market_open", True))) if isinstance(market_context, dict) else bool(data.get("market_open", True))
+    if not market_open:
+        return "OFFHOURS"
+    if isinstance(market_context, dict):
+        mode = str(market_context.get("mode") or "").strip().upper()
+        if mode:
+            return mode
+    exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
+    segment = data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+    ctx_payload = dict(market_context or {}) if isinstance(market_context, dict) else {}
+    if "execution_mode" not in ctx_payload:
+        ctx_payload["execution_mode"] = exec_mode
+    if "market_open" not in ctx_payload:
+        ctx_payload["market_open"] = data.get("market_open", True)
+    if "segment" not in ctx_payload:
+        ctx_payload["segment"] = segment
+    return str(derive_market_context(ctx_payload).mode or exec_mode).upper()
+
+
+def _emit_scan_summary_and_status(self, market_data: dict | None, trade) -> None:
+    market_data_dict = dict(market_data or {})
+    symbol = str((market_data or {}).get("symbol") or "")
+    reject_ctx = dict(self._reject_ctx or {})
+    reject_counts = dict(self._scan_reject_counts or {})
+    reject_reason = str(reject_ctx.get("reason") or "").strip()
+    if trade is None and reject_reason:
+        reject_counts[reject_reason] = int(reject_counts.get(reject_reason, 0)) + 1
+    accepted = int(self._scan_accepted or (1 if trade is not None else 0))
+    summary = build_scan_summary(
+        symbol=symbol,
+        total_candidates=int(self._scan_total_candidates or 0),
+        accepted=accepted,
+        rejected_by_reason=reject_counts,
+        mode=_scan_summary_mode_from_market_data(market_data_dict),
+        profile_name=str(self._scan_profile_name or ""),
+    )
+    market_context = market_data_dict.get("market_context")
+    if isinstance(market_context, dict):
+        market_open = bool(market_context.get("market_open", market_data_dict.get("market_open", True)))
+        market_mode = str(
+            market_context.get("mode")
+            or _scan_summary_mode_from_market_data(market_data_dict)
+            or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).strip().upper()
+    else:
+        market_open = bool(market_data_dict.get("market_open", True))
+        market_mode = str(
+            _scan_summary_mode_from_market_data(market_data_dict)
+            or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).strip().upper()
+    summary["market_open"] = bool(market_open)
+    summary["market_mode"] = "OFFHOURS" if not market_open else market_mode
+    self._last_scan_summary = dict(summary)
+    emit_scan_summary(summary)
+    self._write_scan_status_files(summary)
+
+
+def _coerce_status_bool(value, default: bool) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _wrap_trade_builder_build_with_status(build_fn):
+    if getattr(build_fn, "_scan_status_wrapped", False):
+        return build_fn
+
+    @wraps(build_fn)
+    def _wrapped(self, market_data, *args, **kwargs):
+        trade = None
+        try:
+            trade = build_fn(self, market_data, *args, **kwargs)
+            return trade
+        finally:
+            try:
+                _emit_scan_summary_and_status(self, market_data, trade)
+            except Exception as exc:
+                logger.warning("scan_status_write_failed err=%s:%s", type(exc).__name__, exc)
+
+    _wrapped._scan_status_wrapped = True
+    return _wrapped
+
 class TradeBuilder:
     def __init__(self, predictor=None, execution=None, strategy_tracker=None):
         self._ml_disabled = (
@@ -97,6 +228,7 @@ class TradeBuilder:
         self._expiry_zero_hero_loss_streak = {}
         self._expiry_zero_hero_disabled_until = {}
         self._expiry_zero_hero_pnl = {}
+        self._expiry_lotto_token_incident_ts = {}
         self._zero_to_hero_daily_count = 0
         self._zero_to_hero_last_day = None
         self._reject_ctx = {}
@@ -106,15 +238,142 @@ class TradeBuilder:
         self._scan_profile_name = ""
         self._last_scan_summary = {}
 
+    def _heartbeat_feed_snapshot(self) -> dict:
+        payload = {}
+        try:
+            payload = json.loads((logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                payload = {}
+        except Exception:
+            payload = {}
+        return {
+            "feed_ok": payload.get("feed_ok"),
+            "ws_connected": payload.get("ws_connected"),
+            "subscribed_option_tokens_count": payload.get("subscribed_option_tokens_count"),
+            "missing_option_tokens_count": payload.get("missing_option_tokens_count"),
+        }
+
+    def _status_file_payload(self, filename: str) -> dict:
+        try:
+            payload = json.loads((logs_dir() / filename).read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                return payload
+        except Exception:
+            pass
+        return {}
+
+    def _write_scan_status_files(self, summary: dict) -> None:
+        payload = dict(summary or {})
+        ts_epoch = float(payload.get("ts_epoch") or now_utc_epoch())
+        ts_local = datetime.now().astimezone().isoformat()
+        accepted = int(payload.get("accepted") or 0)
+        total_candidates = int(payload.get("total_candidates") or 0)
+        rejected_by_reason = dict(payload.get("rejected_by_reason") or {})
+        rejected_total = int(sum(int(v) for v in rejected_by_reason.values()))
+        market_open = _coerce_status_bool(
+            payload.get("market_open"),
+            default=(str(payload.get("mode") or "").strip().upper() != "OFFHOURS"),
+        )
+        market_mode = str(
+            payload.get("market_mode")
+            or payload.get("mode")
+            or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).strip().upper()
+        if not market_open:
+            market_mode = "OFFHOURS"
+        cycle_status = derive_cycle_semantics(
+            market_mode=market_mode,
+            market_open=market_open,
+            suggestion_count=accepted,
+            blocker_counts=rejected_by_reason,
+            last_error="",
+        )
+        market_mode = str(cycle_status.get("market_mode") or market_mode or getattr(cfg, "EXECUTION_MODE", "SIM")).strip().upper()
+        market_open = bool(cycle_status.get("market_open"))
+        top_blockers = list(cycle_status.get("top_blockers") or top_blockers_from_counts(rejected_by_reason))
+        current_suggestions_payload = self._status_file_payload("suggestions_status.json")
+        feed_snapshot = self._heartbeat_feed_snapshot()
+        suggestions_payload = {
+            "ts_epoch": ts_epoch,
+            "ts_local": ts_local,
+            "status": cycle_status.get("semantic_state"),
+            "suggestion_count": accepted,
+            "market_mode": market_mode,
+            "market_open": bool(market_open),
+            "reason": cycle_status.get("dominant_reason"),
+            "subreason": cycle_status.get("subreason"),
+            "primary_blocker": cycle_status.get("primary_blocker"),
+            "feed_ok": feed_snapshot.get("feed_ok"),
+            "ws_connected": feed_snapshot.get("ws_connected"),
+            "subscribed_option_tokens_count": feed_snapshot.get("subscribed_option_tokens_count"),
+            "missing_option_tokens_count": feed_snapshot.get("missing_option_tokens_count"),
+            "latest_trade_id": current_suggestions_payload.get("latest_trade_id"),
+            "latest_entry_status": current_suggestions_payload.get("latest_entry_status"),
+            "latest_permission": current_suggestions_payload.get("latest_permission"),
+            "latest_permission_reason": current_suggestions_payload.get("latest_permission_reason"),
+        }
+        engine_payload = {
+            "ts_epoch": ts_epoch,
+            "cycle_ok": True,
+            "cycle_stage": cycle_status.get("semantic_state"),
+            "market_mode": market_mode,
+            "market_open": bool(market_open),
+            "reason": cycle_status.get("dominant_reason"),
+            "subreason": cycle_status.get("subreason"),
+            "symbols_scanned": 1 if str(payload.get("symbol") or "").strip() else 0,
+            "candidates_seen": total_candidates,
+            "candidates_blocked": rejected_total,
+            "candidates_enqueued": accepted,
+            "top_blockers": top_blockers,
+            "primary_blocker": cycle_status.get("primary_blocker"),
+            "feed_ok": feed_snapshot.get("feed_ok"),
+            "ws_connected": feed_snapshot.get("ws_connected"),
+            "subscribed_option_tokens_count": feed_snapshot.get("subscribed_option_tokens_count"),
+            "missing_option_tokens_count": feed_snapshot.get("missing_option_tokens_count"),
+            "last_error": "",
+        }
+        write_json_atomic(logs_dir() / "suggestions_status.json", suggestions_payload)
+        write_json_atomic(logs_dir() / "engine_cycle_status.json", engine_payload)
+
     def _decorate_trade_context(self, trade: Trade | None, market_data: dict | None, raw_conf: float | None):
         if trade is None:
             return trade
         data = market_data if isinstance(market_data, dict) else {}
+        option_ok, missing_fields = self._option_identity_complete(
+            instrument=getattr(trade, "instrument", None),
+            instrument_type=getattr(trade, "instrument_type", None),
+            right=getattr(trade, "right", None),
+            expiry=getattr(trade, "expiry", None),
+            tradingsymbol=getattr(trade, "tradingsymbol", None),
+            instrument_token=getattr(trade, "instrument_token", None),
+            instrument_id=getattr(trade, "instrument_id", None),
+        )
+        if not option_ok:
+            self._log_blocked_candidate(
+                str(getattr(trade, "symbol", None) or data.get("symbol") or "UNKNOWN"),
+                "unresolved_contract",
+                "Option trade blocked: incomplete option identity",
+                market_data=data,
+                extra={
+                    "strike": getattr(trade, "strike", None),
+                    "option_type": getattr(trade, "right", None) or getattr(trade, "option_type", None),
+                    "expiry": getattr(trade, "expiry", None),
+                    "tradingsymbol": getattr(trade, "tradingsymbol", None),
+                    "instrument_token": getattr(trade, "instrument_token", None),
+                    "instrument_id": getattr(trade, "instrument_id", None),
+                    "missing_fields": missing_fields,
+                    "skip_derived_levels": True,
+                },
+            )
+            return None
         try:
             conf = raw_conf if raw_conf is not None else getattr(trade, "confidence", None)
+            reg_conf = data.get("regime_confidence")
+            if reg_conf is None:
+                reg_conf = data.get("day_confidence")
             return replace(
                 trade,
-                regime_confidence=data.get("regime_confidence"),
+                regime_confidence=reg_conf,
                 day_confidence=data.get("day_confidence"),
                 orb_bias=data.get("orb_bias"),
                 raw_signal_confidence=conf,
@@ -128,6 +387,77 @@ class TradeBuilder:
             return Path(str(desk_log_dir)) / "blocked_candidates.jsonl"
         desk = getattr(cfg, "DESK_ID", "DEFAULT")
         return logs_dir() / f"desks/{desk}/blocked_candidates.jsonl"
+
+    def _log_precondition_reject(
+        self,
+        symbol: str,
+        reason_code: str,
+        reason_text: str,
+        market_data: dict | None = None,
+        extra: dict | None = None,
+    ) -> None:
+        data = market_data or {}
+        meta = extra if isinstance(extra, dict) else {}
+        ts_epoch = float(now_utc_epoch())
+        reason_codes = list(meta.get("reason_codes") or [])
+        if not reason_codes:
+            reason_codes = [str(reason_code)]
+        gate_name = str(meta.get("gate_name") or "option_tradability_precondition")
+        direction = (
+            meta.get("direction")
+            or (self._reject_ctx.get("direction") if isinstance(self._reject_ctx, dict) else None)
+            or data.get("direction")
+        )
+        strike = meta.get("strike")
+        option_type = meta.get("option_type") or meta.get("type")
+        quote_source = meta.get("quote_source") or data.get("quote_source") or data.get("index_quote_source")
+        option_ltp_source = (
+            meta.get("option_ltp_source")
+            or data.get("option_ltp_source")
+            or quote_source
+        )
+        try:
+            append_reject_telemetry(
+                {
+                    "candidate_key": meta.get("candidate_id") or meta.get("trade_id"),
+                    "snapshot_id": meta.get("snapshot_id"),
+                    "timestamp_epoch_ms": int(ts_epoch * 1000.0),
+                    "symbol": symbol,
+                    "strike": strike if strike is not None else data.get("strike"),
+                    "trade_side": direction,
+                    "reject_reason": str(reason_code),
+                    "rejection_reasons": [str(x) for x in reason_codes if str(x)],
+                    "quote_age_sec": meta.get("quote_age_sec", data.get("quote_age_sec")),
+                    "spread_pct": meta.get("spread_pct", data.get("spread_pct")),
+                    "feed_state": (
+                        meta.get("feed_state")
+                        or data.get("feed_state")
+                        or (data.get("feed_health_snapshot") or {}).get("state")
+                    ),
+                    "entry_price": meta.get("entry_price") or meta.get("option_ltp") or data.get("ltp"),
+                    "instrument_token": meta.get("instrument_token"),
+                    "horizon_minutes": int(getattr(cfg, "REJECT_SHADOW_HORIZON_MIN", 30)),
+                    "gate_name": gate_name,
+                    "reason": str(reason_text),
+                    "quote_source": quote_source,
+                    "option_ltp_source": option_ltp_source,
+                }
+            )
+        except Exception:
+            pass
+        append_reject_reasons(
+            symbol=symbol,
+            strategy=str(meta.get("strategy")) if meta.get("strategy") is not None else None,
+            reasons=[str(x) for x in reason_codes if str(x)],
+            mode=(data.get("market_context") or {}).get("mode") if isinstance(data.get("market_context"), dict) else getattr(cfg, "EXECUTION_MODE", "SIM"),
+            source="trade_builder_precondition",
+            extra={
+                "reason_text": reason_text,
+                "quote_source": quote_source,
+                "option_ltp_source": option_ltp_source,
+                "gate_name": gate_name,
+            },
+        )
 
     def _log_blocked_candidate(
         self,
@@ -149,6 +479,7 @@ class TradeBuilder:
         reason_codes = list(meta.get("reason_codes") or [])
         if not reason_codes:
             reason_codes = [str(reason_code)]
+        gate_name = str(meta.get("gate_name") or reason_code or "trade_builder_gate")
         direction = (
             meta.get("direction")
             or (self._reject_ctx.get("direction") if isinstance(self._reject_ctx, dict) else None)
@@ -233,6 +564,8 @@ class TradeBuilder:
             "reason_code": str(reason_code),
             "reason_codes": [str(x) for x in reason_codes if str(x)],
             "reason_text": str(reason_text),
+            "reason": str(reason_text),
+            "gate_name": gate_name,
             "direction": direction,
             "entry": entry,
             "stop": stop,
@@ -243,7 +576,12 @@ class TradeBuilder:
             "tradingsymbol": meta.get("tradingsymbol") or data.get("tradingsymbol"),
             "underlying_spot": meta.get("underlying_spot") or data.get("ltp"),
             "spot_source": meta.get("spot_source") or data.get("ltp_source") or data.get("index_quote_source"),
-            "option_ltp_source": meta.get("option_ltp_source"),
+            "option_ltp_source": (
+                meta.get("option_ltp_source")
+                or data.get("option_ltp_source")
+                or data.get("quote_source")
+                or data.get("index_quote_source")
+            ),
             "chain_source": meta.get("chain_source") or data.get("chain_source"),
             "contract": contract,
             "horizon_sec": horizons,
@@ -260,11 +598,14 @@ class TradeBuilder:
         try:
             append_reject_telemetry(
                 {
+                    "candidate_key": rec.get("candidate_id"),
+                    "snapshot_id": meta.get("snapshot_id") if isinstance(meta, dict) else None,
                     "timestamp_epoch_ms": int(ts_epoch * 1000.0),
                     "symbol": symbol,
                     "strike": strike if strike is not None else data.get("strike"),
                     "trade_side": direction,
                     "reject_reason": str(reason_code),
+                    "rejection_reasons": [str(x) for x in reason_codes if str(x)],
                     "quote_age_sec": meta.get("quote_age_sec", data.get("quote_age_sec")),
                     "spread_pct": meta.get("spread_pct", data.get("spread_pct")),
                     "feed_state": (
@@ -272,6 +613,13 @@ class TradeBuilder:
                         or data.get("feed_state")
                         or (data.get("feed_health_snapshot") or {}).get("state")
                     ),
+                    "entry_price": rec.get("entry"),
+                    "instrument_token": rec.get("instrument_token"),
+                    "horizon_minutes": int(getattr(cfg, "REJECT_SHADOW_HORIZON_MIN", 30)),
+                    "gate_name": gate_name,
+                    "reason": str(reason_text),
+                    "quote_source": rec.get("quote_source"),
+                    "option_ltp_source": rec.get("option_ltp_source"),
                 }
             )
         except Exception:
@@ -384,6 +732,64 @@ class TradeBuilder:
         lot_size = int(getattr(cfg, "LOT_SIZE", {}).get(symbol, 1))
         qty_units = int(qty_lots) * (lot_size if instrument_type == "OPT" else 1)
         return instrument_type, instrument_id, qty_units, None
+
+    def _option_identity_complete(
+        self,
+        *,
+        instrument: str | None,
+        instrument_type: str | None,
+        right: str | None,
+        expiry: str | None,
+        tradingsymbol,
+        instrument_token,
+        instrument_id,
+    ) -> tuple[bool, list[str]]:
+        if str(instrument or "").upper() != "OPT":
+            return True, []
+        missing_fields: list[str] = []
+        if str(instrument_type or "").upper() != "OPT":
+            missing_fields.append("instrument_type")
+        if str(right or "").upper() not in {"CE", "PE"}:
+            missing_fields.append("right")
+        if not str(expiry or "").strip():
+            missing_fields.append("expiry")
+        if not str(tradingsymbol or "").strip():
+            missing_fields.append("tradingsymbol")
+        try:
+            token_int = int(instrument_token) if instrument_token is not None else None
+        except Exception:
+            token_int = None
+        if token_int is None:
+            missing_fields.append("instrument_token")
+        if not str(instrument_id or "").strip():
+            missing_fields.append("instrument_id")
+        return (len(missing_fields) == 0), missing_fields
+
+    def _option_liquidity_fields(self, opt) -> dict:
+        if not isinstance(opt, dict):
+            return {}
+        volume = opt.get("volume")
+        return {
+            "volume": volume,
+            "current_volume": opt.get("current_volume", volume),
+            "oi": opt.get("oi"),
+            "oi_change": opt.get("oi_change"),
+        }
+
+    def _hydrate_option_liquidity(self, opt):
+        if not isinstance(opt, dict):
+            return opt
+        hydrated = hydrate_option_liquidity_fields(
+            opt,
+            symbol=opt.get("symbol"),
+            expiry=opt.get("expiry") or opt.get("expiry_date") or opt.get("expiryDate") or opt.get("exp"),
+            strike=opt.get("strike") or opt.get("strike_price") or opt.get("strikePrice"),
+            option_type=opt.get("type") or opt.get("option_type") or opt.get("right") or opt.get("instrument_type"),
+            now_epoch=now_utc_epoch(),
+        )
+        if hydrated.get("current_volume") is None and hydrated.get("volume") is not None:
+            hydrated["current_volume"] = hydrated.get("volume")
+        return hydrated
 
     def _coerce_positive_float(self, value):
         try:
@@ -501,27 +907,40 @@ class TradeBuilder:
         }
 
     def _entry_price_proxy(self, opt: dict, side: str = "BUY"):
+        price, _ = self._option_executable_price(opt, side=side)
+        return price
+
+    def _option_executable_price(self, opt: dict, side: str = "BUY") -> tuple[float | None, str | None]:
         if not isinstance(opt, dict):
-            return None
+            return None, None
         side_val = str(side or "BUY").upper()
-        key = "entry_price_proxy_sell" if side_val == "SELL" else "entry_price_proxy_buy"
-        direct = self._coerce_positive_float(opt.get(key))
-        if direct is not None:
-            return direct
         if side_val == "SELL":
             bid = self._coerce_positive_float(opt.get("best_bid")) or self._coerce_positive_float(opt.get("bid"))
             if bid is not None:
-                return bid
+                return bid, "bid"
         else:
             ask = self._coerce_positive_float(opt.get("best_ask")) or self._coerce_positive_float(opt.get("ask"))
             if ask is not None:
-                return ask
-        return (
-            self._coerce_positive_float(opt.get("mark_price"))
-            or self._coerce_positive_float(opt.get("mid_price"))
+                return ask, "ask"
+        mark_price = self._coerce_positive_float(opt.get("mark_price"))
+        if mark_price is not None:
+            return mark_price, "mark_price"
+        ltp = (
+            self._coerce_positive_float(opt.get("ltp"))
             or self._coerce_positive_float(opt.get("last_price"))
-            or self._coerce_positive_float(opt.get("ltp"))
         )
+        if ltp is not None:
+            return ltp, "ltp"
+        return None, None
+
+    def _option_signal_price(self, opt: dict, market_data: dict | None = None) -> float | None:
+        if isinstance(opt, dict):
+            signal_price = self._coerce_positive_float(opt.get("signal_price"))
+            if signal_price is not None:
+                return signal_price
+        if isinstance(market_data, dict):
+            return self._coerce_positive_float(market_data.get("signal_price"))
+        return None
 
     def _normalize_option_row(self, opt_raw, expected_type: str):
         if not isinstance(opt_raw, dict):
@@ -595,6 +1014,7 @@ class TradeBuilder:
             exp_text = str(expiry).strip()
             if exp_text and exp_text.upper() not in {"NONE", "NA", "N/A", "NAN"}:
                 opt["expiry"] = exp_text
+        opt = self._hydrate_option_liquidity(opt)
         return opt, None
 
     def _validate_required_option_quote_fields(
@@ -617,6 +1037,158 @@ class TradeBuilder:
         if ask < bid:
             return False, "no_bid_ask"
         return True, None
+
+    def _coerce_nonnegative_float(self, value):
+        try:
+            if value is None:
+                return None
+            val = float(value)
+            return val if val >= 0 else None
+        except Exception:
+            return None
+
+    def _option_tradability_precondition(
+        self,
+        *,
+        symbol: str,
+        opt: dict,
+        market_data: dict,
+        market_ctx,
+        direction: str | None = None,
+    ) -> tuple[bool, dict]:
+        strike = opt.get("strike")
+        opt_type = opt.get("type")
+        expiry_candidate = self._option_expiry(opt, market_data) or self._resolve_expiry_for_symbol(symbol, market_data)
+        contract_info = self._resolve_option_contract(
+            symbol,
+            strike,
+            opt_type,
+            expiry_candidate,
+            market_data,
+        )
+        expiry_resolved = str(contract_info.get("expiry") or expiry_candidate or "").strip()
+        tradingsymbol = str(contract_info.get("tradingsymbol") or opt.get("tradingsymbol") or "").strip()
+        instrument_token = contract_info.get("instrument_token")
+        instrument_id = contract_info.get("instrument_id") or opt.get("instrument_id")
+        try:
+            instrument_token = int(instrument_token) if instrument_token is not None else None
+        except Exception:
+            instrument_token = None
+        missing_fields: list[str] = []
+        if instrument_token is None:
+            missing_fields.append("instrument_token")
+        if not tradingsymbol:
+            missing_fields.append("tradingsymbol")
+        if not expiry_resolved:
+            missing_fields.append("expiry_date")
+        contract_label = f"{symbol}|{expiry_resolved}|{strike}|{opt_type}"
+        if missing_fields:
+            return False, {
+                "reason_code": "unresolved_contract",
+                "reason_text": "Option contract unresolved before candidate gating",
+                "gate_name": "option_tradability_precondition",
+                "contract": contract_label,
+                "strike": strike,
+                "option_type": opt_type,
+                "direction": direction,
+                "instrument_token": instrument_token,
+                "tradingsymbol": tradingsymbol or None,
+                "expiry_date": expiry_resolved or None,
+                "missing_fields": missing_fields,
+                "skip_derived_levels": True,
+            }
+
+        quote_source = str(
+            opt.get("quote_source")
+            or opt.get("price_source")
+            or market_data.get("option_quote_source")
+            or market_data.get("chain_source")
+            or ""
+        ).strip()
+        option_ltp_source = str(
+            opt.get("option_ltp_source")
+            or opt.get("quote_source")
+            or opt.get("price_source")
+            or market_data.get("option_ltp_source")
+            or market_data.get("option_quote_source")
+            or ("option_chain_live" if quote_source.lower() in {"live", "option_chain", "option_chain_live"} else "")
+        ).strip()
+        if quote_source.lower() == "synthetic_index" or option_ltp_source.lower() == "synthetic_index" or not option_ltp_source:
+            return False, {
+                "reason_code": "NO_OPTION_QUOTE_SOURCE",
+                "reason_text": "Option candidate rejected because option quote source is missing or synthetic index fallback",
+                "gate_name": "option_tradability_precondition",
+                "contract": contract_label,
+                "strike": strike,
+                "option_type": opt_type,
+                "direction": direction,
+                "instrument_token": instrument_token,
+                "tradingsymbol": tradingsymbol,
+                "expiry_date": expiry_resolved,
+                "quote_source": quote_source or None,
+                "option_ltp_source": option_ltp_source or None,
+            }
+
+        market_mode = str(getattr(market_ctx, "mode", getattr(cfg, "EXECUTION_MODE", "SIM")))
+        live_sla_default = float(getattr(cfg, "OPTION_LTP_SLA_SEC", getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)))
+        option_tick_sla_sec = float(
+            get_option_ltp_sla_sec(
+                market_mode,
+                live_sla_default,
+                allow_stale_quotes=bool(getattr(market_ctx, "allow_stale_quotes", False)),
+                market_open=bool(getattr(market_ctx, "is_market_open", False)),
+                expiry_lotto_mode=bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)),
+            )
+        )
+        quote_age_sec = self._coerce_nonnegative_float(opt.get("quote_age_sec"))
+        quote_ts_epoch = self._coerce_nonnegative_float(
+            opt.get("quote_ts_epoch")
+            or opt.get("quote_timestamp_epoch")
+            or opt.get("timestamp_epoch")
+            or opt.get("ts_epoch")
+        )
+        if quote_age_sec is None and quote_ts_epoch is not None:
+            quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
+        if quote_age_sec is None or quote_age_sec > option_tick_sla_sec:
+            return False, {
+                "reason_code": "STALE_OPTION_TICK",
+                "reason_text": "Option candidate rejected because option tick is missing/stale by SLA",
+                "gate_name": "option_tradability_precondition",
+                "contract": contract_label,
+                "strike": strike,
+                "option_type": opt_type,
+                "direction": direction,
+                "instrument_token": instrument_token,
+                "tradingsymbol": tradingsymbol,
+                "expiry_date": expiry_resolved,
+                "quote_source": quote_source or None,
+                "option_ltp_source": option_ltp_source or None,
+                "quote_age_sec": quote_age_sec,
+                "tick_age_sec": quote_age_sec,
+                "sla_threshold_sec": option_tick_sla_sec,
+                "option_tick_sla_sec": option_tick_sla_sec,
+            }
+
+        opt["expiry"] = expiry_resolved
+        opt["expiry_date"] = expiry_resolved
+        opt["tradingsymbol"] = tradingsymbol
+        opt["instrument_token"] = instrument_token
+        opt["instrument_id"] = instrument_id
+        opt["quote_source"] = quote_source or option_ltp_source
+        opt["option_ltp_source"] = option_ltp_source
+        opt["quote_age_sec"] = quote_age_sec
+        opt["option_tick_sla_sec"] = option_tick_sla_sec
+        opt["_resolved_contract"] = {
+            "expiry": expiry_resolved,
+            "tradingsymbol": tradingsymbol,
+            "instrument_token": instrument_token,
+            "instrument_id": instrument_id,
+            "quote_source": quote_source or option_ltp_source,
+            "option_ltp_source": option_ltp_source,
+            "quote_age_sec": quote_age_sec,
+            "option_tick_sla_sec": option_tick_sla_sec,
+        }
+        return True, dict(opt["_resolved_contract"])
 
     def _option_expiry(self, opt: dict | None, market_data: dict | None = None) -> str:
         candidates = []
@@ -905,7 +1477,7 @@ class TradeBuilder:
                     except Exception:
                         pass
                     if debug_reasons:
-                        print(f"[TradeBuilder] Quick synth error: {exc}")
+                        _log_advisory_debug("trade_builder_quick_synth_error err=%s", exc)
                     pass
             expiry = self._option_expiry(raw, {"option_chain": []})
             if not expiry:
@@ -1053,14 +1625,16 @@ class TradeBuilder:
         if not bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
             return None
         symbol = str(market_data.get("symbol") or "UNKNOWN")
-        if ltp <= 0:
+        underlying_ltp = float(ltp or 0.0)
+        underlying_vwap = float(vwap or underlying_ltp or 0.0)
+        if underlying_ltp <= 0:
             return None
-        direction = "BUY_CALL" if float(ltp) >= float(vwap or ltp) else "BUY_PUT"
+        direction = "BUY_CALL" if underlying_ltp >= underlying_vwap else "BUY_PUT"
         side = "BUY" if direction == "BUY_CALL" else "SELL"
-        atr = float(market_data.get("atr") or max(1.0, float(ltp) * 0.002))
-        entry_price = float(ltp)
-        stop_loss = max(0.01, entry_price - atr) if side == "BUY" else max(0.01, entry_price + atr)
-        target = entry_price + (atr * 1.5) if side == "BUY" else max(0.01, entry_price - (atr * 1.5))
+        underlying_atr = float(market_data.get("atr") or max(1.0, underlying_ltp * 0.002))
+        entry_price = underlying_ltp
+        stop_loss = max(0.01, entry_price - underlying_atr) if side == "BUY" else max(0.01, entry_price + underlying_atr)
+        target = entry_price + (underlying_atr * 1.5) if side == "BUY" else max(0.01, entry_price - (underlying_atr * 1.5))
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
 
         instrument = "EQ"
@@ -1069,6 +1643,8 @@ class TradeBuilder:
         right = None
         option_type = None
         chosen_opt = None
+        tradingsymbol = None
+        instrument_token = None
         opt_type = "CE" if direction == "BUY_CALL" else "PE"
         chain = market_data.get("option_chain") or []
         try:
@@ -1081,23 +1657,38 @@ class TradeBuilder:
             if valid_opts:
                 chosen_opt = min(
                     valid_opts,
-                    key=lambda opt: abs(float(opt.get("strike") or 0.0) - float(ltp)),
+                    key=lambda opt: abs(float(opt.get("strike") or 0.0) - underlying_ltp),
                 )
                 instrument = "OPT"
                 expiry = self._option_expiry(chosen_opt, market_data)
                 strike = int(float(chosen_opt.get("strike") or 0.0))
                 right = str(chosen_opt.get("type") or opt_type)
                 option_type = right
-                if float(chosen_opt.get("ltp") or 0.0) > 0:
-                    entry_price = float(chosen_opt.get("ltp"))
+                tradingsymbol = chosen_opt.get("tradingsymbol")
+                instrument_token = chosen_opt.get("instrument_token")
+                option_entry_price = float(chosen_opt.get("ltp") or 0.0)
+                if option_entry_price > 0:
+                    entry_price = option_entry_price
+                option_bid = float(chosen_opt.get("bid") or entry_price)
+                option_ask = float(chosen_opt.get("ask") or entry_price)
+                option_width = max(0.0, option_ask - option_bid)
+                option_risk_proxy = self._option_risk_proxy(entry_price, option_bid, option_ask)
                 stop_loss, target = self._opt_risk_levels(
                     entry_price,
-                    float(chosen_opt.get("bid") or entry_price),
-                    float(chosen_opt.get("ask") or entry_price),
-                    atr,
+                    option_bid,
+                    option_ask,
+                    option_risk_proxy,
                     stop_mult=1.0,
                     target_mult=1.4,
                 )
+                if side == "BUY" and target <= entry_price:
+                    target = round(entry_price + max(option_risk_proxy * 1.4, option_width, 0.01), 2)
+                if side == "BUY" and stop_loss >= entry_price:
+                    stop_loss = round(max(0.01, entry_price - max(option_risk_proxy, option_width, 0.01)), 2)
+                if side == "SELL" and target >= entry_price:
+                    target = round(max(0.01, entry_price - max(option_risk_proxy * 1.4, option_width, 0.01)), 2)
+                if side == "SELL" and stop_loss <= entry_price:
+                    stop_loss = round(entry_price + max(option_risk_proxy, option_width, 0.01), 2)
         except Exception:
             chosen_opt = None
 
@@ -1109,9 +1700,21 @@ class TradeBuilder:
             right,
             1,
         )
-        if ident_err:
+        option_identity_ok, _missing_option_fields = self._option_identity_complete(
+            instrument=instrument,
+            instrument_type=instrument_type,
+            right=right,
+            expiry=expiry,
+            tradingsymbol=tradingsymbol,
+            instrument_token=instrument_token,
+            instrument_id=instrument_id,
+        )
+        if instrument == "OPT" and (ident_err or not option_identity_ok):
             # Final fallback: directional planning-only index candidate.
+            chosen_opt = None
             instrument = "EQ"
+            tradingsymbol = None
+            instrument_token = None
             instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
                 symbol,
                 instrument,
@@ -1127,10 +1730,37 @@ class TradeBuilder:
             option_type = None
             right = None
 
+        if instrument == "OPT":
+            if side == "BUY" and not (target > entry_price > stop_loss):
+                logger.error(
+                    "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
+                    symbol,
+                    side,
+                    entry_price,
+                    stop_loss,
+                    target,
+                    strike,
+                    right,
+                )
+                return None
+            if side == "SELL" and not (stop_loss > entry_price > target):
+                logger.error(
+                    "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
+                    symbol,
+                    side,
+                    entry_price,
+                    stop_loss,
+                    target,
+                    strike,
+                    right,
+                )
+                return None
+
         intent = self.trade_intent_flags(market_data, opt=chosen_opt)
         intent["planning_only"] = True
         intent["execution_allowed"] = False
         intent["execution_reason"] = "NO_SIGNAL_PLANNING_FALLBACK"
+        liquidity_fields = self._option_liquidity_fields(chosen_opt) if instrument == "OPT" else {}
         trade = Trade(
             trade_id=f"{symbol}-PLAN-{ts}",
             timestamp=datetime.now(),
@@ -1139,10 +1769,11 @@ class TradeBuilder:
             instrument_type=instrument_type,
             right=right,
             instrument_id=instrument_id,
-            instrument_token=(chosen_opt or {}).get("instrument_token") if isinstance(chosen_opt, dict) else None,
+            instrument_token=instrument_token,
             strike=int(strike),
             expiry=str(expiry),
             option_type=option_type,
+            tradingsymbol=tradingsymbol,
             side=side,
             entry_price=round(float(entry_price), 2),
             stop_loss=round(float(stop_loss), 2),
@@ -1158,6 +1789,7 @@ class TradeBuilder:
             regime=str(market_data.get("regime") or "NEUTRAL"),
             tier="EXPLORATION",
             day_type=str(market_data.get("day_type") or "UNKNOWN"),
+            **liquidity_fields,
             quote_ok=bool(market_data.get("quote_ok", True)),
             tradable=bool(intent.get("tradable", True)),
             tradable_reasons_blocking=list(intent.get("tradable_reasons_blocking") or []),
@@ -1207,7 +1839,7 @@ class TradeBuilder:
             quote_cache = {}
         if (not explicit_quote_cache) and (not quote_cache) and symbol:
             try:
-                from core.market_data import get_index_quote_snapshot
+                from core.market_quote_resolver import get_index_quote_snapshot
 
                 quote_cache = get_index_quote_snapshot(symbol) or {}
             except Exception:
@@ -1231,7 +1863,7 @@ class TradeBuilder:
         is_index = _is_index_symbol(symbol)
         synthetic = False
         try:
-            from core.market_data import resolve_index_quote
+            from core.market_quote_resolver import resolve_index_quote
 
             resolved = resolve_index_quote(
                 symbol=symbol,
@@ -1818,6 +2450,22 @@ class TradeBuilder:
             target = entry_price + base_atr * 1.5
             return stop_loss, target
 
+    def _option_risk_proxy(self, entry_price, bid, ask) -> float:
+        try:
+            entry_f = float(entry_price)
+        except Exception:
+            entry_f = 0.0
+        try:
+            bid_f = float(bid if bid is not None else entry_f)
+        except Exception:
+            bid_f = entry_f
+        try:
+            ask_f = float(ask if ask is not None else entry_f)
+        except Exception:
+            ask_f = entry_f
+        width = max(0.0, ask_f - bid_f)
+        return max(width, entry_f * 0.08, 1.0)
+
     def build(self, market_data, quick_mode=False, debug_reasons=False, force_family: str | None = None, allow_fallbacks: bool = True, allow_baseline: bool = True):
         """
         Build a single best Trade candidate from market snapshot.
@@ -1897,7 +2545,7 @@ class TradeBuilder:
                 market_data=market_data,
             )
             if debug_reasons:
-                print(f"[TradeBuilder] Reject {symbol}: {self._reject_ctx['reason']}")
+                _log_advisory_debug("trade_builder_reject symbol=%s reason=%s", symbol, self._reject_ctx["reason"])
             return None
         ltp = market_data.get("ltp", 0)
         vwap = market_data.get("vwap", ltp)
@@ -1950,9 +2598,9 @@ class TradeBuilder:
                     pre_execution_blockers.append(reject_reason)
                 _log_signal_event("trade_offhours_missing_bidask", symbol, reject_payload)
                 if debug_reasons:
-                    print(
-                        f"[TradeBuilder][SOFT_VETO] Missing bid/ask for {symbol}; "
-                        "candidate generation continues with execution blocker."
+                    _log_freshness_debug(
+                        "trade_builder_soft_veto_missing_bidask symbol=%s candidate_generation_continues=true",
+                        symbol,
                     )
                 if ltp is not None and float(ltp or 0.0) > 0:
                     synth_spread = max(float(ltp) * float(getattr(cfg, "SYNTH_INDEX_SPREAD_PCT", 0.0002)), 0.05)
@@ -1973,11 +2621,16 @@ class TradeBuilder:
                     extra=reject_payload,
                 )
                 if debug_reasons:
-                    print(
-                        f"[TradeBuilder] Reject {symbol}: {reject_reason} "
-                        f"ltp={ltp} ltp_source={ltp_source} has_depth={has_depth} "
-                        f"has_quote={has_quote} ws_subscribed={ws_subscribed} "
-                        f"gate_reasons={gate_reasons}"
+                    _log_advisory_debug(
+                        "trade_builder_reject_missing_bidask symbol=%s reason=%s ltp=%s ltp_source=%s has_depth=%s has_quote=%s ws_subscribed=%s gate_reasons=%s",
+                        symbol,
+                        reject_reason,
+                        ltp,
+                        ltp_source,
+                        has_depth,
+                        has_quote,
+                        ws_subscribed,
+                        gate_reasons,
                     )
                 return None
 
@@ -2052,7 +2705,15 @@ class TradeBuilder:
                 if fallback_trade is not None:
                     return fallback_trade
             if debug_reasons:
-                print(f"[TradeBuilder] No signal for {symbol} | ltp={ltp} vwap={vwap} atr={market_data.get('atr')} ltp_change={market_data.get('ltp_change')} ltp_change_window={market_data.get('ltp_change_window')}")
+                _log_advisory_debug(
+                    "trade_builder_no_signal symbol=%s ltp=%s vwap=%s atr=%s ltp_change=%s ltp_change_window=%s",
+                    symbol,
+                    ltp,
+                    vwap,
+                    market_data.get("atr"),
+                    market_data.get("ltp_change"),
+                    market_data.get("ltp_change_window"),
+                )
             return None
         strategy_tag = "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"
         if signal.get("reason") == "trend_vwap_fallback":
@@ -2067,7 +2728,7 @@ class TradeBuilder:
                 extra={"strategy": strategy_tag},
             )
             if debug_reasons:
-                print(f"[TradeBuilder] Reject {symbol}: lifecycle_gate ({strategy_tag})")
+                _log_advisory_debug("trade_builder_lifecycle_gate_reject symbol=%s strategy=%s", symbol, strategy_tag)
             return None
         decay_size_mult = 1.0
         allowed, adj_score, decay_size_mult, _decay_reason = self._apply_decay_gate(strategy_tag, signal.get("score"), decay_size_mult)
@@ -2080,7 +2741,7 @@ class TradeBuilder:
                 extra={"strategy": strategy_tag},
             )
             if debug_reasons:
-                print(f"[TradeBuilder] Reject {symbol}: strategy_quarantined ({strategy_tag})")
+                _log_advisory_debug("trade_builder_strategy_quarantine symbol=%s strategy=%s", symbol, strategy_tag)
             return None
         if adj_score is not None:
             signal["score"] = adj_score
@@ -2093,7 +2754,14 @@ class TradeBuilder:
         if planning_relaxed:
             min_score = min(min_score, float(getattr(cfg, "PLANNING_SIGNAL_SCORE_MIN", 0.5)))
         if debug_reasons:
-            print(f"[SignalPath] {symbol} regime={signal.get('regime_day')} direction={signal.get('direction')} score={signal.get('score'):.3f} reason={signal.get('reason')}")
+            _log_advisory_debug(
+                "signal_path symbol=%s regime=%s direction=%s score=%.3f reason=%s",
+                symbol,
+                signal.get("regime_day"),
+                signal.get("direction"),
+                float(signal.get("score") or 0.0),
+                signal.get("reason"),
+            )
             _log_signal_event(
                 "signal",
                 symbol,
@@ -2114,7 +2782,12 @@ class TradeBuilder:
                 extra={"min_score": min_score, "signal_score": signal.get("score", 0)},
             )
             if debug_reasons:
-                print(f"[TradeBuilder] Signal score below min ({signal.get('score', 0)} < {min_score}) for {symbol}")
+                _log_advisory_debug(
+                    "trade_builder_signal_score_below_min symbol=%s signal_score=%s min_score=%s",
+                    symbol,
+                    signal.get("score", 0),
+                    min_score,
+                )
                 _log_signal_event(
                     "signal_reject",
                     symbol,
@@ -2141,7 +2814,7 @@ class TradeBuilder:
                     extra={"chain_source": market_data.get("chain_source")},
                 )
                 if debug_reasons:
-                    print(f"[TradeBuilder] Reject {symbol}: non-live option chain")
+                    _log_option_chain_debug("trade_builder_non_live_option_chain symbol=%s", symbol)
                 return None
         except Exception:
             pass
@@ -2170,7 +2843,7 @@ class TradeBuilder:
                         extra={"direction": direction, "htf_dir": htf_dir},
                     )
                     if debug_reasons:
-                        print(f"[TradeBuilder] Direction sanity block: PE while price>VWAP and HTF UP for {symbol}")
+                        _log_advisory_debug("trade_builder_direction_sanity_block symbol=%s", symbol)
                     return None
             except Exception:
                 pass
@@ -2463,6 +3136,51 @@ class TradeBuilder:
                     soft_veto_codes.append("option_volume_missing")
                 if "option_volume_missing" not in execution_blockers:
                     execution_blockers.append("option_volume_missing")
+
+            tradability_ok, tradability_ctx = self._option_tradability_precondition(
+                symbol=symbol,
+                opt=opt,
+                market_data=market_data,
+                market_ctx=market_ctx,
+                direction=direction,
+            )
+            if not tradability_ok:
+                reason_code = str(tradability_ctx.get("reason_code") or "option_tradability_precondition_failed")
+                _count_option_reject(reason_code)
+                self._reject_ctx = {
+                    "symbol": symbol,
+                    "reason": reason_code,
+                    "gate_name": tradability_ctx.get("gate_name"),
+                    "contract": tradability_ctx.get("contract"),
+                    "missing_fields": tradability_ctx.get("missing_fields"),
+                    "instrument_token": tradability_ctx.get("instrument_token"),
+                    "quote_source": tradability_ctx.get("quote_source"),
+                    "option_ltp_source": tradability_ctx.get("option_ltp_source"),
+                    "quote_age_sec": tradability_ctx.get("quote_age_sec"),
+                    "option_tick_sla_sec": tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
+                }
+                self._log_precondition_reject(
+                    symbol,
+                    reason_code,
+                    str(tradability_ctx.get("reason_text") or reason_code),
+                    market_data=market_data,
+                    extra=dict(tradability_ctx),
+                )
+                if debug_reasons:
+                    rec = self._reject_record(symbol, opt, opt_type, reason_code, atr=atr)
+                    rec.update(
+                        {
+                            "gate_name": tradability_ctx.get("gate_name"),
+                            "quote_source": tradability_ctx.get("quote_source"),
+                            "option_ltp_source": tradability_ctx.get("option_ltp_source"),
+                            "quote_age_sec": tradability_ctx.get("quote_age_sec"),
+                            "option_tick_sla_sec": tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
+                            "contract": tradability_ctx.get("contract"),
+                        }
+                    )
+                    rejected.append(rec)
+                continue
+
             # Liquidity guard
             spread_pct = (float(opt.get("ask") or 0.0) - float(opt.get("bid") or 0.0)) / opt_ltp if opt_ltp else 1
             max_spread = float(current_filter_profile.max_spread_pct)
@@ -2485,7 +3203,7 @@ class TradeBuilder:
                     if runtime_profile.suggestion_require_volume:
                         _count_option_reject("low_volume")
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: low volume")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=low_volume", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "low_volume", atr=atr))
                         continue
                     if "low_volume" not in soft_veto_codes:
@@ -2496,7 +3214,7 @@ class TradeBuilder:
                     if spread_pct > toxic_spread and runtime_profile.suggestion_require_depth:
                         _count_option_reject("spread_pct")
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: spread {spread_pct:.4f}")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=spread_pct spread_pct=%.4f", symbol, opt.get("strike"), opt_type, spread_pct)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "spread_pct", atr=atr))
                         continue
                     if "spread_pct" not in soft_veto_codes:
@@ -2508,7 +3226,7 @@ class TradeBuilder:
             if not quick_mode:
                 if opt.get("oi", 0) and opt.get("oi", 0) < getattr(cfg, "MIN_OI", 1000) and not _relax("low_oi"):
                     if debug_reasons:
-                        print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: low OI")
+                        _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=low_oi", symbol, opt.get("strike"), opt_type)
                         rejected.append(self._reject_record(symbol, opt, opt_type, "low_oi", atr=atr))
                     continue
                 if opt.get("oi_change", 0):
@@ -2524,98 +3242,98 @@ class TradeBuilder:
                     min_oi = int(min_oi * scale)
                     if abs(opt.get("oi_change", 0)) < min_oi and not _relax("oi_change_min"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: OI change below min")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_change_min", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "oi_change_min", atr=atr))
                         continue
                 if opt.get("iv") is not None:
                     if (opt["iv"] < getattr(cfg, "MIN_IV", 0.1) or opt["iv"] > getattr(cfg, "MAX_IV", 0.6)) and not _relax("iv_bounds"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: IV out of bounds")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_bounds", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_bounds", atr=atr))
                         continue
                 if opt.get("iv_z") is not None:
                     if (opt["iv_z"] < getattr(cfg, "IV_Z_MIN", -1.5) or opt["iv_z"] > getattr(cfg, "IV_Z_MAX", 1.5)) and not _relax("iv_z_bounds"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: IV z out of bounds")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_z_bounds", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_z_bounds", atr=atr))
                         continue
                 if opt.get("iv_skew") is not None:
                     if abs(opt["iv_skew"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_max"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: IV skew max")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_max", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_max", atr=atr))
                         continue
                     if direction == "BUY_CALL" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_BULL_MAX", 0.02) and not _relax("iv_skew_bull"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew bull max")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_bull", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_bull", atr=atr))
                         continue
                     if direction == "BUY_PUT" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_BEAR_MIN", -0.02) and not _relax("iv_skew_bear"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew bear min")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_bear", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_bear", atr=atr))
                         continue
                     if opt_type == "CE" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_CALL_MAX", 0.03) and not _relax("iv_skew_call"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew call max")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_call", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_call", atr=atr))
                         continue
                     if opt_type == "PE" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_PUT_MIN", -0.03) and not _relax("iv_skew_put"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew put min")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_put", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_put", atr=atr))
                         continue
                 if opt.get("iv_skew_norm") is not None:
                     if abs(opt["iv_skew_norm"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_norm"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew norm")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_norm", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_norm", atr=atr))
                         continue
                 if opt.get("iv_skew_curvature") is not None:
                     if abs(opt["iv_skew_curvature"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curvature"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew curvature")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curvature", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curvature", atr=atr))
                         continue
                 if opt_type == "CE" and opt.get("iv_skew_curvature_call") is not None:
                     if abs(opt["iv_skew_curvature_call"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curve_call"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew curvature call")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_call", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_call", atr=atr))
                         continue
                 if opt_type == "PE" and opt.get("iv_skew_curvature_put") is not None:
                     if abs(opt["iv_skew_curvature_put"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curve_put"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: skew curvature put")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_put", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_put", atr=atr))
                         continue
                 if opt.get("iv_term") is not None:
                     if (opt["iv_term"] < getattr(cfg, "IV_TERM_MIN", -0.05) or opt["iv_term"] > getattr(cfg, "IV_TERM_MAX", 0.05)) and not _relax("iv_term"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: iv term")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_term", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_term", atr=atr))
                         continue
                 if opt.get("iv_surface_slope") is not None:
                     if abs(opt["iv_surface_slope"]) > getattr(cfg, "IV_SURFACE_SLOPE_MAX", 0.15) and not _relax("iv_surface_slope"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: iv surface slope")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_surface_slope", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_surface_slope", atr=atr))
                         continue
                 if opt.get("oi_build"):
                     if direction == "BUY_CALL" and opt["oi_build"] not in ("LONG", "SHORT_COVER") and not _relax("oi_build"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: oi build")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
                         continue
                     if direction == "BUY_PUT" and opt["oi_build"] not in ("SHORT", "LONG_LIQ") and not _relax("oi_build"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: oi build")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
                         continue
                 if opt.get("delta") is not None:
                     if (abs(opt["delta"]) < getattr(cfg, "DELTA_MIN", 0.25) or abs(opt["delta"]) > getattr(cfg, "DELTA_MAX", 0.7)) and not _relax("delta"):
                         if debug_reasons:
-                            print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: delta")
+                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=delta", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "delta", atr=atr))
                         continue
 
@@ -2648,10 +3366,16 @@ class TradeBuilder:
                             "volume": opt.get("volume"),
                             "hard_veto": True,
                             "reason_codes": ["premium_band_fail", "liquidity_hard_veto"],
+                            "gate_name": "premium_band_gate",
+                            "instrument_token": opt.get("instrument_token"),
+                            "tradingsymbol": opt.get("tradingsymbol"),
+                            "expiry_date": opt.get("expiry_date") or opt.get("expiry"),
+                            "quote_source": opt.get("quote_source"),
+                            "option_ltp_source": opt.get("option_ltp_source"),
                         },
                     )
                     if debug_reasons:
-                        print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: premium_hard_liquidity")
+                        _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=premium_hard_liquidity", symbol, opt.get("strike"), opt_type)
                         rec = self._reject_record(symbol, opt, opt_type, "premium", atr=atr)
                         rec["hard_veto"] = True
                         rec["spread_pct"] = spread_pct
@@ -2682,7 +3406,7 @@ class TradeBuilder:
                 if hard_spread_reject:
                     _count_option_reject("spread_ok")
                     if debug_reasons:
-                        print(f"[TradeBuilder] Reject {symbol} {opt.get('strike')} {opt_type}: spread_ok")
+                        _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=spread_ok", symbol, opt.get("strike"), opt_type)
                         rec = self._reject_record(symbol, opt, opt_type, "spread_ok", atr=atr)
                         debug_candidates.append(rec)
                         rejected.append(rec)
@@ -2784,6 +3508,7 @@ class TradeBuilder:
                         regime=market_data.get("regime", "NEUTRAL"),
                         tier="MAIN",
                         day_type=market_data.get("day_type", "UNKNOWN"),
+                        **self._option_liquidity_fields(opt),
                         quote_ok=opt.get("quote_ok", True),
                         tradable=False,
                         tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
@@ -2793,7 +3518,8 @@ class TradeBuilder:
                         source_flags=dict(intent["source_flags"]),
                     )
                     blocked_trade = self._decorate_trade_context(blocked_trade, market_data, 0.0)
-                    candidates.append(blocked_trade)
+                    if blocked_trade is not None:
+                        candidates.append(blocked_trade)
                     if debug_reasons:
                         rec = self._reject_record(symbol, opt, opt_type, feature_reason, atr=atr)
                         rejected.append(rec)
@@ -2866,7 +3592,16 @@ class TradeBuilder:
             if confidence < min_proba and not _relax("confidence"):
                 _count_option_reject("confidence")
                 if debug_reasons:
-                    print(f"[TradeBuilder] Reject {symbol} {opt['strike']} {opt_type}: confidence {confidence:.3f} < {min_proba} | regime={signal.get('regime_day')} reason={signal.get('reason')}")
+                    _log_advisory_debug(
+                        "trade_builder_confidence_reject symbol=%s strike=%s type=%s confidence=%.3f min_proba=%s regime=%s reason=%s",
+                        symbol,
+                        opt["strike"],
+                        opt_type,
+                        confidence,
+                        min_proba,
+                        signal.get("regime_day"),
+                        signal.get("reason"),
+                    )
                     rec = self._reject_record(symbol, opt, opt_type, "confidence", atr=atr)
                     rec["confidence"] = round(confidence, 3)
                     rec["min_proba"] = min_proba
@@ -2876,18 +3611,19 @@ class TradeBuilder:
 
             # Slippage adjustment for limit
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
-            base_entry_price = self._entry_price_proxy(opt, side="BUY")
+            base_entry_price, entry_price_source = self._option_executable_price(opt, side="BUY")
             if base_entry_price is None or base_entry_price <= 0:
                 _count_option_reject("invalid_entry_proxy")
                 if debug_reasons:
                     rejected.append(self._reject_record(symbol, opt, opt_type, "invalid_entry_proxy", atr=atr))
                 continue
-            entry_price = base_entry_price + slippage
-            entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
+            entry_price = float(base_entry_price)
+            _trigger_entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                 entry_price, side="BUY", quick_mode=quick_mode
             )
+            if entry_ref_price is None:
+                entry_ref_price = entry_price
 
-            atr = market_data.get("atr", max(1.0, ltp * 0.002))
             stop_mult = getattr(cfg, "OPT_STOP_ATR_MAIN", 1.0)
             target_mult = getattr(cfg, "OPT_TARGET_ATR_MAIN", 1.8)
             if quick_mode:
@@ -2903,15 +3639,28 @@ class TradeBuilder:
                 if not (getattr(cfg, "REGIME_EVENT_ROUTE_ALLOW", True) and getattr(cfg, "EVENT_ALLOW_DEFINED_RISK", True)):
                     _count_option_reject("event_regime_blocked")
                     if debug_reasons:
-                        rec = self._reject_record(symbol, opt, opt_type, "event_regime_blocked", atr=atr)
+                        rec = self._reject_record(symbol, opt, opt_type, "event_regime_blocked", atr=option_risk)
                         rejected.append(rec)
                     continue
                 stop_mult = stop_mult * float(getattr(cfg, "REGIME_EVENT_STOP_MULT", 1.1))
                 target_mult = target_mult * float(getattr(cfg, "REGIME_EVENT_TARGET_MULT", 1.4))
                 size_mult = size_mult * float(getattr(cfg, "REGIME_EVENT_SIZE_MULT", 0.6))
+            option_risk = self._option_risk_proxy(entry_price, opt.get("bid", 0), opt.get("ask", 0))
             stop_loss, target = self._opt_risk_levels(
-                entry_price, opt.get("bid", 0), opt.get("ask", 0), atr, stop_mult=stop_mult, target_mult=target_mult
+                entry_price, opt.get("bid", 0), opt.get("ask", 0), option_risk, stop_mult=stop_mult, target_mult=target_mult
             )
+            if not (target > entry_price > stop_loss):
+                logger.error(
+                    "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
+                    symbol,
+                    "BUY",
+                    entry_price,
+                    stop_loss,
+                    target,
+                    opt.get("strike"),
+                    opt.get("type"),
+                )
+                continue
 
             # Risk/Reward gate (1:2)
             rr = None
@@ -2927,7 +3676,7 @@ class TradeBuilder:
             if rr is None or rr < min_rr:
                 _count_option_reject("rr_gate")
                 if debug_reasons:
-                    rec = self._reject_record(symbol, opt, opt_type, "rr_gate", atr=atr)
+                    rec = self._reject_record(symbol, opt, opt_type, "rr_gate", atr=option_risk)
                     rec["rr"] = rr
                     rec["min_rr"] = min_rr
                     rejected.append(rec)
@@ -2987,15 +3736,22 @@ class TradeBuilder:
                     size_mult = min(size_mult, premium_soft_penalty_size)
 
             tier = "EXPLORATION" if quick_mode else "MAIN"
-            expiry_resolved = self._option_expiry(opt, market_data)
-            if not expiry_resolved:
-                expiry_resolved = self._resolve_expiry_for_symbol(symbol, market_data)
-            contract = self._resolve_option_contract(
-                symbol,
-                opt.get("strike"),
-                opt.get("type"),
-                expiry_resolved,
-                market_data,
+            resolved_contract = opt.get("_resolved_contract") if isinstance(opt.get("_resolved_contract"), dict) else {}
+            expiry_resolved = (
+                resolved_contract.get("expiry")
+                or self._option_expiry(opt, market_data)
+                or self._resolve_expiry_for_symbol(symbol, market_data)
+            )
+            contract = (
+                dict(resolved_contract)
+                if resolved_contract
+                else self._resolve_option_contract(
+                    symbol,
+                    opt.get("strike"),
+                    opt.get("type"),
+                    expiry_resolved,
+                    market_data,
+                )
             )
             expiry_resolved = contract.get("expiry") or expiry_resolved
             tradingsymbol = contract.get("tradingsymbol") or opt.get("tradingsymbol")
@@ -3008,6 +3764,8 @@ class TradeBuilder:
                 opt.get("type"),
                 1,
             )
+            if not instrument_id and contract.get("instrument_id"):
+                instrument_id = contract.get("instrument_id")
             if ident_err or not expiry_resolved or not tradingsymbol or not instrument_id:
                 _count_option_reject("unresolved_contract")
                 if debug_reasons:
@@ -3102,6 +3860,8 @@ class TradeBuilder:
             source_flags.update(
                 {
                     "price_source": opt.get("price_source") or opt.get("quote_source"),
+                    "entry_price_source": entry_price_source,
+                    "expected_entry_source": entry_price_source,
                     "quote_age_sec": opt.get("quote_age_sec"),
                     "best_bid": opt.get("best_bid", opt.get("bid")),
                     "best_ask": opt.get("best_ask", opt.get("ask")),
@@ -3149,9 +3909,14 @@ class TradeBuilder:
                 day_type=market_data.get("day_type", "UNKNOWN"),
                 entry_condition=entry_condition,
                 entry_ref_price=entry_ref_price,
+                signal_price=self._option_signal_price(opt, market_data),
+                entry_price_source=entry_price_source,
+                expected_entry=round(entry_price, 2),
+                expected_entry_source=entry_price_source,
                 opt_ltp=opt.get("ltp"),
                 opt_bid=opt.get("bid"),
                 opt_ask=opt.get("ask"),
+                **self._option_liquidity_fields(opt),
                 quote_ok=opt.get("quote_ok", True),
                 trade_score=round(score, 2),
                 trade_alignment=round(score_pack.get("alignment", 0), 2),
@@ -3175,7 +3940,8 @@ class TradeBuilder:
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
-            candidates.append(trade)
+            if trade is not None:
+                candidates.append(trade)
 
         if debug_reasons and rejected:
             self._write_rejected(rejected)
@@ -3188,7 +3954,14 @@ class TradeBuilder:
             # show top 3 closest candidates by premium (proxy)
             top = sorted(debug_candidates, key=lambda x: x.get("ltp", 0) or 0, reverse=True)[:3]
             for rec in top:
-                print(f"[TradeBuilder] Top candidate {symbol} {rec.get('strike')} {rec.get('type')} rejected by {rec.get('reason')} (ltp={rec.get('ltp')})")
+                _log_option_chain_debug(
+                    "trade_builder_top_candidate_rejected symbol=%s strike=%s type=%s reason=%s ltp=%s",
+                    symbol,
+                    rec.get("strike"),
+                    rec.get("type"),
+                    rec.get("reason"),
+                    rec.get("ltp"),
+                )
 
         if not candidates:
             if not allow_fallbacks:
@@ -3284,21 +4057,41 @@ class TradeBuilder:
                     entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                         entry_price, side="BUY", quick_mode=True
                     )
-                    atr = market_data.get("atr", max(1.0, ltp * 0.002))
+                    option_risk = self._option_risk_proxy(entry_price, bid, ask)
                     stop_loss, target = self._opt_risk_levels(
-                        entry_price, bid, ask, atr, stop_mult=1.0, target_mult=1.5
+                        entry_price, bid, ask, option_risk, stop_mult=1.0, target_mult=1.5
                     )
+                    if not (target > entry_price > stop_loss):
+                        logger.error(
+                            "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
+                            symbol,
+                            "BUY",
+                            entry_price,
+                            stop_loss,
+                            target,
+                            atm_strike,
+                            opt_type,
+                        )
+                        return None
+                    synthetic_offhours_seed = not bool(market_data.get("market_open", True)) or str(
+                        ((market_data.get("market_context") or {}).get("mode") or "")
+                    ).strip().upper() == "OFFHOURS"
                     extra_blockers = []
                     if instrument_token is None:
                         extra_blockers.append("instrument_token_missing")
+                    intent_opt = {
+                        "quote_ok": True,
+                    }
+                    if synthetic_offhours_seed:
+                        intent_opt.update(
+                            {
+                                "option_ltp_source": "synthetic_offhours",
+                                "quote_source": "synthetic_offhours",
+                            }
+                        )
                     intent = self.trade_intent_flags(
                         market_data,
-                        opt={
-                            "quote_ok": True,
-                            "quote_age_sec": 10**9,
-                            "option_ltp_source": "synthetic_offhours",
-                            "quote_source": "synthetic_offhours",
-                        },
+                        opt=intent_opt,
                         additional_blockers=extra_blockers,
                     )
                     trade = Trade(
@@ -3330,6 +4123,11 @@ class TradeBuilder:
                         regime=market_data.get("regime", "NEUTRAL"),
                         tier="EXPLORATION",
                         day_type=market_data.get("day_type", "UNKNOWN"),
+                        signal_price=None,
+                        entry_price_source="ask",
+                        expected_entry=round(entry_price, 2),
+                        expected_entry_source="ask",
+                        **self._option_liquidity_fields(opt),
                         entry_condition=entry_condition,
                         entry_ref_price=entry_ref_price,
                         alpha_confidence=None,
@@ -3343,7 +4141,7 @@ class TradeBuilder:
                         source_flags=dict(intent["source_flags"]),
                         underlying_spot=underlying_spot,
                         spot_source=spot_source,
-                        option_ltp_source="synthetic_offhours",
+                        option_ltp_source="synthetic_offhours" if synthetic_offhours_seed else None,
                         chain_source=market_data.get("chain_source") or "synthetic",
                     )
                     trade = self._decorate_trade_context(
@@ -3370,7 +4168,7 @@ class TradeBuilder:
                         extra={"strategy": strat_name},
                     )
                     if debug_reasons:
-                        print(f"[TradeBuilder] Reject {symbol}: strategy_quarantined ({strat_name})")
+                        _log_advisory_debug("trade_builder_strategy_quarantine symbol=%s strategy=%s", symbol, strat_name)
                     return None
                 if adj_score is not None:
                     base_conf = adj_score
@@ -3395,7 +4193,7 @@ class TradeBuilder:
                         extra={"instrument": instrument},
                     )
                     if debug_reasons:
-                        print(f"[TradeBuilder] Reject {symbol} {instrument}: {ident_err}")
+                        _log_advisory_debug("trade_builder_identity_reject symbol=%s instrument=%s reason=%s", symbol, instrument, ident_err)
                     return None
                 intent = self.trade_intent_flags(
                     market_data,
@@ -3440,6 +4238,8 @@ class TradeBuilder:
                     source_flags=dict(intent["source_flags"]),
                 )
                 trade = self._decorate_trade_context(trade, market_data, base_conf)
+                if trade is None:
+                    return None
                 if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
                     return trade
                 self._log_blocked_candidate(
@@ -3450,7 +4250,7 @@ class TradeBuilder:
                     extra={"confidence": trade.confidence, "min_confidence": getattr(cfg, "ML_MIN_PROBA", 0.6)},
                 )
                 if debug_reasons:
-                    print(f"[TradeBuilder] Reject {symbol} {instrument}: low confidence")
+                    _log_advisory_debug("trade_builder_low_confidence symbol=%s instrument=%s", symbol, instrument)
                 return None
             self._log_blocked_candidate(
                 symbol,
@@ -3540,28 +4340,6 @@ class TradeBuilder:
             reject_ctx=dict(self._reject_ctx or {}),
             run_id=(market_data or {}).get("run_id"),
         )
-        try:
-            symbol = str((market_data or {}).get("symbol") or "")
-            reject_ctx = dict(self._reject_ctx or {})
-            reject_counts = dict(self._scan_reject_counts or {})
-            reject_reason = str(reject_ctx.get("reason") or "").strip()
-            if trade is None and reject_reason:
-                reject_counts[reject_reason] = int(reject_counts.get(reject_reason, 0)) + 1
-            accepted = int(self._scan_accepted or (1 if trade is not None else 0))
-            summary = build_scan_summary(
-                symbol=symbol,
-                total_candidates=int(self._scan_total_candidates or 0),
-                accepted=accepted,
-                rejected_by_reason=reject_counts,
-                mode=(market_data or {}).get("market_context", {}).get("mode")
-                if isinstance((market_data or {}).get("market_context"), dict)
-                else str(getattr(cfg, "EXECUTION_MODE", "SIM")),
-                profile_name=str(self._scan_profile_name or ""),
-            )
-            self._last_scan_summary = dict(summary)
-            emit_scan_summary(summary)
-        except Exception:
-            pass
         return trade, trace
 
     def build_zero_hero(self, market_data, debug_reasons=False):
@@ -3623,7 +4401,7 @@ class TradeBuilder:
         momentum_mult = float(getattr(cfg, "ZERO_TO_HERO_MOMENTUM_ATR_MULT", 0.12))
         if abs(ltp_change_window) < atr * momentum_mult:
             if debug_reasons:
-                print(f"[ZeroToHero] Reject {symbol}: weak momentum")
+                _log_advisory_debug("zero_to_hero_reject symbol=%s reason=weak_momentum", symbol)
             return None
 
         opt_type = "CE" if ltp_change_window >= 0 else "PE"
@@ -3726,22 +4504,37 @@ class TradeBuilder:
 
         bid = float(opt.get("bid") or 0.0)
         ask = float(opt.get("ask") or 0.0)
-        entry_proxy = self._entry_price_proxy(opt, side="BUY")
+        entry_proxy, entry_price_source = self._option_executable_price(opt, side="BUY")
         entry_price = float(entry_proxy) if entry_proxy and entry_proxy > 0 else premium
+        if entry_price_source is None and entry_proxy and entry_proxy > 0:
+            entry_price_source = "ltp"
         slippage = self.execution.estimate_slippage(bid, ask, opt.get("volume", 0))
-        if slippage:
-            entry_price = entry_price + slippage
-        entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
+        _trigger_entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
             entry_price, side="BUY", quick_mode=True
         )
+        if entry_ref_price is None:
+            entry_ref_price = entry_price
+        option_risk = self._option_risk_proxy(entry_price, bid, ask)
         stop_loss, target = self._opt_risk_levels(
             entry_price,
             bid,
             ask,
-            atr,
+            option_risk,
             stop_mult=float(getattr(cfg, "ZERO_TO_HERO_STOP_ATR", 0.8)),
             target_mult=float(getattr(cfg, "ZERO_TO_HERO_TARGET_ATR", 2.0)),
         )
+        if not (target > entry_price > stop_loss):
+            logger.error(
+                "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
+                symbol,
+                "BUY",
+                entry_price,
+                stop_loss,
+                target,
+                opt.get("strike"),
+                opt.get("type"),
+            )
+            return None
 
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         expiry_resolved = self._option_expiry(opt, market_data) or expiry_resolved
@@ -3810,9 +4603,14 @@ class TradeBuilder:
             day_type=market_data.get("day_type", "UNKNOWN"),
             entry_condition=entry_condition,
             entry_ref_price=entry_ref_price,
+            signal_price=self._option_signal_price(opt, market_data),
+            entry_price_source=entry_price_source,
+            expected_entry=round(entry_price, 2),
+            expected_entry_source=entry_price_source,
             opt_ltp=opt.get("ltp"),
             opt_bid=opt.get("bid"),
             opt_ask=opt.get("ask"),
+            **self._option_liquidity_fields(opt),
             quote_ok=opt.get("quote_ok", True),
             tradable=bool(intent["tradable"]),
             tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
@@ -3826,6 +4624,8 @@ class TradeBuilder:
             chain_source=market_data.get("chain_source") or opt.get("chain_source"),
         )
         trade = self._decorate_trade_context(trade, market_data, float(chosen["confidence"]))
+        if trade is None:
+            return None
 
         trade.source_flags.update(
             {
@@ -3882,6 +4682,297 @@ class TradeBuilder:
         except Exception:
             pass
         return trade
+
+    def _is_expiry_day_for_symbol(self, symbol: str, market_data: dict | None) -> bool:
+        data = market_data or {}
+        day_type = str(data.get("day_type") or "").strip().upper()
+        if "EXPIRY" in day_type:
+            return True
+        try:
+            weekday_map = getattr(cfg, "EXPIRY_WEEKDAY_BY_SYMBOL", {}) or {}
+            expected = int(weekday_map.get(str(symbol or "").upper()))
+        except Exception:
+            return False
+        try:
+            # Python Monday=0; config expects the same convention.
+            return int(now_ist().weekday()) == expected
+        except Exception:
+            return False
+
+    def build_expiry_lotto_candidates(self, market_data, debug_reasons: bool = False) -> list[Trade]:
+        if not bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)):
+            return []
+        data = market_data if isinstance(market_data, dict) else {}
+        symbol = str(data.get("symbol") or "").upper()
+        if symbol not in {"NIFTY", "BANKNIFTY", "SENSEX"}:
+            return []
+        if not self._is_expiry_day_for_symbol(symbol, data):
+            if debug_reasons:
+                self._reject_ctx = {"reason": "expiry_lotto_not_expiry_day", "symbol": symbol}
+            return []
+
+        chain = data.get("option_chain") or []
+        if not isinstance(chain, list) or not chain:
+            self._reject_ctx = {"reason": "expiry_lotto_no_option_chain", "symbol": symbol}
+            return []
+        min_option_tokens = max(
+            1,
+            int(
+                getattr(
+                    cfg,
+                    "EXPIRY_LOTTO_MIN_OPTION_TOKENS",
+                    getattr(cfg, "MIN_OPTION_TOKENS", 12),
+                )
+            ),
+        )
+        option_tokens = set()
+        for row in chain:
+            if not isinstance(row, dict):
+                continue
+            tok = row.get("instrument_token")
+            try:
+                tok_int = int(tok)
+            except Exception:
+                tok_int = 0
+            if tok_int > 0:
+                option_tokens.add(tok_int)
+        if len(option_tokens) < min_option_tokens:
+            self._reject_ctx = {
+                "reason": "expiry_lotto_option_tokens_under_min",
+                "symbol": symbol,
+                "option_tokens_count": len(option_tokens),
+                "min_required": min_option_tokens,
+            }
+            now_epoch = float(now_utc_epoch())
+            cooldown_sec = float(getattr(cfg, "OPTION_TOKEN_INCIDENT_COOLDOWN_SEC", 300.0))
+            incident_key = f"{symbol}:{str(data.get('expiry_date') or '')}"
+            last_incident = float(self._expiry_lotto_token_incident_ts.get(incident_key, 0.0) or 0.0)
+            try:
+                if (now_epoch - last_incident) >= cooldown_sec:
+                    create_incident(
+                        SEV2,
+                        "EXPIRY_LOTTO_OPTION_TOKENS_UNDER_MIN",
+                        {
+                            "symbol": symbol,
+                            "option_tokens_count": len(option_tokens),
+                            "min_required": min_option_tokens,
+                        },
+                    )
+                    self._expiry_lotto_token_incident_ts[incident_key] = now_epoch
+            except Exception:
+                pass
+            return []
+
+        target_count = max(1, int(getattr(cfg, "EXPIRY_LOTTO_TARGET_CANDIDATES", 4)))
+        max_trades = max(1, int(getattr(cfg, "EXPIRY_LOTTO_MAX_TRADES", 4)))
+        desired = min(target_count, max_trades)
+        atr = float(data.get("atr") or max(1.0, float(data.get("ltp") or 0.0) * 0.002))
+        ltp_change_window = float(data.get("ltp_change_window") or 0.0)
+        min_momentum = float(getattr(cfg, "EXPIRY_LOTTO_MIN_MOMENTUM_ATR", 0.10))
+        if abs(ltp_change_window) < (atr * min_momentum):
+            self._reject_ctx = {
+                "reason": "expiry_lotto_momentum_too_low",
+                "symbol": symbol,
+                "momentum": ltp_change_window,
+                "atr": atr,
+            }
+            return []
+
+        segment = data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        ctx_payload = dict(data.get("market_context") or {}) if isinstance(data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = str(getattr(cfg, "EXECUTION_MODE", "PAPER")).upper()
+        if "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = data.get("market_open", True)
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = segment
+        market_ctx = derive_market_context(ctx_payload)
+
+        underlying_spot, spot_source, spot_ok, spot_issue = self._resolve_underlying_spot(data, market_ctx)
+        if (not spot_ok) and spot_issue == "spot_stale":
+            # Expiry lotto is advisory-only; allow build when spot exists but quote_age is missing.
+            quote_age_raw = data.get("quote_age_sec")
+            if underlying_spot is not None and quote_age_raw in (None, "", "None"):
+                spot_ok = True
+        if not spot_ok:
+            self._reject_ctx = {
+                "reason": "expiry_lotto_spot_invalid",
+                "symbol": symbol,
+                "spot_issue": spot_issue,
+            }
+            return []
+
+        strike_step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
+        strike_step = float(strike_step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)))
+        atm_steps_map = getattr(cfg, "EXPIRY_LOTTO_ATM_STRIKES_BY_SYMBOL", {}) or {}
+        atm_steps = max(1, int(atm_steps_map.get(symbol, getattr(cfg, "EXPIRY_LOTTO_ATM_STRIKES", 2))))
+        atm = round(float(underlying_spot) / strike_step) * strike_step if strike_step > 0 else float(underlying_spot)
+        low_strike = float(atm) - float(atm_steps * strike_step)
+        high_strike = float(atm) + float(atm_steps * strike_step)
+
+        preferred_type = "CE" if ltp_change_window >= 0 else "PE"
+        orb_bias = str(data.get("orb_bias") or "").upper()
+        trend_state = str(data.get("trend_state") or "").upper()
+        require_trend_confirm = bool(getattr(cfg, "EXPIRY_LOTTO_REQUIRE_TREND_CONFIRM", True))
+        if require_trend_confirm:
+            trend_up = ("UP" in trend_state) or ("BULL" in trend_state) or orb_bias == "UP"
+            trend_down = ("DOWN" in trend_state) or ("BEAR" in trend_state) or orb_bias == "DOWN"
+            if preferred_type == "CE" and not trend_up:
+                self._reject_ctx = {"reason": "expiry_lotto_trend_not_confirmed", "symbol": symbol, "direction": "UP"}
+                return []
+            if preferred_type == "PE" and not trend_down:
+                self._reject_ctx = {"reason": "expiry_lotto_trend_not_confirmed", "symbol": symbol, "direction": "DOWN"}
+                return []
+
+        max_spread_pct = float(getattr(cfg, "EXPIRY_LOTTO_MAX_SPREAD_PCT", 0.35))
+        max_loss_per_trade = float(getattr(cfg, "EXPIRY_LOTTO_MAX_LOSS_PER_TRADE", 1500.0))
+        expiry_resolved = self._option_expiry(None, data) or self._resolve_expiry_for_symbol(symbol, data)
+        lot_size = int(getattr(cfg, "LOT_SIZE", {}).get(symbol, 1))
+        now_text = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+        scored: list[tuple[float, Trade]] = []
+        reject_counts: dict[str, int] = {}
+        for raw in chain:
+            if not isinstance(raw, dict):
+                continue
+            opt_type = str(raw.get("type") or raw.get("option_type") or "").upper()
+            if opt_type not in {"CE", "PE"}:
+                continue
+            try:
+                strike = float(raw.get("strike"))
+            except Exception:
+                reject_counts["missing_strike"] = reject_counts.get("missing_strike", 0) + 1
+                continue
+            if strike < low_strike or strike > high_strike:
+                continue
+            ltp = self._coerce_positive_float(raw.get("ltp") or raw.get("last_price"))
+            bid = self._coerce_positive_float(raw.get("bid"))
+            ask = self._coerce_positive_float(raw.get("ask"))
+            if ltp is None or bid is None or ask is None or ask < bid:
+                reject_counts["invalid_quote"] = reject_counts.get("invalid_quote", 0) + 1
+                continue
+            if not self.execution.spread_ok(
+                bid,
+                ask,
+                ltp,
+                max_spread_pct=max_spread_pct,
+                instrument="OPT",
+                segment=segment,
+                market_open=bool(market_ctx.is_market_open),
+            ):
+                reject_counts["spread_too_wide"] = reject_counts.get("spread_too_wide", 0) + 1
+                continue
+            if opt_type != preferred_type:
+                continue
+
+            slippage = self.execution.estimate_slippage(bid, ask, raw.get("volume", 0))
+            entry_base, entry_price_source = self._option_executable_price(raw, side="BUY")
+            if entry_base is None:
+                reject_counts["missing_entry_proxy"] = reject_counts.get("missing_entry_proxy", 0) + 1
+                continue
+            entry_price = max(0.01, float(entry_base))
+            stop_loss = max(0.01, entry_price * 0.82)
+            target = entry_price + max(entry_price * 0.32, 8.0)
+            per_lot_risk = max(0.01, entry_price - stop_loss) * max(1, lot_size)
+            if per_lot_risk > max_loss_per_trade:
+                reject_counts["risk_cap_breach"] = reject_counts.get("risk_cap_breach", 0) + 1
+                continue
+
+            contract = self._resolve_option_contract(symbol, strike, opt_type, expiry_resolved, data)
+            expiry_use = contract.get("expiry") or expiry_resolved
+            tradingsymbol = contract.get("tradingsymbol") or raw.get("tradingsymbol")
+            instrument_token = contract.get("instrument_token") or raw.get("instrument_token")
+            instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
+                symbol,
+                "OPT",
+                expiry_use,
+                strike,
+                opt_type,
+                1,
+            )
+            if ident_err or not tradingsymbol or not instrument_id or not expiry_use:
+                reject_counts["unresolved_contract"] = reject_counts.get("unresolved_contract", 0) + 1
+                continue
+            confidence = max(0.55, min(0.95, abs(ltp_change_window) / max(atr, 1.0)))
+            intent = self.trade_intent_flags(data, opt=raw, additional_blockers=[])
+            intent["planning_only"] = True
+            intent["execution_allowed"] = False
+            intent["execution_reason"] = "EXPIRY_LOTTO_MODE"
+            trade = Trade(
+                trade_id=f"{symbol}-{opt_type}-{int(strike)}-LOTTO-{now_text}",
+                timestamp=datetime.now(),
+                symbol=symbol,
+                instrument="OPT",
+                instrument_type=instrument_type,
+                right=opt_type,
+                instrument_id=instrument_id,
+                instrument_token=instrument_token,
+                strike=strike,
+                expiry=expiry_use,
+                expiry_date=expiry_use,
+                tradingsymbol=tradingsymbol,
+                option_type=opt_type,
+                side="BUY",
+                entry_price=round(entry_price, 2),
+                stop_loss=round(stop_loss, 2),
+                target=round(target, 2),
+                qty=1,
+                qty_lots=1,
+                qty_units=qty_units,
+                validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
+                capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
+                expected_slippage=round(float(slippage or 0.0), 2),
+                confidence=round(confidence, 3),
+                strategy="EXPIRY_LOTTO",
+                regime=data.get("regime", "UNKNOWN"),
+                tier="EXPLORATION",
+                day_type=data.get("day_type", "EXPIRY_DAY"),
+                signal_price=self._option_signal_price(raw, data),
+                entry_price_source=entry_price_source,
+                expected_entry=round(entry_price, 2),
+                expected_entry_source=entry_price_source,
+                **self._option_liquidity_fields(raw),
+                opt_ltp=ltp,
+                opt_bid=bid,
+                opt_ask=ask,
+                quote_ok=True,
+                tradable=bool(intent["tradable"]),
+                tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+                planning_only=True,
+                execution_allowed=False,
+                reason="EXPIRY_LOTTO_MODE",
+                source_flags=dict(intent.get("source_flags") or {}),
+                underlying_spot=underlying_spot,
+                spot_source=spot_source,
+                option_ltp_source=raw.get("option_ltp_source") or raw.get("quote_source"),
+                chain_source=data.get("chain_source") or raw.get("chain_source"),
+            )
+            # score favors lower spread and nearer ATM
+            spread_penalty = (ask - bid) / max(entry_price, 1e-6)
+            atm_distance = abs(strike - float(atm)) / max(strike_step, 1.0)
+            score = float(confidence) - (0.4 * spread_penalty) - (0.03 * atm_distance)
+            decorated = self._decorate_trade_context(trade, data, confidence)
+            if decorated is not None:
+                scored.append((score, decorated))
+
+        if not scored:
+            self._reject_ctx = {
+                "reason": "expiry_lotto_no_candidates",
+                "symbol": symbol,
+                "reject_counts": reject_counts,
+            }
+            return []
+        scored.sort(key=lambda x: x[0], reverse=True)
+        out = [row[1] for row in scored[:desired]]
+        if len(out) < 3:
+            self._reject_ctx = {
+                "reason": "expiry_lotto_insufficient_candidates",
+                "symbol": symbol,
+                "generated": len(out),
+                "target": desired,
+                "reject_counts": reject_counts,
+            }
+        return out
 
     def _build_zero_hero_expiry(self, market_data, debug_reasons=False):
         """
@@ -3963,13 +5054,15 @@ class TradeBuilder:
                 continue
 
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
-            base_entry_price = self._entry_price_proxy(opt, side="BUY")
+            base_entry_price, entry_price_source = self._option_executable_price(opt, side="BUY")
             if base_entry_price is None or base_entry_price <= 0:
                 continue
-            entry_price = base_entry_price + slippage
-            entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
+            entry_price = float(base_entry_price)
+            _trigger_entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                 entry_price, side="BUY", quick_mode=True
             )
+            if entry_ref_price is None:
+                entry_ref_price = entry_price
             # target based on underlying points * delta proxy
             delta = d if d else 0.3
             target = entry_price + max(5, tgt_points * delta)
@@ -3987,7 +5080,7 @@ class TradeBuilder:
             allowed_life, _ = self._apply_lifecycle_gate("ZERO_HERO_EXPIRY", mode="QUICK")
             if not allowed_life:
                 if debug_reasons:
-                    print(f"[ZeroHeroExpiry] Reject {symbol}: lifecycle_gate (ZERO_HERO_EXPIRY)")
+                    _log_advisory_debug("zero_hero_expiry_reject symbol=%s reason=lifecycle_gate", symbol)
                 return None
             expiry_resolved = self._option_expiry(opt, market_data)
             if not expiry_resolved:
@@ -4050,9 +5143,14 @@ class TradeBuilder:
                 day_type=market_data.get("day_type", "UNKNOWN"),
                 entry_condition=entry_condition,
                 entry_ref_price=entry_ref_price,
+                signal_price=self._option_signal_price(opt, market_data),
+                entry_price_source=entry_price_source,
+                expected_entry=round(entry_price, 2),
+                expected_entry_source=entry_price_source,
                 opt_ltp=opt.get("ltp"),
                 opt_bid=opt.get("bid"),
                 opt_ask=opt.get("ask"),
+                **self._option_liquidity_fields(opt),
                 quote_ok=opt.get("quote_ok", True),
                 alpha_confidence=alpha_conf,
                 alpha_uncertainty=alpha_unc,
@@ -4069,7 +5167,8 @@ class TradeBuilder:
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
-            candidates.append(trade)
+            if trade is not None:
+                candidates.append(trade)
         if not candidates:
             return None
         trade = sorted(candidates, key=lambda t: t.confidence, reverse=True)[0]
@@ -4325,7 +5424,7 @@ class TradeBuilder:
             return None
         if abs(ltp_change_window) > atr * getattr(cfg, "SCALP_MAX_MOM_ATR", 0.08):
             if debug_reasons:
-                print(f"[Scalp] Reject {symbol}: momentum too high")
+                _log_advisory_debug("scalp_reject symbol=%s reason=momentum_too_high", symbol)
                 _log_signal_event(
                     "scalp_reject",
                     symbol,
@@ -4413,12 +5512,12 @@ class TradeBuilder:
             allowed_life, _ = self._apply_lifecycle_gate("SCALP", mode="QUICK")
             if not allowed_life:
                 if debug_reasons:
-                    print(f"[Scalp] Reject {symbol}: lifecycle_gate (SCALP)")
+                    _log_advisory_debug("scalp_reject symbol=%s reason=lifecycle_gate", symbol)
                 return None
             allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate("SCALP", confidence, size_mult)
             if not allowed:
                 if debug_reasons:
-                    print(f"[Scalp] Reject {symbol}: strategy_quarantined (SCALP)")
+                    _log_advisory_debug("scalp_reject symbol=%s reason=strategy_quarantined", symbol)
                 return None
             if adj_score is not None:
                 confidence = adj_score
@@ -4426,18 +5525,33 @@ class TradeBuilder:
             if confidence < getattr(cfg, "SCALP_MIN_PROBA", 0.58):
                 continue
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
-            base_entry_price = self._entry_price_proxy(opt, side="BUY")
+            base_entry_price, entry_price_source = self._option_executable_price(opt, side="BUY")
             if base_entry_price is None or base_entry_price <= 0:
                 continue
-            entry_price = base_entry_price + slippage
-            entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
+            entry_price = float(base_entry_price)
+            _trigger_entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
                 entry_price, side="BUY", quick_mode=True
             )
+            if entry_ref_price is None:
+                entry_ref_price = entry_price
+            option_risk = self._option_risk_proxy(entry_price, opt.get("bid", 0), opt.get("ask", 0))
             stop_loss, target = self._opt_risk_levels(
-                entry_price, opt.get("bid", 0), opt.get("ask", 0), atr,
+                entry_price, opt.get("bid", 0), opt.get("ask", 0), option_risk,
                 stop_mult=getattr(cfg, "SCALP_STOP_ATR", 0.3),
                 target_mult=getattr(cfg, "SCALP_TARGET_ATR", 0.6),
             )
+            if not (target > entry_price > stop_loss):
+                logger.error(
+                    "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
+                    symbol,
+                    "BUY",
+                    entry_price,
+                    stop_loss,
+                    target,
+                    opt.get("strike"),
+                    opt.get("type"),
+                )
+                continue
             ts = datetime.now().strftime("%Y%m%d-%H%M%S")
             instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
                 symbol,
@@ -4449,12 +5563,12 @@ class TradeBuilder:
             )
             if ident_err:
                 if debug_reasons:
-                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=option_risk)
                     rejected.append(rec)
                 continue
             if opt.get("instrument_token") is None:
                 if debug_reasons:
-                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=atr)
+                    rec = self._reject_record(symbol, opt, opt_type, "missing_contract_fields", atr=option_risk)
                     rejected.append(rec)
                 continue
             intent = self.trade_intent_flags(market_data, opt=opt)
@@ -4487,9 +5601,14 @@ class TradeBuilder:
                 day_type=market_data.get("day_type", "UNKNOWN"),
                 entry_condition=entry_condition,
                 entry_ref_price=entry_ref_price,
+                signal_price=self._option_signal_price(opt, market_data),
+                entry_price_source=entry_price_source,
+                expected_entry=round(entry_price, 2),
+                expected_entry_source=entry_price_source,
                 opt_ltp=opt.get("ltp"),
                 opt_bid=opt.get("bid"),
                 opt_ask=opt.get("ask"),
+                **self._option_liquidity_fields(opt),
                 quote_ok=opt.get("quote_ok", True),
                 model_type=model_type,
                 model_version=model_version,
@@ -4506,7 +5625,8 @@ class TradeBuilder:
                 source_flags=dict(intent["source_flags"]),
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
-            candidates.append(trade)
+            if trade is not None:
+                candidates.append(trade)
         if not candidates:
             return None
         return sorted(candidates, key=lambda t: (1 if getattr(t, "tradable", True) else 0, t.confidence), reverse=True)[0]
@@ -4580,3 +5700,6 @@ class TradeBuilder:
                     f.write(json.dumps(rec) + "\n")
         except Exception:
             pass
+
+
+TradeBuilder.build = _wrap_trade_builder_build_with_status(TradeBuilder.build)

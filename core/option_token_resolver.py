@@ -7,16 +7,30 @@ Resolves option instrument tokens without caching per-expiry results.
 from __future__ import annotations
 
 from datetime import datetime, date
+import json
+import time
 from typing import Any
 
+from config import config as cfg
 from core.instruments import build_option_registry, log_requested_expiry_missing
 from core.kite_client import kite_client
 from core.log_writer import get_jsonl_writer
-from core.paths import logs_dir
+from core.paths import data_root, logs_dir
 from core.time_utils import utc_now
 
 _LOG_PATH = logs_dir() / "option_token_resolution.jsonl"
 _LOGGER = get_jsonl_writer(_LOG_PATH)
+_STATS_LOG_TS: dict[tuple[str, str, str], float] = {}
+
+
+class TokenCoverageError(Exception):
+    """Raised when option token coverage for a symbol/expiry is below threshold."""
+
+    def __init__(self, *, code: str, message: str, evidence: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.code = str(code)
+        self.message = str(message)
+        self.evidence = dict(evidence or {})
 
 
 def _coerce_expiry(value: Any) -> date | None:
@@ -33,6 +47,185 @@ def _coerce_expiry(value: Any) -> date | None:
 
 def _norm_text(value: Any) -> str:
     return str(value or "").strip().upper()
+
+
+def _load_local_instruments_cache(exchange: str) -> list[dict]:
+    cache_path = data_root() / "kite_instruments.json"
+    if not cache_path.exists():
+        return []
+    try:
+        raw = json.loads(cache_path.read_text())
+    except Exception:
+        return []
+    if isinstance(raw, dict):
+        bucket = raw.get(exchange)
+        if isinstance(bucket, list):
+            return list(bucket)
+        return []
+    if isinstance(raw, list):
+        return list(raw)
+    return []
+
+
+def _load_instruments(exchange: str) -> tuple[list[dict], str]:
+    local = _load_local_instruments_cache(exchange)
+    if local:
+        return local, "local_cache"
+    ttl_sec = int(getattr(cfg, "OPTION_TOKEN_RESOLVER_CACHE_TTL_SEC", 3600))
+    try:
+        data = kite_client.instruments_cached(exchange, ttl_sec=max(0, ttl_sec))
+    except Exception:
+        data = []
+    if isinstance(data, list) and data:
+        return data, "kite_client_cache"
+    return [], "missing"
+
+
+def _iter_registry_matches_for_expiry(
+    registry: dict,
+    *,
+    sym: str,
+    segment: str,
+    expiry: date,
+) -> list[dict]:
+    out: list[dict] = []
+    for key, value in (registry or {}).items():
+        try:
+            key_sym, key_segment, key_strike, key_opt_type, key_expiry = key
+        except Exception:
+            continue
+        if key_sym != sym or key_segment != segment or key_expiry != expiry:
+            continue
+        if not isinstance(value, dict):
+            continue
+        token = value.get("instrument_token")
+        if token in (None, "", "None"):
+            continue
+        out.append(
+            {
+                "instrument_token": int(token),
+                "tradingsymbol": value.get("tradingsymbol"),
+                "strike": float(key_strike),
+                "option_type": str(key_opt_type),
+            }
+        )
+    out.sort(key=lambda row: (row.get("strike", 0.0), row.get("option_type", "")))
+    return out
+
+
+def _log_registry_stats(
+    *,
+    sym: str,
+    exchange: str,
+    segment: str,
+    expiry: date,
+    registry: dict,
+    data_source: str,
+) -> None:
+    now_ts = time.time()
+    log_key = (sym, segment, expiry.isoformat())
+    last_ts = float(_STATS_LOG_TS.get(log_key, 0.0) or 0.0)
+    if (now_ts - last_ts) < 30.0:
+        return
+    _STATS_LOG_TS[log_key] = now_ts
+    rows = _iter_registry_matches_for_expiry(
+        registry,
+        sym=sym,
+        segment=segment,
+        expiry=expiry,
+    )
+    sample = rows[:8]
+    _LOGGER.write(
+        {
+            "ts": utc_now().isoformat(),
+            "event": "OPTION_TOKEN_REGISTRY_STATS",
+            "symbol": sym,
+            "exchange": exchange,
+            "segment": segment,
+            "expiry": expiry.isoformat(),
+            "resolved_tokens_count": len(rows),
+            "sample_tokens": [int(r.get("instrument_token")) for r in sample if r.get("instrument_token") is not None],
+            "sample_tradingsymbols": [str(r.get("tradingsymbol") or "") for r in sample if r.get("tradingsymbol")],
+            "registry_size": len(registry or {}),
+            "data_source": data_source,
+        }
+    )
+    min_required = int(getattr(cfg, "MIN_OPTION_TOKENS", 20))
+    if len(rows) < max(1, min_required):
+        _LOGGER.write(
+            {
+                "ts": utc_now().isoformat(),
+                "event": "OPTION_TOKEN_REGISTRY_UNDER_MIN",
+                "symbol": sym,
+                "exchange": exchange,
+                "segment": segment,
+                "expiry": expiry.isoformat(),
+                "resolved_tokens_count": len(rows),
+                "min_required": int(min_required),
+                "data_source": data_source,
+            }
+        )
+
+
+def _min_option_token_count() -> int:
+    raw = getattr(cfg, "MIN_OPTION_TOKEN_COUNT", None)
+    if raw is None:
+        raw = getattr(cfg, "MIN_OPTION_TOKENS", 50)
+    try:
+        return max(1, int(raw))
+    except Exception:
+        return 50
+
+
+def _enforce_token_coverage_threshold(
+    *,
+    sym: str,
+    exchange: str,
+    segment: str,
+    exp: date,
+    strike_val: float,
+    opt_type: str,
+    rows_for_expiry: list[dict],
+    data_source: str,
+) -> None:
+    min_required = _min_option_token_count()
+    resolved_count = len(rows_for_expiry or [])
+    if resolved_count >= min_required:
+        return
+    sample_tokens = [
+        int(r.get("instrument_token"))
+        for r in rows_for_expiry[:10]
+        if r.get("instrument_token") is not None
+    ]
+    evidence = {
+        "symbol": sym,
+        "exchange": exchange,
+        "segment": segment,
+        "expiry": exp.isoformat(),
+        "strike": float(strike_val),
+        "option_type": opt_type,
+        "resolved_option_tokens_count": int(resolved_count),
+        "min_option_token_count": int(min_required),
+        "sample_tokens": sample_tokens,
+        "data_source": data_source,
+    }
+    _LOGGER.write(
+        {
+            "ts": utc_now().isoformat(),
+            "event": "OPTION_TOKEN_COVERAGE_BELOW_THRESHOLD",
+            "code": "TOKEN_COVERAGE_BELOW_THRESHOLD",
+            **evidence,
+        }
+    )
+    raise TokenCoverageError(
+        code="TOKEN_COVERAGE_BELOW_THRESHOLD",
+        message=(
+            "resolved option token coverage below threshold: "
+            f"resolved={resolved_count} min_required={min_required} "
+            f"symbol={sym} expiry={exp.isoformat()}"
+        ),
+        evidence=evidence,
+    )
 
 
 def resolve_option_token(
@@ -53,10 +246,7 @@ def resolve_option_token(
         return None
     exchange = (exchange or ("BFO" if sym == "SENSEX" else "NFO")).upper()
     segment = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
-    try:
-        data = kite_client.instruments_cached(exchange, ttl_sec=0)
-    except Exception:
-        data = []
+    data, data_source = _load_instruments(exchange)
     if not data:
         _LOGGER.write(
             {
@@ -67,6 +257,7 @@ def resolve_option_token(
                 "strike": strike,
                 "option_type": opt_type,
                 "exchange": exchange,
+                "data_source": data_source,
             }
         )
         return None
@@ -76,6 +267,20 @@ def resolve_option_token(
         exchange=exchange,
     )
     registry = registry_payload.get("registry") or {}
+    _log_registry_stats(
+        sym=sym,
+        exchange=exchange,
+        segment=segment,
+        expiry=exp,
+        registry=registry,
+        data_source=data_source,
+    )
+    rows_for_expiry = _iter_registry_matches_for_expiry(
+        registry,
+        sym=sym,
+        segment=segment,
+        expiry=exp,
+    )
     key = (sym, segment, strike_val, opt_type, exp)
     entry = registry.get(key)
     if isinstance(entry, dict) and entry.get("instrument_token"):
@@ -97,9 +302,21 @@ def resolve_option_token(
                 "instrument_token": token,
                 "tradingsymbol": entry.get("tradingsymbol"),
                 "exchange": exchange,
+                "data_source": data_source,
+                "resolution_path": "exact_contract_match",
             }
         )
         return payload
+    _enforce_token_coverage_threshold(
+        sym=sym,
+        exchange=exchange,
+        segment=segment,
+        exp=exp,
+        strike_val=strike_val,
+        opt_type=opt_type,
+        rows_for_expiry=rows_for_expiry,
+        data_source=data_source,
+    )
     available_expiries = sorted(
         {
             k[4]
@@ -124,6 +341,7 @@ def resolve_option_token(
             "option_type": opt_type,
             "exchange": exchange,
             "available_expiries": [d.isoformat() for d in available_expiries],
+            "data_source": data_source,
         }
     )
     return None

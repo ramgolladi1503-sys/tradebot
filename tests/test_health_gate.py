@@ -39,6 +39,7 @@ def test_health_gate_blocks_live_arming_on_p0(monkeypatch):
     import scripts.arm_trade as arm_trade
 
     importlib.reload(arm_trade)
+    monkeypatch.setattr(arm_trade.cfg, "CONFIG_APPROVAL_ENFORCE_ON_ARM", False, raising=False)
 
     called = {"arm": False}
 
@@ -139,3 +140,38 @@ def test_no_hardcoded_logs_or_data_paths():
         ["Hardcoded logs/data paths detected in guarded files:"]
         + [f"- {path}:{line_no}: {text}" for path, line_no, text in violations]
     )
+
+
+def test_health_gate_flags_one_trade_can_build_p0(monkeypatch):
+    import core.health_gate as health_gate_mod
+
+    monkeypatch.setattr(health_gate_mod, "_path_contract_violations", lambda: [])
+    monkeypatch.setattr(
+        health_gate_mod,
+        "run_golden_path",
+        lambda desk, run_id: {"ok": True, "desk": desk, "run_id": run_id},
+    )
+    monkeypatch.setattr(
+        health_gate_mod,
+        "run_one_trade_can_build",
+        lambda desk, run_id: {"ok": False, "scenario": "ONE_TRADE_CAN_BUILD", "reason": "forced_failure"},
+    )
+    monkeypatch.setattr(
+        health_gate_mod,
+        "read_events",
+        lambda run_id=None, **kwargs: [
+            {"type": "trade_intent_created"},
+            {"type": "order_submitted"},
+            {"type": "fill"},
+        ],
+    )
+    monkeypatch.setattr(health_gate_mod, "build_recon", lambda events: {"trade_count": 1, "symbols": ["NIFTY"], "trades": events})
+    monkeypatch.setattr(health_gate_mod, "load_execution_analytics", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_gate_mod, "load_reconciliation_summary", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_gate_mod, "load_depth_status", lambda db_path=None: {"status": "ok", "db_path": db_path})
+    monkeypatch.setattr(health_gate_mod, "write_json_atomic", lambda path, payload: path)
+
+    report = health_gate_mod.run_health_gate(desk="DEFAULT", strict=True, run_id="HG_ONE_TRADE_FAIL")
+    codes = {str(item.get("code")) for item in report.get("issues", [])}
+    assert "ONE_TRADE_CAN_BUILD_P0" in codes
+    assert report.get("exit_code") == 2

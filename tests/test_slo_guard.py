@@ -85,3 +85,29 @@ def test_slo_guard_suppresses_feed_warnings_when_allow_stale(monkeypatch, tmp_pa
     )
     assert out["warnings"] == []
     assert "FEED_LTP_STALE" in out["suppressed_warnings"]
+
+
+def test_slo_guard_suppresses_auth_noise_when_market_closed_and_not_enforced(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "SLO_GUARD_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "SLO_ENFORCE_LIVE_ONLY", True, raising=False)
+    monkeypatch.setattr(cfg, "SLO_FAILOVER_STATE_PATH", str(tmp_path / "state.json"), raising=False)
+    monkeypatch.setattr(cfg, "SLO_EVENT_LOG_PATH", str(tmp_path / "events.jsonl"), raising=False)
+
+    auth = {"ok": False, "ts_epoch": None, "latency_sec": None}
+    feed = {
+        "market_open": False,
+        "allow_stale_quotes": True,
+        "ltp": {"age_sec": None},
+        "depth": {"age_sec": None, "required": False},
+    }
+    out = slo_guard.evaluate_slo_status(
+        auth_payload=auth,
+        feed_payload=feed,
+        market_context={"execution_mode": "PAPER", "market_open": False},
+        now_epoch=1700000100.0,
+        enforce_failover=True,
+    )
+    assert out["ok"] is True
+    assert out["warnings"] == []
+    assert "AUTH_UNHEALTHY" in out["suppressed_warnings"]
+    assert "AUTH_LATENCY_MISSING" in out["suppressed_warnings"]

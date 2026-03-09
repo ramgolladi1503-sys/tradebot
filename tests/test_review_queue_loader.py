@@ -47,3 +47,23 @@ def test_load_queue_rows_partial_write_returns_empty(tmp_path):
     path.write_text('[{"symbol":"BANKNIFTY","strike":61000')
     rows = load_queue_rows(path)
     assert rows == []
+
+
+def test_load_queue_rows_clears_entry_when_entry_status_stale(tmp_path):
+    path = tmp_path / "review_queue.json"
+    payload = [
+        {
+            "symbol": "NIFTY",
+            "strike": 24600,
+            "type": "PE",
+            "entry": 101.67,
+            "entry_price": 101.67,
+            "suggested_entry": None,
+            "entry_status": "STALE_PRICE",
+            "timestamp": "2026-03-02T03:35:04Z",
+        }
+    ]
+    path.write_text(json.dumps(payload))
+    rows = load_queue_rows(path)
+    assert len(rows) == 1
+    assert rows[0]["entry"] is None

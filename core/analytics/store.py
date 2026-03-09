@@ -525,16 +525,43 @@ def _trade_outcome_from_row(row: dict, *, source: str) -> TradeOutcome | None:
         return None
     outcome = _normalize_outcome_label(row.get("outcome"))
     outcome_reason = _text(row.get("outcome_reason")).upper()
-    has_candles = outcome_reason not in {"NO_CANDLES", "NO_CANDLES_IN_WINDOW"}
+    has_candles = outcome_reason not in {"NO_CANDLES", "NO_CANDLES_IN_WINDOW", "NO_SERIES_DATA"} and not outcome_reason.startswith(
+        "SERIES_LOAD_ERROR"
+    )
     ambiguous = outcome_reason == "AMBIGUOUS_SAME_CANDLE"
     exec_feasible = bool(row.get("exec_feasible")) if row.get("exec_feasible") is not None else bool(has_candles and not ambiguous)
     flags = {
         "has_candle_data": bool(has_candles),
+        "has_series_data": bool(has_candles),
         "ambiguous_intrabar": bool(ambiguous),
     }
     if isinstance(row.get("exec_feasible_flags"), dict):
         for k, v in row.get("exec_feasible_flags", {}).items():
-            flags[str(k)] = bool(v)
+            key = str(k)
+            if key == "series_source":
+                continue
+            flags[key] = v
+    reject_reason = _text(row.get("primary_reject_reason") or row.get("reject_reason") or row.get("reason")) or None
+    reject_reasons: list[str] = []
+    raw_reject_reasons = row.get("reject_reasons")
+    if isinstance(raw_reject_reasons, (list, tuple)):
+        for reason in raw_reject_reasons:
+            text = _text(reason)
+            if text and text not in reject_reasons:
+                reject_reasons.append(text)
+    raw_reason_codes = row.get("reason_codes")
+    if isinstance(raw_reason_codes, (list, tuple)):
+        for reason in raw_reason_codes:
+            text = _text(reason)
+            if text and text not in reject_reasons:
+                reject_reasons.append(text)
+    if reject_reason and reject_reason not in reject_reasons:
+        reject_reasons = [reject_reason] + reject_reasons
+    if not has_candles:
+        reject_reason = "NO_SERIES_DATA"
+        reject_reasons = ["NO_SERIES_DATA"]
+    elif not reject_reason and reject_reasons:
+        reject_reason = reject_reasons[0]
     event_id = _text(row.get("event_id"))
     if not event_id:
         event_id = build_event_id(
@@ -555,7 +582,9 @@ def _trade_outcome_from_row(row: dict, *, source: str) -> TradeOutcome | None:
         "exec_feasible": exec_feasible,
         "exec_feasible_flags": flags,
         "source": source,
-        "reject_reason": _text(row.get("reject_reason") or row.get("reason")) or None,
+        "reject_reason": reject_reason,
+        "reject_reasons": reject_reasons,
+        "primary_reject_reason": reject_reason,
     }
     try:
         return TradeOutcome.from_dict(payload)

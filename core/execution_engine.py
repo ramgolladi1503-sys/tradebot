@@ -2,6 +2,7 @@ from core.paths import data_root, logs_dir
 import time
 import hashlib
 import json
+from dataclasses import dataclass
 from collections import deque
 from enum import Enum
 from pathlib import Path
@@ -15,9 +16,80 @@ from core.adaptive_pricing import (
 from core.execution_performance import ExecutionPerformanceTracker
 from core.fill_model import FillModel
 from core.order_reconciliation_daemon import OrderReconciliationDaemon
+from core.orders.execution_plan import ExecutionPlan
+from core.orders.intent_store import get_intent, upsert_intent
+from core.orders.order_intent import OrderIntent
 from core.orders.state_machine import OrderState, OrderStateMachine
 from core.pretrade_risk_engine import PreTradeRiskEngine, PreTradeRiskRequest
 from core.spread_guard import SpreadGuard, SpreadGuardDecision
+
+
+@dataclass(frozen=True)
+class ExecutionDecision:
+    can_execute: bool
+    execution_score: float
+    execution_reject_reason: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "can_execute": bool(self.can_execute),
+            "execution_score": float(self.execution_score),
+            "execution_reject_reason": self.execution_reject_reason,
+        }
+
+
+def evaluate(snapshot, signal_result) -> ExecutionDecision:
+    """
+    Execution-constraints evaluation. Does not mutate signal confidence.
+    """
+    snapshot_data = dict(snapshot or {})
+    confidence = None
+    if signal_result is not None:
+        try:
+            confidence = float(getattr(signal_result, "confidence"))
+        except Exception:
+            confidence = None
+    if confidence is None:
+        confidence = 0.0
+
+    freshness = snapshot_data.get("freshness")
+    stale_reject = None
+    if isinstance(freshness, dict):
+        try:
+            max_age = float(freshness.get("max_tick_age_sec"))
+            threshold = float(freshness.get("sla_threshold_sec"))
+            if max_age > threshold:
+                stale_reject = "STALE_SNAPSHOT"
+        except Exception:
+            pass
+    if stale_reject is None:
+        option_quote = snapshot_data.get("option_quote")
+        if isinstance(option_quote, dict):
+            try:
+                age_ms = float(option_quote.get("age_ms"))
+                threshold_ms = float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0)) * 1000.0
+                if age_ms > threshold_ms:
+                    stale_reject = "STALE_OPTION_QUOTE"
+            except Exception:
+                pass
+
+    if stale_reject is not None:
+        return ExecutionDecision(
+            can_execute=False,
+            execution_score=max(0.0, min(1.0, confidence)) * 0.5,
+            execution_reject_reason=stale_reject,
+        )
+    if confidence <= 0.0:
+        return ExecutionDecision(
+            can_execute=False,
+            execution_score=0.0,
+            execution_reject_reason="MISSING_SIGNAL_CONFIDENCE",
+        )
+    return ExecutionDecision(
+        can_execute=True,
+        execution_score=max(0.0, min(1.0, confidence)),
+        execution_reject_reason=None,
+    )
 
 
 class FailureType(str, Enum):
@@ -65,6 +137,12 @@ class ExecutionEngine:
         )
         self._failure_log_path = Path(
             str(getattr(cfg, "EXEC_FAILURE_LOG_PATH", str(logs_dir() / "execution_failures.jsonl")))
+        )
+        self._execution_action_log_path = Path(
+            str(getattr(cfg, "EXEC_ACTION_LOG_PATH", str(logs_dir() / "execution_actions.jsonl")))
+        )
+        self._exit_intent_log_path = Path(
+            str(getattr(cfg, "EXIT_INTEL_LOG_PATH", str(logs_dir() / "exit_intelligence_actions.jsonl")))
         )
         self.kill_switch_triggered = False
         self.kill_switch_reason = None
@@ -474,6 +552,90 @@ class ExecutionEngine:
         raw = f"{sid}{inst}{side_norm}{ts}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
+    def place_order_from_plan(
+        self,
+        plan: ExecutionPlan,
+        *,
+        submit_order_fn=None,
+        submit_kwargs=None,
+        risk_context=None,
+        order_id=None,
+        broker_order_id=None,
+    ):
+        """
+        Execution boundary contract:
+        execution receives an explicit plan object from upstream;
+        it does not compute strategy or candidate selection.
+        """
+        if not isinstance(plan, ExecutionPlan):
+            raise TypeError("execution_plan_required")
+        plan.validate()
+        mode = str(plan.mode or "SIM").upper()
+        action_base = {
+            "event": "execution_plan_action",
+            "snapshot_id": plan.snapshot_id,
+            "decision_id": plan.decision_id,
+            "signal_id": plan.signal_id,
+            "symbol": plan.symbol,
+            "token": int(plan.token),
+            "side": plan.side,
+            "qty": int(plan.qty),
+            "entry_type": plan.entry_type,
+            "mode": mode,
+            "ts_epoch": time.time(),
+        }
+        self._write_execution_action_log({**action_base, "phase": "received"})
+        if mode == "LIVE" and not bool(getattr(cfg, "ALLOW_LIVE_PLACEMENT", False)):
+            out = {
+                "placed": False,
+                "idempotent_skip": False,
+                "risk_rejected": False,
+                "reason": "live_placement_disabled",
+                "snapshot_id": plan.snapshot_id,
+                "decision_id": plan.decision_id,
+            }
+            self._write_execution_action_log({**action_base, "phase": "rejected", "reason": out["reason"]})
+            return out
+
+        payload = dict(submit_kwargs or {})
+        payload.setdefault("quantity", int(plan.qty))
+        payload.setdefault("instrument_token", int(plan.token))
+        payload.setdefault("symbol", plan.symbol)
+        payload.setdefault("order_type", plan.entry_type)
+        if plan.stop_loss is not None:
+            payload.setdefault("stop_loss", float(plan.stop_loss))
+        if plan.take_profit is not None:
+            payload.setdefault("take_profit", float(plan.take_profit))
+        payload.setdefault("snapshot_id", plan.snapshot_id)
+        payload.setdefault("decision_id", plan.decision_id)
+
+        place_order_fn = getattr(self, "place_order")
+        out = place_order_fn(
+            signal_id=plan.signal_id or plan.decision_id,
+            instrument=plan.symbol,
+            side=plan.side,
+            timestamp=plan.timestamp_epoch,
+            order_id=order_id,
+            broker_order_id=broker_order_id,
+            submit_order_fn=submit_order_fn,
+            submit_kwargs=payload,
+            risk_context=risk_context,
+        )
+        enriched = dict(out or {})
+        enriched["snapshot_id"] = plan.snapshot_id
+        enriched["decision_id"] = plan.decision_id
+        self._write_execution_action_log(
+            {
+                **action_base,
+                "phase": "completed",
+                "placed": bool(enriched.get("placed")),
+                "risk_rejected": bool(enriched.get("risk_rejected")),
+                "idempotent_skip": bool(enriched.get("idempotent_skip")),
+                "reason": enriched.get("reason") or (enriched.get("order").state.value if enriched.get("order") else None),
+            }
+        )
+        return enriched
+
     def place_order(
         self,
         *,
@@ -500,7 +662,52 @@ class ExecutionEngine:
             timestamp=timestamp,
         )
         instrument_key = self._normalize_instrument(instrument)
+        intent_type = "PLACE_ORDER"
+        client_order_id = OrderIntent.compute_client_order_id(
+            trade_id=str(signal_id or "").strip() or None,
+            intent_type=intent_type,
+            symbol=instrument_key,
+            side=side,
+        )
+        prior_intent = get_intent(client_order_id)
+        if prior_intent is not None and str(prior_intent.status or "").upper() in {"SUBMITTED", "FILLED"}:
+            return {
+                "placed": False,
+                "idempotent_skip": True,
+                "idempotency_key": idempotency_key,
+                "reason": "intent_already_submitted",
+                "client_order_id": client_order_id,
+                "risk_rejected": True,
+                "risk_decision": {"allowed": False, "reason_code": "DUPLICATE_SIGNAL"},
+                "order": None,
+            }
         requested_qty = self._extract_requested_qty(submit_kwargs)
+        limit_price = None
+        if isinstance(submit_kwargs, dict):
+            raw_limit = submit_kwargs.get("price")
+            if raw_limit is None:
+                raw_limit = submit_kwargs.get("limit_price")
+            try:
+                limit_price = None if raw_limit is None else float(raw_limit)
+            except Exception:
+                limit_price = None
+        upsert_intent(
+            OrderIntent(
+                trade_id=str(signal_id or "").strip() or None,
+                intent_type=intent_type,
+                symbol=instrument_key,
+                side=str(side or "").upper(),
+                qty=int(requested_qty or 0),
+                limit_price=limit_price,
+                client_order_id=client_order_id,
+                status="NEW",
+                order_type=str((submit_kwargs or {}).get("order_type", "LIMIT")).upper() if isinstance(submit_kwargs, dict) else "LIMIT",
+                product=str((submit_kwargs or {}).get("product", "MIS")).upper() if isinstance(submit_kwargs, dict) else "MIS",
+                exchange=str((submit_kwargs or {}).get("exchange", "NFO")).upper() if isinstance(submit_kwargs, dict) else "NFO",
+                strategy_id=str((submit_kwargs or {}).get("strategy_id", "UNKNOWN")) if isinstance(submit_kwargs, dict) else "UNKNOWN",
+                timestamp_bucket=int(time.time() // 60),
+            )
+        )
         order_id_value = str(order_id or "").strip() or f"ord_{idempotency_key[:24]}"
         order_record, created = self.order_state_machine.create_or_get_order(
             order_id=order_id_value,
@@ -666,6 +873,23 @@ class ExecutionEngine:
                 },
             )
         except Exception as exc:
+            upsert_intent(
+                OrderIntent(
+                    trade_id=str(signal_id or "").strip() or None,
+                    intent_type=intent_type,
+                    symbol=instrument_key,
+                    side=str(side or "").upper(),
+                    qty=int(requested_qty or 0),
+                    limit_price=limit_price,
+                    client_order_id=client_order_id,
+                    status="REJECTED",
+                    order_type=str((submit_kwargs or {}).get("order_type", "LIMIT")).upper() if isinstance(submit_kwargs, dict) else "LIMIT",
+                    product=str((submit_kwargs or {}).get("product", "MIS")).upper() if isinstance(submit_kwargs, dict) else "MIS",
+                    exchange=str((submit_kwargs or {}).get("exchange", "NFO")).upper() if isinstance(submit_kwargs, dict) else "NFO",
+                    strategy_id=str((submit_kwargs or {}).get("strategy_id", "UNKNOWN")) if isinstance(submit_kwargs, dict) else "UNKNOWN",
+                    timestamp_bucket=int(time.time() // 60),
+                )
+            )
             if isinstance(exc, RuntimeError) and "EXECUTION KILL SWITCH TRIGGERED" in str(exc):
                 raise
             rejected = self.transition_order_state(
@@ -696,6 +920,23 @@ class ExecutionEngine:
             ).strip().upper()
             explicit_reject = bool(broker_response.get("rejected")) or status in {"REJECTED", "FAILED"}
             if explicit_reject:
+                upsert_intent(
+                    OrderIntent(
+                        trade_id=str(signal_id or "").strip() or None,
+                        intent_type=intent_type,
+                        symbol=instrument_key,
+                        side=str(side or "").upper(),
+                        qty=int(requested_qty or 0),
+                        limit_price=limit_price,
+                        client_order_id=client_order_id,
+                        status="REJECTED",
+                        order_type=str((submit_kwargs or {}).get("order_type", "LIMIT")).upper() if isinstance(submit_kwargs, dict) else "LIMIT",
+                        product=str((submit_kwargs or {}).get("product", "MIS")).upper() if isinstance(submit_kwargs, dict) else "MIS",
+                        exchange=str((submit_kwargs or {}).get("exchange", "NFO")).upper() if isinstance(submit_kwargs, dict) else "NFO",
+                        strategy_id=str((submit_kwargs or {}).get("strategy_id", "UNKNOWN")) if isinstance(submit_kwargs, dict) else "UNKNOWN",
+                        timestamp_bucket=int(time.time() // 60),
+                    )
+                )
                 self.register_failure(
                     FailureType.BROKER_REJECT,
                     reason="broker_reject_response",
@@ -730,10 +971,28 @@ class ExecutionEngine:
             side=side,
             requested_qty=requested_qty,
         )
+        upsert_intent(
+            OrderIntent(
+                trade_id=str(signal_id or "").strip() or None,
+                intent_type=intent_type,
+                symbol=instrument_key,
+                side=str(side or "").upper(),
+                qty=int(requested_qty or 0),
+                limit_price=limit_price,
+                client_order_id=client_order_id,
+                status="SUBMITTED",
+                order_type=str((submit_kwargs or {}).get("order_type", "LIMIT")).upper() if isinstance(submit_kwargs, dict) else "LIMIT",
+                product=str((submit_kwargs or {}).get("product", "MIS")).upper() if isinstance(submit_kwargs, dict) else "MIS",
+                exchange=str((submit_kwargs or {}).get("exchange", "NFO")).upper() if isinstance(submit_kwargs, dict) else "NFO",
+                strategy_id=str((submit_kwargs or {}).get("strategy_id", "UNKNOWN")) if isinstance(submit_kwargs, dict) else "UNKNOWN",
+                timestamp_bucket=int(time.time() // 60),
+            )
+        )
         return {
             "placed": True,
             "idempotent_skip": False,
             "idempotency_key": idempotency_key,
+            "client_order_id": client_order_id,
             "order": acknowledged,
             "broker_response": broker_response,
         }
@@ -845,6 +1104,69 @@ class ExecutionEngine:
                 handle.write(json.dumps(payload, sort_keys=True) + "\n")
         except Exception:
             pass
+
+    def _write_execution_action_log(self, payload):
+        try:
+            self._execution_action_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._execution_action_log_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True) + "\n")
+        except Exception:
+            pass
+
+    def _write_exit_intent_log(self, payload):
+        try:
+            self._exit_intent_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._exit_intent_log_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True) + "\n")
+        except Exception:
+            pass
+
+    @staticmethod
+    def build_exit_intent_id(intent: dict | None) -> str:
+        payload = dict(intent or {})
+        digest_payload = {k: v for k, v in payload.items() if k != "ts_epoch"}
+        digest = hashlib.sha256(
+            json.dumps(digest_payload, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()[:20]
+        return f"exit_{digest}"
+
+    def apply_exit_intent(self, intent: dict | None) -> dict:
+        """
+        Exit-intelligence sink for runtime-initiated active-position actions.
+        This method is deterministic and auditable; it validates and records intent,
+        then returns an ACK for the orchestrator to apply state transitions safely.
+        """
+        now_ts = time.time()
+        payload = dict(intent or {})
+        action = str(payload.get("action") or "").upper()
+        qty = payload.get("exit_qty_units")
+        try:
+            qty_val = int(qty or 0)
+        except Exception:
+            qty_val = 0
+        errors: list[str] = []
+        if action not in {"MODIFY_PLAN", "PARTIAL_EXIT", "FULL_EXIT"}:
+            errors.append("invalid_exit_action")
+        if action in {"PARTIAL_EXIT", "FULL_EXIT"} and qty_val <= 0:
+            errors.append("invalid_exit_qty")
+        intent_id = self.build_exit_intent_id(payload)
+        ack = {
+            "accepted": len(errors) == 0,
+            "intent_id": intent_id,
+            "ts_epoch": now_ts,
+            "errors": errors,
+        }
+        self._write_exit_intent_log(
+            {
+                "event": "EXIT_INTENT",
+                "ts_epoch": now_ts,
+                "intent_id": ack["intent_id"],
+                "accepted": ack["accepted"],
+                "errors": errors,
+                "payload": payload,
+            }
+        )
+        return ack
 
     def get_failure_snapshot(self, now_epoch=None):
         now_ts = float(now_epoch if now_epoch is not None else time.time())

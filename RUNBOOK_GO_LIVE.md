@@ -6,16 +6,19 @@ Run from repo root:
 
 ```bash
 PYTHONPATH=. ./scripts/ci_sanity.sh
+PYTHONPATH=. ./scripts/run_daily_regression.sh
 PYTHONPATH=. python scripts/check_kite_auth.py
 PYTHONPATH=. python scripts/readiness_gate.py
 ```
 
 Required before any live run:
 
+- deterministic daily regression passes (pytest + strict health gate)
 - readiness `can_trade=true`
 - no active risk halt (`logs/risk_halt.json` halted=false)
 - feed freshness healthy while market is open
 - governance snapshot allows trading (`logs/trading_allowed_snapshot.json`)
+- strict health gate includes `ONE_TRADE_CAN_BUILD` and must pass
 
 ## 2) Paper-first validation (minimum 15 minutes)
 

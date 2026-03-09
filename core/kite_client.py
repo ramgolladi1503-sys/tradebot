@@ -1,9 +1,12 @@
-import time
-import json
 import os
+import sys
+import json
+import time
 import logging
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 from config import config as cfg
 from core.auth_manager import access_token_path, resolve_access_token
 from core.paths import data_root
@@ -15,360 +18,772 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
+
 class KiteClient:
     def __init__(self):
         self.kite = None
-        self._instruments_cache = {}
-        self._cache_ts = 0
-        self.last_init_error = None
+        self._instruments_cache: Dict[str, Dict[str, Any]] = {}
+        self._last_instruments_fetch: Optional[str] = None
+        self._historical_auth_cooldown_until = 0.0
+        self._historical_auth_cooldown_reason = ""
+
+    # ---------------------------
+    # Logging (atomic write)
+    # ---------------------------
+    def _log_atomic(self, msg: str) -> None:
+        try:
+            sys.stdout.write(str(msg) + "\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+    # ---------------------------
+    # Kite session
+    # ---------------------------
+    def _create_kite(self, api_key: str, access_token: str):
+        if KiteConnect is None:
+            raise RuntimeError("kiteconnect_not_installed")
+        kite = KiteConnect(api_key=api_key)
+        kite.set_access_token(access_token)
+        return kite
 
     def ensure(self):
-        self._ensure()
+        if self.kite is not None:
+            return self.kite
 
-    @staticmethod
-    def _looks_placeholder_secret(value: str) -> bool:
-        token = str(value or "").strip().lower()
-        if not token:
-            return False
-        if token.startswith("your_") or "placeholder" in token:
-            return True
-        return token in {
-            "your_kiteconnect_api_key",
-            "your_kite_api_key",
-            "your_api_key",
-            "changeme",
-        }
+        api_key = (getattr(cfg, "KITE_API_KEY", "") or "").strip()
+        api_secret = (getattr(cfg, "KITE_API_SECRET", "") or "").strip()  # may be used elsewhere
 
-    def _ensure(self):
-        if self.kite or not KiteConnect:
-            return
-        api_key = (os.getenv("KITE_API_KEY") or str(getattr(cfg, "KITE_API_KEY", "") or "")).strip()
+        access_token = (os.getenv("KITE_ACCESS_TOKEN") or "").strip()
+        if not access_token:
+            access_token = resolve_access_token()
+
         if not api_key:
-            self.last_init_error = "missing_api_key:KITE_API_KEY"
-            return
-        if self._looks_placeholder_secret(api_key):
-            self.last_init_error = "invalid_api_key_placeholder:KITE_API_KEY"
-            return
-        token = ""
-        try:
-            repo_root = Path(__file__).resolve().parents[1]
-            # Always resolve via security guard to avoid stale env/config token drift.
-            token = resolve_access_token(repo_root_path=repo_root, require_token=False).strip()
-        except RuntimeError as exc:
-            print(str(exc))
-            self.last_init_error = str(exc)
-            return
-        if not token:
-            self.last_init_error = f"missing_access_token:{access_token_path(repo_root)}"
-            return
-        self.kite = KiteConnect(api_key=api_key)
-        self.kite.set_access_token(token)
-        print(
-            f"KITE_REST api_key_tail4={api_key[-4:] if len(api_key) >= 4 else api_key} "
-            f"access_token_tail4={token[-4:] if len(token) >= 4 else token} "
-            f"kite_id={id(self.kite)}"
+            raise RuntimeError("kite_api_key_missing")
+        if not access_token:
+            raise RuntimeError("kite_access_token_missing")
+
+        kite = self._create_kite(api_key=api_key, access_token=access_token)
+
+        # Single atomic line to avoid glued logs
+        self._log_atomic(
+            "KITE_REST "
+            f"api_key_tail4={api_key[-4:] if len(api_key) >= 4 else api_key} "
+            f"access_token_tail4={access_token[-4:] if len(access_token) >= 4 else access_token} "
+            f"kite_id={id(kite)}"
         )
-        self.last_init_error = None
 
-    @staticmethod
-    def _coerce_expiry_date(value):
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            return value.date()
-        if isinstance(value, date):
-            return value
+        self.kite = kite
+        return self.kite
+
+    # ---------------------------
+    # Basic wrappers
+    # ---------------------------
+    def profile(self):
+        return self.ensure().profile()
+
+    def margins(self):
+        return self.ensure().margins()
+
+    def instruments(self, exchange: Optional[str] = None, force: bool = False) -> List[Dict[str, Any]]:
+        """
+        Fetch instruments list from Kite (heavy). Cache per exchange per day.
+        """
+        kite = self.ensure()
+        key = (exchange or "ALL").upper()
+        today = date.today().isoformat()
+
+        cached = self._instruments_cache.get(key)
+        if not force and cached and cached.get("date") == today:
+            return cached.get("data", [])
+
         try:
-            text = str(value).split("T", 1)[0]
-            return datetime.fromisoformat(text).date()
-        except Exception:
-            return None
-
-    def instruments(self, exchange=None):
-        self._ensure()
-        if not self.kite:
+            data = kite.instruments(exchange) if exchange else kite.instruments()
+            self._instruments_cache[key] = {"date": today, "data": data}
+            self._last_instruments_fetch = datetime.now().isoformat()
+            return data
+        except Exception as e:
+            logger.exception("instruments_fetch_failed exchange=%s err=%s", exchange, e)
+            if cached:
+                return cached.get("data", [])
             return []
-        time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
-        return self.kite.instruments(exchange) if exchange else self.kite.instruments()
 
-    def instruments_cached(self, exchange=None, ttl_sec=3600):
-        cache_path = data_root() / "kite_instruments.json"
-        now = time.time()
-        key = exchange or "ALL"
+    # Compatibility (some modules may call this)
+    def get_instruments_cached(self, exchange: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self.instruments(exchange=exchange)
 
-        if key in self._instruments_cache and (now - self._cache_ts) < ttl_sec:
-            return self._instruments_cache[key]
+    # Legacy compatibility used by tests and older callers.
+    def instruments_cached(self, exchange: Optional[str] = None, ttl_sec: int = 3600) -> List[Dict[str, Any]]:
+        _ = int(ttl_sec or 3600)
+        return self.instruments(exchange=exchange)
 
-        # Try disk cache
-        if cache_path.exists() and (now - cache_path.stat().st_mtime) < ttl_sec:
-            try:
-                raw = json.loads(cache_path.read_text())
-                self._instruments_cache = raw
-                self._cache_ts = now
-                if key in raw:
-                    return raw[key]
-            except Exception:
-                pass
+    def ltp(self, instruments):
+        return self.ensure().ltp(instruments)
 
-        data = None
-        try:
-            data = self.instruments(exchange)
-        except Exception:
-            data = None
-        if not data:
-            # fallback to local CSV
-            csv_path = data_root() / "kite_instruments.csv"
-            if csv_path.exists():
-                try:
-                    import pandas as pd
-                    df = pd.read_csv(csv_path)
-                    data = df.to_dict(orient="records")
-                except Exception:
-                    data = []
-            # fallback to cache if it has data
-            if not data and cache_path.exists():
-                try:
-                    raw = json.loads(cache_path.read_text())
-                    cached = raw.get(key, [])
-                    if cached:
-                        data = cached
-                except Exception:
-                    pass
-        if data:
-            self._instruments_cache[key] = data
-            self._cache_ts = now
-            try:
-                cache_path.parent.mkdir(exist_ok=True)
-                cache_path.write_text(json.dumps(self._instruments_cache))
-            except Exception:
-                pass
-        return data
+    def quote(self, instruments):
+        return self.ensure().quote(instruments)
 
-    def resolve_tokens(self, symbols, exchange="NFO"):
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        tokens = []
-        for inst in data:
-            if inst.get("tradingsymbol") in symbols or inst.get("name") in symbols:
-                tok = inst.get("instrument_token")
-                if tok:
-                    tokens.append(tok)
-        return list(set(tokens))
+    # ---------------------------
+    # Historical (telemetry-enabled)
+    # ---------------------------
+    def _is_historical_auth_error(self, exc: Exception) -> bool:
+        text = str(exc or "").strip().lower()
+        if not text:
+            return False
+        markers = (
+            "tokenexception",
+            "access_token",
+            "api_key",
+            "incorrect api_key",
+            "incorrect api key",
+            "invalid api key",
+            "invalid session",
+            "session expired",
+            "unauthorized",
+            "forbidden",
+        )
+        return any(marker in text for marker in markers)
 
-    def resolve_option_tokens(self, symbols, expiry_date, strikes_around=2, step=50):
-        data = self.instruments_cached("NFO", ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        tokens = []
-        for inst in data:
-            if inst.get("segment") != "NFO-OPT":
-                continue
-            if inst.get("name") not in symbols:
-                continue
-            if inst.get("expiry") != expiry_date:
-                continue
-            strike = inst.get("strike")
-            if strike is None:
-                continue
-            tok = inst.get("instrument_token")
-            if tok:
-                tokens.append(tok)
-        return list(set(tokens))
+    def _historical_auth_cooldown_remaining(self) -> float:
+        now_ts = float(time.time())
+        remaining = float(self._historical_auth_cooldown_until or 0.0) - now_ts
+        return max(0.0, remaining)
 
-    def resolve_option_tokens_exchange(self, symbols, expiry_date, exchange="NFO"):
-        seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        expiry_norm = self._coerce_expiry_date(expiry_date)
-        tokens = []
-        for inst in data:
-            if inst.get("segment") != seg:
-                continue
-            if inst.get("name") not in symbols:
-                continue
-            inst_expiry = self._coerce_expiry_date(inst.get("expiry"))
-            if expiry_norm is not None and inst_expiry != expiry_norm:
-                continue
-            if expiry_norm is None and inst.get("expiry") != expiry_date:
-                continue
-            tok = inst.get("instrument_token")
-            if tok:
-                tokens.append(tok)
-        return list(set(tokens))
-
-    def resolve_option_tokens_window(self, symbol, expiry_date, atm_strike, strikes_around, step, exchange="NFO"):
-        seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        tokens = []
-        if atm_strike is None or step is None or step <= 0:
-            return []
-        expiry_norm = self._coerce_expiry_date(expiry_date)
-        min_strike = atm_strike - (strikes_around * step)
-        max_strike = atm_strike + (strikes_around * step)
-        for inst in data:
-            if inst.get("segment") != seg:
-                continue
-            if inst.get("name") != symbol:
-                continue
-            inst_expiry = self._coerce_expiry_date(inst.get("expiry"))
-            if expiry_norm is not None and inst_expiry != expiry_norm:
-                continue
-            if expiry_norm is None and inst.get("expiry") != expiry_date:
-                continue
-            strike = inst.get("strike")
-            if strike is None:
-                continue
-            try:
-                strike_val = float(strike)
-            except Exception:
-                continue
-            if strike_val < min_strike or strike_val > max_strike:
-                continue
-            tok = inst.get("instrument_token")
-            if tok:
-                tokens.append(tok)
-        return list(set(tokens))
-
-    def next_available_expiry(self, symbol, exchange="NFO", selection_mode=None):
-        seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        expiries = []
-        for inst in data:
-            if str(inst.get("segment") or "").upper() != seg:
-                continue
-            if str(inst.get("name") or "").upper() != str(symbol or "").upper():
-                continue
-            exp = self._coerce_expiry_date(inst.get("expiry"))
-            if exp is not None:
-                expiries.append(exp)
-        if not expiries:
-            return None
-        normalized = sorted(set(expiries))
-        mode = str(selection_mode or getattr(cfg, "OPTION_EXPIRY_SELECTION", "NEAREST") or "NEAREST").upper()
-        if mode == "MONTHLY":
-            last_by_month = {}
-            for exp in normalized:
-                key = (exp.year, exp.month)
-                prev = last_by_month.get(key)
-                if prev is None or exp > prev:
-                    last_by_month[key] = exp
-            monthly = [last_by_month[key] for key in sorted(last_by_month)]
-            future = [d for d in monthly if d >= date.today()]
-            return future[0] if future else monthly[-1]
-        future = [d for d in normalized if d >= date.today()]
-        return future[0] if future else normalized[-1]
-
-    def token_symbol_map(self, exchange="NFO"):
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        m = {}
-        for inst in data:
-            tok = inst.get("instrument_token")
-            sym = inst.get("tradingsymbol")
-            if tok and sym:
-                m[tok] = sym
-        return m
-
-    def find_option_symbol(self, symbol, strike, opt_type, exchange="NFO"):
-        seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        strike_val = float(strike)
-        for inst in data:
-            if inst.get("segment") != seg:
-                continue
-            if inst.get("name") != symbol:
-                continue
-            if inst.get("strike") is None:
-                continue
-            if float(inst.get("strike")) != strike_val:
-                continue
-            if inst.get("instrument_type") != opt_type:
-                continue
-            ts = inst.get("tradingsymbol")
-            if ts:
-                return f"{exchange}:{ts}"
-        return None
-
-    def find_option_symbol_with_expiry(self, symbol, strike, opt_type, expiry, exchange="NFO"):
-        seg = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        strike_val = float(strike)
-        exp_norm = self._coerce_expiry_date(expiry)
-        exp_str = str(expiry) if expiry is not None else ""
-        available_expiries = set()
-        for inst in data:
-            if inst.get("segment") != seg:
-                continue
-            if inst.get("name") != symbol:
-                continue
-            if inst.get("strike") is None:
-                continue
-            if float(inst.get("strike")) != strike_val:
-                continue
-            if inst.get("instrument_type") != opt_type:
-                continue
-            inst_exp = self._coerce_expiry_date(inst.get("expiry"))
-            if inst_exp is not None:
-                available_expiries.add(inst_exp.isoformat())
-            if exp_norm is not None:
-                if inst_exp != exp_norm:
-                    continue
-            elif exp_str and str(inst.get("expiry")) != exp_str:
-                continue
-            ts = inst.get("tradingsymbol")
-            if ts:
-                return f"{exchange}:{ts}"
-        if exp_norm is not None and available_expiries and exp_norm.isoformat() not in available_expiries:
-            logger.warning(
-                "[EXPIRY_RESOLUTION_MISS] context=find_option_symbol_with_expiry symbol=%s requested_expiry=%s available_expiries=%s",
-                str(symbol or "").upper(),
-                exp_norm.isoformat(),
-                sorted(available_expiries),
+    def historical(
+        self,
+        instrument_token: int,
+        from_date: Any,
+        to_date: Any,
+        interval: str,
+        continuous: bool = False,
+        oi: bool = False,
+        _symbol: Optional[str] = None,
+        _exchange: Optional[str] = None,
+        _caller: Optional[str] = None,
+    ):
+        cooldown_remaining = self._historical_auth_cooldown_remaining()
+        if cooldown_remaining > 0.0:
+            self._log_atomic(
+                "[HIST_SUPPRESSED] "
+                f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
+                f"interval={interval} from={from_date} to={to_date} "
+                f"continuous={continuous} oi={oi} cooldown_remaining_sec={cooldown_remaining:.2f} "
+                f"reason={self._historical_auth_cooldown_reason or 'auth_cooldown'}"
             )
-        return None
+            return []
+        kite = self.ensure()
+        try:
+            bars = kite.historical_data(
+                instrument_token=instrument_token,
+                from_date=from_date,
+                to_date=to_date,
+                interval=interval,
+                continuous=continuous,
+                oi=oi,
+            )
+            if not bars:
+                self._log_atomic(
+                    "[HIST_EMPTY] "
+                    f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
+                    f"interval={interval} from={from_date} to={to_date} "
+                    f"continuous={continuous} oi={oi}"
+                )
+            return bars
+        except Exception as e:
+            if self._is_historical_auth_error(e):
+                cooldown_sec = max(1.0, float(getattr(cfg, "KITE_HIST_AUTH_ERROR_COOLDOWN_SEC", 45.0)))
+                self._historical_auth_cooldown_until = float(time.time()) + cooldown_sec
+                self._historical_auth_cooldown_reason = repr(e)
+                self._log_atomic(
+                    "[HIST_AUTH_COOLDOWN] "
+                    f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
+                    f"interval={interval} cooldown_sec={cooldown_sec:.2f} reason={repr(e)}"
+                )
+            self._log_atomic(
+                "[HIST_ERROR] "
+                f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
+                f"interval={interval} from={from_date} to={to_date} "
+                f"continuous={continuous} oi={oi} err={repr(e)}"
+            )
+            raise
 
-    def quote(self, symbols):
-        self._ensure()
-        if not self.kite:
-            return {}
-        time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
-        return self.kite.quote(symbols)
+    def _normalize_interval(self, interval: str) -> str:
+        """
+        Normalize common interval aliases into Kite values:
+        Kite expects: minute, 3minute, 5minute, 10minute, 15minute, 30minute, 60minute, day
+        """
+        iv = (interval or "").strip().lower()
+        mapping = {
+            "1m": "minute",
+            "1min": "minute",
+            "min": "minute",
+            "minute": "minute",
+            "3m": "3minute",
+            "3min": "3minute",
+            "3minute": "3minute",
+            "5m": "5minute",
+            "5min": "5minute",
+            "5minute": "5minute",
+            "10m": "10minute",
+            "10min": "10minute",
+            "10minute": "10minute",
+            "15m": "15minute",
+            "15min": "15minute",
+            "15minute": "15minute",
+            "30m": "30minute",
+            "30min": "30minute",
+            "30minute": "30minute",
+            "60m": "60minute",
+            "60min": "60minute",
+            "60minute": "60minute",
+            "1h": "60minute",
+            "hour": "60minute",
+            "1d": "day",
+            "day": "day",
+            "daily": "day",
+        }
+        return mapping.get(iv, interval)
 
-    def ltp(self, symbols):
-        self._ensure()
-        if not self.kite:
-            return {}
-        time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
-        return self.kite.ltp(symbols)
+    def historical_data(
+        self,
+        instrument_token: int,
+        from_date: Any,
+        to_date: Any,
+        interval: str = "minute",
+        continuous: bool = False,
+        oi: bool = False,
+        **kwargs,
+    ):
+        """
+        Backward-compatible wrapper: lots of modules call kite_client.historical_data(...)
+        Routes through telemetry-enabled `historical()`.
+        """
+        interval_norm = self._normalize_interval(interval)
+
+        # Kite can be picky about tz-aware datetimes; strip tzinfo if present.
+        def _naive_dt(x: Any) -> Any:
+            try:
+                if isinstance(x, datetime) and x.tzinfo is not None:
+                    return x.replace(tzinfo=None)
+            except Exception:
+                pass
+            return x
+
+        fdt = _naive_dt(from_date)
+        tdt = _naive_dt(to_date)
+
+        return self.historical(
+            instrument_token=instrument_token,
+            from_date=fdt,
+            to_date=tdt,
+            interval=interval_norm,
+            continuous=continuous,
+            oi=oi,
+            _symbol=kwargs.get("_symbol"),
+            _exchange=kwargs.get("_exchange"),
+            _caller=kwargs.get("_caller"),
+        )
+
+    # ---------------------------
+    # Orders / Portfolio
+    # ---------------------------
+    def orders(self):
+        return self.ensure().orders()
+
+    def positions(self):
+        return self.ensure().positions()
+
+    def holdings(self):
+        return self.ensure().holdings()
+
+    def place_order(self, **kwargs):
+        return self.ensure().place_order(**kwargs)
+
+    def modify_order(self, **kwargs):
+        return self.ensure().modify_order(**kwargs)
+
+    def cancel_order(self, **kwargs):
+        return self.ensure().cancel_order(**kwargs)
+
+    def order_history(self, order_id):
+        return self.ensure().order_history(order_id)
 
     def trades(self):
-        self._ensure()
-        if not self.kite:
-            return []
-        time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
-        return self.kite.trades()
+        return self.ensure().trades()
 
-    def historical_data(self, instrument_token, from_dt, to_dt, interval="minute"):
-        self._ensure()
-        if not self.kite:
-            return []
-        time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
-        return self.kite.historical_data(instrument_token, from_dt, to_dt, interval)
+    def convert_position(self, **kwargs):
+        return self.ensure().convert_position(**kwargs)
 
-    def resolve_index_token(self, symbol):
-        sym = (symbol or "").upper()
-        exchange = "BSE" if sym == "SENSEX" else "NSE"
-        data = self.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
-        if not data:
+    # ---------------------------
+    # Auth helpers
+    # ---------------------------
+    def generate_session(self, request_token, api_secret):
+        if KiteConnect is None:
+            raise RuntimeError("kiteconnect_not_installed")
+        api_key = (getattr(cfg, "KITE_API_KEY", "") or "").strip()
+        kite = KiteConnect(api_key=api_key)
+        data = kite.generate_session(request_token, api_secret=api_secret)
+        kite.set_access_token(data.get("access_token"))
+        return data
+
+    def set_access_token(self, token: str):
+        token = (token or "").strip()
+        if not token:
+            raise RuntimeError("empty_access_token")
+        os.environ["KITE_ACCESS_TOKEN"] = token
+        try:
+            p = Path(access_token_path())
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(token)
+        except Exception:
+            pass
+        self.kite = None  # force re-create
+
+    # ---------------------------
+    # Helper converters
+    # ---------------------------
+    def _to_date(self, d: Any) -> Optional[date]:
+        if d is None:
             return None
-        name_map = {
-            "NIFTY": ["NIFTY 50", "NIFTY"],
-            "BANKNIFTY": ["NIFTY BANK", "BANKNIFTY"],
-            "SENSEX": ["SENSEX"],
-        }
-        targets = set(name_map.get(sym, [sym]))
-        for inst in data:
-            ts = inst.get("tradingsymbol")
-            nm = inst.get("name")
-            seg = inst.get("segment", "")
-            if ts in targets or nm in targets:
-                if "INDICES" in str(seg) or exchange in str(inst.get("exchange", "")):
-                    return inst.get("instrument_token")
+        if isinstance(d, date) and not isinstance(d, datetime):
+            return d
+        if isinstance(d, datetime):
+            return d.date()
+        if isinstance(d, str):
+            s = d.strip()
+            for fmt in ("%Y-%m-%d", "%d-%b-%Y", "%d-%B-%Y"):
+                try:
+                    return datetime.strptime(s, fmt).date()
+                except Exception:
+                    pass
         return None
+
+    # ---------------------------
+    # Instrument lookup helpers
+    # ---------------------------
+    def _find_instrument(self, exchange: Optional[str], tradingsymbol: str) -> Optional[Dict[str, Any]]:
+        ts = (tradingsymbol or "").strip().upper()
+        if not ts:
+            return None
+
+        data = self.instruments(exchange=exchange) if exchange else self.instruments()
+        for r in data:
+            if (r.get("tradingsymbol") or "").upper() == ts:
+                return r
+        return None
+
+    def _instrument_row_belongs_to_symbol(self, symbol: str, row: Dict[str, Any]) -> bool:
+        sym = (symbol or "").strip().upper()
+        if not sym:
+            return False
+        name = str(row.get("name") or "").strip().upper()
+        if name == sym:
+            return True
+        tradingsymbol = str(row.get("tradingsymbol") or "").strip().upper()
+        if not tradingsymbol.startswith(sym):
+            return False
+        if len(tradingsymbol) == len(sym):
+            return True
+        next_char = tradingsymbol[len(sym)]
+        return not next_char.isalpha()
+
+    def _normalize_option_instrument_types(
+        self,
+        instrument_types: Optional[Tuple[str, ...]] = None,
+    ) -> set[str]:
+        source = ("OPTIDX", "OPTSTK", "CE", "PE") if instrument_types is None else instrument_types
+        return {
+            str(value or "").strip().upper()
+            for value in source
+            if str(value or "").strip()
+        }
+
+    def _is_option_instrument_row(
+        self,
+        row: Dict[str, Any],
+        instrument_types: Optional[Tuple[str, ...]] = None,
+    ) -> bool:
+        seg = str(row.get("segment") or "").strip().upper()
+        inst_type = str(row.get("instrument_type") or "").strip().upper()
+        tradingsymbol = str(row.get("tradingsymbol") or "").strip().upper()
+        normalized_instrument_types = self._normalize_option_instrument_types(instrument_types)
+        has_suffix_option_shape = (
+            (tradingsymbol.endswith("CE") or tradingsymbol.endswith("PE"))
+            and self._to_date(row.get("expiry")) is not None
+            and any(ch.isdigit() for ch in tradingsymbol[:-2])
+        )
+        return bool(
+            ("OPT" in seg)
+            or (inst_type in normalized_instrument_types)
+            or has_suffix_option_shape
+        )
+
+    def _log_option_window_resolution(
+        self,
+        *,
+        exchange: str,
+        symbol: str,
+        expiry: Any,
+        strikes_around: int,
+        spot: Optional[float],
+        total_rows_scanned: int,
+        option_rows_matched: int,
+        expiry_matched_rows: int,
+        strike_window_matched_rows: int,
+        final_token_count: int,
+        failure_reason: str,
+    ) -> None:
+        try:
+            self._log_atomic(
+                json.dumps(
+                    {
+                        "event": "KITE_OPTION_WINDOW_RESOLUTION",
+                        "exchange": exchange,
+                        "expiry": "none" if expiry is None else str(expiry),
+                        "failure_reason": str(failure_reason or ""),
+                        "final_token_count": int(final_token_count),
+                        "option_rows_matched": int(option_rows_matched),
+                        "spot": spot,
+                        "strike_window_matched_rows": int(strike_window_matched_rows),
+                        "strikes_around": int(strikes_around),
+                        "symbol": symbol,
+                        "total_rows_scanned": int(total_rows_scanned),
+                        "expiry_matched_rows": int(expiry_matched_rows),
+                    },
+                    default=str,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+        except Exception:
+            pass
+
+    def resolve_index_token(self, symbol: str) -> Optional[int]:
+        """
+        Resolve index spot instrument_token deterministically.
+
+        Canonical mapping:
+          NIFTY     -> NSE / "NIFTY 50"
+          BANKNIFTY -> NSE / "NIFTY BANK"
+          SENSEX    -> BSE / "SENSEX"
+        """
+        sym = (symbol or "").strip().upper()
+        if not sym:
+            return None
+
+        canonical = {
+            "NIFTY": ("NSE", "NIFTY 50"),
+            "BANKNIFTY": ("NSE", "NIFTY BANK"),
+            "SENSEX": ("BSE", "SENSEX"),
+        }
+
+        if sym in canonical:
+            exch, ts = canonical[sym]
+            inst = self._find_instrument(exchange=exch, tradingsymbol=ts)
+            if inst:
+                tok = inst.get("instrument_token")
+                return tok if isinstance(tok, int) else None
+
+        # Fallback attempts
+        for exch in ("NSE", "BSE"):
+            inst = self._find_instrument(exchange=exch, tradingsymbol=sym)
+            if inst:
+                tok = inst.get("instrument_token")
+                return tok if isinstance(tok, int) else None
+
+        inst = self._find_instrument(exchange=None, tradingsymbol=sym)
+        if inst:
+            tok = inst.get("instrument_token")
+            return tok if isinstance(tok, int) else None
+
+        return None
+
+    def next_available_expiry(self, symbol: str, exchange: str = "NFO") -> Optional[date]:
+        """
+        Returns soonest available expiry date for options for given underlying (name field).
+        Expects NFO instruments by default.
+        """
+        sym = (symbol or "").strip().upper()
+        exch = (exchange or "NFO").strip().upper()
+        if not sym:
+            return None
+
+        data = self.instruments(exchange=exch)
+        expiries: List[date] = []
+        matched_tradingsymbols: List[str] = []
+        total_option_candidates_scanned = 0
+        sample_segments: List[str] = []
+        sample_instrument_types: List[str] = []
+        candidate_tradingsymbols: List[str] = []
+
+        for r in data:
+            try:
+                inst_type = (r.get("instrument_type") or "").strip().upper()
+                seg = (r.get("segment") or "").strip().upper()
+                tradingsymbol = str(r.get("tradingsymbol") or "").strip().upper()
+                if seg and seg not in sample_segments and len(sample_segments) < 5:
+                    sample_segments.append(seg)
+                if inst_type and inst_type not in sample_instrument_types and len(sample_instrument_types) < 5:
+                    sample_instrument_types.append(inst_type)
+                if not self._is_option_instrument_row(r):
+                    continue
+                if tradingsymbol and len(candidate_tradingsymbols) < 5:
+                    candidate_tradingsymbols.append(tradingsymbol)
+
+                exp = self._to_date(r.get("expiry"))
+                if not exp:
+                    continue
+                total_option_candidates_scanned += 1
+                if not self._instrument_row_belongs_to_symbol(sym, r):
+                    continue
+                expiries.append(exp)
+                if tradingsymbol and len(matched_tradingsymbols) < 5:
+                    matched_tradingsymbols.append(tradingsymbol)
+            except Exception:
+                continue
+
+        resolved_expiry = "none"
+        if not expiries:
+            resolved = None
+        else:
+            expiries.sort()
+            resolved = expiries[0]
+            resolved_expiry = resolved.isoformat()
+
+        try:
+            self._log_atomic(
+                json.dumps(
+                    {
+                        "event": "KITE_NEXT_AVAILABLE_EXPIRY",
+                        "exchange": exch,
+                        "symbol": sym,
+                        "total_option_candidates_scanned": int(total_option_candidates_scanned),
+                        "matched_candidates_count": int(len(expiries)),
+                        "sample_segments": list(sample_segments),
+                        "sample_instrument_types": list(sample_instrument_types),
+                        "candidate_tradingsymbols": list(candidate_tradingsymbols),
+                        "matched_tradingsymbols": list(matched_tradingsymbols),
+                        "resolved_expiry": resolved_expiry,
+                    },
+                    default=str,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+        except Exception:
+            pass
+
+        return resolved
+
+    # ---------------------------
+    # Options token window resolver (for WS subscriptions)
+    # ---------------------------
+    def resolve_option_tokens_window(
+        self,
+        symbol: str,
+        expiry: Any = None,
+        strikes_around: int = 6,
+        exchange: str = "NFO",
+        include_ce: bool = True,
+        include_pe: bool = True,
+        segment: Optional[str] = None,
+        instrument_types: Tuple[str, ...] = ("CE", "PE", "OPTIDX", "OPTSTK"),
+        spot: Optional[float] = None,
+        **kwargs,
+    ) -> List[int]:
+        """
+        Resolve a window of option instrument tokens around ATM.
+        Returns list[int] instrument_token for WS subscribe.
+
+        NOTE: This is best-effort without live spot; if spot not supplied,
+        it uses median strike as ATM proxy (still good enough to subscribe a chain window).
+        """
+        sym = (symbol or "").strip().upper()
+        if not sym:
+            return []
+
+        exch = (exchange or "NFO").strip().upper()
+        seg_filter = (segment or "").strip().upper() or None
+        allowed_instrument_types = self._normalize_option_instrument_types(instrument_types)
+
+        inst = self.instruments(exchange=exch)
+        total_rows_scanned = 0
+        option_rows_matched = 0
+        expiry_matched_rows = 0
+        strike_window_matched_rows = 0
+        failure_reason = ""
+
+        exp = self._to_date(expiry)
+        if exp is None:
+            exp = self.next_available_expiry(sym, exchange=exch)
+        if exp is None:
+            self._log_option_window_resolution(
+                exchange=exch,
+                symbol=sym,
+                expiry=None,
+                strikes_around=int(strikes_around),
+                spot=spot,
+                total_rows_scanned=int(len(inst or [])),
+                option_rows_matched=0,
+                expiry_matched_rows=0,
+                strike_window_matched_rows=0,
+                final_token_count=0,
+                failure_reason="expiry_unavailable",
+            )
+            return []
+
+        if instrument_types is not None and not allowed_instrument_types:
+            self._log_option_window_resolution(
+                exchange=exch,
+                symbol=sym,
+                expiry=exp.isoformat(),
+                strikes_around=int(strikes_around),
+                spot=spot,
+                total_rows_scanned=int(len(inst or [])),
+                option_rows_matched=0,
+                expiry_matched_rows=0,
+                strike_window_matched_rows=0,
+                final_token_count=0,
+                failure_reason="instrument_types_empty",
+            )
+            return []
+
+        candidates: List[Dict[str, Any]] = []
+        for row in inst:
+            try:
+                total_rows_scanned += 1
+                if (row.get("exchange") or "").upper() != exch:
+                    continue
+                if seg_filter and (row.get("segment") or "").upper() != seg_filter:
+                    continue
+                if not self._is_option_instrument_row(row, instrument_types=instrument_types):
+                    continue
+                option_rows_matched += 1
+                row_inst_type = str(row.get("instrument_type") or "").strip().upper()
+                row_tradingsymbol = str(row.get("tradingsymbol") or "").strip().upper()
+                if allowed_instrument_types:
+                    type_allowed = row_inst_type in allowed_instrument_types
+                    suffix_allowed = (
+                        (row_tradingsymbol.endswith("CE") and "CE" in allowed_instrument_types)
+                        or (row_tradingsymbol.endswith("PE") and "PE" in allowed_instrument_types)
+                    )
+                    if not type_allowed and not suffix_allowed:
+                        continue
+                if not self._instrument_row_belongs_to_symbol(sym, row):
+                    continue
+                row_exp = self._to_date(row.get("expiry"))
+                if row_exp != exp:
+                    continue
+                expiry_matched_rows += 1
+                candidates.append(row)
+            except Exception:
+                continue
+
+        if not candidates:
+            failure_reason = "no_expiry_matched_rows"
+            self._log_option_window_resolution(
+                exchange=exch,
+                symbol=sym,
+                expiry=exp.isoformat(),
+                strikes_around=int(strikes_around),
+                spot=spot,
+                total_rows_scanned=int(total_rows_scanned),
+                option_rows_matched=int(option_rows_matched),
+                expiry_matched_rows=int(expiry_matched_rows),
+                strike_window_matched_rows=0,
+                final_token_count=0,
+                failure_reason=failure_reason,
+            )
+            return []
+
+        strikes = sorted(
+            {float(r.get("strike") or 0.0) for r in candidates if float(r.get("strike") or 0.0) > 0.0}
+        )
+        if not strikes:
+            failure_reason = "no_strikes"
+            self._log_option_window_resolution(
+                exchange=exch,
+                symbol=sym,
+                expiry=exp.isoformat(),
+                strikes_around=int(strikes_around),
+                spot=spot,
+                total_rows_scanned=int(total_rows_scanned),
+                option_rows_matched=int(option_rows_matched),
+                expiry_matched_rows=int(expiry_matched_rows),
+                strike_window_matched_rows=0,
+                final_token_count=0,
+                failure_reason=failure_reason,
+            )
+            return []
+
+        diffs = [round(strikes[i + 1] - strikes[i], 6) for i in range(len(strikes) - 1)]
+        diffs = [d for d in diffs if d > 0]
+        strike_step = min(diffs) if diffs else None
+
+        # Determine ATM strike
+        if spot is None:
+            atm = strikes[len(strikes) // 2]
+        else:
+            try:
+                s = float(spot)
+                if strike_step:
+                    atm = round(round(s / strike_step) * strike_step, 6)
+                else:
+                    atm = min(strikes, key=lambda x: abs(x - s))
+            except Exception:
+                atm = strikes[len(strikes) // 2]
+
+        if atm not in strikes:
+            atm = min(strikes, key=lambda x: abs(x - atm))
+
+        atm_idx = strikes.index(atm)
+        lo = max(0, atm_idx - int(strikes_around))
+        hi = min(len(strikes) - 1, atm_idx + int(strikes_around))
+        target_strikes = set(strikes[lo : hi + 1])
+
+        tokens: List[int] = []
+        for row in candidates:
+            try:
+                strike = float(row.get("strike") or 0.0)
+                if strike not in target_strikes:
+                    continue
+                strike_window_matched_rows += 1
+
+                ts = (row.get("tradingsymbol") or "").upper()
+                is_ce = ts.endswith("CE")
+                is_pe = ts.endswith("PE")
+                if is_ce and not include_ce:
+                    continue
+                if is_pe and not include_pe:
+                    continue
+
+                tok = row.get("instrument_token")
+                if isinstance(tok, int):
+                    tokens.append(tok)
+            except Exception:
+                continue
+
+        resolved_tokens = sorted(set(tokens))
+        if not resolved_tokens:
+            if strike_window_matched_rows == 0:
+                failure_reason = "no_strike_window_matches"
+            else:
+                failure_reason = "no_tokens_after_leg_filter"
+            self._log_option_window_resolution(
+                exchange=exch,
+                symbol=sym,
+                expiry=exp.isoformat(),
+                strikes_around=int(strikes_around),
+                spot=spot,
+                total_rows_scanned=int(total_rows_scanned),
+                option_rows_matched=int(option_rows_matched),
+                expiry_matched_rows=int(expiry_matched_rows),
+                strike_window_matched_rows=int(strike_window_matched_rows),
+                final_token_count=0,
+                failure_reason=failure_reason,
+            )
+
+        return resolved_tokens
+
 
 kite_client = KiteClient()

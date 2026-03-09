@@ -6,6 +6,7 @@ import os
 import json
 import time
 import math
+import logging
 import sqlite3
 import pandas as pd
 from datetime import timezone
@@ -13,6 +14,7 @@ from datetime import datetime, timedelta
 from config import config as cfg
 from config.profile import get_runtime_profile
 from core.option_chain import fetch_option_chain as fetch_option_chain_impl
+from core.option_liquidity_cache import hydrate_option_liquidity_fields, update_option_liquidity_cache
 from core.regime_prob_model import RegimeProbModel
 from core.news_shock_encoder import NewsShockEncoder
 from core.news_encoder import NewsEncoder
@@ -22,7 +24,7 @@ from core.ohlc_buffer import ohlc_buffer
 from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
-from core.market_context import derive_market_context, is_offhours
+from core.market_context import coerce_segment_for_market_context, derive_market_context, is_offhours
 from core.paths import logs_dir
 from core.time_utils import (
     compute_age_sec,
@@ -75,6 +77,7 @@ _CROSS_ASSET = None
 _STARTUP_WARMUP_DONE = False
 _STARTUP_WARMUP_ROWS = []
 _WARMUP_SEED_ATTEMPTS = {}
+logger = logging.getLogger(__name__)
 
 # -------------------------------
 # Market Data Functions
@@ -940,9 +943,11 @@ def _maybe_log_index_bidask_missing(
     ctx = derive_market_context({"execution_mode": execution_mode, "market_open": market_open})
     if ctx.mode == "OFFHOURS":
         if bool(getattr(cfg, "OFFHOURS_DEBUG_INDEX_BIDASK_MISSING", False)):
-            print(
-                f"[OFFHOURS] index bid/ask missing suppressed symbol={symbol} "
-                f"quote_source={quote_source} ltp_source={ltp_source}"
+            logger.debug(
+                "offhours_index_bidask_missing_suppressed symbol=%s quote_source=%s ltp_source=%s",
+                symbol,
+                quote_source,
+                ltp_source,
             )
         return
     require_live_quotes = _effective_require_live_quotes(
@@ -1089,6 +1094,23 @@ def _log_insufficient_ohlc_warning(
         pass
 
 
+def _log_market_data_event(event: str, payload: dict | None = None) -> None:
+    try:
+        row = {
+            "event": str(event),
+            "ts_epoch": now_utc_epoch(),
+            "ts_ist": now_ist().isoformat(),
+        }
+        if isinstance(payload, dict):
+            row.update(payload)
+        p = logs_dir() / "market_data_warnings.jsonl"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+
+
 def _warm_seed_windows_minutes(raw_windows: str | None = None) -> list[int]:
     raw = str(
         raw_windows
@@ -1204,7 +1226,15 @@ def _warm_seed_ohlc_from_history(
                 from_dt = now_ist() - timedelta(minutes=int(window_min))
                 to_dt = now_ist()
                 try:
-                    hist = kite_client.historical_data(token, from_dt, to_dt, interval=seed_interval)
+                    hist = kite_client.historical_data(
+                        token,
+                        from_dt,
+                        to_dt,
+                        interval=seed_interval,
+                        _symbol=symbol,
+                        _exchange="NSE",
+                        _caller="market_data_warm_seed",
+                    )
                 except Exception as exc:
                     hist = []
                     last_reason = f"historical_error:{type(exc).__name__}"
@@ -1453,7 +1483,11 @@ def get_ltp(symbol: str):
     """
     Fetch latest market price from Kite or fallback.
     """
-    segment = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+    segment = coerce_segment_for_market_context(
+        getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO"),
+        symbol=str(symbol or "").upper(),
+        instrument="OPT",
+    )
     market_open = bool(is_market_open_ist(segment=segment))
     market_ctx = derive_market_context(
         {
@@ -1654,7 +1688,15 @@ def get_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.Da
         ist = timezone(timedelta(hours=5, minutes=30))
         from_dt = datetime.fromtimestamp(float(start_epoch_ms) / 1000.0, tz=timezone.utc).astimezone(ist)
         to_dt = datetime.fromtimestamp(float(end_epoch_ms) / 1000.0, tz=timezone.utc).astimezone(ist)
-        candles = kite_client.historical_data(int(token), from_dt, to_dt, interval=iv) or []
+        candles = kite_client.historical_data(
+            int(token),
+            from_dt,
+            to_dt,
+            interval=iv,
+            _symbol=sym,
+            _exchange="NSE",
+            _caller="market_data_underlying_candles",
+        ) or []
         rows = []
         for candle in candles:
             if not isinstance(candle, dict):
@@ -1888,7 +1930,18 @@ def get_option_candles_or_snapshots(trade, interval: str, start_ms: int, end_ms:
         to_dt = datetime.fromtimestamp(float(end_epoch_ms) / 1000.0, tz=timezone.utc).astimezone(ist)
 
         try:
-            candles = kite_client.historical_data(int(token), from_dt, to_dt, interval=iv) or []
+            option_exchange = str(trade_row.get("exchange") or "").strip().upper()
+            if not option_exchange:
+                option_exchange = "BFO" if str(trade_row.get("symbol") or "").upper() == "SENSEX" else "NFO"
+            candles = kite_client.historical_data(
+                int(token),
+                from_dt,
+                to_dt,
+                interval=iv,
+                _symbol=str(trade_row.get("symbol") or "").upper(),
+                _exchange=option_exchange,
+                _caller="market_data_option_candles",
+            ) or []
         except Exception:
             candles = []
         rows = []
@@ -1971,6 +2024,36 @@ def _fetch_option_chain_with_context(
             force_synthetic=force_synthetic,
         )
 
+
+def _hydrate_live_option_chain_liquidity(symbol: str, option_chain: list, *, chain_source: str, now_epoch: float) -> list:
+    rows = list(option_chain or [])
+    if not rows:
+        return rows
+    if str(chain_source or "").strip().lower() != "live":
+        return rows
+    update_option_liquidity_cache(
+        [row for row in rows if isinstance(row, dict)],
+        symbol=symbol,
+        snapshot_ts_epoch=now_epoch,
+        source="option_chain_live",
+    )
+    hydrated_rows: list = []
+    for row in rows:
+        if not isinstance(row, dict):
+            hydrated_rows.append(row)
+            continue
+        hydrated_rows.append(
+            hydrate_option_liquidity_fields(
+                row,
+                symbol=symbol,
+                expiry=row.get("expiry") or row.get("expiry_date"),
+                strike=row.get("strike"),
+                option_type=row.get("type") or row.get("option_type") or row.get("right"),
+                now_epoch=now_epoch,
+            )
+        )
+    return hydrated_rows
+
 def _option_chain_health(symbol: str, chain: list, ltp: float, require_live_quotes: bool | None = None):
     quotes_required = bool(
         getattr(cfg, "REQUIRE_LIVE_QUOTES", True)
@@ -2013,7 +2096,7 @@ def _option_chain_health(symbol: str, chain: list, ltp: float, require_live_quot
         "timestamp": now_ist().isoformat(),
     }
 
-def fetch_live_market_data():
+def fetch_live_market_data(*, allow_history_seed: bool = True):
     """
     Returns a list of market snapshots for symbols in config.
     Each snapshot includes LTP, VWAP, ATR, and option chain.
@@ -2066,7 +2149,11 @@ def fetch_live_market_data():
             shock = {**cal_shock, **text_shock}
 
     for symbol in symbols:
-        segment = getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        segment = coerce_segment_for_market_context(
+            getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO"),
+            symbol=str(symbol or "").upper(),
+            instrument="OPT",
+        )
         market_open_for_segment = bool(is_open(now_dt=now_ist(), segment=segment))
         runtime_mode = str(
             os.getenv(
@@ -2079,7 +2166,22 @@ def fetch_live_market_data():
                 "execution_mode": runtime_mode,
                 "market_open": bool(market_open_for_segment),
                 "segment": segment,
+                "symbol": str(symbol or "").upper(),
+                "instrument": "OPT",
             }
+        )
+        _append_live_quote_error(
+            "market_mode_derived",
+            str(symbol or "").upper(),
+            category="mode",
+            level="INFO",
+            source="fetch_live_market_data",
+            details={
+                "now_ist": now_ist().isoformat(),
+                "segment": segment,
+                "mode": str(market_ctx.mode),
+                "market_open": bool(market_ctx.is_market_open),
+            },
         )
         offhours_mode = market_ctx.mode == "OFFHOURS"
         require_live_quotes = bool(market_ctx.require_live_quotes and getattr(cfg, "REQUIRE_LIVE_QUOTES", True))
@@ -2131,7 +2233,7 @@ def fetch_live_market_data():
             continue
         try:
             if ltp and ltp > 0:
-                ohlc_buffer.update_tick(symbol, ltp, volume=0, ts=now_ist())
+                ohlc_buffer.update_tick(symbol, ltp, volume=None, ts=now_ist())
         except Exception:
             pass
         vwap = ltp
@@ -2171,7 +2273,7 @@ def fetch_live_market_data():
             pass
         orb_high = ltp
         orb_low = ltp
-        volume = 0
+        volume = None
         vwap_slope = 0
         rsi_mom = 0
         vol_z = 0
@@ -2199,7 +2301,7 @@ def fetch_live_market_data():
         bars = []
         try:
             bars = ohlc_buffer.get_bars(symbol)
-            if len(bars) < min_bars:
+            if len(bars) < min_bars and bool(allow_history_seed):
                 bars, _seeded_ok, ohlc_seed_reason = _warm_seed_ohlc_from_history(
                     symbol=symbol,
                     bars=bars,
@@ -2207,6 +2309,14 @@ def fetch_live_market_data():
                     interval=str(getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute") or "minute"),
                 )
                 ohlc_seeded = bool(_seeded_ok)
+            elif len(bars) < min_bars:
+                logger.info(
+                    "fetch_live_market_data warm_seed_skipped symbol=%s bars=%d min_bars=%d allow_history_seed=%s",
+                    symbol,
+                    len(bars),
+                    min_bars,
+                    bool(allow_history_seed),
+                )
             ohlc_bars_count = len(bars)
             if bars:
                 try:
@@ -2561,7 +2671,8 @@ def fetch_live_market_data():
             orb_low = ltp
 
         exec_mode_for_policy = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
-        strict_live_market_open = bool(market_ctx.mode == "LIVE" and market_ctx.is_market_open)
+        market_open_now = bool(market_ctx.is_market_open)
+        strict_live_market_open = bool(market_ctx.mode == "LIVE" and market_open_now)
         option_chain = _fetch_option_chain_with_context(
             symbol,
             ltp,
@@ -2569,7 +2680,7 @@ def fetch_live_market_data():
             market_context=market_ctx.to_dict(),
         )
         chain_source = "live" if option_chain else "empty"
-        if (not strict_live_market_open) and (not option_chain) and getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
+        if (not market_open_now) and (not option_chain) and getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
             option_chain = _fetch_option_chain_with_context(
                 symbol,
                 ltp,
@@ -2577,11 +2688,40 @@ def fetch_live_market_data():
                 market_context=market_ctx.to_dict(),
             )
             chain_source = "synthetic_offhours" if option_chain else "empty"
+        elif market_open_now and (not option_chain) and getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
+            _log_market_data_event(
+                "SYNTHETIC_OFFHOURS_BLOCKED_MARKET_OPEN",
+                {
+                    "symbol": symbol,
+                    "mode": str(market_ctx.mode),
+                    "market_open": True,
+                    "reason": "synthetic_offhours_disabled_when_market_open",
+                },
+            )
+        if market_open_now and option_chain and chain_source == "synthetic_offhours":
+            _log_market_data_event(
+                "SYNTHETIC_OFFHOURS_CHAIN_DROPPED_MARKET_OPEN",
+                {
+                    "symbol": symbol,
+                    "mode": str(market_ctx.mode),
+                    "market_open": True,
+                    "reason": "synthetic_offhours_not_allowed_when_market_open",
+                    "rows": len(option_chain),
+                },
+            )
+            option_chain = []
+            chain_source = "empty"
         if option_chain and chain_source == "synthetic_offhours":
             for opt in option_chain:
                 if isinstance(opt, dict):
                     opt["chain_source"] = "synthetic_offhours"
                     opt["planning_only"] = True
+        option_chain = _hydrate_live_option_chain_liquidity(
+            symbol,
+            option_chain,
+            chain_source=chain_source,
+            now_epoch=now_utc_epoch(),
+        )
         # Option chain health validation (live NFO/BFO)
         try:
             health = _option_chain_health(

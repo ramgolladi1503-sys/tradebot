@@ -3,6 +3,8 @@ from core.paths import logs_dir, data_root
 
 import csv
 import json
+import hashlib
+import random
 import sqlite3
 import time
 from dataclasses import asdict
@@ -67,7 +69,7 @@ def _date_bounds(date_str: str) -> Tuple[float, float]:
 class ReplayEngine:
     def __init__(self, db_path: Optional[Path] = None, seed: int = 1):
         self.db_path = Path(db_path) if db_path else Path(cfg.TRADE_DB_PATH)
-        self.seed = seed
+        self.seed = int(seed)
         self.trade_builder = TradeBuilder()
         self.gatekeeper = StrategyGatekeeper()
         self.risk_engine = RiskEngine()
@@ -87,7 +89,7 @@ class ReplayEngine:
         conn = sqlite3.connect(self.db_path)
         cur = conn.execute(
             "SELECT timestamp_epoch, instrument_token, last_price, volume FROM ticks "
-            "WHERE timestamp_epoch >= ? AND timestamp_epoch < ? ORDER BY timestamp_epoch ASC",
+            "WHERE timestamp_epoch >= ? AND timestamp_epoch < ? ORDER BY timestamp_epoch ASC, instrument_token ASC, rowid ASC",
             (start_epoch, end_epoch),
         )
         rows = cur.fetchall()
@@ -100,12 +102,39 @@ class ReplayEngine:
         conn = sqlite3.connect(self.db_path)
         cur = conn.execute(
             "SELECT timestamp_epoch, instrument_token, depth_json FROM depth_snapshots "
-            "WHERE timestamp_epoch >= ? AND timestamp_epoch < ? ORDER BY timestamp_epoch ASC",
+            "WHERE timestamp_epoch >= ? AND timestamp_epoch < ? ORDER BY timestamp_epoch ASC, instrument_token ASC, rowid ASC",
             (start_epoch, end_epoch),
         )
         rows = cur.fetchall()
         conn.close()
         return rows
+
+    def _normalize_option_chain_for_replay(self, chain: List[dict], ts_epoch: float, replay_day: str) -> List[dict]:
+        normalized: List[dict] = []
+        for opt in list(chain or []):
+            row = dict(opt or {})
+            row["quote_ts_epoch"] = float(ts_epoch)
+            row["quote_age_sec"] = 0.0
+            row["timestamp"] = float(ts_epoch)
+            row["expiry"] = str(row.get("expiry") or replay_day)
+            row["expiry_date"] = str(row.get("expiry_date") or row["expiry"])
+            normalized.append(row)
+        return normalized
+
+    def _normalize_trade_payload(self, trade, *, ts_epoch: float, trace_id: str) -> dict:
+        payload = asdict(trade)
+        stable_trade_id = hashlib.sha256(
+            f"{self.seed}|{trace_id}|{payload.get('symbol')}|{payload.get('strike')}|{payload.get('option_type')}".encode(
+                "utf-8"
+            )
+        ).hexdigest()[:20]
+        stable_iso = datetime.fromtimestamp(float(ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        payload["trade_id"] = f"replay-{stable_trade_id}"
+        payload["timestamp"] = stable_iso
+        for key in ("first_seen", "last_seen", "activated_ts"):
+            if key in payload and payload.get(key) is not None:
+                payload[key] = stable_iso
+        return payload
 
     def replay_day(self, date_str: str, symbols: List[str], speed: float = 1.0) -> Path:
         symbol_set = {s.upper() for s in symbols}
@@ -122,148 +151,192 @@ class ReplayEngine:
         out_path.parent.mkdir(exist_ok=True)
 
         trace_counter = 0
-        with out_path.open("w") as f:
-            for ts_epoch, token, price, volume in ticks:
-                # update depth snapshots up to this time
-                while depth_idx < len(depth) and depth[depth_idx][0] <= ts_epoch:
-                    d_ts, d_token, d_json = depth[depth_idx]
-                    latest_depth[d_token] = (d_ts, d_json)
-                    depth_idx += 1
-                sym = _symbol_from_token(int(token), symbol_set, inst_map)
-                if not sym:
-                    continue
-                if price is None:
-                    continue
-                local_ohlc_buffer.update_tick(sym, price, volume or 0, ts=ts_epoch)
-                bars = local_ohlc_buffer.get_bars(sym)
-                indicators_ok = len(bars) >= getattr(cfg, "OHLC_MIN_BARS", 30)
-                ind = compute_indicators(
-                    bars,
-                    vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
-                    atr_period=getattr(cfg, "ATR_PERIOD", 14),
-                    adx_period=getattr(cfg, "ADX_PERIOD", 14),
-                    vol_window=getattr(cfg, "VOL_WINDOW", 30),
-                    slope_window=getattr(cfg, "VWAP_SLOPE_WINDOW", 10),
-                ) if bars else {}
+        local_rng = random.Random(self.seed)
+        py_random_state = random.getstate()
+        np_random_state = None
+        np_random_module = None
+        try:
+            try:
+                import numpy as _np  # type: ignore
 
-                vwap = ind.get("vwap") or price
-                atr = ind.get("atr") or max(1.0, price * 0.002)
-                adx = ind.get("adx") or 0.0
-                vol_z = ind.get("vol_z") or 0.0
-                vwap_slope = ind.get("vwap_slope") or 0.0
+                np_random_module = _np
+                np_random_state = _np.random.get_state()
+                _np.random.seed(self.seed)
+            except Exception:
+                np_random_state = None
+                np_random_module = None
+            random.seed(self.seed)
+            with out_path.open("w") as f:
+                for ts_epoch, token, price, volume in ticks:
+                    # update depth snapshots up to this time
+                    while depth_idx < len(depth) and depth[depth_idx][0] <= ts_epoch:
+                        d_ts, d_token, d_json = depth[depth_idx]
+                        latest_depth[d_token] = (d_ts, d_json)
+                        depth_idx += 1
+                    sym = _symbol_from_token(int(token), symbol_set, inst_map)
+                    if not sym:
+                        continue
+                    if price is None:
+                        continue
+                    local_ohlc_buffer.update_tick(sym, price, volume or 0, ts=ts_epoch)
+                    bars = local_ohlc_buffer.get_bars(sym)
+                    indicators_ok = len(bars) >= getattr(cfg, "OHLC_MIN_BARS", 30)
+                    ind = compute_indicators(
+                        bars,
+                        vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
+                        atr_period=getattr(cfg, "ATR_PERIOD", 14),
+                        adx_period=getattr(cfg, "ADX_PERIOD", 14),
+                        vol_window=getattr(cfg, "VOL_WINDOW", 30),
+                        slope_window=getattr(cfg, "VWAP_SLOPE_WINDOW", 10),
+                    ) if bars else {}
 
-                depth_imb = None
-                if token in latest_depth:
-                    try:
-                        depth_obj = json.loads(latest_depth[token][1])
-                        depth_imb = depth_obj.get("imbalance")
-                    except Exception:
-                        depth_imb = None
+                    vwap = ind.get("vwap") or price
+                    atr = ind.get("atr") or max(1.0, price * 0.002)
+                    adx = ind.get("adx") or 0.0
+                    vol_z = ind.get("vol_z") or 0.0
+                    vwap_slope = ind.get("vwap_slope") or 0.0
 
-                features = {
-                    "adx": adx,
-                    "vwap_slope": vwap_slope,
-                    "vol_z": vol_z,
-                    "atr_pct": (atr / price) if price else 0.0,
-                    "iv_mean": 0.0,
-                    "ltp_acceleration": 0.0,
-                    "option_chain_skew": 0.0,
-                    "oi_delta": 0.0,
-                    "depth_imbalance": depth_imb or 0.0,
-                    "regime_transition_rate": 0.0,
-                    "shock_score": 0.0,
-                    "uncertainty_index": 0.0,
-                    "macro_direction_bias": 0.0,
-                    "x_regime_align": 0.0,
-                    "x_vol_spillover": 0.0,
-                    "x_lead_lag": 0.0,
-                }
-                regime_out = self.regime_model.predict(features)
-
-                market_data = {
-                    "symbol": sym,
-                    "ltp": price,
-                    "vwap": vwap,
-                    "atr": atr,
-                    "vwap_slope": vwap_slope,
-                    "vol_z": vol_z,
-                    "adx_14": adx,
-                    "depth_imbalance": depth_imb,
-                    "indicators_ok": indicators_ok,
-                    "indicators_age_sec": 0.0,
-                    "regime_probs": regime_out.get("regime_probs"),
-                    "primary_regime": regime_out.get("primary_regime"),
-                    "regime_entropy": regime_out.get("regime_entropy"),
-                    "unstable_regime_flag": regime_out.get("unstable_regime_flag"),
-                    "shock_score": 0.0,
-                    "uncertainty_index": 0.0,
-                    "cross_asset_quality": {"stale_feeds": [], "missing": {}},
-                    "execution_mode": "SIM",
-                    "market_context": {
-                        "execution_mode": "SIM",
-                        "market_open": False,
-                    },
-                }
-
-                # option chain (synthetic)
-                try:
-                    market_data["option_chain"] = fetch_option_chain(sym, price, force_synthetic=True)
-                except Exception:
-                    market_data["option_chain"] = []
-
-                gate = self.gatekeeper.evaluate(market_data, mode="MAIN")
-                decision = {
-                    "trace_id": f"replay-{date_str}-{sym}-{trace_counter}",
-                    "ts_epoch": ts_epoch,
-                    "ts_iso": datetime.fromtimestamp(ts_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
-                    "symbol": sym,
-                    "ltp": price,
-                    "features": features,
-                    "regime": regime_out.get("primary_regime"),
-                    "regime_probs": regime_out.get("regime_probs"),
-                    "regime_entropy": regime_out.get("regime_entropy"),
-                    "unstable_regime_flag": regime_out.get("unstable_regime_flag"),
-                    "gatekeeper_allowed": gate.allowed,
-                    "gatekeeper_reasons": gate.reasons,
-                    "risk_allowed": None,
-                    "exec_guard_allowed": None,
-                    "trade": None,
-                    "why": {},
-                }
-
-                if gate.allowed:
-                    trade = self.trade_builder.build(
-                        market_data,
-                        quick_mode=False,
-                        debug_reasons=False,
-                        force_family=gate.family,
-                        allow_fallbacks=False,
-                        allow_baseline=False,
-                    )
-                    if trade:
-                        decision["trade"] = asdict(trade)
-                        allowed, reason = self.risk_engine.allow_trade(self.portfolio)
-                        decision["risk_allowed"] = bool(allowed)
-                        decision["risk_reason"] = reason
-                        if allowed:
-                            ok, guard_reason = self.exec_guard.validate(trade, self.portfolio, trade.regime)
-                            decision["exec_guard_allowed"] = bool(ok)
-                            decision["exec_guard_reason"] = guard_reason
-                        # compute score explanation
+                    depth_imb = None
+                    if token in latest_depth:
                         try:
-                            opt = market_data.get("option_chain", [{}])[0] if market_data.get("option_chain") else {}
-                            rr = None
-                            try:
-                                rr = abs(trade.target - trade.entry_price) / max(abs(trade.entry_price - trade.stop_loss), 1e-6)
-                            except Exception:
-                                rr = None
-                            detail = compute_trade_score(market_data, opt, trade.side, rr, getattr(trade, "strategy", None))
-                            decision["why"] = {"score": detail.get("score"), "detail": detail}
+                            depth_obj = json.loads(latest_depth[token][1])
+                            depth_imb = depth_obj.get("imbalance")
                         except Exception:
-                            decision["why"] = {}
+                            depth_imb = None
 
-                f.write(json.dumps(decision, default=str) + "\n")
-                trace_counter += 1
-                if speed > 0:
-                    time.sleep(1.0 / speed)
+                    features = {
+                        "adx": adx,
+                        "vwap_slope": vwap_slope,
+                        "vol_z": vol_z,
+                        "atr_pct": (atr / price) if price else 0.0,
+                        "iv_mean": 0.0,
+                        "ltp_acceleration": 0.0,
+                        "option_chain_skew": 0.0,
+                        "oi_delta": 0.0,
+                        "depth_imbalance": depth_imb or 0.0,
+                        "regime_transition_rate": 0.0,
+                        "shock_score": 0.0,
+                        "uncertainty_index": 0.0,
+                        "macro_direction_bias": 0.0,
+                        "x_regime_align": 0.0,
+                        "x_vol_spillover": 0.0,
+                        "x_lead_lag": 0.0,
+                    }
+                    regime_out = self.regime_model.predict(features)
+
+                    market_data = {
+                        "symbol": sym,
+                        "ltp": price,
+                        "vwap": vwap,
+                        "atr": atr,
+                        "vwap_slope": vwap_slope,
+                        "vol_z": vol_z,
+                        "adx_14": adx,
+                        "depth_imbalance": depth_imb,
+                        "indicators_ok": indicators_ok,
+                        "indicators_age_sec": 0.0,
+                        "regime_probs": regime_out.get("regime_probs"),
+                        "primary_regime": regime_out.get("primary_regime"),
+                        "regime_entropy": regime_out.get("regime_entropy"),
+                        "unstable_regime_flag": regime_out.get("unstable_regime_flag"),
+                        "shock_score": 0.0,
+                        "uncertainty_index": 0.0,
+                        "cross_asset_quality": {"stale_feeds": [], "missing": {}},
+                        "execution_mode": "SIM",
+                        "market_context": {
+                            "execution_mode": "SIM",
+                            "market_open": False,
+                        },
+                    }
+
+                    # option chain (synthetic for deterministic replay)
+                    try:
+                        chain = fetch_option_chain(sym, price, force_synthetic=True)
+                    except Exception:
+                        chain = []
+                    market_data["option_chain"] = self._normalize_option_chain_for_replay(
+                        chain,
+                        ts_epoch=float(ts_epoch),
+                        replay_day=date_str,
+                    )
+
+                    trace_entropy = local_rng.getrandbits(64)
+                    trace_hash = hashlib.sha256(
+                        f"{self.seed}|{date_str}|{sym}|{trace_counter}|{float(ts_epoch):.6f}|{trace_entropy}".encode(
+                            "utf-8"
+                        )
+                    ).hexdigest()[:16]
+                    trace_id = f"replay-{date_str}-{sym}-{trace_hash}"
+
+                    gate = self.gatekeeper.evaluate(market_data, mode="MAIN")
+                    decision = {
+                        "trace_id": trace_id,
+                        "ts_epoch": ts_epoch,
+                        "ts_iso": datetime.fromtimestamp(ts_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                        "symbol": sym,
+                        "ltp": price,
+                        "features": features,
+                        "regime": regime_out.get("primary_regime"),
+                        "regime_probs": regime_out.get("regime_probs"),
+                        "regime_entropy": regime_out.get("regime_entropy"),
+                        "unstable_regime_flag": regime_out.get("unstable_regime_flag"),
+                        "gatekeeper_allowed": gate.allowed,
+                        "gatekeeper_reasons": gate.reasons,
+                        "risk_allowed": None,
+                        "exec_guard_allowed": None,
+                        "trade": None,
+                        "why": {},
+                    }
+
+                    if gate.allowed:
+                        trade = self.trade_builder.build(
+                            market_data,
+                            quick_mode=False,
+                            debug_reasons=False,
+                            force_family=gate.family,
+                            allow_fallbacks=False,
+                            allow_baseline=False,
+                        )
+                        if trade:
+                            decision["trade"] = self._normalize_trade_payload(
+                                trade,
+                                ts_epoch=float(ts_epoch),
+                                trace_id=trace_id,
+                            )
+                            allowed, reason = self.risk_engine.allow_trade(self.portfolio)
+                            decision["risk_allowed"] = bool(allowed)
+                            decision["risk_reason"] = reason
+                            if allowed:
+                                ok, guard_reason = self.exec_guard.validate(trade, self.portfolio, trade.regime)
+                                decision["exec_guard_allowed"] = bool(ok)
+                                decision["exec_guard_reason"] = guard_reason
+                            # compute score explanation
+                            try:
+                                opt = market_data.get("option_chain", [{}])[0] if market_data.get("option_chain") else {}
+                                rr = None
+                                try:
+                                    rr = abs(trade.target - trade.entry_price) / max(
+                                        abs(trade.entry_price - trade.stop_loss), 1e-6
+                                    )
+                                except Exception:
+                                    rr = None
+                                detail = compute_trade_score(
+                                    market_data,
+                                    opt,
+                                    trade.side,
+                                    rr,
+                                    getattr(trade, "strategy", None),
+                                )
+                                decision["why"] = {"score": detail.get("score"), "detail": detail}
+                            except Exception:
+                                decision["why"] = {}
+
+                    f.write(json.dumps(decision, default=str) + "\n")
+                    trace_counter += 1
+                    if speed > 0:
+                        time.sleep(1.0 / speed)
+        finally:
+            random.setstate(py_random_state)
+            if np_random_module is not None and np_random_state is not None:
+                np_random_module.random.set_state(np_random_state)
         return out_path

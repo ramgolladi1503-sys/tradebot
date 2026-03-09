@@ -4,6 +4,7 @@ import json
 from config import config as cfg
 import core.market_data as market_data
 from core.indicators_live import compute_indicators
+from core.option_liquidity_cache import clear_option_liquidity_cache, update_option_liquidity_cache
 
 
 def _build_hist_rows(count: int, base_price: float = 100.0, step_minutes: int = 1):
@@ -61,7 +62,7 @@ def test_warm_seed_from_historical_enables_indicator_compute(tmp_path, monkeypat
     monkeypatch.setattr(
         market_data.kite_client,
         "historical_data",
-        lambda instrument_token, from_dt, to_dt, interval="minute": _build_hist_rows(40),
+        lambda instrument_token, from_dt, to_dt, interval="minute", **kwargs: _build_hist_rows(40),
     )
 
     symbol = "NIFTY_WARMSEED_TEST"
@@ -120,7 +121,7 @@ def test_fetch_live_market_data_seeds_empty_buffer_and_enables_indicators(tmp_pa
     monkeypatch.setattr(
         market_data.kite_client,
         "historical_data",
-        lambda instrument_token, from_dt, to_dt, interval="minute": _build_hist_rows(40, base_price=25000.0),
+        lambda instrument_token, from_dt, to_dt, interval="minute", **kwargs: _build_hist_rows(40, base_price=25000.0),
     )
 
     rows = market_data.fetch_live_market_data()
@@ -130,6 +131,105 @@ def test_fetch_live_market_data_seeds_empty_buffer_and_enables_indicators(tmp_pa
     assert snap["indicators_ok"] is True
     assert isinstance(snap.get("indicator_last_update_epoch"), (int, float))
     assert isinstance(snap.get("indicators_age_sec"), (int, float))
+
+
+def test_fetch_live_market_data_preserves_unknown_volume_as_none(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "NIFTY_UNKNOWN_VOLUME"
+    fixed_now = market_data.now_ist().replace(second=0, microsecond=0)
+
+    monkeypatch.setattr(cfg, "SYMBOLS", [symbol], raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 5, raising=False)
+    monkeypatch.setattr(cfg, "SYSTEM_WARMUP_MIN_BARS", 5, raising=False)
+    monkeypatch.setattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False, raising=False)
+    monkeypatch.setattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO", raising=False)
+
+    market_data._DATA_CACHE.clear()
+    market_data._OPEN_RANGE.clear()
+    market_data._INSUFFICIENT_OHLC_WARNED.clear()
+    market_data.ohlc_buffer._bars.pop(symbol, None)
+    market_data.ohlc_buffer.seed_bars(symbol, _build_hist_rows(10, base_price=25000.0))
+
+    monkeypatch.setattr(market_data, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(market_data, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(market_data, "now_utc_epoch", lambda: fixed_now.timestamp())
+    monkeypatch.setattr(
+        market_data,
+        "compute_indicators",
+        lambda bars, **kwargs: {
+            "ok": True,
+            "vwap": 25000.0,
+            "atr": 100.0,
+            "adx": 25.0,
+            "vol_z": 0.1,
+            "vwap_slope": 0.2,
+            "last_ts": fixed_now,
+        },
+    )
+
+    def _fake_get_ltp(sym: str):
+        market_data._DATA_CACHE.setdefault(sym, {})
+        market_data._DATA_CACHE[sym]["ltp_source"] = "live"
+        market_data._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_now.timestamp()
+        return 25000.0
+
+    monkeypatch.setattr(market_data, "get_ltp", _fake_get_ltp)
+
+    rows = market_data.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
+    assert snap["volume"] is None
+    assert market_data.ohlc_buffer.get_bars(symbol)[-1]["volume"] == 0
+
+
+def test_hydrate_live_option_chain_liquidity_preserves_cached_values_for_incomplete_update() -> None:
+    clear_option_liquidity_cache()
+    try:
+        update_option_liquidity_cache(
+            [
+                {
+                    "symbol": "NIFTY",
+                    "expiry": "2026-03-12",
+                    "strike": 22500,
+                    "type": "CE",
+                    "instrument_token": 991111,
+                    "volume": 6200,
+                    "current_volume": 6200,
+                    "oi": 30500,
+                    "oi_change": 180,
+                    "snapshot_ts_epoch": 100.0,
+                }
+            ],
+            source="unit_cache",
+        )
+        rows = market_data._hydrate_live_option_chain_liquidity(
+            "NIFTY",
+            [
+                {
+                    "symbol": "NIFTY",
+                    "expiry": "2026-03-12",
+                    "strike": 22500,
+                    "type": "CE",
+                    "instrument_token": 991111,
+                    "quote_age_sec": 0.8,
+                }
+            ],
+            chain_source="live",
+            now_epoch=200.0,
+        )
+
+        assert rows[0]["volume"] == 6200.0
+        assert rows[0]["current_volume"] == 6200.0
+        assert rows[0]["oi"] == 30500.0
+        assert rows[0]["oi_change"] == 180.0
+        assert rows[0]["liquidity_source"] == "unit_cache"
+    finally:
+        clear_option_liquidity_cache()
 
 
 def test_fetch_live_market_data_empty_buffer_sets_indicators_false(tmp_path, monkeypatch):
@@ -220,7 +320,7 @@ def test_warm_seed_fallback_to_240m_window(tmp_path, monkeypatch):
 
     calls = []
 
-    def _hist(_token, from_dt, to_dt, interval="minute"):
+    def _hist(_token, from_dt, to_dt, interval="minute", **kwargs):
         calls.append(int((to_dt - from_dt).total_seconds() // 60))
         if len(calls) == 1:
             return []
@@ -253,7 +353,7 @@ def test_startup_seed_populates_buffer_and_sets_indicator_timestamp(tmp_path, mo
     monkeypatch.setattr(
         market_data.kite_client,
         "historical_data",
-        lambda instrument_token, from_dt, to_dt, interval="minute": _build_hist_rows(60, base_price=25200.0),
+        lambda instrument_token, from_dt, to_dt, interval="minute", **kwargs: _build_hist_rows(60, base_price=25200.0),
     )
 
     market_data.ohlc_buffer._bars.pop(symbol, None)
@@ -286,7 +386,7 @@ def test_startup_seed_uses_configured_5m_200_bar_bootstrap(tmp_path, monkeypatch
     monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
     monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
 
-    def _hist(_instrument_token, from_dt, to_dt, interval="minute"):
+    def _hist(_instrument_token, from_dt, to_dt, interval="minute", **kwargs):
         calls.append(interval)
         return _build_hist_rows(220, base_price=25200.0, step_minutes=5)
 
@@ -331,7 +431,7 @@ def test_startup_seed_uses_long_lookback_window_when_short_windows_empty(tmp_pat
     monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
     monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
 
-    def _hist(_instrument_token, from_dt, to_dt, interval="minute"):
+    def _hist(_instrument_token, from_dt, to_dt, interval="minute", **kwargs):
         window_min = int((to_dt - from_dt).total_seconds() // 60)
         calls.append(window_min)
         if window_min >= (7 * 24 * 60):
@@ -368,7 +468,7 @@ def test_startup_seed_respects_nested_runtime_context_payload(tmp_path, monkeypa
     monkeypatch.setattr(
         market_data.kite_client,
         "historical_data",
-        lambda _instrument_token, _from_dt, _to_dt, interval="minute": _build_hist_rows(220, base_price=25200.0, step_minutes=5),
+        lambda _instrument_token, _from_dt, _to_dt, interval="minute", **kwargs: _build_hist_rows(220, base_price=25200.0, step_minutes=5),
     )
 
     market_data.ohlc_buffer._bars.pop(symbol, None)
@@ -408,7 +508,7 @@ def test_startup_seed_hist_fetch_failed_reason_is_explicit(tmp_path, monkeypatch
     monkeypatch.setattr(
         market_data.kite_client,
         "historical_data",
-        lambda _instrument_token, _from_dt, _to_dt, interval="minute": [],
+        lambda _instrument_token, _from_dt, _to_dt, interval="minute", **kwargs: [],
     )
 
     market_data.ohlc_buffer._bars.pop(symbol, None)
@@ -433,7 +533,7 @@ def test_warm_seed_retries_before_success(tmp_path, monkeypatch):
 
     calls = {"n": 0}
 
-    def _hist(_token, _from_dt, _to_dt, interval="minute"):
+    def _hist(_token, _from_dt, _to_dt, interval="minute", **kwargs):
         calls["n"] += 1
         if calls["n"] < 3:
             raise RuntimeError("transient_hist_error")
@@ -484,7 +584,7 @@ def test_fetch_market_data_hist_fetch_failed_marks_degraded_state_in_planning(tm
     monkeypatch.setattr(
         market_data.kite_client,
         "historical_data",
-        lambda _token, _from_dt, _to_dt, interval="minute": [],
+        lambda _token, _from_dt, _to_dt, interval="minute", **kwargs: [],
     )
 
     def _fake_get_ltp(sym: str):

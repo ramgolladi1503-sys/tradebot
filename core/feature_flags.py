@@ -1,5 +1,6 @@
 from core.paths import data_root, logs_dir
 import json
+import logging
 import os
 import time
 import hashlib
@@ -10,6 +11,9 @@ from config import config as cfg
 from core.audit_log import append_event
 from core.incidents import create_incident, SEV2
 from core.time_utils import now_utc_epoch
+
+
+logger = logging.getLogger(__name__)
 
 
 FLAGS_PATH = Path(getattr(cfg, "FEATURE_FLAGS_PATH", "config/feature_flags.json"))
@@ -25,7 +29,7 @@ def _read_json(path: Path) -> Dict[str, Any]:
     try:
         return json.loads(path.read_text())
     except Exception as exc:
-        print(f"[FLAGS_ERROR] read_failed path={path} err={exc}")
+        logger.error("flags_read_failed path=%s err=%s", path, exc)
         return {}
 
 
@@ -222,6 +226,6 @@ def maybe_auto_rollback() -> Dict[str, Any]:
                 "window_min": window_min,
             })
         except Exception as exc:
-            print(f"[FLAGS_ERROR] rollback_incident_failed err={exc}")
+            logger.warning("flags_rollback_incident_failed err=%s", exc)
         return {"rolled_back": True, "reason": "threshold_breach", "halt_rate": halt_rate, "error_rate": error_rate}
     return {"rolled_back": False, "reason": "within_threshold"}

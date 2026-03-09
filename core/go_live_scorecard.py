@@ -14,6 +14,7 @@ from core.events import append_event, read_events, write_json_atomic
 from core.freshness_sla import get_freshness_status
 from core.health_gate import run_health_gate
 from core.paths import logs_dir
+from core.regime_monitor import get_regime_monitor_status
 from core.reconciliation_project_from_events import build_recon
 from core.runtime_lifecycle import lifecycle
 from core.time_utils import utc_now
@@ -515,6 +516,41 @@ class GoLiveScorecard:
                     "Execution analytics artifact is missing.",
                     {"path": str(execution_analytics_path)},
                     "Generate execution analytics before final go-live review.",
+                )
+            )
+
+        # P1: regime monitor collapse warning.
+        try:
+            regime_status = get_regime_monitor_status(prefer_disk=True)
+            sample_count = int(regime_status.get("sample_count") or 0)
+            collapsed = bool(regime_status.get("collapsed"))
+            severe = bool(regime_status.get("severe"))
+            if sample_count >= int(getattr(cfg, "REGIME_MONITOR_MIN_SAMPLES", 24)) and (collapsed or severe):
+                warnings_rows.append(
+                    _issue(
+                        "REGIME_MONITOR_COLLAPSE_P1",
+                        "P1",
+                        "Regime monitor indicates prediction reliability collapse.",
+                        {
+                            "sample_count": sample_count,
+                            "accuracy": regime_status.get("accuracy"),
+                            "confidence_correlation": regime_status.get("confidence_correlation"),
+                            "collapsed": collapsed,
+                            "severe": severe,
+                            "collapse_streak": regime_status.get("collapse_streak"),
+                            "status_path": str(getattr(cfg, "REGIME_MONITOR_STATUS_PATH", logs_dir() / "regime_monitor_status.json")),
+                        },
+                        "Review regime thresholds/model drift before enabling regime-dependent live entries.",
+                    )
+                )
+        except Exception as exc:
+            warnings_rows.append(
+                _issue(
+                    "REGIME_MONITOR_COLLAPSE_P1",
+                    "P1",
+                    "Regime monitor status check failed with exception.",
+                    {"error": str(exc)},
+                    "Fix regime monitor status pipeline and rerun go-live checks.",
                 )
             )
 

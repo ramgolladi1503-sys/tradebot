@@ -1,10 +1,14 @@
 import json
+import logging
 import time
 from pathlib import Path
 import requests
 from config import config as cfg
 from core.trade_ticket import TradeTicket
 from core.paths import logs_dir
+
+
+logger = logging.getLogger(__name__)
 
 
 def _log_blocked(reason: str, payload: dict | None = None) -> None:
@@ -17,7 +21,7 @@ def _log_blocked(reason: str, payload: dict | None = None) -> None:
         with path.open("a") as f:
             f.write(json.dumps(row, default=str) + "\n")
     except Exception:
-        print("[TELEGRAM_BLOCKED] failed to log")
+        logger.error("telegram_blocked_log_failed")
 
 
 def send_trade_ticket(ticket: TradeTicket) -> bool:

@@ -18,6 +18,16 @@ from core.trade_identity import compute_trade_key, derive_strategy_id
 
 logger = logging.getLogger(__name__)
 
+_ENTRY_STATUSES_WITH_QUOTE_BACKFILL = {
+    "",
+    "OK",
+    "LIVE_OK",
+    "VALID",
+    "NONE",
+    "PRICE_MISMATCH",
+    "REST_FALLBACK",
+}
+
 
 REQUIRED_COLUMNS = [
     "timestamp",
@@ -34,6 +44,8 @@ REQUIRED_COLUMNS = [
     "option_type",
     "side",
     "entry",
+    "expected_entry",
+    "fill_entry",
     "signal_price",
     "current_ltp",
     "suggested_entry",
@@ -125,6 +137,17 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
 
     norm = df.copy()
     norm = _ensure_columns(norm, REQUIRED_COLUMNS + ["ui_warning"])
+    canonical_entry_fields = {
+        "execution_entry",
+        "execution_entry_source",
+        "execution_entry_status",
+        "display_entry",
+        "display_entry_source",
+        "display_entry_status",
+        "entry_reason",
+        "entry_clear_reason",
+    }
+    canonical_entry = any(col in norm.columns for col in canonical_entry_fields)
 
     # Map synonyms
     synonym_map = {
@@ -180,6 +203,44 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
 
             conf = _to_float(row.get("confidence"))
             norm.at[idx, "confidence"] = conf if conf is not None else None
+
+            if canonical_entry and _to_float(row.get("display_entry")) is not None:
+                norm.at[idx, "entry"] = _to_float(row.get("display_entry"))
+                norm.at[idx, "entry_status"] = row.get("display_entry_status")
+            # Never backfill executable entry from model/reference prices.
+            # Use suggested_entry only when quote validation is explicitly OK.
+            entry_val = _to_float(row.get("entry"))
+            if not canonical_entry and entry_val is None:
+                suggested_entry = _to_float(row.get("suggested_entry"))
+                current_ltp = _to_float(row.get("current_ltp"))
+                entry_status = str(row.get("entry_status") or "").strip().upper()
+                if suggested_entry is not None and entry_status in _ENTRY_STATUSES_WITH_QUOTE_BACKFILL:
+                    norm.at[idx, "entry"] = suggested_entry
+                elif current_ltp is not None and entry_status in _ENTRY_STATUSES_WITH_QUOTE_BACKFILL:
+                    norm.at[idx, "entry"] = current_ltp
+                elif _to_float(row.get("entry_price")) is not None and entry_status in _ENTRY_STATUSES_WITH_QUOTE_BACKFILL:
+                    norm.at[idx, "entry"] = _to_float(row.get("entry_price"))
+
+            # Keep model/planning expected entry visible in UI even when not executable.
+            # This is informational only; `entry` retains existing executable semantics.
+            expected_entry = _to_float(row.get("expected_entry"))
+            if canonical_entry and expected_entry is None:
+                expected_entry = _to_float(row.get("display_entry"))
+            if expected_entry is None:
+                for field in ("suggested_entry", "current_ltp", "entry_price", "signal_price", "entry"):
+                    value = _to_float(row.get(field))
+                    if value is not None:
+                        expected_entry = value
+                        break
+            if expected_entry is not None:
+                norm.at[idx, "expected_entry"] = expected_entry
+
+            # Fill entry is what execution could use now; mirror normalized entry behavior.
+            fill_entry = _to_float(row.get("fill_entry"))
+            if fill_entry is None:
+                fill_entry = _to_float(norm.at[idx, "entry"])
+            if fill_entry is not None:
+                norm.at[idx, "fill_entry"] = fill_entry
 
             status = str(row.get("status") or "PLANNING").upper()
             norm.at[idx, "status"] = status

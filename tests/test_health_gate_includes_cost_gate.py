@@ -24,6 +24,11 @@ def test_health_gate_includes_cost_gate(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         health_gate_mod,
+        "run_one_trade_can_build",
+        lambda desk, run_id: {"ok": True, "run_id": run_id, "desk": desk},
+    )
+    monkeypatch.setattr(
+        health_gate_mod,
         "read_events",
         lambda run_id=None, **kwargs: [
             {"type": "trade_intent_created"},

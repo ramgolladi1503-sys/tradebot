@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  tests:
+  unit_tests:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -33,7 +33,7 @@ jobs:
 
   health_gate:
     runs-on: ubuntu-latest
-    needs: tests
+    needs: unit_tests
     timeout-minutes: 10
     env:
       PYTHONPATH: .
@@ -77,4 +77,3 @@ jobs:
       - name: Fail job if health gate failed
         if: steps.run_health_gate.outcome == 'failure'
         run: exit 1
-

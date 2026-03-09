@@ -10,7 +10,10 @@ from config import config as cfg
 from core.depth_store import depth_store
 from core.fs_utils import ensure_parent_dir
 from core.market_context import derive_market_context
-from core.tick_store import last_tick_epoch as _mem_last_tick_epoch
+from core.freshness_policy import resolve_freshness_policy
+from core.tick_store import init_ticks as _init_ticks_schema
+from core.tick_store import get_latest_tick_rows_db as _get_latest_tick_rows_db
+from core.tick_store import get_max_tick_epoch_db as _get_max_tick_epoch_db
 from core.time_utils import (
     compute_age_sec,
     is_market_open_ist,
@@ -60,39 +63,14 @@ def _conn(db_path: Path) -> sqlite3.Connection:
     return sqlite3.connect(str(safe_path))
 
 
-def _query_max_epoch(
-    conn: sqlite3.Connection, table: str, token_filter: Optional[Sequence[int]] = None
-) -> Optional[float]:
+def _query_max_epoch(conn: sqlite3.Connection, table: str) -> Optional[float]:
     try:
-        if token_filter:
-            q_marks = ",".join(["?"] * len(token_filter))
-            row = conn.execute(
-                f"SELECT MAX(timestamp_epoch) FROM {table} WHERE instrument_token IN ({q_marks})",
-                token_filter,
-            ).fetchone()
-        else:
-            row = conn.execute(f"SELECT MAX(timestamp_epoch) FROM {table}").fetchone()
+        row = conn.execute(f"SELECT MAX(timestamp_epoch) FROM {table}").fetchone()
         if not row:
             return None
         return normalize_epoch_seconds(row[0])
     except Exception:
         return None
-
-
-def _query_max_epoch_chunked(
-    conn: sqlite3.Connection, table: str, token_filter: Sequence[int], chunk_size: int = 900
-) -> Optional[float]:
-    if not token_filter:
-        return None
-    latest = None
-    for i in range(0, len(token_filter), chunk_size):
-        chunk = token_filter[i : i + chunk_size]
-        val = _query_max_epoch(conn, table, chunk)
-        if val is None:
-            continue
-        if latest is None or val > latest:
-            latest = val
-    return latest
 
 
 def _latest_depth_epoch_from_store() -> Optional[float]:
@@ -133,10 +111,109 @@ def _fallback_index_tokens() -> List[int]:
     return tokens
 
 
-def get_freshness_status(force: bool = False) -> Dict[str, Any]:
+def _normalize_tokens(tokens: Sequence[int] | None) -> list[int]:
+    out: list[int] = []
+    for token in list(tokens or []):
+        try:
+            out.append(int(token))
+        except Exception:
+            continue
+    return out
+
+
+def _resolve_ltp_tokens(symbol: str | None, tokens: Sequence[int] | None) -> list[int]:
+    explicit = _normalize_tokens(tokens)
+    if explicit:
+        return explicit
+
+    token_map = _load_token_map()
+    if symbol:
+        mapped = _normalize_tokens(token_map.get(str(symbol).upper()) or [])
+        if mapped:
+            return mapped
+
+    store_tokens = _depth_store_tokens()
+    if store_tokens:
+        return store_tokens
+
+    if token_map:
+        merged: list[int] = []
+        seen: set[int] = set()
+        for vals in token_map.values():
+            for token in _normalize_tokens(vals):
+                if token in seen:
+                    continue
+                seen.add(token)
+                merged.append(token)
+        if merged:
+            return merged
+
+    return _fallback_index_tokens()
+
+
+def _ltp_metrics_from_db(
+    *,
+    tokens_for_ltp: Sequence[int],
+    now_epoch: float,
+    sla_threshold_sec: float,
+) -> dict[str, Any]:
+    token_list = _normalize_tokens(tokens_for_ltp)
+    if token_list:
+        rows = _get_latest_tick_rows_db(token_list)
+        latest_epoch = None
+        token_ages: dict[int, float] = {}
+        stale_tokens: list[int] = []
+        for token in token_list:
+            row = rows.get(token) or {}
+            ts_epoch = normalize_epoch_seconds((row or {}).get("ts_epoch"))
+            age_sec = compute_age_sec(ts_epoch, now_epoch) if ts_epoch is not None else None
+            if age_sec is not None:
+                token_ages[token] = age_sec
+            if ts_epoch is not None and (latest_epoch is None or ts_epoch > latest_epoch):
+                latest_epoch = ts_epoch
+            if age_sec is None or age_sec > sla_threshold_sec:
+                stale_tokens.append(token)
+        if latest_epoch is None:
+            latest_epoch = _get_max_tick_epoch_db()
+        max_tick_age_sec = (
+            max(token_ages.values())
+            if token_ages
+            else (compute_age_sec(latest_epoch, now_epoch) if latest_epoch is not None else None)
+        )
+        return {
+            "last_epoch": latest_epoch,
+            "source": "ticks_db_filtered" if rows else ("ticks_db_any" if latest_epoch is not None else "none"),
+            "stale_tokens": stale_tokens,
+            "max_tick_age_sec": max_tick_age_sec,
+            "tracked_tokens": token_list,
+        }
+
+    latest_epoch = _get_max_tick_epoch_db()
+    max_tick_age_sec = compute_age_sec(latest_epoch, now_epoch) if latest_epoch is not None else None
+    return {
+        "last_epoch": latest_epoch,
+        "source": "ticks_db_any" if latest_epoch is not None else "none",
+        "stale_tokens": [],
+        "max_tick_age_sec": max_tick_age_sec,
+        "tracked_tokens": [],
+    }
+
+
+def get_freshness_status(
+    symbol: str | None = None,
+    tokens: Sequence[int] | None = None,
+    force: bool = False,
+) -> Dict[str, Any]:
+    if isinstance(symbol, bool) and tokens is None and force is False:
+        # Backward compatibility for accidental positional usage: get_freshness_status(True)
+        force = bool(symbol)
+        symbol = None
+
     now_epoch = float(now_utc_epoch())
+    symbol_norm = str(symbol).upper() if symbol else None
+    scoped = symbol_norm is not None or bool(tokens)
     ttl_sec = float(getattr(cfg, "FEED_FRESHNESS_TTL_SEC", 5.0))
-    if not force and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
+    if (not scoped) and (not force) and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
         return dict(_CACHE["payload"])
 
     market_ctx = derive_market_context(
@@ -149,81 +226,63 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
     offhours_mode = bool(market_ctx.mode == "OFFHOURS")
     allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
     exec_mode = str(market_ctx.mode)
-    max_ltp_age = float(
-        getattr(
-            cfg,
-            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if allow_stale_quotes else "SLA_MAX_LTP_AGE_SEC",
-            900.0 if allow_stale_quotes else 2.5,
-        )
+    policy = resolve_freshness_policy(
+        mode=exec_mode,
+        market_open=bool(market_open),
+        allow_stale_quotes=bool(allow_stale_quotes),
+        live_ltp_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        live_depth_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
+        planning_ltp_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_LTP_AGE_SEC", 900.0)),
+        planning_depth_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC", 900.0)),
+        option_ok_live_sec=float(getattr(cfg, "FEED_HEALTH_OPTION_OK_AGE_SEC", 2.5)),
+        option_ok_planning_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_LTP_AGE_SEC", 900.0)),
+        expiry_lotto_mode=bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)),
     )
-    max_depth_age = float(
-        getattr(
-            cfg,
-            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if allow_stale_quotes else "SLA_MAX_DEPTH_AGE_SEC",
-            900.0 if allow_stale_quotes else 6.0,
-        )
-    )
-    require_depth_live = bool(getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
-    require_depth_non_live = bool(getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_NON_LIVE", False))
-    depth_required = require_depth_live if exec_mode == "LIVE" else require_depth_non_live
+    max_ltp_age = float(policy.ltp_max_age_sec)
+    max_depth_age = float(policy.depth_max_age_sec)
+    depth_required = bool(policy.depth_required and getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
 
     ltp_last_epoch = None
     depth_last_epoch = None
     ltp_source = "none"
     depth_source = "none"
     data_available = False
+    stale_tokens: list[int] = []
+    max_tick_age_sec = None
+
+    tokens_for_ltp = _resolve_ltp_tokens(symbol_norm, tokens)
+    ltp_metrics = _ltp_metrics_from_db(
+        tokens_for_ltp=tokens_for_ltp,
+        now_epoch=now_epoch,
+        sla_threshold_sec=max_ltp_age,
+    )
+    ltp_last_epoch = normalize_epoch_seconds(ltp_metrics.get("last_epoch"))
+    ltp_source = str(ltp_metrics.get("source") or "none")
+    stale_tokens = [int(t) for t in list(ltp_metrics.get("stale_tokens") or [])]
+    max_tick_age_sec = (
+        float(ltp_metrics.get("max_tick_age_sec"))
+        if ltp_metrics.get("max_tick_age_sec") is not None
+        else None
+    )
 
     db_path = Path(cfg.TRADE_DB_PATH)
     if db_path.exists():
         try:
+            _init_ticks_schema()
+        except Exception:
+            pass
+        try:
             with _conn(db_path) as conn:
-                token_map = _load_token_map()
-                nifty_tokens = [int(t) for t in (token_map.get("NIFTY") or []) if t is not None]
-                store_tokens = _depth_store_tokens()
-                fallback_tokens = _fallback_index_tokens()
-                tokens_for_ltp: List[int] = []
-                if store_tokens:
-                    if nifty_tokens:
-                        intersect = [t for t in store_tokens if t in set(nifty_tokens)]
-                        if intersect:
-                            tokens_for_ltp = intersect
-                            ltp_source = "depth_tokens_nifty"
-                        else:
-                            tokens_for_ltp = store_tokens
-                            ltp_source = "depth_tokens_all"
-                    else:
-                        tokens_for_ltp = store_tokens
-                        ltp_source = "depth_tokens_all"
-                elif nifty_tokens:
-                    tokens_for_ltp = nifty_tokens
-                    ltp_source = "token_map_nifty"
-                elif fallback_tokens:
-                    tokens_for_ltp = fallback_tokens
-                    ltp_source = "index_token_fallback"
-
-                if tokens_for_ltp:
-                    ltp_last_epoch = _query_max_epoch_chunked(conn, "ticks", tokens_for_ltp)
-                if ltp_last_epoch is None:
-                    ltp_last_epoch = _query_max_epoch(conn, "ticks")
-                    if ltp_last_epoch is not None:
-                        ltp_source = "ticks_any"
                 depth_last_epoch = _query_max_epoch(conn, "depth_snapshots")
                 if depth_last_epoch is not None:
                     depth_source = "depth_snapshots"
         except Exception:
-            ltp_last_epoch = None
             depth_last_epoch = None
 
     depth_store_epoch = _latest_depth_epoch_from_store()
     if depth_store_epoch is not None:
         depth_last_epoch = max(depth_last_epoch or 0.0, depth_store_epoch)
         depth_source = "depth_store"
-
-    mem_tick_epoch = normalize_epoch_seconds(_mem_last_tick_epoch())
-    if mem_tick_epoch is not None:
-        if ltp_last_epoch is None or mem_tick_epoch > ltp_last_epoch:
-            ltp_last_epoch = mem_tick_epoch
-            ltp_source = "tick_store_memory"
 
     if ltp_last_epoch is not None:
         data_available = True
@@ -241,6 +300,8 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
     if market_open and (not allow_stale_quotes):
         if no_ticks_yet:
             reasons.append("no_ticks_yet")
+        elif stale_tokens and tokens_for_ltp:
+            reasons.append(f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)}")
         elif ltp_age > max_ltp_age:
             reasons.append(f"ltp_stale:NIFTY age={ltp_age:.2f} max={max_ltp_age:.2f}")
 
@@ -284,17 +345,26 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
     payload = {
         "ok": ok,
         "state": state,
+        "mode": exec_mode,
+        "policy_profile": policy.name,
+        "symbol": symbol_norm,
         "market_open": market_open,
         "offhours_mode": bool(offhours_mode),
         "allow_stale_quotes": bool(allow_stale_quotes),
         "data_available": bool(data_available),
         "ts_epoch": now_epoch,
+        "sla_threshold_sec": max_ltp_age,
+        "max_tick_age_sec": max_tick_age_sec,
+        "stale_tokens": stale_tokens,
+        "tracked_tokens": tokens_for_ltp,
         "ltp": {
             "ok": ltp_ok if market_open else True,
             "age_sec": ltp_age,
             "max_age_sec": max_ltp_age,
-            "symbol": "NIFTY",
+            "required": bool(policy.ltp_required),
+            "symbol": symbol_norm or "NIFTY",
             "source": ltp_source,
+            "stale_tokens_count": len(stale_tokens),
         },
         "depth": {
             "ok": depth_ok if (market_open and depth_required) else True,
@@ -306,9 +376,11 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
         },
         "reasons": reasons,
     }
+    payload["ok"] = bool(payload.get("ok")) and (not stale_tokens or allow_stale_quotes or (not market_open))
 
-    _CACHE["ts_epoch"] = now_epoch
-    _CACHE["payload"] = payload
+    if not scoped:
+        _CACHE["ts_epoch"] = now_epoch
+        _CACHE["payload"] = payload
 
     _log_event(
         {
@@ -323,6 +395,8 @@ def get_freshness_status(force: bool = False) -> Dict[str, Any]:
             "depth_age_sec": depth_age,
             "ltp_source": ltp_source,
             "depth_source": depth_source,
+            "stale_tokens_count": len(stale_tokens),
+            "tracked_tokens_count": len(tokens_for_ltp),
         }
     )
 

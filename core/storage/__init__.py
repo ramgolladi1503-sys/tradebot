@@ -88,17 +88,49 @@ def emit_gate_rejected_event(
     data_source: str = "decision",
     missing_fields: list[str] | None = None,
     features_summary: Mapping[str, Any] | None = None,
+    # ---- NEW (optional) structured decision diagnostics ----
+    decision_stage: str | None = None,
+    decision_explain: str | None = None,
+    decision_blockers: list[str] | None = None,
+    strategy_telemetry: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
+    """
+    Emit a standardized gate_rejected event.
+
+    Backwards compatible:
+      - callers may continue to pass only the original parameters.
+    New optional fields:
+      - decision_stage / decision_explain / decision_blockers
+      - strategy_telemetry (e.g. qual_fail_codes, picked_candidate)
+    """
+    sym = str(symbol or "").upper() or None
+    mode_norm = str(mode or getattr(cfg, "TRADING_MODE", getattr(cfg, "EXECUTION_MODE", "PAPER"))).upper()
+
+    # Ensure JSON-serializable + bounded
+    blockers = [str(x) for x in (decision_blockers or []) if str(x).strip()]
+    blockers = blockers[:64]
+    telem = dict(strategy_telemetry or {})
+    # Avoid huge payloads (candidate lists etc.)
+    if isinstance(telem.get("qual_fail_reasons_raw"), list):
+        telem["qual_fail_reasons_raw"] = list(telem.get("qual_fail_reasons_raw") or [])[:10]
+    if isinstance(telem.get("all_candidates"), list):
+        telem["all_candidates"] = list(telem.get("all_candidates") or [])[:10]
+
     payload = {
         "event_type": "gate_rejected",
         "desk": str(getattr(cfg, "DESK_ID", "DEFAULT")),
-        "mode": str(mode or getattr(cfg, "TRADING_MODE", getattr(cfg, "EXECUTION_MODE", "PAPER"))).upper(),
-        "symbols": [str(symbol or "").upper()] if symbol else [],
+        "mode": mode_norm,
+        "symbols": [sym] if sym else [],
         "gate_name": gate_name,
         "reason_code": str(reason_code or "")[:160],
         "data_source": str(data_source or "decision"),
         "missing_fields": list(missing_fields or []),
         "features_summary": dict(features_summary or {}),
+        # ---- NEW fields (used by readiness_gate + dashboards) ----
+        "decision_stage": str(decision_stage)[:120] if decision_stage else None,
+        "decision_explain": str(decision_explain)[:500] if decision_explain else None,
+        "decision_blockers": blockers,
+        "strategy_telemetry": telem,
         "metadata": {"strategy": strategy},
     }
     return emit_event(payload)

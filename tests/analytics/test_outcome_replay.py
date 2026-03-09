@@ -127,3 +127,65 @@ def test_outcome_replay_handles_gap_candles_missing_intervals():
     # For no-hit windows, replay should resolve at the latest observed point in range.
     assert row["resolution_ts_epoch_ms"] == 1740724860000
     assert row["trade_outcome"]["ts_epoch_ms"] == row["resolution_ts_epoch_ms"]
+
+
+def test_outcome_replay_no_series_data_primary_reason():
+    event = {
+        "event_id": "evt_no_series",
+        "trade_key": "NIFTY|2026-03-05|22500|CE|BUY",
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "entry": 100.0,
+        "target": 110.0,
+        "stop": 95.0,
+        "reject_ts_epoch": 1740723900000,
+        "reject_reason": "premium_band_fail",
+        "reason_codes": ["premium_band_fail", "liquidity_hard_veto"],
+    }
+
+    def _empty_loader(event_row, start_ms, end_ms, interval):
+        del event_row, start_ms, end_ms, interval
+        return [], "no_series_data"
+
+    row = analyze_event_outcome(
+        event,
+        lookahead_minutes=30,
+        candle_interval="1minute",
+        series_loader=_empty_loader,
+    )
+
+    assert row["outcome_reason"] == "NO_SERIES_DATA"
+    assert row["trade_outcome"]["reject_reason"] == "NO_SERIES_DATA"
+    assert row["trade_outcome"]["exec_feasible_flags"]["has_candle_data"] is False
+    assert row["trade_outcome"]["exec_feasible_flags"]["has_series_data"] is False
+    assert row["series_source"] == "no_series_data"
+    assert row["trade_outcome"]["reason_codes"] == ["NO_SERIES_DATA"]
+    assert row["trade_outcome"]["reject_reasons"] == ["NO_SERIES_DATA"]
+    assert row["trade_outcome"]["primary_reject_reason"] == "NO_SERIES_DATA"
+
+
+def test_outcome_replay_series_data_keeps_strategy_reject_reason():
+    candles = _load_json("candles_target_then_sl.json")
+    event = {
+        "event_id": "evt_premium_series",
+        "trade_key": "NIFTY|2026-03-05|22500|CE|BUY",
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "entry": 100.0,
+        "target": 105.0,
+        "stop": 95.0,
+        "reject_ts_epoch": 1740723900000,
+        "reject_reason": "premium_band_fail",
+        "reason_codes": ["premium_band_fail", "liquidity_hard_veto"],
+    }
+    row = analyze_event_outcome(
+        event,
+        lookahead_minutes=30,
+        candle_interval="1minute",
+        series_loader=_loader_from_candles(candles),
+    )
+    assert row["outcome_reason"] == "TARGET_FIRST"
+    assert row["trade_outcome"]["reject_reason"] == "premium_band_fail"
+    assert row["trade_outcome"]["reason_codes"] == ["premium_band_fail", "liquidity_hard_veto"]
+    assert row["trade_outcome"]["reject_reasons"] == ["premium_band_fail", "liquidity_hard_veto"]
+    assert row["trade_outcome"]["primary_reject_reason"] == "premium_band_fail"

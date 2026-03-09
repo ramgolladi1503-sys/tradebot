@@ -5,13 +5,20 @@ Call derive_market_context() instead of ad-hoc EXECUTION_MODE/market_open checks
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from config import config as cfg
 from config.profile import resolve_trading_mode
-from core.time_utils import is_market_open_ist
+from core.time_utils import is_market_open_ist, now_ist
+
+logger = logging.getLogger(__name__)
+
+_NSE_FNO_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY"}
+_NSE_FNO_INSTRUMENTS = {"OPT", "FNO", "OPTION", "OPTIONS", "FUT", "FUTURE"}
+_SEGMENT_COERCE_WARNED: set[tuple[str, str, str]] = set()
 
 
 def _normalized_context_mapping(snapshot_or_config: Mapping[str, Any] | Any = None) -> Mapping[str, Any] | None:
@@ -76,6 +83,43 @@ def _extract_segment(snapshot_or_config: Mapping[str, Any] | Any = None) -> str:
     return segment
 
 
+def _extract_symbol_instrument(snapshot_or_config: Mapping[str, Any] | Any = None) -> tuple[str | None, str | None]:
+    normalized = _normalized_context_mapping(snapshot_or_config)
+    symbol = None
+    instrument = None
+    if isinstance(normalized, Mapping):
+        raw_symbol = normalized.get("symbol") or normalized.get("underlying")
+        raw_instrument = normalized.get("instrument") or normalized.get("instrument_type")
+        symbol = str(raw_symbol).strip().upper() if raw_symbol not in (None, "") else None
+        instrument = str(raw_instrument).strip().upper() if raw_instrument not in (None, "") else None
+    return symbol, instrument
+
+
+def coerce_segment_for_market_context(
+    segment: str | None,
+    *,
+    symbol: str | None = None,
+    instrument: str | None = None,
+) -> str:
+    resolved_segment = str(segment or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")).strip().upper() or "NSE_FNO"
+    symbol_key = str(symbol or "").strip().upper()
+    instrument_key = str(instrument or "").strip().upper()
+    needs_nse_fno = bool(symbol_key in _NSE_FNO_SYMBOLS or instrument_key in _NSE_FNO_INSTRUMENTS)
+    if needs_nse_fno and resolved_segment != "NSE_FNO":
+        warn_key = (symbol_key or "UNKNOWN", instrument_key or "UNKNOWN", resolved_segment)
+        if warn_key not in _SEGMENT_COERCE_WARNED:
+            _SEGMENT_COERCE_WARNED.add(warn_key)
+            logger.warning(
+                "MARKET_CONTEXT_SEGMENT_COERCED now_ist=%s symbol=%s instrument=%s segment=%s->NSE_FNO",
+                now_ist().isoformat(),
+                symbol_key or "UNKNOWN",
+                instrument_key or "UNKNOWN",
+                resolved_segment,
+            )
+        return "NSE_FNO"
+    return resolved_segment
+
+
 def derive_market_context(
     snapshot_or_config: Mapping[str, Any] | Any = None,
     *,
@@ -105,6 +149,12 @@ def derive_market_context(
 
     force_disable = bool(getattr(cfg, "OFFHOURS_FORCE_DISABLE", False))
     force_enable = (not force_disable) and bool(getattr(cfg, "OFFHOURS_FORCE_ENABLE", False))
+    extracted_symbol, extracted_instrument = _extract_symbol_instrument(normalized or snapshot_or_config)
+    resolved_segment = coerce_segment_for_market_context(
+        str(segment) if segment is not None else _extract_segment(normalized or snapshot_or_config),
+        symbol=extracted_symbol,
+        instrument=extracted_instrument,
+    )
 
     explicit_market_open = _to_bool_or_none(market_open)
     explicit_offhours = None
@@ -139,9 +189,8 @@ def derive_market_context(
         elif explicit_market_open is not None:
             inferred_market_open = bool(explicit_market_open)
         else:
-            seg = str(segment) if segment is not None else _extract_segment(normalized or snapshot_or_config)
             try:
-                inferred_market_open = bool(is_market_open_ist(segment=seg))
+                inferred_market_open = bool(is_market_open_ist(segment=resolved_segment))
             except Exception:
                 # Fail closed for mode derivation: prefer stricter LIVE behavior if uncertain.
                 inferred_market_open = bool(exec_mode != "LIVE")
@@ -157,6 +206,15 @@ def derive_market_context(
     require_live_quotes = bool(mode == "LIVE" and is_market_open)
     allow_stale_quotes = bool(mode in {"OFFHOURS", "SIM", "PAPER"})
     planning_only = bool(mode in {"OFFHOURS", "SIM", "PAPER"})
+    if bool(getattr(cfg, "MARKET_CONTEXT_LOG_MODE", False)):
+        logger.info(
+            "MARKET_CONTEXT_DERIVED now_ist=%s segment=%s mode=%s market_open=%s exec_mode=%s",
+            now_ist().isoformat(),
+            resolved_segment,
+            mode,
+            bool(is_market_open),
+            exec_mode,
+        )
     return MarketContext(
         mode=mode,
         is_market_open=bool(is_market_open),

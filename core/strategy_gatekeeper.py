@@ -1,6 +1,9 @@
+import logging
 from dataclasses import dataclass
 from config import config as cfg
 from core.market_context import derive_market_context
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -136,7 +139,7 @@ class StrategyGatekeeper:
                 else:
                     reasons.append("cross_asset_optional_warn")
         except Exception as exc:
-            print(f"[GATEKEEPER_ERROR] cross_asset_check_failed err={exc}")
+            logger.warning("gatekeeper_cross_asset_check_failed err=%s", exc)
             reasons.append("cross_asset_check_error")
             if require_x and required:
                 return GateResult(False, None, reasons)

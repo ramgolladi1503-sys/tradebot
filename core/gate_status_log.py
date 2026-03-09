@@ -1,5 +1,8 @@
 import json
+import logging
 from pathlib import Path
+from datetime import date, datetime
+import base64
 from core.paths import logs_dir
 
 from config import config as cfg
@@ -9,6 +12,30 @@ from core.time_utils import now_ist, now_utc_epoch
 def gate_status_path(desk_id: str | None = None) -> Path:
     desk = desk_id or getattr(cfg, "DESK_ID", "DEFAULT")
     return logs_dir() / f"desks/{desk}/gate_status.jsonl"
+
+
+def gate_status_error_path(desk_id: str | None = None) -> Path:
+    desk = desk_id or getattr(cfg, "DESK_ID", "DEFAULT")
+    return logs_dir() / f"desks/{desk}/gate_status_errors.jsonl"
+
+
+def _json_default(value):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        raw = bytes(value)
+        return {"encoding": "base64", "data": base64.b64encode(raw).decode("ascii")}
+    try:
+        module_name = str(getattr(type(value), "__module__", ""))
+        if module_name.startswith("numpy"):
+            if hasattr(value, "item"):
+                return value.item()
+            return str(value)
+    except Exception:
+        pass
+    return str(value)
 
 
 def build_gate_status_record(
@@ -122,7 +149,7 @@ def build_gate_status_record(
     return payload
 
 
-def append_gate_status(record: dict, desk_id: str | None = None) -> None:
+def append_gate_status(record: dict, desk_id: str | None = None) -> bool:
     path = gate_status_path(desk_id=desk_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -130,5 +157,42 @@ def append_gate_status(record: dict, desk_id: str | None = None) -> None:
         "ts_ist": now_ist().isoformat(),
         **(record or {}),
     }
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    try:
+        with path.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    payload,
+                    ensure_ascii=True,
+                    default=_json_default,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
+        return True
+    except Exception as exc:
+        err_path = gate_status_error_path(desk_id=desk_id)
+        try:
+            err_path.parent.mkdir(parents=True, exist_ok=True)
+            err_payload = {
+                "ts_epoch": now_utc_epoch(),
+                "ts_ist": now_ist().isoformat(),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "desk_id": desk_id or getattr(cfg, "DESK_ID", "DEFAULT"),
+                "record": record or {},
+            }
+            with err_path.open("a", encoding="utf-8") as ef:
+                ef.write(
+                    json.dumps(
+                        err_payload,
+                        ensure_ascii=True,
+                        default=_json_default,
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        logger.error("gate_status_log_write_failed err=%s:%s", type(exc).__name__, exc)
+        return False
+logger = logging.getLogger(__name__)

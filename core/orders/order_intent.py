@@ -46,9 +46,35 @@ class OrderIntent:
     strike: Optional[float] = None
     right: Optional[str] = None
     multiplier: Optional[float] = None
+    trade_id: Optional[str] = None
+    intent_type: str = "PLACE_ORDER"
+    client_order_id: Optional[str] = None
+    status: str = "NEW"
+
+    @staticmethod
+    def compute_client_order_id(
+        *,
+        trade_id: str | None,
+        intent_type: str | None,
+        symbol: str | None,
+        side: str | None,
+    ) -> str:
+        canonical = "|".join(
+            [
+                str(trade_id or "").strip(),
+                str(intent_type or "PLACE_ORDER").strip().upper(),
+                str(symbol or "").strip().upper(),
+                str(side or "").strip().upper(),
+            ]
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def to_canonical_dict(self) -> dict[str, Any]:
         payload = asdict(self)
+        # Runtime idempotency fields are intentionally excluded from legacy
+        # approval hash semantics to preserve backward compatibility.
+        for runtime_key in ("trade_id", "intent_type", "client_order_id", "status"):
+            payload.pop(runtime_key, None)
         canonical: dict[str, Any] = {}
         for key in sorted(payload.keys()):
             value = payload.get(key)
@@ -104,9 +130,19 @@ class OrderIntent:
             or ("option" if right or pick("strike") is not None else "future" if pick("expiry") else "equity")
         )
         strategy_id = str(pick("strategy_id", pick("strategy", "UNKNOWN")) or "UNKNOWN")
+        trade_id = str(pick("trade_id", pick("id", pick("signal_id", ""))) or "").strip() or None
+        intent_type = str(pick("intent_type", "PLACE_ORDER") or "PLACE_ORDER").upper()
+        symbol = str(pick("symbol", "") or "")
+        side = str(pick("side", "") or "").upper()
+        client_order_id = cls.compute_client_order_id(
+            trade_id=trade_id,
+            intent_type=intent_type,
+            symbol=symbol,
+            side=side,
+        )
         return cls(
-            symbol=str(pick("symbol", "") or ""),
-            side=str(pick("side", "") or "").upper(),
+            symbol=symbol,
+            side=side,
             qty=qty,
             order_type=str(pick("order_type", "LIMIT") or "LIMIT").upper(),
             limit_price=None if limit_price is None else float(limit_price),
@@ -119,4 +155,8 @@ class OrderIntent:
             strike=pick("strike"),
             right=right,
             multiplier=pick("multiplier"),
+            trade_id=trade_id,
+            intent_type=intent_type,
+            client_order_id=client_order_id,
+            status=str(pick("intent_status", "NEW") or "NEW").upper(),
         )

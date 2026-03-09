@@ -1,6 +1,7 @@
 from core.paths import data_root, logs_dir
 import time
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,12 +12,16 @@ from core.paper_fill_simulator import PaperFillSimulator
 from core.trade_store import insert_execution_stat
 from core.fill_quality import log_fill_quality
 from core.execution_quality import execution_quality_score
+from core.orders.execution_plan import ExecutionPlan
 from core.orders.order_intent import OrderIntent
 from core.orders.state_machine import OrderState
 from core.readiness_gate import run_readiness_check
 from core.freshness_sla import get_freshness_status
 from core.market_data_monitor import get_feed_health_monitor
 from core.feed.gate import check_execution_allowed
+
+
+logger = logging.getLogger(__name__)
 
 class ExecutionRouter:
     """
@@ -35,6 +40,16 @@ class ExecutionRouter:
 
     def execute(self, trade, bid, ask, volume, depth=None, snapshot_fn=None, spread_pct=None, depth_imbalance=None, vol_z=None):
         mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+        try:
+            execution_plan = ExecutionPlan.from_trade(trade, mode=mode)
+        except Exception as exc:
+            return False, None, {
+                "decision_mid": None,
+                "decision_spread": None,
+                "fill_price": None,
+                "slippage": None,
+                "reason_if_aborted": f"execution_plan_invalid:{type(exc).__name__}",
+            }
         order_intent = OrderIntent.from_trade(
             trade,
             mode=mode,
@@ -66,6 +81,8 @@ class ExecutionRouter:
                 body["broker_order_id"] = current_order.broker_order_id
                 body["created_at"] = current_order.created_at
                 body["updated_at"] = current_order.updated_at
+            body["snapshot_id"] = execution_plan.snapshot_id
+            body["decision_id"] = execution_plan.decision_id
             return body
 
         def _transition(
@@ -93,7 +110,15 @@ class ExecutionRouter:
 
         def _abort(reason, *, extra=None, note=None):
             if note:
-                self._record_intent(trade, bid, ask, volume, depth=depth, note=note)
+                self._record_intent(
+                    trade,
+                    bid,
+                    ask,
+                    volume,
+                    depth=depth,
+                    note=note,
+                    execution_plan=execution_plan,
+                )
             _transition(self._terminal_state_for_reason(reason), reason=reason)
             payload = {
                 "decision_mid": None,
@@ -160,7 +185,15 @@ class ExecutionRouter:
                 )
 
         if mode in {"SIM", "PAPER"}:
-            self._record_intent(trade, bid, ask, volume, depth=depth, note=f"{mode.lower()} intent")
+            self._record_intent(
+                trade,
+                bid,
+                ask,
+                volume,
+                depth=depth,
+                note=f"{mode.lower()} intent",
+                execution_plan=execution_plan,
+            )
             if snapshot_fn is None or not callable(snapshot_fn):
                 return _abort("no_quote_fn")
             first = snapshot_fn()
@@ -226,7 +259,7 @@ class ExecutionRouter:
                     "fill_ratio": fill_ratio,
                 })
             except Exception as exc:
-                print(f"[EXECUTION_STAT_ERROR] {exc}")
+                logger.warning("execution_stat_error err=%s", exc)
             self._record_fill_quality(trade, bid, ask, limit_price, start_ts, filled, price, report)
             if filled and report:
                 self.engine.calibrate_slippage(report.get("slippage"), instrument=getattr(trade, "instrument", "OPT"))
@@ -265,7 +298,7 @@ class ExecutionRouter:
                         mode=mode,
                     )
                 except Exception as exc:
-                    print(f"[EXECUTION_FILL_EVENT_WARN] {exc}")
+                    logger.warning("execution_fill_event_warn err=%s", exc)
                 return filled, price, _report(report or {})
 
             abort_reason = "execution_aborted"
@@ -344,7 +377,15 @@ class ExecutionRouter:
                         "feed_group": gate_details.get("group_key"),
                     },
                 )
-            self._record_intent(trade, bid, ask, volume, depth=depth, note="live placement requested")
+            self._record_intent(
+                trade,
+                bid,
+                ask,
+                volume,
+                depth=depth,
+                note="live placement requested",
+                execution_plan=execution_plan,
+            )
             return _abort("live_not_implemented")
 
         return _abort("unknown_execution_mode")
@@ -457,7 +498,7 @@ class ExecutionRouter:
             payload["execution_quality_score"] = execution_quality_score(payload)
         log_fill_quality(payload)
 
-    def _record_intent(self, trade, bid, ask, volume, depth=None, note="live placement disabled"):
+    def _record_intent(self, trade, bid, ask, volume, depth=None, note="live placement disabled", execution_plan=None):
         try:
             path = Path(
                 str(
@@ -478,6 +519,8 @@ class ExecutionRouter:
                 "volume": volume,
                 "depth_top": None,
                 "note": note,
+                "snapshot_id": getattr(execution_plan, "snapshot_id", None),
+                "decision_id": getattr(execution_plan, "decision_id", None),
             }
             try:
                 if depth and isinstance(depth, dict):
@@ -495,4 +538,4 @@ class ExecutionRouter:
             warn_once = bool(getattr(cfg, "EXECUTION_INTENTS_LOG_WARN_ONCE", False))
             if warn_once and (not self._intent_log_write_warned):
                 self._intent_log_write_warned = True
-                print(f"[EXECUTION_INTENT_ERROR] {exc}")
+                logger.warning("execution_intent_error err=%s", exc)

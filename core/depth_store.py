@@ -1,6 +1,7 @@
 from collections import defaultdict, deque
 import time
 import json
+import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from core.trade_store import insert_depth_snapshot
@@ -9,6 +10,7 @@ from core.log_writer import get_jsonl_writer
 
 _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
+logger = logging.getLogger(__name__)
 
 class DepthStore:
     def __init__(self):
@@ -47,9 +49,9 @@ class DepthStore:
                     "error": str(exc),
                 })
                 if not ok:
-                    print(f"[DEPTH_STORE_ERROR] failed to log path={_ERROR_LOG_PATH} err=write_failed")
+                    logger.error("depth_store_error_log_write_failed path=%s", _ERROR_LOG_PATH)
             except Exception as log_exc:
-                print(f"[DEPTH_STORE_ERROR] failed to log path={_ERROR_LOG_PATH} err={type(log_exc).__name__}:{log_exc}")
+                logger.error("depth_store_error_log_failed path=%s err=%s:%s", _ERROR_LOG_PATH, type(log_exc).__name__, log_exc)
 
     def get(self, instrument_token):
         return self.books.get(instrument_token)

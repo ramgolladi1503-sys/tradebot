@@ -190,3 +190,17 @@ Example 2:
 - Mover rejected by spread gate (`reject_reasons` contains spread fail)
 - but pre-T0 execution quality looked acceptable
 - likely action class: gate threshold review under confidence gating (offline only)
+
+## Outcome Replay Reason Attribution Check
+
+When replay has no series/candle data, `outcome_reason` and `trade_outcome.reject_reason`
+must both be `NO_SERIES_DATA` (strategy veto reasons must not override root-cause attribution).
+
+Quick verification:
+
+```bash
+PYTHONPATH=. python -m core.analytics.outcome_replay --date 2026-02-27 --scope rejected
+rg -n '"outcome_reason":"NO_SERIES_DATA"' runtime/analytics/outcomes/2026-02-27.jsonl | head
+```
+
+For those rows, verify `trade_outcome.reject_reason` is `NO_SERIES_DATA`.

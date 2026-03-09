@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from config import config as cfg
-from core.time_utils import now_ist
+from core.time_utils import is_market_open_ist, now_ist
 
 try:
     import holidays
@@ -138,3 +138,18 @@ def next_expiry_after(start_date, expiry_type="WEEKLY", symbol: str | None = Non
         if candidate.weekday() == weekday and candidate not in IN_HOLIDAYS:
             return candidate
     return None
+
+
+def market_open(now: datetime | None = None) -> bool:
+    """Canonical market-open predicate used by runtime refresh and UI gates."""
+    try:
+        return bool(
+            is_market_open_ist(
+                now=now,
+                open_time=None,
+                close_time=None,
+                segment=str(getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")),
+            )
+        )
+    except Exception:
+        return False

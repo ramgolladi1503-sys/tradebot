@@ -7,6 +7,7 @@ from typing import Any, Iterable
 
 from config import config as cfg
 from core.paths import desk_logs_dir, desks_dir, logs_dir, trade_db_path
+from core.snapshot_schema import compute_snapshot_id
 from dashboard.models import (
     ArtifactVM,
     DepthVM,
@@ -86,6 +87,91 @@ def _artifact_vm(
     return vm_cls(desk_id=desk_id, status=status, path=path, message=message, payload=payload)
 
 
+def _load_market_snapshot_payload(desk_id: str, runtime_payload: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    inline = runtime_payload.get("market_snapshot")
+    if isinstance(inline, dict):
+        return dict(inline), None
+
+    snapshot_path_text = str(runtime_payload.get("snapshot_path") or "").strip()
+    candidates: list[Path] = []
+    if snapshot_path_text:
+        candidates.append(Path(snapshot_path_text))
+    candidates.extend(
+        [
+            desk_logs_dir(desk_id) / "market_snapshot_latest.json",
+            logs_dir() / "market_snapshot_latest.json",
+        ]
+    )
+    snapshot_path = _select_path(candidates)
+    if not snapshot_path.exists():
+        return {}, None
+    try:
+        payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {}, f"snapshot_parse_error:{exc}"
+    if not isinstance(payload, dict):
+        return {}, "snapshot_payload_not_object"
+    return dict(payload), None
+
+
+def _build_feed_payload_from_snapshot(
+    desk_id: str,
+    runtime_payload: dict[str, Any],
+) -> tuple[str, str | None, dict[str, Any]]:
+    snapshot, snapshot_error = _load_market_snapshot_payload(desk_id, runtime_payload)
+    if snapshot_error:
+        return "error", snapshot_error, {}
+    if not snapshot:
+        return "", None, {}
+
+    try:
+        from core.contracts.invariants import assert_invariants
+        from core.health_gate import evaluate_runtime_health
+
+        assert_invariants(snapshot, stage="dashboard_loader")
+        runtime_feed = runtime_payload.get("feed") if isinstance(runtime_payload.get("feed"), dict) else {}
+        feed_connected_raw = runtime_feed.get("ws_connected")
+        if isinstance(feed_connected_raw, bool):
+            feed_connected = feed_connected_raw
+        else:
+            # Unknown feed connectivity must not hard-fail the loader.
+            feed_connected = True
+        db_ok_raw = runtime_payload.get("db_ok")
+        db_ok = bool(db_ok_raw) if db_ok_raw is not None else True
+        runtime_eval = evaluate_runtime_health(
+            snapshot,
+            feed_connected=feed_connected,
+            db_ok=db_ok,
+        )
+    except Exception as exc:
+        return "error", f"snapshot_runtime_eval_error:{type(exc).__name__}", {}
+
+    snapshot_id = str(snapshot.get("snapshot_id") or "").strip()
+    if not snapshot_id:
+        snapshot_id = compute_snapshot_id(snapshot)
+    freshness = snapshot.get("freshness") if isinstance(snapshot.get("freshness"), dict) else {}
+    payload = dict(runtime_payload)
+    payload["snapshot_id"] = snapshot_id
+    payload["freshness_source"] = "snapshot_v1"
+    payload["freshness"] = {
+        "max_tick_age_sec": freshness.get("max_tick_age_sec"),
+        "sla_threshold_sec": freshness.get("sla_threshold_sec"),
+        "stale_tokens_count": freshness.get("stale_tokens_count"),
+    }
+    payload["runtime_health"] = runtime_eval
+    payload["status_light"] = "OK" if bool(runtime_eval.get("ok")) else "BLOCKED"
+    status = "ok" if bool(runtime_eval.get("ok")) else "error"
+    message = None
+    if not bool(runtime_eval.get("ok")):
+        blockers = runtime_eval.get("blockers") if isinstance(runtime_eval.get("blockers"), list) else []
+        if blockers:
+            codes = [str((item or {}).get("code") or "UNKNOWN") for item in blockers]
+            message = f"runtime_health_blocked:{'|'.join(codes)}"
+        else:
+            message = "runtime_health_blocked"
+    return status, message, payload
+
+
 def load_health_gate_report(desk: str | None = None) -> HealthGateVM:
     desk_id = _desk_id_text(desk)
     path = _select_path(_candidate_log_paths(desk_id, "health_gate_report.json"))
@@ -129,7 +215,30 @@ def load_feed_state(desk: str | None = None) -> FeedVM:
         *_candidate_log_paths(desk_id, "feed_health.json"),
     ]
     path = _select_path(candidates)
-    return _artifact_vm(FeedVM, desk_id, path, "feed artifact missing")
+    status, message, payload = _load_json_payload(path, missing_message="feed artifact missing")
+    if status in {"missing", "error"}:
+        return FeedVM(desk_id=desk_id, status=status, path=path, message=message, payload=payload)
+
+    snapshot_status, snapshot_message, snapshot_payload = _build_feed_payload_from_snapshot(desk_id, payload)
+    if snapshot_status:
+        return FeedVM(
+            desk_id=desk_id,
+            status=snapshot_status,
+            path=path,
+            message=snapshot_message,
+            payload=snapshot_payload,
+        )
+
+    # Legacy fallback: keep informational only and explicitly marked.
+    legacy_payload = dict(payload or {})
+    legacy_payload["freshness_source"] = "legacy_runtime_health"
+    legacy_payload["legacy_freshness"] = {
+        "ltp_age_sec": ((legacy_payload.get("feed") or {}).get("ltp_age_sec")),
+        "depth_age_sec": ((legacy_payload.get("feed") or {}).get("depth_age_sec")),
+        "reasons": list(((legacy_payload.get("feed") or {}).get("reasons") or [])),
+    }
+    legacy_payload["status_light"] = "UNKNOWN_LEGACY"
+    return FeedVM(desk_id=desk_id, status=status, path=path, message=message, payload=legacy_payload)
 
 
 def load_risk_state(desk: str | None = None) -> RiskVM:
@@ -293,4 +402,3 @@ def load_depth_vm(db_path: Path, fetch_fn=None) -> DepthVM:
             payload={},
         )
     return load_depth_snapshot(_desk_id_text(None))
-

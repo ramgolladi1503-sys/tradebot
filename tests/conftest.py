@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 import pytest
 
-from core.runtime_lifecycle import lifecycle
+from core.lifecycle import stop_all as stop_lifecycle
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -19,4 +19,5 @@ def _shutdown_managed_runtime_lifecycle():
     try:
         yield
     finally:
-        lifecycle.stop_all(timeout=3.0)
+        # Explicit component stop first, then registered handles; safe to call repeatedly.
+        stop_lifecycle(timeout=3.0, reason="pytest_teardown")

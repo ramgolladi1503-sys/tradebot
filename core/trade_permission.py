@@ -137,6 +137,25 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def normalize_signal_score(signal_score: float | None) -> float:
+    """
+    Normalize signal score to [0, 1] exactly once.
+
+    Accepted input ranges:
+    - [0, 1] -> unchanged
+    - (1, 100] -> interpreted as percentage score and divided by 100
+    - otherwise -> clamped to [0, 1]
+    """
+    raw = _safe_float(signal_score)
+    if raw is None:
+        return 0.0
+    if 0.0 <= raw <= 1.0:
+        return float(raw)
+    if 1.0 < raw <= 100.0:
+        return float(raw / 100.0)
+    return clamp(float(raw), 0.0, 1.0)
+
+
 def apply_bearish_impulse_guard(
     permission: str,
     reason: str,
@@ -185,25 +204,29 @@ def build_permission_payload(
     last_candle: dict[str, Any] | None = None,
     atr_ratio: float | None = None,
 ) -> dict[str, Any]:
-    base_score = 0.0 if signal_score is None else float(signal_score)
-    reg_conf = 0.0 if regime_conf is None else float(regime_conf)
+    base_score = normalize_signal_score(signal_score)
+    reg_conf = _safe_float(regime_conf)
+    reg_conf_for_calc = 0.0 if reg_conf is None else float(reg_conf)
     direction = derive_direction(option_type, side)
     orb_factor = orb_alignment_multiplier(orb_bias, direction)
     reg_pen = regime_penalty(regime)
     global_conf = compute_global_conf(
         base_score,
         regime=regime,
-        regime_conf=reg_conf,
+        regime_conf=reg_conf_for_calc,
         orb_bias=orb_bias,
         direction=direction,
     )
-    permission, reason = decide_permission(
-        global_conf,
-        regime=regime,
-        regime_conf=reg_conf,
-        direction=direction,
-        orb_bias=orb_bias,
-    )
+    if reg_conf is None:
+        permission, reason = (Permission.ADVISORY_ONLY.value, "missing_regime_conf")
+    else:
+        permission, reason = decide_permission(
+            global_conf,
+            regime=regime,
+            regime_conf=reg_conf,
+            direction=direction,
+            orb_bias=orb_bias,
+        )
     permission, reason = apply_bearish_impulse_guard(
         permission,
         reason,
@@ -218,7 +241,7 @@ def build_permission_payload(
         "permission_reason": reason,
         "countertrend": bool(is_countertrend(regime, direction)),
         "orb_bias": normalize_orb_bias(orb_bias),
-        "signal_score": clamp(base_score, 0.0, 1.0),
+        "signal_score": float(base_score),
         "orb_factor": float(orb_factor),
         "regime_penalty": float(reg_pen),
         "regime_confidence": reg_conf,

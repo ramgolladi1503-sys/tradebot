@@ -8,7 +8,7 @@ class OhlcBuffer:
     def __init__(self):
         self._bars = defaultdict(lambda: deque(maxlen=getattr(cfg, "OHLC_BUFFER_MAX_BARS", 500)))
 
-    def update_tick(self, symbol, price, volume=0, ts=None):
+    def update_tick(self, symbol, price, volume=None, ts=None):
         if price is None:
             return
         try:
@@ -24,7 +24,8 @@ class OhlcBuffer:
                 bar["high"] = max(bar["high"], price)
                 bar["low"] = min(bar["low"], price)
                 bar["close"] = price
-                bar["volume"] += volume or 0
+                if volume is not None:
+                    bar["volume"] += volume or 0
             else:
                 bars.append({
                     "ts": bucket,
@@ -32,7 +33,7 @@ class OhlcBuffer:
                     "high": price,
                     "low": price,
                     "close": price,
-                    "volume": volume or 0,
+                    "volume": volume if volume is not None else 0,
                 })
         except Exception:
             return

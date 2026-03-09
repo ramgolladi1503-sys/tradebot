@@ -2,6 +2,8 @@
 # Option-chain strictness now follows core.market_context.derive_market_context.
 
 from datetime import datetime, date
+import logging
+import os
 from config import config as cfg
 from core.paths import data_root
 from core.market_calendar import (
@@ -17,8 +19,16 @@ from core.instruments import (
 from core.market_context import derive_market_context
 from config.profile import get_option_filter_profile
 from core.kite_client import kite_client
+from core.option_liquidity_cache import update_option_liquidity_cache
 from core.greeks import implied_vol, greeks
 from core.time_utils import compute_age_sec, now_utc_epoch
+
+
+logger = logging.getLogger(__name__)
+
+
+def _debug_option_chain_enabled() -> bool:
+    return str(os.getenv("TRADEBOT_DEBUG_OPTION_CHAIN", "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _to_pos_float(value):
@@ -29,6 +39,15 @@ def _to_pos_float(value):
     if out <= 0:
         return None
     return out
+
+
+def _to_float_or_none(value):
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
 
 
 def _top_depth_price(depth: dict, side: str):
@@ -262,9 +281,13 @@ def _annotate_iv_oi(chain):
 
         token = c.get("instrument_token")
         if token is not None:
+            oi_val = _to_float_or_none(c.get("oi"))
             prev = _PREV_OI.get(token)
-            c["oi_change"] = (c.get("oi", 0) - prev) if prev is not None else 0
-            _PREV_OI[token] = c.get("oi", 0)
+            if oi_val is not None:
+                c["oi_change"] = (oi_val - prev) if prev is not None else 0
+                _PREV_OI[token] = oi_val
+            elif "oi_change" not in c:
+                c["oi_change"] = None
             prev_ltp = _PREV_LTP.get(token)
             c["ltp_change"] = (c.get("ltp", 0) - prev_ltp) if prev_ltp is not None else 0
             _PREV_LTP[token] = c.get("ltp", 0)
@@ -342,9 +365,11 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             seg_name = registry_payload.get("segment") or ("BFO-OPT" if exchange == "BFO" else "NFO-OPT")
             symbol_instruments = list(registry_payload.get("instruments") or [])
             if symbol.upper() == "SENSEX" and not symbol_instruments:
-                print(
-                    "[OPTION_CHAIN_WARN]"
-                    f" symbol={symbol} exchange={exchange} segment={seg_name} instruments=0 -> unsupported, skipping"
+                logger.warning(
+                    "option_chain_unsupported symbol=%s exchange=%s segment=%s instruments=0",
+                    symbol,
+                    exchange,
+                    seg_name,
                 )
                 return []
             available_expiries = list(registry_payload.get("available_expiries") or [])
@@ -352,14 +377,14 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 available_expiries,
                 symbol=symbol,
             )
-            if symbol.upper() in {"NIFTY", "BANKNIFTY", "SENSEX"}:
-                print(
-                    "[OPTION_CHAIN_DEBUG]"
-                    f" symbol={symbol}"
-                    f" exchange={exchange}"
-                    f" total_opt_instruments={len(symbol_instruments)}"
-                    f" available_expiries={[exp.isoformat() for exp in available_expiries]}"
-                    f" chosen_expiry={str(expiry_date) if expiry_date else None}"
+            if symbol.upper() in {"NIFTY", "BANKNIFTY", "SENSEX"} and _debug_option_chain_enabled():
+                logger.debug(
+                    "option_chain_selection symbol=%s exchange=%s total_opt_instruments=%d available_expiries=%s chosen_expiry=%s",
+                    symbol,
+                    exchange,
+                    len(symbol_instruments),
+                    [exp.isoformat() for exp in available_expiries],
+                    str(expiry_date) if expiry_date else None,
                 )
             if expiry_date is None:
                 raise ValueError(f"No expiry available for {symbol}")
@@ -473,8 +498,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     and float(quote_age_sec) <= float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8))
                     and (spread_pct is not None and float(spread_pct) <= float(filter_profile.max_spread_pct))
                 )
-                volume = q.get("volume", 0)
-                oi = q.get("oi", 0)
+                volume = _to_float_or_none(q.get("volume"))
+                oi = _to_float_or_none(q.get("oi"))
                 dte = max((expiry_date - date.today()).days, 1)
                 t = dte / 365.0
                 is_call = inst.get("instrument_type") == "CE"
@@ -548,6 +573,12 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             for c in chain:
                 c["chain_source"] = "live"
             chain = _annotate_iv_oi(chain)
+            update_option_liquidity_cache(
+                chain,
+                symbol=symbol,
+                snapshot_ts_epoch=now_utc_epoch(),
+                source="option_chain_live",
+            )
             _write_chain_snapshot(chain, symbol=symbol)
             return chain
         if not getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
@@ -691,5 +722,5 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             _write_chain_snapshot(chain, symbol=symbol)
             return chain
         except Exception as inner_exc:
-            print(f"Option chain error: {e} | fallback_error: {inner_exc}")
+            logger.warning("option_chain_error err=%s fallback_error=%s", e, inner_exc)
             return []

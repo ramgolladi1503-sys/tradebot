@@ -43,11 +43,21 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
     right = None
     expiry = None
     strike = None
+    decision_snapshot = None
+    snapshot_id = None
     if trade:
         instrument_type = getattr(trade, "instrument_type", None) or getattr(trade, "instrument", None)
         right = getattr(trade, "right", None) or getattr(trade, "option_type", None)
         expiry = getattr(trade, "expiry", None)
         strike = getattr(trade, "strike", None)
+        snapshot_id = getattr(trade, "snapshot_id", None)
+        source_flags = getattr(trade, "source_flags", None)
+        if isinstance(source_flags, dict):
+            snap = source_flags.get("decision_snapshot")
+            if isinstance(snap, dict):
+                decision_snapshot = dict(snap)
+            if not snapshot_id:
+                snapshot_id = source_flags.get("decision_snapshot_id")
     symbol = (trade.symbol if trade else market_data.get("symbol"))
     trade_instrument_id = getattr(trade, "instrument_id", None) if trade else None
     instrument_id = trade_instrument_id
@@ -78,6 +88,15 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         if raw_segment is not None:
             ctx_payload["segment"] = raw_segment
     market_ctx = derive_market_context(ctx_payload or {"execution_mode": getattr(cfg, "EXECUTION_MODE", "SIM")})
+
+    def _safe_float(value):
+        try:
+            if value is None:
+                return None
+            return float(value)
+        except Exception:
+            return None
+
     event = {
         "trade_id": trade.trade_id if trade else None,
         "ts": now_text,
@@ -110,6 +129,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "option_ltp_source": (getattr(trade, "option_ltp_source", None) if trade else None)
         or (opt or {}).get("option_ltp_source")
         or (opt or {}).get("quote_source"),
+        "snapshot_id": snapshot_id,
         "chain_source": (getattr(trade, "chain_source", None) if trade else None)
         or market_data.get("chain_source")
         or (opt or {}).get("chain_source"),
@@ -128,6 +148,33 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "challenger_proba": getattr(trade, "shadow_confidence", None) if trade else None,
         "champion_model_id": getattr(trade, "model_version", None) if trade else None,
         "challenger_model_id": getattr(trade, "shadow_model_version", None) if trade else None,
+        "signal_v1": (
+            getattr(trade, "signal_v1", None)
+            if trade and isinstance(getattr(trade, "signal_v1", None), dict)
+            else {
+                "confidence": getattr(trade, "confidence", None) if trade else None,
+                "features": {
+                    "pattern_flags": list(getattr(trade, "pattern_flags", []) or []) if trade else [],
+                    "rank_score": getattr(trade, "trade_score", None) if trade else None,
+                },
+                "direction": str(getattr(trade, "side", "") or "") if trade else "",
+            }
+        ),
+        "execution_v1": (
+            getattr(trade, "execution_v1", None)
+            if trade and isinstance(getattr(trade, "execution_v1", None), dict)
+            else {
+                "can_execute": bool(gatekeeper_allowed and not bool(veto_reasons)),
+                "execution_score": (
+                    (_safe_float(getattr(trade, "global_confidence", getattr(trade, "confidence", 0.0))) or 0.0)
+                    if trade
+                    else 0.0
+                ),
+                "execution_reject_reason": (
+                    str(veto_reasons[0]) if veto_reasons else None
+                ),
+            }
+        ),
         "model_id": lineage.get("model_id") or (getattr(trade, "model_version", None) if trade else None),
         "dataset_hash": lineage.get("dataset_hash"),
         "feature_hash": lineage.get("feature_hash"),
@@ -200,6 +247,8 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         if "epoch_missing" not in veto_reasons:
             veto_reasons.append("epoch_missing")
         event["veto_reasons"] = veto_reasons
+    if decision_snapshot is not None:
+        event["decision_snapshot"] = decision_snapshot
     return event
 
 
@@ -267,17 +316,49 @@ def log_decision_safe(orch, event: dict, trade=None, log_decision_fn=None):
             )
         except Exception:
             pass
+    facts = event.get("facts") if isinstance(event.get("facts"), dict) else {}
+    tele = event.get("strategy_telemetry") if isinstance(event.get("strategy_telemetry"), dict) else None
+    if tele is None:
+        try:
+            tele = (facts or {}).get("strategy_telemetry")
+        except Exception:
+            tele = None
+    tele_compact = None
+    if isinstance(tele, dict):
+        tele_compact = {
+            "qual_fail_codes": tele.get("qual_fail_codes"),
+            "picked_candidate": tele.get("picked_candidate"),
+            "precondition_failures": tele.get("precondition_failures"),
+            "qual_fail_reasons_raw": tele.get("qual_fail_reasons_raw"),
+        }
+        ac = tele.get("all_candidates")
+        if isinstance(ac, list) and len(ac) <= 10:
+            tele_compact["all_candidates"] = ac
     if veto_reasons:
+        blockers = event.get("decision_blockers")
+        if not isinstance(blockers, list):
+            blockers = list(veto_reasons or [])
+
+        event_telemetry = event.get("strategy_telemetry")
+        if not isinstance(event_telemetry, dict):
+            event_telemetry = None
+
+        reject_extra = {
+            "trade_id": event.get("trade_id"),
+            "gatekeeper_allowed": event.get("gatekeeper_allowed"),
+            "decision_stage": event.get("decision_stage") or "decision:event",
+            "decision_explain": event.get("decision_explain"),
+            "decision_blockers": blockers,
+            "strategy_telemetry": event_telemetry,
+            "facts": (event.get("facts") if isinstance(event.get("facts"), dict) else None),
+        }
         append_reject_reasons(
             symbol=event.get("symbol"),
             strategy=event.get("strategy_id"),
             reasons=veto_reasons,
             mode=(event.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM")),
             source="decision_event",
-            extra={
-                "trade_id": event.get("trade_id"),
-                "gatekeeper_allowed": event.get("gatekeeper_allowed"),
-            },
+            extra=reject_extra,
         )
     if event.get("instrument_id") is None:
         symbol = str(event.get("symbol") or (getattr(trade, "symbol", None) if trade is not None else None) or "UNKNOWN")
@@ -304,16 +385,22 @@ def log_decision_safe(orch, event: dict, trade=None, log_decision_fn=None):
             event["veto_reasons"] = veto_reasons
         if trade is not None:
             log_identity_error(orch, trade or event, {"reason": "missing_contract_fields"})
+        reject_extra = {
+            "trade_id": event.get("trade_id"),
+            "fallback_instrument_id": fallback_instrument_id,
+            "decision_stage": "decision:gatekeeper",
+            "decision_explain": "Strategy decision pipeline rejected the candidate set",
+            "decision_blockers": ["missing_contract_fields"],
+            "strategy_telemetry": tele_compact,
+            "facts": facts,
+        }
         append_reject_reasons(
             symbol=event.get("symbol"),
             strategy=event.get("strategy_id"),
             reasons=["missing_contract_fields"],
             mode=(event.get("mode") or getattr(cfg, "EXECUTION_MODE", "SIM")),
-            source="identity",
-            extra={
-                "trade_id": event.get("trade_id"),
-                "fallback_instrument_id": fallback_instrument_id,
-            },
+            source="decision",
+            extra=reject_extra,
         )
     if log_decision_fn is None:
         raise RuntimeError("log_decision_fn is required")

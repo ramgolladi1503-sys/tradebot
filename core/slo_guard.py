@@ -108,6 +108,7 @@ def evaluate_slo_status(
     feed_market_open = bool(feed.get("market_open", ctx.is_market_open))
     feed_allow_stale = bool(feed.get("allow_stale_quotes", ctx.allow_stale_quotes))
     ignore_feed_stale = bool(feed_allow_stale or (not feed_market_open))
+    suppress_auth_checks = bool((not should_enforce) and (not bool(ctx.is_market_open)))
 
     auth_age_sec = compute_age_sec(auth.get("ts_epoch"), now_ts)
     auth_latency_sec = _coerce_float(auth.get("latency_sec"))
@@ -142,15 +143,15 @@ def evaluate_slo_status(
             warnings.append(code)
 
     if not bool(auth.get("ok", False)):
-        _record("AUTH_UNHEALTHY")
+        _record("AUTH_UNHEALTHY", suppress=suppress_auth_checks)
     if auth_age_sec is None:
-        _record("AUTH_TS_MISSING")
+        _record("AUTH_TS_MISSING", suppress=suppress_auth_checks)
     elif auth_age_sec > max_auth_age_sec:
-        _record("AUTH_STALE")
+        _record("AUTH_STALE", suppress=suppress_auth_checks)
     if auth_latency_sec is None:
-        _record("AUTH_LATENCY_MISSING")
+        _record("AUTH_LATENCY_MISSING", suppress=suppress_auth_checks)
     elif auth_latency_sec > max_auth_latency_sec:
-        _record("AUTH_LATENCY_BREACH")
+        _record("AUTH_LATENCY_BREACH", suppress=suppress_auth_checks)
 
     if ltp_age_sec is None:
         _record("FEED_LTP_TS_MISSING", suppress=ignore_feed_stale)

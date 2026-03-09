@@ -5,8 +5,10 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+import uuid
 
 from core.paths import logs_dir
+from core.telemetry_streams import append_execution_stream_event
 from core.time_utils import utc_now
 
 
@@ -36,16 +38,39 @@ def append_event(
     *,
     ts: datetime | float | int | None = None,
     path: Path | None = None,
+    session_id: str | None = None,
 ) -> None:
     target = path or events_path()
     target.parent.mkdir(parents=True, exist_ok=True)
+    payload_obj = dict(payload or {})
+    payload_event_id = str(payload_obj.get("event_id") or "").strip()
+    if not payload_event_id:
+        payload_event_id = str(uuid.uuid4())
+        payload_obj["event_id"] = payload_event_id
+    if session_id is not None and str(payload_obj.get("session_id") or "").strip() == "":
+        payload_obj["session_id"] = str(session_id)
     event = {
         "ts": _iso_utc(ts),
         "type": str(event_type),
-        "payload": dict(payload or {}),
+        "event_id": payload_event_id,
+        "payload": payload_obj,
     }
-    with target.open("a", encoding="utf-8") as handle:
+    with target.open("a", encoding="utf-8", buffering=1) as handle:
         handle.write(json.dumps(event, ensure_ascii=True, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        append_execution_stream_event(
+            {
+                "event_type": str(event_type),
+                "event_id": payload_event_id,
+                "session_id": payload_obj.get("session_id"),
+                "payload": payload_obj,
+                "source": "events_jsonl",
+            }
+        )
+    except Exception:
+        pass
 
 
 def read_events(

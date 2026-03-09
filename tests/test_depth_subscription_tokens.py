@@ -63,19 +63,21 @@ def _setup_depth_window_mocks(monkeypatch):
 
     calls: list[dict] = []
 
-    def _fake_resolve_option_tokens_window(symbol, expiry_date, atm_strike, strikes_around, step, exchange="NFO"):
+    def _fake_resolve_option_tokens_window(*, symbol, expiry=None, strikes_around=6, exchange="NFO", spot=None, **kwargs):
         symbol_u = str(symbol).upper()
         calls.append(
             {
                 "symbol": symbol_u,
-                "expiry": expiry_date,
-                "atm": int(atm_strike),
+                "expiry": expiry,
                 "strikes_around": int(strikes_around),
-                "step": int(step),
                 "exchange": str(exchange),
+                "spot": float(spot) if spot is not None else None,
+                "extra_keys": sorted(kwargs.keys()),
             }
         )
         out: list[int] = []
+        atm_strike = int(atm_by_symbol[symbol_u])
+        step = int(step_by_symbol[symbol_u])
         for off in range(-int(strikes_around), int(strikes_around) + 1):
             strike = int(atm_strike) + (off * int(step))
             out.append(token_map[(symbol_u, strike, "CE")])
@@ -140,9 +142,12 @@ def test_build_depth_subscription_tokens_uses_symbol_windows_and_steps(monkeypat
     assert calls_by_symbol["NIFTY"]["strikes_around"] == 6
     assert calls_by_symbol["BANKNIFTY"]["strikes_around"] == 6
     assert calls_by_symbol["SENSEX"]["strikes_around"] == 4
-    assert calls_by_symbol["NIFTY"]["step"] == 50
-    assert calls_by_symbol["BANKNIFTY"]["step"] == 100
-    assert calls_by_symbol["SENSEX"]["step"] == 100
+    assert calls_by_symbol["NIFTY"]["spot"] == 22000.0
+    assert calls_by_symbol["BANKNIFTY"]["spot"] == 48000.0
+    assert calls_by_symbol["SENSEX"]["spot"] == 83000.0
+    assert calls_by_symbol["NIFTY"]["extra_keys"] == []
+    assert calls_by_symbol["BANKNIFTY"]["extra_keys"] == []
+    assert calls_by_symbol["SENSEX"]["extra_keys"] == []
 
     # Baseline token universe is approximately 73 without sticky tokens.
     assert 70 <= len(tokens) <= 80
@@ -151,7 +156,7 @@ def test_build_depth_subscription_tokens_uses_symbol_windows_and_steps(monkeypat
 def test_build_depth_subscription_tokens_budget_drops_farthest_options_first(monkeypatch):
     ctx = _setup_depth_window_mocks(monkeypatch)
 
-    tokens, _resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=11)
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=11)
 
     index_token = ctx["index_tokens"]["NIFTY"]
     assert index_token in tokens
@@ -162,7 +167,14 @@ def test_build_depth_subscription_tokens_budget_drops_farthest_options_first(mon
     kept_strikes = {int(token_meta[t]["strike"]) for t in option_tokens}
     atm = int(ctx["atm_by_symbol"]["NIFTY"])
     assert kept_strikes == {atm - 100, atm - 50, atm, atm + 50, atm + 100}
-
+    assert resolution
+    row = resolution[0]
+    assert int(row.get("resolved_option_count") or 0) == 26
+    assert int(row.get("option_count") or 0) == 10
+    assert int(row.get("count") or 0) == 11
+    assert row.get("tokens") == tokens
+    assert ws._LAST_OPTION_COUNTS_BY_SYMBOL["NIFTY"] == 10
+    assert row.get("option_drop_reason") == "subscription_budget_truncated"
 
 def test_sticky_tokens_are_preserved_in_final_subscription(monkeypatch):
     ctx = _setup_depth_window_mocks(monkeypatch)
@@ -174,3 +186,100 @@ def test_sticky_tokens_are_preserved_in_final_subscription(monkeypatch):
     assert sticky_token in tokens
     assert ctx["index_tokens"]["NIFTY"] in tokens
     assert len(tokens) == 3
+
+
+def test_option_tokens_under_min_are_blocked(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    incidents: list[dict] = []
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 100, raising=False)
+    monkeypatch.setattr(
+        ws,
+        "_maybe_raise_option_token_incident",
+        lambda **kwargs: incidents.append(dict(kwargs)),
+    )
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=100)
+
+    assert tokens == [ctx["index_tokens"]["NIFTY"]]
+    assert resolution
+    row = resolution[0]
+    assert row.get("option_fail_reason") == "option_tokens_under_min"
+    assert int(row.get("option_count") or 0) == 0
+    assert incidents and incidents[-1]["symbol"] == "NIFTY"
+
+
+def test_option_expiry_unavailable_sets_fail_reason(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    incidents: list[dict] = []
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda symbol, exchange="NFO": None)
+    monkeypatch.setattr(
+        ws,
+        "_maybe_raise_option_token_incident",
+        lambda **kwargs: incidents.append(dict(kwargs)),
+    )
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=100)
+
+    assert tokens == [ctx["index_tokens"]["NIFTY"]]
+    assert resolution
+    row = resolution[0]
+    assert row.get("option_fail_reason") == "expiry_unavailable"
+    assert int(row.get("option_count") or 0) == 0
+    assert incidents and incidents[-1].get("fail_reason") == "expiry_unavailable"
+
+
+def test_validate_tokens_keeps_resolved_bfo_option_tokens(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True, raising=False)
+
+    nfo_known_rows: list[dict] = []
+    for token, meta in ctx["token_meta"].items():
+        if str(meta.get("symbol") or "").upper() != "SENSEX":
+            nfo_known_rows.append({"instrument_token": int(token)})
+    for symbol, token in ctx["index_tokens"].items():
+        if str(symbol).upper() != "SENSEX":
+            nfo_known_rows.append({"instrument_token": int(token)})
+
+    def _nfo_only_instruments_cached(exchange=None, ttl_sec=3600):
+        if str(exchange or "").upper() == "NFO":
+            return list(nfo_known_rows)
+        return []
+
+    monkeypatch.setattr(ws.kite_client, "instruments_cached", _nfo_only_instruments_cached)
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["SENSEX"], max_tokens=200)
+
+    token_set = set(tokens)
+    sensex_option_tokens = [
+        int(tok)
+        for tok, meta in ctx["token_meta"].items()
+        if str(meta.get("symbol") or "").upper() == "SENSEX"
+    ]
+    kept_sensex_options = [tok for tok in sensex_option_tokens if tok in token_set]
+
+    # Even with known_tokens containing only NFO rows, resolver-confirmed BFO option tokens
+    # must be preserved when token validation runs.
+    assert len(kept_sensex_options) >= 18
+    assert resolution
+    assert str(resolution[0].get("symbol") or "").upper() == "SENSEX"
+    assert int(resolution[0].get("option_count") or 0) >= 18
+
+
+def test_build_depth_subscription_tokens_fallback_preserves_symbols_argument(monkeypatch):
+    calls = []
+
+    def _broken_keyword_only(*, symbols=None, max_tokens=None):
+        raise TypeError("keyword path broken")
+
+    def _positional_symbols(symbols):
+        calls.append(list(symbols or []))
+        return [101], [{"symbol": "NIFTY", "count": 1}]
+
+    monkeypatch.setattr(ws, "build_subscription_tokens", _broken_keyword_only)
+    monkeypatch.setattr(ws, "build_tokens", _positional_symbols, raising=False)
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=10)
+
+    assert calls == [["NIFTY"]]
+    assert tokens == [101]
+    assert resolution == [{"symbol": "NIFTY", "count": 1}]

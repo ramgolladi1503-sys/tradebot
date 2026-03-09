@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from config import config as cfg
 import core.governance_gate as governance_gate
 import core.readiness_gate as readiness_gate
+import core.tick_store as tick_store
 from core.time_sanity import check_market_data_time_sanity
 
 
@@ -83,3 +85,12 @@ def test_readiness_decision_rows_normalize_epoch_and_reject_future_skew(monkeypa
     out = readiness_gate._load_recent_decision_rows(now_epoch=1_700_000_050.0)
     assert "NIFTY" in out
     assert "BANKNIFTY" not in out
+
+
+def test_tick_store_to_epoch_naive_iso_matches_equivalent_epoch():
+    # Naive timestamp strings must be interpreted consistently as UTC.
+    iso_naive = "2026-03-04 09:20:00"
+    epoch_expected = datetime(2026, 3, 4, 9, 20, tzinfo=timezone.utc).timestamp()
+    parsed = tick_store._to_epoch(iso_naive)
+    assert parsed is not None
+    assert abs(float(parsed) - float(epoch_expected)) < 1e-6

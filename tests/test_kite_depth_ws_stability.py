@@ -1,8 +1,10 @@
 from pathlib import Path
 from datetime import datetime, timezone
+import sqlite3
 
 from config import config as cfg
 import core.kite_depth_ws as ws
+import core.tick_store as tick_store
 
 
 class _DummyThread:
@@ -69,6 +71,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LOGGED", False, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_LTP_TS", {}, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_DEPTH_TS", {}, raising=False)
+    monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {}, raising=False)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
@@ -82,6 +85,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "invalidate_cache", lambda **kwargs: None)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
     monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
     rest = _DummyRestClient()
     monkeypatch.setattr(ws.kite_client, "ensure", lambda: None, raising=False)
@@ -105,7 +109,7 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
     ticker = captured["ticker"]
     assert ticker.api_key == "api_key_1234"
     assert ticker.access_token == "TOKEN123"
-    assert ticker.auto_reconnect is False
+    assert ticker.auto_reconnect is True
     assert ticker.connected is True
 
 
@@ -288,6 +292,104 @@ def test_on_ticks_does_not_update_index_quote_cache_from_non_underlying_tick(mon
     assert cache_updates == []
 
 
+def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
+    _patch_common(monkeypatch)
+    captured = {}
+    db_path = tmp_path / "ticks.sqlite"
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    receipt_epoch = datetime(2026, 2, 19, 9, 37, tzinfo=timezone.utc).timestamp()
+    stale_payload_ts = datetime(2026, 2, 19, 9, 35, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_OPTION_FRESHNESS_USE_RECEIPT_TIME", True, raising=False)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: receipt_epoch)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {555: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    tick_store._LAST_TICK_EPOCH = None
+    tick_store._LAST_TICK_BY_TOKEN.clear()
+
+    ws.start_depth_ws([555], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_ticks(
+        ticker,
+        [
+            {
+                "instrument_token": 555,
+                "last_price": 25123.5,
+                "exchange_timestamp": stale_payload_ts,
+            }
+        ],
+    )
+
+    assert ws._LAST_MSG_TS_BY_TOKEN[555] == receipt_epoch
+    assert ws._LAST_WS_TICK_EPOCH == receipt_epoch
+
+    option_state = ws._option_runtime_state(
+        now_epoch=receipt_epoch,
+        tokens=[555],
+        expected_counts_by_symbol={"NIFTY": 1},
+        min_required_by_symbol={"NIFTY": 1},
+    )
+    assert option_state["last_tick_ts_by_symbol"]["NIFTY"] == receipt_epoch
+    assert option_state["option_age_by_symbol"]["NIFTY"] == 0.0
+    assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "OK"
+
+    ltp, tick_epoch = tick_store.get_ltp(555)
+    assert ltp == 25123.5
+    assert tick_epoch == receipt_epoch
+
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()
+    assert row is not None
+    assert row[0] == receipt_epoch
+
+
+def test_on_ticks_newer_same_symbol_option_tick_refreshes_symbol_age(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(cfg, "OPTION_LTP_SLA_SEC", 8.0, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {555: "NIFTY", 556: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+
+    current_epoch = {"value": 100.0}
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: current_epoch["value"])
+
+    ws.start_depth_ws([555, 556], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_ticks(ticker, [{"instrument_token": 555, "last_price": 101.0, "exchange_timestamp": datetime(2026, 2, 19, 9, 30, tzinfo=timezone.utc)}])
+    current_epoch["value"] = 105.0
+    ticker.on_ticks(ticker, [{"instrument_token": 556, "last_price": 102.0, "exchange_timestamp": datetime(2026, 2, 19, 9, 31, tzinfo=timezone.utc)}])
+
+    option_state = ws._option_runtime_state(
+        now_epoch=105.0,
+        tokens=[555, 556],
+        expected_counts_by_symbol={"NIFTY": 2},
+        min_required_by_symbol={"NIFTY": 1},
+    )
+
+    assert ws._SYMBOL_LAST_OPTION_TICK_TS["NIFTY"] == 105.0
+    assert option_state["last_tick_ts_by_symbol"]["NIFTY"] == 105.0
+    assert option_state["option_age_by_symbol"]["NIFTY"] == 0.0
+    assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "OK"
+
+
 def test_auth_failure_sets_auth_required_and_blocks_restarts(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
@@ -333,6 +435,7 @@ def test_network_error_restarts_without_auth_required(monkeypatch):
 
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", False, raising=False)
     monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: auth_marks.append(kwargs) or {"status": "AUTH_REQUIRED"})
     monkeypatch.setattr(ws, "restart_depth_ws", lambda reason="unknown": restarts.__setitem__("count", restarts["count"] + 1) or True)
 
@@ -343,3 +446,32 @@ def test_network_error_restarts_without_auth_required(monkeypatch):
     assert restarts["count"] == 1
     assert auth_marks == []
     assert ws._AUTH_REQUIRED_LATCH is False
+
+
+def test_network_error_uses_internal_reconnect_when_enabled(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    restarts = {"count": 0}
+    soft = {"count": 0}
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+    monkeypatch.setattr(ws, "restart_depth_ws", lambda reason="unknown": restarts.__setitem__("count", restarts["count"] + 1) or True)
+    monkeypatch.setattr(
+        ws,
+        "_soft_resubscribe_current",
+        lambda reason="unknown": soft.__setitem__("count", soft["count"] + 1) or True,
+    )
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_error(ticker, 1006, "connection closed by peer")
+
+    assert restarts["count"] == 0
+    assert soft["count"] == 1

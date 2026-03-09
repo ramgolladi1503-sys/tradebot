@@ -178,6 +178,10 @@ def test_live_armed_within_window_passes_once(monkeypatch, tmp_path):
     monkeypatch.setenv("LIVE_TRADING_ENABLED", "true")
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "trades.db"), raising=False)
     monkeypatch.setattr(cfg, "ALLOW_LIVE_PLACEMENT", True, raising=False)
+    monkeypatch.setattr(
+        "core.execution_router.check_execution_allowed",
+        lambda *_args, **_kwargs: (True, "ok", "OK", {"reason": "test_override"}),
+    )
     trade = _trade("T-LIVE-ARMED-ONCE")
     payload_hash = OrderIntent.from_trade(trade, mode="LIVE").order_intent_hash()
     ok, reason = approve_order_intent(payload_hash, approver_id="tester", ttl_sec=600)

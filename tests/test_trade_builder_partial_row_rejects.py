@@ -93,6 +93,67 @@ def test_missing_instrument_token_is_hard_reject(monkeypatch):
     trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
 
     assert trade is None
-    assert int(builder._scan_reject_counts.get("missing_contract_fields", 0)) >= 1
+    assert int(builder._scan_reject_counts.get("unresolved_contract", 0)) >= 1
     gate_reasons = builder._reject_ctx.get("gate_reasons") if isinstance(builder._reject_ctx, dict) else []
-    assert "missing_contract_fields" in list(gate_reasons or [])
+    assert "unresolved_contract" in list(gate_reasons or []) or builder._reject_ctx.get("reason") == "unresolved_contract"
+
+
+def test_no_signal_planning_fallback_emits_clean_eq_trade_when_option_identity_unresolved(monkeypatch):
+    builder = TradeBuilder()
+    monkeypatch.setattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True, raising=False)
+    md = _base_market_data()
+    md["option_chain"] = [
+        {"type": "CE", "strike": 25000, "ltp": 100.0, "bid": 99.0, "ask": 101.0, "expiry": "2026-01-01"}
+    ]
+
+    trade = builder._build_planning_no_signal_trade(md, ltp=25000.0, vwap=24990.0)
+
+    assert trade is not None
+    assert trade.instrument == "EQ"
+    assert trade.instrument_type == "INDEX"
+    assert trade.right is None
+    assert trade.option_type is None
+    assert trade.expiry == ""
+    assert int(trade.strike or 0) == 0
+    assert trade.instrument_token is None
+    assert trade.tradingsymbol is None
+
+
+def test_no_signal_planning_fallback_uses_option_ltp_and_option_risk_levels_when_contract_resolves(monkeypatch):
+    builder = TradeBuilder()
+    monkeypatch.setattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True, raising=False)
+    md = _base_market_data()
+    md["option_chain"] = [
+        {
+            "type": "CE",
+            "strike": 25000,
+            "ltp": 120.0,
+            "bid": 118.0,
+            "ask": 122.0,
+            "expiry": "2026-01-01",
+            "tradingsymbol": "NIFTY26JAN25000CE",
+            "instrument_token": 555001,
+        }
+    ]
+
+    monkeypatch.setattr(
+        builder,
+        "_resolve_option_contract",
+        lambda *_args, **_kwargs: {
+            "expiry": "2026-01-01",
+            "expiry_date": "2026-01-01",
+            "tradingsymbol": "NIFTY26JAN25000CE",
+            "instrument_token": 555001,
+            "instrument_id": "NIFTY|OPT|2026-01-01|25000|CE",
+        },
+    )
+
+    trade = builder._build_planning_no_signal_trade(md, ltp=25000.0, vwap=24990.0)
+
+    assert trade is not None
+    assert trade.instrument == "OPT"
+    assert trade.entry_price == 120.0
+    assert trade.target > trade.entry_price
+    assert trade.stop_loss < trade.entry_price
+    assert trade.instrument_token == 555001
+    assert trade.tradingsymbol == "NIFTY26JAN25000CE"

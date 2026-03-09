@@ -8,6 +8,7 @@ import time
 from typing import Callable
 
 from config import config as cfg
+from core.freshness_policy import resolve_freshness_policy
 from core.time_utils import compute_age_sec, now_utc_epoch
 
 
@@ -330,13 +331,23 @@ def get_feed_health_monitor() -> FeedHealth:
     if _DEFAULT_MONITOR is None:
         with _DEFAULT_LOCK:
             if _DEFAULT_MONITOR is None:
+                policy = resolve_freshness_policy(
+                    mode=str(getattr(cfg, "EXECUTION_MODE", "PAPER")),
+                    market_open=True,
+                    allow_stale_quotes=bool(str(getattr(cfg, "EXECUTION_MODE", "PAPER")).upper() != "LIVE"),
+                    live_ltp_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+                    live_depth_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
+                    planning_ltp_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_LTP_AGE_SEC", 900.0)),
+                    planning_depth_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC", 900.0)),
+                    option_ok_live_sec=float(getattr(cfg, "FEED_HEALTH_OPTION_OK_AGE_SEC", 2.5)),
+                    option_ok_planning_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_LTP_AGE_SEC", 900.0)),
+                    expiry_lotto_mode=bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)),
+                )
                 _DEFAULT_MONITOR = FeedHealth(
                     index_ok_age_sec=float(
                         getattr(cfg, "FEED_HEALTH_INDEX_OK_AGE_SEC", 1.0)
                     ),
-                    option_ok_age_sec=float(
-                        getattr(cfg, "FEED_HEALTH_OPTION_OK_AGE_SEC", 2.5)
-                    ),
+                    option_ok_age_sec=float(policy.option_ok_age_sec),
                     index_down_no_msg_sec=float(
                         getattr(cfg, "FEED_HEALTH_INDEX_DOWN_NO_MSG_SEC", 3.0)
                     ),

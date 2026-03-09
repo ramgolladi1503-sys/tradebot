@@ -436,6 +436,34 @@ def test_index_depth_missing_live_offhours_allows_synthetic_and_offhours_chain(m
     assert snap["market_open"] is False
 
 
+def test_market_open_never_uses_synthetic_offhours_chain(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    md._DATA_CACHE.clear()
+    fixed_epoch = 1710000000.0
+    fixed_now = md.now_ist().replace(hour=10, minute=0, second=0, microsecond=0)
+
+    monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
+    monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(md.cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(md.cfg, "ALLOW_SYNTHETIC_CHAIN", True, raising=False)
+    monkeypatch.setattr(md, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(md, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(md, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(md, "check_market_data_time_sanity", lambda **kwargs: {"ok": True, "reasons": []})
+    monkeypatch.setattr(md, "now_utc_epoch", lambda: fixed_epoch)
+    monkeypatch.setattr(md, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(md, "is_open", lambda now_dt=None, segment="NSE_FNO": True)
+    monkeypatch.setattr(md, "_refresh_index_quote_from_rest", lambda symbol, force=False: False)
+    monkeypatch.setattr(md, "get_ltp", lambda _sym: 25000.0)
+    monkeypatch.setattr(md, "fetch_option_chain", lambda *_args, **_kwargs: [])
+
+    rows = md.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("symbol") == "NIFTY" and r.get("instrument") == "OPT")
+    assert snap["chain_source"] == "empty"
+    assert snap["market_open"] is True
+
+
 def test_non_index_depth_missing_keeps_quote_false(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     md._DATA_CACHE.clear()

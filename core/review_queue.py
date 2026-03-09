@@ -3,21 +3,30 @@ import time
 import hashlib
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from core.orders.order_intent import OrderIntent
-from core.learning_paths import suggestion_log_paths
+from core.learning_paths import canonical_suggestions_log_path, rejected_candidates_paths, suggestion_log_paths
 from core.paths import logs_dir, data_root
 from core.upstox_resolver import resolve_upstox_key
 from core.market_calendar import choose_nearest_available_expiry
 from core.trade_schema import build_instrument_id
 from core.trade_permission import build_permission_payload
 from core.trade_identity import compute_trade_key, derive_strategy_id
-from core.option_token_resolver import resolve_option_token
-from core.option_entry import validate_live_entry
-from core.tick_store import get_last_tick
+from core.option_token_resolver import TokenCoverageError, resolve_option_token
+from core.option_liquidity_cache import hydrate_option_liquidity_fields
+from core.option_entry import get_option_ltp_sla_sec, validate_live_entry
+from core.gating import gate_decision
+from core.tick_store import get_ltp
 from core.kite_depth_ws import ensure_subscribed_tokens
+from core.entry_semantics import EntryContractViolation, enforce_entry_contract
+from core.advisory_schema import AdvisorySchemaError, deserialize_advisory_row, log_advisory_schema_error, serialize_advisory_row
+from core.blocker_lifecycle import TARGET_BLOCKER_CODES, evaluate_advisory_contract_blockers, get_blocker_registry
+from core.events import write_json_atomic
+from core.issue_policy import ISSUE_CATEGORY_HARD, ISSUE_CATEGORY_SOFT, ISSUE_CATEGORY_WARNING, classify_issue
+from core.time_utils import is_market_open_ist
 
 try:
     from config import config as cfg
@@ -46,6 +55,576 @@ APPROVED_PATH = _runtime_path("APPROVED_TRADES_PATH", "approved_trades.json")
 
 _META_CACHE = {"ts": 0.0, "data": {}}
 _CHAIN_CACHE = {"ts": 0.0, "data": {"by_token": {}, "by_contract": {}, "by_symbol_strike_type": {}}}
+_ADVISORY_REST_LTP_CACHE: dict[str, dict] = {}
+_ADVISORY_REST_LTP_LAST_ATTEMPT: dict[str, float] = {}
+_NON_BLOCKING_ENTRY_STATUSES = {"OK", "PRICE_MISMATCH", "REST_FALLBACK", "OFFHOURS_SYNTHETIC", "DISPLAYABLE", "NON_EXECUTABLE"}
+_LOW_GLOBAL_CONF_LOGGED_MINUTE_BY_SYMBOL: dict[str, int] = {}
+_ENTRY_REQUIRED_STATUSES = {"ACTIVE", "PLANNING", "PROPOSED", "READY", "QUEUE_ONLY"}
+_ENTRY_INTEGRITY_REASON = "MISSING_ENTRY"
+_EXPLICIT_REVIEW_STATUSES = {"PLANNING", "BLOCKED_CONTRACT", "BLOCKED_APPROVAL", "ADVISORY_ONLY", "QUEUE_ONLY", "READY"}
+
+
+def _is_entry_status_blocking(status: str | None) -> bool:
+    status_key = str(status or "").strip().upper()
+    if not status_key:
+        return False
+    return status_key not in _NON_BLOCKING_ENTRY_STATUSES
+
+
+def _coerce_instrument_token(value) -> int | None:
+    try:
+        if value in (None, "", "None"):
+            return None
+        token_value = int(value)
+        return token_value if token_value > 0 else None
+    except Exception:
+        return None
+
+
+def _has_valid_broker_contract(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    token_value = _coerce_instrument_token(entry.get("instrument_token"))
+    tradingsymbol = str(entry.get("tradingsymbol") or "").strip()
+    expiry_date = _coerce_expiry(entry.get("expiry_date") or entry.get("expiry"))
+    return bool(token_value is not None and tradingsymbol and expiry_date)
+
+
+def _missing_broker_contract_fields(entry: dict) -> list[str]:
+    if not isinstance(entry, dict):
+        return []
+    missing: list[str] = []
+    if _coerce_instrument_token(entry.get("instrument_token")) is None:
+        missing.append("instrument_token")
+    if not str(entry.get("tradingsymbol") or "").strip():
+        missing.append("tradingsymbol")
+    if not _coerce_expiry(entry.get("expiry_date") or entry.get("expiry")):
+        missing.append("expiry_date")
+    return missing
+
+
+def _is_blocked_contract_row(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    status = str(entry.get("status") or "").strip().upper()
+    permission = str(entry.get("permission") or "").strip().upper()
+    hard_reason = str(entry.get("hard_reason") or "").strip().lower()
+    permission_reason = str(entry.get("permission_reason") or "").strip().lower()
+    if bool(entry.get("unresolved_contract")):
+        return True
+    if status == "BLOCKED_CONTRACT":
+        return True
+    if hard_reason == "unresolved_contract":
+        return True
+    if permission == "BLOCK" and permission_reason == "unresolved_contract":
+        return True
+    return False
+
+
+def _derive_review_status(entry: dict, fallback_status: str | None = None) -> str:
+    raw_status = str(fallback_status or entry.get("status_raw") or entry.get("status") or "PLANNING").strip().upper() or "PLANNING"
+    if _is_blocked_contract_row(entry):
+        return "BLOCKED_CONTRACT"
+    if bool(entry.get("approval_blocked")):
+        return "BLOCKED_APPROVAL"
+    permission = str(entry.get("permission") or "").strip().upper()
+    final_action = str(entry.get("final_action") or "").strip().upper()
+    if permission == "BLOCK" or final_action == "BLOCK":
+        return "INVALID"
+    if permission == "EXECUTE" and final_action == "EXECUTE":
+        return "READY"
+    if permission == "QUEUE_ONLY" and final_action == "QUEUE_ONLY":
+        return "QUEUE_ONLY"
+    if permission == "ADVISORY_ONLY" or final_action == "ADVISORY_ONLY":
+        return "ADVISORY_ONLY"
+    if raw_status in _EXPLICIT_REVIEW_STATUSES:
+        return raw_status
+    return "PLANNING"
+
+
+def _enrich_contract_identity(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    if str(entry.get("instrument") or entry.get("instrument_type") or "").upper() != "OPT":
+        return entry
+    if not entry.get("expiry_date") and entry.get("expiry"):
+        entry["expiry_date"] = _coerce_expiry(entry.get("expiry")) or entry.get("expiry")
+    if entry.get("expiry_date"):
+        entry["expiry_date"] = _coerce_expiry(entry.get("expiry_date")) or entry.get("expiry_date")
+        entry["expiry"] = entry.get("expiry_date")
+    opt_type = _coerce_option_type(entry.get("option_type") or entry.get("type") or entry.get("right"))
+    if opt_type:
+        entry["option_type"] = opt_type
+        entry["type"] = opt_type
+    strike_val = _coerce_strike(entry.get("strike"))
+    if strike_val is not None:
+        entry["strike"] = strike_val
+    token_value = _coerce_instrument_token(entry.get("instrument_token"))
+    if token_value is not None:
+        entry["instrument_token"] = token_value
+    tradingsymbol_text = str(entry.get("tradingsymbol") or "").strip()
+    if token_value is None and tradingsymbol_text:
+        direct_meta = _lookup_instrument_meta_by_tradingsymbol(tradingsymbol_text)
+        direct_token = _coerce_instrument_token(direct_meta.get("instrument_token"))
+        if direct_token is not None:
+            entry["instrument_token"] = direct_token
+            token_value = direct_token
+        direct_expiry = _coerce_expiry(direct_meta.get("expiry"))
+        if direct_expiry and not entry.get("expiry_date"):
+            entry["expiry_date"] = direct_expiry
+            entry["expiry"] = direct_expiry
+    chain_meta = _option_chain_meta_map()
+    if token_value is not None and not _has_valid_broker_contract(entry):
+        meta = _instrument_meta_map().get(token_value, {})
+        if not meta and chain_meta:
+            meta = (chain_meta.get("by_token") or {}).get(token_value, {})
+        if meta:
+            expiry = _coerce_expiry(meta.get("expiry"))
+            if expiry and not entry.get("expiry_date"):
+                entry["expiry_date"] = expiry
+                entry["expiry"] = expiry
+            tradingsymbol = str(meta.get("tradingsymbol") or "").strip()
+            if tradingsymbol and not entry.get("tradingsymbol"):
+                entry["tradingsymbol"] = tradingsymbol
+            meta_type = _coerce_option_type(meta.get("type"))
+            if meta_type:
+                entry.setdefault("option_type", meta_type)
+                entry.setdefault("type", meta_type)
+            meta_strike = _coerce_strike(meta.get("strike"))
+            if meta_strike is not None and entry.get("strike") in (None, "", "None"):
+                entry["strike"] = meta_strike
+    if token_value is None and entry.get("symbol") and strike_val is not None and opt_type:
+        meta = None
+        expiry_date = entry.get("expiry_date")
+        if expiry_date:
+            meta = (chain_meta.get("by_contract") or {}).get((entry.get("symbol"), expiry_date, float(strike_val), opt_type))
+        if meta is None:
+            candidates = (chain_meta.get("by_symbol_strike_type") or {}).get(
+                (entry.get("symbol"), float(strike_val), opt_type),
+                [],
+            )
+            if candidates:
+                exp_dates = []
+                meta_by_exp = {}
+                for cand in candidates:
+                    exp = _coerce_expiry(cand.get("expiry"))
+                    if not exp:
+                        continue
+                    try:
+                        exp_dt = datetime.fromisoformat(exp).date()
+                    except Exception:
+                        continue
+                    exp_dates.append(exp_dt)
+                    meta_by_exp[exp_dt.isoformat()] = cand
+                if exp_dates:
+                    chosen = choose_nearest_available_expiry(exp_dates, today=datetime.now().date())
+                    if chosen is not None:
+                        meta = meta_by_exp.get(chosen.isoformat())
+        if meta:
+            expiry = _coerce_expiry(meta.get("expiry"))
+            if expiry and not entry.get("expiry_date"):
+                entry["expiry_date"] = expiry
+                entry["expiry"] = expiry
+            tradingsymbol = str(meta.get("tradingsymbol") or "").strip()
+            if tradingsymbol and not entry.get("tradingsymbol"):
+                entry["tradingsymbol"] = tradingsymbol
+            meta_token = _coerce_instrument_token(meta.get("instrument_token"))
+            if meta_token is not None and entry.get("instrument_token") in (None, "", "None"):
+                entry["instrument_token"] = meta_token
+                token_value = meta_token
+            meta_type = _coerce_option_type(meta.get("type"))
+            if meta_type:
+                entry.setdefault("option_type", meta_type)
+                entry.setdefault("type", meta_type)
+    if _coerce_instrument_token(entry.get("instrument_token")) is None and entry.get("symbol") and entry.get("expiry_date") and strike_val is not None and opt_type:
+        try:
+            resolved = resolve_option_token(
+                entry.get("symbol"),
+                entry.get("expiry_date"),
+                strike_val,
+                opt_type,
+            )
+        except TokenCoverageError as exc:
+            resolved = None
+            entry.setdefault("token_coverage_error_code", exc.code)
+            entry.setdefault("token_coverage_evidence", exc.evidence)
+        if resolved:
+            resolved_token = _coerce_instrument_token(resolved.get("instrument_token"))
+            if resolved_token is not None:
+                entry["instrument_token"] = resolved_token
+            tradingsymbol = str(resolved.get("tradingsymbol") or "").strip()
+            if tradingsymbol and not entry.get("tradingsymbol"):
+                entry["tradingsymbol"] = tradingsymbol
+    liquidity_meta = {}
+    token_value = _coerce_instrument_token(entry.get("instrument_token"))
+    if chain_meta:
+        if token_value is not None:
+            liquidity_meta = (chain_meta.get("by_token") or {}).get(token_value, {}) or {}
+        if (
+            not liquidity_meta
+            and entry.get("symbol")
+            and entry.get("expiry_date")
+            and strike_val is not None
+            and opt_type
+        ):
+            liquidity_meta = (
+                (chain_meta.get("by_contract") or {}).get(
+                    (entry.get("symbol"), entry.get("expiry_date"), float(strike_val), opt_type)
+                )
+                or {}
+            )
+    entry = _apply_option_chain_liquidity(entry, liquidity_meta)
+    entry = hydrate_option_liquidity_fields(
+        entry,
+        symbol=entry.get("symbol"),
+        expiry=entry.get("expiry_date"),
+        strike=entry.get("strike"),
+        option_type=opt_type,
+        now_epoch=time.time(),
+    )
+    if not entry.get("liquidity_source"):
+        if any(_safe_float(entry.get(field_name)) is not None for field_name in ("volume", "current_volume", "oi", "oi_change")):
+            entry["liquidity_source"] = "trade_payload"
+    if entry.get("liquidity_age_sec") is None:
+        entry["liquidity_age_sec"] = _safe_float(entry.get("quote_age_sec"))
+    if entry.get("liquidity_cache_hit") is None:
+        entry["liquidity_cache_hit"] = False
+    if entry.get("liquidity_missing_fields") is None:
+        entry["liquidity_missing_fields"] = [
+            field_name
+            for field_name in ("volume", "current_volume", "oi", "oi_change")
+            if _safe_float(entry.get(field_name)) is None
+        ]
+    if not entry.get("instrument_id"):
+        if entry.get("tradingsymbol"):
+            entry["instrument_id"] = entry.get("tradingsymbol")
+        elif _coerce_instrument_token(entry.get("instrument_token")) is not None:
+            entry["instrument_id"] = str(entry.get("instrument_token"))
+        else:
+            entry["instrument_id"] = build_instrument_id(
+                entry.get("underlying") or entry.get("symbol"),
+                "OPT",
+                entry.get("expiry_date"),
+                entry.get("strike"),
+                entry.get("option_type") or entry.get("type"),
+            )
+    return entry
+
+
+def _is_unresolved_option_contract(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    option_right = _coerce_option_type(entry.get("option_type") or entry.get("type") or entry.get("right"))
+    if str(entry.get("instrument_type") or entry.get("instrument") or "").upper() != "OPT":
+        return True
+    if option_right not in {"CE", "PE"}:
+        return True
+    if not str(entry.get("tradingsymbol") or "").strip():
+        return True
+    if not _coerce_expiry(entry.get("expiry_date") or entry.get("expiry")):
+        return True
+    return False
+
+
+def _apply_unresolved_contract_state(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    missing_identity_fields = _missing_broker_contract_fields(entry)
+    current_status = str(entry.get("status_raw") or entry.get("status") or "PLANNING").strip().upper() or "PLANNING"
+    if current_status == "BLOCKED_CONTRACT":
+        current_status = "PLANNING"
+    entry["status_raw"] = current_status
+    entry["unresolved_contract"] = True
+    entry["tradable"] = False
+    entry["tradable_reasons_blocking"] = list(
+        dict.fromkeys(list(entry.get("tradable_reasons_blocking") or []) + ["unresolved_contract"])
+    )
+    entry["status"] = "BLOCKED_CONTRACT"
+    entry["permission"] = "BLOCK"
+    entry["execution_allowed"] = False
+    entry["final_action"] = "BLOCK"
+    entry["hard_reason"] = "unresolved_contract"
+    entry["approval_blocked"] = False
+    entry["permission_reason"] = "unresolved_contract"
+    entry["entry_status"] = str(entry.get("entry_status") or "MISSING_OPTION_TOKEN")
+    entry["missing_identity_fields"] = missing_identity_fields
+    entry["entry"] = None
+    entry["suggested_entry"] = None
+    entry["expected_entry"] = None
+    return entry
+
+
+def _clear_unresolved_contract_state(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    status_raw = str(entry.get("status_raw") or "").strip().upper() or "PLANNING"
+    entry["unresolved_contract"] = False
+    entry["missing_identity_fields"] = []
+    reasons = [reason for reason in list(entry.get("tradable_reasons_blocking") or []) if str(reason) != "unresolved_contract"]
+    entry["tradable_reasons_blocking"] = reasons
+    entry["status"] = status_raw if status_raw != "BLOCKED_CONTRACT" else "PLANNING"
+    entry["hard_reason"] = None
+    entry["permission"] = None
+    entry["permission_reason"] = None
+    entry["entry_status"] = None if str(entry.get("entry_status") or "").strip() == "MISSING_OPTION_TOKEN" else entry.get("entry_status")
+    entry["final_action"] = None
+    entry["final_blocker"] = None
+    entry["token_coverage_error_code"] = None
+    entry["token_coverage_evidence"] = None
+    return entry
+
+
+def _emit_review_queue_logs(entry: dict) -> None:
+    if not isinstance(entry, dict):
+        return
+    try:
+        advisory_entry = serialize_advisory_row(entry, allow_legacy=True)
+    except AdvisorySchemaError as exc:
+        log_advisory_schema_error("review_queue.emit", entry, exc)
+        logger.warning("advisory_emit_schema_error trade_id=%s error=%s", entry.get("trade_id"), exc)
+        return
+    suggestion_paths: list[Path] = []
+    seen_paths: set[str] = set()
+
+    def _add_suggestion_path(path) -> None:
+        try:
+            normalized = Path(path).expanduser()
+        except Exception:
+            return
+        key = str(normalized)
+        if not key or key in seen_paths:
+            return
+        seen_paths.add(key)
+        suggestion_paths.append(normalized)
+
+    explicit_suggestions_path = None
+    try:
+        raw = str(getattr(cfg, "SUGGESTIONS_LOG_PATH", "") or "").strip()
+    except Exception:
+        raw = ""
+    if raw:
+        explicit_suggestions_path = canonical_suggestions_log_path()
+    if explicit_suggestions_path is not None:
+        _add_suggestion_path(explicit_suggestions_path)
+    for path in suggestion_log_paths():
+        _add_suggestion_path(path)
+    if _is_blocked_contract_row(entry):
+        if explicit_suggestions_path is not None:
+            _append_jsonl([Path(explicit_suggestions_path).expanduser()], advisory_entry)
+        blocked_payload = dict(advisory_entry)
+        blocked_payload.setdefault("reject_reason", "unresolved_contract")
+        blocked_payload.setdefault("reason_code", "unresolved_contract")
+        _append_jsonl(rejected_candidates_paths(), blocked_payload)
+        return
+    _append_jsonl(suggestion_paths, advisory_entry)
+
+
+def _apply_manual_approval_state(entry: dict, now_epoch: float | None = None) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    if bool(entry.get("unresolved_contract")):
+        entry["approval_blocked"] = False
+        return entry
+    if not _manual_approval_required_for_entry(entry):
+        entry.setdefault("approval_blocked", False)
+        return entry
+    approval_payload_hash = str(entry.get("approval_payload_hash") or "").strip() or None
+    approval_context_present = bool(
+        approval_payload_hash
+        or str(entry.get("approval_reason") or "").strip()
+    )
+    if not approval_context_present:
+        entry.setdefault("approval_blocked", False)
+        return entry
+    trade_id = str(entry.get("trade_id") or "").strip()
+    if not trade_id:
+        entry.setdefault("approval_blocked", False)
+        return entry
+    approved, approval_reason = approval_status(
+        trade_id,
+        payload_hash=approval_payload_hash,
+        now_epoch=now_epoch,
+    )
+    if approved:
+        entry["approval_blocked"] = False
+        return entry
+    entry["approval_blocked"] = True
+    entry["approval_reason"] = str(approval_reason or entry.get("approval_reason") or "approval_missing")
+    entry["execution_allowed"] = False
+    if str(entry.get("permission") or "").upper() == "EXECUTE":
+        entry = _apply_permission_state(
+            entry,
+            "ADVISORY_ONLY",
+            entry["approval_reason"],
+            downgrade_reason=entry["approval_reason"],
+        )
+    elif not str(entry.get("permission_reason") or "").strip():
+        entry["permission_reason"] = entry["approval_reason"]
+    if str(entry.get("final_action") or "").upper() == "EXECUTE":
+        entry["final_action"] = "ADVISORY_ONLY"
+    return entry
+
+
+def _enforce_executable_entry_integrity(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    token_missing_identified = entry.get("instrument_token") in (None, "", "None") and bool(entry.get("tradingsymbol"))
+    if token_missing_identified:
+        return entry
+    status = str(entry.get("status") or "").strip().upper()
+    if status not in _ENTRY_REQUIRED_STATUSES:
+        return entry
+    entry_val = _safe_float(entry.get("entry"))
+    if entry_val is not None:
+        return entry
+    entry["status"] = "INVALID"
+    entry["permission"] = "ADVISORY_ONLY"
+    entry["permission_reason"] = str(entry.get("permission_reason") or _ENTRY_INTEGRITY_REASON)
+    entry["entry_status"] = str(entry.get("entry_status") or _ENTRY_INTEGRITY_REASON)
+    entry["final_action"] = "ADVISORY_ONLY"
+    entry["activation_gate_reason"] = str(entry.get("activation_gate_reason") or "missing_entry")
+    blockers = list(entry.get("tradable_reasons_blocking") or [])
+    if _ENTRY_INTEGRITY_REASON not in blockers:
+        blockers.append(_ENTRY_INTEGRITY_REASON)
+    entry["tradable_reasons_blocking"] = blockers
+    return entry
+
+
+def _log_low_global_conf_once_per_symbol_minute(
+    *,
+    symbol: str | None,
+    raw_conf: float | None,
+    regime_conf: float | None,
+    orb_bias: str | None,
+    orb_factor: float | None,
+    reg_penalty: float | None,
+    global_conf: float | None,
+) -> None:
+    try:
+        sym = str(symbol or "").strip().upper()
+        if not sym:
+            return
+        global_val = _safe_float(global_conf)
+        if global_val is None or global_val >= 0.25:
+            return
+        minute_bucket = int(time.time() // 60)
+        if _LOW_GLOBAL_CONF_LOGGED_MINUTE_BY_SYMBOL.get(sym) == minute_bucket:
+            return
+        _LOW_GLOBAL_CONF_LOGGED_MINUTE_BY_SYMBOL[sym] = minute_bucket
+        logger.info(
+            "low_global_conf symbol=%s raw_conf=%.3f regime_conf=%s orb_bias=%s orb_factor=%s reg_pen=%s global_conf=%.3f",
+            sym,
+            float(_safe_float(raw_conf) or 0.0),
+            f"{_safe_float(regime_conf):.3f}" if _safe_float(regime_conf) is not None else "None",
+            str(orb_bias or "UNKNOWN").upper(),
+            f"{_safe_float(orb_factor):.3f}" if _safe_float(orb_factor) is not None else "None",
+            f"{_safe_float(reg_penalty):.3f}" if _safe_float(reg_penalty) is not None else "None",
+            float(global_val),
+        )
+    except Exception:
+        return
+
+
+def _rest_ltp_cache_key(token_value, tradingsymbol: str | None) -> str | None:
+    if token_value not in (None, "", "None"):
+        return f"token:{token_value}"
+    text = str(tradingsymbol or "").strip().upper()
+    if text:
+        return f"symbol:{text}"
+    return None
+
+
+def _extract_ltp_from_payload(payload, symbols: list[str]) -> float | None:
+    if not isinstance(payload, dict):
+        return None
+    keys = []
+    for candidate in list(symbols) + list(payload.keys()):
+        if candidate not in keys:
+            keys.append(candidate)
+    for key in keys:
+        row = payload.get(key)
+        if isinstance(row, dict):
+            for field in ("last_price", "ltp", "price"):
+                try:
+                    value = row.get(field)
+                    if value is None:
+                        continue
+                    ltp_val = float(value)
+                    if ltp_val > 0:
+                        return ltp_val
+                except Exception:
+                    continue
+            continue
+        try:
+            if row is None:
+                continue
+            ltp_val = float(row)
+            if ltp_val > 0:
+                return ltp_val
+        except Exception:
+            continue
+    return None
+
+
+def _fetch_option_ltp_rest(tradingsymbol: str | None) -> tuple[float | None, float | None]:
+    symbol = str(tradingsymbol or "").strip()
+    if not symbol:
+        return None, None
+    symbol_upper = symbol.upper()
+    # Advisory fallback must fetch option contracts only; never resolve/index-fallback
+    # into underlying quotes for option candidates.
+    if not re.search(r"(CE|PE)$", symbol_upper):
+        return None, None
+    try:
+        from core.kite_client import kite_client
+    except Exception:
+        return None, None
+    symbols = [symbol]
+    if ":" not in symbol:
+        symbols.extend([f"NFO:{symbol}", f"BFO:{symbol}"])
+    try:
+        payload = kite_client.ltp(symbols)
+    except Exception:
+        return None, None
+    ltp_val = _extract_ltp_from_payload(payload, symbols)
+    if ltp_val is None:
+        return None, None
+    return float(ltp_val), float(time.time())
+
+
+def _resolve_rest_fallback_ltp(
+    *,
+    token_value,
+    tradingsymbol: str | None,
+    now_epoch: float | None = None,
+) -> tuple[float | None, float | None, bool]:
+    now_epoch = float(now_epoch if now_epoch is not None else time.time())
+    cache_key = _rest_ltp_cache_key(token_value, tradingsymbol)
+    if not cache_key:
+        return None, None, False
+    cooldown_sec = float(getattr(cfg, "ADVISORY_REST_LTP_COOLDOWN_SEC", 10.0))
+    cache = _ADVISORY_REST_LTP_CACHE.get(cache_key)
+    if isinstance(cache, dict):
+        fetched_epoch = float(cache.get("fetched_epoch") or 0.0)
+        if fetched_epoch > 0 and (now_epoch - fetched_epoch) < cooldown_sec:
+            return cache.get("ltp"), cache.get("ltp_ts_epoch"), True
+    last_attempt = float(_ADVISORY_REST_LTP_LAST_ATTEMPT.get(cache_key) or 0.0)
+    if last_attempt > 0 and (now_epoch - last_attempt) < cooldown_sec:
+        if isinstance(cache, dict):
+            return cache.get("ltp"), cache.get("ltp_ts_epoch"), True
+        return None, None, False
+    _ADVISORY_REST_LTP_LAST_ATTEMPT[cache_key] = now_epoch
+    ltp_val, ltp_ts_epoch = _fetch_option_ltp_rest(tradingsymbol)
+    if ltp_val is None or ltp_ts_epoch is None:
+        if isinstance(cache, dict):
+            return cache.get("ltp"), cache.get("ltp_ts_epoch"), True
+        return None, None, False
+    _ADVISORY_REST_LTP_CACHE[cache_key] = {
+        "ltp": float(ltp_val),
+        "ltp_ts_epoch": float(ltp_ts_epoch),
+        "fetched_epoch": now_epoch,
+    }
+    return float(ltp_val), float(ltp_ts_epoch), True
 
 
 def _coerce_expiry(value) -> str | None:
@@ -117,6 +696,15 @@ def _option_chain_meta_map(ttl_sec: int = 300) -> dict:
                     "type": opt_type,
                     "tradingsymbol": tradingsymbol,
                     "instrument_token": token,
+                    "volume": _safe_float(row.get("volume")),
+                    "current_volume": _safe_float(
+                        row.get("current_volume")
+                        if "current_volume" in row
+                        else row.get("volume")
+                    ),
+                    "oi": _safe_float(row.get("oi")),
+                    "oi_change": _safe_float(row.get("oi_change")),
+                    "quote_age_sec": _safe_float(row.get("quote_age_sec")),
                 }
                 if token:
                     by_token[token] = meta
@@ -132,6 +720,34 @@ def _option_chain_meta_map(ttl_sec: int = 300) -> dict:
         "by_symbol_strike_type": by_symbol_strike_type,
     }
     return _CHAIN_CACHE["data"]
+
+
+def _apply_option_chain_liquidity(entry: dict, meta: dict | None) -> dict:
+    if not isinstance(entry, dict) or not isinstance(meta, dict) or not meta:
+        return entry
+    updated = False
+    for field_name, source_fields in (
+        ("volume", ("volume", "current_volume")),
+        ("current_volume", ("current_volume", "volume")),
+        ("oi", ("oi",)),
+        ("oi_change", ("oi_change",)),
+        ("quote_age_sec", ("quote_age_sec",)),
+    ):
+        if _safe_float(entry.get(field_name)) is not None:
+            continue
+        for source_field in source_fields:
+            if source_field not in meta:
+                continue
+            value = _safe_float(meta.get(source_field))
+            if value is None:
+                continue
+            entry[field_name] = value
+            updated = True
+            break
+    if updated:
+        if not entry.get("liquidity_source"):
+            entry["liquidity_source"] = "option_chain_meta"
+    return entry
 
 
 def _instrument_meta_map(ttl_sec: int = 3600) -> dict:
@@ -161,6 +777,37 @@ def _instrument_meta_map(ttl_sec: int = 3600) -> dict:
         return meta
     except Exception:
         return cache if isinstance(cache, dict) else {}
+
+
+def _lookup_instrument_meta_by_tradingsymbol(tradingsymbol: str | None) -> dict:
+    tradingsymbol_text = str(tradingsymbol or "").strip().upper()
+    meta_map = _instrument_meta_map()
+    instrument_map_size = len(meta_map or {})
+    if not tradingsymbol_text:
+        logger.info(
+            "[TOKEN_RESOLUTION] tradingsymbol=%s lookup_result=missing instrument_map_size=%d",
+            tradingsymbol_text,
+            instrument_map_size,
+        )
+        return {}
+    for token_value, meta in (meta_map or {}).items():
+        if str((meta or {}).get("tradingsymbol") or "").strip().upper() != tradingsymbol_text:
+            continue
+        logger.info(
+            "[TOKEN_RESOLUTION] tradingsymbol=%s lookup_result=resolved instrument_map_size=%d instrument_token=%s",
+            tradingsymbol_text,
+            instrument_map_size,
+            token_value,
+        )
+        out = dict(meta or {})
+        out.setdefault("instrument_token", token_value)
+        return out
+    logger.warning(
+        "[TOKEN_RESOLUTION] tradingsymbol=%s lookup_result=missing instrument_map_size=%d",
+        tradingsymbol_text,
+        instrument_map_size,
+    )
+    return {}
 
 
 def _parse_timestamp(value):
@@ -253,6 +900,13 @@ def _cfg_int(name, default=0):
     except Exception:
         return int(default)
 
+def _cfg_csv_set(name: str, default: str = "") -> set[str]:
+    try:
+        raw = str(getattr(cfg, name, default) or default)
+    except Exception:
+        raw = str(default or "")
+    return {part.strip().upper() for part in raw.split(",") if part.strip()}
+
 def _safe_float(value):
     try:
         if value is None:
@@ -260,6 +914,531 @@ def _safe_float(value):
         return float(value)
     except Exception:
         return None
+
+
+def _first_present_float(mapping: dict, keys: tuple[str, ...]) -> float | None:
+    if not isinstance(mapping, dict):
+        return None
+    for key in keys:
+        if key not in mapping:
+            continue
+        value = _safe_float(mapping.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _validation_reference_price(
+    entry: dict,
+    current_ltp: float | None = None,
+    *,
+    allow_live_ltp: bool = True,
+) -> tuple[float | None, str | None]:
+    for field_name in ("expected_entry", "suggested_entry", "entry_price"):
+        value = _safe_float(entry.get(field_name))
+        if value is not None:
+            return value, field_name
+    entry_val = _safe_float(entry.get("entry"))
+    if entry_val is not None:
+        return entry_val, "entry"
+    signal_price = _safe_float(entry.get("signal_price"))
+    if signal_price is not None:
+        return signal_price, "signal_price"
+    if allow_live_ltp:
+        live_ltp = _safe_float(current_ltp)
+        if live_ltp is None:
+            live_ltp = _safe_float(entry.get("current_ltp"))
+        if live_ltp is not None:
+            return live_ltp, "current_ltp"
+    return None, None
+
+
+def _is_stale_pre_validation_entry(
+    current_entry: float | None,
+    executable_reference: float | None,
+) -> bool:
+    if current_entry is None or executable_reference is None or executable_reference <= 0:
+        return current_entry is None and executable_reference is not None
+    mismatch_pct = _safe_float(getattr(cfg, "OPTION_ENTRY_MISMATCH_PCT", 0.03))
+    threshold = float(mismatch_pct if mismatch_pct is not None and mismatch_pct > 0 else 0.03)
+    diff = abs(float(current_entry) - float(executable_reference)) / float(executable_reference)
+    return bool(diff > threshold)
+
+
+def _quote_spread_pct(entry: dict) -> float | None:
+    spread = _safe_float(entry.get("spread_pct"))
+    if spread is not None:
+        return spread
+    bid = _safe_float(entry.get("best_bid") or entry.get("opt_bid") or entry.get("bid"))
+    ask = _safe_float(entry.get("best_ask") or entry.get("opt_ask") or entry.get("ask"))
+    if bid is None or ask is None or bid <= 0 or ask <= 0 or ask < bid:
+        return None
+    mid = (bid + ask) / 2.0
+    if mid <= 0:
+        return None
+    return (ask - bid) / mid
+
+
+def _entry_execution_mode(entry: dict) -> str:
+    if isinstance(entry, dict):
+        for key in ("execution_mode", "mode"):
+            value = str(entry.get(key) or "").strip().upper()
+            if value:
+                return value
+        market_context = entry.get("market_context")
+        if isinstance(market_context, dict):
+            value = str(market_context.get("execution_mode") or "").strip().upper()
+            if value:
+                return value
+    try:
+        return str(getattr(cfg, "EXECUTION_MODE", "") or "").strip().upper()
+    except Exception:
+        return ""
+
+
+def _entry_execution_mode_explicit(entry: dict) -> str:
+    if isinstance(entry, dict):
+        for key in ("execution_mode", "mode"):
+            value = str(entry.get(key) or "").strip().upper()
+            if value:
+                return value
+        market_context = entry.get("market_context")
+        if isinstance(market_context, dict):
+            value = str(market_context.get("execution_mode") or "").strip().upper()
+            if value:
+                return value
+    return ""
+
+
+def _entry_market_open(mode_for_entry: str, allow_stale_quotes_for_entry: bool) -> bool:
+    mode_key = str(mode_for_entry or "").strip().upper()
+    if mode_key in {"OFFHOURS", "PAPER", "BACKTEST"}:
+        return False
+    return not bool(allow_stale_quotes_for_entry)
+
+
+def _coerce_optional_bool(value) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value in (None, "", "None"):
+        return None
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "on"}:
+        return True
+    if text in {"false", "0", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _resolve_entry_market_open(
+    entry: dict,
+    mode_for_entry: str,
+    allow_stale_quotes_for_entry: bool,
+) -> tuple[bool, str]:
+    symbol = None
+    explicit_entry_market_open = None
+    explicit_market_context_open = None
+    explicit_freshness_market_open = None
+    exchange_clock_result = None
+    if isinstance(entry, dict):
+        symbol = str(entry.get("symbol") or "").strip().upper() or None
+        explicit_entry_market_open = _coerce_optional_bool(entry.get("market_open"))
+        if explicit_entry_market_open is not None:
+            logger.debug(
+                "review_queue_market_open_resolved symbol=%s mode_for_entry=%s entry_market_open=%s market_context_market_open=%s freshness_market_open=%s exchange_clock=%s final_market_open=%s final_source=%s",
+                symbol,
+                str(mode_for_entry or "").strip().upper(),
+                explicit_entry_market_open,
+                explicit_market_context_open,
+                explicit_freshness_market_open,
+                exchange_clock_result,
+                explicit_entry_market_open,
+                "entry.market_open",
+            )
+            return explicit_entry_market_open, "entry.market_open"
+        market_context = entry.get("market_context")
+        if isinstance(market_context, dict):
+            explicit_market_context_open = _coerce_optional_bool(market_context.get("market_open"))
+            if explicit_market_context_open is not None:
+                logger.debug(
+                    "review_queue_market_open_resolved symbol=%s mode_for_entry=%s entry_market_open=%s market_context_market_open=%s freshness_market_open=%s exchange_clock=%s final_market_open=%s final_source=%s",
+                    symbol,
+                    str(mode_for_entry or "").strip().upper(),
+                    explicit_entry_market_open,
+                    explicit_market_context_open,
+                    explicit_freshness_market_open,
+                    exchange_clock_result,
+                    explicit_market_context_open,
+                    "market_context.market_open",
+                )
+                return explicit_market_context_open, "market_context.market_open"
+        explicit_freshness_market_open = _coerce_optional_bool(entry.get("freshness_market_open"))
+        if explicit_freshness_market_open is not None:
+            logger.debug(
+                "review_queue_market_open_resolved symbol=%s mode_for_entry=%s entry_market_open=%s market_context_market_open=%s freshness_market_open=%s exchange_clock=%s final_market_open=%s final_source=%s",
+                symbol,
+                str(mode_for_entry or "").strip().upper(),
+                explicit_entry_market_open,
+                explicit_market_context_open,
+                explicit_freshness_market_open,
+                exchange_clock_result,
+                explicit_freshness_market_open,
+                "entry.freshness_market_open",
+            )
+            return explicit_freshness_market_open, "entry.freshness_market_open"
+    try:
+        exchange_clock_result = bool(is_market_open_ist())
+        logger.debug(
+            "review_queue_market_open_resolved symbol=%s mode_for_entry=%s entry_market_open=%s market_context_market_open=%s freshness_market_open=%s exchange_clock=%s final_market_open=%s final_source=%s",
+            symbol,
+            str(mode_for_entry or "").strip().upper(),
+            explicit_entry_market_open,
+            explicit_market_context_open,
+            explicit_freshness_market_open,
+            exchange_clock_result,
+            exchange_clock_result,
+            "exchange_clock",
+        )
+        return exchange_clock_result, "exchange_clock"
+    except Exception:
+        pass
+    final_market_open = _entry_market_open(mode_for_entry, allow_stale_quotes_for_entry)
+    logger.debug(
+        "review_queue_market_open_resolved symbol=%s mode_for_entry=%s entry_market_open=%s market_context_market_open=%s freshness_market_open=%s exchange_clock=%s final_market_open=%s final_source=%s",
+        symbol,
+        str(mode_for_entry or "").strip().upper(),
+        explicit_entry_market_open,
+        explicit_market_context_open,
+        explicit_freshness_market_open,
+        exchange_clock_result,
+        final_market_open,
+        "mode_fallback",
+    )
+    return final_market_open, "mode_fallback"
+
+
+def _manual_approval_required_for_entry(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if bool(entry.get("unresolved_contract")):
+        return False
+    if not _has_valid_broker_contract(entry):
+        return False
+    if not _cfg_bool("MANUAL_APPROVAL", False):
+        return False
+    required_modes = _cfg_csv_set("APPROVAL_REQUIRED_MODES", "PAPER,LIVE")
+    mode = _entry_execution_mode(entry)
+    if mode and mode not in required_modes:
+        return False
+    return True
+
+
+def _allow_rest_fallback_for_mode(mode: str | None) -> bool:
+    mode_key = str(mode or "").strip().upper()
+    return mode_key in {"PAPER", "SIM", "OFFHOURS", "ADVISORY", "PLANNING"}
+
+
+def _is_synthetic_offhours_row(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    option_ltp_source = str(entry.get("option_ltp_source") or "").strip().lower()
+    quote_source = str(entry.get("quote_source") or "").strip().lower()
+    return option_ltp_source == "synthetic_offhours" or quote_source == "synthetic_offhours"
+
+
+def _clear_synthetic_offhours_state_for_live_takeover(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    for field in ("blockers", "hard_blockers", "soft_penalties", "warnings", "tradable_reasons_blocking"):
+        values = [
+            str(value or "").strip()
+            for value in list(entry.get(field) or [])
+            if str(value or "").strip() not in {"NO_LIVE_OPTION_FEED", "OFFHOURS_SYNTHETIC"}
+        ]
+        if values:
+            entry[field] = values
+        else:
+            entry.pop(field, None)
+    for field in ("hard_reason", "final_blocker", "permission_reason"):
+        text = str(entry.get(field) or "").strip()
+        if text in {"NO_LIVE_OPTION_FEED", "OFFHOURS_SYNTHETIC"}:
+            entry.pop(field, None)
+    entry.pop("subscription_failed", None)
+    if str(entry.get("validation_reference_source") or "").strip().lower() == "synthetic_offhours":
+        entry.pop("validation_reference_source", None)
+    if str(entry.get("entry_status") or "").strip().upper() == "OFFHOURS_SYNTHETIC":
+        entry.pop("entry_status", None)
+    return entry
+
+
+def _clear_synthetic_pricing_state_for_live_takeover(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    for field in (
+        "expected_entry",
+        "expected_entry_source",
+        "entry_ref_price",
+        "validation_reference_price",
+        "validation_reference_source",
+        "pre_validation_entry",
+    ):
+        entry.pop(field, None)
+    return entry
+
+
+def _should_force_live_reference_for_takeover(
+    entry: dict,
+    *,
+    current_ltp: float | None,
+    ltp_ts_epoch: float | None,
+) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if current_ltp is None or ltp_ts_epoch is None:
+        return False
+    if _is_synthetic_offhours_row(entry):
+        return True
+    return str(entry.get("strategy") or "").strip().upper() == "QUICK_SYNTH"
+
+
+def _current_non_lifecycle_blockers(entry: dict) -> list[str]:
+    blockers: list[str] = []
+    for source in (
+        list(entry.get("tradable_reasons_blocking") or []),
+    ):
+        for reason in source:
+            text = str(reason or "").strip()
+            if not text or text in blockers or text in TARGET_BLOCKER_CODES:
+                continue
+            blockers.append(text)
+    for field in ("hard_reason", "final_blocker"):
+        text = str(entry.get(field) or "").strip()
+        if text.upper().startswith("HARD_"):
+            continue
+        if not text or text in blockers or text in TARGET_BLOCKER_CODES:
+            continue
+        blockers.append(text)
+    return blockers
+
+
+def _derive_advisory_readiness(entry: dict, blockers: list[str]) -> str:
+    permission = str(entry.get("permission") or "").strip().upper()
+    if bool(entry.get("unresolved_contract")) or permission == "BLOCK" or any(
+        code in {"NO_TOKEN", "NO_LIVE_OPTION_FEED", "unresolved_contract"} for code in blockers
+    ):
+        return "BLOCKED"
+    if permission == "EXECUTE" and not blockers:
+        return "READY"
+    if permission == "QUEUE_ONLY" and not blockers:
+        return "QUEUE_ONLY"
+    return "ADVISORY_ONLY"
+
+
+def _dedupe_issue_codes(values) -> list[str]:
+    out: list[str] = []
+    for value in list(values or []):
+        text = str(value or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _current_issue_codes(entry: dict) -> list[str]:
+    issue_codes = _dedupe_issue_codes(list(entry.get("blockers") or []) + _current_non_lifecycle_blockers(entry))
+    for field in ("validation_issue_code", "quote_validation_status", "hard_reason", "final_blocker", "entry_status"):
+        text = str(entry.get(field) or "").strip()
+        if not text:
+            continue
+        if field in {"entry_status", "quote_validation_status"} and text.upper() in {"DISPLAYABLE", "NON_EXECUTABLE", "MISSING"}:
+            continue
+        if field in {"validation_issue_code", "entry_status", "quote_validation_status"} and text.upper() in {"OK", "LIVE_OK", "VALID", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}:
+            continue
+        if field in {"hard_reason", "final_blocker"} and text.upper().startswith("HARD_"):
+            continue
+        if text not in issue_codes:
+            issue_codes.append(text)
+    return _dedupe_issue_codes(issue_codes)
+
+
+def _apply_issue_classification(
+    entry: dict,
+    *,
+    mode_for_entry: str,
+    allow_stale_quotes_for_entry: bool,
+) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    issue_codes = _current_issue_codes(entry)
+    current_ltp = _safe_float(entry.get("current_ltp"))
+    validation_reference_price = _safe_float(entry.get("validation_reference_price"))
+    confidence_raw = _safe_float(entry.get("global_confidence"))
+    if confidence_raw is None:
+        confidence_raw = _safe_float(entry.get("confidence"))
+    if confidence_raw is None:
+        confidence_raw = _safe_float(entry.get("raw_signal_confidence"))
+    quote_age_sec = _safe_float(
+        entry.get("quote_age_sec")
+        or entry.get("price_age_sec")
+        or entry.get("option_ltp_age_sec")
+    )
+    market_open_for_entry, _market_open_source = _resolve_entry_market_open(
+        entry,
+        mode_for_entry,
+        allow_stale_quotes_for_entry,
+    )
+    ctx = {
+        "mode": mode_for_entry,
+        "market_open": market_open_for_entry,
+        "allow_stale_quotes": allow_stale_quotes_for_entry,
+        "permission": entry.get("permission"),
+        "entry_status": entry.get("entry_status"),
+        "subscription_failed": bool(entry.get("subscription_failed")),
+        "quote_source": entry.get("option_ltp_source") or entry.get("quote_source"),
+        "quote_age_sec": quote_age_sec,
+        "current_ltp": current_ltp,
+        "reference_price": validation_reference_price,
+        "advisory_id": entry.get("advisory_id") or entry.get("trade_id") or entry.get("trade_key"),
+        "symbol": entry.get("symbol"),
+    }
+    hard_blockers: list[str] = []
+    soft_penalties: list[str] = []
+    warnings: list[str] = []
+    confidence_penalty = 0.0
+    issue_classifications: list[dict] = []
+    for code in issue_codes:
+        classification = classify_issue(code, ctx)
+        issue_classifications.append(
+            {
+                "code": classification.code,
+                "category": classification.category,
+                "penalty": classification.penalty,
+                "reason": classification.reason,
+                "evidence": dict(classification.evidence or {}),
+            }
+        )
+        if classification.category == ISSUE_CATEGORY_HARD:
+            if classification.code not in hard_blockers:
+                hard_blockers.append(classification.code)
+        elif classification.category == ISSUE_CATEGORY_SOFT:
+            if classification.code not in soft_penalties:
+                soft_penalties.append(classification.code)
+            confidence_penalty += float(classification.penalty or 0.0)
+        elif classification.category == ISSUE_CATEGORY_WARNING:
+            if classification.code not in warnings:
+                warnings.append(classification.code)
+    permission = str(entry.get("permission") or "").strip().upper()
+    if (permission == "BLOCK" or bool(entry.get("unresolved_contract"))) and not hard_blockers:
+        fallback_code = str(entry.get("hard_reason") or entry.get("permission_reason") or "execution_blocked").strip()
+        if fallback_code and fallback_code not in hard_blockers:
+            hard_blockers.append(fallback_code)
+    confidence_final = confidence_raw
+    if confidence_final is not None:
+        confidence_final = max(0.0, min(1.0, float(confidence_final) - float(confidence_penalty)))
+    blockers = _dedupe_issue_codes(hard_blockers + soft_penalties + warnings)
+    if hard_blockers or permission == "BLOCK" or bool(entry.get("unresolved_contract")):
+        readiness = "BLOCKED"
+        execution_status = "blocked"
+        is_executable = False
+    elif permission == "EXECUTE":
+        readiness = "READY"
+        execution_status = "executable"
+        is_executable = True
+    elif permission == "QUEUE_ONLY":
+        readiness = "QUEUE_ONLY"
+        execution_status = "queue_only"
+        is_executable = False
+    else:
+        readiness = "ADVISORY_ONLY"
+        execution_status = "advisory_only"
+        is_executable = False
+    advisory_visible = not _is_blocked_contract_row(entry)
+    entry["hard_blockers"] = hard_blockers
+    entry["soft_penalties"] = soft_penalties
+    entry["warnings"] = warnings
+    entry["blockers"] = blockers
+    entry["confidence_raw"] = confidence_raw
+    entry["confidence_penalty"] = round(float(confidence_penalty), 6)
+    entry["confidence_final"] = confidence_final
+    if confidence_final is not None:
+        entry["confidence"] = confidence_final
+        entry["global_confidence"] = confidence_final
+    entry["readiness"] = readiness
+    entry["advisory_visible"] = advisory_visible
+    entry["is_executable"] = is_executable
+    entry["execution_status"] = execution_status
+    entry["entry_source"] = (
+        entry.get("expected_entry_source")
+        or entry.get("entry_price_source")
+        or entry.get("validation_reference_source")
+        or entry.get("option_ltp_source")
+        or entry.get("quote_source")
+    )
+    entry["issue_classifications"] = issue_classifications
+    target_codes = {code for code in hard_blockers if code in TARGET_BLOCKER_CODES}
+    final_blocker = str(entry.get("final_blocker") or "").strip()
+    if target_codes:
+        entry["final_blocker"] = hard_blockers[0]
+    elif final_blocker in TARGET_BLOCKER_CODES:
+        entry["final_blocker"] = None
+    return entry
+
+
+def _refresh_lifecycle_blockers(
+    entry: dict,
+    *,
+    mode_for_entry: str,
+    allow_stale_quotes_for_entry: bool,
+    current_ltp: float | None,
+    validation_reference_price: float | None,
+) -> dict:
+    if not isinstance(entry, dict) or str(entry.get("instrument") or entry.get("instrument_type") or "").upper() != "OPT":
+        return entry
+    option_sla = float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0))
+    canonical_live_sla = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
+    stale_threshold = float(
+        get_option_ltp_sla_sec(
+            mode_for_entry,
+            min(option_sla, canonical_live_sla),
+            allow_stale_quotes=allow_stale_quotes_for_entry,
+            market_open=_entry_market_open(mode_for_entry, allow_stale_quotes_for_entry),
+            expiry_lotto_mode=bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)),
+        )
+    )
+    advisory_generation = (
+        str(entry.get("advisory_id") or "").strip()
+        or str(entry.get("trade_id") or "").strip()
+        or str(entry.get("trade_key") or "").strip()
+        or str(entry.get("timestamp") or "").strip()
+    )
+    active_records = evaluate_advisory_contract_blockers(
+        get_blocker_registry("advisory"),
+        now_ts=float(time.time()),
+        symbol=entry.get("symbol"),
+        expiry=entry.get("expiry_date") or entry.get("expiry"),
+        strike=entry.get("strike"),
+        right=entry.get("option_type") or entry.get("type") or entry.get("right"),
+        advisory_generation=advisory_generation,
+        instrument_token=entry.get("instrument_token"),
+        tradingsymbol=entry.get("tradingsymbol"),
+        live_price=current_ltp,
+        reference_price=validation_reference_price,
+        quote_age_sec=entry.get("price_age_sec"),
+        stale_threshold_sec=stale_threshold,
+        abs_tol=float(getattr(cfg, "OPTION_ENTRY_MISMATCH_ABS", 1.0)),
+        pct_tol=float(getattr(cfg, "OPTION_ENTRY_MISMATCH_PCT", 0.03)),
+        subscription_failed=bool(entry.get("subscription_failed")),
+    )
+    lifecycle_codes = [str(record.code) for record in active_records]
+    blockers = list(dict.fromkeys(lifecycle_codes + _current_non_lifecycle_blockers(entry)))
+    entry["blockers"] = blockers
+    entry["readiness"] = _derive_advisory_readiness(entry, blockers)
+    target_codes = {code for code in lifecycle_codes if code in TARGET_BLOCKER_CODES}
+    final_blocker = str(entry.get("final_blocker") or "").strip()
+    if target_codes:
+        entry["final_blocker"] = lifecycle_codes[0] if lifecycle_codes else None
+    elif final_blocker in TARGET_BLOCKER_CODES:
+        entry["final_blocker"] = None
+    return entry
 
 
 def _perm_rank(value: str | None) -> int:
@@ -272,6 +1451,28 @@ def _perm_rank(value: str | None) -> int:
     if value is None:
         return -1
     return mapping.get(str(value).strip().upper(), -1)
+
+
+def _apply_permission_state(
+    entry: dict,
+    permission: str | None,
+    reason: str | None,
+    *,
+    downgrade_reason: str | None = None,
+) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    prev_permission = str(entry.get("permission") or "").strip().upper()
+    new_permission = str(permission or "").strip().upper()
+    reason_text = str(reason or "").strip()
+    if prev_permission and new_permission and _perm_rank(new_permission) < _perm_rank(prev_permission):
+        entry["permission_downgraded_from"] = prev_permission
+        entry["permission_downgrade_reason"] = str(downgrade_reason or reason_text or "")
+    if new_permission:
+        entry["permission"] = new_permission
+    if reason_text:
+        entry["permission_reason"] = reason_text
+    return entry
 
 
 def _material_change(old_entry: dict, new_entry: dict, tol: float) -> bool:
@@ -356,6 +1557,16 @@ def _merge_trade_entry(data: list[dict], entry: dict) -> list[dict]:
     if existing_lifecycle in {"ACTIVE", "RESOLVED"} and incoming_lifecycle in {"PLANNING", "NEW", ""}:
         entry["status"] = existing_lifecycle
 
+    # Keep entry deterministic for planning rows to avoid entry drift on each revalidation tick.
+    # New entry may still populate when it was previously missing.
+    freeze_planning_entry = bool(getattr(cfg, "FREEZE_PLANNING_ENTRY_ON_REVALIDATE", True)) if cfg else True
+    if freeze_planning_entry and existing_lifecycle in {"PLANNING", "NEW", ""}:
+        old_entry = _safe_float(existing.get("entry"))
+        if old_entry is not None:
+            entry["entry"] = existing.get("entry")
+            if existing.get("suggested_entry") not in (None, "", "None"):
+                entry["suggested_entry"] = existing.get("suggested_entry")
+
     update_count = int(existing.get("update_count") or 0) + 1
     first_seen = existing.get("first_seen") or entry.get("first_seen") or now_iso
 
@@ -404,6 +1615,66 @@ def _write_json(path: Path, payload):
     os.replace(tmp_path, path)
 
 
+def _update_suggestions_status_latest(entry: dict) -> None:
+    try:
+        if not isinstance(entry, dict):
+            return
+        path = logs_dir() / "suggestions_status.json"
+        suggestions_path = canonical_suggestions_log_path()
+        current = _read_json(path, {})
+        if not isinstance(current, dict):
+            current = {}
+        suggestion_count = int(current.get("suggestion_count") or 0)
+        try:
+            if suggestions_path.exists():
+                with suggestions_path.open("r", encoding="utf-8") as fh:
+                    suggestion_count = sum(1 for line in fh if str(line).strip())
+        except Exception:
+            pass
+        primary_blocker = (
+            str(entry.get("final_blocker") or "").strip()
+            or str(entry.get("hard_reason") or "").strip()
+            or str(entry.get("entry_status") or "").strip()
+            or str(entry.get("permission_reason") or "").strip()
+            or None
+        )
+        status = "blocked" if _is_entry_status_blocking(entry.get("entry_status")) or str(entry.get("permission") or "").upper() == "BLOCK" else "ok"
+        payload = dict(current)
+        payload.update(
+            {
+                "ts_epoch": float(time.time()),
+                "ts_local": datetime.now().astimezone().isoformat(),
+                "status": status,
+                "suggestion_count": int(suggestion_count),
+                "latest_trade_id": entry.get("trade_id"),
+                "latest_entry_status": entry.get("entry_status"),
+                "latest_permission": entry.get("permission"),
+                "latest_permission_reason": entry.get("permission_reason"),
+                "primary_blocker": primary_blocker or current.get("primary_blocker"),
+            }
+        )
+        write_json_atomic(path, payload)
+        engine_path = logs_dir() / "engine_cycle_status.json"
+        engine_current = _read_json(engine_path, {})
+        if isinstance(engine_current, dict):
+            engine_payload = dict(engine_current)
+            engine_payload.update(
+                {
+                    "ts_epoch": float(time.time()),
+                    "cycle_ok": True,
+                    "cycle_stage": "blocked" if status == "blocked" else "ok",
+                    "reason": primary_blocker if status == "blocked" else "ok",
+                    "subreason": "",
+                    "candidates_seen": max(int(engine_current.get("candidates_seen") or 0), int(suggestion_count)),
+                    "candidates_enqueued": max(int(engine_current.get("candidates_enqueued") or 0), int(suggestion_count)),
+                    "primary_blocker": primary_blocker or engine_current.get("primary_blocker"),
+                }
+            )
+            write_json_atomic(engine_path, engine_payload)
+    except Exception:
+        logger.warning("suggestions_status_update_failed trade_id=%s", entry.get("trade_id") if isinstance(entry, dict) else None)
+
+
 def _looks_like_trade(payload: dict) -> bool:
     if not isinstance(payload, dict):
         return False
@@ -418,6 +1689,21 @@ def _looks_like_trade(payload: dict) -> bool:
 
 def _normalize_queue_row(row: dict) -> dict:
     out = dict(row or {})
+    canonical_entry = any(
+        key in out
+        for key in (
+            "execution_entry",
+            "execution_entry_source",
+            "execution_entry_status",
+            "display_entry",
+            "display_entry_source",
+            "display_entry_status",
+            "entry_reason",
+            "entry_clear_reason",
+        )
+    )
+    original_status = str(out.get("status_raw") or out.get("status") or "PLANNING").strip().upper() or "PLANNING"
+    out["status_raw"] = original_status
     out.setdefault("symbol", out.get("underlying"))
     if out.get("expiry_date") in (None, "", "None"):
         out["expiry_date"] = _coerce_expiry(out.get("expiry")) or out.get("expiry")
@@ -431,8 +1717,59 @@ def _normalize_queue_row(row: dict) -> dict:
     strike_val = _coerce_strike(strike)
     if strike_val is not None:
         out["strike"] = strike_val
-    out.setdefault("status", "PLANNING")
+    out.setdefault("status", original_status)
+    if _is_blocked_contract_row(out):
+        out = _apply_unresolved_contract_state(out)
+    quote_validation_status = str(out.get("quote_validation_status") or out.get("entry_status") or "").strip()
+    if quote_validation_status:
+        out["quote_validation_status"] = quote_validation_status
+    if "display_entry" in out:
+        out["entry"] = _safe_float(out.get("display_entry"))
+    if "display_entry_status" in out and out.get("display_entry_status") not in (None, "", "None"):
+        out["entry_status"] = str(out.get("display_entry_status")).lower()
+    if "display_entry_source" in out and out.get("display_entry_source") not in (None, "", "None"):
+        out["entry_source"] = out.get("display_entry_source")
     out.setdefault("entry", out.get("entry_price"))
+    entry_status = str(out.get("entry_status") or "").strip().upper()
+    token_missing_advisory = out.get("instrument_token") in (None, "", "None") and bool(out.get("tradingsymbol"))
+    if out.get("entry") in ("", "None"):
+        out["entry"] = None
+    # Fail-closed normalization: executable entry must come from validated quote fields.
+    # Do not carry stale/model reference prices as actionable entry.
+    if canonical_entry:
+        pass
+    elif entry_status and entry_status != "OK":
+        suggested = _safe_float(out.get("suggested_entry"))
+        current_ltp = _safe_float(out.get("current_ltp"))
+        if token_missing_advisory:
+            planned_entry = suggested
+            if planned_entry is None:
+                planned_entry = _safe_float(out.get("entry_price"))
+            out["entry"] = planned_entry
+        else:
+            out["entry"] = suggested if suggested is not None else current_ltp
+    elif out.get("entry") is None:
+        suggested = _safe_float(out.get("suggested_entry"))
+        if suggested is not None:
+            out["entry"] = suggested
+        else:
+            fallback_entry = _safe_float(out.get("entry_price"))
+            if fallback_entry is not None:
+                out["entry"] = fallback_entry
+    if _safe_float(out.get("expected_entry")) is None:
+        expected_entry = _safe_float(out.get("suggested_entry"))
+        if expected_entry is None:
+            expected_entry = _safe_float(out.get("mark_price"))
+        if expected_entry is None:
+            expected_entry = _safe_float(out.get("entry"))
+        if expected_entry is not None:
+            out["expected_entry"] = expected_entry
+    if _safe_float(out.get("fill_entry")) is None:
+        fill_entry = _safe_float(out.get("fill_price"))
+        if fill_entry is None:
+            fill_entry = _safe_float(out.get("avg_fill_price"))
+        if fill_entry is not None:
+            out["fill_entry"] = fill_entry
     for key in ("symbol", "expiry_date", "strike", "type", "status"):
         out.setdefault(key, None)
     ts_ms = _coerce_timestamp_epoch_ms(out)
@@ -443,6 +1780,16 @@ def _normalize_queue_row(row: dict) -> dict:
         out["timestamp"] = out["timestamp_utc_iso"]
     else:
         out["timestamp"] = str(out.get("timestamp"))
+    if _is_blocked_contract_row(out):
+        out = _apply_unresolved_contract_state(out)
+    if original_status in {"APPROVED", "ACTIVE"}:
+        out["status"] = original_status
+    elif bool(out.get("unresolved_contract")):
+        out["status"] = "BLOCKED_CONTRACT"
+    else:
+        out["status"] = _derive_review_status(out, fallback_status=original_status)
+    out = _enforce_executable_entry_integrity(out)
+    out = enforce_entry_contract(out, stage="review_queue.normalize")
     return out
 
 
@@ -505,6 +1852,8 @@ def load_queue_rows(path: Path, rewrite_healed: bool = True) -> list[dict]:
             continue
         try:
             normalized = _normalize_queue_row(item)
+        except EntryContractViolation:
+            raise
         except Exception:
             logger.warning("queue_load_row_normalize_failed path=%s", path)
             modified = True
@@ -604,7 +1953,8 @@ def add_to_queue(trade, queue_path=None, extra=None):
     path = queue_path or QUEUE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     data = load_queue_rows(path)
-    runtime_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
+    mode_for_entry = "ADVISORY"
+    allow_stale_quotes_for_entry = True
     def get_attr(obj, name, default=None):
         if isinstance(obj, dict):
             return obj.get(name, default)
@@ -628,11 +1978,15 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "type": get_attr(trade, "right") or get_attr(trade, "option_type"),
         "option_type": get_attr(trade, "option_type") or get_attr(trade, "right"),
         "side": get_attr(trade, "side"),
-        "entry": get_attr(trade, "entry_price"),
+        # Preserve raw trade.entry when present, but keep entry_price as the
+        # backward-compatible fallback so pre-validation state is not lost.
+        "entry": get_attr(trade, "entry", None) if get_attr(trade, "entry", None) not in (None, "", "None") else get_attr(trade, "entry_price"),
+        "entry_source": get_attr(trade, "entry_source", None),
         "entry_price": get_attr(trade, "entry_price"),
+        "entry_price_source": get_attr(trade, "entry_price_source", None),
         "entry_condition": get_attr(trade, "entry_condition") or "BREAKOUT",
         "entry_ref_price": get_attr(trade, "entry_ref_price"),
-        "signal_price": get_attr(trade, "entry_price"),
+        "signal_price": get_attr(trade, "signal_price", None),
         "stop": get_attr(trade, "stop_loss"),
         "stop_price": get_attr(trade, "stop_price") or get_attr(trade, "stop_loss"),
         "target": get_attr(trade, "target"),
@@ -673,6 +2027,16 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "opt_ltp": get_attr(trade, "opt_ltp", None),
         "opt_bid": get_attr(trade, "opt_bid", None),
         "opt_ask": get_attr(trade, "opt_ask", None),
+        "volume": get_attr(trade, "volume", None),
+        "current_volume": get_attr(trade, "current_volume", None),
+        "oi": get_attr(trade, "oi", None),
+        "oi_change": get_attr(trade, "oi_change", None),
+        "liquidity_source": get_attr(trade, "liquidity_source", None),
+        "liquidity_age_sec": get_attr(trade, "liquidity_age_sec", None),
+        "liquidity_cache_hit": get_attr(trade, "liquidity_cache_hit", None),
+        "liquidity_missing_fields": get_attr(trade, "liquidity_missing_fields", None),
+        "tick_volume": get_attr(trade, "tick_volume", None),
+        "spread_pct": get_attr(trade, "spread_pct", None),
         "quote_ok": get_attr(trade, "quote_ok", None),
         "underlying_spot": get_attr(trade, "underlying_spot", None),
         "spot_source": get_attr(trade, "spot_source", None),
@@ -680,10 +2044,14 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "option_ltp_timestamp": get_attr(trade, "option_ltp_timestamp", None),
         "current_ltp": get_attr(trade, "current_ltp", None),
         "suggested_entry": get_attr(trade, "suggested_entry", None),
+        "expected_entry": get_attr(trade, "expected_entry", None),
+        "expected_entry_source": get_attr(trade, "expected_entry_source", None),
+        "fill_entry": get_attr(trade, "fill_entry", None),
         "price_age_sec": get_attr(trade, "price_age_sec", None),
         "quote_age_sec": get_attr(trade, "quote_age_sec", None),
         "entry_status": get_attr(trade, "entry_status", None),
         "price_source": get_attr(trade, "price_source", None),
+        "quote_source": get_attr(trade, "quote_source", None),
         "mark_price": get_attr(trade, "mark_price", None),
         "mid_price": get_attr(trade, "mid_price", None),
         "best_bid": get_attr(trade, "best_bid", None),
@@ -696,98 +2064,33 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "trade_alignment": get_attr(trade, "trade_alignment", None),
         "trade_score_detail": get_attr(trade, "trade_score_detail", None),
         "direction": get_attr(trade, "direction", None),
+        "execution_mode": get_attr(trade, "execution_mode", None),
+        "mode": get_attr(trade, "mode", None),
+        "market_open": get_attr(trade, "market_open", None),
+        "market_context": get_attr(trade, "market_context", None),
         "global_confidence": get_attr(trade, "global_confidence", None),
         "permission": get_attr(trade, "permission", None),
         "permission_reason": get_attr(trade, "permission_reason", None),
         "countertrend": get_attr(trade, "countertrend", None),
         "raw_signal_confidence": get_attr(trade, "raw_signal_confidence", None),
+        "snapshot_id": get_attr(trade, "snapshot_id", None),
         "timestamp": str(get_attr(trade, "timestamp")),
         "upstox_instrument_key": get_attr(trade, "upstox_instrument_key"),
     }
     if extra:
         entry.update(extra)
+    mode_for_entry = _entry_execution_mode(entry) or mode_for_entry
+    allow_stale_quotes_for_entry = _allow_rest_fallback_for_mode(mode_for_entry)
+    market_open_for_entry, market_open_source = _resolve_entry_market_open(
+        entry,
+        mode_for_entry,
+        allow_stale_quotes_for_entry,
+    )
+    entry["market_open"] = market_open_for_entry
+    entry["market_open_source"] = market_open_source
     if entry.get("instrument") == "OPT":
-        if not entry.get("expiry_date") and entry.get("expiry"):
-            entry["expiry_date"] = _coerce_expiry(entry.get("expiry")) or entry.get("expiry")
-        if entry.get("expiry_date"):
-            entry["expiry_date"] = _coerce_expiry(entry.get("expiry_date")) or entry.get("expiry_date")
-        opt_type = _coerce_option_type(entry.get("option_type") or entry.get("type") or entry.get("right"))
-        if opt_type:
-            entry["option_type"] = opt_type
-            entry["type"] = opt_type
-        strike_val = _coerce_strike(entry.get("strike"))
-        if strike_val is not None:
-            entry["strike"] = strike_val
-        chain_meta = _option_chain_meta_map()
-        if entry.get("instrument_token") and (not entry.get("expiry_date") or not entry.get("tradingsymbol")):
-            meta = _instrument_meta_map().get(entry.get("instrument_token"), {})
-            if not meta and chain_meta:
-                meta = (chain_meta.get("by_token") or {}).get(entry.get("instrument_token"), {})
-            if meta:
-                entry.setdefault("expiry_date", meta.get("expiry"))
-                entry.setdefault("expiry", meta.get("expiry"))
-                entry.setdefault("tradingsymbol", meta.get("tradingsymbol"))
-                entry.setdefault("option_type", _coerce_option_type(meta.get("type")))
-                entry.setdefault("type", _coerce_option_type(meta.get("type")))
-                if meta.get("strike") is not None:
-                    entry.setdefault("strike", meta.get("strike"))
-        if (not entry.get("instrument_token")) and entry.get("symbol") and strike_val is not None and opt_type:
-            meta = None
-            expiry_date = entry.get("expiry_date")
-            if expiry_date:
-                meta = (chain_meta.get("by_contract") or {}).get((entry.get("symbol"), expiry_date, float(strike_val), opt_type))
-            if meta is None:
-                candidates = (chain_meta.get("by_symbol_strike_type") or {}).get(
-                    (entry.get("symbol"), float(strike_val), opt_type),
-                    [],
-                )
-                if candidates:
-                    exp_dates = []
-                    meta_by_exp = {}
-                    for cand in candidates:
-                        exp = _coerce_expiry(cand.get("expiry"))
-                        if not exp:
-                            continue
-                        try:
-                            exp_dt = datetime.fromisoformat(exp).date()
-                        except Exception:
-                            continue
-                        exp_dates.append(exp_dt)
-                        meta_by_exp[exp_dt.isoformat()] = cand
-                    if exp_dates:
-                        chosen = choose_nearest_available_expiry(exp_dates, today=datetime.now().date())
-                        if chosen is not None:
-                            meta = meta_by_exp.get(chosen.isoformat())
-            if meta:
-                entry.setdefault("expiry_date", meta.get("expiry"))
-                entry.setdefault("expiry", meta.get("expiry"))
-                entry.setdefault("tradingsymbol", meta.get("tradingsymbol"))
-                entry.setdefault("instrument_token", meta.get("instrument_token"))
-                entry.setdefault("option_type", _coerce_option_type(meta.get("type")))
-                entry.setdefault("type", _coerce_option_type(meta.get("type")))
-        if (not entry.get("instrument_token")) and entry.get("symbol") and entry.get("expiry_date") and strike_val is not None and opt_type:
-            resolved = resolve_option_token(
-                entry.get("symbol"),
-                entry.get("expiry_date"),
-                strike_val,
-                opt_type,
-            )
-            if resolved:
-                entry.setdefault("instrument_token", resolved.get("instrument_token"))
-                entry.setdefault("tradingsymbol", resolved.get("tradingsymbol"))
-        if not entry.get("instrument_id"):
-            if entry.get("tradingsymbol"):
-                entry["instrument_id"] = entry.get("tradingsymbol")
-            elif entry.get("instrument_token"):
-                entry["instrument_id"] = str(entry.get("instrument_token"))
-            else:
-                entry["instrument_id"] = build_instrument_id(
-                    entry.get("underlying") or entry.get("symbol"),
-                    "OPT",
-                    entry.get("expiry_date"),
-                    entry.get("strike"),
-                    entry.get("option_type") or entry.get("type"),
-                )
+        input_token_missing = entry.get("instrument_token") in (None, "", "None") and bool(entry.get("tradingsymbol"))
+        entry = _enrich_contract_identity(entry)
         if entry.get("target") in (None, "", "None"):
             rr_default = float(getattr(cfg, "TARGET_RR_DEFAULT", 1.5)) if cfg else 1.5
             derived_target = _derive_target(entry.get("entry"), entry.get("stop"), entry.get("side"), rr_default)
@@ -795,57 +2098,249 @@ def add_to_queue(trade, queue_path=None, extra=None):
                 entry["target"] = derived_target
                 entry["target_derived"] = True
                 entry["target_rr"] = rr_default
-        unresolved_contract = False
-        if not entry.get("instrument_id"):
-            unresolved_contract = True
-        if not entry.get("expiry_date"):
-            unresolved_contract = True
-        if not entry.get("tradingsymbol"):
-            unresolved_contract = True
+        unresolved_contract = _is_unresolved_option_contract(entry)
         if unresolved_contract:
-            entry["tradable"] = False
-            entry["tradable_reasons_blocking"] = list(
-                dict.fromkeys(list(entry.get("tradable_reasons_blocking") or []) + ["unresolved_contract"])
-            )
-            entry.setdefault("execution_allowed", False)
-            entry.setdefault("hard_reason", "unresolved_contract")
-            entry.setdefault("approval_blocked", True)
-            if not entry.get("entry_status"):
-                entry["entry_status"] = "NO_TOKEN"
-            entry["entry"] = None
+            entry = _apply_unresolved_contract_state(entry)
         else:
+            entry = _clear_unresolved_contract_state(entry)
             token_val = entry.get("instrument_token")
+            subscription_ok = True
             if token_val is not None:
                 try:
-                    ensure_subscribed_tokens([int(token_val)], reason="trade_created", symbol=entry.get("symbol"))
+                    subscription_ok = bool(
+                        ensure_subscribed_tokens([int(token_val)], reason="trade_created", symbol=entry.get("symbol"))
+                    )
                 except Exception:
-                    pass
-            tick = None
-            try:
-                tick = get_last_tick(entry.get("instrument_token"))
-            except Exception:
-                tick = None
-            current_ltp = tick.get("ltp") if isinstance(tick, dict) else None
-            ltp_ts_epoch = tick.get("ts_epoch") if isinstance(tick, dict) else None
-            validation = validate_live_entry(
-                signal_price=entry.get("signal_price"),
+                    subscription_ok = False
+            token_value = entry.get("instrument_token")
+            current_ltp = None
+            ltp_ts_epoch = None
+            rest_fallback_used = False
+            if token_value not in (None, "", "None"):
+                try:
+                    current_ltp, ltp_ts_epoch = get_ltp(token_value, decision_path=True)
+                except TypeError:
+                    current_ltp, ltp_ts_epoch = get_ltp(token_value)
+                except Exception:
+                    current_ltp, ltp_ts_epoch = None, None
+            token_present = token_value not in (None, "", "None")
+            explicit_mode_for_fallback = _entry_execution_mode_explicit(entry)
+            allow_rest_fallback = bool(
+                token_present
+                and entry.get("tradingsymbol")
+                and (subscription_ok or _allow_rest_fallback_for_mode(explicit_mode_for_fallback))
+            )
+            if current_ltp is None and allow_rest_fallback:
+                fallback_ltp, fallback_ts_epoch, fallback_used = _resolve_rest_fallback_ltp(
+                    token_value=token_value,
+                    tradingsymbol=entry.get("tradingsymbol"),
+                    now_epoch=time.time(),
+                )
+                if fallback_ltp is not None and fallback_ts_epoch is not None:
+                    current_ltp, ltp_ts_epoch = float(fallback_ltp), float(fallback_ts_epoch)
+                    rest_fallback_used = bool(fallback_used)
+            synthetic_offhours = _is_synthetic_offhours_row(entry)
+            live_quote_available = current_ltp is not None and ltp_ts_epoch is not None
+            live_quote_source = "rest_fallback" if rest_fallback_used else "tick_store"
+            token_missing_identified = bool(input_token_missing)
+            live_took_over_synthetic = _should_force_live_reference_for_takeover(
+                entry,
                 current_ltp=current_ltp,
                 ltp_ts_epoch=ltp_ts_epoch,
-                mode=runtime_mode,
             )
-            entry["current_ltp"] = validation.get("current_ltp")
-            entry["option_ltp_timestamp"] = ltp_ts_epoch
-            entry["price_age_sec"] = validation.get("price_age_sec")
-            entry["entry_status"] = validation.get("entry_status")
-            entry["suggested_entry"] = validation.get("suggested_entry")
-            if validation.get("valid"):
-                entry["entry"] = validation.get("suggested_entry")
-                entry["option_ltp_source"] = tick.get("source") if isinstance(tick, dict) else entry.get("option_ltp_source")
+            if live_took_over_synthetic:
+                entry = _clear_synthetic_offhours_state_for_live_takeover(entry)
+                entry = _clear_synthetic_pricing_state_for_live_takeover(entry)
+                synthetic_offhours = False
+            validation_signal_price = _safe_float(entry.get("signal_price"))
+            pre_validation_entry = None if live_took_over_synthetic else _safe_float(entry.get("entry"))
+            if live_took_over_synthetic:
+                validation_reference_entry = dict(entry)
+                for field in (
+                    "expected_entry",
+                    "expected_entry_source",
+                    "entry_ref_price",
+                    "validation_reference_price",
+                    "validation_reference_source",
+                    "pre_validation_entry",
+                    "suggested_entry",
+                    "entry",
+                    "entry_price",
+                    "signal_price",
+                ):
+                    validation_reference_entry.pop(field, None)
+                validation_reference_price, validation_reference_source = _validation_reference_price(
+                    validation_reference_entry,
+                    current_ltp=current_ltp,
+                )
+                validation_reference_source = live_quote_source
             else:
+                validation_reference_price, validation_reference_source = _validation_reference_price(
+                    entry,
+                    current_ltp=current_ltp,
+                    allow_live_ltp=not token_missing_identified,
+                )
+            if (not token_missing_identified) and _safe_float(entry.get("expected_entry")) is None and validation_reference_price is not None:
+                entry["expected_entry"] = validation_reference_price
+            if (not token_missing_identified) and _is_stale_pre_validation_entry(pre_validation_entry, validation_reference_price):
+                entry["entry"] = validation_reference_price
+            if synthetic_offhours:
+                synthetic_entry = _safe_float(entry.get("expected_entry"))
+                if synthetic_entry is None:
+                    synthetic_entry = _safe_float(entry.get("entry_price"))
+                if synthetic_entry is None:
+                    synthetic_entry = validation_reference_price
+                entry["current_ltp"] = current_ltp
+                entry["option_ltp_timestamp"] = ltp_ts_epoch
+                entry["validation_signal_price"] = validation_signal_price
+                entry["validation_reference_price"] = synthetic_entry
+                entry["validation_reference_source"] = "synthetic_offhours"
+                entry["pre_validation_entry"] = pre_validation_entry
+                entry["entry_status"] = "OFFHOURS_SYNTHETIC"
+                entry["suggested_entry"] = synthetic_entry
+                if _safe_float(entry.get("expected_entry")) is None and synthetic_entry is not None:
+                    entry["expected_entry"] = synthetic_entry
+                if _is_stale_pre_validation_entry(pre_validation_entry, synthetic_entry):
+                    entry["entry"] = synthetic_entry
+                if not entry.get("option_ltp_source"):
+                    entry["option_ltp_source"] = "synthetic_offhours"
+            else:
+                if token_missing_identified:
+                    advisory_entry = _safe_float(entry.get("suggested_entry"))
+                    if advisory_entry is None:
+                        advisory_entry = pre_validation_entry
+                    if advisory_entry is None:
+                        advisory_entry = _safe_float(entry.get("entry_price"))
+                    if advisory_entry is None:
+                        advisory_entry = _safe_float(entry.get("signal_price"))
+                    if advisory_entry is None:
+                        advisory_entry = _safe_float(entry.get("expected_entry"))
+                    entry["current_ltp"] = current_ltp
+                    entry["option_ltp_timestamp"] = ltp_ts_epoch
+                    entry["price_age_sec"] = None
+                    entry["freshness_reason"] = None
+                    entry["freshness_market_open"] = market_open_for_entry
+                    entry["freshness_now_epoch"] = None
+                    entry["freshness_quote_epoch"] = None
+                    entry["freshness_candle_epoch"] = None
+                    entry["freshness_threshold_sec"] = None
+                    entry["freshness_selected_source"] = None
+                    entry["freshness_selected_age_sec"] = None
+                    entry["candle_age_sec"] = None
+                    entry["quote_validation_status"] = "non_executable"
+                    entry["validation_signal_price"] = validation_signal_price
+                    entry["validation_reference_price"] = advisory_entry
+                    entry["validation_reference_source"] = "tradingsymbol_without_token"
+                    entry["pre_validation_entry"] = pre_validation_entry
+                    entry["entry_status"] = "non_executable"
+                    entry["suggested_entry"] = advisory_entry
+                    if _safe_float(entry.get("expected_entry")) is None and advisory_entry is not None:
+                        entry["expected_entry"] = advisory_entry
+                    entry["entry"] = advisory_entry
+                    entry.setdefault("execution_allowed", False)
+                    entry["permission"] = "ADVISORY_ONLY"
+                    entry["permission_reason"] = entry.get("permission_reason") or "instrument_token_missing"
+                    entry["option_ltp_source"] = entry.get("option_ltp_source") or "unknown"
+                    entry["quote_source"] = entry.get("quote_source") or entry["option_ltp_source"]
+                else:
+                    validation = validate_live_entry(
+                        signal_price=validation_reference_price,
+                        current_ltp=current_ltp,
+                        ltp_ts_epoch=ltp_ts_epoch,
+                        candle_ts_epoch=_safe_float(
+                            entry.get("candle_ts_epoch")
+                            or entry.get("last_candle_ts_epoch")
+                            or entry.get("signal_candle_epoch")
+                        ),
+                        mode=mode_for_entry,
+                        allow_stale_quotes=allow_stale_quotes_for_entry,
+                        market_open=market_open_for_entry,
+                        now_epoch=float(time.time()),
+                        segment="NSE_FNO",
+                        token=token_value,
+                        symbol=entry.get("symbol"),
+                        trade_id=str(entry.get("advisory_id") or entry.get("trade_id") or entry.get("trade_key") or ""),
+                        require_token=True,
+                        require_strict_match=False,
+                        allow_candle_fallback=True,
+                    )
+                    entry["current_ltp"] = validation.get("current_ltp")
+                    entry["option_ltp_timestamp"] = ltp_ts_epoch
+                    entry["price_age_sec"] = validation.get("price_age_sec")
+                    entry["freshness_reason"] = validation.get("freshness_reason")
+                    entry["freshness_market_open"] = validation.get("freshness_market_open")
+                    entry["freshness_now_epoch"] = validation.get("freshness_now_epoch")
+                    entry["freshness_quote_epoch"] = validation.get("freshness_quote_epoch")
+                    entry["freshness_candle_epoch"] = validation.get("freshness_candle_epoch")
+                    entry["freshness_threshold_sec"] = validation.get("freshness_threshold_sec")
+                    entry["freshness_selected_source"] = validation.get("freshness_selected_source")
+                    entry["freshness_selected_age_sec"] = validation.get("freshness_selected_age_sec")
+                    entry["candle_age_sec"] = validation.get("candle_age_sec")
+                    entry["quote_validation_status"] = validation.get("entry_status")
+                    entry["validation_signal_price"] = validation_signal_price
+                    entry["validation_reference_price"] = (
+                        _safe_float(validation.get("suggested_entry"))
+                        if live_took_over_synthetic
+                        else validation_reference_price
+                    )
+                    entry["validation_reference_source"] = (
+                        live_quote_source if live_took_over_synthetic else validation_reference_source
+                    )
+                    entry["pre_validation_entry"] = pre_validation_entry
+                    entry_status_value = validation.get("entry_status")
+                    if rest_fallback_used and validation.get("valid"):
+                        entry_status_value = "REST_FALLBACK"
+                    entry["entry_status"] = entry_status_value
+                    entry["suggested_entry"] = validation.get("suggested_entry")
+                    if _safe_float(entry.get("expected_entry")) is None:
+                        expected_entry = _safe_float(validation.get("suggested_entry"))
+                        if expected_entry is None:
+                            expected_entry = _safe_float(validation.get("current_ltp"))
+                        if expected_entry is not None:
+                            entry["expected_entry"] = expected_entry
+                    if live_took_over_synthetic and _safe_float(entry.get("expected_entry")) is not None:
+                        entry["expected_entry_source"] = live_quote_source
+                    if validation.get("valid"):
+                        entry["entry"] = validation.get("suggested_entry")
+                        entry["option_ltp_source"] = "rest_fallback" if rest_fallback_used else "tick_store"
+                        entry["quote_source"] = entry["option_ltp_source"]
+                    else:
+                        fallback_entry = _safe_float(validation.get("suggested_entry"))
+                        if fallback_entry is None:
+                            fallback_entry = _safe_float(current_ltp)
+                        entry["entry"] = fallback_entry
+                        if fallback_entry is None:
+                            fallback_entry = _safe_float(current_ltp)
+                        entry.setdefault("execution_allowed", False)
+                        entry["permission"] = "ADVISORY_ONLY"
+                        entry["permission_reason"] = entry.get("permission_reason") or entry_status_value
+                        if rest_fallback_used:
+                            entry["option_ltp_source"] = "rest_fallback"
+                            entry["quote_source"] = "rest_fallback"
+            if (
+                current_ltp is None
+                and token_present
+                and not subscription_ok
+                and not _allow_rest_fallback_for_mode(explicit_mode_for_fallback)
+            ):
                 entry["entry"] = None
-                entry.setdefault("execution_allowed", False)
-                entry["permission"] = "ADVISORY_ONLY"
-                entry["permission_reason"] = entry.get("permission_reason") or validation.get("entry_status")
+                entry["entry_status"] = "NO_LIVE_OPTION_FEED"
+                entry["option_ltp_source"] = "subscription_failed"
+                entry["quote_source"] = "subscription_failed"
+                entry["subscription_failed"] = True
+                entry = _apply_permission_state(
+                    entry,
+                    "BLOCK",
+                    "NO_LIVE_OPTION_FEED",
+                    downgrade_reason="NO_LIVE_OPTION_FEED",
+                )
+                entry["execution_allowed"] = False
+                entry["final_action"] = "BLOCK"
+            if not entry.get("option_ltp_source"):
+                entry["option_ltp_source"] = "rest_fallback" if rest_fallback_used else "tick_store"
+            if not entry.get("quote_source"):
+                entry["quote_source"] = entry.get("option_ltp_source")
+            entry["post_validation_entry"] = _safe_float(entry.get("entry"))
             if not entry.get("upstox_instrument_key"):
                 try:
                     entry["upstox_instrument_key"] = resolve_upstox_key(entry)
@@ -863,6 +2358,8 @@ def add_to_queue(trade, queue_path=None, extra=None):
                 pass
     perm = {}
     try:
+        entry.pop("permission_downgraded_from", None)
+        entry.pop("permission_downgrade_reason", None)
         raw_conf = entry.get("raw_signal_confidence")
         if raw_conf is None:
             raw_conf = entry.get("confidence")
@@ -891,24 +2388,133 @@ def add_to_queue(trade, queue_path=None, extra=None):
         entry["global_confidence"] = perm.get("global_confidence")
         entry["permission"] = perm.get("permission")
         entry["permission_reason"] = perm.get("permission_reason")
+        entry["permission_base"] = str(entry.get("permission") or "").strip().upper()
+        entry["permission_reason_base"] = str(entry.get("permission_reason") or "")
         entry["countertrend"] = perm.get("countertrend")
         entry["raw_signal_confidence"] = raw_conf
         if perm.get("global_confidence") is not None:
             entry["confidence"] = perm.get("global_confidence")
         if perm.get("regime_confidence") is not None:
             entry["regime_confidence"] = perm.get("regime_confidence")
+        _log_low_global_conf_once_per_symbol_minute(
+            symbol=entry.get("symbol"),
+            raw_conf=raw_conf,
+            regime_conf=entry.get("regime_confidence"),
+            orb_bias=(perm.get("orb_bias") if isinstance(perm, dict) else entry.get("orb_bias")),
+            orb_factor=(perm.get("orb_factor") if isinstance(perm, dict) else None),
+            reg_penalty=(perm.get("regime_penalty") if isinstance(perm, dict) else None),
+            global_conf=entry.get("global_confidence"),
+        )
         entry_status = str(entry.get("entry_status") or "")
-        if entry_status and entry_status != "OK":
-            entry["permission"] = "ADVISORY_ONLY"
-            entry["permission_reason"] = entry.get("permission_reason") or entry_status
+        if _is_entry_status_blocking(entry_status):
+            entry = _apply_permission_state(
+                entry,
+                "ADVISORY_ONLY",
+                entry_status,
+                downgrade_reason=entry_status,
+            )
+        if bool(entry.get("subscription_failed")) and entry_status == "NO_LIVE_OPTION_FEED":
+            entry = _apply_permission_state(
+                entry,
+                "BLOCK",
+                "NO_LIVE_OPTION_FEED",
+                downgrade_reason="NO_LIVE_OPTION_FEED",
+            )
+            entry["execution_allowed"] = False
     except Exception as exc:
         logger.warning("permission_compute_failed: %s", exc)
         entry["permission_reason"] = f"permission_compute_failed:{type(exc).__name__}"
     entry_status = str(entry.get("entry_status") or "")
-    entry_block_reason = entry_status if entry_status and entry_status != "OK" else None
+    entry_block_reason = entry_status if _is_entry_status_blocking(entry_status) else None
     permission = str(entry.get("permission") or "ADVISORY_ONLY").upper()
     permission_reason = str(entry.get("permission_reason") or "")
     global_conf = _safe_float(entry.get("global_confidence"))
+    gate_snapshot = {
+        "freshness": {
+            "max_tick_age_sec": _safe_float(entry.get("price_age_sec")),
+            "sla_threshold_sec": _safe_float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0)),
+        },
+        "feed_state": (
+            entry.get("feed_state")
+            or (entry.get("feed_health_snapshot") or {}).get("state")
+            or "UNKNOWN"
+        ),
+    }
+    gate_candidate = {
+        "current_ltp": _safe_float(entry.get("current_ltp") or entry.get("live_ltp") or entry.get("entry")),
+        "option_age_sec": _safe_float(
+            entry.get("option_age_sec")
+            or entry.get("price_age_sec")
+            or entry.get("option_ltp_age_sec")
+        ),
+        "spread_pct": _quote_spread_pct(entry),
+        "volume": _first_present_float(entry, ("volume", "current_volume", "tick_volume")),
+        "best_bid": _safe_float(entry.get("best_bid") or entry.get("bid") or entry.get("opt_bid")),
+        "best_ask": _safe_float(entry.get("best_ask") or entry.get("ask") or entry.get("opt_ask")),
+        "feed_state": gate_snapshot["feed_state"],
+        "global_confidence": _safe_float(entry.get("global_confidence")),
+        "confidence": _safe_float(entry.get("confidence")),
+        "raw_signal_confidence": _safe_float(entry.get("raw_signal_confidence")),
+    }
+    gate_eval = gate_decision(gate_candidate, gate_snapshot)
+    entry["gating"] = gate_eval
+    if not bool(gate_eval.get("hard_pass")):
+        hard_reason = (
+            (gate_eval.get("hard_reasons") or [None])[0]
+            or "HARD_GATE_FAILED"
+        )
+        entry_block_reason = entry_block_reason or hard_reason
+        permission = (
+            "BLOCK"
+            if bool(entry.get("subscription_failed")) and entry_status == "NO_LIVE_OPTION_FEED"
+            else "ADVISORY_ONLY"
+        )
+        permission_reason = hard_reason
+        entry = _apply_permission_state(
+            entry,
+            permission,
+            permission_reason,
+            downgrade_reason=hard_reason,
+        )
+        entry.setdefault("execution_allowed", False)
+        entry["entry_status"] = entry_status or hard_reason
+        entry_status = str(entry.get("entry_status") or "")
+
+    final_conf_threshold = float(
+        getattr(
+            cfg,
+            "GATING_FINAL_CONFIDENCE_MIN",
+            getattr(cfg, "CONFIDENCE_MIN", 0.55),
+        )
+    )
+    gate_final_conf = _safe_float(gate_eval.get("final_confidence"))
+    if gate_final_conf is not None:
+        entry["global_confidence"] = gate_final_conf
+        entry["confidence"] = gate_final_conf
+        global_conf = gate_final_conf
+    soft_conf_reject = bool(
+        bool(gate_eval.get("hard_pass"))
+        and permission == "EXECUTE"
+        and entry_block_reason is None
+        and gate_final_conf is not None
+        and gate_final_conf < final_conf_threshold
+    )
+    if soft_conf_reject:
+        permission = "ADVISORY_ONLY"
+        permission_reason = "SOFT_CONFIDENCE_BELOW_THRESHOLD"
+        entry = _apply_permission_state(
+            entry,
+            permission,
+            permission_reason,
+            downgrade_reason=permission_reason,
+        )
+        entry.setdefault("execution_allowed", False)
+    if bool(entry.get("unresolved_contract")):
+        entry = _apply_unresolved_contract_state(entry)
+    else:
+        entry = _apply_manual_approval_state(entry, now_epoch=time.time())
+    permission = str(entry.get("permission") or permission or "ADVISORY_ONLY").upper()
+    permission_reason = str(entry.get("permission_reason") or permission_reason or "")
     high_execute_threshold = float(getattr(cfg, "HIGH_EXECUTE_MIN_CONF", 0.65))
     high_execute_eligible = bool(
         permission == "EXECUTE"
@@ -916,7 +2522,26 @@ def add_to_queue(trade, queue_path=None, extra=None):
         and global_conf is not None
         and global_conf >= high_execute_threshold
     )
-    final_action = "EXECUTE" if permission == "EXECUTE" and entry_block_reason is None else "ADVISORY_ONLY"
+    final_action = "BLOCK" if permission == "BLOCK" else (
+        "EXECUTE"
+        if permission == "EXECUTE" and entry_block_reason is None
+        else ("QUEUE_ONLY" if permission == "QUEUE_ONLY" and entry_block_reason is None else "ADVISORY_ONLY")
+    )
+    entry["final_action"] = final_action
+    entry = _refresh_lifecycle_blockers(
+        entry,
+        mode_for_entry=mode_for_entry,
+        allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+        current_ltp=_safe_float(entry.get("current_ltp")),
+        validation_reference_price=_safe_float(entry.get("validation_reference_price")),
+    )
+    entry = _apply_issue_classification(
+        entry,
+        mode_for_entry=mode_for_entry,
+        allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+    )
+    entry["status_raw"] = str(entry.get("status_raw") or entry.get("status") or "PLANNING").strip().upper() or "PLANNING"
+    entry["status"] = _derive_review_status(entry, fallback_status=entry["status_raw"])
     high_execute_blockers: list[str] = []
     if global_conf is None or global_conf < high_execute_threshold:
         high_execute_blockers.append("global_conf_below_high_execute")
@@ -924,6 +2549,8 @@ def add_to_queue(trade, queue_path=None, extra=None):
         high_execute_blockers.append(f"permission_{permission}")
     if entry_block_reason:
         high_execute_blockers.append(f"entry_{entry_block_reason}")
+    if soft_conf_reject:
+        high_execute_blockers.append("soft_confidence_below_threshold")
     decision_trace = {
         "signal_score": _safe_float(perm.get("signal_score") if isinstance(perm, dict) else entry.get("raw_signal_confidence")),
         "regime_conf": _safe_float(entry.get("regime_confidence")),
@@ -933,15 +2560,51 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "global_conf": global_conf,
         "permission": permission,
         "permission_reason": permission_reason,
+        "permission_base": entry.get("permission_base"),
+        "permission_reason_base": entry.get("permission_reason_base"),
+        "permission_downgraded_from": entry.get("permission_downgraded_from"),
+        "permission_downgrade_reason": entry.get("permission_downgrade_reason"),
         "entry_status": entry_status or None,
         "entry_block_reason": entry_block_reason,
+        "hard_pass": bool(gate_eval.get("hard_pass")),
+        "hard_gate_reasons": list(gate_eval.get("hard_reasons") or []),
+        "soft_gate_reasons": list(gate_eval.get("soft_reasons") or []),
+        "soft_score_adjustment": _safe_float(gate_eval.get("soft_score_adjustment")),
+        "final_confidence_after_soft_gates": gate_final_conf,
+        "final_confidence_min_threshold": final_conf_threshold,
         "high_execute_threshold": high_execute_threshold,
         "high_execute_eligible": high_execute_eligible,
         "high_execute_blockers": high_execute_blockers,
+        "strategy_qualified": bool(permission in {"EXECUTE", "QUEUE", "HIGH_EXECUTE"}),
+        "gating_reason": entry_block_reason or permission_reason or None,
+        "final_blocker": (
+            entry.get("final_blocker")
+            or entry_block_reason
+            or permission_reason
+            or None
+        ),
+        "feed_state": (
+            entry.get("feed_state")
+            or (entry.get("feed_health_snapshot") or {}).get("state")
+            or None
+        ),
+        "quote_age_sec": _safe_float(entry.get("quote_age_sec")),
+        "option_age_sec": _safe_float(
+            entry.get("option_age_sec")
+            or entry.get("price_age_sec")
+            or entry.get("option_ltp_age_sec")
+        ),
         "final_action": final_action,
     }
     entry["decision_trace"] = decision_trace
     entry["final_action"] = final_action
+    entry = enforce_entry_contract(entry, stage="review_queue.add_to_queue")
+    entry = _enforce_executable_entry_integrity(entry)
+    try:
+        serialize_advisory_row(entry, allow_legacy=True)
+    except AdvisorySchemaError as exc:
+        log_advisory_schema_error("review_queue.add_to_queue", entry, exc)
+        logger.warning("advisory_queue_schema_error trade_id=%s error=%s", entry.get("trade_id"), exc)
     source_flags = entry.get("source_flags")
     if isinstance(source_flags, dict):
         merged_flags = dict(source_flags)
@@ -958,7 +2621,8 @@ def add_to_queue(trade, queue_path=None, extra=None):
     data = _merge_trade_entry(data, entry)
     write_queue_rows(path, data)
     # Log suggestion for evaluation
-    _append_jsonl(suggestion_log_paths(), entry)
+    _emit_review_queue_logs(entry)
+    _update_suggestions_status_latest(entry)
 
 def is_approved(trade_id, payload_hash=None):
     ok, _reason = approval_status(trade_id, payload_hash=payload_hash)

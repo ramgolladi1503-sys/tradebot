@@ -100,3 +100,16 @@ def compute_strategy_timeline_metrics(df: pd.DataFrame, bucket_size: str = "5m",
 
     grouped = grouped.sort_values(["time_bucket", "strategy_family"], ascending=[True, True])
     return grouped.reset_index(drop=True)
+
+
+def build_blocker_distribution(df: pd.DataFrame, blocker_col: str = "final_blocker") -> pd.DataFrame:
+    """
+    Return a stable blocker distribution frame with columns:
+    - final_blocker
+    - count
+    """
+    if df is None or df.empty or blocker_col not in df.columns:
+        return pd.DataFrame(columns=["final_blocker", "count"])
+    series = df[blocker_col].fillna("NONE").astype(str)
+    dist = series.value_counts(dropna=False).rename_axis("final_blocker").reset_index(name="count")
+    return dist[["final_blocker", "count"]]

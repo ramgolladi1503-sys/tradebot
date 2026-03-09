@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 import time
 from pathlib import Path
@@ -7,6 +8,9 @@ from typing import Dict, List
 from config import config as cfg
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
+
+
+logger = logging.getLogger(__name__)
 
 STATE_PATH = logs_dir() / "feed_restart_guard_state.json"
 LOG_PATH = logs_dir() / "feed_restart_guard.jsonl"
@@ -22,9 +26,9 @@ class FeedRestartGuard:
     def _log(self, payload: Dict) -> None:
         try:
             if not LOG_WRITER.write(payload):
-                print(f"[FEED_RESTART_GUARD] failed to log path={LOG_PATH}")
+                logger.error("feed_restart_guard_log_write_failed path=%s", LOG_PATH)
         except Exception as exc:
-            print(f"[FEED_RESTART_GUARD] failed to log path={LOG_PATH} err={type(exc).__name__}:{exc}")
+            logger.error("feed_restart_guard_log_error path=%s err=%s:%s", LOG_PATH, type(exc).__name__, exc)
 
     def _save_state(self) -> None:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -83,6 +87,20 @@ class FeedRestartGuard:
                 }
             )
             return True
+
+    def reset(self, *, reason: str = "manual_reset", now: float | None = None) -> None:
+        now = now or time.time()
+        with self._lock:
+            self._restart_epochs = []
+            self._breaker_open_until = 0.0
+            self._save_state()
+            self._log(
+                {
+                    "ts_epoch": now,
+                    "event": "FEED_RESTART_RESET",
+                    "reason": reason,
+                }
+            )
 
 
 feed_restart_guard = FeedRestartGuard()

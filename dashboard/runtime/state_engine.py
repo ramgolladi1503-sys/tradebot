@@ -27,7 +27,10 @@ def run_state_engine_if_due(
 ) -> bool:
     now_ts = float(now_fn())
     last_ts = float(session_state.get("last_state_engine_ts", 0.0) or 0.0)
-    enabled = bool(session_state.get("auto_refresh_enabled", True))
+    # Keep lifecycle progression independent from UI autorefresh toggle.
+    # Operators may choose manual browser refresh while still expecting
+    # queue state transitions (PLANNING->ACTIVE/EXITED) to process on rerun.
+    enabled = bool(session_state.get("state_engine_enabled", True))
     if not should_run_state_engine(
         auto_refresh_enabled=enabled,
         now_ts=now_ts,

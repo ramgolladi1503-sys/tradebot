@@ -15,12 +15,14 @@ from pathlib import Path
 from typing import Iterable
 
 from config import config as cfg
+from core.option_entry import get_option_ltp_sla_sec
 from core.tick_store import get_last_tick
 from core.time_utils import compute_age_sec, now_utc_epoch
 from core.trade_activation import should_activate, activate_trade
 from core.trade_identity import compute_trade_key, derive_strategy_id
-from core.option_token_resolver import resolve_option_token
+from core.option_token_resolver import TokenCoverageError, resolve_option_token
 from core.sim_pnl import resolve_lot_size
+from core.entry_semantics import EntryContractViolation, enforce_entry_contract
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +96,11 @@ def _resolve_token(row: dict) -> int | None:
     option_type = row.get("option_type") or row.get("type") or row.get("right")
     if not symbol or not expiry or strike is None or not option_type:
         return None
-    resolved = resolve_option_token(symbol, expiry, strike, option_type)
+    try:
+        resolved = resolve_option_token(symbol, expiry, strike, option_type)
+    except TokenCoverageError as exc:
+        logger.warning("token coverage below threshold during trade state processing: %s evidence=%s", exc.code, exc.evidence)
+        return None
     if not resolved:
         return None
     token = resolved.get("instrument_token")
@@ -163,7 +169,16 @@ def dedupe_rows(rows: list[dict]) -> list[dict]:
 
 def process_trade_state(trades: list[dict], now_ts: float | None = None) -> tuple[list[dict], TradeStateUpdate]:
     now_epoch = float(now_ts if now_ts is not None else now_utc_epoch())
-    sla_sec = float(getattr(cfg, "LTP_SLA_SECONDS", getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0)))
+    exec_mode = str(getattr(cfg, "EXECUTION_MODE", "PAPER") or "PAPER").upper()
+    live_sla = float(getattr(cfg, "LTP_SLA_SECONDS", getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0)))
+    allow_stale = bool(getattr(cfg, "ALLOW_STALE_QUOTES", exec_mode in {"PAPER", "SIM", "BACKTEST", "PLANNING", "ADVISORY", "OFFHOURS"}))
+    sla_sec = float(
+        get_option_ltp_sla_sec(
+            exec_mode,
+            live_sla,
+            allow_stale_quotes=allow_stale,
+        )
+    )
     update = TradeStateUpdate()
     updated_rows: list[dict] = []
     for trade in trades:
@@ -172,7 +187,13 @@ def process_trade_state(trades: list[dict], now_ts: float | None = None) -> tupl
         row = dict(trade)
         _ensure_trade_key(row)
         token = _resolve_token(row)
-        tick = get_last_tick(token) if token is not None else None
+        tick = None
+        if token is not None:
+            try:
+                tick = get_last_tick(token, decision_path=True)
+            except TypeError:
+                # Backward/test compatibility for patched callables without decision_path kwarg.
+                tick = get_last_tick(token)
         ltp = tick.get("ltp") if isinstance(tick, dict) else None
         ts_epoch = tick.get("ts_epoch") if isinstance(tick, dict) else None
         price_age = compute_age_sec(ts_epoch, now_epoch) if ts_epoch is not None else None
@@ -212,6 +233,10 @@ def process_trade_state(trades: list[dict], now_ts: float | None = None) -> tupl
                     row["exit_ts"] = _now_iso()
                     update.exited += 1
                     update.updated = True
+        try:
+            row = enforce_entry_contract(row, stage="trade_state_engine.process")
+        except EntryContractViolation:
+            raise
         updated_rows.append(row)
     return updated_rows, update
 

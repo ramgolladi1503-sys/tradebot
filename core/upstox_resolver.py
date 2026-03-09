@@ -19,13 +19,18 @@ def resolve_upstox_key(row: dict, instruments_path: Path | None = None) -> str |
 def ensure_upstox_columns(df: pd.DataFrame | None) -> pd.DataFrame | None:
     if df is None or df.empty:
         return df
-    for col in (
+    missing = [
+        col
+        for col in (
         "upstox_instrument_key",
         "upstox_contract_url",
         "upstox_search_url",
         "upstox_query",
         "unresolved_contract",
-    ):
-        if col not in df.columns:
-            df[col] = None
-    return df
+        )
+        if col not in df.columns
+    ]
+    if not missing:
+        return df
+    # Add missing columns in one reindex operation to avoid fragmented-frame warnings.
+    return df.reindex(columns=[*df.columns, *missing])

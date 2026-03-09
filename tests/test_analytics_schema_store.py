@@ -57,6 +57,8 @@ def test_schema_roundtrip_serialize_deserialize():
         exec_feasible_flags={"has_candle_data": True, "ambiguous_intrabar": False},
         source="unit_test",
         reject_reason="spread_pct",
+        reject_reasons=("spread_pct",),
+        primary_reject_reason="spread_pct",
     )
     out_payload = outcome.to_dict()
     ok2, errors2 = validate_trade_outcome_payload(out_payload)

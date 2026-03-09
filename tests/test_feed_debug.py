@@ -5,6 +5,9 @@ from core.feed_debug import get_feed_debug
 
 
 def test_feed_debug_handles_missing_db_tables(tmp_path, monkeypatch):
+    isolated_logs = tmp_path / "logs"
+    isolated_logs.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("core.feed_debug.logs_dir", lambda: isolated_logs)
     db_path = tmp_path / "missing.db"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
     out = get_feed_debug(now_epoch=1700000000.0)

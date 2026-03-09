@@ -34,6 +34,7 @@ def test_planning_mode_when_market_closed(monkeypatch):
 def test_tradable_false_when_quote_stale_live_open(monkeypatch):
     monkeypatch.setattr("strategies.trade_builder.is_market_open_ist", lambda *args, **kwargs: True)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     builder = TradeBuilder()
     stale_opt = _base_opt()
     stale_opt["quote_age_sec"] = 30.0

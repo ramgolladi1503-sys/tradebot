@@ -30,7 +30,7 @@ def test_get_candles_returns_schema_with_required_columns(monkeypatch):
     monkeypatch.setattr(
         market_data.kite_client,
         "historical_data",
-        lambda instrument_token, from_dt, to_dt, interval="minute": [
+        lambda instrument_token, from_dt, to_dt, interval="minute", **kwargs: [
             {
                 "date": candle_dt,
                 "open": 100.0,
@@ -59,3 +59,40 @@ def test_get_candles_returns_schema_with_required_columns(monkeypatch):
     assert float(row["low"]) == 99.0
     assert float(row["close"]) == 100.5
     assert float(row["volume"]) == 1200.0
+
+
+def test_get_candles_passes_historical_caller_context(monkeypatch):
+    calls = []
+
+    def _hist(instrument_token, from_dt, to_dt, interval="minute", **kwargs):
+        calls.append(
+            {
+                "instrument_token": instrument_token,
+                "interval": interval,
+                "kwargs": dict(kwargs),
+            }
+        )
+        return []
+
+    monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda symbol: 256265)
+    monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
+
+    out = market_data.get_candles(
+        symbol="NIFTY",
+        interval="5minute",
+        start_ms=1_700_000_000_000,
+        end_ms=1_700_000_300_000,
+    )
+
+    assert out.empty
+    assert calls == [
+        {
+            "instrument_token": 256265,
+            "interval": "5minute",
+            "kwargs": {
+                "_symbol": "NIFTY",
+                "_exchange": "NSE",
+                "_caller": "market_data_underlying_candles",
+            },
+        }
+    ]

@@ -1,11 +1,15 @@
 from core.paths import data_root, logs_dir
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Dict
 
 from config import config as cfg
 from core.audit_log import append_event
+
+
+logger = logging.getLogger(__name__)
 
 
 INCIDENTS_PATH = Path(getattr(cfg, "INCIDENTS_LOG_PATH", str(logs_dir() / "incidents.jsonl")))
@@ -59,7 +63,7 @@ def trigger_audit_chain_fail(context: Dict) -> str:
     try:
         risk_halt.set_halt("audit_chain_fail", {"incident_id": incident_id, **context})
     except Exception as exc:
-        print(f"[INCIDENT_ERROR] audit_chain_fail halt err={exc}")
+        logger.error("incident_audit_chain_fail_halt_error err=%s", exc)
     return incident_id
 
 
@@ -69,7 +73,7 @@ def trigger_db_write_fail(context: Dict) -> str:
     try:
         risk_halt.set_halt("db_write_fail", {"incident_id": incident_id, **context})
     except Exception as exc:
-        print(f"[INCIDENT_ERROR] db_write_fail halt err={exc}")
+        logger.error("incident_db_write_fail_halt_error err=%s", exc)
     return incident_id
 
 
@@ -82,7 +86,7 @@ def trigger_feed_stale(context: Dict) -> str:
             from core import risk_halt
             risk_halt.set_halt("feed_stale", {"incident_id": incident_id, **context})
     except Exception as exc:
-        print(f"[INCIDENT_ERROR] feed_stale halt err={exc}")
+        logger.error("incident_feed_stale_halt_error err=%s", exc)
     return incident_id
 
 

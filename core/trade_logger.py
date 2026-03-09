@@ -2,6 +2,7 @@
 # Trade logger now resolves canonical trade-log path through core.trade_log_paths.
 
 import json
+import logging
 from datetime import datetime
 from core.trade_store import (
     insert_trade,
@@ -144,7 +145,7 @@ def _log_error(payload: dict) -> None:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, default=str) + "\n")
     except Exception:
-        print("[TRADE_LOGGER_ERROR] failed to write error log")
+        logger.error("trade_logger_error_write_failed")
 
 
 def _compute_realized_metrics(entry: dict, exit_price: float, actual: int, exit_reason: str | None = None) -> dict:
@@ -426,3 +427,4 @@ def update_trade_fill(trade_id, fill_price, latency_ms=None, slippage=None):
         except Exception:
             pass
     return updated_entry if updated else None
+logger = logging.getLogger(__name__)

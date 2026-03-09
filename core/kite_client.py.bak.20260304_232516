@@ -1,0 +1,221 @@
+import time
+import json
+import os
+import logging
+from datetime import date, datetime
+from pathlib import Path
+
+from config import config as cfg
+from core.auth_manager import access_token_path, resolve_access_token
+from core.paths import data_root
+
+try:
+    from kiteconnect import KiteConnect
+except Exception:
+    KiteConnect = None
+
+logger = logging.getLogger(__name__)
+
+
+class KiteClient:
+    def __init__(self):
+        self.kite = None
+        self._instruments_cache = {}
+        self._cache_ts = 0
+        self.last_init_error = None
+
+    def ensure(self):
+        self._ensure()
+
+    @staticmethod
+    def _looks_placeholder_secret(value: str) -> bool:
+        token = str(value or "").strip().lower()
+        if not token:
+            return False
+        if token.startswith("your_") or "placeholder" in token:
+            return True
+        return token in {
+            "your_kiteconnect_api_key",
+            "your_kite_api_key",
+            "your_api_key",
+            "changeme",
+        }
+
+    def _ensure(self):
+        if self.kite or not KiteConnect:
+            return
+
+        api_key = (
+            os.getenv("KITE_API_KEY")
+            or str(getattr(cfg, "KITE_API_KEY", "") or "")
+        ).strip()
+
+        if not api_key:
+            self.last_init_error = "missing_api_key:KITE_API_KEY"
+            return
+
+        if self._looks_placeholder_secret(api_key):
+            self.last_init_error = "invalid_api_key_placeholder:KITE_API_KEY"
+            return
+
+        token = ""
+
+        try:
+            repo_root = Path(__file__).resolve().parents[1]
+
+            # Resolve token through security guard
+            token = resolve_access_token(
+                repo_root_path=repo_root,
+                require_token=False
+            ).strip()
+
+        except RuntimeError as exc:
+            print(str(exc))
+            self.last_init_error = str(exc)
+            return
+
+        if not token:
+            self.last_init_error = f"missing_access_token:{access_token_path(repo_root)}"
+            return
+
+        # Initialize Kite
+        self.kite = KiteConnect(api_key=api_key)
+        self.kite.set_access_token(token)
+
+        # ------------------------------------------------------------------
+        # FIXED DEBUG PRINT (atomic + flushed)
+        # Prevents glued logs like:
+        # kite_id=123KITE_REST api_key...
+        # ------------------------------------------------------------------
+
+        access_token = token
+
+        msg = (
+            "KITE_REST "
+            f"api_key_tail4={api_key[-4:] if len(api_key) >= 4 else api_key} "
+            f"access_token_tail4={access_token[-4:] if len(access_token) >= 4 else access_token} "
+            f"kite_id={id(self.kite)}"
+        )
+
+        print(msg, flush=True)
+
+        # ------------------------------------------------------------------
+
+        self.last_init_error = None
+
+    @staticmethod
+    def _coerce_expiry_date(value):
+        if value is None:
+            return None
+
+        if isinstance(value, datetime):
+            return value.date()
+
+        if isinstance(value, date):
+            return value
+
+        try:
+            text = str(value).split("T", 1)[0]
+            return datetime.fromisoformat(text).date()
+        except Exception:
+            return None
+
+    def instruments(self, exchange=None):
+        self._ensure()
+
+        if not self.kite:
+            return []
+
+        time.sleep(cfg.KITE_RATE_LIMIT_SLEEP)
+
+        return (
+            self.kite.instruments(exchange)
+            if exchange
+            else self.kite.instruments()
+        )
+
+    def instruments_cached(self, exchange=None, ttl_sec=3600):
+        cache_path = data_root() / "kite_instruments.json"
+        now = time.time()
+        key = exchange or "ALL"
+        exchange_upper = str(exchange or "").upper()
+
+        def _filter_rows(rows, exchange_code):
+            if not isinstance(rows, list):
+                return []
+
+            if not exchange_code:
+                return rows
+
+            ex = str(exchange_code).upper()
+
+            out = []
+
+            for inst in rows:
+                if not isinstance(inst, dict):
+                    continue
+
+                inst_exchange = str(inst.get("exchange") or "").upper()
+                inst_segment = str(inst.get("segment") or "").upper()
+
+                if inst_exchange == ex or inst_segment.startswith(f"{ex}-"):
+                    out.append(inst)
+
+            return out
+
+        def _cache_get(raw_cache, cache_key, exchange_code):
+            if isinstance(raw_cache, dict):
+
+                rows = raw_cache.get(cache_key)
+
+                if rows:
+                    return _filter_rows(rows, exchange_code)
+
+                if "ALL" in raw_cache:
+                    return _filter_rows(raw_cache["ALL"], exchange_code)
+
+            if isinstance(raw_cache, list):
+                return _filter_rows(raw_cache, exchange_code)
+
+            return []
+
+        # in-memory cache
+        if key in self._instruments_cache:
+            if now - self._cache_ts < ttl_sec:
+                return self._instruments_cache[key]
+
+        # disk cache
+        if cache_path.exists():
+            try:
+                with open(cache_path) as f:
+                    raw_cache = json.load(f)
+
+                rows = _cache_get(raw_cache, key, exchange_upper)
+
+                if rows:
+                    self._instruments_cache[key] = rows
+                    self._cache_ts = now
+                    return rows
+
+            except Exception:
+                pass
+
+        # refresh from broker
+        rows = self.instruments(exchange)
+
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(cache_path, "w") as f:
+                json.dump(rows, f)
+
+        except Exception:
+            pass
+
+        self._instruments_cache[key] = rows
+        self._cache_ts = now
+
+        return rows
+
+
+kite_client = KiteClient()

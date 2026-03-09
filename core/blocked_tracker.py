@@ -74,7 +74,7 @@ class BlockedTradeTracker:
     def _read_rejections(self) -> list[dict]:
         rows: list[dict] = []
         seen: set[str] = set()
-        for path in rejected_candidates_paths():
+        for path in self._rejection_source_paths():
             for rec in _read_jsonl(path):
                 key = str(
                     rec.get("blocked_id")
@@ -88,6 +88,38 @@ class BlockedTradeTracker:
         now = time.time()
         rows.sort(key=lambda r: self._parse_ts_epoch(r.get("timestamp"), now))
         return rows
+
+    def _rejection_source_paths(self) -> list[Path]:
+        def _normalize(paths: list[Path]) -> list[Path]:
+            out: list[Path] = []
+            seen: set[str] = set()
+            for raw_path in paths:
+                try:
+                    path = Path(raw_path).expanduser()
+                except Exception:
+                    continue
+                key = str(path)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                out.append(path)
+            return out
+
+        source_paths = _normalize(list(rejected_candidates_paths()))
+        desk_path = None
+        try:
+            desk_log_dir = str(getattr(cfg, "DESK_LOG_DIR", "") or "").strip()
+        except Exception:
+            desk_log_dir = ""
+        if desk_log_dir:
+            desk_path = Path(desk_log_dir).expanduser() / "blocked_candidates.jsonl"
+
+        # When a desk blocked-candidates source exists, it is the canonical blocked feed.
+        # Do not also ingest generic or inherited rejected-candidates fallbacks in the same pass.
+        if desk_path is not None and desk_path.exists():
+            return _normalize([desk_path])
+
+        return source_paths
 
     def capture_from_log(self):
         if not getattr(cfg, "BLOCKED_TRACK_ENABLE", True):

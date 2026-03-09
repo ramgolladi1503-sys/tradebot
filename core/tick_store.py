@@ -8,17 +8,93 @@ from config import config as cfg
 from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
-from core.time_utils import compute_age_sec, now_utc_epoch
+from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
 
 _tick_window = deque(maxlen=200000)
 _LAST_TICK_EPOCH = None
 _LAST_TICK_BY_TOKEN: dict[int, dict] = {}
 _ERROR_LOG_PATH = logs_dir() / "tick_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
+_SCHEMA_LOGGED = False
+
+
+def _normalize_token(token: int | str | None) -> int | None:
+    if token is None:
+        return None
+    try:
+        return int(token)
+    except Exception:
+        return None
+
 
 def _conn():
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
     return sqlite3.connect(str(db_path))
+
+
+def _tick_columns(conn: sqlite3.Connection) -> set[str]:
+    try:
+        rows = conn.execute("PRAGMA table_info(ticks)").fetchall()
+    except Exception:
+        return set()
+    cols = set()
+    for row in rows:
+        try:
+            cols.add(str(row[1]))
+        except Exception:
+            continue
+    return cols
+
+
+def _log_schema_event(event: str, **extra) -> None:
+    global _SCHEMA_LOGGED
+    if _SCHEMA_LOGGED and event == "TICK_SCHEMA_OK":
+        return
+    payload = {
+        "ts_epoch": float(time.time()),
+        "event": event,
+        "db_path": str(getattr(cfg, "TRADE_DB_PATH", "")),
+    }
+    payload.update(extra or {})
+    try:
+        _ERROR_LOGGER.write(payload)
+    except Exception:
+        pass
+    if event == "TICK_SCHEMA_OK":
+        _SCHEMA_LOGGED = True
+
+
+def _migrate_ticks_epoch_column(conn: sqlite3.Connection) -> None:
+    cols = _tick_columns(conn)
+    if "timestamp_epoch" in cols:
+        return
+    if "ts_epoch" in cols:
+        try:
+            conn.execute("ALTER TABLE ticks RENAME COLUMN ts_epoch TO timestamp_epoch")
+            conn.commit()
+            _log_schema_event("TICK_SCHEMA_MIGRATE_RENAME_OK")
+        except Exception as exc:
+            _log_schema_event("TICK_SCHEMA_MIGRATE_RENAME_FAIL", error=f"{type(exc).__name__}:{exc}")
+            try:
+                conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_epoch REAL")
+                conn.execute(
+                    "UPDATE ticks SET timestamp_epoch = ts_epoch WHERE timestamp_epoch IS NULL AND ts_epoch IS NOT NULL"
+                )
+                conn.commit()
+                _log_schema_event("TICK_SCHEMA_MIGRATE_COPY_OK")
+            except Exception as copy_exc:
+                _log_schema_event(
+                    "TICK_SCHEMA_MIGRATE_COPY_FAIL",
+                    error=f"{type(copy_exc).__name__}:{copy_exc}",
+                )
+    else:
+        try:
+            conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_epoch REAL")
+            conn.commit()
+            _log_schema_event("TICK_SCHEMA_ADD_TIMESTAMP_EPOCH_OK")
+        except Exception as exc:
+            _log_schema_event("TICK_SCHEMA_ADD_TIMESTAMP_EPOCH_FAIL", error=f"{type(exc).__name__}:{exc}")
+
 
 def init_ticks():
     with _conn() as conn:
@@ -35,53 +111,211 @@ def init_ticks():
         )
         """
         )
-        try:
-            conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_epoch REAL")
-        except Exception:
-            pass
+        _migrate_ticks_epoch_column(conn)
         try:
             conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_iso TEXT")
         except Exception:
             pass
+        cols = _tick_columns(conn)
+        if "timestamp_epoch" not in cols:
+            _log_schema_event("TICK_SCHEMA_INVALID", columns=sorted(cols))
+            raise RuntimeError("ticks schema invalid: missing timestamp_epoch")
+        _log_schema_event("TICK_SCHEMA_OK", columns=sorted(cols))
 
 def _to_epoch(ts):
-    if ts is None or ts == "" or ts == "None":
-        return None
-    if isinstance(ts, (int, float)):
-        return float(ts)
-    try:
-        if hasattr(ts, "timestamp"):
-            return float(ts.timestamp())
-    except Exception:
-        pass
-    try:
-        return float(ts)
-    except Exception:
-        pass
-    try:
-        return datetime.fromisoformat(str(ts)).timestamp()
-    except Exception:
-        return None
+    return normalize_epoch_seconds(ts)
 
 
 def _parse_ts_epoch(ts):
-    if ts is None or ts == "" or ts == "None":
-        return None
-    if isinstance(ts, (int, float)):
-        return float(ts)
+    return normalize_epoch_seconds(ts)
+
+
+def get_max_tick_epoch(conn: sqlite3.Connection) -> float | None:
     try:
-        if hasattr(ts, "timestamp"):
-            return float(ts.timestamp())
-    except Exception:
-        pass
-    try:
-        return float(ts)
-    except Exception:
-        pass
-    try:
-        return datetime.fromisoformat(str(ts)).timestamp()
+        row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks").fetchone()
     except Exception:
         return None
+    if not row:
+        return None
+    return _to_epoch(row[0])
+
+
+def get_max_tick_epoch_db(tokens: list[int] | None = None) -> float | None:
+    try:
+        init_ticks()
+        with _conn() as conn:
+            if not tokens:
+                return get_max_tick_epoch(conn)
+            token_list = [t for t in (_normalize_token(v) for v in list(tokens)) if t is not None]
+            if not token_list:
+                return None
+            latest = None
+            chunk_size = 900
+            for idx in range(0, len(token_list), chunk_size):
+                chunk = token_list[idx : idx + chunk_size]
+                q_marks = ",".join(["?"] * len(chunk))
+                row = conn.execute(
+                    f"SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token IN ({q_marks})",
+                    tuple(chunk),
+                ).fetchone()
+                val = _to_epoch(row[0] if row else None)
+                if val is None:
+                    continue
+                if latest is None or val > latest:
+                    latest = val
+            return latest
+    except Exception:
+        return None
+
+
+def get_last_tick_for_token(
+    conn: sqlite3.Connection, token: int | str | None
+) -> tuple[float | None, float | None] | None:
+    if token is None:
+        return None
+    try:
+        token_int = int(token)
+    except Exception:
+        return None
+    cols = _tick_columns(conn)
+    if "timestamp_epoch" not in cols or "instrument_token" not in cols:
+        return None
+    last_price_expr = "last_price" if "last_price" in cols else "NULL"
+    try:
+        row = conn.execute(
+            f"SELECT {last_price_expr} AS last_price, timestamp_epoch FROM ticks "
+            "WHERE instrument_token=? ORDER BY timestamp_epoch DESC LIMIT 1",
+            (token_int,),
+        ).fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    ltp = None
+    ts_epoch = _to_epoch(row[1])
+    try:
+        if row[0] is not None:
+            ltp = float(row[0])
+    except Exception:
+        ltp = None
+    return ltp, ts_epoch
+
+
+def get_latest_tick_db(token: int) -> dict | None:
+    token_int = _normalize_token(token)
+    if token_int is None:
+        return None
+    try:
+        init_ticks()
+        with _conn() as conn:
+            cols = _tick_columns(conn)
+            if "timestamp_epoch" not in cols or "instrument_token" not in cols:
+                return None
+            last_price_expr = "last_price" if "last_price" in cols else "NULL"
+            volume_expr = "volume" if "volume" in cols else "NULL"
+            oi_expr = "oi" if "oi" in cols else "NULL"
+            row = conn.execute(
+                f"""
+                SELECT {last_price_expr} AS last_price, timestamp_epoch, {volume_expr} AS volume, {oi_expr} AS oi
+                FROM ticks
+                WHERE instrument_token=?
+                ORDER BY timestamp_epoch DESC
+                LIMIT 1
+                """,
+                (token_int,),
+            ).fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    ltp = None
+    try:
+        if row[0] is not None:
+            ltp = float(row[0])
+    except Exception:
+        ltp = None
+    volume = None
+    oi = None
+    try:
+        if row[2] is not None:
+            volume = float(row[2])
+    except Exception:
+        volume = None
+    try:
+        if row[3] is not None:
+            oi = float(row[3])
+    except Exception:
+        oi = None
+    return {
+        "instrument_token": token_int,
+        "ltp": ltp,
+        "ts_epoch": _to_epoch(row[1]),
+        "volume": volume,
+        "oi": oi,
+        "source": "sqlite",
+    }
+
+
+def get_latest_tick_rows_db(tokens: list[int]) -> dict[int, dict]:
+    token_list = [t for t in (_normalize_token(v) for v in list(tokens or [])) if t is not None]
+    if not token_list:
+        return {}
+    out: dict[int, dict] = {}
+    try:
+        init_ticks()
+        with _conn() as conn:
+            cols = _tick_columns(conn)
+            if "timestamp_epoch" not in cols or "instrument_token" not in cols:
+                return out
+            last_price_expr = "last_price" if "last_price" in cols else "NULL"
+            volume_expr = "volume" if "volume" in cols else "NULL"
+            oi_expr = "oi" if "oi" in cols else "NULL"
+            chunk_size = 900
+            for idx in range(0, len(token_list), chunk_size):
+                chunk = token_list[idx : idx + chunk_size]
+                q_marks = ",".join(["?"] * len(chunk))
+                rows = conn.execute(
+                    f"""
+                    SELECT instrument_token, {last_price_expr} AS last_price, timestamp_epoch, {volume_expr} AS volume, {oi_expr} AS oi
+                    FROM ticks
+                    WHERE instrument_token IN ({q_marks})
+                    ORDER BY instrument_token ASC, timestamp_epoch DESC
+                    """,
+                    tuple(chunk),
+                ).fetchall()
+                for row in rows:
+                    token_int = _normalize_token(row[0])
+                    if token_int is None or token_int in out:
+                        continue
+                    ltp = None
+                    try:
+                        if row[1] is not None:
+                            ltp = float(row[1])
+                    except Exception:
+                        ltp = None
+                    volume = None
+                    oi = None
+                    try:
+                        if row[3] is not None:
+                            volume = float(row[3])
+                    except Exception:
+                        volume = None
+                    try:
+                        if row[4] is not None:
+                            oi = float(row[4])
+                    except Exception:
+                        oi = None
+                    out[token_int] = {
+                        "instrument_token": token_int,
+                        "ltp": ltp,
+                        "ts_epoch": _to_epoch(row[2]),
+                        "volume": volume,
+                        "oi": oi,
+                        "source": "sqlite",
+                    }
+    except Exception:
+        return out
+    return out
 
 
 def record_tick_epoch(ts_epoch):
@@ -206,42 +440,50 @@ def last_tick_epoch():
     return _LAST_TICK_EPOCH
 
 
-def get_last_tick(token: int | str | None, allow_db: bool = True) -> dict | None:
-    if token is None:
+def get_last_tick(
+    token: int | str | None,
+    allow_db: bool = True,
+    *,
+    decision_path: bool = False,
+) -> dict | None:
+    token_int = _normalize_token(token)
+    if token_int is None:
         return None
-    try:
-        token_int = int(token)
-    except Exception:
-        return None
-    cached = _LAST_TICK_BY_TOKEN.get(token_int)
-    if cached and cached.get("ts_epoch") is not None:
-        return {"ltp": cached.get("ltp"), "ts_epoch": cached.get("ts_epoch"), "source": "memory"}
+
+    force_sqlite = bool(
+        decision_path and bool(getattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS", True))
+    )
+    if not force_sqlite:
+        cached = _LAST_TICK_BY_TOKEN.get(token_int)
+        if cached and cached.get("ts_epoch") is not None:
+            return {"ltp": cached.get("ltp"), "ts_epoch": cached.get("ts_epoch"), "source": "memory"}
     if not allow_db:
         return None
-    try:
-        init_ticks()
-        with _conn() as conn:
-            row = conn.execute(
-                "SELECT last_price, timestamp_epoch FROM ticks WHERE instrument_token=? ORDER BY timestamp_epoch DESC LIMIT 1",
-                (token_int,),
-            ).fetchone()
-        if not row:
-            return None
-        return {"ltp": row[0], "ts_epoch": row[1], "source": "db"}
-    except Exception:
+    row = get_latest_tick_db(token_int)
+    if not isinstance(row, dict):
         return None
+    return {"ltp": row.get("ltp"), "ts_epoch": row.get("ts_epoch"), "source": "sqlite"}
 
 
-def get_ltp(token: int | str | None) -> tuple[float | None, float | None]:
-    tick = get_last_tick(token, allow_db=True)
+def get_ltp(
+    token: int | str | None,
+    *,
+    decision_path: bool = False,
+) -> tuple[float | None, float | None]:
+    tick = get_last_tick(token, allow_db=True, decision_path=decision_path)
     if not isinstance(tick, dict):
         return None, None
     return tick.get("ltp"), tick.get("ts_epoch")
 
 
-def get_age_sec(token: int | str | None, now_epoch: float | None = None) -> float | None:
+def get_age_sec(
+    token: int | str | None,
+    now_epoch: float | None = None,
+    *,
+    decision_path: bool = False,
+) -> float | None:
     now_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
-    _ltp, ts_epoch = get_ltp(token)
+    _ltp, ts_epoch = get_ltp(token, decision_path=decision_path)
     if ts_epoch is None:
         return None
     return compute_age_sec(ts_epoch, now_epoch)

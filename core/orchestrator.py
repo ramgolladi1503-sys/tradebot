@@ -2,10 +2,13 @@ import time
 import json
 import argparse
 import copy
+import logging
+import os
+from collections import Counter
 from types import MappingProxyType
 from pathlib import Path
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 from strategies.trade_builder import TradeBuilder
 from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap, refresh_index_quote_from_rest
@@ -17,7 +20,7 @@ from core.trade_ticket import TradeTicket
 from core.trade_schema import build_instrument_id, validate_trade_identity
 from core.auto_retrain import AutoRetrain
 from ml.trade_predictor import TradePredictor
-from core.execution_engine import ExecutionEngine
+from core.execution_engine import ExecutionEngine, evaluate as evaluate_execution_decision
 from core.execution_router import ExecutionRouter
 from core.fill_quality import log_fill_quality
 from core.risk_state import RiskState
@@ -29,6 +32,8 @@ from core.run_lock import RunLock
 from core.governance import record_governance
 from core.audit_log import append_event as audit_append, verify_chain as verify_audit_chain
 from core.incidents import create_incident, trigger_audit_chain_fail
+from core.events import append_event as append_runtime_event, write_json_atomic
+from core.heartbeat_status import derive_cycle_semantics
 from core.ml_governance import log_ab_trial
 from rl.size_agent import SizeRLAgent, build_features
 from config import config as cfg
@@ -37,7 +42,18 @@ from ml.strategy_decay_predictor import generate_decay_report, telegram_summary
 from core.kite_client import kite_client
 from core import model_registry
 from core.strategy_allocator import StrategyAllocator
-from core.review_queue import add_to_queue, approval_status, order_payload_hash, QUICK_QUEUE_PATH, ZERO_HERO_QUEUE_PATH, SCALP_QUEUE_PATH, TARGET_POINTS_QUEUE_PATH
+from core.review_queue import (
+    QUICK_QUEUE_PATH,
+    SCALP_QUEUE_PATH,
+    TARGET_POINTS_QUEUE_PATH,
+    ZERO_HERO_QUEUE_PATH,
+    _enrich_contract_identity,
+    _has_valid_broker_contract,
+    _missing_broker_contract_fields,
+    add_to_queue,
+    approval_status,
+    order_payload_hash,
+)
 from core.blocked_tracker import BlockedTradeTracker
 from core.trade_store import insert_execution_stat, update_trailing_state, insert_trail_event, insert_trade_leg, update_trade_close
 from core.depth_store import depth_store
@@ -59,11 +75,26 @@ from core.orchestrator_parts import finalize as orchestrator_finalize
 from core.session_guard import auto_clear_risk_halt_if_safe
 from core.decision_store import DecisionStore
 from core.decision_builder import build_decision
+from core.decision_snapshot import DecisionSnapshot
+from core.snapshot_builder import build_snapshot
+from core.signal_engine import evaluate as evaluate_signal
+from core.gates.quote_age_gate import validate_quote_age
 from core.review_packet import build_review_packet, format_review_packet
 from core.gate_status_log import append_gate_status, build_gate_status_record
+from core.telemetry_streams import (
+    append_candidate_stream_event,
+    append_decision_stream_event,
+    compute_candidate_id,
+)
 from core.trade_log_paths import ensure_trade_log_exists
 from core.runtime_health import write_runtime_health_snapshot
 from core.paths import logs_dir
+from core.market_snapshot_builder import (
+    build_market_snapshot as build_dashboard_market_snapshot,
+    build_symbol_market_snapshot,
+)
+from core.market_snapshot_store import write_market_snapshot_atomic
+from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
     NODE_N2_FEED_FRESH,
@@ -75,20 +106,55 @@ from core.decision_dag import (
     build_market_snapshot,
     evaluate_decision,
 )
+from core.decision_telemetry_health import append_decision_write_error
 from core.decision_side_effects import handle_post_decision_side_effects
 from core.market_context import derive_market_context
 from core.slo_guard import evaluate_slo_status
 from core.slippage_guard import evaluate_slippage_budget
+from core.exit_intelligence import ExitAction, evaluate_exit
 from core.suggestion_reliability import (
     evaluate_suggestion_reliability,
     persist_suggestion_reliability,
 )
+from core.latency_monitor import LatencyMonitor
+from core.latency_guard import (
+    ACTION_COOLDOWN,
+    ACTION_DEGRADE_EXIT_ONLY,
+    ACTION_HALT_ALL,
+    ACTION_OK,
+    LatencyGuard,
+)
+from core.decision_breakers import DecisionCircuitBreakers
 from core.auth_manager import is_auth_error
+from core.regime_monitor import get_regime_monitor
 from core.learning_paths import (
+    canonical_suggestions_log_path,
     canonical_suggestion_eval_log_path,
     suggestion_eval_log_paths,
     suggestion_log_paths,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+def _env_debug_enabled(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _log_option_chain_debug(message: str, *args) -> None:
+    if _env_debug_enabled("TRADEBOT_DEBUG_OPTION_CHAIN"):
+        logger.debug(message, *args)
+
+
+def _log_freshness_debug(message: str, *args) -> None:
+    if _env_debug_enabled("TRADEBOT_DEBUG_FRESHNESS"):
+        logger.debug(message, *args)
+
+
+def _log_advisory_debug(message: str, *args) -> None:
+    if _env_debug_enabled("TRADEBOT_DEBUG_ADVISORY"):
+        logger.debug(message, *args)
 
 
 def resolve_global_halt_reason(circuit_breaker) -> str | None:
@@ -111,6 +177,319 @@ def resolve_global_halt_reason(circuit_breaker) -> str | None:
     return None
 
 
+def _trade_attr(trade, name: str, default=None):
+    if isinstance(trade, dict):
+        return trade.get(name, default)
+    return getattr(trade, name, default)
+
+
+def _replace_trade_fields(trade, updates: dict):
+    if not updates:
+        return trade
+    safe_updates = {}
+    if isinstance(trade, dict):
+        out = dict(trade)
+        out.update(updates)
+        return out
+    for key, value in dict(updates or {}).items():
+        if hasattr(trade, key):
+            safe_updates[key] = value
+    if not safe_updates:
+        return trade
+    try:
+        return replace(trade, **safe_updates)
+    except Exception:
+        for key, value in safe_updates.items():
+            try:
+                setattr(trade, key, value)
+            except Exception:
+                continue
+        return trade
+
+
+def _read_json_dict(path: Path) -> dict:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def _count_jsonl_rows(path: Path) -> int:
+    try:
+        if not path.exists():
+            return 0
+        with path.open("r", encoding="utf-8") as handle:
+            return sum(1 for line in handle if str(line).strip())
+    except Exception:
+        return 0
+
+
+def _scan_visible_suggestions(path: Path) -> dict:
+    counts = {
+        "visible_suggestion_count": 0,
+        "visible_advisory_count": 0,
+        "visible_queue_only_count": 0,
+        "visible_executable_count": 0,
+        "primary_blocker": None,
+    }
+    blocker_counts: Counter = Counter()
+    try:
+        if not path.exists():
+            return counts
+        with path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = str(raw_line or "").strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                if row.get("advisory_visible") is False:
+                    continue
+                counts["visible_suggestion_count"] += 1
+                execution_status = str(row.get("execution_status") or "").strip().lower()
+                final_action = str(row.get("final_action") or "").strip().upper()
+                readiness = str(row.get("readiness") or "").strip().upper()
+                if execution_status == "executable" or final_action == "EXECUTE" or readiness == "READY":
+                    counts["visible_executable_count"] += 1
+                elif execution_status == "queue_only" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
+                    counts["visible_queue_only_count"] += 1
+                else:
+                    counts["visible_advisory_count"] += 1
+                for field in ("hard_blockers", "blockers", "soft_penalties", "warnings"):
+                    for blocker in list(row.get(field) or []):
+                        text = str(blocker or "").strip()
+                        if text:
+                            blocker_counts[text] += 1
+                for field in ("hard_reason", "final_blocker"):
+                    text = str(row.get(field) or "").strip()
+                    if text:
+                        blocker_counts[text] += 1
+        if blocker_counts:
+            counts["primary_blocker"] = str(blocker_counts.most_common(1)[0][0])
+        return counts
+    except Exception:
+        return counts
+
+
+def _top_blockers_payload(blocker_counts: Counter, limit: int = 5) -> list[dict]:
+    out: list[dict] = []
+    for reason, count in blocker_counts.most_common(max(1, int(limit))):
+        out.append({"reason": str(reason), "count": int(count)})
+    return out
+
+
+def _coerce_snapshot_number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        out = float(value)
+    except Exception:
+        return None
+    if out != out:
+        return None
+    return out
+
+
+def _snapshot_ohlc_payload(market_data: dict) -> dict:
+    cache = market_data.get("index_quote_cache") if isinstance(market_data.get("index_quote_cache"), dict) else {}
+    last_candle = market_data.get("last_candle") if isinstance(market_data.get("last_candle"), dict) else {}
+    return {
+        "open": _coerce_snapshot_number(last_candle.get("open", cache.get("open"))),
+        "high": _coerce_snapshot_number(last_candle.get("high", cache.get("high"))),
+        "low": _coerce_snapshot_number(last_candle.get("low", cache.get("low"))),
+        "close": _coerce_snapshot_number(last_candle.get("close", cache.get("close"))),
+    }
+
+
+def _snapshot_atm_strike(market_data: dict) -> float | None:
+    explicit = _coerce_snapshot_number(market_data.get("atm_strike"))
+    if explicit is not None:
+        return explicit
+    chain = market_data.get("option_chain") if isinstance(market_data.get("option_chain"), list) else []
+    ltp = _coerce_snapshot_number(market_data.get("ltp"))
+    strikes: list[float] = []
+    for row in list(chain or []):
+        if not isinstance(row, dict):
+            continue
+        strike = _coerce_snapshot_number(row.get("strike"))
+        if strike is not None:
+            strikes.append(strike)
+    if not strikes:
+        return None
+    if ltp is None:
+        return min(strikes)
+    return min(strikes, key=lambda strike: abs(float(strike) - float(ltp)))
+
+
+def _snapshot_symbol_payload(market_data: dict, warnings: list[str]) -> dict:
+    symbol = str(market_data.get("symbol") or "").upper()
+    cross_quality = market_data.get("cross_asset_quality") if isinstance(market_data.get("cross_asset_quality"), dict) else {}
+    option_chain_health = market_data.get("option_chain_health") if isinstance(market_data.get("option_chain_health"), dict) else {}
+    feed_health = market_data.get("feed_health") if isinstance(market_data.get("feed_health"), dict) else {}
+    cross_asset_available = bool(cross_quality) and not bool(cross_quality.get("disabled", False))
+    if not cross_asset_available:
+        warnings.append(f"{symbol}:cross_asset_unavailable")
+    chain_quality = option_chain_health.get("status")
+    if chain_quality in (None, "", "None"):
+        warnings.append(f"{symbol}:option_chain_summary_missing")
+    return build_symbol_market_snapshot(
+        spot=_coerce_snapshot_number(market_data.get("spot", market_data.get("ltp"))),
+        ltp=_coerce_snapshot_number(market_data.get("ltp")),
+        change_pct=_coerce_snapshot_number(
+            market_data.get("change_pct", market_data.get("ltp_change"))
+        ),
+        ohlc=_snapshot_ohlc_payload(market_data),
+        regime={
+            "trend": market_data.get("primary_regime") or market_data.get("regime"),
+            "volatility_state": market_data.get("day_type"),
+            "confidence": _coerce_snapshot_number(market_data.get("regime_confidence")),
+        },
+        cross_asset={
+            "available": bool(cross_asset_available),
+            "signals": {
+                key: value
+                for key, value in {
+                    "quality": cross_quality.get("status") or cross_quality.get("quality"),
+                    "any_stale": cross_quality.get("any_stale"),
+                    "disabled_reason": cross_quality.get("disabled_reason"),
+                }.items()
+                if value not in (None, "", [], {})
+            },
+        },
+        option_chain_summary={
+            "atm_strike": _snapshot_atm_strike(market_data),
+            "pcr": _coerce_snapshot_number(market_data.get("pcr")),
+            "max_pain": _coerce_snapshot_number(market_data.get("max_pain")),
+            "chain_quality": None if chain_quality in (None, "", "None") else str(chain_quality),
+        },
+        feed_health={
+            "underlying_quote_age_sec": _coerce_snapshot_number(market_data.get("quote_age_sec")),
+            "option_quote_age_sec": _coerce_snapshot_number(
+                option_chain_health.get("quote_age_sec", feed_health.get("option_quote_age_sec"))
+            ),
+            "status": feed_health.get("status") or option_chain_health.get("status"),
+        },
+    )
+
+
+def produce_and_store_market_snapshot(
+    *,
+    market_data_list: list[dict] | None,
+    market_open: bool,
+    compute_ms: float | None = None,
+    loop_id: str | None = None,
+) -> dict:
+    warnings: list[str] = []
+    symbols_payload: dict[str, dict] = {}
+    for market_data in list(market_data_list or []):
+        if not isinstance(market_data, dict):
+            continue
+        symbol = str(market_data.get("symbol") or "").upper()
+        if not symbol:
+            continue
+        symbols_payload[symbol] = _snapshot_symbol_payload(market_data, warnings)
+    generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    snapshot = build_dashboard_market_snapshot(
+        generated_at=generated_at,
+        market_open=bool(market_open),
+        symbols_payload=symbols_payload,
+        warnings=list(dict.fromkeys(warnings)),
+        compute_ms=compute_ms,
+        loop_id=loop_id,
+    )
+    started = time.perf_counter()
+    try:
+        path = write_market_snapshot_atomic(snapshot)
+        elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+        logger.info(
+            "[MARKET_SNAPSHOT_WRITE] path=%s symbols=%d compute_ms=%.2f write_ms=%.2f",
+            path,
+            len(symbols_payload),
+            float(compute_ms or 0.0),
+            elapsed_ms,
+        )
+        return snapshot
+    except Exception as exc:
+        logger.error(
+            "[MARKET_SNAPSHOT_WRITE_ERROR] symbols=%d error=%s:%s",
+            len(symbols_payload),
+            type(exc).__name__,
+            exc,
+        )
+        raise
+
+
+def _prepare_trade_for_review_queue(trade):
+    if str(_trade_attr(trade, "instrument", "") or "").upper() != "OPT":
+        return trade, True, []
+    entry = {
+        "symbol": _trade_attr(trade, "symbol"),
+        "underlying": _trade_attr(trade, "underlying"),
+        "instrument": _trade_attr(trade, "instrument"),
+        "instrument_type": _trade_attr(trade, "instrument_type"),
+        "instrument_token": _trade_attr(trade, "instrument_token"),
+        "tradingsymbol": _trade_attr(trade, "tradingsymbol"),
+        "expiry_date": _trade_attr(trade, "expiry_date"),
+        "expiry": _trade_attr(trade, "expiry"),
+        "strike": _trade_attr(trade, "strike"),
+        "option_type": _trade_attr(trade, "option_type"),
+        "type": _trade_attr(trade, "type"),
+        "right": _trade_attr(trade, "right"),
+        "instrument_id": _trade_attr(trade, "instrument_id"),
+    }
+    enriched = _enrich_contract_identity(entry)
+    trade = _replace_trade_fields(
+        trade,
+        {
+            "instrument_token": enriched.get("instrument_token"),
+            "tradingsymbol": enriched.get("tradingsymbol"),
+            "expiry_date": enriched.get("expiry_date"),
+            "expiry": enriched.get("expiry"),
+            "strike": enriched.get("strike"),
+            "option_type": enriched.get("option_type"),
+            "right": enriched.get("right") or enriched.get("type"),
+            "instrument_id": enriched.get("instrument_id"),
+        },
+    )
+    if _has_valid_broker_contract(enriched):
+        return trade, True, []
+    return trade, False, _missing_broker_contract_fields(enriched)
+
+
+def _queue_review_candidate(
+    trade,
+    *,
+    queue_path=None,
+    extra: dict | None = None,
+    reject_source: str = "orchestrator_review_queue",
+    allow_unresolved_for_analytics: bool = False,
+):
+    prepared_trade, contract_ok, missing_fields = _prepare_trade_for_review_queue(trade)
+    if contract_ok or allow_unresolved_for_analytics:
+        add_to_queue(prepared_trade, queue_path=queue_path, extra=extra)
+        return True, prepared_trade
+    append_reject_reasons(
+        symbol=_trade_attr(prepared_trade, "symbol"),
+        strategy=_trade_attr(prepared_trade, "strategy"),
+        reasons=["unresolved_contract"],
+        mode=str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+        source=reject_source,
+        extra={
+            **dict(extra or {}),
+            "trade_id": _trade_attr(prepared_trade, "trade_id"),
+            "queue_path": str(queue_path) if queue_path is not None else "default",
+            "missing_fields": list(missing_fields or []),
+            "identity_scope": "broker_tradable",
+            "broker_contract_required": True,
+        },
+    )
+    return False, prepared_trade
+
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
         """
@@ -119,11 +498,25 @@ class Orchestrator:
         try:
             auto_clear_risk_halt_if_safe()
         except Exception as exc:
-            print(f"[SessionGuard] startup check error: {exc}")
+            logger.warning("session_guard_startup_check_error err=%s", exc)
+
         try:
             ensure_trade_log_exists()
         except Exception as exc:
-            print(f"[Startup] trade log init failed: {exc}")
+            logger.warning("startup_trade_log_init_failed err=%s", exc)
+
+        try:
+            events_file = logs_dir() / "events.jsonl"
+            repair_status = validate_and_repair_event_log(events_file)
+
+            if bool(repair_status.get("repaired")):
+                logger.info(
+                    "startup_events_log_repaired bytes_trimmed=%d path=%s",
+                    int(repair_status.get("bytes_trimmed") or 0),
+                    events_file,
+                )
+        except Exception as exc:
+            logger.warning("startup_events_log_repair_failed err=%s", exc)
         try:
             intents_path = Path(
                 str(
@@ -143,7 +536,7 @@ class Orchestrator:
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.touch(exist_ok=True)
         except Exception as exc:
-            print(f"[Startup] intent log init failed: {exc}")
+            logger.warning("startup_intent_log_init_failed err=%s", exc)
         self._auth_runtime_guard = self._run_preopen_auth_warm_check()
         self.total_capital = total_capital
         self.poll_interval = poll_interval
@@ -171,7 +564,7 @@ class Orchestrator:
                 try:
                     self.execution_engine.reconcile_orders_once()
                 except Exception as exc:
-                    print(f"[Recon] startup reconcile failed: {exc}")
+                    logger.warning("recon_startup_reconcile_failed err=%s", exc)
                 self._recon_daemon_started = True
                 try:
                     audit_append(
@@ -185,7 +578,7 @@ class Orchestrator:
                 except Exception:
                     pass
         except Exception as exc:
-            print(f"[Recon] startup failed: {exc}")
+            logger.warning("recon_startup_failed err=%s", exc)
 
         # Phase B: Risk and execution
         self.risk_engine = RiskEngine(risk_state=self.risk_state)
@@ -217,7 +610,7 @@ class Orchestrator:
             try:
                 self.decision_store = DecisionStore(getattr(cfg, "DECISION_DB_PATH", cfg.TRADE_DB_PATH))
             except Exception as exc:
-                print(f"[DecisionStore] init failed: {exc}")
+                logger.warning("decision_store_init_failed err=%s", exc)
                 self.decision_store = None
 
         # Portfolio tracking
@@ -243,6 +636,36 @@ class Orchestrator:
         self._regime_unstable_streak_by_symbol: dict[str, int] = {}
         self._feed_auto_repair_state: dict[str, dict] = {}
         self._last_suggestion_reliability_eval_ts = 0.0
+        self.quote_age_gate_metrics = {
+            "stale_index_count": 0,
+            "stale_option_count": 0,
+        }
+        self.regime_monitor = get_regime_monitor()
+        self._regime_monitor_enabled = bool(getattr(cfg, "REGIME_MONITOR_ENABLED", True))
+        self._regime_monitor_status = {}
+        self.latency_monitor = LatencyMonitor(
+            window_size=int(getattr(cfg, "LATENCY_MONITOR_WINDOW_SIZE", 120)),
+            max_p95_total_ms=float(getattr(cfg, "MAX_P95_TOTAL_MS", 120.0)),
+            max_p95_decision_ms=float(getattr(cfg, "MAX_P95_DECISION_MS", 80.0)),
+            sustained_windows=int(getattr(cfg, "SUSTAINED_WINDOWS", 3)),
+        )
+        self.latency_guard = LatencyGuard(
+            max_p95_total_ms=float(getattr(cfg, "MAX_P95_TOTAL_MS", 120.0)),
+            max_p95_decision_ms=float(getattr(cfg, "MAX_P95_DECISION_MS", 80.0)),
+            sustained_windows=int(getattr(cfg, "SUSTAINED_WINDOWS", 3)),
+            cooldown_sec=float(getattr(cfg, "EXIT_ONLY_COOLDOWN_S", 30.0)),
+            halt_on_breach=bool(getattr(cfg, "HALT_ON_BREACH", True)),
+        )
+        self.decision_breakers = DecisionCircuitBreakers()
+        self._decision_breaker_failure_counters = {"BROKER_REJECT": 0, "NETWORK": 0}
+        self._latency_guard_state = {
+            "action": ACTION_OK,
+            "reason": "init",
+            "cooldown_until_ts": 0.0,
+            "ts_epoch": now_utc_epoch(),
+        }
+        self._latency_last_reported_action = ACTION_OK
+        self._last_latency_stats = {}
         try:
             ok, status, _ = verify_audit_chain()
             self._audit_chain_ok = ok
@@ -260,6 +683,18 @@ class Orchestrator:
         self.eps_history = []
         self._load_suggestion_eval()
         self.rl_size_agent = SizeRLAgent(cfg.RL_SIZE_MODEL_PATH) if getattr(cfg, "RL_ENABLED", False) else None
+
+    def _build_decision_snapshot(
+        self,
+        *,
+        market_data: dict,
+        trade=None,
+        ts_epoch: float | None = None,
+    ) -> DecisionSnapshot | None:
+        if not bool(getattr(cfg, "USE_DECISION_SNAPSHOT", False)):
+            return None
+        ts_val = float(ts_epoch if ts_epoch is not None else time.time())
+        return build_snapshot(market_data=market_data, trade=trade, now_ts=ts_val)
 
     def _infer_opt_type(self, trade_id: str | None):
         if not trade_id:
@@ -290,9 +725,157 @@ class Orchestrator:
                 return opt
         return None
 
-    def _append_gate_status(self, market_data: dict, gate_allowed, gate_family, gate_reasons, stage: str):
+    def _apply_exit_state_patch(self, trade, meta: dict, state_patch: dict, current_price: float):
+        patch = dict(state_patch or {})
+        if not patch:
+            return meta
+        prev_sl = float(meta.get("current_sl", meta.get("trail_stop", trade.stop_loss)) or trade.stop_loss)
+        prev_tp = float(meta.get("current_tp", trade.target) or trade.target)
+        prev_phase = str(meta.get("exit_intel_phase") or "INIT")
+        meta.update(patch)
+        if "current_sl" in patch and patch.get("current_sl") is not None:
+            meta["trail_stop"] = float(patch.get("current_sl"))
+        elif "trail_stop" in meta and meta.get("trail_stop") is not None:
+            meta["current_sl"] = float(meta.get("trail_stop"))
+        if "current_tp" not in meta:
+            meta["current_tp"] = float(trade.target)
+        self.trade_meta[trade.trade_id] = meta
+
+        next_sl = float(meta.get("current_sl", prev_sl) or prev_sl)
+        next_tp = float(meta.get("current_tp", prev_tp) or prev_tp)
+        next_phase = str(meta.get("exit_intel_phase") or prev_phase)
+        sl_changed = abs(next_sl - prev_sl) > 1e-9
+        tp_changed = abs(next_tp - prev_tp) > 1e-9
+        if sl_changed:
+            meta["trail_updates"] = int(meta.get("trail_updates", 0) or 0) + 1
+            try:
+                insert_trail_event(trade.trade_id, float(next_sl), float(current_price), "EXIT_INTEL_SL_UPDATE")
+            except Exception:
+                pass
         try:
-            symbol = str((market_data or {}).get("symbol") or "")
+            update_trailing_state(
+                trade.trade_id,
+                trailing_enabled=bool(meta.get("trailing_enabled", True)),
+                trailing_method=str(meta.get("trailing_method", "EXIT_INTEL")),
+                trailing_atr_mult=float(meta.get("trailing_atr_mult", getattr(cfg, "TRAILING_STOP_ATR_MULT", 0.8))),
+                trail_stop_init=float(meta.get("trail_stop_init", trade.stop_loss)),
+                trail_stop_last=float(next_sl),
+                trail_updates=int(meta.get("trail_updates", 0) or 0),
+            )
+        except Exception:
+            pass
+        try:
+            audit_append(
+                {
+                    "event": "EXIT_INTEL_STATE_PATCH",
+                    "trade_id": trade.trade_id,
+                    "symbol": trade.symbol,
+                    "phase_before": prev_phase,
+                    "phase_after": next_phase,
+                    "sl_before": prev_sl,
+                    "sl_after": next_sl,
+                    "tp_before": prev_tp,
+                    "tp_after": next_tp,
+                    "sl_changed": sl_changed,
+                    "tp_changed": tp_changed,
+                    "reason_codes": list(meta.get("reason_codes") or []),
+                    "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                }
+            )
+        except Exception:
+            pass
+        return meta
+
+    def _emit_exit_intent(self, trade, decision, market_data: dict, current_price: float):
+        intent_payload = {
+            "intent_type": "EXIT_INTELLIGENCE",
+            "trade_id": trade.trade_id,
+            "symbol": trade.symbol,
+            "instrument": trade.instrument,
+            "action": decision.action.value,
+            "exit_qty_units": int(decision.exit_qty_units),
+            "current_price": float(current_price),
+            "reason_codes": list(decision.reason_codes),
+            "before_plan": dict(decision.before_plan),
+            "after_plan": dict(decision.after_plan),
+            "safe_mode": bool(decision.safe_mode),
+            "feed_state": market_data.get("feed_state")
+            or ((market_data.get("feed_health") or {}).get("state") if isinstance(market_data.get("feed_health"), dict) else None),
+            "ts_epoch": now_utc_epoch(),
+        }
+        preview_intent_id = self.execution_engine.build_exit_intent_id(intent_payload)
+        existing_meta = self.trade_meta.get(trade.trade_id, {})
+        if str(existing_meta.get("last_exit_intent_id") or "") == preview_intent_id:
+            ack = {
+                "accepted": True,
+                "duplicate": True,
+                "intent_id": preview_intent_id,
+                "ts_epoch": now_utc_epoch(),
+                "errors": [],
+            }
+            try:
+                audit_append(
+                    {
+                        "event": "EXIT_INTEL_DUPLICATE_INTENT_SKIPPED",
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                        "intent_id": preview_intent_id,
+                        "trade_id": trade.trade_id,
+                    }
+                )
+            except Exception:
+                pass
+            return ack, intent_payload
+        ack = self.execution_engine.apply_exit_intent(intent_payload)
+        try:
+            audit_append(
+                {
+                    "event": "EXIT_INTEL_DECISION",
+                    "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                    "intent": intent_payload,
+                    "ack": ack,
+                }
+            )
+        except Exception:
+            pass
+        return ack, intent_payload
+
+    def _write_exit_intel_state(self, trade, meta: dict, current_price: float):
+        try:
+            path = logs_dir() / "exit_intel_state.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "ts_epoch": now_utc_epoch(),
+                "trade_id": trade.trade_id,
+                "symbol": trade.symbol,
+                "instrument": trade.instrument,
+                "status": getattr(trade, "status", None),
+                "current_price": float(current_price),
+                "best_price_seen": meta.get("best_price_seen"),
+                "best_price_ts": meta.get("best_price_ts"),
+                "current_sl": meta.get("current_sl"),
+                "current_tp": meta.get("current_tp"),
+                "exit_intel_phase": meta.get("exit_intel_phase"),
+                "exit_intel_action": meta.get("exit_intel_action"),
+                "stall_counter": meta.get("stall_counter"),
+                "last_action_ts": meta.get("last_action_ts"),
+                "reason_codes": list(meta.get("reason_codes") or []),
+                "remaining_qty_units": int(meta.get("remaining_qty_units", 0) or 0),
+            }
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True) + "\n")
+        except Exception:
+            pass
+
+    def _append_gate_status(self, market_data: dict, gate_allowed, gate_family, gate_reasons, stage: str):
+        symbol = str((market_data or {}).get("symbol") or "")
+        payload_min = {
+            "event_type": str((market_data or {}).get("event_type") or "gate_status"),
+            "symbol": symbol,
+            "decision_stage": str((market_data or {}).get("decision_stage") or stage or ""),
+            "cycle_id": (market_data or {}).get("cycle_id"),
+            "ts_epoch": (market_data or {}).get("timestamp") or (market_data or {}).get("ts_epoch"),
+        }
+        try:
             seen = getattr(self, "_gate_status_cycle_seen", None)
             if isinstance(seen, set):
                 key = (symbol, str(stage))
@@ -306,9 +889,46 @@ class Orchestrator:
                 gate_reasons=gate_reasons,
                 stage=stage,
             )
-            append_gate_status(record, desk_id=getattr(cfg, "DESK_ID", "DEFAULT"))
-        except Exception:
-            pass
+            write_ok = append_gate_status(record, desk_id=getattr(cfg, "DESK_ID", "DEFAULT"))
+            if write_ok is False:
+                audit_append(
+                    {
+                        "event": "GATE_STATUS_WRITE_FAILED",
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                        "symbol": symbol,
+                        "stage": str(stage),
+                        "gate_allowed": bool(gate_allowed),
+                        "gate_family": gate_family,
+                        "gate_reasons": list(gate_reasons or []),
+                    }
+                )
+                append_decision_write_error(
+                    desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+                    stream="gate_status",
+                    exc=RuntimeError("append_gate_status_returned_false"),
+                    payload=payload_min,
+                    context={
+                        "stage": str(stage),
+                        "gate_allowed": bool(gate_allowed),
+                        "gate_family": gate_family,
+                    },
+                )
+        except Exception as exc:
+            try:
+                append_decision_write_error(
+                    desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+                    stream="gate_status",
+                    exc=exc,
+                    payload=payload_min,
+                    context={
+                        "stage": str(stage),
+                        "gate_allowed": bool(gate_allowed),
+                        "gate_family": gate_family,
+                    },
+                )
+            except Exception:
+                pass
+            logger.warning("gate_status_write_failed err=%s:%s", type(exc).__name__, exc)
 
     def _emit_global_halt_events(self, reason: str):
         reason = str(reason or "UNKNOWN_HALT")
@@ -341,6 +961,65 @@ class Orchestrator:
                 create_incident("SEV1", "KILL_SWITCH", {"desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
             except Exception:
                 pass
+
+    def _latency_guard_action(self) -> str:
+        state = getattr(self, "_latency_guard_state", {}) or {}
+        return str(state.get("action") or ACTION_OK).upper()
+
+    def _latency_blocks_entries(self) -> bool:
+        return self._latency_guard_action() in {
+            ACTION_COOLDOWN,
+            ACTION_DEGRADE_EXIT_ONLY,
+            ACTION_HALT_ALL,
+        }
+
+    def _latency_blocks_non_emergency_exits(self) -> bool:
+        return self._latency_guard_action() == ACTION_HALT_ALL
+
+    def _evaluate_latency_guard(self, *, market_open: bool, monitor_stats: dict) -> dict:
+        result = self.latency_guard.evaluate(
+            monitor_stats=monitor_stats or {},
+            market_open=bool(market_open),
+            now_ts=now_utc_epoch(),
+        )
+        state = {
+            "action": str(result.action),
+            "reason": str(result.reason),
+            "cooldown_until_ts": float(result.cooldown_until_ts or 0.0),
+            "ts_epoch": now_utc_epoch(),
+            "blocks_new_entries": bool(result.blocks_new_entries),
+            "blocks_non_emergency_exits": bool(result.blocks_non_emergency_exits),
+        }
+        previous_action = str(getattr(self, "_latency_last_reported_action", ACTION_OK) or ACTION_OK).upper()
+        next_action = str(state.get("action") or ACTION_OK).upper()
+        self._latency_guard_state = state
+        self._latency_last_reported_action = next_action
+        if previous_action == next_action:
+            return state
+        payload = {
+            "action": next_action,
+            "previous_action": previous_action,
+            "reason": state.get("reason"),
+            "market_open": bool(market_open),
+            "monitor_stats": monitor_stats or {},
+            "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+        }
+        try:
+            append_runtime_event("latency_breach" if next_action != ACTION_OK else "latency_recovered", payload)
+        except Exception:
+            pass
+        if next_action in {ACTION_DEGRADE_EXIT_ONLY, ACTION_HALT_ALL}:
+            sev = "SEV1" if next_action == ACTION_HALT_ALL else "SEV2"
+            try:
+                create_incident(sev, "LATENCY_BREACH", payload)
+            except Exception:
+                pass
+        if next_action == ACTION_HALT_ALL and bool(getattr(cfg, "HALT_ON_BREACH", True)):
+            try:
+                self._emit_global_halt_events("LATENCY_BREACH")
+            except Exception:
+                pass
+        return state
 
     def _allocator_seed_date_iso(self, market_data: dict) -> str:
         ts_val = None
@@ -539,12 +1218,12 @@ class Orchestrator:
         )
         persist_suggestion_reliability(payload)
         if str(payload.get("status") or "").upper() == "DEGRADED":
-            print(
-                "[SUGGESTION_SLO][DEGRADED] "
-                f"ratio={payload.get('allowed_to_candidate_ratio'):.3f} "
-                f"allowed={payload.get('allowed_count')} "
-                f"candidates={payload.get('candidate_count')} "
-                f"top_reject_reasons={payload.get('top_reject_reasons')}"
+            logger.warning(
+                "suggestion_slo_degraded ratio=%.3f allowed=%s candidates=%s top_reject_reasons=%s",
+                float(payload.get("allowed_to_candidate_ratio") or 0.0),
+                payload.get("allowed_count"),
+                payload.get("candidate_count"),
+                payload.get("top_reject_reasons"),
             )
             try:
                 create_incident("SEV3", "SUGGESTION_RELIABILITY_DEGRADED", payload)
@@ -636,7 +1315,7 @@ class Orchestrator:
             if (not auth_ok) and is_auth_error(reason_text=auth_err):
                 result["action"] = "auth_required"
                 result["auth_error"] = auth_err
-                print(f"[FEED_AUTO_REPAIR] blocked symbol={symbol} auth_error={auth_err}")
+                logger.warning("feed_auto_repair_blocked symbol=%s auth_error=%s", symbol, auth_err)
                 try:
                     create_incident(
                         "SEV2",
@@ -653,10 +1332,14 @@ class Orchestrator:
         state["retries"] = int(state.get("retries", 0)) + 1
         result["action"] = "restart_attempted"
         result["restarted"] = restarted
-        print(
-            "[FEED_AUTO_REPAIR] "
-            f"symbol={symbol} restarted={restarted} streak={state['streak']} retries={state['retries']} "
-            f"reasons={sorted(list(normalized))} quote_refreshed={quote_refreshed}"
+        _log_freshness_debug(
+            "feed_auto_repair symbol=%s restarted=%s streak=%s retries=%s reasons=%s quote_refreshed=%s",
+            symbol,
+            restarted,
+            state["streak"],
+            state["retries"],
+            sorted(list(normalized)),
+            quote_refreshed,
         )
         return result
 
@@ -666,6 +1349,7 @@ class Orchestrator:
         """
         snapshot = self._immutable_cycle_snapshot(market_data)
         snapshot_data = self._annotate_regime_unstable_debounce(dict(snapshot))
+        candidate_id = compute_candidate_id(snapshot_data)
         symbol = str((snapshot_data or {}).get("symbol") or "").upper()
         cache = getattr(self, "_gatekeeper_cycle_cache", None)
         if not isinstance(cache, dict):
@@ -717,12 +1401,14 @@ class Orchestrator:
         cache[symbol] = decision
 
         log_snapshot = dict(snapshot_data)
+        log_snapshot["candidate_id"] = str(candidate_id)
         log_snapshot["decision_allowed"] = bool(decision.allowed)
         log_snapshot["decision_stage"] = decision.stage
         log_snapshot["decision_blockers"] = list(decision.blockers)
         log_snapshot["decision_explain"] = list(decision.explain)
         log_snapshot["feed_health_snapshot"] = dict(decision.facts.get("feed_health") or {})
         log_snapshot["node_call_counts"] = dict(decision.facts.get("node_call_counts") or {})
+        log_snapshot["event_type"] = "decision_allowed" if bool(decision.allowed) else "decision_blocked"
 
         self._append_gate_status(
             log_snapshot,
@@ -731,6 +1417,87 @@ class Orchestrator:
             gate_reasons=list(decision.blockers),
             stage=str(decision.stage or "strategy_gate"),
         )
+        decision_payload = {
+            "event_type": "decision_evaluated",
+            "candidate_id": str(candidate_id),
+            "symbol": symbol,
+            "allowed": bool(decision.allowed),
+            "decision_stage": str(decision.stage or ""),
+            "blockers": [str(x) for x in (decision.blockers or []) if str(x).strip()],
+            "confidence": snapshot_data.get("global_conf", snapshot_data.get("regime_confidence")),
+            "score_signal": snapshot_data.get("signal_score"),
+            "score_global": snapshot_data.get("global_conf"),
+            "score_regime_conf": snapshot_data.get("regime_confidence"),
+            "orb_bias": snapshot_data.get("orb_bias"),
+            "orb_factor": snapshot_data.get("orb_factor"),
+            "reg_penalty": snapshot_data.get("reg_penalty"),
+            "feed_state": (log_snapshot.get("feed_health_snapshot") or {}).get("state"),
+            "gate_family": decision.selected_strategy,
+            "ts_epoch": snapshot_data.get("timestamp") or now_utc_epoch(),
+        }
+        candidate_payload = {
+            "event_type": "candidate_seen",
+            "candidate_id": str(candidate_id),
+            "symbol": symbol,
+            "cycle_id": snapshot_data.get("cycle_id"),
+            "instrument": snapshot_data.get("instrument", "OPT"),
+            "strategy_id": decision.selected_strategy,
+            "regime": snapshot_data.get("regime"),
+            "regime_confidence": snapshot_data.get("regime_confidence"),
+            "ts_epoch": snapshot_data.get("timestamp") or now_utc_epoch(),
+        }
+        try:
+            append_candidate_stream_event(
+                candidate_payload,
+                desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+            )
+        except Exception as exc:
+            try:
+                append_decision_write_error(
+                    desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+                    stream="candidates_stream",
+                    exc=exc,
+                    payload=candidate_payload,
+                    context={"phase": "candidate_seen"},
+                )
+            except Exception:
+                pass
+            logger.warning("candidate_stream_write_failed err=%s:%s", type(exc).__name__, exc)
+        try:
+            append_decision_stream_event(decision_payload, desk_id=getattr(cfg, "DESK_ID", "DEFAULT"))
+            append_decision_stream_event(
+                {
+                    **decision_payload,
+                    "event_type": "decision_allowed" if bool(decision.allowed) else "decision_blocked",
+                },
+                desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+            )
+        except Exception as exc:
+            try:
+                append_decision_write_error(
+                    desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+                    stream="decisions_stream",
+                    exc=exc,
+                    payload=decision_payload,
+                    context={"phase": "decision_events"},
+                )
+            except Exception:
+                pass
+            try:
+                audit_append(
+                    {
+                        "event": "DECISION_STREAM_WRITE_FAILED",
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                        "symbol": symbol,
+                        "decision_stage": str(decision.stage or ""),
+                        "allowed": bool(decision.allowed),
+                        "exception_type": type(exc).__name__,
+                        "exception": str(exc),
+                    }
+                )
+            except Exception:
+                pass
+            logger.warning("decision_stream_write_failed err=%s:%s", type(exc).__name__, exc)
 
         return GateResult(bool(decision.allowed), decision.selected_strategy, list(decision.blockers))
 
@@ -762,7 +1529,7 @@ class Orchestrator:
         This is used for governance/readiness-derived checks without recomputing feed health.
         """
         if max_age_sec is None:
-            max_age_sec = float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 45.0))
+            max_age_sec = float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 240.0))
         path = logs_dir() / f"desks/{getattr(cfg, 'DESK_ID', 'DEFAULT')}/gate_status.jsonl"
         if not path.exists():
             return {}
@@ -832,7 +1599,68 @@ class Orchestrator:
         if not market_open:
             return True, []
         if not decision_rows:
-            return False, ["decision_gate_missing"]
+            now_epoch = float(now_utc_epoch())
+            stale_reasons: list[str] = []
+            health_evidence_found = False
+            runtime_health_path = logs_dir() / "runtime_health_latest.json"
+            feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
+            runtime_health_max_age_sec = float(getattr(cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 30.0))
+            feed_tick_stale_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 5.0))
+
+            def _safe_float(value):
+                try:
+                    if value is None:
+                        return None
+                    return float(value)
+                except Exception:
+                    return None
+
+            runtime_payload = {}
+            if runtime_health_path.exists():
+                try:
+                    runtime_payload = json.loads(runtime_health_path.read_text(encoding="utf-8"))
+                except Exception:
+                    runtime_payload = {}
+            if runtime_payload:
+                health_evidence_found = True
+            snapshot_ts = _safe_float(runtime_payload.get("snapshot_ts_epoch") or runtime_payload.get("ts_epoch"))
+            snapshot_age = (now_epoch - snapshot_ts) if snapshot_ts is not None else None
+            if snapshot_age is not None and snapshot_age > runtime_health_max_age_sec:
+                stale_reasons.append("feed_stale:RUNTIME_HEALTH_STALE")
+
+            feed_payload = runtime_payload.get("feed") if isinstance(runtime_payload.get("feed"), dict) else {}
+            if feed_payload:
+                ws_connected = feed_payload.get("ws_connected")
+                ltp_required = bool(feed_payload.get("ltp_required", True))
+                ltp_age = _safe_float(feed_payload.get("ltp_age_sec"))
+                ltp_max_age = _safe_float(feed_payload.get("ltp_max_age_sec"))
+                if ws_connected is False:
+                    stale_reasons.append("feed_stale:WS_DISCONNECTED")
+                if ltp_required and ltp_age is not None and ltp_max_age is not None and ltp_age > ltp_max_age:
+                    stale_reasons.append("feed_stale:LTP_STALE")
+                sla_status = str(feed_payload.get("sla_status") or "").upper()
+                if sla_status in {"FAIL", "STALE"}:
+                    stale_reasons.append("feed_stale:SLA_FAIL")
+
+            if (not stale_reasons) and feed_runtime_path.exists():
+                try:
+                    feed_runtime_payload = json.loads(feed_runtime_path.read_text(encoding="utf-8"))
+                except Exception:
+                    feed_runtime_payload = {}
+                if feed_runtime_payload:
+                    health_evidence_found = True
+                ws_connected = feed_runtime_payload.get("ws_connected")
+                db_tick_age = _safe_float(feed_runtime_payload.get("last_db_tick_age_sec"))
+                if ws_connected is False:
+                    stale_reasons.append("feed_stale:WS_DISCONNECTED")
+                if db_tick_age is not None and db_tick_age > feed_tick_stale_sec:
+                    stale_reasons.append("feed_stale:DB_TICK_STALE")
+
+            if not health_evidence_found:
+                stale_reasons.append("feed_stale:UNKNOWN")
+            if not stale_reasons:
+                return True, []
+            return False, sorted(set(stale_reasons))
         stale_symbols = []
         for sym, row in decision_rows.items():
             blockers = [str(x).upper() for x in (row.get("decision_blockers") or [])]
@@ -948,7 +1776,7 @@ class Orchestrator:
                 capital_at_risk=min(float(getattr(trade, "capital_at_risk", max_risk) or max_risk), max_risk),
                 tier="PILOT",
             )
-            add_to_queue(
+            queued, pilot_trade = _queue_review_candidate(
                 pilot_trade,
                 extra={
                     "tier": "PILOT",
@@ -958,7 +1786,10 @@ class Orchestrator:
                     "pilot_unlock_clean_cycles": self._pilot_unlock_clean_cycles,
                     "gate_reasons": list(gate_reasons or []),
                 },
+                reject_source="orchestrator_pilot_unlock",
             )
+            if not queued:
+                return None
             self._pilot_unlock_used_day = today
             try:
                 audit_append(
@@ -1012,7 +1843,7 @@ class Orchestrator:
             min_points = float(getattr(cfg, "TARGET_POINTS_MIN", 20.0))
             if target_points < min_points:
                 return None
-            add_to_queue(
+            queued, trade = _queue_review_candidate(
                 trade,
                 queue_path=TARGET_POINTS_QUEUE_PATH,
                 extra={
@@ -1022,7 +1853,10 @@ class Orchestrator:
                     "target_premium": round(target_points, 2),
                     "target_points_min": min_points,
                 },
+                reject_source="orchestrator_target_points",
             )
+            if not queued:
+                return None
             try:
                 audit_append(
                     {
@@ -1128,6 +1962,122 @@ class Orchestrator:
             config_snapshot=config_snapshot,
         )
 
+    def _feed_status_for_heartbeat(self) -> dict:
+        payload = _read_json_dict(logs_dir() / "feed_runtime_latest.json")
+        feed_ok = False
+        try:
+            feed_ok, _ = self._pilot_feed_ok()
+        except Exception:
+            feed_ok = False
+        return {
+            "feed_ok": bool(feed_ok),
+            "ws_connected": payload.get("ws_connected"),
+            "subscribed_option_tokens_count": int(payload.get("subscribed_option_tokens_count") or 0),
+            "missing_option_tokens_count": int(payload.get("missing_option_tokens_count") or 0),
+        }
+
+    def _write_cycle_status_files(
+        self,
+        *,
+        cycle_ok: bool,
+        cycle_stage: str,
+        cycle_reason: str,
+        last_error: str,
+        market_mode: str,
+        market_open: bool,
+        symbols_scanned: int,
+        candidates_seen: int,
+        candidates_blocked: int,
+        candidates_enqueued: int,
+        blocker_counts: Counter,
+        suggestion_count: int,
+    ) -> None:
+        ts_epoch = float(now_utc_epoch())
+        ts_local = datetime.now().astimezone().isoformat()
+        feed_status = self._feed_status_for_heartbeat()
+        visible_counts = _scan_visible_suggestions(canonical_suggestions_log_path())
+        cycle_status = derive_cycle_semantics(
+            market_mode=str(market_mode or "").strip().upper(),
+            market_open=bool(market_open),
+            suggestion_count=int(suggestion_count),
+            blocker_counts=blocker_counts,
+            last_error=last_error,
+        )
+        top_blockers = list(cycle_status.get("top_blockers") or [])
+        normalized_market_mode = str(cycle_status.get("market_mode") or "").strip().upper()
+        normalized_market_open = bool(cycle_status.get("market_open"))
+        visible_suggestion_count = int(visible_counts.get("visible_suggestion_count") or 0)
+        visible_advisory_count = int(visible_counts.get("visible_advisory_count") or 0)
+        visible_queue_only_count = int(visible_counts.get("visible_queue_only_count") or 0)
+        visible_executable_count = int(visible_counts.get("visible_executable_count") or 0)
+        visible_primary_blocker = str(visible_counts.get("primary_blocker") or "").strip() or None
+        suggestions_status = str(cycle_status.get("semantic_state") or "no_candidates")
+        suggestions_reason = cycle_status.get("dominant_reason")
+        suggestions_subreason = cycle_status.get("subreason")
+        suggestions_primary_blocker = cycle_status.get("primary_blocker")
+        if visible_suggestion_count > 0 and suggestions_status == "no_candidates":
+            if visible_executable_count > 0 or visible_queue_only_count > 0 or visible_advisory_count > 0:
+                suggestions_status = "ok"
+                suggestions_reason = "visible_suggestions_present"
+                suggestions_subreason = ""
+            else:
+                suggestions_status = "blocked"
+                suggestions_reason = visible_primary_blocker or "visible_suggestions_blocked"
+                suggestions_subreason = ""
+            suggestions_primary_blocker = visible_primary_blocker
+
+        suggestions_payload = {
+            "ts_epoch": ts_epoch,
+            "ts_local": ts_local,
+            "status": suggestions_status,
+            "suggestion_count": visible_suggestion_count,
+            "market_mode": normalized_market_mode,
+            "market_open": normalized_market_open,
+            "reason": suggestions_reason,
+            "subreason": suggestions_subreason,
+            "primary_blocker": suggestions_primary_blocker,
+            "current_cycle_candidates_seen": int(candidates_seen),
+            "current_cycle_candidates_enqueued": int(candidates_enqueued),
+            "current_cycle_suggestion_count": int(suggestion_count),
+            "visible_suggestion_count": visible_suggestion_count,
+            "visible_advisory_count": visible_advisory_count,
+            "visible_queue_only_count": visible_queue_only_count,
+            "visible_executable_count": visible_executable_count,
+            "feed_ok": bool(feed_status.get("feed_ok")),
+            "ws_connected": feed_status.get("ws_connected"),
+            "subscribed_option_tokens_count": int(feed_status.get("subscribed_option_tokens_count") or 0),
+            "missing_option_tokens_count": int(feed_status.get("missing_option_tokens_count") or 0),
+        }
+        engine_payload = {
+            "ts_epoch": ts_epoch,
+            "cycle_ok": bool(cycle_ok),
+            "cycle_stage": cycle_status.get("semantic_state"),
+            "market_mode": normalized_market_mode,
+            "market_open": normalized_market_open,
+            "reason": cycle_status.get("dominant_reason"),
+            "subreason": cycle_status.get("subreason"),
+            "symbols_scanned": int(symbols_scanned),
+            "candidates_seen": int(candidates_seen),
+            "candidates_blocked": int(candidates_blocked),
+            "candidates_enqueued": int(candidates_enqueued),
+            "current_cycle_candidates_seen": int(candidates_seen),
+            "current_cycle_candidates_enqueued": int(candidates_enqueued),
+            "current_cycle_suggestion_count": int(suggestion_count),
+            "visible_suggestion_count": visible_suggestion_count,
+            "visible_advisory_count": visible_advisory_count,
+            "visible_queue_only_count": visible_queue_only_count,
+            "visible_executable_count": visible_executable_count,
+            "top_blockers": top_blockers,
+            "primary_blocker": cycle_status.get("primary_blocker"),
+            "feed_ok": bool(feed_status.get("feed_ok")),
+            "ws_connected": feed_status.get("ws_connected"),
+            "subscribed_option_tokens_count": int(feed_status.get("subscribed_option_tokens_count") or 0),
+            "missing_option_tokens_count": int(feed_status.get("missing_option_tokens_count") or 0),
+            "last_error": str(last_error or ""),
+        }
+        write_json_atomic(logs_dir() / "suggestions_status.json", suggestions_payload)
+        write_json_atomic(logs_dir() / "engine_cycle_status.json", engine_payload)
+
     def _validate_market_snapshot(self, market_data: dict):
         return orchestrator_finalize.validate_market_snapshot(self, market_data)
 
@@ -1170,15 +2120,180 @@ class Orchestrator:
         except Exception as exc:
             snapshot["circuit_breaker"] = {"error": f"circuit_breaker_state_error:{type(exc).__name__}"}
         try:
+            snapshot["decision_breakers"] = self.decision_breakers.snapshot(now_ts=now_utc_epoch())
+        except Exception as exc:
+            snapshot["decision_breakers"] = {"error": f"decision_breakers_state_error:{type(exc).__name__}"}
+        try:
             snapshot["run_lock"] = self.run_lock.state_dict()
         except Exception as exc:
             snapshot["run_lock"] = {"error": f"run_lock_state_error:{type(exc).__name__}"}
+        try:
+            snapshot["regime_monitor"] = dict(getattr(self, "_regime_monitor_status", {}) or {})
+        except Exception as exc:
+            snapshot["regime_monitor"] = {"error": f"regime_monitor_state_error:{type(exc).__name__}"}
+        try:
+            snapshot["latency_guard"] = dict(getattr(self, "_latency_guard_state", {}) or {})
+            snapshot["latency_monitor"] = dict(getattr(self, "_last_latency_stats", {}) or {})
+        except Exception as exc:
+            snapshot["latency_guard"] = {"error": f"latency_guard_state_error:{type(exc).__name__}"}
         return snapshot
+
+    def _emit_decision_breaker_transitions(self, transitions: list[dict] | None) -> None:
+        for transition in list(transitions or []):
+            payload = dict(transition or {})
+            payload["desk_id"] = str(getattr(cfg, "DESK_ID", "DEFAULT"))
+            try:
+                append_runtime_event("decision_breaker_state", payload)
+            except Exception:
+                pass
+            try:
+                action = str(payload.get("action") or "UNKNOWN")
+                breaker = str(payload.get("breaker") or "UNKNOWN")
+                reason = str(payload.get("reason") or payload.get("previous_reason") or "")
+                logger.warning("decision_breaker action=%s breaker=%s reason=%s", action, breaker, reason)
+            except Exception:
+                pass
+
+    def _observe_price_mismatch_breaker(self, gate_reasons: list[str] | None) -> None:
+        try:
+            reasons = [str(x).strip().upper() for x in (gate_reasons or []) if str(x).strip()]
+            mismatch_markers = {"PRICE_MISMATCH", "STALE_PRICE", "STALE_OPTION_LTP"}
+            unhealthy = any(any(marker in reason for marker in mismatch_markers) for reason in reasons)
+            transitions = self.decision_breakers.observe_price_mismatch(
+                unhealthy,
+                now_ts=now_utc_epoch(),
+                evidence={"gate_reasons": reasons},
+            )
+            self._emit_decision_breaker_transitions(transitions)
+        except Exception:
+            pass
+
+    def _update_decision_breakers(self, market_data_list: list[dict]) -> None:
+        try:
+            now_ts = now_utc_epoch()
+            option_rows = [
+                row for row in (market_data_list or [])
+                if str((row or {}).get("instrument", "OPT")).upper() == "OPT"
+            ]
+            transitions = []
+            if option_rows:
+                fresh_count = 0
+                max_tick_age = float(
+                    getattr(
+                        cfg,
+                        "BREAKER_STALE_FEED_MAX_TICK_AGE_SEC",
+                        getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5),
+                    )
+                )
+                for row in option_rows:
+                    feed_health = (row or {}).get("feed_health")
+                    feed_is_fresh = (
+                        feed_health.get("is_fresh")
+                        if isinstance(feed_health, dict) and ("is_fresh" in feed_health)
+                        else None
+                    )
+                    if feed_is_fresh is None:
+                        quote_age = (row or {}).get("quote_age_sec")
+                        if quote_age is None:
+                            quote_age = self._quote_age_sec((row or {}).get("quote_ts"))
+                        try:
+                            feed_is_fresh = float(quote_age) <= float(max_tick_age)
+                        except Exception:
+                            feed_is_fresh = False
+                    if bool(feed_is_fresh):
+                        fresh_count += 1
+                fresh_ratio = float(fresh_count) / float(max(1, len(option_rows)))
+                min_fresh_ratio = float(getattr(cfg, "BREAKER_STALE_FEED_MIN_FRESH_RATIO", 0.5))
+                transitions.extend(
+                    self.decision_breakers.observe_stale_feed(
+                        fresh_ratio < min_fresh_ratio,
+                        now_ts=now_ts,
+                        evidence={
+                            "option_rows": len(option_rows),
+                            "fresh_count": fresh_count,
+                            "fresh_ratio": fresh_ratio,
+                            "min_fresh_ratio": min_fresh_ratio,
+                        },
+                    )
+                )
+            failure_snapshot = self.execution_engine.get_failure_snapshot(now_epoch=now_ts)
+            counters = dict((failure_snapshot or {}).get("counters") or {})
+            broker_rejects = int(counters.get("BROKER_REJECT") or 0)
+            network_errors = int(counters.get("NETWORK") or 0)
+            prev = dict(getattr(self, "_decision_breaker_failure_counters", {}) or {})
+            broker_reject_delta = max(0, broker_rejects - int(prev.get("BROKER_REJECT") or 0))
+            network_error_delta = max(0, network_errors - int(prev.get("NETWORK") or 0))
+            broker_unhealthy = bool(
+                broker_reject_delta > 0
+                or network_error_delta > 0
+                or bool((failure_snapshot or {}).get("kill_switch_triggered"))
+            )
+            transitions.extend(
+                self.decision_breakers.observe_broker_failure(
+                    broker_unhealthy,
+                    now_ts=now_ts,
+                    evidence={
+                        "broker_reject_delta": broker_reject_delta,
+                        "network_error_delta": network_error_delta,
+                        "kill_switch_triggered": bool((failure_snapshot or {}).get("kill_switch_triggered")),
+                    },
+                )
+            )
+            self._decision_breaker_failure_counters = {
+                "BROKER_REJECT": broker_rejects,
+                "NETWORK": network_errors,
+            }
+            self._emit_decision_breaker_transitions(transitions)
+        except Exception as exc:
+            logger.warning("decision_breaker_update_error err=%s:%s", type(exc).__name__, exc)
+
+    def _decision_breakers_block_entries(self) -> tuple[bool, list[str]]:
+        try:
+            blocked, reasons = self.decision_breakers.should_block_decisions(now_ts=now_utc_epoch())
+            if blocked:
+                mapped = [f"decision_breaker_{str(r).lower()}" for r in list(reasons or [])]
+                return True, mapped
+            return False, []
+        except Exception:
+            return False, []
+
+    def _record_regime_monitor(self, market_data: dict) -> None:
+        if not bool(getattr(self, "_regime_monitor_enabled", True)):
+            return
+        try:
+            symbol = str((market_data or {}).get("symbol") or "").upper()
+            if not symbol:
+                return
+            regime = (
+                (market_data or {}).get("primary_regime")
+                or (market_data or {}).get("regime")
+                or "NEUTRAL"
+            )
+            confidence = (market_data or {}).get("regime_prob_max")
+            if confidence is None:
+                probs = (market_data or {}).get("regime_probs") or {}
+                if isinstance(probs, dict) and probs:
+                    try:
+                        confidence = max(float(v) for v in probs.values())
+                    except Exception:
+                        confidence = None
+            ltp = (market_data or {}).get("ltp")
+            ts_epoch = (market_data or {}).get("timestamp")
+            status = self.regime_monitor.record_market_snapshot(
+                symbol=symbol,
+                predicted_regime=regime,
+                confidence=confidence,
+                ltp=ltp,
+                ts_epoch=ts_epoch,
+            )
+            self._regime_monitor_status = dict(status or {})
+        except Exception:
+            pass
 
     def live_monitoring(self, run_once: bool = False):
         acquired, reason = self.run_lock.acquire()
         if not acquired:
-            print(f"[RunLock] {reason}")
+            logger.warning("run_lock_blocked reason=%s", reason)
             try:
                 audit_append(
                     {
@@ -1188,7 +2303,7 @@ class Orchestrator:
                     }
                 )
             except Exception as exc:
-                print(f"[RunLock] audit_error:{type(exc).__name__}")
+                logger.warning("run_lock_audit_error err=%s", type(exc).__name__)
             try:
                 snap = decision_config_snapshot()
                 snap.update(self._runtime_safety_snapshot())
@@ -1198,7 +2313,7 @@ class Orchestrator:
                     config_snapshot=snap,
                 )
             except Exception as exc:
-                print(f"[RunLock] report_error:{type(exc).__name__}")
+                logger.warning("run_lock_report_error err=%s", type(exc).__name__)
             return {"ok": False, "reason": reason}
         try:
             return run_live_monitoring(self, run_once=run_once, time_module=time)
@@ -1206,20 +2321,35 @@ class Orchestrator:
             try:
                 self.run_lock.release()
             except Exception as exc:
-                print(f"[RunLock] release_error:{type(exc).__name__}")
+                logger.warning("run_lock_release_error err=%s", type(exc).__name__)
 
     def _legacy_live_monitoring(self, run_once: bool = False):
         """
         Phase E: Live trading loop
         Fetch market data, generate trades, risk-check, execute, log, alert
         """
-        print("[Orchestrator] Starting live monitoring...")
+        logger.info("orchestrator_live_monitoring_start")
         while True:
             cycle_reason = "cycle_complete"
+            cycle_stage = "cycle_start"
+            cycle_error = ""
+            cycle_perf_start = time.perf_counter()
+            feature_build_ms = 0.0
+            decision_build_ms = 0.0
+            execution_route_ms = 0.0
+            cycle_blockers: Counter = Counter()
+            cycle_symbols_scanned: set[str] = set()
+            cycle_candidates_seen = 0
+            cycle_candidates_blocked = 0
+            cycle_candidates_enqueued = 0
+            cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
+            cycle_market_open = False
+            suggestion_rows_before = _count_jsonl_rows(canonical_suggestions_log_path())
             self._decision_traces = []
             self._gate_status_cycle_seen = set()
             self._gatekeeper_cycle_cache = {}
             self._gate_status_cycle_id = f"{int(now_utc_epoch() * 1000)}"
+            market_data_list = []
             try:
                 # Hot-reload config to pick up FORCE_REGIME changes
                 try:
@@ -1231,6 +2361,8 @@ class Orchestrator:
                 global_halt_reason = resolve_global_halt_reason(self.circuit_breaker)
                 if global_halt_reason:
                     cycle_reason = global_halt_reason
+                    cycle_stage = "global_halt"
+                    cycle_blockers[str(global_halt_reason)] += 1
                     self._emit_global_halt_events(global_halt_reason)
                     time.sleep(self.poll_interval)
                     continue
@@ -1238,26 +2370,45 @@ class Orchestrator:
                 slo_guard = evaluate_slo_status(enforce_failover=True)
                 if self._is_live_mode() and str(slo_guard.get("status") or "").upper() in {"BREACH", "FAILOVER"}:
                     cycle_reason = "slo_guard_blocked"
+                    cycle_stage = "slo_guard"
+                    for reason_code in list(slo_guard.get("reasons") or []) or ["slo_guard_blocked"]:
+                        cycle_blockers[str(reason_code)] += 1
                     if bool(slo_guard.get("failover_triggered", False)):
                         self._emit_global_halt_events("SLO_FAILOVER")
                     else:
-                        print(
-                            "[SLO_GUARD] live cycle blocked reasons="
-                            + ",".join(list(slo_guard.get("reasons") or []) or ["unknown"])
+                        logger.warning(
+                            "slo_guard_live_cycle_blocked reasons=%s",
+                            ",".join(list(slo_guard.get("reasons") or []) or ["unknown"]),
                         )
                     time.sleep(self.poll_interval)
                     continue
                 # Feed freshness is now evaluated only in the Decision DAG from the
                 # immutable market snapshot. Do not recompute readiness here.
+                feature_stage_start = time.perf_counter()
+                cycle_stage = "fetch_market_data"
                 # Daily decay report / strategy gating
                 self._refresh_decay_report()
                 market_data_list = self._build_cycle_market_data(fetch_live_market_data())
+                cycle_market_open = bool(
+                    any(bool((row or {}).get("market_open")) for row in (market_data_list or []))
+                )
+                try:
+                    # Engine-owned compute: dashboard reads this compact artifact and must not recompute it.
+                    produce_and_store_market_snapshot(
+                        market_data_list=market_data_list,
+                        market_open=cycle_market_open,
+                        compute_ms=(time.perf_counter() - feature_stage_start) * 1000.0,
+                        loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
+                    )
+                except Exception as exc:
+                    logger.error("[MARKET_SNAPSHOT_WRITE_ERROR] phase=cycle error=%s:%s", type(exc).__name__, exc)
+                self._update_decision_breakers(market_data_list)
                 self._update_pilot_unlock_clean_cycles()
                 self._evaluate_suggestions(market_data_list)
                 try:
                     self._maybe_run_suggestion_reliability_check()
                 except Exception as exc:
-                    print(f"[SUGGESTION_SLO] check failed: {exc}")
+                    logger.warning("suggestion_slo_check_failed err=%s", exc)
                 try:
                     # Update consolidated loss streak (max across symbols)
                     try:
@@ -1306,19 +2457,28 @@ class Orchestrator:
                 max_trades_day = getattr(cfg, "MAX_TRADES_PER_DAY", 0)
                 if getattr(cfg, "LIVE_PILOT_MODE", False):
                     max_trades_day = min(max_trades_day, int(getattr(cfg, "LIVE_MAX_TRADES_PER_DAY", 2)))
+                feature_build_ms += (time.perf_counter() - feature_stage_start) * 1000.0
 
+                cycle_stage = "scan_symbols"
                 for market_data in market_data_list:
                     market_snapshot = self._immutable_cycle_snapshot(market_data)
                     snap_ok, halt_cycle = self._validate_market_snapshot(market_data)
+                    symbol_key = str((market_data or {}).get("symbol") or "").strip().upper()
+                    if symbol_key:
+                        cycle_symbols_scanned.add(symbol_key)
                     if not snap_ok:
+                        cycle_candidates_blocked += 1
                         try:
                             invalid_reasons = [str(x) for x in (market_data.get("invalid_reason_codes") or []) if str(x)]
                             invalid_reason = str(market_data.get("invalid_reason") or "").strip()
                             if invalid_reason:
                                 invalid_reasons.append(invalid_reason)
+                            for reason_code in list(invalid_reasons or []) or ["invalid_market_snapshot"]:
+                                cycle_blockers[str(reason_code)] += 1
                             repair = self._maybe_auto_repair_live_feed(market_data, gate_reasons=invalid_reasons)
                             if str(repair.get("action") or "").upper() == "AUTH_REQUIRED":
                                 cycle_reason = "auth_required"
+                                cycle_stage = "auth_required"
                                 self._emit_global_halt_events("AUTH_REQUIRED")
                                 break
                         except Exception:
@@ -1375,8 +2535,50 @@ class Orchestrator:
                         continue
                     if sym:
                         self.last_md_by_symbol[sym] = market_data
+                    self._record_regime_monitor(market_data)
                     # Check exits for any open trades on this symbol/instrument
+                    if self._latency_blocks_non_emergency_exits():
+                        try:
+                            self._log_decision_safe(
+                                self._build_decision_event(
+                                    None,
+                                    market_data,
+                                    gatekeeper_allowed=False,
+                                    veto_reasons=["latency_guard_halt_all"],
+                                )
+                            )
+                        except Exception:
+                            pass
+                        continue
                     self._check_open_trades(market_data)
+                    if self._latency_blocks_entries():
+                        latency_action = self._latency_guard_action().lower()
+                        try:
+                            self._log_decision_safe(
+                                self._build_decision_event(
+                                    None,
+                                    market_data,
+                                    gatekeeper_allowed=False,
+                                    veto_reasons=[f"latency_guard_{latency_action}"],
+                                )
+                            )
+                        except Exception:
+                            pass
+                        continue
+                    breaker_blocked, breaker_reasons = self._decision_breakers_block_entries()
+                    if breaker_blocked:
+                        try:
+                            self._log_decision_safe(
+                                self._build_decision_event(
+                                    None,
+                                    market_data,
+                                    gatekeeper_allowed=False,
+                                    veto_reasons=breaker_reasons,
+                                )
+                            )
+                        except Exception:
+                            pass
+                        continue
                     cooldown = getattr(cfg, "MIN_COOLDOWN_SEC", 300)
                     last_t = self.last_trade_time.get(sym)
                     if last_t and time.time() - last_t < cooldown:
@@ -1386,20 +2588,65 @@ class Orchestrator:
                     trade = None
                     gate = self._strategy_gate_for_symbol(market_snapshot)
                     if not gate.allowed:
+                        cycle_candidates_blocked += 1
+                        for reason_code in list(gate.reasons or []) or ["gatekeeper_blocked"]:
+                            cycle_blockers[str(reason_code)] += 1
+                        tele_compact = {}
                         if debug_flag:
-                            print(f"[Gatekeeper] Blocked {sym}: {','.join(gate.reasons)}")
+                            # --- Gatekeeper rejection telemetry (NO_STRATEGY_QUALIFIED debug) ---
+                            tele = {}
+                            try:
+                                if hasattr(gate, "facts") and isinstance(getattr(gate, "facts"), dict):
+                                    tele = (gate.facts or {}).get("strategy_telemetry") or {}
+                                elif hasattr(gate, "decision") and getattr(gate, "decision") is not None:
+                                    d = gate.decision
+                                    if hasattr(d, "facts") and isinstance(getattr(d, "facts"), dict):
+                                        tele = (d.facts or {}).get("strategy_telemetry") or {}
+                            except Exception:
+                                tele = {}
+
+                            if isinstance(tele, dict) and tele:
+                                tele_compact = {
+                                    "qual_fail_codes": tele.get("qual_fail_codes"),
+                                    "picked_candidate": tele.get("picked_candidate"),
+                                    "qual_fail_reasons_raw": (tele.get("qual_fail_reasons_raw") or [])[:3],
+                                }
+
+                            _log_advisory_debug(
+                                "gatekeeper_blocked symbol=%s reasons=%s tele=%s",
+                                sym,
+                                ",".join(gate.reasons),
+                                tele_compact if tele_compact else None,
+                            )
                         try:
-                            repair = self._maybe_auto_repair_live_feed(market_data, gate_reasons=list(gate.reasons or []))
+                            repair = self._maybe_auto_repair_live_feed(
+                                market_data,
+                                gate_reasons=list(gate.reasons or []),
+                            )
                             if str(repair.get("action") or "").upper() == "AUTH_REQUIRED":
                                 cycle_reason = "auth_required"
+                                cycle_stage = "auth_required"
                                 self._emit_global_halt_events("AUTH_REQUIRED")
                                 break
                         except Exception:
                             pass
+
                         try:
-                            event = self._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=gate.reasons)
+                            event = self._build_decision_event(
+                                None,
+                                market_data,
+                                gatekeeper_allowed=False,
+                                veto_reasons=gate.reasons,
+                            )
                             self._log_decision_safe(event)
-                            audit_append({"event": "GATEKEEPER_BLOCK", "symbol": sym, "reasons": gate.reasons, "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
+
+                            audit_append({
+                                "event": "GATEKEEPER_BLOCK",
+                                "symbol": sym,
+                                "reasons": gate.reasons,
+                                "telemetry": tele_compact,
+                                "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                            })
                         except Exception:
                             pass
                         # Advisory-only fallback: queue higher-upside ideas for operator review.
@@ -1414,6 +2661,54 @@ class Orchestrator:
                             debug_flag=debug_flag,
                         )
                         continue
+                    quote_age_snapshot = self._build_decision_snapshot(
+                        market_data=market_data,
+                        trade=None,
+                        ts_epoch=time.time(),
+                    )
+                    if quote_age_snapshot is not None:
+                        quote_age_thresholds = {
+                            "index_max_age_ms": float(getattr(cfg, "DECISION_SNAPSHOT_INDEX_MAX_AGE_MS", 1500.0)),
+                            "option_max_age_ms": float(getattr(cfg, "DECISION_SNAPSHOT_OPTION_MAX_AGE_MS", 1500.0)),
+                        }
+                        quote_age_gate = validate_quote_age(quote_age_snapshot, quote_age_thresholds)
+                        if not bool(quote_age_gate.get("pass", False)):
+                            reason_code = str(quote_age_gate.get("reason_code") or "STALE_OPTION_LTP")
+                            cycle_candidates_blocked += 1
+                            cycle_blockers[reason_code] += 1
+                            if reason_code == "STALE_INDEX":
+                                self.quote_age_gate_metrics["stale_index_count"] = int(
+                                    self.quote_age_gate_metrics.get("stale_index_count", 0)
+                                ) + 1
+                            elif reason_code == "STALE_OPTION_LTP":
+                                self.quote_age_gate_metrics["stale_option_count"] = int(
+                                    self.quote_age_gate_metrics.get("stale_option_count", 0)
+                                ) + 1
+                            try:
+                                audit_append(
+                                    {
+                                        "event": "QUOTE_AGE_GATE_BLOCKED",
+                                        "symbol": sym,
+                                        "reason_code": reason_code,
+                                        "quote_age_gate": quote_age_gate,
+                                        "snapshot_id": str(getattr(quote_age_snapshot, "snapshot_id", "")),
+                                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                                    }
+                                )
+                            except Exception:
+                                pass
+                            try:
+                                event = self._build_decision_event(
+                                    None,
+                                    market_data,
+                                    gatekeeper_allowed=False,
+                                    veto_reasons=[reason_code],
+                                )
+                                self._log_decision_safe(event)
+                            except Exception:
+                                pass
+                            continue
+                    decision_stage_start = time.perf_counter()
                     trade, decision_trace = self.trade_builder.build_with_trace(
                         market_data,
                         quick_mode=False,
@@ -1422,12 +2717,14 @@ class Orchestrator:
                         allow_fallbacks=False,
                         allow_baseline=False,
                     )
+                    decision_build_ms += (time.perf_counter() - decision_stage_start) * 1000.0
                     if decision_trace is not None:
                         try:
                             self._decision_traces.append(decision_trace.to_dict())
                         except Exception:
                             pass
                     if trade is None:
+                        cycle_candidates_blocked += 1
                         reject_ctx = {}
                         try:
                             reject_ctx = dict(self.trade_builder._reject_ctx or {})
@@ -1437,6 +2734,9 @@ class Orchestrator:
                         reject_gate_reasons = [str(x) for x in (reject_ctx.get("gate_reasons") or []) if str(x).strip()]
                         if not reject_gate_reasons:
                             reject_gate_reasons = [reject_reason] if reject_reason else ["no_trade_generated"]
+                        for reason_code in reject_gate_reasons:
+                            cycle_blockers[str(reason_code)] += 1
+                        self._observe_price_mismatch_breaker(reject_gate_reasons)
                         if reject_reason == "missing_live_bidask":
                             self._append_gate_status(
                                 market_snapshot,
@@ -1453,6 +2753,16 @@ class Orchestrator:
                                 break
                         except Exception:
                             pass
+                        try:
+                            event = self._build_decision_event(
+                                None,
+                                market_data,
+                                gatekeeper_allowed=True,
+                                veto_reasons=reject_gate_reasons,
+                            )
+                            self._log_decision_safe(event)
+                        except Exception:
+                            pass
                         self._maybe_queue_target_points_idea(
                             market_data,
                             debug_flag=debug_flag,
@@ -1460,6 +2770,28 @@ class Orchestrator:
                         )
                         if self.decision_store is not None:
                             try:
+                                decision_snapshot = self._build_decision_snapshot(
+                                    market_data=market_data,
+                                    trade=None,
+                                    ts_epoch=time.time(),
+                                )
+                                snapshot_payload = (
+                                    decision_snapshot.to_dict()
+                                    if isinstance(decision_snapshot, DecisionSnapshot)
+                                    else {}
+                                )
+                                signal_result = evaluate_signal(
+                                    snapshot_payload,
+                                    {
+                                        "direction": "",
+                                        "confidence": None,
+                                        "features": {
+                                            "pattern_flags": [],
+                                            "rank_score": None,
+                                        },
+                                    },
+                                )
+                                execution_decision = evaluate_execution_decision(snapshot_payload, signal_result)
                                 decision = build_decision(
                                     meta={
                                         "ts_epoch": time.time(),
@@ -1477,11 +2809,16 @@ class Orchestrator:
                                         "ivp": market_data.get("ivp"),
                                     },
                                     outcome={"status": "skipped", "reject_reasons": reject_gate_reasons},
+                                    decision_snapshot=decision_snapshot,
+                                    signal_result=signal_result,
+                                    execution_decision=execution_decision,
                                 )
                                 self.decision_store.save_decision(decision)
                             except Exception as exc:
-                                print(f"[DecisionStore] save skipped decision failed: {exc}")
+                                logger.warning("decision_store_save_skipped_failed err=%s", exc)
                         continue
+                    cycle_candidates_seen += 1
+                    self._observe_price_mismatch_breaker([])
                     if str(trade.strategy).upper() in getattr(cfg, "HALT_STRATEGIES", []):
                         try:
                             update_execution(trade.trade_id, {"veto_reasons": ["halt_strategy"]})
@@ -1505,7 +2842,12 @@ class Orchestrator:
                         if gate.allowed and gate.family in ("DEFINED_RISK",):
                             spreads = self.trade_builder.build_spread_suggestions(market_data)
                             for sp in spreads:
-                                add_to_queue(type("Obj", (), sp))
+                                queued, _ = _queue_review_candidate(type("Obj", (), sp), reject_source="orchestrator_spread_suggestion")
+                                if queued:
+                                    cycle_candidates_enqueued += 1
+                                else:
+                                    cycle_candidates_blocked += 1
+                                    cycle_blockers["unresolved_contract"] += 1
                     except Exception:
                         pass
                     if not trade:
@@ -1530,25 +2872,94 @@ class Orchestrator:
                         try:
                             if str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE" and not getattr(cfg, "ALLOW_AUX_TRADES_LIVE", False):
                                 continue
+                            if gate.allowed and bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)):
+                                lotto_trades = self.trade_builder.build_expiry_lotto_candidates(
+                                    market_data,
+                                    debug_reasons=debug_flag,
+                                )
+                                if lotto_trades:
+                                    for lotto_trade in lotto_trades:
+                                        queued, _ = _queue_review_candidate(
+                                            lotto_trade,
+                                            queue_path=TARGET_POINTS_QUEUE_PATH,
+                                            extra={"category": "expiry_lotto", "tier": "EXPLORATION"},
+                                            reject_source="orchestrator_expiry_lotto",
+                                        )
+                                        if queued:
+                                            cycle_candidates_enqueued += 1
+                                        else:
+                                            cycle_candidates_blocked += 1
+                                            cycle_blockers["unresolved_contract"] += 1
+                                else:
+                                    try:
+                                        reason = (self.trade_builder._reject_ctx or {}).get("reason")
+                                        if reason:
+                                            self._log_decision_safe(
+                                                self._build_decision_event(
+                                                    None,
+                                                    market_data,
+                                                    gatekeeper_allowed=True,
+                                                    veto_reasons=[f"expiry_lotto:{reason}"],
+                                                )
+                                            )
+                                    except Exception:
+                                        pass
                             if gate.allowed and gate.family in ("TREND", "EVENT"):
                                 zero_trade = self.trade_builder.build_zero_hero(
                                     market_data,
                                     debug_reasons=debug_flag
                                 )
                                 if zero_trade:
-                                    add_to_queue(zero_trade, queue_path=ZERO_HERO_QUEUE_PATH, extra={"category": "zero_to_hero", "tier": "EXPLORATION"})
+                                    queued, _ = _queue_review_candidate(
+                                        zero_trade,
+                                        queue_path=ZERO_HERO_QUEUE_PATH,
+                                        extra={"category": "zero_to_hero", "tier": "EXPLORATION"},
+                                        reject_source="orchestrator_zero_to_hero",
+                                    )
+                                    if queued:
+                                        cycle_candidates_enqueued += 1
+                                    else:
+                                        cycle_candidates_blocked += 1
+                                        cycle_blockers["unresolved_contract"] += 1
                             if gate.allowed and gate.family == "MEAN_REVERT":
                                 scalp_trade = self.trade_builder.build_scalp(
                                     market_data,
                                     debug_reasons=debug_flag
                                 )
                                 if scalp_trade:
-                                    add_to_queue(scalp_trade, queue_path=SCALP_QUEUE_PATH, extra={"category": "scalp", "tier": "EXPLORATION"})
+                                    queued, _ = _queue_review_candidate(
+                                        scalp_trade,
+                                        queue_path=SCALP_QUEUE_PATH,
+                                        extra={"category": "scalp", "tier": "EXPLORATION"},
+                                        reject_source="orchestrator_scalp",
+                                    )
+                                    if queued:
+                                        cycle_candidates_enqueued += 1
+                                    else:
+                                        cycle_candidates_blocked += 1
+                                        cycle_blockers["unresolved_contract"] += 1
                         except Exception:
                             pass
                         continue
                     # RiskState: register attempt and approve
                     decision_id = None
+                    decision_snapshot_obj = self._build_decision_snapshot(
+                        market_data=market_data,
+                        trade=trade,
+                        ts_epoch=time.time(),
+                    )
+                    if decision_snapshot_obj is not None:
+                        try:
+                            source_flags = dict(getattr(trade, "source_flags", {}) or {})
+                            source_flags["decision_snapshot"] = decision_snapshot_obj.to_dict()
+                            source_flags["decision_snapshot_id"] = str(decision_snapshot_obj.snapshot_id)
+                            trade = replace(
+                                trade,
+                                snapshot_id=str(decision_snapshot_obj.snapshot_id),
+                                source_flags=source_flags,
+                            )
+                        except Exception:
+                            pass
                     try:
                         event = self._build_decision_event(trade, market_data, gatekeeper_allowed=True, veto_reasons=[])
                         if event.get("instrument_id") is None:
@@ -1568,6 +2979,23 @@ class Orchestrator:
                         decision_id = trade.trade_id
                     if self.decision_store is not None:
                         try:
+                            snapshot_payload = (
+                                decision_snapshot_obj.to_dict()
+                                if isinstance(decision_snapshot_obj, DecisionSnapshot)
+                                else {}
+                            )
+                            signal_result = evaluate_signal(
+                                snapshot_payload,
+                                {
+                                    "direction": str(getattr(trade, "side", "") or ""),
+                                    "confidence": getattr(trade, "confidence", None),
+                                    "features": {
+                                        "pattern_flags": list(getattr(trade, "pattern_flags", []) or []),
+                                        "rank_score": getattr(trade, "trade_score", None),
+                                    },
+                                },
+                            )
+                            execution_decision = evaluate_execution_decision(snapshot_payload, signal_result)
                             decision = build_decision(
                                 meta={
                                     "ts_epoch": time.time(),
@@ -1606,16 +3034,21 @@ class Orchestrator:
                                     "slippage_bps_assumed": float(getattr(cfg, "SLIPPAGE_BPS", 0.0)),
                                 },
                                 outcome={"status": "planned", "reject_reasons": []},
+                                decision_snapshot=decision_snapshot_obj,
+                                signal_result=signal_result,
+                                execution_decision=execution_decision,
                             )
                             self.decision_store.save_decision(decision)
                         except Exception as exc:
-                            print(f"[DecisionStore] save decision failed: {exc}")
+                            logger.warning("decision_store_save_failed err=%s", exc)
                     try:
                         self.risk_state.record_trade_attempt(trade)
                         ok, reason = self.risk_state.approve(trade)
                         if not ok:
+                            cycle_candidates_blocked += 1
+                            cycle_blockers[str(reason or "risk_state_blocked")] += 1
                             if debug_flag:
-                                print(f"[RiskState] Trade blocked: {reason}")
+                                _log_advisory_debug("risk_state_trade_blocked reason=%s", reason)
                             try:
                                 update_execution(trade.trade_id, {"risk_allowed": 0, "veto_reasons": [reason]})
                             except Exception:
@@ -1624,7 +3057,7 @@ class Orchestrator:
                                 try:
                                     self.decision_store.update_status(decision_id, "rejected", reject_reasons=[reason])
                                 except Exception as exc:
-                                    print(f"[DecisionStore] update rejected failed: {exc}")
+                                    logger.warning("decision_store_update_rejected_failed err=%s", exc)
                             continue
                         try:
                             update_execution(trade.trade_id, {"risk_allowed": 1})
@@ -1637,7 +3070,7 @@ class Orchestrator:
                         min_trades=getattr(cfg, "STRATEGY_MIN_TRADES", 30),
                         threshold=getattr(cfg, "STRATEGY_DISABLE_THRESHOLD", 0.45)
                     ):
-                        print(f"[StrategyTracker] Disabled strategy: {trade.strategy}")
+                        logger.info("strategy_tracker_disabled strategy=%s", trade.strategy)
                         continue
                     # Decay-based gating
                     action, _prob = self.strategy_tracker.decay_action(trade.strategy)
@@ -1757,8 +3190,18 @@ class Orchestrator:
                         review_packet_text = format_review_packet(review_packet)
                         validation["review_packet"] = review_packet
                         validation["review_packet_text"] = review_packet_text
-                        add_to_queue(trade, extra=dict(validation, **{"tier": "MAIN"}))
-                        print(f"[ReviewQueue] Trade queued: {trade.trade_id}")
+                        queued, trade = _queue_review_candidate(
+                            trade,
+                            extra=dict(validation, **{"tier": "MAIN"}),
+                            reject_source="orchestrator_manual_review",
+                        )
+                        if not queued:
+                            try:
+                                update_execution(trade.trade_id, {"veto_reasons": ["unresolved_contract"]})
+                            except Exception:
+                                pass
+                            continue
+                        logger.info("review_queue_trade_queued trade_id=%s", trade.trade_id)
                         try:
                             send_telegram_message(review_packet_text)
                         except Exception:
@@ -1795,7 +3238,7 @@ class Orchestrator:
                     reason = str(risk_decision.reason)
                     reason_code = str(risk_decision.reason_code)
                     if not allowed:
-                        print(f"[RiskEngine] Trade blocked: {reason}")
+                        logger.warning("risk_engine_trade_blocked reason=%s", reason)
                         if reason.lower().startswith("daily loss"):
                             risk_halt.set_halt("Daily loss limit hit")
                             send_telegram_message("Auto-halt: daily loss limit hit.")
@@ -1853,7 +3296,7 @@ class Orchestrator:
                     # Phase B: Portfolio-level allocator (correlation + factor exposure + stress)
                     alloc = self.portfolio_allocator.allocate(trade, self.portfolio, market_data, self.last_md_by_symbol)
                     if not alloc.allowed:
-                        print(f"[PortfolioAllocator] Trade blocked: {alloc.reason}")
+                        logger.warning("portfolio_allocator_trade_blocked reason=%s", alloc.reason)
                         try:
                             update_execution(trade.trade_id, {"veto_reasons": [alloc.reason]})
                         except Exception:
@@ -1885,7 +3328,7 @@ class Orchestrator:
                     if getattr(cfg, "LIVE_PILOT_MODE", False):
                         final_qty = min(final_qty, int(getattr(cfg, "LIVE_MAX_LOTS", 1)))
                     if final_qty <= 0:
-                        print("[PortfolioAllocator] Trade blocked: qty<=0 after allocation")
+                        logger.warning("portfolio_allocator_trade_blocked reason=qty_after_allocation_zero")
                         continue
                     # RL sizing agent (shadow or live)
                     if getattr(cfg, "RL_ENABLED", False):
@@ -1920,7 +3363,7 @@ class Orchestrator:
                         else:
                             final_qty = int(round(final_qty * mult))
                             if final_qty <= 0:
-                                print("[RLSize] Trade blocked: qty<=0 after RL sizing")
+                                logger.warning("rl_size_trade_blocked reason=qty_after_rl_sizing_zero")
                                 continue
                     trade = replace(trade, qty=final_qty, capital_at_risk=round((trade.entry_price - trade.stop_loss) * final_qty * lot_size, 2))
                     # Phase B: Execution guard (after sizing)
@@ -1935,7 +3378,7 @@ class Orchestrator:
                     reason = str(guard_decision.reason)
                     reason_code = str(guard_decision.reason_code)
                     if not approved:
-                        print(f"[ExecutionGuard] Trade blocked: {reason}")
+                        logger.warning("execution_guard_trade_blocked reason=%s", reason)
                         try:
                             blocked_reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
                             blocked_reasons.append(f"risk_guard_failed:{reason_code}")
@@ -1985,6 +3428,52 @@ class Orchestrator:
                             trade = replace(trade, source_flags=source_flags)
                         except Exception:
                             pass
+                        try:
+                            size_mult = float((guard_decision.context or {}).get("size_multiplier", 1.0))
+                        except Exception:
+                            size_mult = 1.0
+                        if size_mult < 1.0:
+                            bounded_mult = max(0.0, min(1.0, float(size_mult)))
+                            reduced_qty = int(round(float(trade.qty) * bounded_mult))
+                            if reduced_qty <= 0:
+                                logger.warning("execution_guard_trade_blocked reason=regime_monitor_qty_zero")
+                                try:
+                                    update_execution(
+                                        trade.trade_id,
+                                        {
+                                            "exec_guard_allowed": 0,
+                                            "exec_guard_reason": "regime_monitor_size_multiplier_zero_qty",
+                                            "exec_guard_reason_code": "REGIME_MONITOR_SIZE_MULTIPLIER_ZERO_QTY",
+                                            "veto_reasons": ["REGIME_MONITOR_SIZE_MULTIPLIER_ZERO_QTY"],
+                                            "regime_size_multiplier": bounded_mult,
+                                        },
+                                    )
+                                except Exception:
+                                    pass
+                                continue
+                            if reduced_qty < int(trade.qty):
+                                lot_size = getattr(cfg, "LOT_SIZE", {}).get(trade.symbol, 1)
+                                try:
+                                    trade = replace(
+                                        trade,
+                                        qty=int(reduced_qty),
+                                        capital_at_risk=round(
+                                            (trade.entry_price - trade.stop_loss) * int(reduced_qty) * lot_size, 2
+                                        ),
+                                    )
+                                except Exception:
+                                    pass
+                                try:
+                                    update_execution(
+                                        trade.trade_id,
+                                        {
+                                            "regime_size_multiplier": bounded_mult,
+                                            "qty_before_regime_multiplier": int(final_qty),
+                                            "qty_after_regime_multiplier": int(reduced_qty),
+                                        },
+                                    )
+                                except Exception:
+                                    pass
 
                     slippage_decision = evaluate_slippage_budget(
                         trade,
@@ -1992,7 +3481,7 @@ class Orchestrator:
                         self.execution_engine,
                     )
                     if not bool(slippage_decision.allowed):
-                        print(f"[SlippageGuard] Trade blocked: {slippage_decision.reason_code}")
+                        logger.warning("slippage_guard_trade_blocked reason=%s", slippage_decision.reason_code)
                         try:
                             append_reject_reasons(
                                 symbol=trade.symbol,
@@ -2001,6 +3490,9 @@ class Orchestrator:
                                 mode=getattr(cfg, "EXECUTION_MODE", "SIM"),
                                 source="slippage_guard",
                                 extra={
+                                    "decision_stage": "execution:slippage_guard",
+                                    "decision_explain": "Trade blocked due to slippage budget evaluation",
+                                    "decision_blockers": [str(slippage_decision.reason_code)],
                                     "expected_slippage_bps": slippage_decision.expected_slippage_bps,
                                     "budget_bps": slippage_decision.budget_bps,
                                 },
@@ -2070,7 +3562,7 @@ class Orchestrator:
                                 "time_to_fill": None,
                                 "slippage_vs_mid": None,
                             })
-                            print("[ExecutionEngine] Missing/invalid option quotes. Skipping.")
+                            logger.warning("execution_engine_skip reason=missing_invalid_option_quotes")
                             continue
                     else:
                         bid = market_data.get("bid")
@@ -2092,9 +3584,9 @@ class Orchestrator:
                                 "time_to_fill": None,
                                 "slippage_vs_mid": None,
                             })
-                            print("[ExecutionEngine] Missing live quotes. Skipping.")
+                            logger.warning("execution_engine_skip reason=missing_live_quotes")
                             continue
-                    volume = market_data.get("volume", 0)
+                    volume = market_data.get("volume")
                     depth = None
                     if trade.instrument_token:
                         d = depth_store.get(trade.instrument_token)
@@ -2114,6 +3606,7 @@ class Orchestrator:
                             pass
                         return {"bid": bid0, "ask": ask0, "ts": time.time(), "depth": depth}
 
+                    execution_stage_start = time.perf_counter()
                     filled, fill_price, fill_report = self.execution_router.execute(
                         trade,
                         bid,
@@ -2125,15 +3618,16 @@ class Orchestrator:
                         depth_imbalance=market_data.get("depth_imbalance"),
                         vol_z=market_data.get("vol_z"),
                     )
+                    execution_route_ms += (time.perf_counter() - execution_stage_start) * 1000.0
                     try:
                         self.risk_state.record_fill(filled)
                     except Exception:
                         pass
                     if not filled:
                         if fill_report and fill_report.get("reason_if_aborted"):
-                            print(f"[ExecutionEngine] Fill aborted: {fill_report.get('reason_if_aborted')}")
+                            logger.warning("execution_engine_fill_aborted reason=%s", fill_report.get("reason_if_aborted"))
                         else:
-                            print("[ExecutionEngine] Limit order not filled.")
+                            logger.info("execution_engine_limit_order_not_filled")
                         try:
                             update_execution(trade.trade_id, {
                                 "filled_bool": 0,
@@ -2152,7 +3646,7 @@ class Orchestrator:
                                     reject_reasons=[fill_report.get("reason_if_aborted") if fill_report else "not_filled"],
                                 )
                             except Exception as exc:
-                                print(f"[DecisionStore] update not_filled failed: {exc}")
+                                logger.warning("decision_store_update_not_filled_failed err=%s", exc)
                         continue
                     trade = replace(trade, entry_price=fill_price)
                     try:
@@ -2168,7 +3662,7 @@ class Orchestrator:
                         try:
                             self.decision_store.update_status(decision_id, "filled")
                         except Exception as exc:
-                            print(f"[DecisionStore] update filled failed: {exc}")
+                            logger.warning("decision_store_update_filled_failed err=%s", exc)
 
                     self.portfolio["trades"].append(trade)
                     self.portfolio["capital"] -= getattr(trade, "capital_at_risk", 0)
@@ -2245,13 +3739,18 @@ class Orchestrator:
                     self.blocked_tracker.update(self.predictor)
                 except Exception:
                     pass
+                cycle_stage = "cycle_complete"
 
             except Exception as e:
                 cycle_reason = f"cycle_exception:{type(e).__name__}"
-                print(f"[Orchestrator ERROR] {e}")
+                cycle_stage = "cycle_exception"
+                cycle_error = f"{type(e).__name__}:{e}"
+                cycle_blockers[cycle_reason] += 1
+                logger.exception("orchestrator_cycle_error err=%s", e)
                 tripped, cb_reason = self.circuit_breaker.record_error("CYCLE_EXCEPTION")
                 if tripped:
                     cycle_reason = cb_reason or "CB_ERROR_STORM"
+                    cycle_blockers[cycle_reason] += 1
                     try:
                         audit_append(
                             {
@@ -2262,7 +3761,7 @@ class Orchestrator:
                             }
                         )
                     except Exception as exc:
-                        print(f"[CircuitBreaker] audit_error:{type(exc).__name__}")
+                        logger.warning("circuit_breaker_audit_error err=%s", type(exc).__name__)
                     try:
                         create_incident(
                             "SEV1",
@@ -2270,8 +3769,36 @@ class Orchestrator:
                             {"detail": str(e), "desk_id": getattr(cfg, "DESK_ID", "DEFAULT")},
                         )
                     except Exception as exc:
-                        print(f"[CircuitBreaker] incident_error:{type(exc).__name__}")
+                        logger.warning("circuit_breaker_incident_error err=%s", type(exc).__name__)
             finally:
+                try:
+                    total_loop_ms = (time.perf_counter() - cycle_perf_start) * 1000.0
+                    self.latency_monitor.record("feature_build", feature_build_ms)
+                    self.latency_monitor.record("decision_build", decision_build_ms)
+                    self.latency_monitor.record("execution_route", execution_route_ms)
+                    latency_stats = self.latency_monitor.tick_end(total_loop_ms)
+                    self._last_latency_stats = latency_stats
+                    market_open = False
+                    if isinstance(market_data_list, list) and market_data_list:
+                        market_open = any(bool((row or {}).get("market_open")) for row in market_data_list)
+                    if not market_open:
+                        market_open = bool(is_market_open_ist())
+                    self._evaluate_latency_guard(
+                        market_open=market_open,
+                        monitor_stats=latency_stats,
+                    )
+                except Exception as latency_exc:
+                    logger.warning("latency_guard_cycle_evaluation_failed err=%s", latency_exc)
+                if not cycle_market_open:
+                    try:
+                        cycle_market_open = bool(is_market_open_ist())
+                    except Exception:
+                        cycle_market_open = False
+                if not cycle_market_open:
+                    cycle_market_mode = "OFFHOURS"
+                suggestion_rows_after = _count_jsonl_rows(canonical_suggestions_log_path())
+                cycle_suggestion_count = max(0, int(suggestion_rows_after) - int(suggestion_rows_before))
+                cycle_candidates_enqueued = max(int(cycle_candidates_enqueued), int(cycle_suggestion_count))
                 try:
                     config_snapshot = decision_config_snapshot()
                     config_snapshot.update(self._runtime_safety_snapshot())
@@ -2281,11 +3808,28 @@ class Orchestrator:
                         config_snapshot=config_snapshot,
                     )
                 except Exception as report_exc:
-                    print(f"[Orchestrator REPORT ERROR] {report_exc}")
+                    logger.warning("orchestrator_report_error err=%s", report_exc)
+                try:
+                    self._write_cycle_status_files(
+                        cycle_ok=not bool(cycle_error),
+                        cycle_stage=cycle_stage,
+                        cycle_reason=cycle_reason,
+                        last_error=cycle_error,
+                        market_mode=cycle_market_mode,
+                        market_open=cycle_market_open,
+                        symbols_scanned=len(cycle_symbols_scanned),
+                        candidates_seen=cycle_candidates_seen,
+                        candidates_blocked=cycle_candidates_blocked,
+                        candidates_enqueued=cycle_candidates_enqueued,
+                        blocker_counts=cycle_blockers,
+                        suggestion_count=cycle_suggestion_count,
+                    )
+                except Exception as status_exc:
+                    logger.warning("cycle_status_write_error err=%s", status_exc)
                 try:
                     write_runtime_health_snapshot(orchestrator=self)
                 except Exception as health_exc:
-                    print(f"[RuntimeHealth] snapshot_error:{health_exc}")
+                    logger.warning("runtime_health_snapshot_error err=%s", health_exc)
                 if run_once:
                     break
                 time.sleep(self.poll_interval)
@@ -2509,7 +4053,7 @@ class Orchestrator:
                 "Check: (1) cfg/env api_key present (2) token not expired (3) token generated using same api_key."
             )
         user_id = str((auth_payload or {}).get("user_id", "") or "")
-        print(f"[KITE_WS] profile verified user_last4={user_id[-4:] if user_id else 'NONE'}")
+        logger.info("kite_ws_profile_verified user_last4=%s", user_id[-4:] if user_id else "NONE")
         # Resolve a minimal depth subscription universe (index + ATM window).
         from core.kite_depth_ws import build_depth_subscription_tokens
         tokens, _resolution = build_depth_subscription_tokens(list(cfg.SYMBOLS))
@@ -2521,7 +4065,7 @@ class Orchestrator:
                     fallback.append(tok)
             tokens = list(dict.fromkeys(fallback))
             if tokens:
-                print(f"[KITE_WS] fallback index tokens={len(tokens)}")
+                logger.info("kite_ws_fallback_index_tokens token_count=%d", len(tokens))
         if not tokens:
             raise RuntimeError("kite_depth_ws_init_failed:no_tokens_resolved")
         start_depth_ws(tokens, profile_verified=True)
@@ -2532,13 +4076,13 @@ class Orchestrator:
 
             payload = run_preopen_auth_warm_check(force=True)
             if bool(payload.get("degrade_to_planning")):
-                print(
-                    "[AUTH_GUARD] pre-open auth unhealthy; runtime downgraded to planning mode "
-                    f"reason={payload.get('reason')}"
+                logger.warning(
+                    "auth_guard_preopen_unhealthy degraded_to_planning=true reason=%s",
+                    payload.get("reason"),
                 )
             return payload
         except Exception as exc:
-            print(f"[AUTH_GUARD] pre-open warm check failed: {exc}")
+            logger.warning("auth_guard_preopen_warm_check_failed err=%s", exc)
             return {}
 
     def _run_startup_warmup_bootstrap(self):
@@ -2547,17 +4091,18 @@ class Orchestrator:
                 list(getattr(cfg, "SYMBOLS", []) or [])
             )
             for row in warmup_rows:
-                print(
-                    "[WARMUP] "
-                    f"{row.get('symbol')} bars={row.get('seeded_bars_count')} "
-                    f"last_candle_ts={row.get('last_candle_ts')} "
-                    f"indicator_last_update_ts={row.get('indicator_last_update_ts')} "
-                    f"ok={row.get('warmup_ok', row.get('indicators_ok_after_seed'))} "
-                    f"reason={row.get('warmup_reason') or row.get('seed_reason')}"
+                logger.info(
+                    "warmup_startup symbol=%s bars=%s last_candle_ts=%s indicator_last_update_ts=%s ok=%s reason=%s",
+                    row.get("symbol"),
+                    row.get("seeded_bars_count"),
+                    row.get("last_candle_ts"),
+                    row.get("indicator_last_update_ts"),
+                    row.get("warmup_ok", row.get("indicators_ok_after_seed")),
+                    row.get("warmup_reason") or row.get("seed_reason"),
                 )
             return warmup_rows
         except Exception as exc:
-            print(f"[WARMUP] startup seeding failed: {exc}")
+            logger.warning("warmup_startup_failed err=%s", exc)
             return []
 
     def _track_open_trade(self, trade, market_data):
@@ -2569,6 +4114,8 @@ class Orchestrator:
         meta = {
             "entry_time": time.time(),
             "trail_stop": trail_init,
+            "current_sl": trail_init,
+            "current_tp": float(getattr(trade, "target", 0.0) or 0.0),
             "instrument_token": trade.instrument_token,
             "entry_price": trade.entry_price,
             "mfe": 0.0,
@@ -2588,6 +4135,13 @@ class Orchestrator:
             "realized_pnl_legs": 0.0,
             "legs_count": 0,
             "weighted_exit_sum": 0.0,
+            "best_price_seen": float(getattr(trade, "entry_price", 0.0) or 0.0),
+            "best_price_ts": time.time(),
+            "exit_intel_phase": "INIT",
+            "stall_counter": 0,
+            "last_action_ts": 0.0,
+            "reason_codes": [],
+            "last_exit_intent_id": None,
         }
         if trade.strategy == "SCALP":
             meta["max_hold_sec"] = getattr(cfg, "SCALP_MAX_HOLD_MINUTES", 12) * 60
@@ -2618,49 +4172,27 @@ class Orchestrator:
         remaining = []
         for tr in self.open_trades[key]:
             meta = self.trade_meta.get(tr.trade_id, {"trail_stop": tr.stop_loss, "entry_time": time.time()})
+            meta.setdefault("current_sl", float(meta.get("trail_stop", tr.stop_loss) or tr.stop_loss))
+            meta.setdefault("current_tp", float(meta.get("current_tp", tr.target) or tr.target))
+            meta.setdefault("best_price_seen", float(meta.get("entry_price", tr.entry_price) or tr.entry_price))
+            meta.setdefault("best_price_ts", float(meta.get("entry_time", time.time()) or time.time()))
+            meta.setdefault("exit_intel_phase", "INIT")
+            meta.setdefault("stall_counter", 0)
+            meta.setdefault("last_action_ts", 0.0)
+            meta.setdefault("reason_codes", [])
             if instrument == "OPT":
-                current_price = None
-                for opt in market_data.get("option_chain", []):
-                    if tr.instrument_token and opt.get("instrument_token") == tr.instrument_token:
-                        current_price = opt.get("ltp")
-                        break
-                    if opt.get("strike") == tr.strike and opt.get("type") in ("CE", "PE"):
-                        current_price = opt.get("ltp")
-                        break
+                option_snapshot = self._match_option_snapshot(tr, market_data)
+                current_price = option_snapshot.get("ltp") if isinstance(option_snapshot, dict) else None
                 if current_price is None:
                     remaining.append(tr)
                     continue
             else:
+                option_snapshot = None
                 current_price = market_data.get("ltp")
                 if current_price is None:
                     remaining.append(tr)
                     continue
 
-            # Trailing stop update (for BUY)
-            if tr.side == "BUY":
-                trail_dist = market_data.get("atr", 0) * getattr(cfg, "TRAILING_STOP_ATR_MULT", 0.8)
-                prev_trail = float(meta.get("trail_stop", tr.stop_loss))
-                new_trail = max(prev_trail, current_price - trail_dist)
-                meta["trail_stop"] = new_trail
-                if new_trail > prev_trail:
-                    meta["trail_updates"] = int(meta.get("trail_updates", 0)) + 1
-                    try:
-                        insert_trail_event(tr.trade_id, float(new_trail), float(current_price), "TRAIL_UPDATE")
-                    except Exception:
-                        pass
-                    try:
-                        update_trailing_state(
-                            tr.trade_id,
-                            trailing_enabled=bool(meta.get("trailing_enabled", True)),
-                            trailing_method=str(meta.get("trailing_method", "ATR")),
-                            trailing_atr_mult=float(meta.get("trailing_atr_mult", getattr(cfg, "TRAILING_STOP_ATR_MULT", 0.8))),
-                            trail_stop_init=float(meta.get("trail_stop_init", tr.stop_loss)),
-                            trail_stop_last=float(new_trail),
-                            trail_updates=int(meta.get("trail_updates", 0)),
-                        )
-                    except Exception:
-                        pass
-                self.trade_meta[tr.trade_id] = meta
             # Store last price for unrealized PnL computation
             meta["last_price"] = current_price
             lot_size = int(getattr(cfg, "LOT_SIZE", {}).get(tr.symbol, 1))
@@ -2669,6 +4201,10 @@ class Orchestrator:
                 qty_total_units = int(getattr(tr, "qty_units", 0) or 0)
             if qty_total_units <= 0:
                 qty_total_units = int(getattr(tr, "qty", 0) or 0) * (lot_size if tr.instrument == "OPT" else 1)
+            if qty_total_units <= 0:
+                remaining.append(tr)
+                self.trade_meta[tr.trade_id] = meta
+                continue
             # Track MFE/MAE and horizon PnL snapshots
             try:
                 entry_px = meta.get("entry_price", tr.entry_price)
@@ -2684,72 +4220,133 @@ class Orchestrator:
                     meta["mae_15m"] = meta.get("mae")
             except Exception:
                 pass
+            feed_state = (
+                market_data.get("feed_state")
+                or (market_data.get("feed_health") or {}).get("state")
+                or (market_data.get("quote_health") or {}).get("state")
+            )
+            decision = evaluate_exit(
+                position={
+                    "side": tr.side,
+                    "entry_price": float(meta.get("entry_price", tr.entry_price)),
+                    "current_sl": float(meta.get("current_sl", tr.stop_loss)),
+                    "current_tp": float(meta.get("current_tp", tr.target)),
+                    "best_price_seen": meta.get("best_price_seen"),
+                    "best_price_ts": meta.get("best_price_ts"),
+                    "exit_intel_phase": meta.get("exit_intel_phase"),
+                    "stall_counter": meta.get("stall_counter"),
+                    "last_action_ts": meta.get("last_action_ts"),
+                    "remaining_qty_units": qty_total_units,
+                    "qty_units": qty_total_units,
+                    "entry_time": meta.get("entry_time"),
+                    "max_hold_sec": meta.get("max_hold_sec"),
+                    "reason_codes": list(meta.get("reason_codes") or []),
+                    "last_price": meta.get("last_price"),
+                },
+                market_snapshot={
+                    "ltp": current_price,
+                    "atr": market_data.get("atr"),
+                    "quote_age_sec": (
+                        option_snapshot.get("quote_age_sec")
+                        if isinstance(option_snapshot, dict)
+                        else market_data.get("quote_age_sec")
+                    ),
+                    "spread_pct": (
+                        option_snapshot.get("spread_pct")
+                        if isinstance(option_snapshot, dict)
+                        else market_data.get("spread_pct")
+                    ),
+                    "feed_state": feed_state,
+                    "momentum": market_data.get("momentum"),
+                    "momentum_break": market_data.get("momentum_break"),
+                },
+                now_ts=time.time(),
+                cfg=cfg,
+            )
+            meta = self._apply_exit_state_patch(tr, meta, decision.state_patch, float(current_price))
+            reason_codes = list(decision.reason_codes or [])
+            meta["exit_intel_action"] = decision.action.value
             self.trade_meta[tr.trade_id] = meta
-
-            # Partial-profit leg at TP1 before final exit.
-            try:
-                if bool(meta.get("partial_enabled", False)) and not bool(meta.get("tp1_done", False)):
-                    risk_abs = abs(float(meta.get("entry_price", tr.entry_price)) - float(tr.stop_loss))
-                    tp1_mult = float(getattr(cfg, "TP1_R_MULT", 0.7))
-                    tp1_px = float(meta.get("entry_price", tr.entry_price)) + (risk_abs * tp1_mult if tr.side == "BUY" else -risk_abs * tp1_mult)
-                    hit_tp1 = (current_price >= tp1_px) if tr.side == "BUY" else (current_price <= tp1_px)
-                    if hit_tp1 and qty_total_units > 1:
-                        frac = float(getattr(cfg, "TP1_FRACTION", 0.5))
-                        leg_qty = int(max(1, round(qty_total_units * frac)))
-                        leg_qty = min(leg_qty, qty_total_units - 1)
-                        leg_pnl = (
-                            (current_price - float(meta.get("entry_price", tr.entry_price))) * leg_qty
-                            if tr.side == "BUY"
-                            else (float(meta.get("entry_price", tr.entry_price)) - current_price) * leg_qty
-                        )
-                        meta["tp1_done"] = True
-                        meta["remaining_qty_units"] = qty_total_units - leg_qty
-                        meta["realized_pnl_legs"] = float(meta.get("realized_pnl_legs", 0.0)) + float(leg_pnl)
-                        meta["legs_count"] = int(meta.get("legs_count", 0)) + 1
-                        meta["weighted_exit_sum"] = float(meta.get("weighted_exit_sum", 0.0)) + (float(current_price) * leg_qty)
-                        if bool(getattr(cfg, "MOVE_SL_TO_BE", True)):
-                            meta["trail_stop"] = float(meta.get("entry_price", tr.entry_price))
-                        try:
-                            insert_trade_leg(tr.trade_id, int(meta["legs_count"]), int(leg_qty), float(current_price), "TP1")
-                        except Exception:
-                            pass
-                        self.trade_meta[tr.trade_id] = meta
-            except Exception:
-                pass
-
-            # Time exit
-            max_hold = meta.get("max_hold_sec") or (getattr(cfg, "MAX_HOLD_MINUTES", 60) * 60)
-            time_exit = False
-            target_level = tr.target
-            if time.time() - meta.get("entry_time", time.time()) >= max_hold:
-                hit_target = False
-                hit_stop = True
-                time_exit = True
-            else:
-                if bool(meta.get("tp1_done", False)):
-                    risk_abs = abs(float(meta.get("entry_price", tr.entry_price)) - float(tr.stop_loss))
-                    tp2_mult = float(getattr(cfg, "TP2_R_MULT", 1.5))
-                    target_level = float(meta.get("entry_price", tr.entry_price)) + (risk_abs * tp2_mult if tr.side == "BUY" else -risk_abs * tp2_mult)
-                hit_target = current_price >= target_level if tr.side == "BUY" else current_price <= target_level
-                stop_level = meta.get("trail_stop", tr.stop_loss)
-                hit_stop = current_price <= stop_level if tr.side == "BUY" else current_price >= stop_level
-            if not (hit_target or hit_stop):
+            self._write_exit_intel_state(tr, meta, float(current_price))
+            if decision.action == ExitAction.NOOP:
+                if reason_codes:
+                    meta["reason_codes"] = reason_codes
+                    self.trade_meta[tr.trade_id] = meta
                 remaining.append(tr)
                 continue
 
-            stop_level = meta.get("trail_stop", tr.stop_loss)
-            exit_price = target_level if hit_target else stop_level
-            actual = 1 if hit_target else 0
-            if hit_target:
+            ack, _intent_payload = self._emit_exit_intent(tr, decision, market_data, float(current_price))
+            if not bool(ack.get("accepted", False)):
+                codes = list(meta.get("reason_codes") or [])
+                codes.append("exit_intent_rejected")
+                meta["reason_codes"] = sorted(set(codes))
+                self.trade_meta[tr.trade_id] = meta
+                remaining.append(tr)
+                continue
+            if bool(ack.get("duplicate", False)):
+                remaining.append(tr)
+                continue
+            meta["last_exit_intent_id"] = ack.get("intent_id")
+            self.trade_meta[tr.trade_id] = meta
+
+            if decision.action == ExitAction.MODIFY_PLAN:
+                remaining.append(tr)
+                continue
+
+            if decision.action == ExitAction.PARTIAL_EXIT:
+                remaining_units = int(meta.get("remaining_qty_units", qty_total_units) or qty_total_units)
+                if remaining_units <= 1:
+                    remaining.append(tr)
+                    continue
+                exit_qty = int(decision.exit_qty_units or 0)
+                exit_qty = min(max(1, exit_qty), remaining_units - 1)
+                if exit_qty <= 0:
+                    remaining.append(tr)
+                    continue
+                entry_price_val = float(meta.get("entry_price", tr.entry_price))
+                leg_pnl = (
+                    (float(current_price) - entry_price_val) * exit_qty
+                    if tr.side == "BUY"
+                    else (entry_price_val - float(current_price)) * exit_qty
+                )
+                meta["remaining_qty_units"] = max(remaining_units - exit_qty, 0)
+                meta["realized_pnl_legs"] = float(meta.get("realized_pnl_legs", 0.0)) + float(leg_pnl)
+                meta["legs_count"] = int(meta.get("legs_count", 0)) + 1
+                meta["weighted_exit_sum"] = float(meta.get("weighted_exit_sum", 0.0)) + (float(current_price) * exit_qty)
+                meta["reason_codes"] = reason_codes
+                self.trade_meta[tr.trade_id] = meta
+                self._write_exit_intel_state(tr, meta, float(current_price))
+                try:
+                    insert_trade_leg(
+                        tr.trade_id,
+                        int(meta["legs_count"]),
+                        int(exit_qty),
+                        float(current_price),
+                        "EXIT_INTEL_PARTIAL",
+                    )
+                except Exception:
+                    pass
+                remaining.append(tr)
+                continue
+
+            if decision.action != ExitAction.FULL_EXIT:
+                remaining.append(tr)
+                continue
+
+            exit_reason_code = reason_codes[0] if reason_codes else "exit_intel_full_exit"
+            if "TARGET" in exit_reason_code.upper():
                 exit_reason = "TARGET"
-            elif time_exit:
+                actual = 1
+            elif "TIME" in exit_reason_code.upper():
                 exit_reason = "TIME"
-            elif tr.side == "BUY" and stop_level > tr.stop_loss:
-                exit_reason = "TRAIL_STOP"
-            elif tr.side == "SELL" and stop_level < tr.stop_loss:
-                exit_reason = "TRAIL_STOP"
+                actual = 0
+            elif "STALL" in exit_reason_code.upper():
+                exit_reason = "STALL_EXIT"
+                actual = 0
             else:
                 exit_reason = "STOP"
+                actual = 0
+            exit_price = float(current_price)
 
             remaining_units = int(meta.get("remaining_qty_units", 0) or 0)
             if remaining_units <= 0:
@@ -2866,6 +4463,9 @@ class Orchestrator:
                 self.risk_state.record_realized_pnl(tr.strategy, pnl)
             except Exception:
                 pass
+            meta["remaining_qty_units"] = 0
+            self.trade_meta[tr.trade_id] = meta
+            self._write_exit_intel_state(tr, meta, float(current_price))
 
         self.open_trades[key] = remaining
         # Update unrealized PnL across all open trades using last known prices
@@ -2891,7 +4491,7 @@ class Orchestrator:
         """
         Phase D: Walk-forward backtest integration
         """
-        print(f"[Orchestrator] Running backtest on {historical_file}")
+        logger.info("orchestrator_backtest_start file=%s", historical_file)
         historical = pd.read_csv(historical_file)
 
         # Use TradeBuilder + Phase B + Phase C logic for each window
@@ -2916,7 +4516,7 @@ class Orchestrator:
                     })
         df_results = pd.DataFrame(results)
         df_results.to_csv(str(logs_dir() / "backtest_results.csv"), index=False)
-        print("[Orchestrator] Backtest complete, results saved.")
+        logger.info("orchestrator_backtest_complete")
         return df_results
 
 

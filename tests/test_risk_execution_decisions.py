@@ -3,8 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from config import config as cfg
+import core.execution_guard as execution_guard_mod
 from core.execution_guard import ExecutionGuard
 from core.risk_engine import RiskEngine
+from core.survival_gates import SurvivalGateDecision
 
 
 def _trade(**overrides):
@@ -73,3 +75,69 @@ def test_execution_guard_paper_planning_is_allowed_with_explicit_reason(monkeypa
     assert decision.allowed is True
     assert decision.planning_only is True
     assert decision.reason_code == "PLANNING_ONLY_MODE"
+
+
+def test_execution_guard_blocks_p0_on_regime_monitor_severe(monkeypatch):
+    monkeypatch.setattr(cfg, "REGIME_MONITOR_ENABLED", True, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_MONITOR_P0_ON_SEVERE", True, raising=False)
+    monkeypatch.setattr(
+        execution_guard_mod,
+        "get_regime_monitor_status",
+        lambda prefer_disk=False: {"severe": True, "collapsed": True, "sample_count": 30},
+    )
+    guard = ExecutionGuard()
+    decision = guard.evaluate(
+        _trade(strategy="TREND_VWAP_FALLBACK"),
+        {"capital": 10000.0},
+        "TREND",
+        market_data={"market_context": {"execution_mode": "LIVE", "market_open": True}},
+    )
+    assert decision.allowed is False
+    assert decision.reason_code == "REGIME_MONITOR_SEVERE_COLLAPSE"
+
+
+def test_execution_guard_applies_regime_size_multiplier_context(monkeypatch):
+    monkeypatch.setattr(cfg, "REGIME_MONITOR_ENABLED", True, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_MONITOR_P0_ON_SEVERE", True, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_MONITOR_BLOCK_ON_COLLAPSE", False, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_MONITOR_SIZE_MULT_ON_COLLAPSE", 0.4, raising=False)
+    monkeypatch.setattr(
+        execution_guard_mod,
+        "get_regime_monitor_status",
+        lambda prefer_disk=False: {"severe": False, "collapsed": True, "sample_count": 40},
+    )
+    guard = ExecutionGuard()
+    decision = guard.evaluate(
+        _trade(strategy="TREND_VWAP_FALLBACK"),
+        {"capital": 10000.0},
+        "TREND",
+        market_data={"market_context": {"execution_mode": "LIVE", "market_open": True}},
+    )
+    assert decision.allowed is True
+    assert float((decision.context or {}).get("size_multiplier", 1.0)) == 0.4
+
+
+def test_execution_guard_blocks_on_survival_gate_breach():
+    class _StubSurvivalGates:
+        def evaluate(self, **kwargs):
+            del kwargs
+            return SurvivalGateDecision(
+                allowed_entries=False,
+                breach=True,
+                reason_codes=["MAX_CONSECUTIVE_LOSSES_BREACH"],
+                size_multiplier=1.0,
+                auto_flatten_requested=True,
+                incident_id="inc-survival-1",
+                context={"reason_codes": ["MAX_CONSECUTIVE_LOSSES_BREACH"], "auto_flatten_on_breach": True},
+            )
+
+    guard = ExecutionGuard(survival_gates=_StubSurvivalGates())
+    decision = guard.evaluate(
+        _trade(strategy="TREND_VWAP_FALLBACK"),
+        {"capital": 10000.0, "loss_streak": 5, "daily_max_drawdown": -0.04},
+        "TREND",
+        market_data={"market_context": {"execution_mode": "LIVE", "market_open": True}},
+    )
+    assert decision.allowed is False
+    assert decision.reason_code == "SURVIVAL_GATE_BREACH"
+    assert "MAX_CONSECUTIVE_LOSSES_BREACH" in list((decision.context or {}).get("reason_codes") or [])

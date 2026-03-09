@@ -156,7 +156,7 @@ def test_dynamic_premium_band_uses_chain_percentiles_not_global_clamp(monkeypatc
     assert band_max > 150.0
 
 
-def test_paper_missing_quote_depth_stays_suggestion_with_execution_block(monkeypatch):
+def test_paper_missing_quote_depth_is_rejected_by_option_tradability_precondition(monkeypatch):
     monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
     monkeypatch.setattr(cfg, "PAPER_STRICT_MODE", False, raising=False)
@@ -178,9 +178,5 @@ def test_paper_missing_quote_depth_stays_suggestion_with_execution_block(monkeyp
     opt["ask"] = None
 
     trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
-    assert trade is not None
-    assert trade.execution_allowed is False
-    soft_codes = set(trade.source_flags.get("soft_veto_codes") or [])
-    gate_codes = set(trade.source_flags.get("gates_failed") or [])
-    assert "option_quote_missing" in soft_codes or "option_bidask_missing" in soft_codes
-    assert "option_quote_missing" in gate_codes or "option_bidask_missing" in gate_codes
+    assert trade is None
+    assert int(builder._scan_reject_counts.get("STALE_OPTION_TICK", 0)) >= 1

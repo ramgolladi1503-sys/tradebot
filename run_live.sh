@@ -2,7 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 TOKEN_PATH="$ROOT_DIR/.runtime/kite_access_token"
+
+echo "[RUN_LIVE] ROOT_DIR=$ROOT_DIR"
+echo "[RUN_LIVE] TOKEN_PATH=$TOKEN_PATH"
 
 export DATA_ROOT="${DATA_ROOT:-$ROOT_DIR/.runtime}"
 export DESKS_ROOT="${DESKS_ROOT:-$DATA_ROOT/desks}"
@@ -129,18 +133,23 @@ fi
 
 configure_openmp_runtime
 
-TOKEN_VAL=""
-if [[ -f "$TOKEN_PATH" ]]; then
-TOKEN_VAL="$(TOKEN_PATH="$TOKEN_PATH" python - <<'PY'
-import os
-from pathlib import Path
-p = Path(os.environ["TOKEN_PATH"])
-print(p.read_text().strip() if p.exists() else "")
-PY
-)"
-fi
+token_len=0
 
-token_len="${#TOKEN_VAL}"
+# Pre-export token ASAP so validate_token/auth_health can call kite_client.ensure()
+if [[ -f "$TOKEN_PATH" ]]; then
+  export KITE_ACCESS_TOKEN="$(tr -d ' \n\r\t' < "$TOKEN_PATH")"
+  token_len="${#KITE_ACCESS_TOKEN}"
+
+  if [[ "$token_len" -lt 20 ]]; then
+    echo "[RUN_LIVE][WARN] token_file_present_but_short path=$TOKEN_PATH len=$token_len"
+    unset KITE_ACCESS_TOKEN || true
+    token_len=0
+  else
+    echo "[RUN_LIVE] pre-exported KITE_ACCESS_TOKEN len=$token_len tail4=${KITE_ACCESS_TOKEN: -4}"
+  fi
+else
+  echo "[RUN_LIVE][INFO] token_file_not_found path=$TOKEN_PATH"
+fi
 
 validate_token() {
   python - <<'PY'
@@ -160,10 +169,28 @@ run_login() {
     echo "          Required for autologin."
     exit 1
   fi
+
   echo "[RUN_LIVE] Running Kite autologin..."
   python "$ROOT_DIR/scripts/kite_autologin_localhost.py"
-}
 
+  # Re-export (login may have written a new token)
+  if [[ -f "$TOKEN_PATH" ]]; then
+    export KITE_ACCESS_TOKEN="$(tr -d ' \n\r\t' < "$TOKEN_PATH")"
+    token_len="${#KITE_ACCESS_TOKEN}"
+
+    if [[ "$token_len" -lt 20 ]]; then
+      echo "[RUN_LIVE][WARN] token_file_present_but_short_after_login path=$TOKEN_PATH len=$token_len"
+      unset KITE_ACCESS_TOKEN || true
+      token_len=0
+    else
+      echo "[RUN_LIVE] post-login-exported KITE_ACCESS_TOKEN len=$token_len tail4=${KITE_ACCESS_TOKEN: -4}"
+    fi
+  else
+    echo "[RUN_LIVE][WARN] token_file_missing_after_login path=$TOKEN_PATH"
+    unset KITE_ACCESS_TOKEN || true
+    token_len=0
+  fi
+}
 if [[ "$FORCE_LOGIN" -eq 1 ]]; then
   run_login
 elif [[ "$SKIP_LOGIN" -eq 1 ]]; then
@@ -181,6 +208,7 @@ else
   fi
 fi
 
+
 echo "[RUN_LIVE] Final token validation..."
 validate_token
 
@@ -194,5 +222,23 @@ if [[ "$LOGIN_ONLY" -eq 1 ]]; then
   exit 0
 fi
 
+
+# --- after validate_token and LOGIN_ONLY/VALIDATE_ONLY exits ---
+
+# Export token into environment for this process and children (main.py)
+if [[ ! -f "$TOKEN_PATH" ]]; then
+  echo "[RUN_LIVE][FATAL] token_file_missing path=$TOKEN_PATH"
+  exit 2
+fi
+
+export KITE_ACCESS_TOKEN="$(tr -d ' \n\r\t' < "$TOKEN_PATH")"
+
+if [[ "${#KITE_ACCESS_TOKEN}" -lt 20 ]]; then
+  echo "[RUN_LIVE][FATAL] token_file_empty path=$TOKEN_PATH"
+  exit 2
+fi
+
+echo "[RUN_LIVE] exported KITE_ACCESS_TOKEN len=${#KITE_ACCESS_TOKEN} tail4=${KITE_ACCESS_TOKEN: -4}"
+
 echo "[RUN_LIVE] Starting main.py ..."
-python "$ROOT_DIR/main.py"
+exec python "$ROOT_DIR/main.py"

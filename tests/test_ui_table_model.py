@@ -1,6 +1,6 @@
 import pandas as pd
 
-from dashboard.ui.table_model import normalize_df, filter_non_active
+from dashboard.ui.table_model import normalize_df, filter_non_active, select_display_df, dedupe
 
 
 def test_normalize_df_adds_missing_cols():
@@ -46,3 +46,113 @@ def test_normalize_df_handles_duplicate_last_seen_columns():
     assert list(out.columns).count("last_seen_ts") == 1
     assert pd.notna(out.iloc[0]["last_seen_ts"])
     assert pd.notna(out.iloc[1]["last_seen_ts"])
+
+
+def test_normalize_df_does_not_backfill_entry_from_signal_price_when_stale():
+    df = pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-03-02T03:35:04Z",
+                "symbol": "NIFTY",
+                "status": "PLANNING",
+                "side": "BUY",
+                "signal_price": 101.67,
+                "entry_price": 101.67,
+                "entry": None,
+                "suggested_entry": None,
+                "entry_status": "STALE_PRICE",
+            }
+        ]
+    )
+    out = normalize_df(df)
+    assert pd.isna(out.iloc[0]["entry"])
+
+
+def test_normalize_df_backfills_entry_from_suggested_entry_only_when_ok():
+    df = pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-03-02T03:35:04Z",
+                "symbol": "NIFTY",
+                "status": "PLANNING",
+                "side": "BUY",
+                "entry": None,
+                "suggested_entry": 44.3,
+                "entry_status": "OK",
+            }
+        ]
+    )
+    out = normalize_df(df)
+    assert float(out.iloc[0]["entry"]) == 44.3
+
+
+def test_normalize_df_backfills_entry_for_price_mismatch_from_current_ltp():
+    df = pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-03-02T03:35:04Z",
+                "symbol": "NIFTY",
+                "status": "PLANNING",
+                "side": "BUY",
+                "entry": None,
+                "suggested_entry": None,
+                "current_ltp": 565.0,
+                "entry_status": "PRICE_MISMATCH",
+            }
+        ]
+    )
+    out = normalize_df(df)
+    assert float(out.iloc[0]["entry"]) == 565.0
+
+
+def test_select_display_df_formats_last_seen_ts_in_ist():
+    df = pd.DataFrame(
+        [
+            {
+                "last_seen_ts": "2026-03-02T03:35:04Z",
+                "symbol": "NIFTY",
+                "expiry_date": "2026-03-02",
+                "strike": 24600,
+                "opt_type": "PE",
+                "side": "BUY",
+                "status": "PLANNING",
+                "entry": 44.3,
+                "stop": 35.0,
+                "target": 60.0,
+                "confidence": 0.38,
+                "trade_key": "k1",
+            }
+        ]
+    )
+    out = select_display_df(df, "advisory")
+    assert out.iloc[0]["last_seen_ts"] == "2026-03-02 09:05:04 IST"
+
+
+def test_dedupe_uses_stable_trade_identity_not_entry_price():
+    df = pd.DataFrame(
+        [
+            {
+                "last_seen_ts": "2026-03-02T03:35:04Z",
+                "symbol": "NIFTY",
+                "expiry_date": "2026-03-02",
+                "strike": 24600,
+                "opt_type": "PE",
+                "side": "BUY",
+                "status": "PLANNING",
+                "entry": 101.7,
+            },
+            {
+                "last_seen_ts": "2026-03-02T03:36:04Z",
+                "symbol": "NIFTY",
+                "expiry_date": "2026-03-02",
+                "strike": 24600,
+                "opt_type": "PE",
+                "side": "BUY",
+                "status": "PLANNING",
+                "entry": 44.3,
+            },
+        ]
+    )
+    out = dedupe(df)
+    assert len(out) == 1
+    assert float(out.iloc[0]["entry"]) == 44.3

@@ -1,14 +1,17 @@
 from config import config as cfg
+import logging
+import os
 import time
 import threading
 import json
 import re
 import atexit
+import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 from core.kite_client import kite_client
 from core.depth_store import depth_store
-from core.tick_store import insert_tick, record_tick_epoch
+from core.tick_store import get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.auth_manager import (
     clear_auth_required_state,
@@ -21,11 +24,18 @@ from core.auth_health import get_kite_auth_health
 from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
+from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core import risk_halt
 from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer
 from core.run_lock import RunLock
 from core.runtime_lifecycle import lifecycle
+from core.blocker_lifecycle import (
+    build_feed_owner_key,
+    evaluate_feed_symbol_blockers,
+    get_blocker_registry,
+    top_active_code,
+)
 
 try:
     from kiteconnect import KiteTicker
@@ -37,12 +47,14 @@ _KITE_TICKER_LOCK = threading.Lock()
 _WATCHDOG_THREAD = None
 _WATCHDOG_STOP = None
 _LAST_TOKENS = []
+_LAST_DESIRED_TOKENS: list[int] | None = None
 _UNDERLYING_TOKENS: set[int] = set()
 _UNDERLYING_TOKEN_TO_SYMBOL: dict[int, str] = {}
 _TOKEN_TO_SYMBOL: dict[int, str] = {}
 _UNDERLYING_LOGGED_MISSING = False
 _SYMBOL_LAST_LTP_TS: dict[str, float] = {}
 _SYMBOL_LAST_DEPTH_TS: dict[str, float] = {}
+_SYMBOL_LAST_OPTION_TICK_TS: dict[str, float] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
 _RESTART_LOCK = threading.Lock()
@@ -52,6 +64,10 @@ _STALE_STRIKES = 0
 _WARMUP_PENDING = False
 _LOG_PATH = logs_dir() / "depth_ws_watchdog.log"
 _LOG_WRITER = get_jsonl_writer(_LOG_PATH)
+_TICK_INGEST_ERROR_PATH = logs_dir() / "tick_ingest_errors.jsonl"
+_TICK_INGEST_ERROR_WRITER = get_jsonl_writer(_TICK_INGEST_ERROR_PATH)
+_TICK_INGEST_ERROR_LOCK = threading.Lock()
+_LAST_TICK_INGEST_ERROR_TS = 0.0
 _DEPTH_WS_LOCK: RunLock | None = None
 _DEPTH_WS_LOCK_ACQUIRED = False
 _STOP_REQUESTED = False
@@ -59,12 +75,107 @@ _SCHEMA_LOG_TS = 0.0
 _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
 _AUTH_REQUIRED_LOGGED = False
+_LAST_FEED_TICK_LOG_MINUTE: int | None = None
+_RUNTIME_STATE: str = "STOPPED"
+_LAST_RUNTIME_ERROR: str = ""
+_INTENDED_TOKEN_COUNT: int = 0
+_LAST_OPTION_TOKEN_INCIDENT_TS: dict[str, float] = {}
+_LAST_ATM_BY_SYMBOL: dict[str, int] = {}
+_LAST_OPTION_COUNTS_BY_SYMBOL: dict[str, int] = {}
+_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL: dict[str, int] = {}
+logger = logging.getLogger(__name__)
+
+
+def _use_internal_reconnect() -> bool:
+    return bool(getattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True))
+
+
+def _maybe_reset_restart_guard_on_market_open(
+    *,
+    market_open_now: bool,
+    market_was_open: bool | None,
+) -> bool:
+    if bool(market_open_now) and (market_was_open is False or market_was_open is None):
+        try:
+            feed_restart_guard.reset(reason="market_open_transition")
+        except Exception:
+            pass
+    return bool(market_open_now)
 
 
 def _is_underlying_token(token: int | None) -> bool:
     if token is None:
         return False
     return (int(token) in _UNDERLYING_TOKENS) or (int(token) in _UNDERLYING_TOKEN_TO_SYMBOL)
+
+
+def _normalize_positive_tokens(token_source) -> list[int]:
+    out: set[int] = set()
+    for tok in list(token_source or []):
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        if tok_int > 0:
+            out.add(tok_int)
+    return sorted(out)
+
+
+def _use_desired_tokens_for_resubscribe() -> bool:
+    return str(os.getenv("FEED_USE_DESIRED_TOKENS", "") or "").strip() == "1"
+
+
+def _resubscribe_token_selection() -> tuple[list[int], dict[str, int | bool | str]]:
+    desired_tokens = _normalize_positive_tokens(_LAST_DESIRED_TOKENS)
+    fallback_tokens = _normalize_positive_tokens(_LAST_TOKENS)
+    use_desired_tokens = _use_desired_tokens_for_resubscribe()
+    desired_option_tokens_count = sum(1 for t in desired_tokens if not _is_underlying_token(t))
+    fallback_option_tokens_count = sum(1 for t in fallback_tokens if not _is_underlying_token(t))
+    auto_recover_missing_options = bool(
+        desired_tokens
+        and desired_option_tokens_count > 0
+        and fallback_option_tokens_count <= 0
+    )
+    prefer_desired_tokens = bool((use_desired_tokens or auto_recover_missing_options) and desired_tokens)
+    tokens = desired_tokens if prefer_desired_tokens else fallback_tokens
+    return tokens, {
+        "use_desired_tokens": use_desired_tokens,
+        "desired_tokens_count": len(desired_tokens),
+        "desired_option_tokens_count": desired_option_tokens_count,
+        "fallback_tokens_count": len(fallback_tokens),
+        "fallback_option_tokens_count": fallback_option_tokens_count,
+        "auto_recover_missing_options": auto_recover_missing_options,
+        "resubscribe_tokens_count": len(tokens),
+        "token_source": (
+            "desired"
+            if use_desired_tokens and desired_tokens
+            else ("desired_auto_recovery" if auto_recover_missing_options and desired_tokens else "last_tokens")
+        ),
+    }
+
+
+def _soft_resubscribe_current(reason: str) -> bool:
+    with _KITE_TICKER_LOCK:
+        ws_obj = _KITE_TICKER
+        tokens, selection_payload = _resubscribe_token_selection()
+        log_payload = {"reason": reason, **selection_payload}
+        if ws_obj is None or not tokens:
+            _log_ws(
+                "FEED_SOFT_RESUBSCRIBE_SKIPPED",
+                {**log_payload, "detail": "ws_or_tokens_missing", "token_count": len(tokens)},
+            )
+            return False
+        try:
+            ws_obj.subscribe(tokens)
+            ws_obj.set_mode(ws_obj.MODE_FULL, tokens)
+            _log_ws("FEED_SOFT_RESUBSCRIBE_OK", log_payload)
+            return True
+        except Exception as exc:
+            _log_ws(
+                "FEED_SOFT_RESUBSCRIBE_ERROR",
+                {**log_payload, "tokens": len(tokens), "error": str(exc)},
+            )
+            return False
 
 
 def _auth_error_text(code, reason) -> str:
@@ -77,10 +188,18 @@ def _auth_error_text(code, reason) -> str:
 
 
 def _mark_auth_required(reason: str, code=None, *, source: str = "kite_depth_ws") -> None:
-    global _AUTH_REQUIRED_LATCH, _AUTH_REQUIRED_LOGGED
+    global _AUTH_REQUIRED_LATCH, _AUTH_REQUIRED_LOGGED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
     if _AUTH_REQUIRED_LATCH:
         return
     _AUTH_REQUIRED_LATCH = True
+    _RUNTIME_STATE = "AUTH_BLOCKED"
+    _LAST_RUNTIME_ERROR = str(reason or "")[:1000]
+    _persist_runtime_snapshot_row(
+        ws_connected=False,
+        source="mark_auth_required",
+        runtime_state="AUTH_BLOCKED",
+        last_error=_LAST_RUNTIME_ERROR,
+    )
     invalidate_cache(reason=f"ws_auth_failure:{reason}")
     try:
         set_auth_required_state(reason=reason, source=source, code=code, repo_root_path=repo_root())
@@ -93,9 +212,10 @@ def _mark_auth_required(reason: str, code=None, *, source: str = "kite_depth_ws"
 
 
 def _clear_auth_required_latch() -> None:
-    global _AUTH_REQUIRED_LATCH, _AUTH_REQUIRED_LOGGED
+    global _AUTH_REQUIRED_LATCH, _AUTH_REQUIRED_LOGGED, _LAST_RUNTIME_ERROR
     _AUTH_REQUIRED_LATCH = False
     _AUTH_REQUIRED_LOGGED = False
+    _LAST_RUNTIME_ERROR = ""
     try:
         clear_auth_required_state(source="kite_depth_ws", repo_root_path=repo_root())
     except Exception:
@@ -118,6 +238,16 @@ def _extract_tick_epoch(tick: dict) -> float:
     return float(time.time())
 
 
+def _freshness_epoch_for_tick(token: int | None, payload_epoch: float | None, receipt_epoch: float) -> float:
+    try:
+        use_receipt_time = bool(getattr(cfg, "DEPTH_WS_OPTION_FRESHNESS_USE_RECEIPT_TIME", True))
+    except Exception:
+        use_receipt_time = True
+    if use_receipt_time and token is not None and not _is_underlying_token(token):
+        return float(receipt_epoch)
+    return float(payload_epoch if payload_epoch is not None else receipt_epoch)
+
+
 def _best_price(levels):
     try:
         if not levels:
@@ -136,14 +266,26 @@ def _depth_has_bid_ask(depth: dict | None) -> bool:
     return bid is not None and ask is not None and bid > 0 and ask > 0
 
 
-def _update_symbol_freshness(symbol: str | None, tick_epoch: float, has_ltp: bool, has_depth: bool) -> None:
+def _update_symbol_freshness(
+    symbol: str | None,
+    tick_epoch: float,
+    has_ltp: bool,
+    has_depth: bool,
+    *,
+    option_symbol: str | None = None,
+) -> None:
     if not symbol:
-        return
-    sym = str(symbol).upper()
-    if has_ltp:
-        _SYMBOL_LAST_LTP_TS[sym] = float(tick_epoch)
-    if has_depth:
-        _SYMBOL_LAST_DEPTH_TS[sym] = float(tick_epoch)
+        sym = ""
+    else:
+        sym = str(symbol).upper()
+    if sym:
+        if has_ltp:
+            _SYMBOL_LAST_LTP_TS[sym] = float(tick_epoch)
+        if has_depth:
+            _SYMBOL_LAST_DEPTH_TS[sym] = float(tick_epoch)
+    opt_sym = str(option_symbol or "").strip().upper()
+    if opt_sym and has_ltp:
+        _SYMBOL_LAST_OPTION_TICK_TS[opt_sym] = float(tick_epoch)
 
 
 def _update_index_quote_cache(symbol: str, bid, ask, mid, ts_epoch: float, last_price):
@@ -176,7 +318,10 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):
             try:
                 return fn(symbols=symbols, max_tokens=max_tokens)
             except TypeError:
-                return fn()
+                try:
+                    return fn(symbols)
+                except TypeError:
+                    continue
     return []
 
 
@@ -190,9 +335,9 @@ def _log_ws(event: str, extra: dict | None = None):
         if extra:
             payload.update(extra)
         if not _LOG_WRITER.write(payload):
-            print(f"[DEPTH_WS_LOG_ERROR] failed to log path={_LOG_PATH} err=write_failed")
+            logger.error("depth_ws_log_write_failed path=%s", _LOG_PATH)
     except Exception as exc:
-        print(f"[DEPTH_WS_LOG_ERROR] failed to log path={_LOG_PATH} err={type(exc).__name__}:{exc}")
+        logger.error("depth_ws_log_error path=%s err=%s:%s", _LOG_PATH, type(exc).__name__, exc)
 
 
 def _masked_secret_stats(label: str, secret: str | None) -> dict:
@@ -201,6 +346,484 @@ def _masked_secret_stats(label: str, secret: str | None) -> dict:
         f"{label}_len": len(value),
         f"{label}_tail4": value[-4:] if len(value) >= 4 else value,
         f"{label}_has_whitespace": bool(re.search(r"\s", value)),
+    }
+
+
+def _safe_float(value):
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _log_tick_ingest_error(
+    *,
+    token: int | None,
+    reason: str,
+    error: str | None = None,
+    keys: list[str] | None = None,
+    tick_ts_present: bool | None = None,
+) -> None:
+    global _LAST_TICK_INGEST_ERROR_TS
+    now_epoch = float(time.time())
+    min_interval = 10.0
+    with _TICK_INGEST_ERROR_LOCK:
+        if (now_epoch - _LAST_TICK_INGEST_ERROR_TS) < min_interval:
+            return
+        _LAST_TICK_INGEST_ERROR_TS = now_epoch
+    payload = {
+        "ts_epoch": now_epoch,
+        "event": "TICK_INGEST_ERROR",
+        "instrument_token": token,
+        "reason": reason,
+    }
+    if error:
+        payload["error"] = str(error)
+    if keys:
+        payload["keys"] = list(keys)[:20]
+    if tick_ts_present is not None:
+        payload["tick_ts_present"] = bool(tick_ts_present)
+    try:
+        if not _TICK_INGEST_ERROR_WRITER.write(payload):
+            logger.error("tick_ingest_error_log_write_failed path=%s", _TICK_INGEST_ERROR_PATH)
+    except Exception:
+        pass
+
+
+def _coerce_epoch(value) -> float | None:
+    try:
+        if value is None:
+            return None
+        epoch = float(value)
+        if epoch > 1e12:
+            epoch = epoch / 1000.0
+        return epoch
+    except Exception:
+        return None
+
+
+def _latest_db_tick_epoch() -> float | None:
+    db_path = Path(str(getattr(cfg, "TRADE_DB_PATH", "") or "")).expanduser()
+    if not db_path.exists():
+        return None
+    try:
+        with sqlite3.connect(str(db_path), timeout=1.0) as conn:
+            return _coerce_epoch(get_max_tick_epoch(conn))
+    except Exception:
+        return None
+
+
+def _ws_connected_state() -> bool | None:
+    with _KITE_TICKER_LOCK:
+        ticker = _KITE_TICKER
+    if ticker is None:
+        return None
+    try:
+        probe = getattr(ticker, "is_connected", None)
+        if callable(probe):
+            return bool(probe())
+        if isinstance(probe, bool):
+            return probe
+    except Exception:
+        return None
+    return None
+
+
+def _restart_count_1h(now_epoch: float) -> int:
+    with _RESTART_LOCK:
+        recent = [ts for ts in _FULL_RESTARTS if (float(now_epoch) - float(ts)) <= 3600.0]
+    return len(recent)
+
+
+def _subscribed_tokens_count_by_symbol(tokens: list[int] | None) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for tok in list(tokens or []):
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
+        if not symbol or symbol == "STICKY":
+            continue
+        counts[symbol] = int(counts.get(symbol, 0)) + 1
+    return counts
+
+
+def _missing_option_tokens_stats() -> tuple[int, dict[str, int]]:
+    missing_by_symbol: dict[str, int] = {}
+    total_missing = 0
+    for symbol, min_required in dict(_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL).items():
+        sym = str(symbol or "").upper()
+        if not sym:
+            continue
+        try:
+            required = max(0, int(min_required))
+        except Exception:
+            required = 0
+        try:
+            resolved = max(0, int((_LAST_OPTION_COUNTS_BY_SYMBOL or {}).get(sym, 0)))
+        except Exception:
+            resolved = 0
+        missing = max(0, required - resolved)
+        if missing <= 0:
+            continue
+        missing_by_symbol[sym] = int(missing)
+        total_missing += int(missing)
+    return int(total_missing), missing_by_symbol
+
+
+def _subscribed_option_token_stats(
+    *, now_epoch: float, tokens: list[int] | None, sample_limit: int = 10
+) -> tuple[int, dict[str, float | None], list[dict[str, float | int | str | None]]]:
+    option_count = 0
+    latest_tick_ts_by_symbol: dict[str, float | None] = {}
+    age_by_symbol: dict[str, float | None] = {}
+    sample_rows: list[dict[str, float | int | str | None]] = []
+    for tok in list(tokens or []):
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        if _is_underlying_token(tok_int):
+            continue
+        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
+        if not symbol or symbol == "STICKY":
+            continue
+        option_count += 1
+        last_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(tok_int))
+        age_sec = None if last_epoch is None else max(0.0, float(now_epoch) - float(last_epoch))
+        prev_ts = latest_tick_ts_by_symbol.get(symbol)
+        if prev_ts is None or (last_epoch is not None and float(last_epoch) > float(prev_ts)):
+            latest_tick_ts_by_symbol[symbol] = last_epoch
+        sample_rows.append(
+            {
+                "token": tok_int,
+                "symbol": symbol,
+                "last_tick_epoch": last_epoch,
+                "tick_age_sec": age_sec,
+            }
+        )
+    sample_rows.sort(key=lambda row: float(row.get("tick_age_sec") or -1.0), reverse=True)
+    for symbol, last_tick_ts in dict(_SYMBOL_LAST_OPTION_TICK_TS or {}).items():
+        sym = str(symbol or "").upper()
+        if not sym:
+            continue
+        last_epoch = _coerce_epoch(last_tick_ts)
+        prev_ts = latest_tick_ts_by_symbol.get(sym)
+        if prev_ts is None or (last_epoch is not None and float(last_epoch) > float(prev_ts)):
+            latest_tick_ts_by_symbol[sym] = last_epoch
+    for symbol, last_tick_ts in list(latest_tick_ts_by_symbol.items()):
+        last_epoch = _coerce_epoch(last_tick_ts)
+        age_by_symbol[symbol] = None if last_epoch is None else max(0.0, float(now_epoch) - float(last_epoch))
+    return int(option_count), dict(age_by_symbol), sample_rows[: max(1, int(sample_limit))]
+
+
+def _option_runtime_state(
+    *,
+    now_epoch: float,
+    tokens: list[int] | None,
+    expected_counts_by_symbol: dict[str, int] | None = None,
+    min_required_by_symbol: dict[str, int] | None = None,
+    ws_connected: bool | None = None,
+    sample_limit: int = 10,
+) -> dict[str, object]:
+    subscribed_count_by_symbol: dict[str, int] = {}
+    ticks_received_count_by_symbol: dict[str, int] = {}
+    last_tick_ts_by_symbol: dict[str, float | None] = {}
+    option_age_by_symbol: dict[str, float | None] = {}
+    sample_rows: list[dict[str, float | int | str | None]] = []
+    option_count = 0
+    for tok in list(tokens or []):
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        if _is_underlying_token(tok_int):
+            continue
+        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
+        if not symbol or symbol == "STICKY":
+            continue
+        option_count += 1
+        subscribed_count_by_symbol[symbol] = int(subscribed_count_by_symbol.get(symbol, 0)) + 1
+        last_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(tok_int))
+        age_sec = None if last_epoch is None else max(0.0, float(now_epoch) - float(last_epoch))
+        prev_ts = last_tick_ts_by_symbol.get(symbol)
+        if prev_ts is None or (last_epoch is not None and float(last_epoch) > float(prev_ts)):
+            last_tick_ts_by_symbol[symbol] = last_epoch
+        if last_epoch is not None:
+            ticks_received_count_by_symbol[symbol] = int(ticks_received_count_by_symbol.get(symbol, 0)) + 1
+        sample_rows.append(
+            {
+                "token": tok_int,
+                "symbol": symbol,
+                "last_tick_epoch": last_epoch,
+                "tick_age_sec": age_sec,
+            }
+        )
+    sample_rows.sort(key=lambda row: float(row.get("tick_age_sec") or -1.0), reverse=True)
+    for symbol, last_tick_ts in dict(_SYMBOL_LAST_OPTION_TICK_TS or {}).items():
+        sym = str(symbol or "").upper()
+        if not sym:
+            continue
+        last_epoch = _coerce_epoch(last_tick_ts)
+        prev_ts = last_tick_ts_by_symbol.get(sym)
+        if prev_ts is None or (last_epoch is not None and float(last_epoch) > float(prev_ts)):
+            last_tick_ts_by_symbol[sym] = last_epoch
+    for symbol, last_tick_ts in list(last_tick_ts_by_symbol.items()):
+        last_epoch = _coerce_epoch(last_tick_ts)
+        option_age_by_symbol[symbol] = (
+            None if last_epoch is None else max(0.0, float(now_epoch) - float(last_epoch))
+        )
+    option_sla_sec = float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0))
+    feed_block_reason_by_symbol: dict[str, str] = {}
+    active_blockers_by_symbol: dict[str, list[str]] = {}
+    blocker_records_by_symbol: dict[str, list[dict[str, object]]] = {}
+    tracked_symbols = (
+        set(str(k).upper() for k in dict(expected_counts_by_symbol or {}).keys())
+        | set(str(k).upper() for k in subscribed_count_by_symbol.keys())
+    )
+    registry = get_blocker_registry("feed")
+    valid_owner_keys: set[str] = set()
+    for symbol in sorted(sym for sym in tracked_symbols if sym):
+        owner_key = build_feed_owner_key(symbol)
+        valid_owner_keys.add(owner_key)
+        expected_count = max(0, int((expected_counts_by_symbol or {}).get(symbol, 0) or 0))
+        subscribed_count = max(0, int(subscribed_count_by_symbol.get(symbol, 0) or 0))
+        last_tick_ts = _coerce_epoch(last_tick_ts_by_symbol.get(symbol))
+        age_sec = option_age_by_symbol.get(symbol)
+        min_required = max(0, int((min_required_by_symbol or {}).get(symbol, 0) or 0))
+        if expected_count <= 0 and min_required <= 0 and subscribed_count <= 0:
+            continue
+        active_records = evaluate_feed_symbol_blockers(
+            registry,
+            now_ts=float(now_epoch),
+            symbol=symbol,
+            ws_connected=ws_connected,
+            expected_option_count=expected_count,
+            subscribed_option_count=subscribed_count,
+            latest_option_tick_ts=last_tick_ts,
+            latest_option_tick_age_sec=age_sec,
+            feed_freshness_sec=option_sla_sec,
+            min_required_count=min_required,
+        )
+        active_codes = [str(record.code) for record in active_records]
+        active_blockers_by_symbol[symbol] = active_codes
+        blocker_records_by_symbol[symbol] = [record.to_payload() for record in active_records]
+        feed_block_reason_by_symbol[symbol] = top_active_code(active_records) or "OK"
+    registry.prune_invalid_owners(now_ts=float(now_epoch), scope="feed_symbol", valid_owner_keys=valid_owner_keys)
+    registry.expire_stale(float(now_epoch), scope="feed_symbol")
+    return {
+        "option_count": int(option_count),
+        "option_age_by_symbol": option_age_by_symbol,
+        "sample_rows": sample_rows[: max(1, int(sample_limit))],
+        "subscribed_count_by_symbol": subscribed_count_by_symbol,
+        "ticks_received_count_by_symbol": ticks_received_count_by_symbol,
+        "last_tick_ts_by_symbol": last_tick_ts_by_symbol,
+        "feed_block_reason_by_symbol": feed_block_reason_by_symbol,
+        "active_blockers_by_symbol": active_blockers_by_symbol,
+        "blocker_records_by_symbol": blocker_records_by_symbol,
+    }
+
+
+def _write_feed_runtime_snapshot(
+    *,
+    now_epoch: float,
+    ws_connected: bool | None,
+    subscribed_tokens_count: int,
+    intended_tokens_count: int,
+    subscribed_tokens_count_by_symbol: dict[str, int] | None = None,
+    missing_option_tokens_count: int | None = None,
+    missing_option_tokens_count_by_symbol: dict[str, int] | None = None,
+    last_db_tick_epoch: float | None,
+    last_db_tick_age_sec: float | None,
+    last_ws_tick_epoch: float | None,
+    subscribed_option_tokens_count: int | None = None,
+    option_last_tick_age_by_symbol: dict[str, float | None] | None = None,
+    option_last_tick_sample: list[dict] | None = None,
+    option_tokens_resolved_count_by_symbol: dict[str, int] | None = None,
+    option_tokens_subscribed_count_by_symbol: dict[str, int] | None = None,
+    option_ticks_received_count_by_symbol: dict[str, int] | None = None,
+    last_option_tick_ts_by_symbol: dict[str, float | None] | None = None,
+    option_feed_block_reason_by_symbol: dict[str, str] | None = None,
+    option_active_blockers_by_symbol: dict[str, list[str]] | None = None,
+    restart_count_1h: int,
+    stale_strikes: int,
+    runtime_state: str | None = None,
+    last_error: str | None = None,
+) -> None:
+    path = logs_dir() / "feed_runtime_latest.json"
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    payload = {
+        "ts_epoch": float(now_epoch),
+        "ws_connected": ws_connected,
+        "subscribed_tokens_count": int(subscribed_tokens_count),
+        "intended_tokens_count": int(intended_tokens_count),
+        "subscribed_tokens_count_by_symbol": dict(subscribed_tokens_count_by_symbol or {}),
+        "missing_option_tokens_count": int(missing_option_tokens_count or 0),
+        "missing_option_tokens_count_by_symbol": dict(missing_option_tokens_count_by_symbol or {}),
+        "last_db_tick_epoch": _coerce_epoch(last_db_tick_epoch),
+        "last_db_tick_age_sec": _safe_float(last_db_tick_age_sec),
+        "last_ws_tick_epoch": _coerce_epoch(last_ws_tick_epoch),
+        "subscribed_option_tokens_count": int(subscribed_option_tokens_count or 0),
+        "option_last_tick_age_by_symbol": dict(option_last_tick_age_by_symbol or {}),
+        "option_last_tick_sample": list(option_last_tick_sample or []),
+        "option_tokens_resolved_count_by_symbol": dict(option_tokens_resolved_count_by_symbol or {}),
+        "option_tokens_subscribed_count_by_symbol": dict(option_tokens_subscribed_count_by_symbol or {}),
+        "option_ticks_received_count_by_symbol": dict(option_ticks_received_count_by_symbol or {}),
+        "last_option_tick_ts_by_symbol": dict(last_option_tick_ts_by_symbol or {}),
+        "option_feed_block_reason_by_symbol": dict(option_feed_block_reason_by_symbol or {}),
+        "option_active_blockers_by_symbol": dict(option_active_blockers_by_symbol or {}),
+        "restart_count_1h": int(restart_count_1h),
+        "stale_strikes": int(stale_strikes),
+        "runtime_state": str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper(),
+        "last_error": str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000],
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(payload, sort_keys=True))
+        tmp.replace(path)
+    except Exception as exc:
+        _log_ws("FEED_RUNTIME_SNAPSHOT_ERROR", {"error": str(exc), "path": str(path)})
+
+
+def _latest_depth_epoch_from_store() -> float | None:
+    latest = None
+    try:
+        for book in depth_store.books.values():
+            ts = book.get("ts_epoch") or book.get("ts")
+            if ts is None:
+                continue
+            ts_val = _coerce_epoch(ts)
+            if ts_val is None:
+                continue
+            if latest is None or ts_val > latest:
+                latest = ts_val
+    except Exception:
+        return None
+    return latest
+
+
+def _persist_runtime_snapshot_row(
+    *,
+    ws_connected: bool | None,
+    source: str,
+    now_epoch: float | None = None,
+    runtime_state: str | None = None,
+    last_error: str | None = None,
+    intended_tokens_count: int | None = None,
+) -> None:
+    ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
+    state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
+    err_text = str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000]
+    sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
+    missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
+    last_db_tick_epoch = _latest_db_tick_epoch()
+    last_db_tick_age_sec = None
+    if last_db_tick_epoch is not None:
+        last_db_tick_age_sec = max(0.0, float(ts_epoch) - float(last_db_tick_epoch))
+    option_state = _option_runtime_state(
+        now_epoch=ts_epoch,
+        tokens=_LAST_TOKENS,
+        expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
+        min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        ws_connected=ws_connected,
+    )
+    payload = {
+        "ts_epoch": ts_epoch,
+        "ws_connected": ws_connected,
+        "subscribed_tokens_count": len(_LAST_TOKENS or []),
+        "intended_tokens_count": int(
+            intended_tokens_count
+            if intended_tokens_count is not None
+            else (_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else len(_LAST_TOKENS or []))
+        ),
+        "subscribed_tokens_sample": list(_LAST_TOKENS or [])[:25],
+        "subscribed_tokens_count_by_symbol": sub_counts,
+        "missing_option_tokens_count": int(missing_count),
+        "missing_option_tokens_count_by_symbol": missing_counts_by_symbol,
+        "subscribed_option_tokens_count": int(option_state.get("option_count") or 0),
+        "option_last_tick_age_by_symbol": dict(option_state.get("option_age_by_symbol") or {}),
+        "option_last_tick_sample": list(option_state.get("sample_rows") or []),
+        "option_tokens_resolved_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+        "option_tokens_subscribed_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
+        "option_ticks_received_count_by_symbol": dict(option_state.get("ticks_received_count_by_symbol") or {}),
+        "last_option_tick_ts_by_symbol": dict(option_state.get("last_tick_ts_by_symbol") or {}),
+        "option_feed_block_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
+        "option_active_blockers_by_symbol": dict(option_state.get("active_blockers_by_symbol") or {}),
+        "last_ws_tick_epoch": _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None,
+        "last_depth_epoch": _latest_depth_epoch_from_store(),
+        "source": source,
+        "runtime_state": state_text,
+        "last_error": err_text,
+    }
+    ok = write_feed_runtime_snapshot(payload)
+    if not ok:
+        _log_ws("FEED_RUNTIME_STORE_WRITE_ERROR", {"source": source})
+    _write_feed_runtime_snapshot(
+        now_epoch=ts_epoch,
+        ws_connected=ws_connected,
+        subscribed_tokens_count=len(_LAST_TOKENS or []),
+        intended_tokens_count=int(payload["intended_tokens_count"] or 0),
+        subscribed_tokens_count_by_symbol=sub_counts,
+        missing_option_tokens_count=missing_count,
+        missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
+        last_db_tick_epoch=last_db_tick_epoch,
+        last_db_tick_age_sec=last_db_tick_age_sec,
+        last_ws_tick_epoch=_LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None,
+        subscribed_option_tokens_count=int(option_state.get("option_count") or 0),
+        option_last_tick_age_by_symbol=dict(option_state.get("option_age_by_symbol") or {}),
+        option_last_tick_sample=list(option_state.get("sample_rows") or []),
+        option_tokens_resolved_count_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+        option_tokens_subscribed_count_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
+        option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
+        last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
+        option_feed_block_reason_by_symbol=dict(option_state.get("feed_block_reason_by_symbol") or {}),
+        option_active_blockers_by_symbol=dict(option_state.get("active_blockers_by_symbol") or {}),
+        restart_count_1h=_restart_count_1h(ts_epoch),
+        stale_strikes=_STALE_STRIKES,
+        runtime_state=state_text,
+        last_error=err_text,
+    )
+
+
+def _run_db_tick_watchdog_cycle(
+    *,
+    now_epoch: float,
+    market_open: bool,
+    stale_restart_sec: float,
+    reset_sec: float = 2.0,
+    strikes_to_restart: int = 2,
+    restart_cb=None,
+) -> dict:
+    global _STALE_STRIKES
+    db_tick_epoch = _latest_db_tick_epoch()
+    db_tick_age_sec = None
+    if db_tick_epoch is not None:
+        db_tick_age_sec = max(0.0, float(now_epoch) - float(db_tick_epoch))
+    restarted = False
+    if not market_open:
+        _STALE_STRIKES = 0
+    elif db_tick_age_sec is not None and db_tick_age_sec > float(stale_restart_sec):
+        _STALE_STRIKES += 1
+        _log_ws("FEED_TICK_STALE", {"age_sec": db_tick_age_sec, "strikes": _STALE_STRIKES})
+        if _STALE_STRIKES >= max(1, int(strikes_to_restart)):
+            cb = restart_cb or restart_depth_ws
+            try:
+                restarted = bool(cb(reason="tick_stalled"))
+            except TypeError:
+                restarted = bool(cb("tick_stalled"))
+    elif db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec):
+        if _STALE_STRIKES:
+            _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "strikes": _STALE_STRIKES})
+        _STALE_STRIKES = 0
+
+    return {
+        "last_db_tick_epoch": db_tick_epoch,
+        "last_db_tick_age_sec": db_tick_age_sec,
+        "stale_strikes": int(_STALE_STRIKES),
+        "restarted": bool(restarted),
     }
 
 
@@ -213,19 +836,27 @@ def _infer_atm_strike(ltp: float | None, step: float | None) -> int | None:
         return None
 
 
-def _underlying_ltp(symbol: str) -> float | None:
+def _underlying_ltp(symbol: str, index_token: int | None = None) -> tuple[float | None, str]:
     mapping = getattr(cfg, "PREMARKET_INDICES_LTP", {}) or {}
     ltp_symbol = mapping.get(symbol.upper())
     if not ltp_symbol:
-        return None
+        ltp_symbol = None
     try:
-        quotes = kite_client.ltp([ltp_symbol]) or {}
-        val = quotes.get(ltp_symbol, {}).get("last_price")
-        if val is not None:
-            return float(val)
+        if ltp_symbol:
+            quotes = kite_client.ltp([ltp_symbol]) or {}
+            val = quotes.get(ltp_symbol, {}).get("last_price")
+            if val is not None:
+                return float(val), "live_ltp"
     except Exception:
-        return None
-    return None
+        pass
+    if index_token is not None:
+        try:
+            ltp, _ts_epoch = get_ltp(int(index_token))
+            if ltp is not None:
+                return float(ltp), "tick_store"
+        except Exception:
+            pass
+    return None, "missing"
 
 
 def _expiry_key(value) -> str | None:
@@ -275,6 +906,42 @@ def _load_option_token_meta(symbol: str, exchange: str, expiry) -> dict[int, dic
             "instrument_type": str(inst.get("instrument_type") or "").upper(),
         }
     return out
+
+
+def _maybe_raise_option_token_incident(
+    *,
+    symbol: str,
+    exchange: str,
+    expiry,
+    option_count: int,
+    min_required: int,
+    sample_tokens: list[int] | None = None,
+    fail_reason: str = "option_tokens_under_min",
+) -> None:
+    cooldown_sec = float(getattr(cfg, "OPTION_TOKEN_INCIDENT_COOLDOWN_SEC", 300.0))
+    now_epoch = float(now_utc_epoch())
+    exp_key = _expiry_key(expiry) or "unknown"
+    key = f"{str(symbol).upper()}|{str(exchange).upper()}|{exp_key}"
+    last_ts = float(_LAST_OPTION_TOKEN_INCIDENT_TS.get(key, 0.0) or 0.0)
+    if (now_epoch - last_ts) < cooldown_sec:
+        return
+    _LAST_OPTION_TOKEN_INCIDENT_TS[key] = now_epoch
+    payload = {
+        "symbol": str(symbol).upper(),
+        "exchange": str(exchange).upper(),
+        "expiry": exp_key,
+        "option_count": int(option_count),
+        "min_required": int(min_required),
+        "fail_reason": str(fail_reason or "option_tokens_under_min"),
+        "sample_tokens": list(sample_tokens or [])[:10],
+    }
+    _log_ws("FEED_OPTION_TOKENS_UNDER_MIN", payload)
+    try:
+        from core.incidents import SEV2, create_incident
+
+        create_incident(SEV2, "OPTION_TOKENS_UNDER_MIN", payload)
+    except Exception:
+        pass
 
 
 def _option_distance_rank(meta: dict | None, atm: int | None, step: float | None, token: int) -> tuple[float, int, float, int, int]:
@@ -421,7 +1088,9 @@ def get_sticky_tokens() -> set[int]:
 
 
 def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict]]:
-    global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL
+    global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL, _LAST_ATM_BY_SYMBOL
+    global _LAST_DESIRED_TOKENS
+    global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
     symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
     tokens: list[int] = []
     resolution: list[dict] = []
@@ -429,29 +1098,54 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     underlying_token_to_symbol: dict[int, str] = {}
     token_to_symbol: dict[int, str] = {}
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]] = {}
+    token_exchange_hint: dict[int, str] = {}
     if max_tokens is None:
         max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150))
     strikes_around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6))
     strikes_by_symbol = getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {}
     step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
     validate_tokens = bool(getattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True))
+    min_option_tokens = max(1, int(getattr(cfg, "MIN_OPTION_TOKENS", 12)))
     sticky_tokens = set(int(t) for t in get_sticky_tokens() if t is not None)
     active_trade_tokens = set(sticky_tokens)
 
     for sym in symbols:
         sym_upper = str(sym).upper()
         exchange = "BFO" if sym_upper == "SENSEX" else "NFO"
+        index_token = kite_client.resolve_index_token(sym_upper)
+        index_source = "instruments"
+        if not index_token:
+            mapping = getattr(cfg, "INDEX_TOKEN_BY_SYMBOL", {}) or {}
+            fallback_token = int(mapping.get(sym_upper, 0) or 0)
+            if fallback_token > 0:
+                index_token = fallback_token
+                index_source = "config"
         expiry = kite_client.next_available_expiry(sym, exchange=exchange)
         step = float(step_map.get(sym_upper, getattr(cfg, "STRIKE_STEP", 50)))
         strikes_around = int(strikes_by_symbol.get(sym_upper, strikes_around_default))
-        ltp = _underlying_ltp(sym_upper)
-        ltp_source = "live"
+        try:
+            ltp_result = _underlying_ltp(sym_upper, index_token)
+        except TypeError:
+            # Legacy tests may monkeypatch _underlying_ltp(symbol) only.
+            ltp_result = _underlying_ltp(sym_upper)
+        if isinstance(ltp_result, tuple):
+            ltp, ltp_source = ltp_result
+        else:
+            ltp = ltp_result
+            ltp_source = "live_ltp" if ltp is not None else "missing"
         if ltp is None:
             fallback = (getattr(cfg, "PREMARKET_INDICES_CLOSE", {}) or {}).get(sym_upper)
             if fallback:
                 ltp = float(fallback)
                 ltp_source = "fallback_close"
         atm = _infer_atm_strike(ltp, step)
+        if atm is None:
+            cached_atm = _LAST_ATM_BY_SYMBOL.get(sym_upper)
+            if cached_atm is not None:
+                atm = int(cached_atm)
+                ltp_source = "fallback_last_atm"
+        if atm is not None:
+            _LAST_ATM_BY_SYMBOL[sym_upper] = int(atm)
 
         option_meta: dict[int, dict] = {}
         if expiry:
@@ -460,12 +1154,11 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         option_tokens_raw: list[int] = []
         if expiry and atm is not None:
             option_tokens_raw = kite_client.resolve_option_tokens_window(
-                sym,
-                expiry,
-                atm,
-                strikes_around,
-                step,
+                symbol=sym,
+                expiry=expiry,
+                strikes_around=strikes_around,
                 exchange=exchange,
+                spot=ltp,
             )
         option_tokens: list[int] = []
         seen_option_tokens: set[int] = set()
@@ -481,15 +1174,26 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         option_tokens.sort(key=lambda t: _option_distance_rank(option_meta.get(int(t)), atm, step, int(t)))
         for tok in option_tokens:
             option_rank_by_token[int(tok)] = _option_distance_rank(option_meta.get(int(tok)), atm, step, int(tok))
+        option_fail_reason = None
+        if expiry is None:
+            option_fail_reason = "expiry_unavailable"
+        elif atm is None:
+            option_fail_reason = "atm_unavailable"
+        elif len(option_tokens) < min_option_tokens:
+            option_fail_reason = "option_tokens_under_min"
+        if option_fail_reason is not None:
+            _maybe_raise_option_token_incident(
+                symbol=sym_upper,
+                exchange=exchange,
+                expiry=expiry,
+                option_count=len(option_tokens),
+                min_required=min_option_tokens,
+                sample_tokens=option_tokens[:10],
+                fail_reason=option_fail_reason,
+            )
+            if option_fail_reason == "option_tokens_under_min":
+                option_tokens = []
 
-        index_token = kite_client.resolve_index_token(sym_upper)
-        index_source = "instruments"
-        if not index_token:
-            mapping = getattr(cfg, "INDEX_TOKEN_BY_SYMBOL", {}) or {}
-            fallback_token = int(mapping.get(sym_upper, 0) or 0)
-            if fallback_token > 0:
-                index_token = fallback_token
-                index_source = "config"
         per_tokens: list[int] = []
         if index_token:
             try:
@@ -497,11 +1201,13 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                 per_tokens.append(idx_int)
                 underlying_tokens.append(idx_int)
                 underlying_token_to_symbol[idx_int] = sym_upper
+                token_exchange_hint[idx_int] = "BSE" if sym_upper == "SENSEX" else "NSE"
             except Exception:
                 index_token = None
         for tok in option_tokens:
             if tok not in per_tokens:
                 per_tokens.append(int(tok))
+            token_exchange_hint[int(tok)] = str(exchange).upper()
         if index_token:
             token_to_symbol[int(index_token)] = sym_upper
         selected_strikes: dict[float, set[str]] = {}
@@ -529,7 +1235,11 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                 "step": step,
                 "tokens": list(per_tokens),
                 "count": len(per_tokens),
+                "resolved_count": len(per_tokens),
                 "option_count": len(option_tokens),
+                "resolved_option_count": len(option_tokens),
+                "option_min_required": min_option_tokens,
+                "option_fail_reason": option_fail_reason,
                 "option_strikes_selected": sorted(selected_strikes.keys()),
                 "option_strike_count": len(selected_strikes),
                 "option_two_sided_strike_count": sum(1 for legs in selected_strikes.values() if {"CE", "PE"}.issubset(legs)),
@@ -549,11 +1259,29 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     _UNDERLYING_TOKEN_TO_SYMBOL = dict(underlying_token_to_symbol)
     _TOKEN_TO_SYMBOL = dict(token_to_symbol)
     _UNDERLYING_LOGGED_MISSING = False
+    _LAST_OPTION_COUNTS_BY_SYMBOL = {
+        str(row.get("symbol") or "").upper(): int(row.get("option_count") or 0)
+        for row in resolution
+        if str(row.get("symbol") or "").strip()
+    }
+    _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL = {
+        str(row.get("symbol") or "").upper(): int(row.get("option_min_required") or 0)
+        for row in resolution
+        if str(row.get("symbol") or "").strip()
+    }
 
     preserve_tokens: set[int] = set(int(t) for t in _UNDERLYING_TOKENS)
     preserve_tokens.update(int(t) for t in sticky_tokens if t is not None)
+    preserve_tokens.update(int(t) for t in option_rank_by_token.keys())
 
     if validate_tokens:
+        def _count_by_exchange(token_list: list[int]) -> dict[str, int]:
+            counts: dict[str, int] = {}
+            for token in token_list:
+                exchange_key = str(token_exchange_hint.get(int(token), "UNKNOWN")).upper()
+                counts[exchange_key] = int(counts.get(exchange_key, 0)) + 1
+            return counts
+
         known_tokens: set[int] = set()
         try:
             for exch in ("NFO", "BFO", "NSE", "BSE"):
@@ -567,11 +1295,48 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         except Exception:
             known_tokens = set()
         if known_tokens:
-            before = len(tokens)
-            tokens = [t for t in tokens if int(t) in known_tokens or int(t) in preserve_tokens]
-            dropped = before - len(tokens)
+            before_tokens = [int(t) for t in tokens]
+            before = len(before_tokens)
+            before_counts = _count_by_exchange(before_tokens)
+            tokens = [t for t in before_tokens if int(t) in known_tokens or int(t) in preserve_tokens]
+            kept_set = set(int(t) for t in tokens)
+            dropped_tokens = [int(t) for t in before_tokens if int(t) not in kept_set]
+            dropped = len(dropped_tokens)
+            dropped_counts = _count_by_exchange(dropped_tokens)
+            after_counts = _count_by_exchange([int(t) for t in tokens])
+            _log_ws(
+                "FEED_TOKEN_FILTER_COUNTS",
+                {
+                    "before_total": before,
+                    "after_total": len(tokens),
+                    "dropped_total": dropped,
+                    "before_by_exchange": before_counts,
+                    "after_by_exchange": after_counts,
+                    "dropped_by_exchange": dropped_counts,
+                    "kept_resolver_option_tokens": len(
+                        [t for t in tokens if int(t) in option_rank_by_token]
+                    ),
+                },
+            )
             if dropped > 0:
-                _log_ws("FEED_TOKEN_FILTERED", {"dropped": dropped, "kept": len(tokens)})
+                _log_ws(
+                    "FEED_TOKEN_FILTERED",
+                    {
+                        "dropped": dropped,
+                        "kept": len(tokens),
+                        "dropped_sample": dropped_tokens[:20],
+                    },
+                )
+            dropped_bfo = [int(t) for t in dropped_tokens if str(token_exchange_hint.get(int(t), "")).upper() == "BFO"]
+            if dropped_bfo:
+                _log_ws(
+                    "FEED_TOKEN_FILTERED_BFO_DROPPED",
+                    {
+                        "reason": "validate_tokens_not_in_known_universe",
+                        "count": len(dropped_bfo),
+                        "sample_tokens": dropped_bfo[:20],
+                    },
+                )
 
     tokens, truncated, budget_meta = _enforce_subscription_budget(
         tokens,
@@ -581,6 +1346,42 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         sticky_tokens=sticky_tokens,
         active_trade_tokens=active_trade_tokens,
     )
+
+    final_tokens_by_symbol: dict[str, list[int]] = {}
+    final_option_counts_by_symbol: dict[str, int] = {}
+    for tok in list(tokens or []):
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
+        if not symbol or symbol == "STICKY":
+            continue
+        final_tokens_by_symbol.setdefault(symbol, []).append(tok_int)
+        if not _is_underlying_token(tok_int):
+            final_option_counts_by_symbol[symbol] = int(final_option_counts_by_symbol.get(symbol, 0)) + 1
+
+    for row in resolution:
+        symbol = str(row.get("symbol") or "").upper()
+        final_tokens_for_symbol = list(final_tokens_by_symbol.get(symbol, []))
+        final_option_count = int(final_option_counts_by_symbol.get(symbol, 0))
+        row["tokens"] = final_tokens_for_symbol
+        row["count"] = len(final_tokens_for_symbol)
+        row["final_count"] = len(final_tokens_for_symbol)
+        row["option_count"] = final_option_count
+        row["final_option_count"] = final_option_count
+        row["option_drop_reason"] = row.get("option_fail_reason")
+        if not row.get("option_drop_reason") and final_option_count < int(row.get("resolved_option_count") or 0):
+            row["option_drop_reason"] = (
+                "subscription_budget_truncated"
+                if bool(truncated)
+                else "option_tokens_filtered"
+            )
+    _LAST_OPTION_COUNTS_BY_SYMBOL = {
+        str(row.get("symbol") or "").upper(): int(row.get("option_count") or 0)
+        for row in resolution
+        if str(row.get("symbol") or "").strip()
+    }
 
     try:
         out = logs_dir() / "token_resolution.json"
@@ -596,6 +1397,17 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             "max_tokens": max_tokens,
             "truncated": truncated,
             "per_symbol": {r["symbol"]: r.get("count", 0) for r in resolution},
+            "option_tokens_resolved_count_by_symbol": {
+                r["symbol"]: int(r.get("resolved_option_count") or 0) for r in resolution
+            },
+            "option_tokens_subscribed_count_by_symbol": {
+                r["symbol"]: int(r.get("option_count") or 0) for r in resolution
+            },
+            "option_drop_reason_by_symbol": {
+                r["symbol"]: str(r.get("option_drop_reason") or "")
+                for r in resolution
+                if str(r.get("option_drop_reason") or "").strip()
+            },
             "underlying_tokens": list(_UNDERLYING_TOKENS),
             "sticky_tokens": sorted(int(t) for t in sticky_tokens if t is not None),
             "active_trade_tokens": sorted(int(t) for t in active_trade_tokens if t is not None),
@@ -604,6 +1416,8 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             "sample_tokens": tokens[:10],
         },
     )
+    desired_tokens = _normalize_positive_tokens(tokens)
+    _LAST_DESIRED_TOKENS = desired_tokens or None
     return tokens, resolution
 
 
@@ -941,7 +1755,7 @@ def _ensure_depth_ws_lock() -> bool:
     if not ok:
         state = _DEPTH_WS_LOCK.state_dict()
         _log_ws("FEED_LOCK_BLOCKED", {"reason": reason, "state": state})
-        print(f"[DEPTH_WS_LOCK] {reason} state={state}")
+        logger.warning("depth_ws_lock_blocked reason=%s state=%s", reason, state)
         return False
     _DEPTH_WS_LOCK_ACQUIRED = True
     atexit.register(_DEPTH_WS_LOCK.release)
@@ -982,11 +1796,180 @@ def _join_ticker_threads(instance, timeout_sec: float) -> None:
         _join_thread_safe(ws_thread, timeout_sec)
 
 
+def on_ticks(ws, ticks):
+    global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    _ = ws
+    if not ticks:
+        return
+    now_epoch = float(now_utc_epoch())
+    max_tick_epoch = None
+    try:
+        get_feed_health_monitor().on_ws_message(now_epoch=now_epoch)
+    except Exception:
+        pass
+    if ticks and (now_epoch - _SCHEMA_LOG_TS) >= 30.0:
+        try:
+            sample = ticks[0] if isinstance(ticks[0], dict) else {}
+            sample_keys = sorted(list(sample.keys()))
+            ts_fields = [k for k in ("exchange_timestamp", "last_trade_time", "timestamp") if k in sample]
+            _log_ws(
+                "TICK_PAYLOAD_SCHEMA",
+                {
+                    "sample_keys": sample_keys,
+                    "has_last_price": sample.get("last_price") is not None,
+                    "has_depth": sample.get("depth") is not None,
+                    "instrument_token": sample.get("instrument_token"),
+                    "ts_fields_present": ts_fields,
+                },
+            )
+            _SCHEMA_LOG_TS = now_epoch
+        except Exception:
+            pass
+    for t in ticks:
+        if not isinstance(t, dict):
+            continue
+        tick_epoch = _extract_tick_epoch(t)
+        token_int = None
+        try:
+            token_int = int(t.get("instrument_token"))
+        except Exception:
+            token_int = None
+        freshness_tick_epoch = _freshness_epoch_for_tick(token_int, tick_epoch, now_epoch)
+        if max_tick_epoch is None or float(freshness_tick_epoch) > float(max_tick_epoch):
+            max_tick_epoch = float(freshness_tick_epoch)
+        depth = t.get("depth")
+        last_price = t.get("last_price")
+        if token_int is not None:
+            _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
+        symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
+        underlying_tick = _is_underlying_token(token_int)
+        has_depth = _depth_has_bid_ask(depth)
+        tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
+        tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
+        if token_int is not None and isinstance(depth, dict) and depth:
+            depth_store.update(token_int, depth)
+        if token_int is not None and token_int in _UNDERLYING_TOKEN_TO_SYMBOL:
+            symbol = _UNDERLYING_TOKEN_TO_SYMBOL.get(token_int) or symbol
+        if underlying_tick and _is_index_symbol(symbol):
+            if isinstance(depth, dict) and depth:
+                buy_book = depth.get("buy", [])
+                sell_book = depth.get("sell", [])
+                bid = _best_price(buy_book)
+                ask = _best_price(sell_book)
+                mid = None
+                if bid is not None and ask is not None and bid > 0 and ask > 0:
+                    mid = (bid + ask) / 2.0
+                _update_index_quote_cache(
+                    symbol=symbol,
+                    bid=bid,
+                    ask=ask,
+                    mid=mid,
+                    ts_epoch=tick_epoch,
+                    last_price=last_price,
+                )
+            elif last_price is not None:
+                _update_index_quote_cache(
+                    symbol=symbol,
+                    bid=None,
+                    ask=None,
+                    mid=None,
+                    ts_epoch=tick_epoch,
+                    last_price=last_price,
+                )
+        freshness_symbol = symbol
+        option_freshness_symbol = None
+        if _is_index_symbol(symbol) and not underlying_tick:
+            freshness_symbol = None
+        if (not underlying_tick) and symbol and last_price is not None:
+            option_freshness_symbol = symbol
+        _update_symbol_freshness(
+            freshness_symbol,
+            freshness_tick_epoch,
+            has_ltp=last_price is not None,
+            has_depth=has_depth,
+            option_symbol=option_freshness_symbol,
+        )
+        try:
+            record_tick(
+                token=token_int,
+                symbol=symbol,
+                ts_epoch=freshness_tick_epoch,
+                has_depth=has_depth,
+                is_index=bool(underlying_tick and _is_index_symbol(symbol)),
+                bid=tick_bid,
+                ask=tick_ask,
+                ltp=last_price,
+                depth_ok=has_depth,
+                now_epoch=now_epoch,
+            )
+            if has_depth:
+                record_depth(
+                    token=token_int,
+                    symbol=symbol,
+                    ts_epoch=freshness_tick_epoch,
+                    is_index=bool(underlying_tick and _is_index_symbol(symbol)),
+                    now_epoch=now_epoch,
+                )
+        except Exception:
+            pass
+        if last_price is not None or has_depth:
+            record_tick_epoch(freshness_tick_epoch)
+            if not _UNDERLYING_TOKENS and not _UNDERLYING_LOGGED_MISSING:
+                _log_ws("FEED_UNDERLYING_TOKENS_MISSING", {})
+                _UNDERLYING_LOGGED_MISSING = True
+
+        last_price_float = _safe_float(last_price)
+        if token_int is None or last_price_float is None:
+            continue
+        ts_value = freshness_tick_epoch
+        volume = t.get("volume")
+        if volume is None:
+            volume = t.get("volume_traded")
+        oi = t.get("oi")
+        try:
+            ok = insert_tick(
+                ts=ts_value,
+                token=token_int,
+                last_price=last_price_float,
+                volume=volume,
+                oi=oi,
+            )
+            if not ok:
+                _log_tick_ingest_error(
+                    token=token_int,
+                    reason="insert_tick_returned_false",
+                    keys=list(t.keys()),
+                    tick_ts_present=ts_value is not None,
+                )
+        except Exception as exc:
+            _log_tick_ingest_error(
+                token=token_int,
+                reason="insert_tick_exception",
+                error=f"{type(exc).__name__}:{exc}",
+                keys=list(t.keys()),
+                tick_ts_present=ts_value is not None,
+            )
+    _LAST_WS_TICK_EPOCH = float(max_tick_epoch if max_tick_epoch is not None else now_epoch)
+    _RUNTIME_STATE = "RUNNING"
+    _LAST_RUNTIME_ERROR = ""
+    minute_bucket = int(_LAST_WS_TICK_EPOCH // 60.0)
+    if _LAST_FEED_TICK_LOG_MINUTE != minute_bucket:
+        _LAST_FEED_TICK_LOG_MINUTE = minute_bucket
+        _log_ws("FEED_TICK", {"ticks": len(ticks), "last_ws_tick_epoch": _LAST_WS_TICK_EPOCH})
+    _persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="on_ticks",
+        now_epoch=now_epoch,
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+
 def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
     watchdog_thread = None
     ticker_instance = None
     stop_timeout_sec = float(getattr(cfg, "DEPTH_WATCHDOG_STOP_TIMEOUT_SEC", 3.0))
@@ -1000,11 +1983,20 @@ def stop_depth_ws(reason: str = "manual_stop"):
         _STALE_STRIKES = 0
         _LAST_WS_TICK_EPOCH = 0.0
         _LAST_MSG_TS_BY_TOKEN = {}
+        _SYMBOL_LAST_OPTION_TICK_TS = {}
+        _LAST_FEED_TICK_LOG_MINUTE = None
+        _RUNTIME_STATE = "STOPPED"
         ticker_instance = _KITE_TICKER
         _close_ticker_instance(ticker_instance)
         _KITE_TICKER = None
     _join_thread_safe(watchdog_thread, stop_timeout_sec)
     _join_ticker_threads(ticker_instance, stop_timeout_sec)
+    _persist_runtime_snapshot_row(
+        ws_connected=False,
+        source=f"stop_depth_ws:{reason}",
+        runtime_state="STOPPED",
+        last_error=str(reason),
+    )
 
 
 def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
@@ -1018,10 +2010,20 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
         return False
 
-    tokens = list(_LAST_TOKENS or [])
+    tokens, selection_payload = _resubscribe_token_selection()
     if not tokens:
-        _log_ws("FEED_RESTART_SKIPPED", {"reason": reason, "detail": "no_tokens_cached"})
+        _log_ws(
+            "FEED_RESTART_SKIPPED",
+            {"reason": reason, "detail": "no_tokens_cached", **selection_payload},
+        )
         return False
+
+    if _use_internal_reconnect() and _KITE_TICKER is not None:
+        _log_ws(
+            "FEED_RESTART_SOFT_PATH",
+            {"reason": reason, "detail": "internal_reconnect_enabled"},
+        )
+        return _soft_resubscribe_current(reason=reason)
 
     now = time.time()
     cooldown = float(getattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 120))
@@ -1072,7 +2074,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
             )
             return False
 
-        _log_ws("FEED_FULL_RESTART_BEGIN", {"reason": reason, "tokens": len(tokens)})
+        _log_ws("FEED_FULL_RESTART_BEGIN", {"reason": reason, "tokens": len(tokens), **selection_payload})
         stop_depth_ws(reason=f"restart:{reason}")
         try:
             start_depth_ws(tokens, profile_verified=False, skip_guard=True)
@@ -1083,14 +2085,33 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
         _LAST_FULL_RESTART_EPOCH = now
         _FULL_RESTARTS.append(now)
         _STALE_STRIKES = 0
-        _log_ws("FEED_FULL_RESTART_OK", {"reason": reason, "tokens": len(tokens)})
+        _log_ws("FEED_FULL_RESTART_OK", {"reason": reason, "tokens": len(tokens), **selection_payload})
         return True
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False):
-    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN
+    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    _RUNTIME_STATE = "STARTING"
+    _LAST_RUNTIME_ERROR = ""
+    _INTENDED_TOKEN_COUNT = len(list(dict.fromkeys(instrument_tokens or [])))
+    _persist_runtime_snapshot_row(
+        ws_connected=None,
+        source="start_depth_ws:starting",
+        runtime_state="STARTING",
+        last_error="",
+        intended_tokens_count=_INTENDED_TOKEN_COUNT,
+    )
     if not skip_lock:
         if not _ensure_depth_ws_lock():
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = "depth_ws_lock_blocked"
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source="start_depth_ws:lock_blocked",
+                runtime_state=_RUNTIME_STATE,
+                last_error=_LAST_RUNTIME_ERROR,
+                intended_tokens_count=_INTENDED_TOKEN_COUNT,
+            )
             return
     if not skip_guard and getattr(cfg, "DEPTH_WS_SINGLETON", True):
         with _KITE_TICKER_LOCK:
@@ -1099,48 +2120,111 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     "FEED_START_SUPPRESSED",
                     {"reason": "already_running", "tokens": len(_LAST_TOKENS or [])},
                 )
+                _RUNTIME_STATE = "RUNNING"
+                _LAST_RUNTIME_ERROR = ""
+                _persist_runtime_snapshot_row(
+                    ws_connected=True,
+                    source="start_depth_ws:already_running",
+                    runtime_state="RUNNING",
+                    last_error="",
+                    intended_tokens_count=_INTENDED_TOKEN_COUNT,
+                )
                 return
     if not KiteTicker or not cfg.KITE_USE_DEPTH:
-        print("Depth websocket not available.")
+        _RUNTIME_STATE = "IMPORT_MISSING"
+        _LAST_RUNTIME_ERROR = "kiteticker_unavailable_or_depth_disabled"
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:import_missing",
+            runtime_state="IMPORT_MISSING",
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
+        logger.error("depth_ws_not_available")
         return
     if not cfg.KITE_API_KEY:
-        print("Missing Kite API key.")
+        _RUNTIME_STATE = "AUTH_BLOCKED"
+        _LAST_RUNTIME_ERROR = "missing_api_key"
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:auth_blocked",
+            runtime_state="AUTH_BLOCKED",
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
+        logger.error("depth_ws_missing_api_key")
         return
     try:
         cwd = Path.cwd()
         root = repo_root()
         log_dir = logs_dir()
-        print(f"[KITE_WS][PATHS] cwd={cwd} repo_root={root} logs_dir={log_dir} log_path={_LOG_PATH}")
+        logger.debug("kite_ws_paths cwd=%s repo_root=%s logs_dir=%s log_path=%s", cwd, root, log_dir, _LOG_PATH)
         _log_ws(
             "FEED_PATHS",
             {"cwd": str(cwd), "repo_root": str(root), "logs_dir": str(log_dir), "log_path": str(_LOG_PATH)},
         )
     except Exception as exc:
-        print(f"[KITE_WS][PATHS_ERROR] {type(exc).__name__}:{exc}")
+        logger.debug("kite_ws_paths_error err=%s:%s", type(exc).__name__, exc)
     auth_payload = get_kite_auth_health(force=True)
     if not auth_payload.get("ok"):
         err = auth_payload.get("error") or "unknown_auth_error"
         _log_ws("FEED_AUTH_BLOCKED", {"error": err})
+        _RUNTIME_STATE = "AUTH_BLOCKED"
+        _LAST_RUNTIME_ERROR = str(err)
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:auth_blocked",
+            runtime_state="AUTH_BLOCKED",
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
         if is_auth_error(reason_text=str(err)):
             _mark_auth_required(str(err), source="kite_depth_ws_start")
-        print(f"Missing/invalid Kite access token: {err}")
+        logger.error("depth_ws_invalid_access_token reason=%s", err)
         return
     try:
         access_token = str(resolve_access_token(repo_root_path=repo_root(), require_token=True) or "").strip()
     except Exception as exc:
         _log_ws("FEED_AUTH_BLOCKED", {"error": f"token_resolve_failed:{type(exc).__name__}:{exc}"})
+        _RUNTIME_STATE = "AUTH_BLOCKED"
+        _LAST_RUNTIME_ERROR = f"token_resolve_failed:{type(exc).__name__}:{exc}"
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:auth_blocked",
+            runtime_state="AUTH_BLOCKED",
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
         _mark_auth_required(f"token_resolve_failed:{type(exc).__name__}:{exc}", source="kite_depth_ws_start")
-        print(f"Missing/invalid Kite access token: token_resolve_failed:{exc}")
+        logger.error("depth_ws_access_token_resolve_failed err=%s", exc)
         return
     if not access_token:
         _log_ws("FEED_AUTH_BLOCKED", {"error": "missing_access_token:empty"})
+        _RUNTIME_STATE = "AUTH_BLOCKED"
+        _LAST_RUNTIME_ERROR = "missing_access_token:empty"
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:auth_blocked",
+            runtime_state="AUTH_BLOCKED",
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
         _mark_auth_required("missing_access_token:empty", source="kite_depth_ws_start")
-        print("Missing/invalid Kite access token: empty")
+        logger.error("depth_ws_access_token_empty")
         return
 
     tokens = list(dict.fromkeys(instrument_tokens or []))
     if not tokens:
-        print("No instrument tokens provided for depth websocket.")
+        _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+        _LAST_RUNTIME_ERROR = "no_instrument_tokens"
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:subscribe_failed",
+            runtime_state="SUBSCRIBE_FAILED",
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
+        logger.error("depth_ws_no_instrument_tokens")
         return
     _LAST_TOKENS = list(tokens)
     _STALE_STRIKES = 0
@@ -1148,6 +2232,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _STOP_REQUESTED = False
     _LAST_WS_TICK_EPOCH = 0.0
     _LAST_MSG_TS_BY_TOKEN = {}
+    _SYMBOL_LAST_OPTION_TICK_TS = {}
+    _LAST_FEED_TICK_LOG_MINUTE = None
+    _RUNTIME_STATE = "STARTING"
     try:
         get_feed_health_monitor().set_reconnect_handler(
             lambda reason: restart_depth_ws(reason=f"feed_health:{reason}")
@@ -1192,18 +2279,20 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     stats_api = _masked_secret_stats("api_key", cfg.KITE_API_KEY)
     stats_token = _masked_secret_stats("access_token", access_token)
-    print(
-        "[KITE_WS] "
-        f"api_key_len={stats_api['api_key_len']} api_key_tail4={stats_api['api_key_tail4']} "
-        f"api_key_has_whitespace={stats_api['api_key_has_whitespace']} "
-        f"access_token_len={stats_token['access_token_len']} access_token_tail4={stats_token['access_token_tail4']} "
-        f"access_token_has_whitespace={stats_token['access_token_has_whitespace']}"
+    logger.info(
+        "kite_ws_credential_stats api_key_len=%s api_key_tail4=%s api_key_has_whitespace=%s access_token_len=%s access_token_tail4=%s access_token_has_whitespace=%s",
+        stats_api["api_key_len"],
+        stats_api["api_key_tail4"],
+        stats_api["api_key_has_whitespace"],
+        stats_token["access_token_len"],
+        stats_token["access_token_tail4"],
+        stats_token["access_token_has_whitespace"],
     )
     _log_ws("FEED_CREDENTIAL_STATS", {**stats_api, **stats_token, "tokens": len(tokens)})
 
     with _KITE_TICKER_LOCK:
         if _KITE_TICKER is not None:
-            print("[KITE_WS] existing ticker instance detected, closing before recreate")
+            logger.info("kite_ws_existing_instance_detected_closing")
             _log_ws("FEED_RECREATE_CLOSE_OLD", {"tokens": len(tokens)})
             _close_ticker_instance(_KITE_TICKER)
             _KITE_TICKER = None
@@ -1213,20 +2302,21 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         kws = KiteTicker(cfg.KITE_API_KEY, access_token, debug=True)
         if hasattr(kws, "auto_reconnect"):
             try:
-                kws.auto_reconnect = False
+                kws.auto_reconnect = _use_internal_reconnect()
             except Exception:
                 pass
-        print(
-            f"KITE_WS api_key_tail4={cfg.KITE_API_KEY[-4:] if len(str(cfg.KITE_API_KEY or '')) >= 4 else cfg.KITE_API_KEY} "
-            f"access_token_tail4={access_token[-4:] if len(str(access_token or '')) >= 4 else access_token} "
-            f"kite_id={id(kws)}"
+        logger.info(
+            "kite_ws_created api_key_tail4=%s access_token_tail4=%s kite_id=%s",
+            cfg.KITE_API_KEY[-4:] if len(str(cfg.KITE_API_KEY or "")) >= 4 else cfg.KITE_API_KEY,
+            access_token[-4:] if len(str(access_token or "")) >= 4 else access_token,
+            id(kws),
         )
         _KITE_TICKER = kws
 
     handshake_soft_reset_used = False
 
     def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
-        global _LAST_TOKENS
+        global _LAST_TOKENS, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
         to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
         try:
@@ -1234,9 +2324,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 ws.subscribe(to_subscribe)
                 ws.set_mode(ws.MODE_FULL, to_subscribe)
         except Exception as exc:
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = f"subscribe_delta:{exc}"[:1000]
             _log_ws(
                 "FEED_REBALANCE_SUBSCRIBE_ERROR",
                 {"reason": reason, "count": len(to_subscribe), "error": str(exc)},
+            )
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"rebalance_subscribe_error:{reason}",
+                runtime_state="SUBSCRIBE_FAILED",
+                last_error=_LAST_RUNTIME_ERROR,
             )
             return False
         if to_unsubscribe:
@@ -1244,9 +2342,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if hasattr(ws, "unsubscribe"):
                     ws.unsubscribe(to_unsubscribe)
             except Exception as exc:
+                _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+                _LAST_RUNTIME_ERROR = f"unsubscribe_delta:{exc}"[:1000]
                 _log_ws(
                     "FEED_REBALANCE_UNSUBSCRIBE_ERROR",
                     {"reason": reason, "count": len(to_unsubscribe), "error": str(exc)},
+                )
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"rebalance_unsubscribe_error:{reason}",
+                    runtime_state="SUBSCRIBE_FAILED",
+                    last_error=_LAST_RUNTIME_ERROR,
                 )
                 return False
         final_set = set(int(t) for t in (_LAST_TOKENS or []))
@@ -1268,20 +2374,63 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 "total_tokens": len(_LAST_TOKENS),
             },
         )
+        _RUNTIME_STATE = "RUNNING"
+        _LAST_RUNTIME_ERROR = ""
+        _persist_runtime_snapshot_row(
+            ws_connected=True,
+            source=f"rebalance_applied:{reason}",
+            runtime_state="RUNNING",
+            last_error="",
+        )
         return True
 
     def _resubscribe_full(ws, reason: str):
-        desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
-        ws.subscribe(desired)
-        ws.set_mode(ws.MODE_FULL, desired)
+        global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        desired, selection_payload = _resubscribe_token_selection()
+        if not desired:
+            desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
+        if desired:
+            ws.subscribe(desired)
+            ws.set_mode(ws.MODE_FULL, desired)
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
-        _log_ws("FEED_RESUBSCRIBE", {"reason": reason, "tokens": len(tokens)})
+        _RUNTIME_STATE = "RUNNING"
+        _LAST_RUNTIME_ERROR = ""
+        option_state = _option_runtime_state(
+            now_epoch=float(time.time()),
+            tokens=desired,
+            expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
+            min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        )
+        _log_ws(
+            "FEED_ON_CONNECT_SUBSCRIBE",
+            {
+                "reason": reason,
+                "tokens": len(desired),
+                "final_token_count_before_subscribe": len(desired),
+                "resolved_option_tokens_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+                "subscribed_option_tokens_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
+                "option_drop_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
+                **selection_payload,
+            },
+        )
+        _log_ws(
+            "FEED_RESUBSCRIBE",
+            {
+                "reason": reason,
+                "tokens": len(tokens),
+                "final_token_count_before_subscribe": len(tokens),
+                "resolved_option_tokens_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+                "subscribed_option_tokens_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
+                "option_drop_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
+                **selection_payload,
+            },
+        )
         if rebalance_state.get("last_rebalance_ts") is None:
             rebalance_state["last_rebalance_ts"] = time.time()
 
     def on_connect(ws, response):
-        global _STALE_STRIKES, _WARMUP_PENDING
+        global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
             _log_ws("FEED_CONNECT", {"tokens": len(tokens), "response": str(response)})
             # Reset stale tracker and invalidate pre-existing depth timestamps so
@@ -1293,21 +2442,63 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             _resubscribe_full(ws, reason="connect")
+            _RUNTIME_STATE = "RUNNING"
+            _LAST_RUNTIME_ERROR = ""
+            _persist_runtime_snapshot_row(
+                ws_connected=True,
+                source="on_connect",
+                runtime_state="RUNNING",
+                last_error="",
+            )
         except Exception as exc:
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = str(exc)
             _log_ws("FEED_CONNECT_ERROR", {"error": str(exc)})
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source="on_connect:error",
+                runtime_state="SUBSCRIBE_FAILED",
+                last_error=_LAST_RUNTIME_ERROR,
+            )
 
     def on_reconnect(ws, attempts):
+        global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
             _resubscribe_full(ws, reason=f"reconnect:{attempts}")
+            _RUNTIME_STATE = "RUNNING"
+            _LAST_RUNTIME_ERROR = ""
+            _persist_runtime_snapshot_row(
+                ws_connected=True,
+                source=f"on_reconnect:{attempts}",
+                runtime_state="RUNNING",
+                last_error="",
+            )
             _log_ws("FEED_RECONNECT", {"attempts": attempts})
         except Exception as exc:
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = str(exc)
             _log_ws("FEED_RECONNECT_ERROR", {"error": str(exc), "attempts": attempts})
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"on_reconnect:{attempts}:error",
+                runtime_state="SUBSCRIBE_FAILED",
+                last_error=_LAST_RUNTIME_ERROR,
+            )
 
     def on_error(ws, code, reason):
         nonlocal handshake_soft_reset_used
+        global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         reason_text = str(reason)
         _log_ws("FEED_ERROR", {"code": code, "reason": reason_text, "profile_verified": bool(computed_profile_verified)})
-        print(f"[KITE_WS][ERROR] code={code} reason={reason}")
+        _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+        _LAST_RUNTIME_ERROR = f"{code}:{reason_text}"[:1000]
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source=f"on_error:{code}",
+            runtime_state="SUBSCRIBE_FAILED",
+            last_error=_LAST_RUNTIME_ERROR,
+        )
+        logger.warning("kite_ws_error code=%s reason=%s", code, reason)
         code_int = None
         try:
             code_int = int(code) if code is not None else None
@@ -1335,161 +2526,58 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             fatal = True
         stop_set = bool(_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set())
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
+            if _use_internal_reconnect():
+                _log_ws(
+                    "FEED_INTERNAL_RECONNECT_WAIT",
+                    {"source": "on_error", "code": code, "reason": reason_text},
+                )
+                _soft_resubscribe_current(reason=f"on_error:{code}")
+                return
             restart_depth_ws(reason=f"ws_error:{code}")
 
     def on_close(ws, code, reason):
+        global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         if _AUTH_REQUIRED_LATCH:
             _log_ws("FEED_CLOSE_AUTH_REQUIRED", {"code": code, "reason": str(reason)})
+            _RUNTIME_STATE = "AUTH_BLOCKED"
+            _LAST_RUNTIME_ERROR = f"{code}:{reason}"[:1000]
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"on_close_auth_required:{code}",
+                runtime_state="AUTH_BLOCKED",
+                last_error=_LAST_RUNTIME_ERROR,
+            )
             return
         if (_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set()) or _STOP_REQUESTED:
             _log_ws("FEED_CLOSE_STOP_REQUESTED", {"code": code, "reason": str(reason)})
+            _RUNTIME_STATE = "STOPPED"
+            _LAST_RUNTIME_ERROR = f"{code}:{reason}"[:1000]
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"on_close_stop_requested:{code}",
+                runtime_state="STOPPED",
+                last_error=_LAST_RUNTIME_ERROR,
+            )
             return
         _log_ws("FEED_CLOSE", {"code": code, "reason": str(reason)})
-        print(f"[KITE_WS][CLOSE] code={code} reason={reason}")
+        _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+        _LAST_RUNTIME_ERROR = f"{code}:{reason}"[:1000]
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source=f"on_close:{code}",
+            runtime_state="SUBSCRIBE_FAILED",
+            last_error=_LAST_RUNTIME_ERROR,
+        )
+        logger.warning("kite_ws_close code=%s reason=%s", code, reason)
         if is_market_open_ist():
-            restart_depth_ws(reason=f"ws_close:{code}")
-
-    def on_ticks(ws, ticks):
-        global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN
-        now_epoch = time.time()
-        if ticks:
-            _LAST_WS_TICK_EPOCH = now_epoch
-            try:
-                get_feed_health_monitor().on_ws_message(now_epoch=now_epoch)
-            except Exception:
-                pass
-        if ticks and (now_epoch - _SCHEMA_LOG_TS) >= 30.0:
-            try:
-                sample = ticks[0] if isinstance(ticks[0], dict) else {}
-                sample_keys = sorted(list(sample.keys()))
-                ts_fields = [k for k in ("exchange_timestamp", "last_trade_time", "timestamp") if k in sample]
+            if _use_internal_reconnect():
                 _log_ws(
-                    "TICK_PAYLOAD_SCHEMA",
-                    {
-                        "sample_keys": sample_keys,
-                        "has_last_price": sample.get("last_price") is not None,
-                        "has_depth": sample.get("depth") is not None,
-                        "instrument_token": sample.get("instrument_token"),
-                        "ts_fields_present": ts_fields,
-                    },
+                    "FEED_INTERNAL_RECONNECT_WAIT",
+                    {"source": "on_close", "code": code, "reason": str(reason)},
                 )
-                _SCHEMA_LOG_TS = now_epoch
-            except Exception:
-                pass
-        for t in ticks:
-            token = t.get("instrument_token")
-            depth = t.get("depth")
-            last_price = t.get("last_price")
-            token_int = None
-            if token is not None:
-                try:
-                    token_int = int(token)
-                except Exception:
-                    token_int = None
-            if token_int is not None:
-                _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(now_epoch)
-            symbol = _TOKEN_TO_SYMBOL.get(token_int) if token_int is not None else None
-            underlying_tick = _is_underlying_token(token_int)
-            has_depth = _depth_has_bid_ask(depth)
-            tick_bid = _best_price(depth.get("buy", [])) if isinstance(depth, dict) else None
-            tick_ask = _best_price(depth.get("sell", [])) if isinstance(depth, dict) else None
-            if token is not None and depth:
-                depth_store.update(token, depth)
-            tick_epoch = _extract_tick_epoch(t)
-            if token_int is not None and token_int in _UNDERLYING_TOKEN_TO_SYMBOL:
-                symbol = _UNDERLYING_TOKEN_TO_SYMBOL.get(token_int) or symbol
-            if underlying_tick and _is_index_symbol(symbol):
-                if isinstance(depth, dict) and depth:
-                    buy_book = depth.get("buy", [])
-                    sell_book = depth.get("sell", [])
-                    bid = _best_price(buy_book)
-                    ask = _best_price(sell_book)
-                    mid = None
-                    if bid is not None and ask is not None and bid > 0 and ask > 0:
-                        mid = (bid + ask) / 2.0
-                    _update_index_quote_cache(
-                        symbol=symbol,
-                        bid=bid,
-                        ask=ask,
-                        mid=mid,
-                        ts_epoch=tick_epoch,
-                        last_price=last_price,
-                    )
-                elif last_price is not None:
-                    _update_index_quote_cache(
-                        symbol=symbol,
-                        bid=None,
-                        ask=None,
-                        mid=None,
-                        ts_epoch=tick_epoch,
-                        last_price=last_price,
-                    )
-            freshness_symbol = symbol
-            # Never let option ticks masquerade as index-underlying freshness.
-            if _is_index_symbol(symbol) and not underlying_tick:
-                freshness_symbol = None
-            _update_symbol_freshness(freshness_symbol, tick_epoch, has_ltp=last_price is not None, has_depth=has_depth)
-            try:
-                record_tick(
-                    token=token_int,
-                    symbol=symbol,
-                    ts_epoch=tick_epoch,
-                    has_depth=has_depth,
-                    is_index=bool(underlying_tick and _is_index_symbol(symbol)),
-                    bid=tick_bid,
-                    ask=tick_ask,
-                    ltp=last_price,
-                    depth_ok=has_depth,
-                    now_epoch=now_epoch,
-                )
-                if has_depth:
-                    record_depth(
-                        token=token_int,
-                        symbol=symbol,
-                        ts_epoch=tick_epoch,
-                        is_index=bool(underlying_tick and _is_index_symbol(symbol)),
-                        now_epoch=now_epoch,
-                    )
-            except Exception:
-                pass
-            if last_price is not None or has_depth:
-                record_tick_epoch(tick_epoch)
-                if not _UNDERLYING_TOKENS and not _UNDERLYING_LOGGED_MISSING:
-                    _log_ws("FEED_UNDERLYING_TOKENS_MISSING", {})
-                    _UNDERLYING_LOGGED_MISSING = True
-            if cfg.KITE_STORE_TICKS:
-                try:
-                    ok = insert_tick(
-                        t.get("exchange_timestamp") or t.get("last_trade_time") or t.get("timestamp"),
-                        token,
-                        last_price,
-                        t.get("volume"),
-                        t.get("oi")
-                    )
-                    if not ok:
-                        _log_ws(
-                            "FEED_TICK_STORE_ERROR",
-                            {
-                                "instrument_token": token,
-                                "error": "insert_failed",
-                                "has_ltp": last_price is not None,
-                                "has_depth": depth is not None,
-                                "ts_present": (t.get("exchange_timestamp") or t.get("last_trade_time") or t.get("timestamp")) is not None,
-                                "keys": list(t.keys())[:20],
-                            },
-                        )
-                except Exception as exc:
-                    _log_ws(
-                        "FEED_TICK_STORE_ERROR",
-                        {
-                            "instrument_token": token,
-                            "error": f"{type(exc).__name__}:{exc}",
-                            "has_ltp": last_price is not None,
-                            "has_depth": depth is not None,
-                            "ts_present": (t.get("exchange_timestamp") or t.get("last_trade_time") or t.get("timestamp")) is not None,
-                            "keys": list(t.keys())[:20],
-                        },
-                    )
+                _soft_resubscribe_current(reason=f"on_close:{code}")
+                return
+            restart_depth_ws(reason=f"ws_close:{code}")
 
     def _watchdog():
         global _STALE_STRIKES, _WARMUP_PENDING
@@ -1497,6 +2585,10 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
         strikes_to_restart = int(getattr(cfg, "FEED_RESTART_STRIKES", 3))
         watchdog_poll_sec = float(getattr(cfg, "FEED_WATCHDOG_POLL_SEC", 1.0))
+        tick_stale_restart_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 5.0))
+        tick_stale_reset_sec = float(getattr(cfg, "FEED_TICK_RECOVER_SEC", 2.0))
+        tick_stale_strikes_to_restart = int(getattr(cfg, "FEED_TICK_STALE_STRIKES", 2))
+        tick_watchdog_poll_sec = float(getattr(cfg, "FEED_TICK_WATCHDOG_POLL_SEC", 2.0))
         silent_index_sec = float(getattr(cfg, "FEED_SILENT_INDEX_THRESHOLD_SEC", 1.5))
         silent_option_sec = float(getattr(cfg, "FEED_SILENT_OPTION_THRESHOLD_SEC", 3.0))
         silent_confirm_cycles = int(getattr(cfg, "FEED_SILENT_CONFIRM_CYCLES", 2))
@@ -1508,26 +2600,119 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         last_warmup_log = 0.0
         no_tick_strikes = 0
         last_no_tick_restart = 0.0
+        last_tick_watchdog_check = 0.0
+        last_db_tick_epoch = None
+        last_db_tick_age = None
+        depth_stale_strikes = 0
         silent_state = {"confirm_hits": 0, "last_reconnect_epoch": 0.0}
+        market_was_open: bool | None = None
+        last_option_subscribe_retry = 0.0
+
+        def _emit_snapshot(now_epoch: float) -> None:
+            sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
+            missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
+            option_state = _option_runtime_state(
+                now_epoch=now_epoch,
+                tokens=_LAST_TOKENS,
+                expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
+                min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+            )
+            _write_feed_runtime_snapshot(
+                now_epoch=now_epoch,
+                ws_connected=_ws_connected_state(),
+                subscribed_tokens_count=len(_LAST_TOKENS or []),
+                intended_tokens_count=int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else len(_LAST_TOKENS or [])),
+                subscribed_tokens_count_by_symbol=sub_counts,
+                missing_option_tokens_count=missing_count,
+                missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
+                last_db_tick_epoch=last_db_tick_epoch,
+                last_db_tick_age_sec=last_db_tick_age,
+                last_ws_tick_epoch=_LAST_WS_TICK_EPOCH,
+                subscribed_option_tokens_count=int(option_state.get("option_count") or 0),
+                option_last_tick_age_by_symbol=dict(option_state.get("option_age_by_symbol") or {}),
+                option_last_tick_sample=list(option_state.get("sample_rows") or []),
+                option_tokens_resolved_count_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+                option_tokens_subscribed_count_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
+                option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
+                last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
+                option_feed_block_reason_by_symbol=dict(option_state.get("feed_block_reason_by_symbol") or {}),
+                restart_count_1h=_restart_count_1h(now_epoch),
+                stale_strikes=_STALE_STRIKES,
+                runtime_state=_RUNTIME_STATE,
+                last_error=_LAST_RUNTIME_ERROR,
+            )
+
         while True:
             if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
                 break
             time.sleep(max(0.5, watchdog_poll_sec))
             if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
                 break
+            now_loop = float(time.time())
+            if (now_loop - float(last_tick_watchdog_check)) >= max(0.5, tick_watchdog_poll_sec):
+                last_tick_watchdog_check = now_loop
+                hb = _run_db_tick_watchdog_cycle(
+                    now_epoch=now_loop,
+                    market_open=bool(is_market_open_ist()),
+                    stale_restart_sec=tick_stale_restart_sec,
+                    reset_sec=tick_stale_reset_sec,
+                    strikes_to_restart=tick_stale_strikes_to_restart,
+                    restart_cb=restart_depth_ws,
+                )
+                last_db_tick_epoch = hb.get("last_db_tick_epoch")
+                last_db_tick_age = hb.get("last_db_tick_age_sec")
+                if hb.get("restarted"):
+                    _emit_snapshot(now_loop)
+                    continue
+            else:
+                last_db_tick_age = (
+                    max(0.0, now_loop - float(last_db_tick_epoch))
+                    if last_db_tick_epoch is not None
+                    else None
+                )
+            _emit_snapshot(now_loop)
+            market_open_now = bool(is_market_open_ist())
+            market_was_open = _maybe_reset_restart_guard_on_market_open(
+                market_open_now=market_open_now,
+                market_was_open=market_was_open,
+            )
+            if not market_open_now:
+                _STALE_STRIKES = 0
+                depth_stale_strikes = 0
+                no_tick_strikes = 0
+                silent_state["confirm_hits"] = 0
+                _emit_snapshot(now_loop)
+                # Keep watchdog/re-subscription paths active even when market is closed.
+            expected_option_tokens = sum(
+                max(0, int(v or 0)) for v in dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}).values()
+            )
+            option_state = _option_runtime_state(
+                now_epoch=now_loop,
+                tokens=_LAST_TOKENS,
+                expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
+                min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+            )
+            subscribed_option_tokens = int(option_state.get("option_count") or 0)
+            if expected_option_tokens > 0 and subscribed_option_tokens <= 0:
+                if (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
+                    last_option_subscribe_retry = now_loop
+                    _log_ws(
+                        "FEED_OPTION_SUBSCRIPTIONS_MISSING",
+                        {
+                            "expected_option_tokens": int(expected_option_tokens),
+                            "subscribed_option_tokens": int(subscribed_option_tokens),
+                            "subscribed_tokens_count_by_symbol": _subscribed_tokens_count_by_symbol(_LAST_TOKENS),
+                            "reason": "market_open_option_subscriptions_missing",
+                        },
+                    )
+                    _soft_resubscribe_current(reason="market_open_option_subscriptions_missing")
             try:
                 get_feed_health_monitor().maybe_trigger_reconnect(
                     reason_prefix="watchdog_down",
-                    now_epoch=time.time(),
+                    now_epoch=now_loop,
                 )
             except Exception:
                 pass
-            if not is_market_open_ist():
-                _STALE_STRIKES = 0
-                no_tick_strikes = 0
-                silent_state["confirm_hits"] = 0
-                continue
-            now_loop = time.time()
             silent_triggered = _maybe_trigger_silent_reconnect(
                 now_epoch=now_loop,
                 current_tokens=set(int(t) for t in (_LAST_TOKENS or []) if int(t) > 0),
@@ -1543,6 +2728,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 restart_cb=restart_depth_ws,
             )
             if silent_triggered:
+                _emit_snapshot(now_loop)
                 continue
             tick_age = None
             if _LAST_WS_TICK_EPOCH > 0:
@@ -1562,6 +2748,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if (now_loop - last_no_tick_restart) >= backoff:
                     last_no_tick_restart = now_loop
                     restart_depth_ws(reason=f"no_ticks_age={tick_age:.1f}s")
+                _emit_snapshot(now_loop)
                 continue
             no_tick_strikes = 0
             latest = None
@@ -1579,39 +2766,42 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 if now - last_warmup_log >= 30.0:
                     _log_ws("FEED_WARMUP_WAIT", {})
                     last_warmup_log = now
+                _emit_snapshot(now_loop)
                 continue
             age = time.time() - latest
             if _WARMUP_PENDING:
                 _log_ws("FEED_WARMUP_DONE", {"first_age_sec": age})
                 _WARMUP_PENDING = False
             if age <= max_age:
-                if _STALE_STRIKES:
-                    _log_ws("FEED_RECOVERED", {"age_sec": age, "strikes": _STALE_STRIKES})
-                _STALE_STRIKES = 0
+                if depth_stale_strikes:
+                    _log_ws("FEED_RECOVERED", {"age_sec": age, "strikes": depth_stale_strikes})
+                depth_stale_strikes = 0
             else:
-                _STALE_STRIKES += 1
+                depth_stale_strikes += 1
                 _log_ws(
                     "FEED_STALE_DETECTED",
-                    {"age_sec": age, "strikes": _STALE_STRIKES, "max_age": max_age},
+                    {"age_sec": age, "strikes": depth_stale_strikes, "max_age": max_age},
                 )
 
-                if _STALE_STRIKES >= 2:
-                    backoff = soft_cooldown * (2 ** min(_STALE_STRIKES - 2, 3))
+                if depth_stale_strikes >= 2:
+                    backoff = soft_cooldown * (2 ** min(depth_stale_strikes - 2, 3))
                     if time.time() - last_soft >= backoff:
                         last_soft = time.time()
                         try:
-                            _resubscribe_full(kws, reason=f"soft_reset:strikes={_STALE_STRIKES}")
+                            _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
                             _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
                         except Exception as exc:
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 
-                if _STALE_STRIKES >= strikes_to_restart:
+                if depth_stale_strikes >= strikes_to_restart:
                     restart_depth_ws(reason=f"depth_stale_age={age:.1f}s")
+                    _emit_snapshot(now_loop)
                     continue
 
             now_reb = time.time()
             eval_interval = max(5.0, min(rebalance_cooldown_sec, 30.0))
             if (now_reb - float(rebalance_state.get("last_eval_ts") or 0.0)) < eval_interval:
+                _emit_snapshot(now_loop)
                 continue
             rebalance_state["last_eval_ts"] = now_reb
             try:
@@ -1621,6 +2811,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 )
             except Exception as exc:
                 _log_ws("FEED_REBALANCE_BUILD_ERROR", {"error": str(exc)})
+                _emit_snapshot(now_loop)
                 continue
 
             sticky_tokens = set(int(t) for t in get_sticky_tokens() if t is not None)
@@ -1668,6 +2859,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         },
                     )
                     rebalance_state["last_reason"] = reason
+            _emit_snapshot(now_loop)
 
     kws.on_connect = on_connect
     kws.on_reconnect = on_reconnect
@@ -1690,4 +2882,15 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         stop_fn=lambda: stop_depth_ws(reason="lifecycle_stop"),
         join_fn=lambda timeout_sec=3.0: _join_thread_safe(watchdog_thread, timeout_sec),
     )
-    kws.connect(threaded=True)
+    try:
+        kws.connect(threaded=True)
+    except Exception as exc:
+        _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+        _LAST_RUNTIME_ERROR = f"connect_failed:{type(exc).__name__}:{exc}"[:1000]
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:connect_failed",
+            runtime_state="SUBSCRIBE_FAILED",
+            last_error=_LAST_RUNTIME_ERROR,
+        )
+        raise

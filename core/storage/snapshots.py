@@ -168,7 +168,7 @@ def _default_fetch_snapshot(instrument: Mapping[str, Any]) -> dict[str, Any] | N
         try:
             from core.tick_store import get_last_tick
 
-            tick = get_last_tick(token_int, allow_db=True)
+            tick = get_last_tick(token_int, allow_db=True, decision_path=True)
             if isinstance(tick, Mapping):
                 ltp = _safe_float(tick.get("ltp"))
                 ts_epoch = _safe_float(tick.get("ts_epoch"))

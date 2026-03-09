@@ -5,6 +5,7 @@ from __future__ import annotations
 from core.paths import data_root, logs_dir
 
 import json
+import logging
 import shutil
 import sqlite3
 from pathlib import Path
@@ -15,12 +16,25 @@ from core import risk_halt
 from core.audit_log import verify_chain as verify_audit_chain
 from core.auth_health import get_kite_auth_health, run_preopen_auth_warm_check
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
+from core.feed_debug import get_feed_debug
 from core.market_context import derive_market_context
+from core.freshness_policy import resolve_freshness_policy
 from core.time_utils import compute_age_sec, is_market_open_ist, normalize_epoch_seconds, now_ist
 from core.market_calendar import IN_HOLIDAYS
 from core.trade_store import init_db
 from core.readiness_state import ReadinessResult, ReadinessState
 from core.gate_status_log import gate_status_path
+from core.telemetry_streams import decisions_stream_path, iter_recent_events
+from core.decision_telemetry_health import check_decision_telemetry
+
+logger = logging.getLogger(__name__)
+
+_LIFECYCLE_FEED_BLOCKER_CODES = {
+    "NO_LIVE_OPTION_FEED",
+    "STALE_OPTION_LTP",
+    "PRICE_MISMATCH",
+    "NO_TOKEN",
+}
 
 
 def _disk_free_gb(path: str = ".") -> float:
@@ -83,6 +97,45 @@ def check_trade_identity_schema() -> Tuple[bool, str]:
 
 def _load_recent_decision_rows(now_epoch: float) -> Dict[str, Dict[str, Any]]:
     desk = getattr(cfg, "DESK_ID", "DEFAULT")
+    max_age = float(
+        getattr(
+            cfg,
+            "READINESS_DECISION_MAX_AGE_SEC",
+            getattr(cfg, "READINESS_DECISION_ENGINE_ACTIVE_SEC", 240.0),
+        )
+    )
+    max_future_skew = float(getattr(cfg, "MAX_CLOCK_SKEW_SEC", 5.0))
+    out: Dict[str, Dict[str, Any]] = {}
+    decision_path = decisions_stream_path(desk_id=desk)
+    if decision_path.exists():
+        for payload in reversed(
+            iter_recent_events(
+                decision_path,
+                now_epoch=now_epoch,
+                max_age_sec=max_age,
+                event_types={"decision_evaluated"},
+                max_lines=5000,
+            )
+        ):
+            symbol = str(payload.get("symbol") or "").upper()
+            if not symbol or symbol in out:
+                continue
+            ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
+            if ts_epoch is None:
+                continue
+            if ts_epoch > (now_epoch + max_future_skew):
+                continue
+            age_sec = compute_age_sec(ts_epoch, now_epoch)
+            if age_sec is None or age_sec > max_age:
+                continue
+            payload["gate_allowed"] = bool(payload.get("allowed", payload.get("gate_allowed", False)))
+            payload["decision_blockers"] = list(payload.get("blockers") or payload.get("decision_blockers") or [])
+            out[symbol] = payload
+        if out:
+            logger.debug("decision rows loaded from decisions stream: %s", len(out))
+            return out
+
+    # Backward compatibility with legacy gate_status.jsonl payloads.
     path = gate_status_path(desk_id=desk)
     if not path.exists():
         return {}
@@ -90,9 +143,6 @@ def _load_recent_decision_rows(now_epoch: float) -> Dict[str, Dict[str, Any]]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except Exception:
         return {}
-    max_age = float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 45.0))
-    max_future_skew = float(getattr(cfg, "MAX_CLOCK_SKEW_SEC", 5.0))
-    out: Dict[str, Dict[str, Any]] = {}
     for raw in reversed(lines[-500:]):
         row = raw.strip()
         if not row:
@@ -102,34 +152,30 @@ def _load_recent_decision_rows(now_epoch: float) -> Dict[str, Dict[str, Any]]:
         except Exception:
             continue
         symbol = str(payload.get("symbol") or "").upper()
-        if not symbol:
-            continue
-        if symbol in out:
+        if not symbol or symbol in out:
             continue
         ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
-        if ts_epoch is None:
-            continue
-        if ts_epoch > (now_epoch + max_future_skew):
+        if ts_epoch is None or ts_epoch > (now_epoch + max_future_skew):
             continue
         age_sec = compute_age_sec(ts_epoch, now_epoch)
-        if age_sec is None:
+        if age_sec is None or age_sec > max_age:
             continue
-        if age_sec > max_age:
-            continue
-        # Ignore non-decision rows (for example trade-builder reject rows) so
-        # readiness is sourced from the Decision DAG output only.
         has_decision_stage = str(payload.get("decision_stage") or "").strip() != ""
         has_decision_explain = payload.get("decision_explain") is not None
         has_decision_blockers = payload.get("decision_blockers") is not None
-        if not (has_decision_stage or has_decision_explain or has_decision_blockers):
+        is_gate_rejected_event = str(payload.get("event_type") or "").strip().lower() == "gate_rejected"
+        if not (has_decision_stage or has_decision_explain or has_decision_blockers or is_gate_rejected_event):
             continue
+        payload["gate_allowed"] = bool(payload.get("gate_allowed", False))
         out[symbol] = payload
+    logger.debug("decision rows loaded: %s", len(out))
     return out
 
 
-def _decision_gate_health(now_epoch: float, market_open: bool) -> Dict[str, Any]:
+def _decision_gate_health(now_epoch: float, market_open: bool, execution_mode: str) -> Dict[str, Any]:
     rows = _load_recent_decision_rows(now_epoch)
     symbols = sorted(rows.keys())
+    evaluations_last_window = len(rows)
     blocked_rows: List[Dict[str, Any]] = []
     allowed_rows: List[Dict[str, Any]] = []
     feed_stale_symbols: List[str] = []
@@ -168,22 +214,22 @@ def _decision_gate_health(now_epoch: float, market_open: bool) -> Dict[str, Any]
 
     blockers: List[str] = []
     reasons: List[str] = []
-    require_decision = bool(getattr(cfg, "READINESS_REQUIRE_DECISION_GATE", True))
-    if market_open and require_decision:
-        if not rows:
-            blockers.append("decision_gate_missing")
-        elif blocked_rows:
-            blockers.append("decision_gate_blocked")
+    decision_engine_active = evaluations_last_window > 0
+    status = "ACTIVE" if decision_engine_active else "INSUFFICIENT_SAMPLE"
+    status_reason = "OK" if decision_engine_active else "DECISION_ROWS_STALE_OR_MISSING"
 
     unique_feed_stale_symbols = sorted(set(feed_stale_symbols))
     if market_open and unique_feed_stale_symbols:
         reasons.append("feed_stale:" + ",".join(unique_feed_stale_symbols))
 
+    execution_ready = len(allowed_rows) > 0
     decision_ok = (not market_open) or (not blockers)
     feed_ok = (not market_open) or (len(feed_stale_symbols) == 0)
     return {
         "ok": decision_ok,
         "feed_ok": feed_ok,
+        "decision_engine_active": decision_engine_active,
+        "execution_ready": execution_ready,
         "blockers": blockers,
         "reasons": reasons,
         "symbols": symbols,
@@ -191,9 +237,13 @@ def _decision_gate_health(now_epoch: float, market_open: bool) -> Dict[str, Any]
         "blocked_symbols": sorted(str(row.get("symbol") or "").upper() for row in blocked_rows),
         "blockers_by_symbol": blockers_by_symbol,
         "rows": rows,
+        "evaluations_last_window": evaluations_last_window,
+        "decisions_last_window": len(allowed_rows),
         "ltp_age_sec": max_ltp_age,
         "depth_age_sec": max_depth_age,
         "latest_explain": latest_explain,
+        "status": status,
+        "reason": status_reason,
     }
 
 
@@ -229,15 +279,35 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
             "segment": getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO"),
         }
     )
+    execution_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     offhours_mode = bool(market_ctx.mode == "OFFHOURS")
     require_live_quotes = bool(market_ctx.require_live_quotes)
     allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
+    freshness_policy = resolve_freshness_policy(
+        mode=str(getattr(cfg, "EXECUTION_MODE", "SIM")),
+        market_open=bool(market_open),
+        allow_stale_quotes=bool(allow_stale_quotes),
+        live_ltp_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        live_depth_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
+        planning_ltp_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_LTP_AGE_SEC", 900.0)),
+        planning_depth_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC", 900.0)),
+        option_ok_live_sec=float(getattr(cfg, "FEED_HEALTH_OPTION_OK_AGE_SEC", 2.5)),
+        option_ok_planning_sec=float(getattr(cfg, "OFFHOURS_SLA_MAX_LTP_AGE_SEC", 900.0)),
+        expiry_lotto_mode=bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)),
+    )
 
     blockers = []
     warnings = []
     checks: Dict[str, object] = {}
     checks["ts_epoch"] = now.timestamp()
     checks["ts_ist"] = now.isoformat()
+    checks["freshness_policy"] = {
+        "profile": freshness_policy.name,
+        "ltp_max_age_sec": float(freshness_policy.ltp_max_age_sec),
+        "depth_max_age_sec": float(freshness_policy.depth_max_age_sec),
+        "ltp_required": bool(freshness_policy.ltp_required),
+        "depth_required": bool(freshness_policy.depth_required),
+    }
 
     # Required config
     missing_cfg = []
@@ -309,25 +379,66 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
     checks["trade_identity_schema"] = {"ok": schema_ok, "reason": schema_reason}
 
     # Decision DAG health (single source of truth for gating/readiness)
-    decision_health = _decision_gate_health(now_epoch=float(checks["ts_epoch"]), market_open=market_open)
+    decision_health = _decision_gate_health(
+        now_epoch=float(checks["ts_epoch"]),
+        market_open=market_open,
+        execution_mode=execution_mode,
+    )
+    decision_stream_health = check_decision_telemetry(
+        desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
+        max_age_sec=float(
+            getattr(
+                cfg,
+                "READINESS_DECISION_MAX_AGE_SEC",
+                getattr(cfg, "READINESS_DECISION_ENGINE_ACTIVE_SEC", 240.0),
+            )
+        ),
+    )
     for reason in decision_health.get("blockers", []):
         blockers.append(reason)
     checks["decision_gate"] = {
         "ok": bool(decision_health.get("ok")),
+        "decision_engine_active": bool(decision_health.get("decision_engine_active", False)),
+        "execution_ready": bool(decision_health.get("execution_ready", False)),
         "symbols": decision_health.get("symbols") or [],
         "allowed_symbols": decision_health.get("allowed_symbols") or [],
         "blocked_symbols": decision_health.get("blocked_symbols") or [],
         "blockers_by_symbol": decision_health.get("blockers_by_symbol") or {},
+        "evaluations_last_window": int(decision_health.get("evaluations_last_window") or 0),
+        "decisions_last_window": int(decision_health.get("decisions_last_window") or 0),
         "rows": decision_health.get("rows") or {},
         "latest_explain": decision_health.get("latest_explain"),
+        "status": str(decision_health.get("status") or "UNKNOWN"),
+        "reason": str(decision_health.get("reason") or ""),
+        "stream_health": decision_stream_health,
     }
     feed_ok = bool(decision_health.get("feed_ok", True))
     feed_reasons = list(decision_health.get("reasons") or [])
+    try:
+        feed_debug = get_feed_debug(now_epoch=float(checks["ts_epoch"]))
+    except Exception:
+        feed_debug = {}
+    active_blockers_by_symbol = {}
+    if isinstance(feed_debug, dict):
+        active_blockers_by_symbol = dict(feed_debug.get("option_active_blockers_by_symbol") or {})
+    active_feed_blockers: list[str] = []
+    for symbol in sorted(active_blockers_by_symbol.keys()):
+        for code in list(active_blockers_by_symbol.get(symbol) or []):
+            text = str(code or "").strip().upper()
+            if not text or text not in _LIFECYCLE_FEED_BLOCKER_CODES:
+                continue
+            if text not in active_feed_blockers:
+                active_feed_blockers.append(text)
+    if market_open and active_feed_blockers:
+        feed_ok = False
+        feed_reasons = list(dict.fromkeys(active_feed_blockers + feed_reasons))
     if require_live_quotes and (not feed_ok):
         blockers.append(f"feed_health:{','.join(feed_reasons) or 'feed_stale'}")
     checks["feed_health"] = {
         "ok": bool(feed_ok or allow_stale_quotes),
         "reasons": feed_reasons,
+        "active_blockers": active_feed_blockers,
+        "active_blockers_by_symbol": active_blockers_by_symbol,
         "ltp_age_sec": decision_health.get("ltp_age_sec"),
         "depth_age_sec": decision_health.get("depth_age_sec"),
         "state": (

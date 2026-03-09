@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import threading
 import time
+import weakref
 from typing import Any
 
 from config import config as cfg
@@ -44,6 +45,9 @@ _TERMINAL_STATES = {
     OrderState.CANCELLED,
     OrderState.EXPIRED,
 }
+
+_DAEMON_REGISTRY_LOCK = threading.RLock()
+_DAEMON_REGISTRY: weakref.WeakSet["OrderReconciliationDaemon"] = weakref.WeakSet()
 
 
 @dataclass(frozen=True)
@@ -148,6 +152,8 @@ class OrderReconciliationDaemon:
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_cycle_ts_epoch: float | None = None
+        with _DAEMON_REGISTRY_LOCK:
+            _DAEMON_REGISTRY.add(self)
 
     @property
     def is_running(self) -> bool:
@@ -178,7 +184,7 @@ class OrderReconciliationDaemon:
             self._thread.start()
         if thread is not None:
             lifecycle.register(
-                "order-reconciliation-daemon",
+                f"order-reconciliation-daemon:{id(self)}",
                 stop_fn=lambda: self.stop(timeout_sec=3.0),
                 join_fn=lambda timeout_sec=3.0: self._join_thread(timeout_sec=timeout_sec),
             )
@@ -592,3 +598,21 @@ class OrderReconciliationDaemon:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
         except Exception:
             pass
+
+
+def stop_reconciliation_daemon(timeout_sec: float = 5.0) -> bool:
+    """
+    Best-effort module-level stop for all instantiated reconciliation daemons.
+
+    This is intentionally idempotent and safe to call during partial teardown.
+    """
+    timeout_value = max(0.0, float(timeout_sec))
+    with _DAEMON_REGISTRY_LOCK:
+        daemons = list(_DAEMON_REGISTRY)
+    clean = True
+    for daemon in daemons:
+        try:
+            clean = bool(daemon.stop(timeout_sec=timeout_value)) and clean
+        except Exception:
+            clean = False
+    return clean

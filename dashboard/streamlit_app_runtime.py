@@ -40,6 +40,7 @@ from dashboard.ui.utils.cache_utils import (
 from dashboard.ui.utils.strategy_timeline import (
     floor_timestamp_to_bucket,
     compute_strategy_timeline_metrics,
+    build_blocker_distribution,
 )
 from dashboard.ui import (
     apply_global_style,
@@ -61,32 +62,41 @@ from core.scorecard import compute_scorecard
 from core.gpt_advisor import get_trade_advice, save_advice, get_day_summary
 from core.market_data import (
     fetch_live_market_data,
-    ensure_startup_warmup_bootstrap,
     get_underlying_candles as market_data_get_underlying_candles,
     get_option_candles_or_snapshots as market_data_get_option_candles_or_snapshots,
 )
 from core.auth_health import load_auth_runtime_guard
 from core.day_type_history import load_day_type_events, day_type_events_dataframe
+from core.market_calendar import market_open as canonical_market_open
 from core.offhours import is_offhours
-from core.time_utils import is_today_local, age_minutes_local, now_local, parse_ts_local
-from core.trade_log_paths import ensure_trade_log_exists, resolve_trade_log_path
-from core.learning_paths import canonical_suggestion_eval_log_path, suggestion_eval_log_paths
+from core.time_utils import (
+    is_today_local,
+    age_minutes_local,
+    now_local,
+    parse_ts_local,
+    get_market_phase_ist,
+    parse_hhmm_time,
+)
+from core.trade_log_paths import resolve_trade_log_path
+from core.learning_paths import canonical_suggestion_eval_log_path, canonical_suggestions_log_path, suggestion_eval_log_paths
 from core.sim_pnl import DEFAULT_DELTAS, delta_key, simulate_row, compute_row_live_pnl
 from core.trailing_display import apply_trailing_display_df
 from core.trade_activation import should_activate, activate_trade
 from core.trade_state_engine import run_state_engine_once
 from core.trailing import init_trailing, update_trailing, check_exit
 from core.tf_utils import check_tf_available
-from core.upstox_resolver import ensure_upstox_columns, resolve_upstox_key
 from core.feed_debug import get_feed_debug
 from core.market_data_monitor import get_feed_health_snapshot
 from core.reject_telemetry import get_recent_reject_telemetry
 from core.paths import logs_dir, data_root, db_dir
-from dashboard.upstox_links import (
-    build_upstox_contract_url,
-    build_upstox_search_query,
-    build_upstox_search_url,
+from core.market_snapshot_schema import validate_market_snapshot
+from core.market_snapshot_store import (
+    DEFAULT_MARKET_SNAPSHOT_PATH,
+    get_market_snapshot_status,
+    read_market_snapshot,
 )
+from core.telemetry_streams import iter_recent_events
+from core.advisory_schema import AdvisorySchemaError, deserialize_advisory_row, log_advisory_schema_error
 from dashboard.ui.table_model import (
     normalize_df as normalize_table_df,
     compute_trade_key as compute_table_trade_key,
@@ -198,20 +208,450 @@ except Exception:
 
 st.set_page_config(page_title="Axiom Quant Console", layout="wide")
 if "auto_refresh_enabled" not in st.session_state:
-    st.session_state.auto_refresh_enabled = True
+    # Safer default: manual browser refresh, operator can opt-in to live reruns.
+    st.session_state.auto_refresh_enabled = False
+if "state_engine_enabled" not in st.session_state:
+    # Run queue lifecycle updates on rerun even when UI autorefresh is disabled.
+    st.session_state["state_engine_enabled"] = True
 if "trade_refresh_mode" not in st.session_state:
     st.session_state["trade_refresh_mode"] = REFRESH_MODE_MARKET_OPEN_ONLY
 
-LOG_PATH = ensure_trade_log_exists()
+LOG_PATH = resolve_trade_log_path()
 STRAT_PATH = logs_dir() / "strategy_perf.json"
 apply_global_style()
+
+_RERUN_PERF = {"data_load_ms": 0.0, "steps": []}
+_DEFAULT_JSONL_TAIL_ROWS = 250
+_FULL_JSONL_TAIL_ROWS = 5000
+_DASHBOARD_LIVE_MD_CACHE_TTL_SEC = 1.0
+_DASHBOARD_HISTORY_ERROR_COOLDOWN_SEC = 30.0
+
+
+def _dashboard_read_only_mode() -> bool:
+    return bool(getattr(cfg, "UI_DASHBOARD_READ_ONLY", True))
+
+
+def _read_only_market_snapshot_rows() -> list[dict]:
+    path = data_root() / "option_chain_latest.json"
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("dashboard_read_only_artifact_error artifact=option_chain_latest error=%s", exc)
+        return []
+    if not isinstance(payload, dict):
+        return []
+    rows: list[dict] = []
+    for symbol, chain in payload.items():
+        if not isinstance(chain, list):
+            continue
+        rows.append(
+            {
+                "symbol": str(symbol or "").upper(),
+                "instrument": "OPT",
+                "option_chain": list(chain),
+            }
+        )
+    return rows
+
+
+def _log_read_only_block(operation: str, caller: str, detail: str = "") -> None:
+    logger.warning(
+        "dashboard_read_only_guard_blocked operation=%s caller=%s detail=%s",
+        operation,
+        caller,
+        detail or "read_only_mode",
+    )
+
+
+def _log_dashboard_forbidden_call(function_name: str, caller: str, detail: str = "") -> None:
+    logger.warning(
+        "[DASHBOARD_FORBIDDEN_CALL] function=%s caller=%s detail=%s",
+        function_name,
+        caller,
+        detail or "read_only_snapshot_path",
+    )
+
+
+def _coerce_status_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def read_market_snapshot_for_dashboard(
+    path: str | Path = DEFAULT_MARKET_SNAPSHOT_PATH,
+    *,
+    stale_after_sec: float | None = None,
+) -> dict:
+    # Dashboard read-only snapshot path. Missing or stale artifacts must not trigger recompute.
+    target = Path(path).expanduser()
+    stale_after = float(
+        stale_after_sec
+        if stale_after_sec is not None
+        else getattr(cfg, "DASHBOARD_MARKET_SNAPSHOT_STALE_AFTER_SEC", 15.0)
+    )
+    status = get_market_snapshot_status(target, stale_after_sec=stale_after)
+    state = str(status.get("state") or "invalid")
+    age_sec = status.get("age_sec")
+    errors = list(status.get("errors") or [])
+    if state in {"missing", "invalid"}:
+        logger.info(
+            "[DASHBOARD_SNAPSHOT_READ] state=%s age_sec=%s symbol_count=0 path=%s errors=%s",
+            state,
+            age_sec,
+            target,
+            "|".join(errors),
+        )
+        return {
+            "state": state,
+            "age_sec": age_sec,
+            "errors": errors,
+            "path": str(target),
+            "snapshot": {},
+        }
+    try:
+        snapshot = read_market_snapshot(target)
+    except Exception as exc:
+        logger.info(
+            "[DASHBOARD_SNAPSHOT_READ] state=invalid age_sec=%s symbol_count=0 path=%s errors=%s",
+            age_sec,
+            target,
+            str(exc),
+        )
+        return {
+            "state": "invalid",
+            "age_sec": age_sec,
+            "errors": [str(exc)],
+            "path": str(target),
+            "snapshot": {},
+        }
+    valid, validation_errors = validate_market_snapshot(snapshot)
+    if not valid:
+        logger.info(
+            "[DASHBOARD_SNAPSHOT_READ] state=invalid age_sec=%s symbol_count=0 path=%s errors=%s",
+            age_sec,
+            target,
+            "|".join(validation_errors),
+        )
+        return {
+            "state": "invalid",
+            "age_sec": age_sec,
+            "errors": list(validation_errors),
+            "path": str(target),
+            "snapshot": {},
+        }
+    symbol_count = len(dict(snapshot.get("symbols") or {}))
+    logger.info(
+        "[DASHBOARD_SNAPSHOT_READ] state=%s age_sec=%s symbol_count=%d path=%s",
+        state,
+        age_sec,
+        symbol_count,
+        target,
+    )
+    return {
+        "state": state,
+        "age_sec": age_sec,
+        "errors": errors,
+        "path": str(target),
+        "snapshot": snapshot,
+    }
+
+
+def get_market_snapshot_view_model(
+    path: str | Path = DEFAULT_MARKET_SNAPSHOT_PATH,
+    *,
+    stale_after_sec: float | None = None,
+) -> dict:
+    payload = read_market_snapshot_for_dashboard(path, stale_after_sec=stale_after_sec)
+    snapshot = dict(payload.get("snapshot") or {})
+    market_open = _coerce_status_bool(snapshot.get("market_open"))
+    market_mode = "OFFHOURS" if not market_open else "LIVE"
+    return {
+        "state": str(payload.get("state") or "invalid"),
+        "age_sec": payload.get("age_sec"),
+        "errors": list(payload.get("errors") or []),
+        "path": payload.get("path"),
+        "market_open": market_open,
+        "market_mode": market_mode,
+        "generated_at": snapshot.get("generated_at"),
+        "warnings": list(snapshot.get("warnings") or []),
+        "symbols": dict(snapshot.get("symbols") or {}),
+        "producer_meta": dict(snapshot.get("producer_meta") or {}),
+    }
+
+
+def _perf_timed_load(label: str, fn, *args, **kwargs):
+    started = time.perf_counter()
+    out = fn(*args, **kwargs)
+    elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+    _RERUN_PERF["data_load_ms"] = float(_RERUN_PERF.get("data_load_ms", 0.0) + elapsed_ms)
+    steps = list(_RERUN_PERF.get("steps") or [])
+    if len(steps) < 12:
+        steps.append((str(label), float(round(elapsed_ms, 2))))
+    _RERUN_PERF["steps"] = steps
+    try:
+        logger.info("dashboard_data_load label=%s dt_ms=%.2f", label, elapsed_ms)
+    except Exception:
+        pass
+    return out
+
+
+def _perf_timed_render(label: str, fn, *args, **kwargs):
+    started = time.perf_counter()
+    out = fn(*args, **kwargs)
+    elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+    try:
+        logger.info("dashboard_render label=%s dt_ms=%.2f", label, elapsed_ms)
+    except Exception:
+        pass
+    return out
 
 
 def _log_path(*parts: str) -> Path:
     return logs_dir().joinpath(*parts)
 
 
+def _trade_db_sig() -> tuple[bool, int, int]:
+    db_path = Path(str(getattr(cfg, "TRADE_DB_PATH", "") or ""))
+    return file_sig(db_path)
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def _fetch_recent_trades_cached(limit: int, _db_sig: tuple[bool, int, int]):
+    _ = _db_sig
+    return fetch_recent_trades(int(limit))
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def _fetch_recent_outcomes_cached(limit: int, _db_sig: tuple[bool, int, int]):
+    _ = _db_sig
+    return fetch_recent_outcomes(int(limit))
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def _fetch_execution_stats_cached(limit: int, _db_sig: tuple[bool, int, int]):
+    _ = _db_sig
+    return fetch_execution_stats(int(limit))
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def _load_jsonl_tail_cached(path_str: str, sig: tuple[bool, int, int], max_lines: int) -> list[dict]:
+    _ = sig
+    path = Path(path_str)
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    rows: list[dict] = []
+    for line in lines[-max(1, int(max_lines)):]:
+        text = str(line or "").strip()
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+    return rows
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def _iter_recent_events_cached(
+    path_str: str,
+    sig: tuple[bool, int, int],
+    now_bucket: int,
+    max_age_sec: float,
+    event_types: tuple[str, ...],
+    max_lines: int,
+) -> list[dict]:
+    _ = sig
+    now_epoch = float(max(0, int(now_bucket))) * 5.0
+    return iter_recent_events(
+        Path(path_str),
+        now_epoch=now_epoch,
+        max_age_sec=float(max_age_sec),
+        event_types=set(event_types),
+        max_lines=int(max_lines),
+    )
+
+
+@st.cache_data(ttl=1)
+def _load_runtime_health_cached(path_str: str, sig: tuple) -> dict:
+    _ = sig
+    try:
+        payload = json.loads(Path(path_str).read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _load_runtime_health_latest() -> dict:
+    path = _log_path("runtime_health_latest.json")
+    payload = _load_runtime_health_cached(str(path), file_sig(path))
+    if not isinstance(payload, dict):
+        return {}
+    out = dict(payload)
+    ts_value = out.get("snapshot_ts_epoch", out.get("ts_epoch"))
+    snapshot_age = None
+    try:
+        if ts_value is not None:
+            snapshot_age = max(0.0, float(time.time()) - float(ts_value))
+    except Exception:
+        snapshot_age = None
+    out["snapshot_path"] = str(path)
+    out["snapshot_age_sec"] = snapshot_age
+    return out
+
+
+def _bridge_feed_state_from_runtime_health(
+    feed_state_machine: dict,
+    feed_debug: dict,
+    runtime_health: dict,
+) -> tuple[dict, dict]:
+    out_sm = dict(feed_state_machine or {})
+    out_fd = dict(feed_debug or {})
+    rh = runtime_health if isinstance(runtime_health, dict) else {}
+    rh_feed = rh.get("feed") if isinstance(rh.get("feed"), dict) else {}
+    ws_connected = rh_feed.get("ws_connected")
+
+    now_epoch = float(time.time())
+    ts_epoch = rh.get("ts_epoch")
+    try:
+        ts_epoch = float(ts_epoch)
+    except Exception:
+        ts_epoch = None
+    max_age_sec = float(getattr(cfg, "UI_RUNTIME_HEALTH_MAX_AGE_SEC", 120.0))
+    snapshot_age_sec = None
+    try:
+        if ts_epoch is not None:
+            snapshot_age_sec = max(0.0, now_epoch - float(ts_epoch))
+    except Exception:
+        snapshot_age_sec = None
+    if ts_epoch is None or (snapshot_age_sec is not None and snapshot_age_sec > max_age_sec):
+        return out_sm, out_fd
+
+    local_state = str(out_sm.get("state") or "").upper()
+    local_reason = str(out_sm.get("reason") or "").lower()
+    local_ws = out_fd.get("ws_connected")
+    market_open = bool(rh.get("market_open", False))
+    last_tick_age = rh_feed.get("last_tick_age_sec")
+    ltp_age = rh_feed.get("ltp_age_sec")
+    depth_age = rh_feed.get("depth_age_sec")
+    subscriptions_count = rh_feed.get("subscriptions_count")
+    intended_tokens_count = rh_feed.get("intended_tokens_count")
+    runtime_last_error = rh_feed.get("last_error")
+    allow_stale_quotes = bool(rh_feed.get("allow_stale_quotes", False))
+    sla_state = str(rh_feed.get("sla_state") or "").strip().upper()
+    if not sla_state:
+        sla_state = "LIVE" if (market_open and not allow_stale_quotes) else "PLANNING"
+    ltp_required_raw = rh_feed.get("ltp_required")
+    if isinstance(ltp_required_raw, bool):
+        ltp_required = ltp_required_raw
+    else:
+        ltp_required = bool(sla_state == "LIVE" and market_open and (not allow_stale_quotes))
+    depth_required_raw = rh_feed.get("depth_required")
+    depth_required = bool(depth_required_raw) if isinstance(depth_required_raw, bool) else False
+    ltp_max_age_sec = rh_feed.get("ltp_max_age_sec")
+    depth_max_age_sec = rh_feed.get("depth_max_age_sec")
+    sla_status = str(rh_feed.get("sla_status") or "").strip().upper()
+    sla_reasons = list(rh_feed.get("reasons") or [])
+    stale_tick_threshold = float(
+        max(
+            float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+            float(getattr(cfg, "FEED_HEALTH_OPTION_OK_AGE_SEC", 2.5)),
+        )
+    )
+    try:
+        ltp_max_age_sec_f = float(ltp_max_age_sec)
+    except Exception:
+        ltp_max_age_sec_f = stale_tick_threshold
+    try:
+        depth_max_age_sec_f = float(depth_max_age_sec)
+    except Exception:
+        depth_max_age_sec_f = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0))
+    strict_live_freshness = bool(sla_state == "LIVE" and market_open and (not allow_stale_quotes))
+
+    observed_ltp_age = None
+    if isinstance(last_tick_age, (int, float)):
+        observed_ltp_age = float(last_tick_age)
+    elif isinstance(ltp_age, (int, float)):
+        observed_ltp_age = float(ltp_age)
+    observed_depth_age = float(depth_age) if isinstance(depth_age, (int, float)) else None
+
+    # SLA/source policy failures are authoritative and should surface even when ws telemetry is unavailable.
+    has_sla_fail = bool(sla_status in {"FAIL", "STALE", "DOWN"} and sla_reasons)
+    policy_age_fail = False
+    policy_age_reason = ""
+    if bool(ltp_required) and observed_ltp_age is not None and observed_ltp_age > ltp_max_age_sec_f:
+        policy_age_fail = True
+        policy_age_reason = "runtime_health_sla_ltp_stale"
+    if bool(depth_required) and observed_depth_age is not None and observed_depth_age > depth_max_age_sec_f:
+        policy_age_fail = True
+        if not policy_age_reason:
+            policy_age_reason = "runtime_health_sla_depth_stale"
+    strict_live_stale = bool(
+        strict_live_freshness
+        and observed_ltp_age is not None
+        and observed_ltp_age > stale_tick_threshold
+    )
+
+    should_override = bool(
+        local_state in ("", "DOWN", "UNKNOWN")
+        or "no_ws" in local_reason
+        or local_ws in (None, False)
+    )
+    if not should_override:
+        return out_sm, out_fd
+
+    if has_sla_fail:
+        out_sm["state"] = "DEGRADED"
+        out_sm["reason"] = f"runtime_health_sla_fail:{sla_reasons[0]}"
+    elif strict_live_stale:
+        out_sm["state"] = "DEGRADED"
+        out_sm["reason"] = "runtime_health_ws_connected_but_stale_ticks"
+    elif policy_age_fail:
+        out_sm["state"] = "DEGRADED"
+        out_sm["reason"] = policy_age_reason
+    elif ws_connected is True:
+        out_sm["state"] = "OK"
+        out_sm["reason"] = "runtime_health_ws_connected"
+    elif ws_connected is False:
+        if strict_live_freshness and market_open:
+            out_sm["state"] = "DOWN"
+            out_sm["reason"] = "runtime_health_ws_disconnected"
+        else:
+            out_sm["state"] = "UNKNOWN"
+            out_sm["reason"] = "runtime_health_ws_disconnected_nonlive"
+    else:
+        out_sm["state"] = "UNKNOWN"
+        out_sm["reason"] = "runtime_health_ws_unknown"
+
+    out_sm["ws_msg_age_sec"] = observed_ltp_age
+    if ws_connected in (True, False):
+        out_fd["ws_connected"] = bool(ws_connected)
+        out_fd["ws_connected_source"] = "runtime_health_bridge"
+    if subscriptions_count is not None:
+        out_fd["subscribed_tokens_count"] = subscriptions_count
+    if intended_tokens_count is not None:
+        out_fd["intended_tokens_count"] = intended_tokens_count
+    if runtime_last_error not in (None, "", "None"):
+        out_fd["feed_runtime_last_error"] = runtime_last_error
+    if observed_ltp_age is not None:
+        out_fd["last_tick_age_sec"] = observed_ltp_age
+    return out_sm, out_fd
+
+
 def _refresh_trade_state():
+    if _dashboard_read_only_mode():
+        logger.info("dashboard_read_only_skip operation=state_engine")
+        return False
     try:
         desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT")
         return run_state_engine_if_due(
@@ -380,8 +820,8 @@ def _desk_log_path(filename: str) -> Path:
     return logs_dir() / f"desks/{desk_id}/{filename}"
 
 
-@st.cache_data(ttl=2, show_spinner=False)
-def _load_trade_log_rows_cached(path_str: str, sig: tuple[bool, int, int]) -> list[dict]:
+@st.cache_data(ttl=1.0, show_spinner=False)
+def _load_trade_log_rows_cached(path_str: str, sig: tuple[bool, int, int], max_rows: int | None = None) -> list[dict]:
     _ = sig
     try:
         resolved = Path(path_str)
@@ -398,13 +838,19 @@ def _load_trade_log_rows_cached(path_str: str, sig: tuple[bool, int, int]) -> li
         try:
             payload = json.loads(raw)
             if isinstance(payload, list):
-                return [row for row in payload if isinstance(row, dict)]
+                rows = [row for row in payload if isinstance(row, dict)]
+                if max_rows is not None and int(max_rows) > 0:
+                    return rows[-max(1, int(max_rows)) :]
+                return rows
         except Exception:
             return []
         return []
 
     rows: list[dict] = []
-    for line in raw.splitlines():
+    lines = raw.splitlines()
+    if max_rows is not None and int(max_rows) > 0:
+        lines = lines[-max(1, int(max_rows)) :]
+    for line in lines:
         line = line.strip()
         if not line:
             continue
@@ -417,9 +863,351 @@ def _load_trade_log_rows_cached(path_str: str, sig: tuple[bool, int, int]) -> li
     return rows
 
 
-def _load_trade_log_rows(path: Path) -> list[dict]:
+def _load_trade_log_rows(path: Path, *, max_rows: int | None = None) -> list[dict]:
     resolved = resolve_trade_log_path(path)
-    return _load_trade_log_rows_cached(str(resolved), file_sig(resolved))
+    return _load_trade_log_rows_cached(str(resolved), file_sig(resolved), max_rows)
+
+
+def _load_json_payload_uncached(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return {}
+
+
+def _load_jsonl_tail_uncached(path: Path, max_rows: int) -> list[dict]:
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    rows: list[dict] = []
+    for line in lines[-max(1, int(max_rows)) :]:
+        text = str(line or "").strip()
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+    return rows
+
+
+def _load_live_suggestions_status() -> dict:
+    return _perf_timed_load(
+        "suggestions_status_json",
+        _load_json_payload_uncached,
+        logs_dir() / "suggestions_status.json",
+    )
+
+
+def _load_freshness_latest() -> dict:
+    payload = _perf_timed_load(
+        "freshness_latest_json",
+        _load_json_payload_uncached,
+        logs_dir() / "freshness_latest.json",
+    )
+    if not isinstance(payload, dict):
+        return {}
+    try:
+        updated_at = str(payload.get("updated_at") or "").strip()
+        if updated_at:
+            dt_text = updated_at[:-1] + "+00:00" if updated_at.endswith("Z") else updated_at
+            updated_dt = datetime.fromisoformat(dt_text)
+            if updated_dt.year < 2023:
+                logger.warning("dashboard_freshness_payload_invalid reason=updated_at_before_2023 updated_at=%s", updated_at)
+                return {}
+    except Exception:
+        logger.warning("dashboard_freshness_payload_invalid reason=updated_at_parse_error updated_at=%s", payload.get("updated_at"))
+        return {}
+    decisions = payload.get("decisions")
+    if isinstance(decisions, dict):
+        for symbol, symbol_payload in decisions.items():
+            if not isinstance(symbol_payload, dict):
+                continue
+            for decision_type, decision_payload in symbol_payload.items():
+                if not isinstance(decision_payload, dict):
+                    continue
+                try:
+                    now_epoch = decision_payload.get("now_epoch")
+                    if now_epoch is not None and float(now_epoch) < 1577836800.0:
+                        logger.warning(
+                            "dashboard_freshness_payload_invalid reason=decision_now_epoch_before_2020 symbol=%s decision_type=%s now_epoch=%s",
+                            symbol,
+                            decision_type,
+                            now_epoch,
+                        )
+                        return {}
+                except Exception:
+                    logger.warning(
+                        "dashboard_freshness_payload_invalid reason=decision_now_epoch_parse_error symbol=%s decision_type=%s now_epoch=%s",
+                        symbol,
+                        decision_type,
+                        decision_payload.get("now_epoch"),
+                    )
+                    return {}
+    return payload
+
+
+def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
+    suggestions_path = Path(canonical_suggestions_log_path())
+    rows = _perf_timed_load(
+        "suggestions_jsonl_tail",
+        _load_jsonl_tail_uncached,
+        suggestions_path,
+        max(1, int(limit)),
+    )
+    filtered_rows = _filter_rows_today(rows)
+    if filtered_rows:
+        rows = filtered_rows
+    if not rows:
+        return pd.DataFrame()
+    validated_rows: list[dict] = []
+    for row in rows:
+        try:
+            validated_rows.append(deserialize_advisory_row(row, allow_legacy=True))
+        except AdvisorySchemaError as exc:
+            log_advisory_schema_error("dashboard.live_suggestions", row, exc)
+            logger.warning("dashboard_live_advisory_schema_error trade_id=%s error=%s", row.get("trade_id") if isinstance(row, dict) else None, exc)
+    if not validated_rows:
+        return pd.DataFrame()
+    df_live = _perf_timed_load("suggestions_dataframe_build", pd.DataFrame, validated_rows)
+    if df_live.empty:
+        return df_live
+    if "trade_key" not in df_live.columns:
+        df_live["trade_key"] = None
+    if "advisory_id" in df_live.columns:
+        missing_trade_key = df_live["trade_key"].isna() | df_live["trade_key"].astype(str).str.strip().eq("")
+        df_live.loc[missing_trade_key, "trade_key"] = df_live.loc[missing_trade_key, "advisory_id"]
+    if "trade_id" in df_live.columns:
+        missing_trade_key = df_live["trade_key"].isna() | df_live["trade_key"].astype(str).str.strip().eq("")
+        df_live.loc[missing_trade_key, "trade_key"] = df_live.loc[missing_trade_key, "trade_id"]
+    df_live = _add_upstox_links(df_live)
+    df_live = _prepare_trade_display_df(df_live)
+    return df_live
+
+
+def _is_dashboard_auth_fetch_error(exc: Exception) -> bool:
+    text = str(exc or "").strip().lower()
+    if not text:
+        return False
+    markers = (
+        "tokenexception",
+        "access_token",
+        "api_key",
+        "incorrect api key",
+        "invalid session",
+        "session expired",
+        "hist_error",
+        "forbidden",
+        "unauthorized",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _dashboard_history_cooldown_keys(name: str) -> tuple[str, str]:
+    key = str(name or "history").strip().lower().replace(" ", "_")
+    return (
+        f"dashboard_history_cooldown_until_{key}",
+        f"dashboard_history_cooldown_reason_{key}",
+    )
+
+
+def _history_fetch_suppressed(name: str) -> bool:
+    cooldown_key, reason_key = _dashboard_history_cooldown_keys(name)
+    now_ts = float(time.time())
+    try:
+        cooldown_until = float(st.session_state.get(cooldown_key) or 0.0)
+    except Exception:
+        cooldown_until = 0.0
+    if cooldown_until <= now_ts:
+        return False
+    try:
+        reason = str(st.session_state.get(reason_key) or "")
+    except Exception:
+        reason = ""
+    logger.info(
+        "dashboard_history_fetch_suppressed name=%s cooldown_remaining_sec=%.2f reason=%s",
+        name,
+        max(0.0, cooldown_until - now_ts),
+        reason or "cooldown",
+    )
+    return True
+
+
+def _record_history_fetch_failure(name: str, exc: Exception) -> None:
+    if not _is_dashboard_auth_fetch_error(exc):
+        return
+    cooldown_key, reason_key = _dashboard_history_cooldown_keys(name)
+    now_ts = float(time.time())
+    try:
+        st.session_state[cooldown_key] = now_ts + _DASHBOARD_HISTORY_ERROR_COOLDOWN_SEC
+        st.session_state[reason_key] = str(exc)
+    except Exception:
+        pass
+
+
+def _fetch_day_type_events_dashboard(*, caller: str, max_rows: int) -> list[dict]:
+    cache_key = f"dashboard_day_type_events_cache_{int(max_rows)}"
+    cache_ts_key = f"{cache_key}_ts"
+    now_ts = float(time.time())
+    try:
+        cached = list(st.session_state.get(cache_key) or [])
+    except Exception:
+        cached = []
+    try:
+        cache_ts = float(st.session_state.get(cache_ts_key) or 0.0)
+    except Exception:
+        cache_ts = 0.0
+    if cached and (now_ts - cache_ts) <= 10.0:
+        logger.info(
+            "dashboard_data_load label=day_type_events_cache_hit caller=%s dt_ms=0.00 rows=%d",
+            caller,
+            len(cached),
+        )
+        return cached
+    if _history_fetch_suppressed("day_type_events"):
+        return cached
+    started = time.perf_counter()
+    try:
+        rows = list(load_day_type_events(backfill=False, max_rows=int(max_rows)) or [])
+        elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+        logger.info(
+            "dashboard_history_fetch_attempt name=day_type_events caller=%s result=ok dt_ms=%.2f rows=%d",
+            caller,
+            elapsed_ms,
+            len(rows),
+        )
+        try:
+            st.session_state[cache_key] = rows
+            st.session_state[cache_ts_key] = now_ts
+        except Exception:
+            pass
+        return rows
+    except Exception as exc:
+        elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+        logger.warning(
+            "dashboard_history_fetch_attempt name=day_type_events caller=%s result=error dt_ms=%.2f error=%s",
+            caller,
+            elapsed_ms,
+            exc,
+        )
+        _record_history_fetch_failure("day_type_events", exc)
+        return cached
+
+
+def _fetch_live_market_data_dashboard(
+    caller: str,
+    *,
+    allow_stale_cache: bool = True,
+    allow_broker_fetch: bool = False,
+) -> list[dict]:
+    if str(caller or "").strip() == "market_snapshot":
+        _log_dashboard_forbidden_call("fetch_live_market_data", caller, "use_market_snapshot_artifact")
+        return []
+    now_ts = float(time.time())
+    cache_key = "dashboard_live_market_data_cache"
+    cache_ts_key = "dashboard_live_market_data_cache_ts"
+    cooldown_key = "dashboard_live_market_data_error_cooldown_until"
+    cooldown_reason_key = "dashboard_live_market_data_error_reason"
+    try:
+        cached = list(st.session_state.get(cache_key) or [])
+    except Exception:
+        cached = []
+    try:
+        cache_ts = float(st.session_state.get(cache_ts_key) or 0.0)
+    except Exception:
+        cache_ts = 0.0
+    try:
+        cooldown_until = float(st.session_state.get(cooldown_key) or 0.0)
+    except Exception:
+        cooldown_until = 0.0
+    cooldown_reason = ""
+    try:
+        cooldown_reason = str(st.session_state.get(cooldown_reason_key) or "")
+    except Exception:
+        cooldown_reason = ""
+
+    if cached and (now_ts - cache_ts) <= _DASHBOARD_LIVE_MD_CACHE_TTL_SEC:
+        logger.info(
+            "dashboard_market_data_cache_hit caller=%s age_sec=%.2f rows=%d",
+            caller,
+            max(0.0, now_ts - cache_ts),
+            len(cached),
+        )
+        return cached
+    artifact_rows = _read_only_market_snapshot_rows()
+    if artifact_rows:
+        logger.info(
+            "dashboard_market_data_artifact_hit caller=%s rows=%d",
+            caller,
+            len(artifact_rows),
+        )
+        try:
+            st.session_state[cache_key] = artifact_rows
+            st.session_state[cache_ts_key] = now_ts
+        except Exception:
+            pass
+        return artifact_rows
+    if _dashboard_read_only_mode() and not allow_broker_fetch:
+        _log_read_only_block("live_market_data_fetch", caller, "artifact_missing")
+        return cached if allow_stale_cache else []
+    if cooldown_until > now_ts:
+        logger.info(
+            "dashboard_history_fetch_suppressed caller=%s cooldown_remaining_sec=%.2f reason=%s",
+            caller,
+            max(0.0, cooldown_until - now_ts),
+            cooldown_reason or "cooldown",
+        )
+        return cached if allow_stale_cache else []
+
+    started = time.perf_counter()
+    try:
+        rows = list(fetch_live_market_data(allow_history_seed=False) or [])
+        elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+        logger.info(
+            "dashboard_history_fetch_attempt caller=%s result=ok dt_ms=%.2f rows=%d",
+            caller,
+            elapsed_ms,
+            len(rows),
+        )
+        try:
+            st.session_state[cache_key] = rows
+            st.session_state[cache_ts_key] = now_ts
+            st.session_state[cooldown_key] = 0.0
+            st.session_state[cooldown_reason_key] = ""
+        except Exception:
+            pass
+        return rows
+    except Exception as exc:
+        elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+        logger.warning(
+            "dashboard_history_fetch_attempt caller=%s result=error dt_ms=%.2f error=%s",
+            caller,
+            elapsed_ms,
+            exc,
+        )
+        if _is_dashboard_auth_fetch_error(exc):
+            try:
+                st.session_state[cooldown_key] = now_ts + _DASHBOARD_HISTORY_ERROR_COOLDOWN_SEC
+                st.session_state[cooldown_reason_key] = str(exc)
+            except Exception:
+                pass
+        return cached if allow_stale_cache else []
+
+
+def _should_enable_local_trade_refresh(show_active_view: bool, show_advisory_view: bool) -> bool:
+    return bool(
+        hasattr(st, "fragment")
+        and bool(st.session_state.get("auto_refresh_enabled", False))
+        and (bool(show_active_view) or bool(show_advisory_view))
+    )
 
 
 def _load_approved_trades(path: Path):
@@ -479,7 +1267,71 @@ def _safe_sort_by_last_seen(df: pd.DataFrame) -> pd.DataFrame:
 def _prepare_trade_display_df(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
-    return dedupe_table_df(work := _safe_sort_by_last_seen(df))
+    work = _safe_sort_by_last_seen(df.copy())
+    # Do not re-normalize display frames here; table-model normalization can inject
+    # canonical columns with null placeholders and pollute visible tables.
+    if "trade_key" in work.columns:
+        work = work.drop_duplicates(subset=["trade_key"], keep="first")
+    return work
+
+
+def _is_entry_executable_status(value) -> bool:
+    status = str(value or "").strip().upper()
+    return status in {"OK", "LIVE_OK", "VALID", "NONE", "", "PRICE_MISMATCH", "REST_FALLBACK"}
+
+
+def _is_canonical_advisory_df(df: pd.DataFrame | None) -> bool:
+    if df is None or df.empty:
+        return False
+    canonical_cols = {
+        "hard_blockers",
+        "soft_penalties",
+        "warnings",
+        "confidence_final",
+        "advisory_visible",
+        "execution_status",
+        "entry_source",
+    }
+    return any(col in df.columns for col in canonical_cols)
+
+
+def _enforce_executable_entry_display(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    if _is_canonical_advisory_df(df):
+        return df
+    if "entry_status" not in df.columns or "entry" not in df.columns:
+        return df
+    out = df.copy()
+    status = out["entry_status"].astype(str).str.strip().str.upper()
+    executable_mask = status.apply(_is_entry_executable_status)
+    out.loc[~executable_mask, "entry"] = None
+    return out
+
+
+def _select_visible_advisory_rows(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    if "advisory_visible" in out.columns:
+        visible = out["advisory_visible"].fillna(True).astype(bool)
+        out = out[visible].copy()
+    if out.empty:
+        return out
+    return _prepare_trade_display_df(out)
+
+
+def _simulation_display_cols(df: pd.DataFrame) -> list[str]:
+    if df is None or df.empty:
+        return []
+    ordered = [
+        "sim_reason",
+        "lot_size",
+        "lot_size_source",
+        "lot_fallback_used",
+    ]
+    ordered.extend(sorted([c for c in df.columns if str(c).startswith("sim_pnl_")]))
+    return [c for c in ordered if c in df.columns]
 
 
 def _queue_sources() -> list[tuple[str, Path]]:
@@ -505,7 +1357,95 @@ def _trade_universe_sources_sig() -> tuple[tuple[str, tuple[bool, int, int]], ..
     return tuple(sigs)
 
 
-@st.cache_data(ttl=2, show_spinner=False)
+def _exit_intel_state_sig() -> tuple[bool, int, int]:
+    return file_sig(logs_dir() / "exit_intel_state.jsonl")
+
+
+@st.cache_data(ttl=1, show_spinner=False)
+def _load_exit_intel_state_df_cached(_sig: tuple[bool, int, int]) -> pd.DataFrame:
+    path = logs_dir() / "exit_intel_state.jsonl"
+    if not path.exists():
+        return pd.DataFrame()
+    rows: list[dict] = []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                text = str(line).strip()
+                if not text:
+                    continue
+                try:
+                    payload = json.loads(text)
+                except Exception:
+                    continue
+                if isinstance(payload, dict):
+                    rows.append(payload)
+    except Exception:
+        return pd.DataFrame()
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    if "trade_id" not in df.columns:
+        return pd.DataFrame()
+    if "ts_epoch" in df.columns:
+        df["ts_epoch"] = pd.to_numeric(df["ts_epoch"], errors="coerce")
+        df = df.sort_values("ts_epoch", ascending=False)
+    return df.drop_duplicates(subset=["trade_id"], keep="first")
+
+
+def _load_exit_intel_state_df() -> pd.DataFrame:
+    return _load_exit_intel_state_df_cached(_exit_intel_state_sig())
+
+
+def _merge_exit_intel_state(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    state_df = _load_exit_intel_state_df()
+    if state_df is None or state_df.empty:
+        return df
+    merge_cols = [
+        c
+        for c in [
+            "trade_id",
+            "best_price_seen",
+            "best_price_ts",
+            "current_sl",
+            "current_tp",
+            "exit_intel_phase",
+            "exit_intel_action",
+            "stall_counter",
+            "last_action_ts",
+            "reason_codes",
+            "remaining_qty_units",
+        ]
+        if c in state_df.columns
+    ]
+    if not merge_cols:
+        return df
+    right = state_df[merge_cols].drop_duplicates(subset=["trade_id"], keep="first")
+    out = df.copy()
+    if "trade_id" in out.columns:
+        return out.merge(right, on="trade_id", how="left", suffixes=("", "_exit"))
+    if "identity" in out.columns:
+        right_identity = right.rename(columns={"trade_id": "identity"})
+        return out.merge(right_identity, on="identity", how="left", suffixes=("", "_exit"))
+    return out
+
+
+def _concat_frames_safely(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    valid: list[pd.DataFrame] = []
+    for frame in frames:
+        if frame is None or frame.empty:
+            continue
+        # Skip fully-empty/NA entries that trigger pandas concat future warnings.
+        if frame.dropna(how="all").empty:
+            continue
+        valid.append(frame)
+    if not valid:
+        return pd.DataFrame()
+    return pd.concat(valid, axis=0, ignore_index=True)
+
+
+@st.cache_data(ttl=1, show_spinner=False)
 def _load_trade_universe_df_cached(_sources_sig: tuple[tuple[str, tuple[bool, int, int]], ...]) -> pd.DataFrame:
     frames = []
     meta_map = _get_instrument_meta_map()
@@ -522,12 +1462,15 @@ def _load_trade_universe_df_cached(_sources_sig: tuple[tuple[str, tuple[bool, in
                 continue
             tmp["source_bucket"] = source
             tmp = normalize_trade_df(tmp, meta_map)
-            frames.append(tmp)
+            if tmp is not None and not tmp.empty:
+                frames.append(tmp)
         except Exception as exc:
             logger.warning("trade_universe_load_failed source=%s path=%s err=%s", source, path, exc)
     if not frames:
         return pd.DataFrame()
-    merged = pd.concat(frames, axis=0, ignore_index=True)
+    merged = _concat_frames_safely(frames)
+    if merged.empty:
+        return merged
     merged = normalize_table_df(merged)
     merged = compute_table_trade_key(merged)
     merged = dedupe_table_df(merged)
@@ -569,7 +1512,9 @@ def _derive_permission_bucket(df: pd.DataFrame) -> pd.Series:
     bucket = pd.Series("ADVISORY", index=df.index, dtype="object")
     queue_mask = permission.str.startswith("QUEUE")
     exec_mask = permission.isin(["EXECUTE", "HIGH_EXECUTE"]) | final_action.eq("EXECUTE")
-    high_mask = exec_mask & (global_conf >= high_threshold) & (~entry_status.isin(["STALE_OPTION_LTP", "STALE_PRICE", "INVALID_LTP", "NO_TOKEN"]))
+    high_mask = exec_mask & (
+        global_conf >= high_threshold
+    ) & (~entry_status.isin(["STALE_OPTION_LTP", "STALE_PRICE", "INVALID_LTP", "NO_TOKEN", "MISSING_OPTION_TOKEN"]))
 
     bucket.loc[queue_mask] = "QUEUE"
     bucket.loc[exec_mask] = "EXECUTE"
@@ -578,6 +1523,8 @@ def _derive_permission_bucket(df: pd.DataFrame) -> pd.Series:
 
 
 def _derive_final_blocker(df: pd.DataFrame) -> pd.Series:
+    trace_blocker = _extract_trace_field(df, "final_blocker")
+    trace_gating_reason = _extract_trace_field(df, "gating_reason")
     blocker = _series_first_non_null(
         df,
         [
@@ -588,6 +1535,8 @@ def _derive_final_blocker(df: pd.DataFrame) -> pd.Series:
             "reject_reason",
         ],
     )
+    blocker = blocker.where(blocker.notna(), trace_blocker)
+    blocker = blocker.where(blocker.notna(), trace_gating_reason)
     entry_status = _series_first_non_null(df, ["entry_status"], default="")
     blocker = blocker.where(blocker.notna(), entry_status)
     blocker = blocker.fillna("NONE").astype(str).str.strip()
@@ -1208,14 +2157,7 @@ def _render_strategy_timeline_tab():
         empty_state("No rows for selected bucket + strategy family.")
     else:
         st.dataframe(drill_df[preset_cols].head(500), use_container_width=True, hide_index=True)
-        blocker_dist = (
-            drill_df["final_blocker"]
-            .fillna("NONE")
-            .astype(str)
-            .value_counts()
-            .reset_index()
-            .rename(columns={"index": "final_blocker", "final_blocker": "count"})
-        )
+        blocker_dist = build_blocker_distribution(drill_df, blocker_col="final_blocker")
         st.markdown("**Blocker distribution (drill-down subset)**")
         st.dataframe(blocker_dist, use_container_width=True, hide_index=True)
 
@@ -1230,8 +2172,8 @@ def filter_trades_for_panel(trades, panel_name: str) -> pd.DataFrame:
     panel = str(panel_name or "").strip().lower()
     allowed = {
         "active": {"ACTIVE"},
-        "suggested": {"PLANNING", "PROPOSED"},
-        "review": {"QUEUED_REVIEW"},
+        "suggested": {"PLANNING", "PROPOSED", "ADVISORY_ONLY", "READY"},
+        "review": {"QUEUED_REVIEW", "BLOCKED_APPROVAL", "BLOCKED_CONTRACT"},
     }.get(panel)
     if allowed is None:
         raise ValueError(f"unsupported panel_name={panel_name!r}")
@@ -1515,6 +2457,14 @@ def _micro_training_paths() -> dict[str, Path]:
     }
 
 
+def _legacy_micro_training_paths() -> dict[str, Path]:
+    legacy_logs = ROOT / "logs"
+    return {
+        "log": legacy_logs / "train_micro.log",
+        "status": legacy_logs / "train_micro.status.json",
+    }
+
+
 def _read_pid(path: Path) -> int | None:
     try:
         raw = path.read_text(encoding="utf-8").strip()
@@ -1571,6 +2521,135 @@ def _append_log_line(path: Path, line: str) -> None:
         pass
 
 
+def _compute_decision_debug_metrics(
+    trade_universe_df: pd.DataFrame,
+    advisory_df: pd.DataFrame,
+    decision_gate: dict | None,
+) -> dict:
+    gate = dict(decision_gate or {})
+    rows = gate.get("rows") if isinstance(gate.get("rows"), dict) else {}
+    allowed_symbols = gate.get("allowed_symbols") if isinstance(gate.get("allowed_symbols"), list) else []
+
+    candidates_generated = int(len(trade_universe_df.index)) if isinstance(trade_universe_df, pd.DataFrame) else 0
+    advisory_rows = int(len(advisory_df.index)) if isinstance(advisory_df, pd.DataFrame) else 0
+
+    try:
+        decisions_generated = int(gate.get("evaluations_last_window") or 0)
+    except Exception:
+        decisions_generated = 0
+    if decisions_generated <= 0 and rows:
+        decisions_generated = int(len(rows))
+
+    try:
+        decisions_passed = int(gate.get("decisions_last_window") or 0)
+    except Exception:
+        decisions_passed = 0
+    if decisions_passed <= 0:
+        if allowed_symbols:
+            decisions_passed = int(len(allowed_symbols))
+        elif rows:
+            decisions_passed = int(sum(1 for row in rows.values() if bool((row or {}).get("gate_allowed"))))
+
+    window_60s = 60.0
+    window_15m = 900.0
+    now_epoch = float(time.time())
+    # Use 5-second buckets to keep cache hit-rate high while preserving near-live behavior.
+    now_bucket = int(now_epoch // 5)
+    decisions_path = _desk_log_path("decisions.jsonl")
+    candidates_path = _desk_log_path("candidates.jsonl")
+    decision_events_60s = _iter_recent_events_cached(
+        str(decisions_path),
+        file_sig(decisions_path),
+        now_bucket,
+        window_60s,
+        ("decision_evaluated", "decision_allowed", "decision_blocked"),
+        _FULL_JSONL_TAIL_ROWS,
+    )
+    decision_events_15m = _iter_recent_events_cached(
+        str(decisions_path),
+        file_sig(decisions_path),
+        now_bucket,
+        window_15m,
+        ("decision_blocked",),
+        _FULL_JSONL_TAIL_ROWS,
+    )
+    candidate_events_60s = _iter_recent_events_cached(
+        str(candidates_path),
+        file_sig(candidates_path),
+        now_bucket,
+        window_60s,
+        ("candidate_seen",),
+        _FULL_JSONL_TAIL_ROWS,
+    )
+
+    eval_per_min = int(sum(1 for row in decision_events_60s if str(row.get("event_type") or "") == "decision_evaluated"))
+    allowed_per_min = int(sum(1 for row in decision_events_60s if str(row.get("event_type") or "") == "decision_allowed"))
+    candidates_per_min = int(len(candidate_events_60s))
+
+    blocker_counts: dict[str, int] = {}
+    for row in decision_events_15m:
+        blockers = row.get("blockers")
+        if not isinstance(blockers, list):
+            blockers = []
+        for reason in blockers:
+            text = str(reason or "").strip()
+            if not text:
+                continue
+            blocker_counts[text] = int(blocker_counts.get(text, 0)) + 1
+    top_blockers_15m = sorted(blocker_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+
+    return {
+        "candidates_generated": max(0, candidates_generated),
+        "decisions_generated": max(0, decisions_generated),
+        "decisions_passed": max(0, decisions_passed),
+        "advisory_rows": max(0, advisory_rows),
+        "candidates_per_min": max(0, candidates_per_min),
+        "evaluations_per_min": max(0, eval_per_min),
+        "allowed_per_min": max(0, allowed_per_min),
+        "top_blockers_15m": top_blockers_15m,
+    }
+
+
+def _should_emit_decision_debug_log(last_emit_ts: float, now_ts: float, interval_sec: float = 30.0) -> bool:
+    try:
+        now_val = float(now_ts)
+    except Exception:
+        return False
+    try:
+        last_val = float(last_emit_ts)
+    except Exception:
+        last_val = 0.0
+    try:
+        interval_val = max(1.0, float(interval_sec))
+    except Exception:
+        interval_val = 30.0
+    if last_val <= 0.0:
+        return True
+    return (now_val - last_val) >= interval_val
+
+
+def _log_decision_debug_metrics(metrics: dict, *, interval_sec: float = 30.0) -> None:
+    now_ts = time.time()
+    last_ts = float(st.session_state.get("decision_debug_metrics_last_log_ts", 0.0) or 0.0)
+    if not _should_emit_decision_debug_log(last_ts, now_ts, interval_sec=interval_sec):
+        return
+    payload = {
+        "ts_epoch": float(now_ts),
+        "ts_utc": datetime.now(timezone.utc).isoformat(),
+        "event": "DASHBOARD_DECISION_DEBUG_METRICS",
+        "desk_id": str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT"),
+        "candidates_generated": int(metrics.get("candidates_generated") or 0),
+        "decisions_generated": int(metrics.get("decisions_generated") or 0),
+        "decisions_passed": int(metrics.get("decisions_passed") or 0),
+        "advisory_rows": int(metrics.get("advisory_rows") or 0),
+    }
+    _append_log_line(
+        _desk_log_path("decision_debug_metrics.jsonl"),
+        json.dumps(payload, separators=(",", ":"), sort_keys=True),
+    )
+    st.session_state["decision_debug_metrics_last_log_ts"] = float(now_ts)
+
+
 def _resolve_micro_train_backend(value: str | None) -> str:
     backend = str(value or getattr(cfg, "MICRO_MODEL_TRAIN_BACKEND", "auto") or "auto").strip().lower()
     if backend not in {"auto", "tensorflow", "sklearn"}:
@@ -1595,15 +2674,16 @@ def _micro_model_badge_state(
     micro_state = dict(state or _compute_micro_training_status(work))
     status = str(micro_state.get("status") or "").upper()
     artifact_exists = _micro_model_artifact_exists(work)
-    stale_artifact = bool(artifact_exists and status == MICRO_TRAIN_STATUS_FAILED)
+    readiness = _micro_model_readiness(paths=work, state=micro_state)
+    stale_artifact = bool(artifact_exists and (status == MICRO_TRAIN_STATUS_FAILED or not readiness.get("ready")))
 
     if status == MICRO_TRAIN_STATUS_RUNNING:
         return "Training", stale_artifact
-    if status == MICRO_TRAIN_STATUS_SUCCESS and artifact_exists:
+    if bool(readiness.get("ready")):
         return "Trained", stale_artifact
     if stale_artifact:
         return "Not trained", True
-    return ("Trained" if artifact_exists else "Not trained"), False
+    return "Not trained", False
 
 
 def _cleanup_micro_train_runtime_files(paths: dict[str, Path] | None = None) -> None:
@@ -1653,6 +2733,67 @@ def _last_training_report(log_path: Path) -> dict:
     return {}
 
 
+def _normalize_class_labels(raw_labels) -> list[int]:
+    if not isinstance(raw_labels, (list, tuple, set)):
+        return []
+    labels: set[int] = set()
+    for value in raw_labels:
+        try:
+            labels.add(int(value))
+        except Exception:
+            continue
+    return sorted(labels)
+
+
+def _micro_model_readiness(
+    paths: dict[str, Path] | None = None,
+    state: dict | None = None,
+) -> dict:
+    # Fail-closed readiness: status + artifact + training evidence + class variance.
+    work = dict(paths or _micro_training_paths())
+    micro_state = dict(state or _compute_micro_training_status(work))
+    status = str(micro_state.get("status") or "").upper()
+    artifact_exists = _micro_model_artifact_exists(work)
+    report = _last_training_report(Path(work["log"]))
+    report_status = str(
+        report.get("status")
+        or micro_state.get("last_report_status")
+        or ""
+    ).upper()
+    class_labels = _normalize_class_labels(
+        report.get("class_labels")
+        if isinstance(report, dict)
+        else micro_state.get("class_labels")
+    )
+    if not class_labels:
+        class_labels = _normalize_class_labels(micro_state.get("class_labels"))
+    class_variance_ok = len(class_labels) >= 2
+
+    reason_code = None
+    if status == MICRO_TRAIN_STATUS_RUNNING:
+        reason_code = "TRAINING_RUNNING"
+    elif status != MICRO_TRAIN_STATUS_SUCCESS:
+        reason_code = "STATUS_NOT_SUCCESS"
+    elif not artifact_exists:
+        reason_code = "ARTIFACT_MISSING"
+    elif not report:
+        reason_code = "TRAIN_REPORT_MISSING"
+    elif report_status not in {"TRAINED", "DRY_RUN_OK"}:
+        reason_code = "TRAIN_REPORT_STATUS_INVALID"
+    elif not class_variance_ok:
+        reason_code = "CLASS_VARIANCE_NOT_PROVEN"
+
+    return {
+        "ready": reason_code is None,
+        "reason_code": reason_code,
+        "status": status,
+        "artifact_exists": bool(artifact_exists),
+        "report_status": report_status or None,
+        "class_labels": class_labels,
+        "class_variance_ok": bool(class_variance_ok),
+    }
+
+
 def _compute_micro_training_status(paths: dict[str, Path] | None = None) -> dict:
     work = dict(paths or _micro_training_paths())
     status_path = Path(work["status"])
@@ -1683,6 +2824,9 @@ def _compute_micro_training_status(paths: dict[str, Path] | None = None) -> dict
                 "pid": None,
                 "last_report_status": report_status or None,
                 "last_report_reason": report.get("reason"),
+                "class_labels": report.get("class_labels"),
+                "target_positive_rate": report.get("target_positive_rate"),
+                "backend_used": report.get("backend_used"),
                 "log_path": str(log_path),
                 "model_artifact_path": str(work["model_artifact"]),
             }
@@ -1702,6 +2846,21 @@ def _compute_micro_training_status(paths: dict[str, Path] | None = None) -> dict
     status_payload["log_path"] = str(log_path)
     status_payload["model_artifact_path"] = str(work["model_artifact"])
     status_payload["feature_importance_path"] = str(work["feature_importance"])
+    legacy = _legacy_micro_training_paths()
+    legacy_status_payload = _read_json(Path(legacy["status"]))
+    if legacy_status_payload:
+        canonical_status = str(status_payload.get("status") or "").upper()
+        legacy_status = str(legacy_status_payload.get("status") or "").upper()
+        status_payload["legacy_status_path"] = str(legacy["status"])
+        status_payload["legacy_status"] = legacy_status or None
+        status_payload["legacy_status_conflict"] = bool(
+            canonical_status and legacy_status and canonical_status != legacy_status
+        )
+    readiness = _micro_model_readiness(paths=work, state=status_payload)
+    status_payload["ready"] = bool(readiness.get("ready"))
+    status_payload["ready_reason_code"] = readiness.get("reason_code")
+    status_payload["class_labels"] = readiness.get("class_labels", status_payload.get("class_labels"))
+    status_payload["class_variance_ok"] = bool(readiness.get("class_variance_ok"))
     status_payload["log_tail"] = _tail_log_lines(log_path, limit=50)
     if str(status_payload.get("status") or "").upper() not in {
         MICRO_TRAIN_STATUS_RUNNING,
@@ -1795,7 +2954,7 @@ def start_micro_training_subprocess(
                 "model_artifact_path": str(work["model_artifact"]),
             },
         )
-        return False, "Unable to start micro model training. Check logs/train_micro.log."
+        return False, f"Unable to start micro model training. Check {log_path}."
     finally:
         try:
             if log_handle is not None:
@@ -1823,9 +2982,7 @@ def cancel_micro_training(paths: dict[str, Path] | None = None) -> tuple[bool, s
         cancelled = False
 
     if cancelled:
-        deadline = time.time() + 2.0
-        while _is_pid_alive(pid) and time.time() < deadline:
-            time.sleep(0.1)
+        # Avoid UI-thread sleeps; issue immediate hard-stop escalation if process remains alive.
         if _is_pid_alive(pid):
             try:
                 if hasattr(os, "killpg"):
@@ -1849,7 +3006,7 @@ def cancel_micro_training(paths: dict[str, Path] | None = None) -> tuple[bool, s
         },
     )
     if not cancelled:
-        return False, f"Unable to cancel training process pid={pid}. See logs/train_micro.log."
+        return False, f"Unable to cancel training process pid={pid}. See {work['log']}."
     return True, f"Cancelled micro model training (pid={pid})."
 
 
@@ -1857,6 +3014,8 @@ def cancel_micro_training(paths: dict[str, Path] | None = None) -> tuple[bool, s
 def get_underlying_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
     columns = ["time_ms", "open", "high", "low", "close", "volume"]
     empty = pd.DataFrame(columns=columns)
+    if _history_fetch_suppressed("underlying_candles"):
+        return empty
     try:
         start = _coerce_epoch_ms(start_ms)
         end = _coerce_epoch_ms(end_ms)
@@ -1876,6 +3035,7 @@ def get_underlying_candles(symbol: str, interval: str, start_ms: int, end_ms: in
         return out[columns]
     except Exception as exc:
         logger.warning("chart_view_get_candles_failed symbol=%s err=%s", symbol, exc)
+        _record_history_fetch_failure("underlying_candles", exc)
         return empty
 
 
@@ -1888,6 +3048,8 @@ def _get_option_candles_or_snapshots_cached(
 ) -> pd.DataFrame:
     columns = ["time_ms", "ltp", "bid", "ask", "mark_price", "quote_age_sec", "spread_pct", "source"]
     empty = pd.DataFrame(columns=columns)
+    if _history_fetch_suppressed("option_candles"):
+        return empty
     try:
         trade = json.loads(trade_payload_json or "{}")
         out = market_data_get_option_candles_or_snapshots(
@@ -1904,6 +3066,7 @@ def _get_option_candles_or_snapshots_cached(
         return out[columns]
     except Exception as exc:
         logger.warning("chart_view_get_option_series_failed err=%s", exc)
+        _record_history_fetch_failure("option_candles", exc)
         return empty
 
 
@@ -2610,7 +3773,8 @@ def _render_chart_view_panel(trade_universe_df: pd.DataFrame):
             return
         trade = selected_row.iloc[0].to_dict()
 
-        show_option_line = st.checkbox("Show option line", value=True, key="chart_show_option_line")
+        load_chart_history = st.checkbox("Load chart history", value=False, key="chart_load_history")
+        show_option_line = st.checkbox("Show option line", value=False, key="chart_show_option_line")
         option_mode = st.selectbox("Option line mode", ["mark", "mid", "ltp"], index=0, key="chart_option_line_mode")
         show_quote_diagnostics = st.checkbox("Show quote diagnostics", value=True, key="chart_show_quote_diagnostics")
 
@@ -2631,6 +3795,10 @@ def _render_chart_view_panel(trade_universe_df: pd.DataFrame):
         start_ms = max(0, trade_ts_ms - (lookback_hours * 60 * 60 * 1000))
         end_ms = max(now_ms, trade_ts_ms + (forward_hours * 60 * 60 * 1000))
         chart_interval = _auto_interval_for_range(chart_interval, start_ms, end_ms, max_points=1500)
+
+        if not load_chart_history:
+            st.info("Chart history is disabled until requested. Enable 'Load chart history' to fetch underlying and option history.")
+            return
 
         candles_df = get_underlying_candles(underlying, chart_interval, start_ms, end_ms)
         if candles_df is None or candles_df.empty:
@@ -2684,8 +3852,6 @@ def _render_chart_view_panel(trade_universe_df: pd.DataFrame):
         st.info("Chart view is temporarily unavailable. Tables continue to render.")
 
 
-rows = _load_trade_log_rows(LOG_PATH)
-df = pd.DataFrame(rows)
 updates_candidates = [
     logs_dir() / "trade_updates.jsonl",
     data_root() / "trade_updates.json",
@@ -2767,28 +3933,9 @@ def _ensure_trade_df_schema(df_in: pd.DataFrame) -> pd.DataFrame:
     return df_out
 
 
-# Keep dashboard fully accessible even with empty trade history (offhours/fresh install).
-df = _ensure_trade_df_schema(df)
-if df.empty:
-    st.info("No trades logged yet. Dashboard is active in empty-history mode.")
-    try:
-        auth_guard = load_auth_runtime_guard()
-        if bool((auth_guard or {}).get("degrade_to_planning")):
-            st.warning(
-                "OFFHOURS MODE (degraded): pre-open auth is unhealthy; "
-                "planning views remain available while execution is gated."
-            )
-    except Exception:
-        pass
-
-df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-df["date"] = df["timestamp"].dt.date
-entry = pd.to_numeric(df["entry"], errors="coerce")
-exit_px = pd.to_numeric(df["exit_price"], errors="coerce")
-qty = pd.to_numeric(df["qty"], errors="coerce").fillna(0.0)
-df["pnl"] = (exit_px.fillna(entry) - entry) * qty
-df.loc[df["side"].astype(str).str.upper() == "SELL", "pnl"] *= -1
-dfm = df.copy()
+# Keep dashboard importable even before nav-specific trade logs are loaded.
+rows: list[dict] = []
+df = _ensure_trade_df_schema(pd.DataFrame())
 
 def _load_prefs():
     prefs_path = _log_path("ui_prefs.json")
@@ -2910,6 +4057,34 @@ def _on_nav_change():
     _set_query_tab(st.session_state["nav_choice"])
 
 nav = app_shell("Axiom Quant Console", nav_items, st.session_state["nav_choice"], on_change=_on_nav_change)
+if str(nav or "") == "Home":
+    rows = []
+    df = _ensure_trade_df_schema(pd.DataFrame())
+    logger.info("dashboard_data_load label=trade_log_rows_skipped_home dt_ms=0.00")
+else:
+    trade_log_tail_rows = _DEFAULT_JSONL_TAIL_ROWS if str(nav or "") == "Home" else _FULL_JSONL_TAIL_ROWS
+    rows = _perf_timed_load("trade_log_rows", _load_trade_log_rows, LOG_PATH, max_rows=trade_log_tail_rows)
+    df = _perf_timed_load("trade_log_dataframe", pd.DataFrame, rows)
+    df = _ensure_trade_df_schema(df)
+if df.empty:
+    st.info("No trades logged yet. Dashboard is active in empty-history mode.")
+    try:
+        auth_guard = load_auth_runtime_guard()
+        if bool((auth_guard or {}).get("degrade_to_planning")):
+            st.warning(
+                "OFFHOURS MODE (degraded): pre-open auth is unhealthy; "
+                "planning views remain available while execution is gated."
+            )
+    except Exception:
+        pass
+df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+df["date"] = df["timestamp"].dt.date
+entry = pd.to_numeric(df["entry"], errors="coerce")
+exit_px = pd.to_numeric(df["exit_price"], errors="coerce")
+qty = pd.to_numeric(df["qty"], errors="coerce").fillna(0.0)
+df["pnl"] = (exit_px.fillna(entry) - entry) * qty
+df.loc[df["side"].astype(str).str.upper() == "SELL", "pnl"] *= -1
+dfm = df.copy()
 default_ui_mode = _normalize_ui_mode(prefs.get("ui_mode", "Trader"))
 if "ui_mode_choice" not in st.session_state:
     st.session_state["ui_mode_choice"] = default_ui_mode
@@ -3041,7 +4216,7 @@ def _compute_readiness_snapshot():
             auth_health = {}
         try:
             from core.freshness_sla import get_freshness_status
-            feed_freshness = get_freshness_status(force=False)
+            feed_freshness = get_freshness_status(force=True)
         except Exception:
             feed_freshness = {}
         try:
@@ -3052,6 +4227,12 @@ def _compute_readiness_snapshot():
             feed_debug = get_feed_debug()
         except Exception:
             feed_debug = {}
+        runtime_health = _load_runtime_health_latest()
+        feed_state_machine, feed_debug = _bridge_feed_state_from_runtime_health(
+            feed_state_machine,
+            feed_debug,
+            runtime_health,
+        )
         snapshot.update(
             {
                 "state": state,
@@ -3069,11 +4250,49 @@ def _compute_readiness_snapshot():
                 "latest_decision_row": latest_decision_row,
                 "auth_health": auth_health,
                 "kite": checks.get("kite_auth") or {},
+                "runtime_health": runtime_health,
             }
         )
     except Exception as e:
         snapshot["error"] = str(e)
     return snapshot
+
+
+def _get_readiness_snapshot() -> dict:
+    """
+    Reuse readiness snapshot for a short window to avoid repeated heavy checks
+    on quick reruns caused by UI interactions.
+    """
+    try:
+        ttl_sec = max(1.0, float(getattr(cfg, "UI_READINESS_CACHE_SEC", 2.0)))
+    except Exception:
+        ttl_sec = 2.0
+    now_epoch = float(time.time())
+    cached = st.session_state.get("_readiness_snapshot_cache")
+    if isinstance(cached, dict):
+        cached_ts = float(cached.get("ts_epoch") or 0.0)
+        payload = cached.get("payload")
+        if cached_ts > 0.0 and (now_epoch - cached_ts) < ttl_sec and isinstance(payload, dict):
+            return payload
+    payload = _compute_readiness_snapshot()
+    st.session_state["_readiness_snapshot_cache"] = {
+        "ts_epoch": now_epoch,
+        "payload": payload,
+    }
+    return payload
+
+
+def _market_phase_ist() -> str:
+    try:
+        return get_market_phase_ist(
+            now=now_local(),
+            premarket_start=parse_hhmm_time(getattr(cfg, "PREMARKET_START_IST", "09:00"), default=parse_hhmm_time("09:00")),
+            open_time=parse_hhmm_time(getattr(cfg, "MARKET_OPEN_IST", "09:15")),
+            close_time=parse_hhmm_time(getattr(cfg, "MARKET_CLOSE_IST", "15:30")),
+            segment=str(getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")),
+        )
+    except Exception:
+        return "CLOSED"
 
 
 def _feed_status_summary(feed: dict, feed_debug: dict):
@@ -3086,6 +4305,9 @@ def _feed_status_summary(feed: dict, feed_debug: dict):
     reasons = list(feed.get("reasons") or [])
 
     if sla_state == "MARKET_CLOSED" or not market_open:
+        phase = _market_phase_ist()
+        if phase == "PREMARKET":
+            return "IDLE", "premarket", ltp_age, depth_age
         return "IDLE", "market closed", ltp_age, depth_age
     if allow_stale or sla_state in ("OFFHOURS", "PLANNING", "IDLE"):
         reason = reasons[0] if reasons else ("planning mode" if allow_stale else "idle")
@@ -3114,12 +4336,15 @@ def _compute_trade_refresh_gate(snapshot: dict) -> tuple[bool, str, str]:
         feed_state = feed_state_sm
     else:
         feed_state, _reason, _ltp_age, _depth_age = _feed_status_summary(feed, feed_debug)
-    market_open = bool(feed.get("market_open", False))
+    try:
+        market_open = bool(canonical_market_open())
+    except Exception:
+        market_open = bool(feed.get("market_open", False))
     state = str(feed.get("state") or "").upper()
     market_status = "OPEN" if market_open and state != "MARKET_CLOSED" else "CLOSED"
     feed_status = "ACTIVE" if feed_state in ("OK", "DEGRADED") else "INACTIVE"
     should_refresh = should_trade_autorefresh(
-        auto_refresh_enabled=bool(st.session_state.get("auto_refresh_enabled", True)),
+        auto_refresh_enabled=bool(st.session_state.get("auto_refresh_enabled", False)),
         refresh_mode=str(st.session_state.get("trade_refresh_mode") or REFRESH_MODE_MARKET_OPEN_ONLY),
         feed_status=feed_status,
         market_status=market_status,
@@ -3130,6 +4355,9 @@ def _compute_trade_refresh_gate(snapshot: dict) -> tuple[bool, str, str]:
 def _render_status_row(snapshot: dict):
     try:
         state = str(snapshot.get("state") or "UNKNOWN")
+        phase = _market_phase_ist()
+        if state == "MARKET_CLOSED" and phase == "PREMARKET":
+            state = "PREMARKET"
         can_trade = snapshot.get("can_trade")
         feed = snapshot.get("feed_freshness") or {}
         feed_sm = snapshot.get("feed_state_machine") or {}
@@ -3144,6 +4372,9 @@ def _render_status_row(snapshot: dict):
             depth_age = None
         else:
             feed_state, feed_reason, ltp_age, depth_age = _feed_status_summary(feed, feed_debug)
+        if phase == "PREMARKET" and feed_state == "DOWN" and "no_ws" in str(feed_reason).lower():
+            feed_state = "IDLE"
+            feed_reason = "premarket"
         sla_text = "LTP N/A | Depth N/A"
         if isinstance(ltp_age, (int, float)) or isinstance(depth_age, (int, float)):
             ltp_txt = f"{ltp_age:.1f}s" if isinstance(ltp_age, (int, float)) else "N/A"
@@ -3156,7 +4387,15 @@ def _render_status_row(snapshot: dict):
         cols = st.columns(7)
         cols[0].caption(("✅" if can_trade else "❌") + f" Readiness: {state}")
         feed_icon = {"OK": "✅", "DEGRADED": "🟠", "DOWN": "❌", "STALE": "❌", "IDLE": "🟡"}.get(feed_state, "⬜")
-        cols[1].caption(f"{feed_icon} Feed: {feed_state} ({feed_reason})")
+        ws_src = str(feed_debug.get("ws_connected_source") or "unknown")
+        ws_val = feed_debug.get("ws_connected")
+        subs_count = feed_debug.get("subscribed_tokens_count")
+        intended_count = feed_debug.get("intended_tokens_count")
+        last_error = feed_debug.get("feed_runtime_last_error")
+        ws_diag = f" | ws={ws_val} ({ws_src}) | subs={subs_count}/{intended_count}"
+        if last_error:
+            ws_diag += f" | err={str(last_error)[:60]}"
+        cols[1].caption(f"{feed_icon} Feed: {feed_state} ({feed_reason}){ws_diag}")
         cols[2].caption(("✅" if auth_ok else "❌") + " Kite auth")
         cols[3].caption(("✅" if risk_ok else "⬜") + " Risk monitor")
         cols[4].caption(("✅" if review_ok else "⬜") + " Review queue")
@@ -3166,51 +4405,125 @@ def _render_status_row(snapshot: dict):
         pass
 
 
+def _feed_banner_text(feed_state: str, feed_reason: str, strict_live: bool) -> str | None:
+    state = str(feed_state or "").upper()
+    reason = str(feed_reason or "n/a")
+    if state == "DEGRADED":
+        msg = "LIVE entries blocked; advisory only." if strict_live else "Monitoring mode; advisory/training flow continues."
+        return f"Feed DEGRADED: {reason}. {msg}"
+    if state == "DOWN":
+        msg = "LIVE entries blocked and reconnect requested." if strict_live else "Reconnect requested; live gating not enforced in this mode."
+        return f"Feed DOWN: {reason}. {msg}"
+    return None
+
+
 def _render_feed_health_banner(snapshot: dict):
     try:
         feed_sm = snapshot.get("feed_state_machine") or {}
         feed_state = str(feed_sm.get("state") or "").upper()
         feed_reason = str(feed_sm.get("reason") or "n/a")
-        if feed_state == "DEGRADED":
+        feed_debug = snapshot.get("feed_debug") or {}
+        feed_freshness = snapshot.get("feed_freshness") or {}
+        runtime_health = snapshot.get("runtime_health") or {}
+        runtime_feed = runtime_health.get("feed") if isinstance(runtime_health.get("feed"), dict) else {}
+        runtime_state = str(
+            runtime_feed.get("runtime_state")
+            or feed_debug.get("feed_runtime_state")
+            or ""
+        ).strip().upper()
+        runtime_error = str(
+            runtime_feed.get("last_error")
+            or feed_debug.get("feed_runtime_last_error")
+            or ""
+        ).strip()
+        allow_stale_quotes = bool(runtime_feed.get("allow_stale_quotes", feed_freshness.get("allow_stale_quotes", False)))
+        ltp_required_raw = runtime_feed.get("ltp_required")
+        if isinstance(ltp_required_raw, bool):
+            ltp_required = ltp_required_raw
+        else:
+            ltp_required = bool(feed_freshness.get("market_open", False) and (not allow_stale_quotes))
+        mode = str(runtime_health.get("mode") or getattr(cfg, "EXECUTION_MODE", "PAPER") or "PAPER").upper()
+        strict_live = bool(mode == "LIVE" and ltp_required and (not allow_stale_quotes))
+        phase = _market_phase_ist()
+        if phase == "PREMARKET" and feed_state == "DOWN" and "no_ws" in feed_reason.lower():
             st.markdown(
-                f"<div class='banner warn'>Feed DEGRADED: {feed_reason}. LIVE entries blocked; advisory only.</div>",
+                "<div class='banner warn'>Pre-market session (09:00-09:15 IST): waiting for live WS ticks. "
+                "Trade suggestions/execution gates activate from 09:15 IST.</div>",
                 unsafe_allow_html=True,
             )
-        elif feed_state == "DOWN":
-            st.markdown(
-                f"<div class='banner error'>Feed DOWN: {feed_reason}. LIVE entries blocked and reconnect requested.</div>",
-                unsafe_allow_html=True,
+            return
+        banner_text = _feed_banner_text(feed_state, feed_reason, strict_live=strict_live)
+        if banner_text:
+            css_class = "warn" if feed_state == "DEGRADED" else "error"
+            st.markdown(f"<div class='banner {css_class}'>{banner_text}</div>", unsafe_allow_html=True)
+        if runtime_state in {"IMPORT_MISSING", "AUTH_BLOCKED", "SUBSCRIBE_FAILED"}:
+            st.error(
+                f"WebSocket runtime state={runtime_state}. "
+                f"last_error={runtime_error or 'unknown'}"
             )
+        try:
+            ws_connected = feed_debug.get("ws_connected")
+            intended = feed_debug.get("intended_tokens_count")
+            subscribed = feed_debug.get("subscribed_tokens_count")
+            subscribed_by_symbol = feed_debug.get("subscribed_tokens_count_by_symbol") or {}
+            missing_option_tokens = feed_debug.get("missing_option_tokens_count")
+            ltp_age = feed_debug.get("last_tick_age_sec")
+            depth_age = feed_debug.get("last_depth_age_sec")
+            last_error = feed_debug.get("feed_runtime_last_error")
+            st.caption(
+                "Feed runtime: "
+                f"ws_connected={ws_connected} "
+                f"tokens={subscribed}/{intended} "
+                f"missing_option_tokens={missing_option_tokens} "
+                f"last_tick_age={ltp_age} "
+                f"last_depth_age={depth_age} "
+                f"last_error={last_error or 'none'}"
+            )
+            if subscribed_by_symbol:
+                st.caption(f"Token coverage by symbol: {subscribed_by_symbol}")
+        except Exception:
+            pass
     except Exception:
         pass
 
-readiness_snapshot = _compute_readiness_snapshot()
+readiness_snapshot = _perf_timed_load("readiness_snapshot", _get_readiness_snapshot)
 st.session_state["readiness_snapshot"] = readiness_snapshot
 _render_status_row(readiness_snapshot)
 _render_feed_health_banner(readiness_snapshot)
 with st.expander("Feed Debug", expanded=False):
     try:
+        rh_payload = readiness_snapshot.get("runtime_health") or {}
+        rh_path = str(rh_payload.get("snapshot_path") or _log_path("runtime_health_latest.json"))
+        rh_age = rh_payload.get("snapshot_age_sec")
+        feed_debug_payload = readiness_snapshot.get("feed_debug") or {}
+        freshness_payload = _load_freshness_latest()
         st.json(
             {
                 "state_machine": readiness_snapshot.get("feed_state_machine") or {},
-                "legacy_debug": readiness_snapshot.get("feed_debug") or {},
+                "legacy_debug": feed_debug_payload,
+                "cross_process_feed": {
+                    "ws_connected": feed_debug_payload.get("ws_connected"),
+                    "ws_connected_source": feed_debug_payload.get("ws_connected_source"),
+                    "subscribed_tokens_count": feed_debug_payload.get("subscribed_tokens_count"),
+                    "subscribed_tokens_count_by_symbol": feed_debug_payload.get("subscribed_tokens_count_by_symbol"),
+                    "missing_option_tokens_count": feed_debug_payload.get("missing_option_tokens_count"),
+                    "missing_option_tokens_count_by_symbol": feed_debug_payload.get("missing_option_tokens_count_by_symbol"),
+                    "distinct_tokens_recent": feed_debug_payload.get("distinct_tokens_recent"),
+                    "feed_runtime_db_age_sec": feed_debug_payload.get("feed_runtime_db_age_sec"),
+                },
+                "runtime_health_snapshot": {
+                    "path": rh_path,
+                    "snapshot_age_sec": rh_age,
+                    "snapshot_ts_epoch": rh_payload.get("snapshot_ts_epoch", rh_payload.get("ts_epoch")),
+                },
+                "freshness_latest": freshness_payload,
             }
         )
     except Exception:
         st.caption("Feed debug unavailable.")
 
 def _is_market_hours():
-    try:
-        tz = ZoneInfo("Asia/Kolkata")
-        now = datetime.now(tz).time()
-        # NSE cash hours 09:15–15:30 IST
-        start = datetime.now(tz).replace(hour=9, minute=15, second=0, microsecond=0).time()
-        end = datetime.now(tz).replace(hour=15, minute=30, second=0, microsecond=0).time()
-        return start <= now <= end
-    except Exception:
-        # fallback to local time
-        now = datetime.now().time()
-        return now.hour >= 9 and now.hour < 16
+    return _market_phase_ist() == "OPEN"
 
 def _should_show_quote_errors(readiness_state: str) -> bool:
     # Show quote errors only during market-open states, or if user explicitly tested.
@@ -3264,6 +4577,50 @@ def _ml_label_count():
             count += 1
     return count
 
+
+def _suggestion_reliability_snapshot() -> dict:
+    try:
+        from config import config as cfg  # local import to avoid import-order side effects
+
+        latest_path = Path(
+            str(
+                getattr(
+                    cfg,
+                    "SUGGESTION_RELIABILITY_LATEST_PATH",
+                    str(_log_path("suggestion_reliability_latest.json")),
+                )
+            )
+        )
+    except Exception:
+        latest_path = _log_path("suggestion_reliability_latest.json")
+
+    payload = _read_json(latest_path)
+    status = str(payload.get("status") or "UNKNOWN").upper()
+    try:
+        allowed = int(payload.get("allowed_count") or 0)
+    except Exception:
+        allowed = 0
+    try:
+        candidates = int(payload.get("candidate_count") or 0)
+    except Exception:
+        candidates = 0
+    try:
+        min_allowed = int(payload.get("min_allowed") or 20)
+    except Exception:
+        min_allowed = 20
+    return {
+        "path": str(latest_path),
+        "exists": bool(latest_path.exists()),
+        "status": status,
+        "allowed_count": allowed,
+        "candidate_count": candidates,
+        "min_allowed": max(1, min_allowed),
+        "mode": str(payload.get("mode") or ""),
+        "window_sec": payload.get("window_sec"),
+        "reason_codes": list(payload.get("reason_codes") or []),
+    }
+
+
 def _render_confidence_reliability():
     try:
         from config import config as cfg
@@ -3271,74 +4628,99 @@ def _render_confidence_reliability():
     except Exception:
         needed = 200
     labeled = _ml_label_count()
-    ratio = min(1.0, labeled / max(1, needed))
-    status = "HIGH" if labeled >= needed else "LOW"
-    color = "#23c55e" if labeled >= needed else "#f59e0b"
-    st.markdown(
-        f"""<div style='display:flex;align-items:center;gap:10px;'>
-        <div style='font-size:0.95rem;color:#a3b3c5;'>Confidence Reliability</div>
-        <div style='padding:4px 10px;border-radius:999px;background:{color};color:#0b0f14;font-weight:700;font-size:0.85rem;'>{status}</div>
-        <div style='color:#a3b3c5;font-size:0.85rem;'>{labeled}/{needed} labeled</div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-    st.progress(ratio)
+    label_ratio = min(1.0, labeled / max(1, needed))
+    label_status = "READY" if labeled >= needed else "LOW_SAMPLE"
+    label_color = "#23c55e" if labeled >= needed else "#f59e0b"
+
+    reliability = _suggestion_reliability_snapshot()
+    allowed = int(reliability.get("allowed_count") or 0)
+    candidates = int(reliability.get("candidate_count") or 0)
+    min_allowed = int(reliability.get("min_allowed") or 20)
+    sample_ratio = min(1.0, allowed / max(1, min_allowed))
+    sample_status = "READY" if allowed >= min_allowed else "LOW_SAMPLE"
+    sample_color = "#23c55e" if allowed >= min_allowed else "#f59e0b"
+    rel_status = str(reliability.get("status") or "UNKNOWN")
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown(
+            f"""<div style='display:flex;align-items:center;gap:10px;'>
+            <div style='font-size:0.95rem;color:#a3b3c5;'>ML Label Coverage</div>
+            <div style='padding:4px 10px;border-radius:999px;background:{label_color};color:#0b0f14;font-weight:700;font-size:0.85rem;'>{label_status}</div>
+            <div style='color:#a3b3c5;font-size:0.85rem;'>{labeled}/{needed} labeled</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        st.progress(label_ratio)
+    with right:
+        st.markdown(
+            f"""<div style='display:flex;align-items:center;gap:10px;'>
+            <div style='font-size:0.95rem;color:#a3b3c5;'>Suggestion Reliability Sample</div>
+            <div style='padding:4px 10px;border-radius:999px;background:{sample_color};color:#0b0f14;font-weight:700;font-size:0.85rem;'>{sample_status}</div>
+            <div style='color:#a3b3c5;font-size:0.85rem;'>{allowed}/{min_allowed} allowed ({candidates} candidates)</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        st.progress(sample_ratio)
+        st.caption(f"Latest status: {rel_status}")
+        reasons = list(reliability.get("reason_codes") or [])
+        if reasons:
+            st.caption(f"Reason: {', '.join(str(x) for x in reasons)}")
 
 def _render_market_snapshot():
     try:
-        from core.kite_client import kite_client
         from config import config as cfg
-        from core.market_data import fetch_live_market_data
     except Exception as e:
         st.error(f"Market data error: {e}")
         return
+    snapshot_vm = _perf_timed_load("market_snapshot_artifact", get_market_snapshot_view_model)
+    snapshot_state = str(snapshot_vm.get("state") or "invalid")
+    snapshot_age = snapshot_vm.get("age_sec")
+    snapshot_warnings = list(snapshot_vm.get("warnings") or [])
+    symbols_payload = dict(snapshot_vm.get("symbols") or {})
+    market_mode = str(snapshot_vm.get("market_mode") or "UNKNOWN")
+    market_open = bool(snapshot_vm.get("market_open"))
     cols = st.columns(3)
     symbols = {
         "NIFTY 50": ("NIFTY", cfg.PREMARKET_INDICES_LTP.get("NIFTY", "NSE:NIFTY 50")),
         "BANKNIFTY": ("BANKNIFTY", cfg.PREMARKET_INDICES_LTP.get("BANKNIFTY", "NSE:BANKNIFTY")),
         "SENSEX": ("SENSEX", "BSE:SENSEX"),
     }
-    try:
-        q = kite_client.quote([v[1] for v in symbols.values()])
-    except Exception as e:
-        q = {}
-        st.error(f"Market data error: {e}")
-
-    # Regime banner + day type map (once)
-    day_map = {}
-    try:
-        md = fetch_live_market_data()
-        reg_map = {
-            m.get("symbol"): {
-                "regime": m.get("regime_day") or m.get("regime") or "UNKNOWN",
-                "confidence": m.get("regime_confidence"),
-                "reasons": m.get("regime_reasons") or [],
-            }
-            for m in md
-            if m.get("instrument") == "OPT"
+    reg_map = {
+        symbol: {
+            "regime": ((payload.get("regime") or {}).get("trend")) or "UNKNOWN",
+            "confidence": ((payload.get("regime") or {}).get("confidence")),
+            "volatility_state": ((payload.get("regime") or {}).get("volatility_state")),
         }
-        if reg_map:
-            lines = []
-            for sym, info in reg_map.items():
-                conf_txt = "n/a"
-                try:
-                    if info.get("confidence") is not None:
-                        conf_txt = f"{float(info.get('confidence')):.2f}"
-                except Exception:
-                    conf_txt = "n/a"
-                lines.append(f"{sym}: {info.get('regime')} (conf={conf_txt})")
-            st.caption("Model regime: " + " | ".join(lines))
-        day_map = {m.get("symbol"): (m.get("day_type"), m.get("day_confidence"), m.get("day_conf_history", [])) for m in md if m.get("instrument") == "OPT"}
-        if day_map:
+        for symbol, payload in symbols_payload.items()
+        if isinstance(payload, dict)
+    }
+    if reg_map:
+        lines = []
+        for sym, info in reg_map.items():
+            conf_txt = "n/a"
             try:
-                conf_min = float(getattr(cfg, "DAYTYPE_CONF_SWITCH_MIN", 0.6))
-                low = [k for k, v in day_map.items() if (v[1] is not None and v[1] < conf_min)]
-                if low:
-                    st.caption(f"Day-type confidence below threshold for: {', '.join(low)}")
+                if info.get("confidence") is not None:
+                    conf_txt = f"{float(info.get('confidence')):.2f}"
             except Exception:
-                pass
-    except Exception:
-        day_map = {}
+                conf_txt = "n/a"
+            lines.append(f"{sym}: {info.get('regime')} (conf={conf_txt})")
+        st.caption("Model regime: " + " | ".join(lines))
+
+    if snapshot_state == "missing":
+        st.warning("Market snapshot artifact missing. Dashboard is read-only and will not recompute it.")
+    elif snapshot_state == "invalid":
+        st.error(
+            "Market snapshot artifact invalid. Dashboard is read-only and will not repair it."
+        )
+    elif snapshot_state == "stale":
+        age_txt = f"{float(snapshot_age):.1f}s" if isinstance(snapshot_age, (int, float)) else "n/a"
+        st.warning(f"Market snapshot is stale ({age_txt}). Showing last completed engine snapshot.")
+    else:
+        age_txt = f"{float(snapshot_age):.1f}s" if isinstance(snapshot_age, (int, float)) else "n/a"
+        st.caption(f"Snapshot: {snapshot_state} | Mode {market_mode} | Open {market_open} | Age {age_txt}")
+    if snapshot_warnings:
+        st.caption("Snapshot warnings: " + " | ".join(str(item) for item in snapshot_warnings[:6]))
 
     # Feed freshness badge (canonical SLA snapshot)
     try:
@@ -3352,69 +4734,31 @@ def _render_market_snapshot():
     except Exception:
         pass
 
-    # Per-symbol tick health is intentionally suppressed to avoid non-canonical SLA logic.
-
-    if _is_ops_research_mode():
-        # Restart tick feed button
-        try:
-            import subprocess
-
-            if st.button("Restart Tick Feed", key="restart_tick_feed"):
-                log_path = _log_path("tick_feed_restart.log")
-                log_path.parent.mkdir(exist_ok=True)
-                with log_path.open("a") as f:
-                    subprocess.Popen([sys.executable, "scripts/start_depth_ws.py"], stdout=f, stderr=f, start_new_session=True)
-                st.success("Tick feed restart triggered (background).")
-        except Exception as e:
-            st.warning(f"Tick feed restart failed: {e}")
-
-        # ORB confirmation panel
-        try:
-            section_header("ORB Confirmation")
-            if day_map:
-                orb_cols = st.columns(len(day_map))
-                for i, sym in enumerate(["NIFTY", "BANKNIFTY", "SENSEX"]):
-                    if sym not in day_map:
-                        continue
-                    md_sym = next((m for m in md if m.get("symbol") == sym), {})
-                    orb_bias = md_sym.get("orb_bias", "NEUTRAL")
-                    orb_min = md_sym.get("orb_lock_min", 15)
-                    mins = md_sym.get("minutes_since_open", 0)
-                    orb_cols[i].markdown(f"**{sym}**")
-                    orb_cols[i].write(f"ORB Bias: {orb_bias}")
-                    orb_cols[i].caption(f"Lock at {orb_min} min | Now {mins} min")
-        except Exception:
-            pass
-
-        # Risk overlay panel
-        try:
-            section_header("Risk Overlay")
-            if day_map:
-                risk_cols = st.columns(len(day_map))
-                for i, sym in enumerate(["NIFTY", "BANKNIFTY", "SENSEX"]):
-                    if sym not in day_map:
-                        continue
-                    dtype, conf, _ = day_map[sym]
-                    mult = getattr(cfg, "DAYTYPE_RISK_MULT", {}).get(dtype, 1.0)
-                    risk_cols[i].markdown(f"**{sym}**")
-                    risk_cols[i].write(f"Day Type: {dtype}")
-                    risk_cols[i].write(f"Risk Multiplier: {mult:.2f}x")
-        except Exception:
-            pass
+    if not symbols_payload:
+        st.caption("Market snapshot data unavailable from prebuilt artifacts.")
 
     for i, (label, (sym_key, sym)) in enumerate(symbols.items()):
+        del sym
+        symbol_payload = symbols_payload.get(sym_key) if isinstance(symbols_payload.get(sym_key), dict) else {}
+        ohlc = symbol_payload.get("ohlc") if isinstance(symbol_payload.get("ohlc"), dict) else {}
+        regime = symbol_payload.get("regime") if isinstance(symbol_payload.get("regime"), dict) else {}
+        feed_health = symbol_payload.get("feed_health") if isinstance(symbol_payload.get("feed_health"), dict) else {}
+        option_chain_summary = (
+            symbol_payload.get("option_chain_summary")
+            if isinstance(symbol_payload.get("option_chain_summary"), dict)
+            else {}
+        )
         price = None
         change = None
         pct = None
-        if q and sym in q:
-            price = q[sym].get("last_price")
-            try:
-                prev_close = q[sym].get("ohlc", {}).get("close")
-                if isinstance(prev_close, (int, float)) and isinstance(price, (int, float)):
-                    change = price - prev_close
-                    pct = (change / prev_close) * 100 if prev_close else None
-            except Exception:
-                pass
+        try:
+            price = symbol_payload.get("ltp", symbol_payload.get("spot"))
+            prev_close = ohlc.get("close")
+            if isinstance(prev_close, (int, float)) and isinstance(price, (int, float)):
+                change = float(price) - float(prev_close)
+                pct = (change / float(prev_close)) * 100.0 if float(prev_close) else None
+        except Exception:
+            price = None
         delta = None
         if isinstance(change, (int, float)) and isinstance(pct, (int, float)):
             delta = f"{change:+.2f} ({pct:+.2f}%)"
@@ -3422,38 +4766,41 @@ def _render_market_snapshot():
             st.markdown("<div class='market-card'>", unsafe_allow_html=True)
             st.markdown(f"<div class='market-card-title'>{label}</div>", unsafe_allow_html=True)
             st.metric(label, f"{price:.2f}" if isinstance(price, (int, float)) else "N/A", delta)
-            reg_info = reg_map.get(sym_key, {}) if isinstance(reg_map, dict) else {}
-            if sym_key in day_map or reg_info:
-                dtype, conf, hist = day_map.get(sym_key, (None, None, []))
-                regime = reg_info.get("regime") if isinstance(reg_info, dict) else None
-                if regime:
-                    st.markdown(
-                        f"<div class='market-card-sub'>Model regime: {regime}</div>",
-                        unsafe_allow_html=True,
-                    )
-                if dtype:
-                    st.markdown(
-                        f"<div class='market-card-sub'>Day-type events: {dtype} (conf {fmt_conf(conf)})</div>",
-                        unsafe_allow_html=True,
-                    )
-                if regime and dtype and str(regime).upper() != str(dtype).upper():
-                    st.caption("⚠️ Disagreement between model regime and day-type")
-                st.caption("Day‑Type Confidence (per symbol)")
-                if not hist:
-                    hist = _get_daytype_history(sym_key)
-                if not hist and conf is not None:
-                    hist = [conf]
-                if hist and _should_plot_series(hist):
-                    st.line_chart(hist)
+            if regime.get("trend"):
+                st.markdown(
+                    f"<div class='market-card-sub'>Model regime: {regime.get('trend')}</div>",
+                    unsafe_allow_html=True,
+                )
+            if regime.get("volatility_state"):
+                st.markdown(
+                    (
+                        "<div class='market-card-sub'>Volatility state: "
+                        f"{regime.get('volatility_state')} (conf {fmt_conf(regime.get('confidence'))})"
+                        "</div>"
+                    ),
+                    unsafe_allow_html=True,
+                )
+            if option_chain_summary.get("chain_quality"):
+                st.caption(f"Chain quality: {option_chain_summary.get('chain_quality')}")
+            if option_chain_summary.get("atm_strike") is not None:
+                st.caption(f"ATM strike: {option_chain_summary.get('atm_strike')}")
+            if feed_health.get("status"):
+                uq_age = feed_health.get("underlying_quote_age_sec")
+                oq_age = feed_health.get("option_quote_age_sec")
+                uq_txt = f"{float(uq_age):.1f}s" if isinstance(uq_age, (int, float)) else "n/a"
+                oq_txt = f"{float(oq_age):.1f}s" if isinstance(oq_age, (int, float)) else "n/a"
+                st.caption(
+                    f"Feed: {feed_health.get('status')} | Underlying {uq_txt} | Option {oq_txt}"
+                )
             st.markdown("</div>", unsafe_allow_html=True)
 
 if hasattr(st, "fragment"):
     @st.fragment(run_every=5)
     def _market_snapshot_fragment():
-        _render_market_snapshot()
+        _perf_timed_render("market_snapshot_fragment", _render_market_snapshot)
 else:
     def _market_snapshot_fragment():
-        _render_market_snapshot()
+        _perf_timed_render("market_snapshot_fragment", _render_market_snapshot)
 
 def _compute_strategy_stats_from_log(df_in):
     if df_in.empty or "strategy" not in df_in.columns:
@@ -3577,7 +4924,7 @@ def _get_chain_map():
     except Exception:
         pass
     try:
-        md = fetch_live_market_data()
+        md = _fetch_live_market_data_dashboard("chain_map", allow_stale_cache=True)
         chain_map = {m.get("symbol"): m.get("option_chain", []) for m in md if m.get("instrument") == "OPT"}
     except Exception:
         chain_map = {}
@@ -3899,57 +5246,8 @@ def _add_live_pnl_columns(df, meta_map=None):
 
 
 def _add_upstox_links(df):
-    df = ensure_upstox_columns(df)
-    if df is None or df.empty:
-        return df
-    deeplink_enabled = bool(getattr(cfg, "UPSTOX_ENABLE_DEEPLINK", False))
-    for idx, row in df.iterrows():
-        row_dict = row.to_dict()
-        unresolved = not _contract_resolved(row_dict)
-        df.at[idx, "unresolved_contract"] = bool(unresolved)
-        if row_dict.get("instrument") == "OPT":
-            if not row_dict.get("upstox_instrument_key"):
-                try:
-                    row_dict["upstox_instrument_key"] = resolve_upstox_key(row_dict)
-                except Exception:
-                    row_dict["upstox_instrument_key"] = None
-        key = row_dict.get("upstox_instrument_key")
-        query = build_upstox_search_query(row_dict)
-        df.at[idx, "upstox_query"] = query
-        df.at[idx, "upstox_search_url"] = build_upstox_search_url(query) if query else None
-        if key and not unresolved and deeplink_enabled:
-            url = build_upstox_contract_url(key)
-            df.at[idx, "upstox_contract_url"] = url
-        else:
-            df.at[idx, "upstox_contract_url"] = None
+    # Upstox deep links are intentionally disabled in runtime UI.
     return df
-
-
-def _upstox_master_available() -> bool:
-    try:
-        from core.upstox_instruments import default_instruments_path
-        return default_instruments_path() is not None
-    except Exception:
-        return False
-
-
-def _safe_link_button(container, label: str, url: str, note: str | None = None):
-    if not url:
-        container.write("—")
-        return
-    try:
-        container.link_button(label, url, use_container_width=True)
-        return
-    except TypeError as exc:
-        logger.warning("link_button failed: %s", exc)
-    try:
-        html = f'<a href="{url}" target="_blank">{label}</a>'
-        container.markdown(html, unsafe_allow_html=True)
-        if note:
-            container.caption(note)
-    except Exception as exc:
-        logger.warning("link_button fallback failed: %s", exc)
-        container.write(label)
 
 
 def _select_speed_trader_cols(df: pd.DataFrame, extra_cols: list[str] | None = None) -> list[str]:
@@ -3988,54 +5286,47 @@ def _cap_unknown_regime_advisory(df: pd.DataFrame) -> pd.DataFrame:
     other = df[~mask]
     if other.empty:
         return subset
-    merged = pd.concat([other, subset], axis=0)
+    merged = _concat_frames_safely([other, subset])
+    if merged.empty:
+        return merged
     if "timestamp" in merged.columns:
         return merged.sort_values("timestamp", ascending=False)
     return merged
 
 
 def _render_upstox_table(table_df: pd.DataFrame, display_cols: list[str], key_prefix: str):
-    table_df = ensure_upstox_columns(table_df)
     if table_df is None or table_df.empty:
         return
-    deeplink_enabled = bool(getattr(cfg, "UPSTOX_ENABLE_DEEPLINK", False))
-    master_ok = _upstox_master_available()
-    if not deeplink_enabled:
-        st.caption("Upstox deep link disabled; showing search only.")
-    elif not master_ok:
-        st.caption("Upstox instrument master not found; showing search only.")
     cols = [c for c in display_cols if c in table_df.columns]
-    header_cols = st.columns(len(cols) + 1)
-    for i, col in enumerate(cols + ["Upstox"]):
-        header_cols[i].markdown(f"**{col}**")
-    required = cols + ["upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"]
-    for col in required:
-        if col not in table_df.columns:
-            table_df[col] = None
-    rows = table_df[required].to_dict("records")
-    for ridx, row in enumerate(rows):
-        row_cols = st.columns(len(cols) + 1)
-        for i, col in enumerate(cols):
-            val = row.get(col)
-            row_cols[i].write(val if val not in (None, "") else "—")
-        unresolved = bool(row.get("unresolved_contract"))
-        contract_url = row.get("upstox_contract_url")
-        search_url = row.get("upstox_search_url")
-        query = row.get("upstox_query")
-        if contract_url and not unresolved and deeplink_enabled and master_ok:
-            _safe_link_button(row_cols[-1], "Open", contract_url)
-        else:
-            if search_url:
-                _safe_link_button(row_cols[-1], "Search", search_url)
-            else:
-                row_cols[-1].write("—")
-        if query:
-            if row_cols[-1].button("Copy", key=f"{key_prefix}_copy_{ridx}"):
-                st.session_state["last_upstox_query"] = query
-                try:
-                    st.toast(f"Query: {query}")
-                except Exception:
-                    st.caption(f"Query: {query}")
+    display = table_df[cols].copy()
+    for col in display.columns:
+        if pd.api.types.is_datetime64_any_dtype(display[col]):
+            display[col] = pd.to_datetime(display[col], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S")
+        display[col] = display[col].apply(_table_display_cell)
+    use_container_width = bool(getattr(cfg, "UI_TABLE_USE_CONTAINER_WIDTH", False))
+    st.dataframe(
+        display,
+        use_container_width=use_container_width,
+        hide_index=True,
+        height=min(650, 42 * (len(display) + 1)),
+    )
+
+
+_DISPLAY_NULL_MARKERS = {"", "NONE", "NAN", "NAT", "NULL", "N/A", "NA"}
+
+
+def _table_display_cell(value):
+    try:
+        if value is None:
+            return "—"
+        if isinstance(value, float) and math.isnan(value):
+            return "—"
+    except Exception:
+        pass
+    text = str(value).strip()
+    if text.upper() in _DISPLAY_NULL_MARKERS:
+        return "—"
+    return value
 
 
 def _zero_to_hero_display_columns(df):
@@ -4109,7 +5400,9 @@ def _activate_planning_rows(df, auto_activate=False):
             continue
         if not row.get("instrument_token"):
             continue
-        ltp = row.get("opt_ltp")
+        ltp = row.get("current_ltp")
+        if ltp is None:
+            ltp = row.get("opt_ltp")
         mark_price = row.get("mark_price")
         if ltp is None:
             ltp = mark_price
@@ -4125,7 +5418,13 @@ def _activate_planning_rows(df, auto_activate=False):
             continue
         try:
             age_sec = _safe_float(row.get("price_age_sec"))
-            if age_sec is None or age_sec > max_quote_age:
+            if age_sec is None:
+                age_sec = _safe_float(row.get("quote_age_sec"))
+            # When quote hydration supplies current bid/ask/ltp without explicit age,
+            # treat it as current for this render pass.
+            if age_sec is None:
+                age_sec = 0.0
+            if age_sec > max_quote_age:
                 continue
         except Exception:
             continue
@@ -4395,18 +5694,30 @@ def _apply_trailing(df, queue_name, path, rows, trail_enabled, min_offset, risk_
     return df, updated
 
 def _get_daytype_history(symbol, max_points=60):
+    started = time.perf_counter()
     try:
         cache_key = f"daytype_hist_{symbol}"
         cache_ts_key = f"{cache_key}_ts"
         cache = st.session_state.get(cache_key)
         ts = st.session_state.get(cache_ts_key, 0)
-        if cache and (time.time() - ts) < 10:
+        if cache and (time.time() - ts) < 60:
+            logger.info(
+                "dashboard_data_load label=daytype_history_cache_hit symbol=%s dt_ms=0.00 points=%d",
+                symbol,
+                len(list(cache or [])),
+            )
             return cache
     except Exception:
         pass
     hist = []
     try:
-        for obj in load_day_type_events(backfill=True, max_rows=5000):
+        rows = _perf_timed_load(
+            "daytype_history_rows",
+            _fetch_day_type_events_dashboard,
+            caller=f"daytype_history:{symbol}",
+            max_rows=5000,
+        )
+        for obj in rows:
             if obj.get("symbol") != symbol:
                 continue
             conf = obj.get("confidence")
@@ -4423,6 +5734,13 @@ def _get_daytype_history(symbol, max_points=60):
         st.session_state[cache_ts_key] = time.time()
     except Exception:
         pass
+    elapsed_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+    logger.info(
+        "dashboard_data_load label=daytype_history_build symbol=%s dt_ms=%.2f points=%d",
+        symbol,
+        elapsed_ms,
+        len(hist),
+    )
     return hist
 
 def _fill_strike_from_meta(df, meta_map):
@@ -4605,31 +5923,6 @@ def _hydrate_option_quotes(df, chain_map, cache_ttl=8):
                         opt = next((o for o in chain if str(o.get("type")) == opt_type and float(o.get("strike", 0)) == strike), None)
                         if opt:
                             return side, opt
-                        # fallback: quote via Kite symbol lookup
-                        try:
-                            from core.kite_client import kite_client
-                            exchange = "BFO" if str(sym).upper() == "SENSEX" else "NFO"
-                            qsym = None
-                            if expiry:
-                                qsym = kite_client.find_option_symbol_with_expiry(sym, strike, opt_type, expiry, exchange=exchange)
-                            if not qsym:
-                                qsym = kite_client.find_option_symbol(sym, strike, opt_type, exchange=exchange)
-                            if qsym:
-                                if cache and (time.time() - cache_ts) < cache_ttl and qsym in cache:
-                                    q = cache[qsym]
-                                    ltp = q.get("ltp")
-                                    bid = q.get("bid")
-                                    ask = q.get("ask")
-                                else:
-                                    q = kite_client.quote([qsym]).get(qsym, {})
-                                    ltp = q.get("last_price")
-                                    depth = q.get("depth") or {}
-                                    bid = depth.get("buy", [{}])[0].get("price")
-                                    ask = depth.get("sell", [{}])[0].get("price")
-                                    cache[qsym] = {"ltp": ltp, "bid": bid, "ask": ask}
-                                return side, {"ltp": ltp, "bid": bid, "ask": ask}
-                        except Exception:
-                            return None
                         return None
                     leg_quotes = []
                     for leg in legs:
@@ -4683,35 +5976,7 @@ def _hydrate_option_quotes(df, chain_map, cache_ttl=8):
                 if strike_val is not None:
                     match = next((c for c in chain if c.get("strike") == strike_val and c.get("type") == opt_type), None)
             if not match:
-                # fallback: quote by token/strike from instruments
-                exchange = "BFO" if str(sym).upper() == "SENSEX" else "NFO"
-                quote_symbol = None
-                if token:
-                    token_map = _get_token_symbol_map(exchange)
-                    ts = token_map.get(token) or token_map.get(int(token)) if token_map else None
-                    if ts:
-                        quote_symbol = f"{exchange}:{ts}"
-                        df.at[idx, "quote_note"] = "token_fallback"
-                if not quote_symbol and strike is not None:
-                    try:
-                        from core.kite_client import kite_client
-                        quote_symbol = kite_client.find_option_symbol(sym, strike, opt_type, exchange=exchange)
-                        if quote_symbol:
-                            df.at[idx, "quote_note"] = "symbol_fallback"
-                    except Exception:
-                        quote_symbol = None
-                if quote_symbol:
-                    if cache and (time.time() - cache_ts) < cache_ttl and quote_symbol in cache:
-                        cached = cache[quote_symbol]
-                        df.at[idx, "opt_ltp"] = cached.get("ltp")
-                        df.at[idx, "opt_bid"] = cached.get("bid")
-                        df.at[idx, "opt_ask"] = cached.get("ask")
-                        df.at[idx, "mark_price"] = cached.get("mark_price")
-                        df.at[idx, "price_source"] = cached.get("price_source")
-                    else:
-                        pending.append((idx, quote_symbol))
-                else:
-                    df.at[idx, "quote_note"] = "strike not in live chain"
+                df.at[idx, "quote_note"] = "strike not in cached chain"
                 continue
             df.at[idx, "opt_ltp"] = match.get("ltp")
             bid = match.get("best_bid", match.get("bid"))
@@ -4728,37 +5993,6 @@ def _hydrate_option_quotes(df, chain_map, cache_ttl=8):
             df.at[idx, "mark_price"] = mark_price
             df.at[idx, "price_source"] = source
             df.at[idx, "quote_age_sec"] = quote_age_sec
-        if pending:
-            try:
-                from core.kite_client import kite_client
-                symbols = list({s for _, s in pending})
-                quotes = kite_client.quote(symbols)
-                for idx, sym in pending:
-                    q = quotes.get(sym, {})
-                    if not q:
-                        df.at[idx, "quote_note"] = df.at[idx, "quote_note"] or "quote_missing"
-                        continue
-                    ltp = q.get("last_price")
-                    depth = q.get("depth") or {}
-                    bid = depth.get("buy", [{}])[0].get("price")
-                    ask = depth.get("sell", [{}])[0].get("price")
-                    mark_price, source = _derive_mark_price(ltp, bid, ask, quote_age_sec=None)
-                    df.at[idx, "opt_ltp"] = mark_price if mark_price is not None else ltp
-                    df.at[idx, "opt_bid"] = bid
-                    df.at[idx, "opt_ask"] = ask
-                    df.at[idx, "mark_price"] = mark_price
-                    df.at[idx, "price_source"] = source
-                    df.at[idx, "quote_age_sec"] = None
-                    cache[sym] = {
-                        "ltp": mark_price if mark_price is not None else ltp,
-                        "bid": bid,
-                        "ask": ask,
-                        "mark_price": mark_price,
-                        "price_source": source,
-                    }
-                _set_quote_cache(cache)
-            except Exception:
-                pass
         return df
     except Exception:
         return df
@@ -4922,6 +6156,67 @@ def _confirm_action(key, label, confirm_label="Confirm", cancel_label="Cancel", 
     except Exception:
         return set()
 
+
+def _record_tab_render_duration(tab_name: str, start_ts: float) -> float:
+    try:
+        elapsed_ms = max(0.0, (time.perf_counter() - float(start_ts)) * 1000.0)
+    except Exception:
+        elapsed_ms = 0.0
+    timings = dict(st.session_state.get("tab_render_durations_ms") or {})
+    timings[str(tab_name or "UNKNOWN")] = float(round(elapsed_ms, 2))
+    st.session_state["tab_render_durations_ms"] = timings
+    st.session_state["tab_last_rendered"] = str(tab_name or "UNKNOWN")
+    st.session_state["tab_last_rendered_ts_epoch"] = float(time.time())
+    try:
+        logger.info("dashboard_tab_render tab=%s dt_ms=%.2f", tab_name, elapsed_ms)
+    except Exception:
+        pass
+    return elapsed_ms
+
+
+def _render_tab_timing_footer(active_tab: str) -> None:
+    timings = dict(st.session_state.get("tab_render_durations_ms") or {})
+    active_ms = timings.get(str(active_tab), None)
+    heavy_tabs = {"Risk & Governance", "Data & SLA", "ML/RL", "Market Depth"}
+    heavy_executed = str(active_tab) in heavy_tabs
+    parts = []
+    for name in [
+        "Home",
+        "Strategy Timeline",
+        "Execution",
+        "Reconciliation",
+        "Risk & Governance",
+        "Data & SLA",
+        "ML/RL",
+        "Market Depth",
+        "Gemini",
+    ]:
+        if name in timings:
+            parts.append(f"{name}={timings[name]:.1f}ms")
+    compact = " | ".join(parts) if parts else "no tab timings yet"
+    active_text = f"{active_ms:.1f}ms" if isinstance(active_ms, (int, float)) else "n/a"
+    st.caption(
+        "Tab render debug: "
+        f"active={active_tab} ({active_text}) "
+        f"heavy_tabs_executed={heavy_executed} "
+        f"| {compact}"
+    )
+
+
+def _render_rerun_perf_footer(active_tab: str) -> None:
+    timings = dict(st.session_state.get("tab_render_durations_ms") or {})
+    render_ms = _safe_float(timings.get(str(active_tab)))
+    data_load_ms = _safe_float(st.session_state.get("rerun_data_load_ms"), 0.0) or 0.0
+    steps = list(st.session_state.get("rerun_data_load_steps") or [])
+    st.caption(
+        "Performance report: "
+        f"render_time_ms={render_ms:.1f} "
+        f"data_load_ms={float(data_load_ms):.1f}"
+    )
+    if steps:
+        compact_steps = " | ".join([f"{name}:{ms:.1f}ms" for name, ms in steps[:8]])
+        st.caption(f"Data load breakdown: {compact_steps}")
+
 def _save_gpt_pins(pins):
     path = _log_path("gpt_pins.json")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -4973,6 +6268,8 @@ def _render_gpt_panel(trade_row: dict, market_ctx: dict, key_prefix: str):
         _save_gpt_pins(pins)
         st.success(f"Pinned {tid}")
 
+_active_tab_render_start = time.perf_counter()
+
 if nav == "Home":
     section_header("Ready To Place Trades")
     snapshot = st.session_state.get("readiness_snapshot") or _compute_readiness_snapshot()
@@ -4990,8 +6287,11 @@ if nav == "Home":
     latest_decision_row = snapshot.get("latest_decision_row") or {}
     auth_health = snapshot.get("auth_health") or {}
     feed_freshness = snapshot.get("feed_freshness") or {}
+    view_options = ["Active Trades", "Review Queue", "Advisory", "Feed / Debug", "Scorecards"]
+    if st.session_state.get("home_view_selector") not in view_options:
+        st.session_state["home_view_selector"] = "Advisory"
     with st.sidebar:
-        st.checkbox("Live update trades", value=True, key="auto_refresh_enabled")
+        st.checkbox("Live update trades", value=False, key="auto_refresh_enabled")
         st.radio(
             "Refresh mode",
             [
@@ -5008,10 +6308,12 @@ if nav == "Home":
         )
         home_view = st.selectbox(
             "View",
-            ["Active Trades", "Review Queue", "Advisory", "Feed / Debug", "Scorecards"],
-            index=0,
+            view_options,
+            index=view_options.index(str(st.session_state.get("home_view_selector") or "Advisory")),
             key="home_view_selector",
         )
+        refresh_interval_sec = max(2.0, float(getattr(cfg, "UI_REFRESH_SEC", 2.0)))
+        st.session_state["refresh_interval_sec"] = refresh_interval_sec
 
     show_active_view = home_view == "Active Trades"
     show_review_view = home_view == "Review Queue"
@@ -5296,6 +6598,16 @@ if nav == "Home":
             pass
         _render_confidence_reliability()
 
+    if not show_feed_debug_view:
+        with st.expander("Market Snapshot", expanded=False):
+            try:
+                if _is_market_hours():
+                    _market_snapshot_fragment()
+                else:
+                    _render_market_snapshot()
+            except Exception as e:
+                st.caption(f"Market snapshot error: {e}")
+
     if show_feed_debug_view:
         with st.expander("Pre‑Market Day Plan", expanded=False):
             try:
@@ -5312,16 +6624,6 @@ if nav == "Home":
                 pass
         with st.expander("Market Snapshot", expanded=False):
             try:
-                if "startup_warmup_bootstrap_done" not in st.session_state:
-                    st.session_state["startup_warmup_bootstrap_done"] = True
-                    warmup_rows = ensure_startup_warmup_bootstrap()
-                    warmup_fail = [
-                        row for row in (warmup_rows or [])
-                        if str((row or {}).get("warmup_reason") or (row or {}).get("seed_reason") or "").upper() == "HIST_FETCH_FAILED"
-                    ]
-                    if warmup_fail:
-                        syms = ", ".join(sorted(str(r.get("symbol") or "").upper() for r in warmup_fail if r.get("symbol")))
-                        st.caption(f"Warmup bootstrap: HIST_FETCH_FAILED ({syms or 'symbols'})")
                 # Refresh only the market snapshot during market hours to avoid dimming the whole app
                 if _is_market_hours():
                     _market_snapshot_fragment()
@@ -5335,14 +6637,15 @@ if nav == "Home":
             try:
                 gate_path = _desk_log_path("gate_status.jsonl")
                 if gate_path.exists():
-                    rows = []
-                    with gate_path.open("r", encoding="utf-8") as f:
-                        lines = f.readlines()[-40:]
-                    for line in lines:
-                        try:
-                            rows.append(json.loads(line))
-                        except Exception:
-                            continue
+                    load_full = st.checkbox("Load full gate history", value=False, key="gate_status_full_history")
+                    max_rows = _FULL_JSONL_TAIL_ROWS if load_full else _DEFAULT_JSONL_TAIL_ROWS
+                    rows = _perf_timed_load(
+                        "gate_status_jsonl_tail",
+                        _load_jsonl_tail_cached,
+                        str(gate_path),
+                        file_sig(gate_path),
+                        max_rows,
+                    )
                     if rows:
                         gate_df = pd.DataFrame(rows)
                         for _json_col in ("gate_reasons", "decision_blockers", "decision_explain", "feed_health_snapshot", "node_call_counts"):
@@ -5417,30 +6720,38 @@ if nav == "Home":
 
     try:
         should_refresh, feed_status, market_status = _compute_trade_refresh_gate(readiness_snapshot)
-        if bool(st.session_state.get("auto_refresh_enabled", True)) and not ST_AUTORREFRESH_AVAILABLE:
-            st.warning("streamlit_autorefresh is unavailable; install it to enable automatic refresh.")
-        if should_refresh and ST_AUTORREFRESH_AVAILABLE:
-            refresh_backoff = float(st.session_state.get("ui_refresh_backoff_sec", 0.0) or 0.0)
-            base_refresh_sec = max(1.0, float(getattr(cfg, "UI_REFRESH_SEC", 2.0)))
-            refresh_sec = max(base_refresh_sec, refresh_backoff)
-            refresh_ms = max(1000, int(refresh_sec * 1000))
-            st_autorefresh(interval=refresh_ms, limit=None, key="trades_autorefresh")
-            if refresh_backoff > 0:
-                st.session_state["ui_refresh_backoff_sec"] = 0.0
-        elif bool(st.session_state.get("auto_refresh_enabled", True)):
-            st.caption(f"Live refresh gated ({st.session_state.get('trade_refresh_mode')}) | feed={feed_status} market={market_status}")
+        st.session_state["ui_should_refresh"] = bool(should_refresh)
+        st.session_state["ui_feed_status"] = str(feed_status)
+        st.session_state["ui_market_status"] = str(market_status)
+        st.session_state["ui_local_trade_refresh_enabled"] = _should_enable_local_trade_refresh(
+            show_active_view=show_active_view,
+            show_advisory_view=show_advisory_view,
+        )
+        if bool(st.session_state.get("auto_refresh_enabled", False)) and not should_refresh:
+            if bool(st.session_state.get("ui_local_trade_refresh_enabled", False)):
+                st.caption(
+                    "Execution-sensitive refresh is gated, but the live trade table still updates from runtime files."
+                )
+            else:
+                st.caption(
+                    f"Live refresh gated ({st.session_state.get('trade_refresh_mode')}) | feed={feed_status} market={market_status}"
+                )
     except Exception as exc:
         logger.exception("trades_autorefresh_failed: %s", exc)
-        st.session_state["ui_refresh_backoff_sec"] = max(
-            5.0,
-            float(getattr(cfg, "UI_REFRESH_SEC", 2.0)),
-        )
-        st.warning("Live update encountered a data issue; retrying automatically.")
+        st.session_state["ui_should_refresh"] = False
+        st.session_state["ui_feed_status"] = "INACTIVE"
+        st.session_state["ui_market_status"] = "UNKNOWN"
+        st.session_state["ui_local_trade_refresh_enabled"] = False
+        st.warning("Live update encountered a data issue; refresh loop will retry automatically.")
 
-    needs_trade_universe = show_active_view or show_review_view or show_advisory_view
+    needs_trade_universe = show_active_view
     if needs_trade_universe:
-        trade_universe_df = _load_trade_universe_df()
-        df_active_all, df_review_all, df_suggested_all, df_advisory_all = _partition_trade_universe(trade_universe_df)
+        trade_universe_df = _perf_timed_load("trade_universe_df", _load_trade_universe_df)
+        df_active_all, df_review_all, df_suggested_all, df_advisory_all = _perf_timed_load(
+            "trade_universe_partition",
+            _partition_trade_universe,
+            trade_universe_df,
+        )
         if _is_ops_research_mode():
             st.caption(
                 "Trade partitions "
@@ -5454,56 +6765,130 @@ if nav == "Home":
         df_suggested_all = pd.DataFrame()
         df_advisory_all = pd.DataFrame()
 
-    if show_active_view:
-        _render_trade_explorer_panel(trade_universe_df)
-        section_header("Active Trades")
-        try:
-            active_df = _prepare_trade_display_df(df_active_all)
-            active_df = _with_active_runtime_metrics(active_df)
-            active_display = select_display_df(active_df, "active")
-            active_display = _prepare_trade_display_df(active_display)
-            if not active_display.empty and "trade_key" in active_display.columns and "trade_key" in active_df.columns:
-                active_extras = [
-                    c
-                    for c in ["trade_key", "mark_price", "bid", "ask", "ltp", "pnl_unrealized"]
-                    if c in active_df.columns
-                ]
-                if len(active_extras) > 1:
-                    active_display = active_display.merge(
-                        active_df[active_extras].drop_duplicates(subset=["trade_key"], keep="last"),
-                        on="trade_key",
-                        how="left",
-                    )
-            active_display = _apply_executable_pricing(active_display)
-            active_cols = [
-                c
-                for c in [
-                    "last_seen_ts",
-                    "identity",
-                    "status",
-                    "side",
-                    "entry",
-                    "stop",
-                    "target",
-                    "pnl_unrealized",
-                    "live_ltp",
-                    "pnl_points",
-                    "pnl_cash",
-                    "qty",
-                    "confidence",
-                ]
-                if c in active_display.columns
-            ]
-            active_cols = [c for c in _inject_executable_pricing_cols(active_cols) if c in active_display.columns]
-            if not active_display.empty:
-                _render_upstox_table(active_display, active_cols, "active_trades")
-            else:
-                empty_state("No active trades right now.")
-        except Exception as exc:
-            logger.exception("active_trades_render_failed: %s", exc)
-            st.info("No active trades right now.")
+    if show_feed_debug_view:
+        decision_debug_metrics = _perf_timed_load(
+            "decision_debug_metrics",
+            _compute_decision_debug_metrics,
+            trade_universe_df,
+            df_advisory_all,
+            decision_gate,
+        )
+    else:
+        decision_debug_metrics = {
+            "candidates_per_min": 0,
+            "evaluations_per_min": 0,
+            "allowed_per_min": 0,
+            "candidates_generated": 0,
+            "decisions_generated": 0,
+            "decisions_passed": 0,
+            "advisory_rows": 0,
+            "top_blockers_15m": [],
+        }
+    with st.expander("Decision Pipeline Debug", expanded=False):
+        rate1, rate2, rate3 = st.columns(3)
+        rate1.metric("candidates/min", f"{int(decision_debug_metrics.get('candidates_per_min') or 0)}")
+        rate2.metric("evaluations/min", f"{int(decision_debug_metrics.get('evaluations_per_min') or 0)}")
+        rate3.metric("allowed/min", f"{int(decision_debug_metrics.get('allowed_per_min') or 0)}")
+        total1, total2, total3, total4 = st.columns(4)
+        total1.metric("candidates_generated", f"{int(decision_debug_metrics['candidates_generated'])}")
+        total2.metric("decisions_generated", f"{int(decision_debug_metrics['decisions_generated'])}")
+        total3.metric("decisions_passed", f"{int(decision_debug_metrics['decisions_passed'])}")
+        total4.metric("advisory_rows", f"{int(decision_debug_metrics['advisory_rows'])}")
+        top_blockers_15m = list(decision_debug_metrics.get("top_blockers_15m") or [])
+        if top_blockers_15m:
+            st.caption("Top blockers (last 15m)")
+            blocker_df = pd.DataFrame(
+                [{"blocker": str(reason), "count": int(count)} for reason, count in top_blockers_15m]
+            )
+            st.dataframe(blocker_df, use_container_width=True, hide_index=True)
+        st.caption("Metrics log every 30s to desk logs: decision_debug_metrics.jsonl")
+    _log_decision_debug_metrics(decision_debug_metrics, interval_sec=30.0)
 
-        _render_chart_view_panel(trade_universe_df)
+    def _render_home_trade_fragment(label: str, fn) -> None:
+        use_local_fragment = bool(st.session_state.get("ui_local_trade_refresh_enabled", False)) and hasattr(st, "fragment")
+        refresh_every = max(2.0, float(st.session_state.get("refresh_interval_sec") or getattr(cfg, "UI_REFRESH_SEC", 2.0)))
+        if use_local_fragment:
+            @st.fragment(run_every=refresh_every)
+            def _fragment():
+                _perf_timed_render(label, fn)
+            _fragment()
+            return
+        _perf_timed_render(label, fn)
+
+    if show_active_view:
+        def _render_active_trades_section():
+            _render_trade_explorer_panel(trade_universe_df)
+            section_header("Active Trades")
+            try:
+                active_df = _prepare_trade_display_df(df_active_all)
+                active_df = _with_active_runtime_metrics(active_df)
+                active_df = _merge_exit_intel_state(active_df)
+                active_display = select_display_df(active_df, "active")
+                active_display = _prepare_trade_display_df(active_display)
+                if not active_display.empty and "trade_key" in active_display.columns and "trade_key" in active_df.columns:
+                    active_extras = [
+                        c
+                        for c in ["trade_key", "mark_price", "bid", "ask", "ltp", "pnl_unrealized"]
+                        if c in active_df.columns
+                    ]
+                    active_extras += [
+                        c
+                        for c in [
+                            "exit_intel_phase",
+                            "exit_intel_action",
+                            "reason_codes",
+                            "best_price_seen",
+                            "current_sl",
+                            "current_tp",
+                            "stall_counter",
+                            "last_action_ts",
+                        ]
+                        if c in active_df.columns and c not in active_extras
+                    ]
+                    if len(active_extras) > 1:
+                        active_display = active_display.merge(
+                            active_df[active_extras].drop_duplicates(subset=["trade_key"], keep="last"),
+                            on="trade_key",
+                            how="left",
+                        )
+                active_display = _apply_executable_pricing(active_display)
+                active_cols = [
+                    c
+                    for c in [
+                        "last_seen_ts",
+                        "identity",
+                        "status",
+                        "side",
+                        "entry",
+                        "stop",
+                        "target",
+                        "pnl_unrealized",
+                        "live_ltp",
+                        "pnl_points",
+                        "pnl_cash",
+                        "qty",
+                        "confidence",
+                        "exit_intel_phase",
+                        "exit_intel_action",
+                        "reason_codes",
+                        "best_price_seen",
+                        "current_sl",
+                        "current_tp",
+                        "stall_counter",
+                    ]
+                    if c in active_display.columns
+                ]
+                active_cols = [c for c in _inject_executable_pricing_cols(active_cols) if c in active_display.columns]
+                if not active_display.empty:
+                    _render_upstox_table(active_display, active_cols, "active_trades")
+                else:
+                    empty_state("No active trades right now.")
+            except Exception as exc:
+                logger.exception("active_trades_render_failed: %s", exc)
+                st.info("No active trades right now.")
+            _render_chart_view_panel(trade_universe_df)
+
+        _render_home_trade_fragment("home_active_trades", _render_active_trades_section)
 
     if show_review_view:
         section_header("Review Queue (Latest)")
@@ -5612,19 +6997,11 @@ if nav == "Home":
                 else:
                     q_df["status"] = q_df["status"].fillna("QUEUED_REVIEW")
                 q_df_queue_raw = filter_trades_for_panel(q_df, "review")
-                q_df_queue = _prepare_trade_display_df(select_display_df(q_df_queue_raw, "review"))
+                q_df_queue = select_display_df(_prepare_trade_display_df(q_df_queue_raw), "review")
                 if "trade_key" not in q_df_queue.columns:
                     q_df_queue["trade_key"] = None
-                link_cols = [c for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"] if c in q_df.columns]
-                if link_cols and "trade_key" in link_cols:
-                    link_map = q_df[link_cols].drop_duplicates(subset=["trade_key"], keep="last")
-                    q_df_queue = q_df_queue.merge(link_map, on="trade_key", how="left")
-                display_cols = [c for c in q_df_queue.columns if c not in {"trade_key", "tradingsymbol", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"}]
+                display_cols = [c for c in q_df_queue.columns if c not in {"trade_key", "tradingsymbol"}]
                 if display_cols and not q_df_queue.empty:
-                    st.caption("Opens Upstox for manual confirmation (no auto-order).")
-                    last_query = st.session_state.get("last_upstox_query")
-                    if last_query:
-                        st.text_input("Last Upstox query", value=str(last_query), key="upstox_last_query", disabled=True)
                     _render_upstox_table(q_df_queue.copy(), display_cols, "review_queue")
                 else:
                     empty_state("No pending trades in review queue for today.")
@@ -5717,53 +7094,30 @@ if nav == "Home":
         logger.exception("review_queue_render_failed: %s", e)
         st.info("No trades pending manual review.")
 
-    if show_advisory_view:
+    def _render_suggested_trades_section():
         section_header("Suggested Trades (Latest)")
-    try:
-        if not show_advisory_view:
-            raise _SkipSection()
-        # Source: suggested persistent queues (quick/scalp buckets), not manual review/advisory queues.
-        suggested_source_df = filter_trades_for_panel(df_suggested_all, "suggested")
-        suggested_df = _prepare_trade_display_df(filter_by_permission(suggested_source_df, "EXECUTE"))
-        if suggested_df.empty:
-            suggested_df = _prepare_trade_display_df(filter_by_permission(suggested_source_df, "QUEUE_ONLY"))
-        suggested_df = _add_upstox_links(suggested_df)
-        suggested_display = _prepare_trade_display_df(select_display_df(suggested_df, "advisory")).head(25)
-        if "trade_key" not in suggested_display.columns:
-            suggested_display["trade_key"] = None
-        link_cols = [
-            c
-            for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"]
-            if c in suggested_df.columns
-        ]
-        if link_cols and "trade_key" in link_cols:
-            suggested_display = suggested_display.merge(
-                suggested_df[link_cols].drop_duplicates(subset=["trade_key"], keep="last"),
-                on="trade_key",
-                how="left",
-            )
-        show_cols = [
-            c
-            for c in suggested_display.columns
-            if c
-            not in {
-                "trade_key",
-                "tradingsymbol",
-                "upstox_contract_url",
-                "upstox_search_url",
-                "upstox_query",
-                "unresolved_contract",
-            }
-        ]
-        if show_cols and not suggested_display.empty:
-            _render_upstox_table(suggested_display, show_cols, "suggested_trades")
-        else:
-            empty_state("No suggested trades right now.")
-    except _SkipSection:
-        pass
-    except Exception as exc:
-        logger.exception("suggested_render_failed: %s", exc)
-        st.info("No suggested trades right now.")
+        try:
+            if not show_advisory_view:
+                raise _SkipSection()
+            status_payload = _load_live_suggestions_status()
+            suggested_live_df = _load_live_suggestions_df(limit=100)
+            st.caption("Shows latest emitted live suggestions from suggestions.jsonl. Advisory-only queues are listed below.")
+            suggested_df = _select_visible_advisory_rows(suggested_live_df)
+            suggested_display = select_display_df(suggested_df, "advisory").head(25)
+            show_cols = [c for c in suggested_display.columns if c not in {"trade_key", "tradingsymbol"}]
+            if show_cols and not suggested_display.empty:
+                _render_upstox_table(suggested_display, show_cols, "suggested_trades")
+            else:
+                primary_blocker = str(status_payload.get("primary_blocker") or status_payload.get("reason") or "NO_CANDIDATES")
+                empty_state(f"No visible advisory rows right now. Primary blocker: {primary_blocker}.")
+        except _SkipSection:
+            pass
+        except Exception as exc:
+            logger.exception("suggested_render_failed: %s", exc)
+            st.info("No suggested trades right now.")
+
+    if show_advisory_view:
+        _render_home_trade_fragment("home_suggested_trades", _render_suggested_trades_section)
 
     if show_advisory_view and _is_trader_mode():
         st.caption("Trader mode active: research/admin panels are hidden. Switch Dashboard Mode to Ops/Research to view them.")
@@ -5854,6 +7208,7 @@ if nav == "Home":
 
     if show_advisory_view:
         section_header("20-Point Profit Ideas (Advisory)")
+        st.caption("Time column is shown in IST. Entry reflects executable quote only; unavailable quotes are shown as —.")
     try:
         if not show_advisory_view:
             raise _SkipSection()
@@ -5883,7 +7238,12 @@ if nav == "Home":
                 if "instrument" in t20_df.columns:
                     t20_df = t20_df[t20_df["instrument"] == "OPT"]
                 t20_df = _ensure_activation_fields(t20_df)
-                auto_activate_t20 = bool(st.session_state.get("auto_activate_suggested", False))
+                auto_activate_t20 = st.checkbox(
+                    "Auto-activate advisory rows (use live LTP)",
+                    value=bool(st.session_state.get("auto_activate_suggested", True)),
+                    key="auto_activate_t20",
+                )
+                st.session_state["auto_activate_suggested"] = bool(auto_activate_t20)
                 if auto_activate_t20:
                     chain_map_t20 = _get_chain_map()
                     t20_df = _hydrate_option_quotes(t20_df, chain_map_t20)
@@ -5954,22 +7314,14 @@ if nav == "Home":
                             t20_path.write_text(json.dumps(t20_all, indent=2))
                         except Exception as exc:
                             logger.warning("t20 target persist failed: %s", exc)
-                show_sim_t20 = False
-                if _is_ops_research_mode():
-                    show_sim_t20 = st.checkbox("Show Simulation Columns", value=False, key="show_sim_t20")
+                show_sim_t20 = st.checkbox("Show Simulation Columns", value=False, key="show_sim_t20")
                 if show_sim_t20:
                     st.caption("Simulation assumes option premium Δ points; 1-lot P&L shown. Not delta/IV based.")
-                    has_active = False
                     try:
-                        has_active = (t20_df["status"].astype(str).str.upper() == "ACTIVE").any()
-                    except Exception:
-                        has_active = False
-                    if has_active:
-                        try:
-                            sim_rows = t20_df.apply(lambda r: pd.Series(simulate_row(r.to_dict(), meta_map_t20)), axis=1)
-                            t20_df = pd.concat([t20_df, sim_rows], axis=1)
-                        except Exception as exc:
-                            logger.warning("t20 sim failed: %s", exc)
+                        sim_rows = t20_df.apply(lambda r: pd.Series(simulate_row(r.to_dict(), meta_map_t20)), axis=1)
+                        t20_df = pd.concat([t20_df, sim_rows], axis=1)
+                    except Exception as exc:
+                        logger.warning("t20 sim failed: %s", exc)
                 exec_mode = str(getattr(cfg, "EXECUTION_MODE", "PAPER") or "PAPER").upper()
                 is_live_mode = exec_mode == "LIVE"
                 trail_enabled = bool(getattr(cfg, "TRAIL_ENABLE", False)) if is_live_mode else bool(getattr(cfg, "TRAIL_ENABLE_PAPER", True))
@@ -5991,22 +7343,89 @@ if nav == "Home":
                 t20_df = dedupe_by_trade_key(t20_df, sort_by="global_confidence")
                 t20_df = _cap_unknown_regime_advisory(t20_df)
                 t20_df = _mask_unresolved_prices(t20_df)
+                t20_df = _enforce_executable_entry_display(t20_df)
                 t20_df = _add_upstox_links(t20_df)
                 t20_df = normalize_table_df(t20_df)
                 t20_df = _prepare_trade_display_df(t20_df)
-                t20_display = _prepare_trade_display_df(select_display_df(t20_df, "advisory"))
-                link_cols_t20 = [c for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"] if c in t20_df.columns]
-                if link_cols_t20 and "trade_key" in t20_display.columns:
-                    t20_display = t20_display.merge(
-                        t20_df[link_cols_t20].drop_duplicates(subset=["trade_key"], keep="last"),
-                        on="trade_key",
-                        how="left",
-                    )
-                t20_cols = [c for c in t20_display.columns if c not in {"trade_key", "tradingsymbol", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"}]
+                t20_display = select_display_df(_prepare_trade_display_df(t20_df), "advisory")
+                if "trade_key" in t20_display.columns and "trade_key" in t20_df.columns:
+                    diag_cols = [
+                        c
+                        for c in [
+                            "entry_status",
+                            "activation_gate_reason",
+                            "activation_ui_flag",
+                            "current_ltp",
+                        ]
+                        if c in t20_df.columns
+                    ]
+                    if diag_cols:
+                        t20_display = t20_display.merge(
+                            t20_df[["trade_key", *diag_cols]].drop_duplicates(subset=["trade_key"], keep="last"),
+                            on="trade_key",
+                            how="left",
+                        )
+                if show_sim_t20 and "trade_key" in t20_display.columns and "trade_key" in t20_df.columns:
+                    sim_cols = _simulation_display_cols(t20_df)
+                    if sim_cols:
+                        t20_display = t20_display.merge(
+                            t20_df[["trade_key", *sim_cols]].drop_duplicates(subset=["trade_key"], keep="last"),
+                            on="trade_key",
+                            how="left",
+                        )
+                t20_cols = [c for c in t20_display.columns if c not in {"trade_key", "tradingsymbol"}]
                 if t20_cols and not t20_display.empty:
                     _render_upstox_table(t20_display, t20_cols, "t20_advisory")
                 else:
                     empty_state("No 20-point ideas yet for today.")
+                diag_source = t20_df.copy()
+                if not diag_source.empty:
+                    diag_last_seen = _series_first_non_null(
+                        diag_source,
+                        ["last_seen_ts", "timestamp"],
+                        default=None,
+                    )
+                    token_series = _series_first_non_null(
+                        diag_source,
+                        ["instrument_token"],
+                        default=None,
+                    )
+                    token_present = token_series.apply(
+                        lambda value: bool(
+                            value not in (None, "", "None")
+                            and str(value).strip().lower() not in {"nan", "na", "n/a"}
+                        )
+                    )
+                    diag_df = pd.DataFrame(
+                        {
+                            "last_seen_ts": diag_last_seen,
+                            "symbol": _series_first_non_null(
+                                diag_source,
+                                ["symbol", "underlying"],
+                                default="",
+                            ).astype(str),
+                            "option_token_present": token_present,
+                            "option_ltp_age": pd.to_numeric(
+                                _series_first_non_null(diag_source, ["price_age_sec"], default=None),
+                                errors="coerce",
+                            ).round(2),
+                            "source(tick/rest)": _series_first_non_null(
+                                diag_source,
+                                ["option_ltp_source"],
+                                default="unknown",
+                            ).fillna("unknown"),
+                            "entry_status": _series_first_non_null(
+                                diag_source,
+                                ["entry_status"],
+                                default="",
+                            ).astype(str),
+                        }
+                    )
+                    diag_df = _safe_sort_by_last_seen(diag_df)
+                    if "last_seen_ts" in diag_df.columns:
+                        diag_df = diag_df.drop(columns=["last_seen_ts"], errors="ignore")
+                    st.caption("Option entry diagnostics (live advisory): symbol | option_token_present | option_ltp_age | source(tick/rest) | entry_status")
+                    st.dataframe(diag_df.head(25), use_container_width=True, hide_index=True)
                 st.caption("Advisory queue only. Trades are still blocked unless readiness and approval gates pass.")
             else:
                 empty_state("No 20-point ideas yet for today.")
@@ -6076,15 +7495,8 @@ if nav == "Home":
                     zh_df = _add_upstox_links(zh_df)
                     zh_df = normalize_table_df(zh_df)
                     zh_df = _prepare_trade_display_df(zh_df)
-                    zh_display = _prepare_trade_display_df(select_display_df(zh_df, "advisory"))
-                    link_cols_zh = [c for c in ["trade_key", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"] if c in zh_df.columns]
-                    if link_cols_zh and "trade_key" in zh_display.columns:
-                        zh_display = zh_display.merge(
-                            zh_df[link_cols_zh].drop_duplicates(subset=["trade_key"], keep="last"),
-                            on="trade_key",
-                            how="left",
-                        )
-                    zh_cols = [c for c in zh_display.columns if c not in {"trade_key", "tradingsymbol", "upstox_contract_url", "upstox_search_url", "upstox_query", "unresolved_contract"}]
+                    zh_display = select_display_df(_prepare_trade_display_df(zh_df), "advisory")
+                    zh_cols = [c for c in zh_display.columns if c not in {"trade_key", "tradingsymbol"}]
                     if zh_cols and not zh_display.empty:
                         _render_upstox_table(zh_display, zh_cols, "zero_to_hero")
                     else:
@@ -6398,7 +7810,7 @@ if nav == "Home":
                     from core import market_data as md
 
                     # Lock current day-type snapshot
-                    for m in fetch_live_market_data():
+                    for m in _fetch_live_market_data_dashboard("daytype_relock", allow_stale_cache=True):
                         sym = m.get("symbol")
                         if not sym:
                             continue
@@ -6765,7 +8177,7 @@ if nav == "Home":
     try:
         if not (show_scorecards_view and _is_ops_research_mode()):
             raise _SkipSection()
-        rows = load_day_type_events(backfill=True, max_rows=10000)
+        rows = _fetch_day_type_events_dashboard(caller="scorecards_daytype_history", max_rows=10000)
         if rows:
             df_dt = day_type_events_dataframe(rows)
             # Export CSV
@@ -6821,7 +8233,7 @@ if nav == "Home":
     except Exception as e:
         st.warning(f"Day‑type history error: {e}")
 
-if nav == "Gemini":
+elif nav == "Gemini":
     section_header("Gemini Summary (Day Plan)")
     try:
         provider = str(os.getenv("GPT_PROVIDER", "openai") or "openai").strip().lower()
@@ -6840,7 +8252,7 @@ if nav == "Gemini":
             @st.fragment(run_every=cooldown)
             def _gpt_summary_fragment():
                 with st.spinner("Requesting Gemini summary..."):
-                    md = fetch_live_market_data()
+                    md = _fetch_live_market_data_dashboard("gpt_summary_fragment", allow_stale_cache=True)
                     summary = get_day_summary({"market": md})
                     st.session_state["gpt_summary"] = summary
                     st.json(summary)
@@ -6848,7 +8260,7 @@ if nav == "Gemini":
         else:
             if st.button("Generate Gemini Summary", key="gpt_summary_btn"):
                 with st.spinner("Requesting Gemini summary..."):
-                    md = fetch_live_market_data()
+                    md = _fetch_live_market_data_dashboard("gpt_summary_button", allow_stale_cache=True)
                     summary = get_day_summary({"market": md})
                     st.session_state["gpt_summary"] = summary
         col_t1, col_t2 = st.columns(2)
@@ -7204,37 +8616,37 @@ if nav == "Gemini":
                     "error": advice.get("error") if isinstance(advice, dict) else None,
                 })
             ui.table(pd.DataFrame(results), use_container_width=True)
-    try:
-        # Build LTP map for strike inference
-        ltp_map = {}
-        chain_map = {}
         try:
-            md_list = fetch_live_market_data()
-            for m in md_list:
-                sym = m.get("symbol")
-                if sym and sym not in ltp_map:
-                    ltp_map[sym] = m.get("ltp")
-                if sym and sym not in chain_map:
-                    chain_map[sym] = m.get("option_chain", [])
-        except Exception:
+            # Build LTP map for strike inference
             ltp_map = {}
             chain_map = {}
-        _analyze_queue(str(REVIEW_QUEUE_PATH), "Manual Review Queue", "manual_tab", ltp_map=ltp_map, chain_map=chain_map)
-        _analyze_queue(str(QUICK_REVIEW_QUEUE_PATH), "Quick Trades", "quick_tab", ltp_map=ltp_map, chain_map=chain_map)
-        _analyze_queue(str(ZERO_HERO_QUEUE_PATH), "Zero Hero", "zero_tab", ltp_map=ltp_map, chain_map=chain_map)
-        _analyze_queue(str(SCALP_QUEUE_PATH), "Scalp Trades", "scalp_tab", ltp_map=ltp_map, chain_map=chain_map)
-        # Rejected candidates
-        rej_path = _log_path("rejected_candidates.jsonl")
-        if rej_path.exists():
-            rows = []
-            with rej_path.open() as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        rows.append(json.loads(line))
-                    except Exception:
-                        continue
+            try:
+                md_list = _fetch_live_market_data_dashboard("manual_queue_analysis", allow_stale_cache=True)
+                for m in md_list:
+                    sym = m.get("symbol")
+                    if sym and sym not in ltp_map:
+                        ltp_map[sym] = m.get("ltp")
+                    if sym and sym not in chain_map:
+                        chain_map[sym] = m.get("option_chain", [])
+            except Exception:
+                ltp_map = {}
+                chain_map = {}
+            _analyze_queue(str(REVIEW_QUEUE_PATH), "Manual Review Queue", "manual_tab", ltp_map=ltp_map, chain_map=chain_map)
+            _analyze_queue(str(QUICK_REVIEW_QUEUE_PATH), "Quick Trades", "quick_tab", ltp_map=ltp_map, chain_map=chain_map)
+            _analyze_queue(str(ZERO_HERO_QUEUE_PATH), "Zero Hero", "zero_tab", ltp_map=ltp_map, chain_map=chain_map)
+            _analyze_queue(str(SCALP_QUEUE_PATH), "Scalp Trades", "scalp_tab", ltp_map=ltp_map, chain_map=chain_map)
+            # Rejected candidates
+            rej_path = _log_path("rejected_candidates.jsonl")
+            if rej_path.exists():
+                rows = []
+                with rej_path.open() as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        try:
+                            rows.append(json.loads(line))
+                        except Exception:
+                            continue
             if rows:
                 rej_df = pd.DataFrame(rows)
                 # Filter to current LTP window to avoid stale strikes
@@ -7265,9 +8677,8 @@ if nav == "Gemini":
                         row_dict = row.to_dict()
                         row_dict["trade_id"] = f"REJ-{row_dict.get('symbol')}-{row_dict.get('strike')}-{row_dict.get('type')}-{int(datetime.now().timestamp())}"
                         _render_gpt_panel(row_dict, {"market": "live"}, "rej_tab")
-    except Exception:
-        pass
-
+        except Exception:
+            pass
     if _is_ops_research_mode():
         section_header("Approved Trades")
     try:
@@ -7366,7 +8777,7 @@ if nav == "Gemini":
         option_chain = []
         md_live = None
         try:
-            md_list = fetch_live_market_data()
+            md_list = _fetch_live_market_data_dashboard("manual_trade_builder", allow_stale_cache=True)
             md_live = next((m for m in md_list if m.get("symbol") == sym and m.get("instrument") == "OPT"), None)
             if md_live:
                 option_chain = md_live.get("option_chain", [])
@@ -7656,7 +9067,7 @@ if nav == "Gemini":
 
     section_header("Recent Trades (SQLite)")
     try:
-        cols, rows = fetch_recent_trades(100)
+        cols, rows = _perf_timed_load("sqlite_recent_trades_100", _fetch_recent_trades_cached, 100, _trade_db_sig())
         if rows:
             db_df = pd.DataFrame(rows, columns=cols)
             db_df = _localize_ts(db_df, "timestamp")
@@ -7669,7 +9080,7 @@ if nav == "Gemini":
 
     section_header("Recent Outcomes (SQLite)")
     try:
-        cols, rows = fetch_recent_outcomes(100)
+        cols, rows = _perf_timed_load("sqlite_recent_outcomes_100", _fetch_recent_outcomes_cached, 100, _trade_db_sig())
         if rows:
             ui.table(pd.DataFrame(rows, columns=cols), use_container_width=True)
         else:
@@ -7697,14 +9108,14 @@ if nav == "Gemini":
     except Exception as e:
         st.warning(f"SQLite PnL error: {e}")
 
-if nav == "Strategy Timeline":
+elif nav == "Strategy Timeline":
     try:
         _render_strategy_timeline_tab()
     except Exception as exc:
         logger.exception("strategy_timeline_render_failed: %s", exc)
-        error_state("Strategy Timeline unavailable.", str(exc))
+        error_state(f"Strategy Timeline unavailable. {exc}")
 
-if nav == "Execution":
+elif nav == "Execution":
     with st.expander("Execution Status", expanded=False):
         try:
             enabled, allowed, total = _wf_lock_status()
@@ -7740,7 +9151,7 @@ if nav == "Execution":
             detail = "No recent fills"
             last_fill = None
             try:
-                cols, rows = fetch_execution_stats(5)
+                cols, rows = _perf_timed_load("sqlite_execution_stats_5", _fetch_execution_stats_cached, 5, _trade_db_sig())
                 if rows:
                     df_exec = pd.DataFrame(rows, columns=cols)
                     if "timestamp" in df_exec.columns:
@@ -7782,7 +9193,7 @@ if nav == "Execution":
             from core.execution_engine import ExecutionEngine
             ee = ExecutionEngine()
             st.write("Per-instrument slippage bps (approx):", ee.instrument_slippage)
-            cols, rows = fetch_recent_trades(200)
+            cols, rows = _perf_timed_load("sqlite_recent_trades_200", _fetch_recent_trades_cached, 200, _trade_db_sig())
             dfq = pd.DataFrame(rows, columns=cols)
             if "fill_price" in dfq.columns:
                 fill_ratio = dfq["fill_price"].notna().mean()
@@ -7794,7 +9205,7 @@ if nav == "Execution":
                 lat = dfq["latency_ms"].dropna().mean() if "latency_ms" in dfq.columns else 0
                 score = (fill_ratio * 100) - (lat * 0.01)
                 st.metric("Execution Quality Score", _safe_metric(score, "{:.1f}"))
-            cols2, rows2 = fetch_execution_stats(200)
+            cols2, rows2 = _perf_timed_load("sqlite_execution_stats_200", _fetch_execution_stats_cached, 200, _trade_db_sig())
             if rows2:
                 ui.table(pd.DataFrame(rows2, columns=cols2), use_container_width=True)
         except Exception as e:
@@ -7847,7 +9258,7 @@ if nav == "Execution":
         except Exception as e:
             st.caption(f"Execution intent accuracy error: {e}")
 
-if nav == "Reconciliation":
+elif nav == "Reconciliation":
     with st.expander("Reconciliation Summary", expanded=False):
         try:
             from core.reconciliation import reconcile_execution_fills
@@ -8030,7 +9441,7 @@ if nav == "Reconciliation":
         except Exception as e:
             st.error(f"Reconciliation history error: {e}")
 
-if nav == "Risk & Governance":
+elif nav == "Risk & Governance":
     advanced = st.toggle("Advanced", value=False, key="adv_scorecard")
     if advanced:
         with st.expander("Top‑1% Readiness Scorecard", expanded=False):
@@ -8073,7 +9484,7 @@ if nav == "Risk & Governance":
         except Exception as e:
             st.caption(f"Arm live trades error: {e}")
 
-if nav == "Data & SLA":
+elif nav == "Data & SLA":
     with st.expander("Data & SLA Panels", expanded=False):
         st.subheader("Daily PF / Sharpe")
         try:
@@ -8116,7 +9527,7 @@ if nav == "Data & SLA":
         st.subheader("Data SLA Status")
         try:
             from core.freshness_sla import get_freshness_status
-            sla = get_freshness_status(force=False)
+            sla = get_freshness_status(force=True)
             ui.table(pd.DataFrame([sla]), use_container_width=True)
         except Exception as e:
             st.caption(f"SLA status error: {e}")
@@ -8244,12 +9655,14 @@ if nav == "Data & SLA":
         except Exception as e:
             st.caption(f"Backtest settings error: {e}")
 
-if nav == "ML/RL":
+elif nav == "ML/RL":
     st.subheader("Model Training Utilities")
     try:
         micro_paths = _micro_training_paths()
         micro_state = _compute_micro_training_status(micro_paths)
         micro_label, stale_artifact = _micro_model_badge_state(micro_paths, micro_state)
+        micro_ready = bool(micro_state.get("ready"))
+        micro_ready_reason = str(micro_state.get("ready_reason_code") or "").strip()
         rl_trained = _log_path("rl_metrics.json").exists()
         col_s1, col_s2, col_s3 = st.columns(3)
         col_s1.metric("Micro Model", micro_label)
@@ -8260,6 +9673,13 @@ if nav == "ML/RL":
 
         st.caption(f"Micro training log: {micro_state.get('log_path')}")
         st.caption(f"Micro model artifact: {micro_state.get('model_artifact_path')}")
+        if not micro_ready and micro_ready_reason:
+            st.caption(f"Micro model readiness: {micro_ready_reason}")
+        if bool(micro_state.get("legacy_status_conflict")):
+            st.warning(
+                "Detected conflicting legacy micro status file at "
+                f"{micro_state.get('legacy_status_path')}. Canonical status under .runtime/logs is used."
+            )
         if not bool(micro_state.get("running")) and str(micro_state.get("status") or "").upper() == MICRO_TRAIN_STATUS_FAILED:
             fail_reason = micro_state.get("last_report_reason") or micro_state.get("error")
             if fail_reason:
@@ -8376,7 +9796,7 @@ if nav == "ML/RL":
     except Exception as e:
         st.warning(f"RL metrics error: {e}")
 
-if nav == "Market Depth":
+elif nav == "Market Depth":
     st.subheader("Depth Snapshots (SQLite)")
     try:
         depth_vm = load_depth_vm(Path(str(getattr(cfg, "TRADE_DB_PATH", ""))))
@@ -8468,6 +9888,13 @@ if nav == "Market Depth":
             empty_state("No imbalance data yet.")
     except Exception as e:
         st.warning(f"Depth imbalance error: {e}")
+
+# Tab timing footer (debug)
+_record_tab_render_duration(nav, _active_tab_render_start)
+st.session_state["rerun_data_load_ms"] = float(round(_RERUN_PERF.get("data_load_ms", 0.0), 2))
+st.session_state["rerun_data_load_steps"] = list(_RERUN_PERF.get("steps") or [])
+_render_tab_timing_footer(nav)
+_render_rerun_perf_footer(nav)
 
 # End app shell container
 end_shell()

@@ -10,8 +10,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
-from core.market_data import resolve_index_quote
-from core.market_context import derive_market_context
+from core.market_context import coerce_segment_for_market_context, derive_market_context
 from core.time_utils import compute_age_sec, now_utc_epoch
 
 ReasonCode = str
@@ -121,6 +120,97 @@ def _synth_index_bid_ask(ltp: float) -> tuple[float, float]:
     spread = min(spread, 5.0)
     half = spread / 2.0
     return round(float(ltp) - half, 4), round(float(ltp) + half, 4)
+
+
+def _resolve_index_quote_from_snapshot(snapshot: "MarketSnapshot") -> dict:
+    """
+    Resolve index bid/ask using only snapshot fields.
+    This keeps decision evaluation deterministic and snapshot-bound.
+    """
+
+    def _as_price(value: Any) -> float | None:
+        try:
+            p = float(value)
+            if p > 0:
+                return p
+        except Exception:
+            return None
+        return None
+
+    mode = str(snapshot.mode or "SIM").upper()
+    ctx_payload = dict(snapshot.market_context or {})
+    if "execution_mode" not in ctx_payload:
+        ctx_payload["execution_mode"] = mode
+    if "market_open" not in ctx_payload:
+        ctx_payload["market_open"] = bool(snapshot.market_open)
+    ctx = derive_market_context(ctx_payload)
+    mode = str(ctx.mode or mode).upper()
+
+    depth = dict(snapshot.depth or {})
+    bid = _as_price(depth.get("bid"))
+    ask = _as_price(depth.get("ask"))
+    if bid is None:
+        bid = _as_price(snapshot.bid)
+    if ask is None:
+        ask = _as_price(snapshot.ask)
+    if bid is not None and ask is not None and ask >= bid:
+        return {
+            "bid": bid,
+            "ask": ask,
+            "mid": (bid + ask) / 2.0,
+            "quote_ok": True,
+            "quote_source": "depth",
+        }
+
+    ltp = _as_price(snapshot.ltp)
+    if ltp is None:
+        return {
+            "bid": None,
+            "ask": None,
+            "mid": None,
+            "quote_ok": False,
+            "quote_source": "missing_ltp" if bool(getattr(ctx, "require_live_quotes", False)) else "missing_depth",
+        }
+
+    max_ltp_age = float(
+        getattr(
+            cfg,
+            "MAX_LTP_AGE_SEC" if mode == "LIVE" else "OFFHOURS_MAX_LTP_AGE_SEC",
+            8.0 if mode == "LIVE" else 3600.0,
+        )
+    )
+    ltp_age_sec = compute_age_sec(snapshot.ltp_ts_epoch, snapshot.ts_epoch)
+    if ltp_age_sec is None:
+        age_ok = not bool(getattr(ctx, "require_live_quotes", False))
+    else:
+        age_ok = float(max(0.0, ltp_age_sec)) <= max_ltp_age
+    if not age_ok:
+        return {
+            "bid": None,
+            "ask": None,
+            "mid": None,
+            "quote_ok": False,
+            "quote_source": "stale_ltp",
+        }
+
+    depth_required = bool(mode == "LIVE" and bool(snapshot.market_open) and bool(getattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", False)))
+    if depth_required:
+        return {
+            "bid": None,
+            "ask": None,
+            "mid": None,
+            "quote_ok": False,
+            "quote_source": "missing_depth",
+        }
+
+    synth_bid, synth_ask = _synth_index_bid_ask(ltp)
+    return {
+        "bid": synth_bid,
+        "ask": synth_ask,
+        "mid": (synth_bid + synth_ask) / 2.0 if synth_bid is not None and synth_ask is not None else None,
+        "quote_ok": bool(synth_bid is not None and synth_ask is not None),
+        "quote_source": "synthetic_index" if synth_bid is not None and synth_ask is not None else "missing_depth",
+    }
 
 
 @dataclass(frozen=True)
@@ -252,6 +342,7 @@ def build_market_snapshot(
         now_value = float(now_utc_epoch())
 
     symbol = str(data.get("symbol") or "").upper() or "UNKNOWN"
+    instrument = str(data.get("instrument") or data.get("instrument_type") or "").upper() or "OPT"
     ctx_payload = dict(data.get("market_context") or {}) if isinstance(data.get("market_context"), Mapping) else {}
     if "execution_mode" not in ctx_payload:
         ctx_payload["execution_mode"] = data.get("execution_mode")
@@ -259,6 +350,15 @@ def build_market_snapshot(
         ctx_payload["market_open"] = data.get("market_open")
     if "segment" not in ctx_payload:
         ctx_payload["segment"] = data.get("segment")
+    ctx_payload["segment"] = coerce_segment_for_market_context(
+        ctx_payload.get("segment"),
+        symbol=symbol,
+        instrument=instrument,
+    )
+    if "symbol" not in ctx_payload:
+        ctx_payload["symbol"] = symbol
+    if "instrument" not in ctx_payload:
+        ctx_payload["instrument"] = instrument
     if "state" not in ctx_payload:
         ctx_payload["state"] = data.get("state")
     market_ctx = derive_market_context(ctx_payload)
@@ -348,7 +448,6 @@ def build_market_snapshot(
     broker_enabled = _to_bool(data.get("broker_enabled"), default=True) and (not _to_bool(data.get("broker_disabled"), default=False))
     manual_review_required = _to_bool(data.get("manual_review_required", data.get("review_required", False)), default=False)
 
-    instrument = str(data.get("instrument") or data.get("instrument_type") or "").upper() or "OPT"
     quote_ok_input: bool | None
     if "quote_ok" in data:
         quote_ok_input = _to_bool(data.get("quote_ok"), default=False)
@@ -498,21 +597,7 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
     is_index = _is_index_symbol(symbol, snapshot.instrument)
 
     if is_index:
-        ltp_age_sec = None
-        try:
-            if snapshot.ltp_ts_epoch is not None:
-                ltp_age_sec = compute_age_sec(snapshot.ltp_ts_epoch, snapshot.ts_epoch)
-        except Exception:
-            ltp_age_sec = None
-        resolved = resolve_index_quote(
-            symbol=symbol,
-            mode=mode,
-            ltp=snapshot.ltp,
-            depth=snapshot.depth,
-            market_open=bool(snapshot.market_open),
-            ltp_age_sec=ltp_age_sec,
-            market_context=dict(snapshot.market_context or {}),
-        )
+        resolved = _resolve_index_quote_from_snapshot(snapshot)
         facts = {
             "quote_ok": bool(resolved.get("quote_ok")),
             "quote_source": resolved.get("quote_source"),
@@ -703,6 +788,56 @@ def _collect_failed_deps(deps: Mapping[str, NodeResult], dep_order: Sequence[str
     return failures, reasons
 
 
+def _derive_qual_fail_codes(candidate: StrategyCandidate | None, *, manual_review: bool) -> list[str]:
+    """
+    Produce stable, machine-friendly codes to explain NO_STRATEGY_QUALIFIED outcomes.
+    We do not try to "interpret" all possible reasons; we bucket the common ones
+    and also include normalized raw reasons.
+    """
+    codes: list[str] = []
+    if manual_review:
+        codes.append("manual_review_required")
+    if candidate is None:
+        codes.append("no_candidates")
+        return codes
+
+    if not candidate.allowed:
+        codes.append("candidate_not_allowed")
+    if not candidate.family:
+        codes.append("candidate_family_missing")
+
+    # Normalize raw reasons into stable tokens
+    for r in candidate.reasons or ():
+        s = str(r or "").strip().lower()
+        if not s:
+            continue
+        # small canonical buckets (extend safely over time)
+        if "liquid" in s or "liquidity" in s:
+            code = "liquidity"
+        elif "spread" in s:
+            code = "spread"
+        elif "iv" in s or "implied" in s:
+            code = "iv"
+        elif "vwap" in s:
+            code = "vwap"
+        elif "trend" in s:
+            code = "trend"
+        elif "time" in s or "window" in s:
+            code = "time_window"
+        elif "warmup" in s or "hist" in s:
+            code = "warmup"
+        elif "risk" in s:
+            code = "risk"
+        elif "manual" in s or "review" in s:
+            code = "manual_review"
+        else:
+            code = "reason:" + s.replace(" ", "_")[:64]
+        if code not in codes:
+            codes.append(code)
+
+    return codes
+
+
 def _node_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     precondition_nodes = (
         NODE_N1_MARKET_OPEN,
@@ -717,30 +852,71 @@ def _node_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps
     if not isinstance(cached_results, Mapping):
         cached_results = deps
     precondition_failures, precondition_reasons = _collect_failed_deps(cached_results, precondition_nodes)
+
     candidates = tuple(ctx.get("strategy_candidates") or ())
     candidate = _pick_actionable_candidate(candidates)
     candidate_summary = _candidate_summary(candidate)
+
+    # NEW: full candidates telemetry (bounded + deterministic)
+    all_candidates_rows: list[dict[str, Any]] = []
+    for c in candidates:
+        try:
+            all_candidates_rows.append(
+                {
+                    "family": c.family,
+                    "allowed": bool(c.allowed),
+                    "manual_review_required": bool(c.manual_review_required),
+                    "reasons": list(c.reasons),
+                    "candidate_summary": dict(c.candidate_summary or {}),
+                }
+            )
+        except Exception:
+            continue
+
     facts: dict[str, Any] = {
         "strategy_skipped_due_to_preconditions": bool(precondition_failures),
         "precondition_failures": list(precondition_failures),
         "precondition_reasons": list(precondition_reasons),
         "candidate_summary": candidate_summary if candidate_summary else {},
+        "picked_candidate": {
+            "family": (candidate.family if candidate else None),
+            "allowed": (bool(candidate.allowed) if candidate else False),
+            "manual_review_required": (bool(candidate.manual_review_required) if candidate else False),
+            "reasons": (list(candidate.reasons) if candidate else []),
+        },
+        "all_candidates": all_candidates_rows,
     }
 
     if precondition_failures:
+        # Strategy selection is intentionally skipped if preconditions fail.
+        # Still emit candidate telemetry for observability.
         return NodeResult(ok=True, reasons=(), facts=facts)
 
     if candidate is None:
         facts["strategy_reasons"] = []
+        facts["qual_fail_codes"] = _derive_qual_fail_codes(None, manual_review=False)
+        facts["qual_fail_reasons_raw"] = []
         return NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts=facts)
 
     facts["strategy_reasons"] = list(candidate.reasons)
-    if snapshot.manual_review_required or candidate.manual_review_required:
+
+    manual_review = bool(snapshot.manual_review_required or candidate.manual_review_required)
+    if manual_review:
+        facts["qual_fail_codes"] = _derive_qual_fail_codes(candidate, manual_review=True)
+        facts["qual_fail_reasons_raw"] = list(candidate.reasons)
         return NodeResult(ok=False, reasons=(REASON_MANUAL_REVIEW_REQUIRED,), facts=facts)
 
     if not candidate.allowed or not candidate.family:
         has_manual_reason = any("manual_review" in reason.lower() for reason in candidate.reasons)
         reason = REASON_MANUAL_REVIEW_REQUIRED if has_manual_reason else REASON_NO_STRATEGY_QUALIFIED
+
+        if reason == REASON_NO_STRATEGY_QUALIFIED:
+            facts["qual_fail_codes"] = _derive_qual_fail_codes(candidate, manual_review=False)
+            facts["qual_fail_reasons_raw"] = list(candidate.reasons)
+        else:
+            facts["qual_fail_codes"] = _derive_qual_fail_codes(candidate, manual_review=True)
+            facts["qual_fail_reasons_raw"] = list(candidate.reasons)
+
         return NodeResult(ok=False, reasons=(reason,), facts=facts)
 
     return NodeResult(
@@ -754,6 +930,10 @@ def _node_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps
 def _node_strategy_eligible(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     n8 = deps.get(NODE_N8_STRATEGY_SELECT, NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts={}))
     facts = {"from_node": NODE_N8_STRATEGY_SELECT, "candidate_summary": (n8.facts or {}).get("candidate_summary", {})}
+    # NEW: pass through telemetry if present
+    for k in ("qual_fail_codes", "qual_fail_reasons_raw", "picked_candidate", "all_candidates", "precondition_failures", "precondition_reasons"):
+        if k in (n8.facts or {}):
+            facts[k] = (n8.facts or {}).get(k)
     if n8.ok:
         return NodeResult(ok=True, value=n8.value, facts=facts)
     return NodeResult(ok=False, reasons=n8.reasons, facts=facts)
@@ -762,6 +942,10 @@ def _node_strategy_eligible(snapshot: MarketSnapshot, ctx: Mapping[str, Any], de
 def _node_decision_ready(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
     n9 = deps.get(NODE_N9_STRATEGY_ELIGIBLE, NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts={}))
     facts = {"from_node": NODE_N9_STRATEGY_ELIGIBLE}
+    # NEW: pass through telemetry if present
+    for k in ("qual_fail_codes", "qual_fail_reasons_raw", "picked_candidate", "all_candidates", "precondition_failures", "precondition_reasons"):
+        if k in (n9.facts or {}):
+            facts[k] = (n9.facts or {}).get(k)
     if n9.ok:
         return NodeResult(ok=True, value=n9.value, facts=facts)
     return NodeResult(ok=False, reasons=n9.reasons, facts=facts)
@@ -774,6 +958,9 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
     cached_results = ctx.get("cache") if isinstance(ctx, Mapping) else None
     if not isinstance(cached_results, Mapping):
         cached_results = {}
+
+    # NEW: capture strategy telemetry from N8/N9/N10 chain if present
+    strategy_telemetry: dict[str, Any] = {}
 
     for node_name in _LINEAR_NODE_ORDER[:-1]:
         result = cached_results.get(node_name)
@@ -792,6 +979,13 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
             for reason in result.reasons:
                 if reason not in blockers:
                     blockers.append(reason)
+
+        if node_name in {NODE_N8_STRATEGY_SELECT, NODE_N9_STRATEGY_ELIGIBLE, NODE_N10_DECISION_READY}:
+            f = dict(result.facts or {})
+            # Only keep a safe subset (bounded)
+            for k in ("qual_fail_codes", "qual_fail_reasons_raw", "picked_candidate", "all_candidates", "precondition_failures", "precondition_reasons", "strategy_reasons"):
+                if k in f:
+                    strategy_telemetry[k] = f.get(k)
 
     decision_ready = cached_results.get(
         NODE_N10_DECISION_READY,
@@ -820,7 +1014,7 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
         stage=stage,
         selected_strategy=selected_strategy,
         risk_params=risk_params,
-        facts={},
+        facts={"strategy_telemetry": strategy_telemetry} if strategy_telemetry else {},
         explain=tuple(explain_rows),
     )
     final_row = {
@@ -830,7 +1024,12 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
         "facts": {"stage": stage},
     }
     decision.explain = tuple(list(decision.explain) + [final_row])
-    return NodeResult(ok=bool(allowed), value=decision, reasons=tuple(blockers), facts={"stage": stage})
+    return NodeResult(
+        ok=bool(allowed),
+        value=decision,
+        reasons=tuple(blockers),
+        facts={"stage": stage, "strategy_telemetry": strategy_telemetry} if strategy_telemetry else {"stage": stage},
+    )
 
 
 class DecisionDAGEvaluator:

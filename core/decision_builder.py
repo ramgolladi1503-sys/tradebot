@@ -6,8 +6,9 @@ that already has plain Python dicts for market/strategy/signals.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
+from config import config as cfg
 from core.decision import (
     Decision,
     DecisionMarket,
@@ -18,6 +19,7 @@ from core.decision import (
     DecisionStatus,
     DecisionStrategy,
 )
+from core.decision_snapshot import DecisionSnapshot
 
 
 _REQUIRED_FIELDS_BY_FAMILY = {
@@ -25,6 +27,56 @@ _REQUIRED_FIELDS_BY_FAMILY = {
     "options_iv": {"iv", "ivp"},
     "skew": {"iv", "ivp"},
 }
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        out = float(value)
+    except Exception:
+        return None
+    if out != out:  # NaN guard
+        return None
+    return out
+
+
+def _signal_result_payload(signal_result: Any) -> Dict[str, Any]:
+    if signal_result is None:
+        return {}
+    if hasattr(signal_result, "to_dict"):
+        try:
+            payload = signal_result.to_dict()
+            if isinstance(payload, Mapping):
+                return dict(payload)
+        except Exception:
+            pass
+    if isinstance(signal_result, Mapping):
+        return dict(signal_result)
+    return {
+        "confidence": getattr(signal_result, "confidence", None),
+        "features": getattr(signal_result, "features", None),
+        "direction": getattr(signal_result, "direction", None),
+    }
+
+
+def _execution_decision_payload(execution_decision: Any) -> Dict[str, Any]:
+    if execution_decision is None:
+        return {}
+    if hasattr(execution_decision, "to_dict"):
+        try:
+            payload = execution_decision.to_dict()
+            if isinstance(payload, Mapping):
+                return dict(payload)
+        except Exception:
+            pass
+    if isinstance(execution_decision, Mapping):
+        return dict(execution_decision)
+    return {
+        "can_execute": getattr(execution_decision, "can_execute", None),
+        "execution_score": getattr(execution_decision, "execution_score", None),
+        "execution_reject_reason": getattr(execution_decision, "execution_reject_reason", None),
+    }
 
 
 def _missing_required_fields(strategy_family: Optional[str], market: Dict[str, Any]) -> List[str]:
@@ -46,6 +98,9 @@ def build_decision(
     risk: Optional[Dict[str, Any]] = None,
     outcome: Optional[Dict[str, Any]] = None,
     strategy_family: Optional[str] = None,
+    decision_snapshot: Optional[DecisionSnapshot | Dict[str, Any]] = None,
+    signal_result: Optional[Any] = None,
+    execution_decision: Optional[Any] = None,
 ) -> Decision:
     """Build a Decision from plain dicts.
 
@@ -56,9 +111,21 @@ def build_decision(
     strategy = strategy or {}
     risk = risk or {}
     outcome = outcome or {}
+    market = dict(market or {})
 
     reject_reasons = list(outcome.get("reject_reasons", []))
     reject_reasons.extend(_missing_required_fields(strategy_family, market))
+
+    snapshot_obj: DecisionSnapshot | None = None
+    if bool(getattr(cfg, "USE_DECISION_SNAPSHOT", False)) and decision_snapshot is not None:
+        if isinstance(decision_snapshot, DecisionSnapshot):
+            snapshot_obj = decision_snapshot
+        elif isinstance(decision_snapshot, dict):
+            snapshot_obj = DecisionSnapshot.from_dict(decision_snapshot)
+        if snapshot_obj is not None:
+            # Snapshot becomes source-of-truth for spot-like value when feature is enabled.
+            if snapshot_obj.index_price is not None:
+                market["spot"] = float(snapshot_obj.index_price)
 
     meta_obj = DecisionMeta(
         ts_epoch=float(meta.get("ts_epoch", 0.0)),
@@ -75,10 +142,24 @@ def build_decision(
         iv=market.get("iv"),
         ivp=market.get("ivp"),
     )
+    signal_payload = _signal_result_payload(signal_result)
+    signal_features = signal_payload.get("features")
+    if not isinstance(signal_features, Mapping):
+        signal_features = {}
+    signal_conf = _safe_float(signal_payload.get("confidence"))
+    if signal_conf is None:
+        signal_conf = _safe_float(signals.get("confidence"))
+    rank_score = signal_features.get("rank_score")
+    if rank_score is None:
+        rank_score = signals.get("rank_score")
+    pattern_flags = signal_features.get("pattern_flags")
+    if not isinstance(pattern_flags, list):
+        pattern_flags = list(signals.get("pattern_flags", []))
+
     signals_obj = DecisionSignals(
-        pattern_flags=list(signals.get("pattern_flags", [])),
-        rank_score=signals.get("rank_score"),
-        confidence=signals.get("confidence"),
+        pattern_flags=list(pattern_flags),
+        rank_score=rank_score,
+        confidence=signal_conf,
     )
     strategy_obj = DecisionStrategy(
         name=str(strategy.get("name", "")),
@@ -102,6 +183,29 @@ def build_decision(
         reject_reasons=reject_reasons,
     )
 
+    extra_payload = {
+        k: v for k, v in outcome.items() if k not in {"status", "reject_reasons"}
+    }
+    if snapshot_obj is not None:
+        extra_payload["decision_snapshot"] = snapshot_obj.to_dict()
+    if signal_payload:
+        extra_payload["signal_v1"] = {
+            "confidence": signal_conf,
+            "features": dict(signal_features),
+            "direction": str(signal_payload.get("direction") or strategy.get("direction") or ""),
+        }
+    exec_payload = _execution_decision_payload(execution_decision)
+    if exec_payload:
+        extra_payload["execution_v1"] = {
+            "can_execute": bool(exec_payload.get("can_execute")),
+            "execution_score": _safe_float(exec_payload.get("execution_score")) or 0.0,
+            "execution_reject_reason": (
+                str(exec_payload.get("execution_reject_reason"))
+                if exec_payload.get("execution_reject_reason") is not None
+                else None
+            ),
+        }
+
     return Decision(
         meta=meta_obj,
         market=market_obj,
@@ -109,9 +213,7 @@ def build_decision(
         strategy=strategy_obj,
         risk=risk_obj,
         outcome=outcome_obj,
-        extra={
-            k: v for k, v in outcome.items() if k not in {"status", "reject_reasons"}
-        },
+        extra=extra_payload,
     )
 
 

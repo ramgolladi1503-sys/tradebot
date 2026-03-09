@@ -25,7 +25,7 @@ def test_get_last_tick_get_ltp_and_age_for_fresh_tick(monkeypatch, tmp_path):
     assert set(last_tick.keys()) == {"ltp", "ts_epoch", "source"}
     assert isinstance(last_tick["ltp"], float)
     assert isinstance(last_tick["ts_epoch"], float)
-    assert last_tick["source"] in {"memory", "db"}
+    assert last_tick["source"] in {"memory", "sqlite"}
 
     ltp, ts_epoch = tick_store.get_ltp(token)
     assert isinstance(ltp, float)
@@ -48,7 +48,7 @@ def test_get_last_tick_db_fallback_when_memory_missing(monkeypatch, tmp_path):
 
     last_tick = tick_store.get_last_tick(token, allow_db=True)
     assert isinstance(last_tick, dict)
-    assert last_tick["source"] == "db"
+    assert last_tick["source"] == "sqlite"
     assert isinstance(last_tick["ltp"], float)
     assert isinstance(last_tick["ts_epoch"], float)
 

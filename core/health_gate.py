@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from config import config as cfg
+from core.contracts.invariants import InvariantViolation, assert_invariants
 from core.cost_gate import run_cost_gate
 from core.events import append_event, events_path, read_events, write_json_atomic
-from core.health_scenarios import run_golden_path
+from core.health_scenarios import run_golden_path, run_one_trade_can_build
 from core.paths import logs_dir
 from core.reconciliation_project_from_events import build_recon, recon_path
 from core.time_utils import utc_now
@@ -53,6 +54,117 @@ def _issue(code: str, priority: str, message: str, evidence: dict[str, Any], fix
         "evidence": evidence,
         "fix_hint": fix_hint,
     }
+
+
+def evaluate_runtime_health(snapshot: dict, *, feed_connected: bool, db_ok: bool) -> dict:
+    """
+    Evaluate runtime health from a single snapshot contract and runtime liveness flags.
+
+    Returns:
+      {
+        "ok": bool,
+        "blockers": [{"code","priority","message","evidence"}, ...]
+      }
+    """
+    blockers: list[dict[str, Any]] = []
+
+    try:
+        assert_invariants(snapshot, stage="runtime_health")
+    except InvariantViolation as exc:
+        blockers.append(
+            {
+                "code": "INVARIANT_VIOLATION",
+                "priority": "P0",
+                "message": f"{exc.code}: {exc.message}",
+                "evidence": dict(exc.evidence or {}),
+            }
+        )
+        return {"ok": False, "blockers": blockers}
+
+    min_required = max(
+        1,
+        int(
+            getattr(
+                cfg,
+                "MIN_OPTION_TOKEN_COUNT",
+                getattr(cfg, "MIN_OPTION_TOKENS", 50),
+            )
+        ),
+    )
+    coverage = dict(snapshot.get("token_coverage") or {})
+    option_count = int(coverage.get("option_tokens_count") or 0)
+    if option_count < min_required:
+        blockers.append(
+            {
+                "code": "TOKEN_COVERAGE_BELOW_THRESHOLD",
+                "priority": "P0",
+                "message": "Option token coverage below minimum required threshold.",
+                "evidence": {
+                    "option_tokens_count": option_count,
+                    "min_option_token_count": min_required,
+                    "symbol": snapshot.get("symbol"),
+                    "snapshot_id": snapshot.get("snapshot_id"),
+                },
+            }
+        )
+
+    freshness = dict(snapshot.get("freshness") or {})
+    max_tick_age = freshness.get("max_tick_age_sec")
+    sla_threshold = freshness.get("sla_threshold_sec")
+    try:
+        max_tick_age_f = float(max_tick_age)
+        sla_threshold_f = float(sla_threshold)
+    except Exception:
+        max_tick_age_f = None
+        sla_threshold_f = None
+    if (
+        max_tick_age_f is None
+        or sla_threshold_f is None
+        or max_tick_age_f > sla_threshold_f
+    ):
+        blockers.append(
+            {
+                "code": "FRESHNESS_STALE",
+                "priority": "P0",
+                "message": "Tick freshness exceeds SLA threshold.",
+                "evidence": {
+                    "max_tick_age_sec": max_tick_age,
+                    "sla_threshold_sec": sla_threshold,
+                    "symbol": snapshot.get("symbol"),
+                    "snapshot_id": snapshot.get("snapshot_id"),
+                },
+            }
+        )
+
+    if not bool(db_ok):
+        blockers.append(
+            {
+                "code": "DB_UNAVAILABLE",
+                "priority": "P0",
+                "message": "SQLite data source not healthy.",
+                "evidence": {
+                    "db_ok": bool(db_ok),
+                    "symbol": snapshot.get("symbol"),
+                    "snapshot_id": snapshot.get("snapshot_id"),
+                },
+            }
+        )
+
+    if not bool(feed_connected):
+        blockers.append(
+            {
+                "code": "FEED_DISCONNECTED",
+                "priority": "P0",
+                "message": "Live feed is not connected.",
+                "evidence": {
+                    "feed_connected": bool(feed_connected),
+                    "symbol": snapshot.get("symbol"),
+                    "snapshot_id": snapshot.get("snapshot_id"),
+                },
+            }
+        )
+
+    return {"ok": len(blockers) == 0, "blockers": blockers}
 
 
 def _project_root() -> Path:
@@ -218,6 +330,19 @@ def run_health_gate(
             )
         )
     checks.append("golden_path_trade")
+
+    trade_build = run_one_trade_can_build(str(desk or "DEFAULT"), run_id=active_run_id)
+    if not bool(trade_build.get("ok")):
+        issue_list.append(
+            _issue(
+                "ONE_TRADE_CAN_BUILD_P0",
+                "P0",
+                "Health gate could not build one trade to EXECUTABLE state.",
+                {"scenario": trade_build},
+                "Fix token resolution, tick/depth freshness, or queue decision wiring so one candidate reaches EXECUTE.",
+            )
+        )
+    checks.append("one_trade_can_build")
 
     events = read_events(run_id=active_run_id)
     intent_count = sum(1 for row in events if row.get("type") == "trade_intent_created")

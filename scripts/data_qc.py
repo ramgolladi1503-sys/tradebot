@@ -4,15 +4,14 @@ from core.paths import logs_dir
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
-import sqlite3
-from pathlib import Path
 import json
+import sqlite3
 import pandas as pd
-import sys
 
 from config import config as cfg
 
 OUT = logs_dir() / "data_qc.json"
+
 
 def _qc_table(conn, table, ts_col="timestamp"):
     try:
@@ -27,7 +26,6 @@ def _qc_table(conn, table, ts_col="timestamp"):
         res["null_ts"] = int(df[ts_col].isna().sum())
         res["min_ts"] = str(df[ts_col].min())
         res["max_ts"] = str(df[ts_col].max())
-    # null rate (focus on timestamp for ticks/trades)
     if table in ("ticks", "trades"):
         null_rate = float(df[ts_col].isna().mean()) if ts_col in df.columns else 0.0
     else:
@@ -36,18 +34,52 @@ def _qc_table(conn, table, ts_col="timestamp"):
     res["null_rate_ok"] = null_rate <= getattr(cfg, "QC_MAX_NULL_RATE", 0.1)
     return res
 
-if __name__ == "__main__":
+
+def _ensure_trade_db_ready(db_path: Path) -> dict:
+    """
+    Root-cause fix:
+    Daily ops can run before any trade rows are inserted. In that case the DB file
+    may not exist yet, even though schema init is safe and deterministic.
+    """
+    if db_path.exists():
+        return {"created": False, "path": str(db_path)}
+    try:
+        from core.trade_store import init_db
+
+        init_db()
+    except Exception as exc:
+        raise RuntimeError(f"cannot initialize trade db at {db_path}: {exc}") from exc
+    return {"created": bool(db_path.exists()), "path": str(db_path)}
+
+
+def run_qc() -> dict:
     db = Path(cfg.TRADE_DB_PATH)
-    if not db.exists():
-        raise SystemExit("trades.db not found")
-    conn = sqlite3.connect(db)
-    qc = [
-        _qc_table(conn, "ticks"),
-        _qc_table(conn, "depth_snapshots"),
-        _qc_table(conn, "trades"),
-        _qc_table(conn, "broker_fills"),
-    ]
-    conn.close()
-    OUT.parent.mkdir(exist_ok=True)
-    OUT.write_text(json.dumps(qc, indent=2))
-    print(qc)
+    db_state = _ensure_trade_db_ready(db)
+    conn = sqlite3.connect(str(db))
+    try:
+        qc_rows = [
+            _qc_table(conn, "ticks"),
+            _qc_table(conn, "depth_snapshots"),
+            _qc_table(conn, "trades"),
+            _qc_table(conn, "broker_fills"),
+        ]
+    finally:
+        conn.close()
+
+    payload = {
+        "status": "ok",
+        "db_path": str(db),
+        "db_created": bool(db_state.get("created")),
+        "tables": qc_rows,
+    }
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(payload)
+    return payload
+
+
+if __name__ == "__main__":
+    try:
+        run_qc()
+    except Exception as exc:
+        raise SystemExit(str(exc))

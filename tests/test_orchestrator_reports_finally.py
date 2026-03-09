@@ -29,15 +29,24 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     day = now_ist().date().isoformat()
     audit_path = Path(cfg.LOGS_ROOT) / f"daily_audit_{day}.json"
     exec_path = Path(cfg.LOGS_ROOT) / f"execution_report_{day}.json"
+    suggestions_status_path = Path(cfg.LOGS_ROOT) / "suggestions_status.json"
+    engine_cycle_status_path = Path(cfg.LOGS_ROOT) / "engine_cycle_status.json"
 
     assert audit_path.exists()
     assert exec_path.exists()
+    assert suggestions_status_path.exists()
+    assert engine_cycle_status_path.exists()
 
     audit_doc = json.loads(audit_path.read_text())
     exec_doc = json.loads(exec_path.read_text())
+    suggestions_status = json.loads(suggestions_status_path.read_text())
+    engine_cycle_status = json.loads(engine_cycle_status_path.read_text())
 
     assert audit_doc["date"] == day
     assert exec_doc["date"] == day
     assert isinstance(exec_doc.get("executions"), list)
     assert exec_doc.get("executions") == []
     assert exec_doc.get("reason")
+    assert suggestions_status["status"] == "error"
+    assert engine_cycle_status["cycle_ok"] is False
+    assert engine_cycle_status["last_error"]

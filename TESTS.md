@@ -28,3 +28,24 @@ Current status:
 
 - Unit/default suite: active
 - Integration-marked tests: none required at this time
+
+## Deterministic daily regression suite
+
+Daily local regression (offline-safe) runs both the test suite and strict health gate:
+
+```bash
+PYTHONPATH=. ./scripts/run_daily_regression.sh
+```
+
+Artifacts:
+
+- `logs_dir()/health_gate_report.json`
+- `logs_dir()/health_gate_report.md`
+- `logs_dir()/daily_regression/YYYY-MM-DD.json`
+
+Health gate includes `ONE_TRADE_CAN_BUILD`:
+
+- synthetic index + option ticks are injected
+- deterministic token resolution is exercised
+- one candidate must reach executable state (`final_action != ADVISORY_ONLY`)
+- blocked statuses `STALE_OPTION_LTP`, `NO_TOKEN`, `FEED_UNKNOWN` fail the gate

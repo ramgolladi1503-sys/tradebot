@@ -29,6 +29,12 @@ def test_target_points_idea_queued_when_threshold_met(monkeypatch):
     trade = SimpleNamespace(
         symbol="NIFTY",
         trade_id="NIFTY-T20-1",
+        instrument="OPT",
+        instrument_token=12345,
+        tradingsymbol="NIFTY26MAR25000CE",
+        expiry="2026-03-26",
+        expiry_date="2026-03-26",
+        instrument_id="NIFTY26MAR25000CE",
         entry_price=100.0,
         target=122.0,
     )
@@ -57,6 +63,11 @@ def test_target_points_idea_not_queued_below_threshold(monkeypatch):
     trade = SimpleNamespace(
         symbol="NIFTY",
         trade_id="NIFTY-T20-LOW",
+        instrument="OPT",
+        instrument_token=12345,
+        tradingsymbol="NIFTY26MAR25000CE",
+        expiry="2026-03-26",
+        expiry_date="2026-03-26",
         entry_price=100.0,
         target=111.0,
     )
@@ -80,6 +91,11 @@ def test_target_points_idea_skips_quality_blockers(monkeypatch):
     trade = SimpleNamespace(
         symbol="NIFTY",
         trade_id="NIFTY-T20-BLOCKED",
+        instrument="OPT",
+        instrument_token=12345,
+        tradingsymbol="NIFTY26MAR25000CE",
+        expiry="2026-03-26",
+        expiry_date="2026-03-26",
         entry_price=100.0,
         target=130.0,
     )

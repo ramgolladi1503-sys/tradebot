@@ -50,6 +50,66 @@ def test_capture_from_log_reads_desk_blocked_candidates(tmp_path, monkeypatch):
     assert rows[0]["symbol"] == "NIFTY"
 
 
+def test_capture_from_log_dedupes_desk_source_and_skips_fallback_rejected_log(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    desk_dir = tmp_path / "logs" / "desks" / "DEFAULT"
+    desk_dir.mkdir(parents=True, exist_ok=True)
+    blocked_path = desk_dir / "blocked_candidates.jsonl"
+    rejected_path = tmp_path / "logs" / "rejected_candidates.jsonl"
+    rejected_path.parent.mkdir(parents=True, exist_ok=True)
+
+    desk_row = {
+        "trade_id": "BLK-DEDUPE-1",
+        "timestamp": "2026-02-24T09:20:00+05:30",
+        "symbol": "NIFTY",
+        "strike": 24000,
+        "type": "CE",
+        "reason": "REGIME_BLOCK",
+        "ltp": 100.0,
+        "stop": 90.0,
+        "target": 120.0,
+        "atr": 10.0,
+    }
+    blocked_path.write_text(json.dumps(desk_row) + "\n")
+    rejected_path.write_text(
+        "\n".join(
+            [
+                json.dumps(desk_row),
+                json.dumps(
+                    {
+                        "trade_id": "T-1",
+                        "timestamp": "2026-02-24T09:21:00+05:30",
+                        "symbol": "BANKNIFTY",
+                        "strike": 52000,
+                        "type": "PE",
+                        "reason": "OTHER_BLOCK",
+                        "ltp": 200.0,
+                        "stop": 180.0,
+                        "target": 240.0,
+                        "atr": 20.0,
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+
+    track_path = tmp_path / "runtime" / "logs" / "blocked_tracking.jsonl"
+    monkeypatch.setattr(cfg, "DESK_LOG_DIR", str(desk_dir), raising=False)
+    monkeypatch.setattr(cfg, "BLOCKED_TRACK_PATH", str(track_path), raising=False)
+    monkeypatch.setattr(cfg, "BLOCKED_TRACK_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "BLOCKED_TRACK_POLL_SEC", 0, raising=False)
+
+    tracker = BlockedTradeTracker()
+    tracker.capture_from_log()
+
+    rows = [json.loads(line) for line in track_path.read_text().splitlines() if line.strip()]
+    assert len(rows) == 1
+    assert rows[0]["blocked_id"] == "BLK-DEDUPE-1"
+    assert rows[0]["symbol"] == "NIFTY"
+
+
 def test_update_trains_from_suggestion_eval_once_per_new_data(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "runtime" / "logs"), raising=False)

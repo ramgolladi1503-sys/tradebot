@@ -47,9 +47,11 @@ class TradeOutcomeTD(TypedDict, total=False):
     mfe_points: float | None
     mae_points: float | None
     exec_feasible: bool
-    exec_feasible_flags: dict[str, bool]
+    exec_feasible_flags: dict[str, Any]
     source: str
     reject_reason: str | None
+    reject_reasons: list[str]
+    primary_reject_reason: str | None
 
 
 GATE_DECISION_JSON_SCHEMA: dict[str, Any] = {
@@ -109,6 +111,8 @@ TRADE_OUTCOME_JSON_SCHEMA: dict[str, Any] = {
         "exec_feasible_flags": {"type": "object"},
         "source": {"type": "string"},
         "reject_reason": {"type": ["string", "null"]},
+        "reject_reasons": {"type": "array", "items": {"type": "string"}},
+        "primary_reject_reason": {"type": ["string", "null"]},
     },
 }
 
@@ -391,11 +395,21 @@ class TradeOutcome:
     mfe_points: float | None = None
     mae_points: float | None = None
     exec_feasible: bool = True
-    exec_feasible_flags: dict[str, bool] = field(default_factory=dict)
+    exec_feasible_flags: dict[str, Any] = field(default_factory=dict)
     source: str = ""
     reject_reason: str | None = None
+    reject_reasons: tuple[str, ...] = field(default_factory=tuple)
+    primary_reject_reason: str | None = None
 
     def to_dict(self) -> TradeOutcomeTD:
+        normalized_reasons = [str(item).strip() for item in (self.reject_reasons or ()) if str(item).strip()]
+        primary = str(self.primary_reject_reason).strip() if self.primary_reject_reason is not None else ""
+        if not primary:
+            primary = (str(self.reject_reason).strip() if self.reject_reason is not None else "") or (
+                normalized_reasons[0] if normalized_reasons else ""
+            )
+        if primary and primary not in normalized_reasons:
+            normalized_reasons = [primary] + normalized_reasons
         return {
             "trade_key": str(self.trade_key),
             "event_id": str(self.event_id),
@@ -405,9 +419,11 @@ class TradeOutcome:
             "mfe_points": _safe_float(self.mfe_points),
             "mae_points": _safe_float(self.mae_points),
             "exec_feasible": bool(self.exec_feasible),
-            "exec_feasible_flags": {str(k): bool(v) for k, v in (self.exec_feasible_flags or {}).items()},
+            "exec_feasible_flags": {str(k): v for k, v in (self.exec_feasible_flags or {}).items()},
             "source": str(self.source),
-            "reject_reason": (str(self.reject_reason) if self.reject_reason is not None else None),
+            "reject_reason": (primary or None),
+            "reject_reasons": normalized_reasons,
+            "primary_reject_reason": (primary or None),
         }
 
     @classmethod
@@ -445,7 +461,22 @@ class TradeOutcome:
         flags = data.get("exec_feasible_flags")
         if not isinstance(flags, dict):
             flags = {}
-        normalized_flags = {str(k): bool(v) for k, v in flags.items()}
+        normalized_flags = {str(k): v for k, v in flags.items()}
+        raw_reasons = data.get("reject_reasons")
+        normalized_reasons: list[str] = []
+        if isinstance(raw_reasons, (list, tuple)):
+            for item in raw_reasons:
+                text = str(item or "").strip()
+                if text and text not in normalized_reasons:
+                    normalized_reasons.append(text)
+        fallback_reject_reason = str(data.get("reject_reason") or "").strip()
+        primary_reject_reason = str(data.get("primary_reject_reason") or "").strip()
+        if not primary_reject_reason and fallback_reject_reason:
+            primary_reject_reason = fallback_reject_reason
+        if primary_reject_reason and primary_reject_reason not in normalized_reasons:
+            normalized_reasons = [primary_reject_reason] + normalized_reasons
+        if not primary_reject_reason and normalized_reasons:
+            primary_reject_reason = normalized_reasons[0]
         return cls(
             trade_key=trade_key,
             event_id=event_id,
@@ -457,7 +488,9 @@ class TradeOutcome:
             exec_feasible=bool(data.get("exec_feasible")),
             exec_feasible_flags=normalized_flags,
             source=str(data.get("source") or ""),
-            reject_reason=(str(data.get("reject_reason")) if data.get("reject_reason") is not None else None),
+            reject_reason=(primary_reject_reason or None),
+            reject_reasons=tuple(normalized_reasons),
+            primary_reject_reason=(primary_reject_reason or None),
         )
 
 

@@ -75,6 +75,15 @@ def css(tokens: dict | None = None) -> str:
     html, body, [class*="css"] {{ font-family: var(--font-body); color: var(--text); background: var(--bg); }}
     h1, h2, h3, h4, h5 {{ font-family: var(--font-heading); letter-spacing: 0.2px; }}
     .block-container {{ padding-top: 2.6rem !important; padding-bottom: 2rem !important; }}
+    section[data-testid="stSidebar"] {{
+      min-width: 240px !important;
+      max-width: 240px !important;
+    }}
+    section[data-testid="stSidebar"] .block-container {{
+      padding-left: 0.65rem !important;
+      padding-right: 0.65rem !important;
+      padding-top: 1rem !important;
+    }}
     .app-shell-header {{
       background: linear-gradient(135deg, #0b1220 0%, #0a0f18 100%);
       border: 1px solid var(--border);

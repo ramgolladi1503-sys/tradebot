@@ -44,3 +44,47 @@ def test_schema_dataclasses_roundtrip():
     assert decoded_outcome.outcome == "hit_sl"
     assert decoded_outcome.exec_feasible_flags["has_candle_data"] is True
 
+
+def test_trade_outcome_exec_flags_preserve_series_source_string():
+    outcome = TradeOutcome(
+        trade_key="NIFTY|2026-03-05|22500|CE|BUY",
+        event_id="out_schema_series_source",
+        outcome="no_hit",
+        ts_epoch_ms=1740723960000,
+        symbol="NIFTY",
+        exec_feasible=False,
+        exec_feasible_flags={"has_candle_data": False, "has_series_data": False},
+        source="unit_test",
+        reject_reason="NO_SERIES_DATA",
+        reject_reasons=("NO_SERIES_DATA",),
+        primary_reject_reason="NO_SERIES_DATA",
+    )
+    payload = outcome.to_dict()
+    assert payload["exec_feasible_flags"]["has_series_data"] is False
+    assert payload["primary_reject_reason"] == "NO_SERIES_DATA"
+    assert payload["reject_reasons"] == ["NO_SERIES_DATA"]
+    decoded = TradeOutcome.from_dict(payload)
+    assert decoded.exec_feasible_flags["has_series_data"] is False
+    assert decoded.primary_reject_reason == "NO_SERIES_DATA"
+    assert list(decoded.reject_reasons) == ["NO_SERIES_DATA"]
+
+
+def test_trade_outcome_reject_reasons_multi_preserved():
+    payload = {
+        "trade_key": "NIFTY|2026-03-05|22500|CE|BUY",
+        "event_id": "out_schema_multi_reasons",
+        "outcome": "no_hit",
+        "ts_epoch_ms": 1740723960000,
+        "symbol": "NIFTY",
+        "exec_feasible": False,
+        "exec_feasible_flags": {"has_candle_data": False, "has_series_data": False},
+        "source": "unit_test",
+        "reject_reason": "premium_band_fail",
+        "reject_reasons": ["premium_band_fail", "liquidity_hard_veto"],
+    }
+    decoded = TradeOutcome.from_dict(payload)
+    assert decoded.primary_reject_reason == "premium_band_fail"
+    assert list(decoded.reject_reasons) == ["premium_band_fail", "liquidity_hard_veto"]
+    encoded = decoded.to_dict()
+    assert encoded["primary_reject_reason"] == "premium_band_fail"
+    assert encoded["reject_reasons"] == ["premium_band_fail", "liquidity_hard_veto"]

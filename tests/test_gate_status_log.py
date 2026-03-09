@@ -1,7 +1,15 @@
 import json
+from datetime import datetime, timezone
+from pathlib import Path
+import pytest
 
 from config import config as cfg
-from core.gate_status_log import append_gate_status, build_gate_status_record, gate_status_path
+from core.gate_status_log import (
+    append_gate_status,
+    build_gate_status_record,
+    gate_status_error_path,
+    gate_status_path,
+)
 from core.orchestrator import Orchestrator
 import core.orchestrator as orchestrator_module
 
@@ -153,3 +161,35 @@ def test_gate_status_includes_explicit_regime_reasons():
         stage="strategy_gate",
     )
     assert row["regime_reasons"] == ["prob_too_low", "entropy_too_high"]
+
+
+def test_append_gate_status_serializes_numpy_datetime_path(tmp_path, monkeypatch):
+    np = pytest.importorskip("numpy")
+    runtime_root = tmp_path / "runtime"
+    logs_root = runtime_root / "logs"
+    monkeypatch.setenv("DATA_ROOT", str(runtime_root))
+    monkeypatch.setenv("LOG_DIR", str(logs_root))
+    monkeypatch.setattr(cfg, "DESK_ID", "TEST", raising=False)
+
+    payload = {
+        "symbol": "NIFTY",
+        "metric_np": np.int64(7),
+        "dt": datetime(2026, 3, 4, 9, 15, tzinfo=timezone.utc),
+        "path_obj": Path("/tmp/abc"),
+    }
+    ok = append_gate_status(payload, desk_id="TEST")
+    assert ok is True
+
+    path = gate_status_path("TEST")
+    assert path.exists()
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert rows
+    row = rows[-1]
+    assert row["metric_np"] == 7
+    assert row["dt"].startswith("2026-03-04T09:15:00")
+    assert row["path_obj"] == "/tmp/abc"
+
+    err_path = gate_status_error_path("TEST")
+    if err_path.exists():
+        err_rows = [line for line in err_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert len(err_rows) == 0

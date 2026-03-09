@@ -1,5 +1,8 @@
+import json
+
 from config import config as cfg
 import core.orchestrator as orchestrator_module
+from core.decision_telemetry_health import decision_write_error_path
 from core.decision_dag import (
     NODE_N3_WARMUP_DONE,
     NODE_N9_FINAL_DECISION,
@@ -275,3 +278,105 @@ def test_warmup_clears_when_min_bars_reached(monkeypatch):
     strategy_rows = [row for row in emitted if row.get("stage") == NODE_N9_FINAL_DECISION and row.get("symbol") == "NIFTY"]
     assert len(warmup_rows) == 1
     assert len(strategy_rows) == 1
+
+
+def test_blocked_candidate_emits_decision_evaluated(monkeypatch):
+    emitted_gate_rows = []
+    decision_stream_rows = []
+    candidate_stream_rows = []
+
+    class _StubGatekeeper:
+        def evaluate(self, market_data, mode="MAIN"):
+            return GateResult(True, "DEFINED_RISK", [])
+
+    monkeypatch.setattr(orchestrator_module, "append_gate_status", lambda record, desk_id=None: emitted_gate_rows.append(record))
+    monkeypatch.setattr(orchestrator_module, "append_decision_stream_event", lambda payload, desk_id=None: decision_stream_rows.append(dict(payload)))
+    monkeypatch.setattr(orchestrator_module, "append_candidate_stream_event", lambda payload, desk_id=None: candidate_stream_rows.append(dict(payload)))
+    monkeypatch.setattr(cfg, "DESK_ID", "TEST", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.gatekeeper = _StubGatekeeper()
+    orch._gate_status_cycle_seen = set()
+    orch._gatekeeper_cycle_cache = {}
+
+    snapshot = {
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "timestamp": 1,
+        "market_open": True,
+        "ltp_ts_epoch": 1,
+        "ltp": 25000.0,
+        "quote_ok": True,
+        "primary_regime": "TREND",
+        "system_state": "WARMUP",
+        "warmup_reasons": ["bars_below_min:1m:10/50"],
+        "indicators_ok": False,
+        "indicators_age_sec": 1e9,
+    }
+    gate = orch._strategy_gate_for_symbol(snapshot)
+
+    assert gate.allowed is False
+    evaluated = [row for row in decision_stream_rows if row.get("event_type") == "decision_evaluated"]
+    blocked = [row for row in decision_stream_rows if row.get("event_type") == "decision_blocked"]
+    assert len(candidate_stream_rows) == 1
+    assert len(evaluated) == 1
+    assert len(blocked) == 1
+    assert evaluated[0].get("candidate_id")
+    assert evaluated[0].get("allowed") is False
+    assert str(evaluated[0].get("decision_stage") or "") == NODE_N3_WARMUP_DONE
+
+
+def test_decision_stream_write_failure_is_captured(monkeypatch, tmp_path):
+    emitted_gate_rows = []
+
+    class _StubGatekeeper:
+        def evaluate(self, market_data, mode="MAIN"):
+            return GateResult(True, "DEFINED_RISK", [])
+
+    runtime_root = tmp_path / "runtime"
+    logs_root = runtime_root / "logs"
+    monkeypatch.setenv("DATA_ROOT", str(runtime_root))
+    monkeypatch.setenv("LOG_DIR", str(logs_root))
+    monkeypatch.setattr(cfg, "DESK_ID", "TEST", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+
+    monkeypatch.setattr(orchestrator_module, "append_gate_status", lambda record, desk_id=None: emitted_gate_rows.append(record))
+    monkeypatch.setattr(orchestrator_module, "append_candidate_stream_event", lambda payload, desk_id=None: dict(payload))
+
+    def _raise_non_serializable(*args, **kwargs):
+        raise TypeError("Object of type NonSerializable is not JSON serializable")
+
+    monkeypatch.setattr(orchestrator_module, "append_decision_stream_event", _raise_non_serializable)
+
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.gatekeeper = _StubGatekeeper()
+    orch._gate_status_cycle_seen = set()
+    orch._gatekeeper_cycle_cache = {}
+
+    snapshot = {
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "timestamp": 1,
+        "market_open": True,
+        "ltp_ts_epoch": 1,
+        "ltp": 25000.0,
+        "quote_ok": True,
+        "primary_regime": "TREND",
+        "system_state": "READY",
+        "warmup_reasons": [],
+        "indicators_ok": True,
+        "indicators_age_sec": 0.1,
+    }
+
+    gate = orch._strategy_gate_for_symbol(snapshot)
+    assert gate.allowed is True
+
+    err_path = decision_write_error_path("TEST")
+    assert err_path.exists()
+    rows = [json.loads(line) for line in err_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert rows
+    last = rows[-1]
+    assert last.get("stream") == "decisions_stream"
+    assert last.get("exception_type") == "TypeError"
+    assert "not JSON serializable" in str(last.get("exception_message") or "")

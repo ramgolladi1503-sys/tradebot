@@ -1,7 +1,11 @@
 import json
+import logging
 from pathlib import Path
 from config import config as cfg
 from core.time_utils import now_utc_epoch, now_ist
+
+
+logger = logging.getLogger(__name__)
 
 def _path():
     return Path(cfg.RISK_HALT_FILE)
@@ -40,7 +44,7 @@ def set_halt(reason, details=None):
         from core.incidents import trigger_hard_halt
         trigger_hard_halt({"reason": reason, "details": details or {}})
     except Exception as exc:
-        print(f"[INCIDENT_ERROR] hard_halt err={exc}")
+        logger.error("incident_hard_halt_error err=%s", exc)
     return payload
 
 def clear_halt():

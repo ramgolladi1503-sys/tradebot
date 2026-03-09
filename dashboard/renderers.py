@@ -44,11 +44,42 @@ def render_recon(vm: ArtifactVM) -> None:
 
 
 def render_feed(vm: ArtifactVM) -> None:
-    _render_artifact(
-        vm,
-        missing_caption="Feed artifact unavailable.",
-        error_caption="Feed artifact parse error.",
-    )
+    if vm.status == "missing":
+        st.caption(vm.message or "Feed artifact unavailable.")
+        return
+    if vm.status == "error":
+        st.warning(vm.message or "Feed artifact parse error.")
+    payload = dict(vm.payload or {})
+    source = str(payload.get("freshness_source") or "")
+    if source == "snapshot_v1":
+        freshness = payload.get("freshness") if isinstance(payload.get("freshness"), dict) else {}
+        runtime_health = payload.get("runtime_health") if isinstance(payload.get("runtime_health"), dict) else {}
+        st.caption("Freshness source: MarketSnapshotV1.freshness + health_gate.evaluate_runtime_health")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "status_light": payload.get("status_light"),
+                        "snapshot_id": payload.get("snapshot_id"),
+                        "max_tick_age_sec": freshness.get("max_tick_age_sec"),
+                        "sla_threshold_sec": freshness.get("sla_threshold_sec"),
+                        "stale_tokens_count": freshness.get("stale_tokens_count"),
+                        "runtime_ok": runtime_health.get("ok"),
+                    }
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+        blockers = runtime_health.get("blockers") if isinstance(runtime_health.get("blockers"), list) else []
+        if blockers:
+            st.caption("Runtime blockers")
+            st.dataframe(pd.DataFrame(blockers), use_container_width=True, hide_index=True)
+        return
+
+    if source == "legacy_runtime_health":
+        st.caption("Freshness source: legacy_runtime_health (display only; not used for status lights)")
+    _render_payload_table(payload)
 
 
 def render_depth(vm: DepthVM) -> None:
@@ -117,4 +148,3 @@ def render_depth_panel(vm: DepthVM) -> None:
 
 def render_risk_panel(vm: RiskVM) -> None:
     render_risk(vm)
-

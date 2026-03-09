@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 import hashlib
@@ -13,6 +14,9 @@ from core.audit_log import append_event as audit_append
 from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
 from core.reason_codes import normalize_reason_codes
+
+
+logger = logging.getLogger(__name__)
 
 
 DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
@@ -81,7 +85,7 @@ def _log_decision_error(payload: Dict[str, Any]) -> None:
         with DECISION_ERROR_LOG.open("a") as f:
             f.write(json.dumps(payload, default=_json_default) + "\n")
     except Exception as exc:
-        print(f"[DECISION_ERROR_LOG] {exc}")
+        logger.error("decision_error_log_failed err=%s", exc)
 
 
 def _validate_event(event: Dict[str, Any]) -> None:
@@ -411,7 +415,7 @@ def log_decision(event: Dict[str, Any]):
             from core.incidents import trigger_db_write_fail
             trigger_db_write_fail({"table": "decision_events", "error": str(exc)})
         except Exception as inner:
-            print(f"[INCIDENT_ERROR] db_write_fail err={inner}")
+            logger.error("incident_db_write_fail err=%s", inner)
         raise
     try:
         audit_append({
@@ -424,7 +428,7 @@ def log_decision(event: Dict[str, Any]):
             "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
         })
     except Exception as exc:
-        print(f"[AUDIT_ERROR] decision_audit_failed err={exc}")
+        logger.error("decision_audit_failed err=%s", exc)
     return trade_id
 
 
@@ -449,7 +453,7 @@ def update_execution(trade_id: str, exec_fields: Dict[str, Any]):
             from core.incidents import trigger_db_write_fail
             trigger_db_write_fail({"table": "decision_events", "error": str(exc)})
         except Exception as inner:
-            print(f"[INCIDENT_ERROR] db_write_fail err={inner}")
+            logger.error("incident_db_write_fail err=%s", inner)
         raise
 
 
@@ -467,5 +471,5 @@ def update_outcome(trade_id: str, outcome_fields: Dict[str, Any]):
             from core.incidents import trigger_db_write_fail
             trigger_db_write_fail({"table": "decision_events", "error": str(exc)})
         except Exception as inner:
-            print(f"[INCIDENT_ERROR] db_write_fail err={inner}")
+            logger.error("incident_db_write_fail err=%s", inner)
         raise

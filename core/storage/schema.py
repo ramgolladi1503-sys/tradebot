@@ -49,6 +49,12 @@ class EventRecord:
     instruments: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    # ---- NEW: structured decision diagnostics (optional) ----
+    decision_stage: str | None = None
+    decision_explain: str | None = None
+    decision_blockers: list[str] = field(default_factory=list)
+    strategy_telemetry: dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -123,6 +129,23 @@ def build_event_record(
     confidence = _coerce_float(payload.get("confidence"))
     latency_ms = _coerce_float(payload.get("latency_ms"))
 
+    # ---- NEW: structured decision diagnostics ----
+    decision_stage = _clean_nullable_text(payload.get("decision_stage"), max_len=120)
+    decision_explain = _clean_nullable_text(payload.get("decision_explain"), max_len=500)
+    decision_blockers = _normalize_text_list(payload.get("decision_blockers"), max_items=64, max_len=120)
+
+    strategy_telemetry: dict[str, Any] = {}
+    raw_telem = payload.get("strategy_telemetry")
+    if isinstance(raw_telem, Mapping):
+        # sanitize + bound (avoid huge payloads)
+        strategy_telemetry = _sanitize_mapping(raw_telem)
+        qfr = strategy_telemetry.get("qual_fail_reasons_raw")
+        if isinstance(qfr, list):
+            strategy_telemetry["qual_fail_reasons_raw"] = list(qfr)[:10]
+        ac = strategy_telemetry.get("all_candidates")
+        if isinstance(ac, list):
+            strategy_telemetry["all_candidates"] = list(ac)[:10]
+
     record = EventRecord(
         event_id=_normalize_uuid(payload.get("event_id")),
         ts_utc=ts_utc,
@@ -140,6 +163,11 @@ def build_event_record(
         missing_fields=_normalize_text_list(payload.get("missing_fields"), max_items=32, max_len=96),
         instruments=instruments,
         metadata=_sanitize_mapping(payload.get("metadata") if isinstance(payload.get("metadata"), Mapping) else {}),
+        # ---- NEW ----
+        decision_stage=decision_stage,
+        decision_explain=decision_explain,
+        decision_blockers=decision_blockers,
+        strategy_telemetry=strategy_telemetry,
     )
     return record
 

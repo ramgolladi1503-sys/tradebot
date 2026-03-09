@@ -2,6 +2,7 @@ from __future__ import annotations
 from core.paths import logs_dir, data_root
 
 import json
+import logging
 import math
 import time
 from collections import deque
@@ -12,6 +13,9 @@ from config import config as cfg
 from core.kite_client import kite_client
 
 
+logger = logging.getLogger(__name__)
+
+
 def _log_error(payload: dict) -> None:
     try:
         err_path = logs_dir() / "cross_asset_errors.jsonl"
@@ -19,7 +23,7 @@ def _log_error(payload: dict) -> None:
         with err_path.open("a") as f:
             f.write(json.dumps(payload, default=str) + "\n")
     except Exception as exc:
-        print(f"[CROSS_ASSET_LOG_ERROR] {exc}")
+        logger.error("cross_asset_log_error err=%s", exc)
 
 
 def _safe_float(v):

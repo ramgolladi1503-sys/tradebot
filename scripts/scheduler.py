@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -19,6 +20,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from core.time_utils import now_ist, ist_date_key, within_window
+
+
+logger = logging.getLogger(__name__)
 
 
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
@@ -137,12 +141,17 @@ def _write_failure_marker(date_key: str, reason: str) -> None:
 def _print_check(decision: Decision, date_key: str) -> None:
     local_ts = datetime.now().astimezone().isoformat()
     ist_ts = now_ist().isoformat()
-    print(f"local_time={local_ts}")
-    print(f"ist_time={ist_ts}")
+    logger.info("scheduler_check local_time=%s", local_ts)
+    logger.info("scheduler_check ist_time=%s", ist_ts)
     if decision.should_run:
-        print(f"WOULD_RUN reason={decision.reason} delay_min={decision.delay_min:.1f} date_key={date_key}")
+        logger.info(
+            "scheduler_check would_run reason=%s delay_min=%.1f date_key=%s",
+            decision.reason,
+            decision.delay_min,
+            date_key,
+        )
     else:
-        print(f"SKIP reason={decision.reason} date_key={date_key}")
+        logger.info("scheduler_check skip reason=%s date_key=%s", decision.reason, date_key)
 
 
 def main() -> int:

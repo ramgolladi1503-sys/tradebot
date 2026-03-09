@@ -98,6 +98,56 @@ def _event_price(event: Mapping[str, Any], *keys: str) -> float | None:
     return None
 
 
+def _append_reason(reason_list: list[str], reason: Any) -> None:
+    text = _norm_text(reason)
+    if not text:
+        return
+    if text not in reason_list:
+        reason_list.append(text)
+
+
+def _event_reason_codes(event: Mapping[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    _append_reason(reasons, event.get("reject_reason"))
+    for key in ("reason_codes", "reject_reasons", "gate_reasons"):
+        raw = event.get(key)
+        if isinstance(raw, (list, tuple)):
+            for item in raw:
+                _append_reason(reasons, item)
+    gate_decisions = event.get("gate_decisions")
+    if isinstance(gate_decisions, (list, tuple)):
+        for decision in gate_decisions:
+            if not isinstance(decision, Mapping):
+                continue
+            if decision.get("passed") is False:
+                _append_reason(reasons, decision.get("reason"))
+    return reasons
+
+
+def _build_reject_attribution(
+    event: Mapping[str, Any],
+    *,
+    outcome_reason: str,
+    has_candle_data: bool,
+    series_source: str,
+) -> tuple[str | None, list[str]]:
+    normalized_outcome_reason = _norm_text(outcome_reason).upper()
+    normalized_series_source = _norm_text(series_source).lower()
+    missing_series = (not has_candle_data) or normalized_outcome_reason == "NO_SERIES_DATA" or normalized_series_source in {
+        "no_series_data",
+        "no_market_data_loader",
+    }
+    if missing_series:
+        return "NO_SERIES_DATA", ["NO_SERIES_DATA"]
+
+    reasons = _event_reason_codes(event)
+    primary = reasons[0] if reasons else None
+    if primary is None:
+        return None, []
+    ordered = [primary] + [item for item in reasons[1:] if item != primary]
+    return primary, ordered
+
+
 def _rows_from_table_like(data: Any) -> list[dict[str, Any]]:
     if data is None:
         return []
@@ -256,6 +306,12 @@ def _empty_outcome_row(event: Mapping[str, Any], *, reason: str, series_source: 
     ts_ms = _event_ts_ms(event) or int(datetime.now(tz=timezone.utc).timestamp() * 1000.0)
     trade_key = _event_trade_key(event, ts_ms)
     event_id = _event_id(event, trade_key, ts_ms)
+    reject_reason, reason_codes = _build_reject_attribution(
+        event,
+        outcome_reason=reason,
+        has_candle_data=False,
+        series_source=series_source,
+    )
     outcome = TradeOutcome(
         trade_key=trade_key,
         event_id=f"out_{event_id}",
@@ -265,10 +321,14 @@ def _empty_outcome_row(event: Mapping[str, Any], *, reason: str, series_source: 
         mfe_points=0.0,
         mae_points=0.0,
         exec_feasible=False,
-        exec_feasible_flags={"has_candle_data": False, "series_source": series_source},
+        exec_feasible_flags={"has_candle_data": False, "has_series_data": False},
         source="analytics_outcome_replay",
-        reject_reason=_norm_text(event.get("reject_reason")) or None,
+        reject_reason=reject_reason,
+        reject_reasons=tuple(reason_codes),
+        primary_reject_reason=reject_reason,
     )
+    trade_outcome = outcome.to_dict()
+    trade_outcome["reason_codes"] = list(reason_codes)
     entry = _event_price(event, "entry", "intended_entry", "entry_price", "mark")
     target = _event_price(event, "target", "target_price")
     stop = _event_price(event, "stop", "stop_price", "stop_loss")
@@ -283,7 +343,8 @@ def _empty_outcome_row(event: Mapping[str, Any], *, reason: str, series_source: 
         "resolution_ts_epoch_ms": int(ts_ms),
         "target_points": target_points,
         "stop_points": stop_points,
-        "trade_outcome": outcome.to_dict(),
+        "reason_codes": list(reason_codes),
+        "trade_outcome": trade_outcome,
     }
 
 
@@ -386,6 +447,12 @@ def analyze_event_outcome(
 
     trade_key = _event_trade_key(event_row, event_ts_ms)
     event_id = _event_id(event_row, trade_key, event_ts_ms)
+    reject_reason, reason_codes = _build_reject_attribution(
+        event_row,
+        outcome_reason=outcome_reason,
+        has_candle_data=True,
+        series_source=series_source,
+    )
     trade_outcome = TradeOutcome(
         trade_key=trade_key,
         event_id=f"out_{event_id}",
@@ -395,10 +462,14 @@ def analyze_event_outcome(
         mfe_points=(round(float(mfe_points), 6) if mfe_points is not None else None),
         mae_points=(round(float(mae_points), 6) if mae_points is not None else None),
         exec_feasible=True,
-        exec_feasible_flags={"has_candle_data": True, "series_source": series_source},
+        exec_feasible_flags={"has_candle_data": True, "has_series_data": True},
         source="analytics_outcome_replay",
-        reject_reason=_norm_text(event_row.get("reject_reason")) or None,
+        reject_reason=reject_reason,
+        reject_reasons=tuple(reason_codes),
+        primary_reject_reason=reject_reason,
     )
+    trade_outcome_payload = trade_outcome.to_dict()
+    trade_outcome_payload["reason_codes"] = list(reason_codes)
     return {
         "event_ref_id": event_id,
         "trade_key": trade_key,
@@ -408,7 +479,8 @@ def analyze_event_outcome(
         "resolution_ts_epoch_ms": int(resolution_ts_ms),
         "target_points": abs(float(target - entry)),
         "stop_points": abs(float(entry - stop)),
-        "trade_outcome": trade_outcome.to_dict(),
+        "reason_codes": list(reason_codes),
+        "trade_outcome": trade_outcome_payload,
     }
 
 
