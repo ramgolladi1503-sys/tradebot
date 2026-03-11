@@ -95,8 +95,11 @@ from core.market_snapshot_store import (
     get_market_snapshot_status,
     read_market_snapshot,
 )
+from core.runtime_snapshot_store import ADVISORY_LATEST_PATH
 from core.telemetry_streams import iter_recent_events
 from core.advisory_schema import AdvisorySchemaError, deserialize_advisory_row, log_advisory_schema_error
+from dashboard.readers.advisory_reader import read_advisory_snapshot_rows
+from dashboard.readers.snapshot_reader import read_snapshot_payload
 from dashboard.ui.table_model import (
     normalize_df as normalize_table_df,
     compute_trade_key as compute_table_trade_key,
@@ -878,6 +881,12 @@ def _load_json_payload_uncached(path: Path) -> dict:
     return {}
 
 
+def _load_snapshot_payload_uncached(path: Path) -> dict:
+    payload = read_snapshot_payload(path)
+    inner = payload.get("payload")
+    return inner if isinstance(inner, dict) else {}
+
+
 def _load_jsonl_tail_uncached(path: Path, max_rows: int) -> list[dict]:
     if not path.exists():
         return []
@@ -956,13 +965,31 @@ def _load_freshness_latest() -> dict:
 
 
 def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
-    suggestions_path = Path(canonical_suggestions_log_path())
-    rows = _perf_timed_load(
-        "suggestions_jsonl_tail",
-        _load_jsonl_tail_uncached,
-        suggestions_path,
-        max(1, int(limit)),
+    advisory_snapshot = _perf_timed_load(
+        "advisory_latest_snapshot_json",
+        read_advisory_snapshot_rows,
+        ADVISORY_LATEST_PATH,
+        limit=max(1, int(limit)),
     )
+    snapshot_state = str(advisory_snapshot.get("state") or "")
+    snapshot_rows = list(advisory_snapshot.get("rows") or []) if isinstance(advisory_snapshot, dict) else []
+    if snapshot_rows:
+        rows = snapshot_rows
+    elif snapshot_state == "invalid":
+        logger.warning(
+            "dashboard_live_advisory_snapshot_invalid path=%s errors=%s",
+            advisory_snapshot.get("path"),
+            "|".join(list(advisory_snapshot.get("errors") or [])),
+        )
+        return pd.DataFrame()
+    else:
+        suggestions_path = Path(canonical_suggestions_log_path())
+        rows = _perf_timed_load(
+            "suggestions_jsonl_tail",
+            _load_jsonl_tail_uncached,
+            suggestions_path,
+            max(1, int(limit)),
+        )
     filtered_rows = _filter_rows_today(rows)
     if filtered_rows:
         rows = filtered_rows

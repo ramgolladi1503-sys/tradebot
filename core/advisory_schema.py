@@ -19,6 +19,7 @@ from core.issue_policy import (
     classify_issue,
 )
 from core.paths import logs_dir
+from core.trade_identity import derive_strategy_id
 
 
 class AdvisorySchemaError(ValueError):
@@ -47,6 +48,8 @@ QUOTE_SOURCES = {
     "unknown",
 }
 REQUIRED_FIELDS = (
+    "trade_id",
+    "strategy_id",
     "advisory_id",
     "symbol",
     "strategy_name",
@@ -62,11 +65,17 @@ REQUIRED_FIELDS = (
     "entry_clear_reason",
     "entry",
     "entry_status",
+    "entry_source",
     "confidence",
     "readiness",
     "blockers",
+    "hard_blockers",
+    "soft_penalties",
+    "warnings",
     "quote_source",
     "quote_age_sec",
+    "decision_explain",
+    "market_open",
 )
 _LEGACY_NON_ERROR_ENTRY_STATUSES = {"VALID", "OK", "LIVE_OK", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}
 _LIST_FIELDS = ("hard_blockers", "soft_penalties", "warnings")
@@ -121,6 +130,19 @@ def _safe_lower_text(value: Any) -> str | None:
     return text or None
 
 
+def _normalize_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value in (None, "", "None"):
+        return None
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "on"}:
+        return True
+    if text in {"false", "0", "no", "n", "off"}:
+        return False
+    return None
+
+
 def _normalize_blockers(value: Any) -> list[str]:
     if value is None:
         return []
@@ -139,6 +161,14 @@ def _normalize_blockers(value: Any) -> list[str]:
     if "," in text:
         return _normalize_blockers([part.strip() for part in text.split(",")])
     return [text]
+
+
+def _normalize_decision_explain(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return list(value)
+    return [value]
 
 
 def _derive_blockers(payload: dict[str, Any]) -> list[str]:
@@ -262,38 +292,37 @@ def _legacy_entry_state(payload: dict[str, Any]) -> dict[str, Any]:
 def _looks_like_canonical(payload: dict[str, Any]) -> bool:
     if not isinstance(payload, dict):
         return False
-    required_canonical_fields = {
-        "advisory_id",
-        "strategy_name",
-        "timestamp",
-        "instrument_type",
-        "execution_entry",
-        "execution_entry_source",
-        "execution_entry_status",
-        "display_entry",
-        "display_entry_source",
-        "display_entry_status",
-        "entry_reason",
-        "entry_clear_reason",
-        "hard_blockers",
-        "soft_penalties",
-        "warnings",
-        "execution_status",
-        "advisory_visible",
-        "is_executable",
-    }
-    return all(field in payload for field in required_canonical_fields)
+    return all(field in payload for field in REQUIRED_FIELDS)
 
 
 def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out = dict(payload)
+    out.setdefault("trade_id", payload.get("trade_id") or payload.get("advisory_id") or payload.get("trade_key"))
     out.setdefault("advisory_id", payload.get("advisory_id") or payload.get("trade_id") or payload.get("trade_key"))
+    out.setdefault(
+        "strategy_id",
+        derive_strategy_id(
+            payload.get("strategy_id"),
+            payload.get("strategy_name") or payload.get("strategy") or payload.get("generator"),
+        ),
+    )
     out.setdefault(
         "strategy_name",
         payload.get("strategy_name") or payload.get("strategy") or payload.get("generator") or payload.get("strategy_id"),
     )
     out.setdefault("timestamp", _derive_timestamp(payload))
     out.setdefault("instrument_type", payload.get("instrument_type") or payload.get("instrument"))
+    out.setdefault("decision_explain", _normalize_decision_explain(payload.get("decision_explain")))
+    market_open = _normalize_bool(payload.get("market_open"))
+    if market_open is None:
+        market_context = payload.get("market_context")
+        if isinstance(market_context, dict):
+            market_open = _normalize_bool(market_context.get("market_open"))
+    if market_open is None:
+        market_open = _normalize_bool(payload.get("freshness_market_open"))
+    if market_open is None:
+        market_open = str(payload.get("execution_mode") or payload.get("mode") or "").strip().upper() not in {"OFFHOURS", "PAPER", "BACKTEST"}
+    out.setdefault("market_open", market_open)
     lifecycle = _legacy_entry_state(payload)
     out.update(lifecycle)
     out["entry"] = lifecycle.get("display_entry")
@@ -360,6 +389,8 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         if field not in out:
             raise AdvisorySchemaError(f"missing required field: {field}")
 
+    trade_id = _normalize_text(out.get("trade_id"))
+    strategy_id = _normalize_text(out.get("strategy_id"))
     advisory_id = _normalize_text(out.get("advisory_id"))
     symbol = _normalize_text(out.get("symbol"))
     strategy_name = _normalize_text(out.get("strategy_name"))
@@ -390,6 +421,8 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     entry_source = _normalize_text(out.get("entry_source"))
     advisory_visible = bool(out.get("advisory_visible", True))
     is_executable = bool(out.get("is_executable", False))
+    decision_explain = _normalize_decision_explain(out.get("decision_explain"))
+    market_open = _normalize_bool(out.get("market_open"))
 
     categorized_union = []
     for source in (hard_blockers, soft_penalties, warnings):
@@ -399,6 +432,10 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     if categorized_union:
         blockers = categorized_union
 
+    if not trade_id:
+        raise AdvisorySchemaError("trade_id must be non-empty")
+    if not strategy_id:
+        raise AdvisorySchemaError("strategy_id must be non-empty")
     if not advisory_id:
         raise AdvisorySchemaError("advisory_id must be non-empty")
     if not symbol:
@@ -435,6 +472,10 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         raise AdvisorySchemaError("confidence_final must be within [0.0, 1.0]")
     if quote_age_sec is not None and quote_age_sec < 0.0:
         raise AdvisorySchemaError("quote_age_sec must be non-negative")
+    if market_open is None:
+        raise AdvisorySchemaError("market_open must be explicitly boolean")
+    if not isinstance(decision_explain, list):
+        raise AdvisorySchemaError("decision_explain must be a list")
     if quote_age_sec is not None and not quote_source:
         raise AdvisorySchemaError("quote_age_sec requires quote_source")
     if execution_entry is not None and execution_entry_status != "executable":
@@ -468,6 +509,8 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     if entry is None and entry_status != "missing":
         raise AdvisorySchemaError("missing entry requires entry_status=missing")
 
+    out["trade_id"] = trade_id
+    out["strategy_id"] = strategy_id
     out["advisory_id"] = advisory_id
     out["symbol"] = symbol
     out["strategy_name"] = strategy_name
@@ -498,6 +541,8 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["entry_source"] = display_entry_source
     out["quote_source"] = quote_source
     out["quote_age_sec"] = quote_age_sec
+    out["decision_explain"] = decision_explain
+    out["market_open"] = market_open
     return out
 
 

@@ -118,6 +118,9 @@ class Trade:
     permission_reason: str | None = None
     countertrend: bool | None = None
     raw_signal_confidence: float | None = None
+    confidence_base: float | None = None
+    confidence_penalty_total: float | None = None
+    confidence_penalty_reasons: list[str] = field(default_factory=list)
     trade_key: str | None = None
     snapshot_id: str | None = None
     trade_status: str | None = None

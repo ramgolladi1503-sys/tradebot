@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import dashboard.streamlit_app_runtime as runtime
 import pandas as pd
@@ -57,6 +58,83 @@ def test_load_live_suggestions_df_reads_latest_rows_only(tmp_path, monkeypatch):
     assert all(df_live["entry_status"].astype(str).str.lower() == "non_executable")
     assert float(df_live.iloc[0]["entry"]) == 104.0
     assert list(df_live.iloc[0]["blockers"]) == ["STALE_OPTION_LTP"]
+
+
+def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    row = {
+        "trade_id": "T-SNAPSHOT-1",
+        "advisory_id": "T-SNAPSHOT-1",
+        "timestamp": _iso_now(),
+        "last_seen_ts": _iso_now(),
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "instrument_type": "OPT",
+        "strategy_name": "CORE",
+        "strategy_id": "CORE",
+        "status": "READY",
+        "permission": "EXECUTE",
+        "entry_status": "OK",
+        "readiness": "READY",
+        "blockers": [],
+        "quote_source": "tick_store",
+        "quote_age_sec": 0.5,
+        "confidence": 0.7,
+        "entry": 123.45,
+        "display_entry": 123.45,
+        "execution_entry": 123.45,
+        "entry_source": "ask",
+        "current_ltp": 123.45,
+        "entry_price": 123.45,
+        "expected_entry": 123.45,
+        "warnings": [],
+        "soft_penalties": [],
+        "hard_blockers": [],
+        "decision_explain": "snapshot",
+        "market_open": True,
+        "tradingsymbol": "NIFTYTESTCE",
+        "instrument_token": 123456,
+        "option_type": "CE",
+        "type": "CE",
+        "expiry_date": "2026-03-26",
+        "strike": 23000,
+        "side": "BUY",
+    }
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
+        encoding="utf-8",
+    )
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    suggestions_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+
+    df_live = runtime._load_live_suggestions_df(limit=5)
+
+    assert list(df_live["trade_id"]) == ["T-SNAPSHOT-1"]
+    assert float(df_live.iloc[0]["entry"]) == 123.45
+
+
+def test_load_live_suggestions_df_returns_empty_on_invalid_advisory_snapshot(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": {}}}),
+        encoding="utf-8",
+    )
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    suggestions_path.write_text(json.dumps({"trade_id": "T-RAW-1", "entry": 10.0}) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+
+    df_live = runtime._load_live_suggestions_df(limit=5)
+
+    assert df_live.empty
 
 
 def test_load_live_suggestions_status_reads_runtime_payload(tmp_path, monkeypatch):
@@ -299,6 +377,7 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
     suggestions_path = tmp_path / "suggestions.jsonl"
     row = {
         "trade_id": "T-CANONICAL",
+        "strategy_id": "CORE",
         "advisory_id": "ADV-1",
         "timestamp": _iso_now(),
         "last_seen_ts": _iso_now(),
@@ -316,8 +395,11 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
         "entry": 72.5,
         "entry_status": "non_executable",
         "confidence": 0.71,
+        "confidence_base": 0.82,
         "confidence_raw": 0.82,
         "confidence_penalty": 0.11,
+        "confidence_penalty_total": 0.11,
+        "confidence_penalty_reasons": ["STALE_OPTION_LTP"],
         "confidence_final": 0.71,
         "readiness": "ADVISORY_ONLY",
         "hard_blockers": [],
@@ -331,6 +413,8 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
         "execution_status": "advisory_only",
         "entry_source": "mark",
         "current_ltp": 72.5,
+        "decision_explain": [{"code": "TRACE", "message": "kept"}],
+        "market_open": True,
     }
     suggestions_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
 
@@ -341,19 +425,25 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
     assert len(df_live) == 1
     loaded = df_live.iloc[0]
     assert float(loaded["entry"]) == 72.5
+    assert float(loaded["confidence_base"]) == 0.82
     assert float(loaded["confidence_final"]) == 0.71
+    assert float(loaded["confidence_penalty_total"]) == 0.11
+    assert list(loaded["confidence_penalty_reasons"]) == ["STALE_OPTION_LTP"]
     assert list(loaded["hard_blockers"]) == []
     assert list(loaded["soft_penalties"]) == ["STALE_OPTION_LTP"]
     assert list(loaded["warnings"]) == ["NO_LIVE_OPTION_FEED"]
     assert str(loaded["execution_status"]) == "advisory_only"
     assert str(loaded["entry_source"]) == "mark"
     assert str(loaded["display_entry_status"]) == "non_executable"
+    assert loaded["decision_explain"] == [{"code": "TRACE", "message": "kept"}]
+    assert bool(loaded["market_open"]) is True
 
 
 def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch):
     suggestions_path = tmp_path / "suggestions.jsonl"
     stale_row = {
         "trade_id": "T-RECOVER",
+        "strategy_id": "CORE",
         "advisory_id": "ADV-RECOVER",
         "timestamp": "2026-03-08T14:30:00+00:00",
         "last_seen_ts": "2026-03-08T14:30:00+00:00",
@@ -387,9 +477,12 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "entry_source": "mark",
         "freshness_reason": "quote_exceeds_threshold",
         "freshness_market_open": True,
+        "decision_explain": [],
+        "market_open": True,
     }
     fresh_row = {
         "trade_id": "T-RECOVER",
+        "strategy_id": "CORE",
         "advisory_id": "ADV-RECOVER",
         "timestamp": "2026-03-08T14:31:00+00:00",
         "last_seen_ts": "2026-03-08T14:31:00+00:00",
@@ -423,6 +516,8 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "entry_source": "ask",
         "freshness_reason": "quote_within_threshold",
         "freshness_market_open": True,
+        "decision_explain": [],
+        "market_open": True,
     }
     suggestions_path.write_text(
         json.dumps(stale_row) + "\n" + json.dumps(fresh_row) + "\n",

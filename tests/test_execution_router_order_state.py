@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from config import config as cfg
 from core.approval_store import approve_order_intent
+import core.execution_router as execution_router_mod
 from core.execution_router import ExecutionRouter
 from core.orders.order_intent import OrderIntent
 from core.orders.state_machine import OrderState
@@ -78,3 +79,32 @@ def test_router_persists_filled_state_on_success(monkeypatch, tmp_path):
     assert report["order_state"] == OrderState.FILLED.value
     db_state = router.engine.get_order_state(report["order_id"])
     assert db_state.state == OrderState.FILLED
+
+
+def test_router_aborts_when_execution_guard_blocks_wide_spread(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "trades.db"), raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "APPROVAL_REQUIRED_MODES", "", raising=False)
+    monkeypatch.setattr(cfg, "READINESS_ENFORCE_ON_EXEC", False, raising=False)
+    monkeypatch.setattr(cfg, "ENFORCE_READINESS_ON_EXECUTION", False, raising=False)
+    monkeypatch.setattr(cfg, "READINESS_ENFORCE_PAPER", False, raising=False)
+    monkeypatch.setattr(cfg, "EXEC_MAX_SPREAD_PCT", 0.01, raising=False)
+    audit_events = []
+    monkeypatch.setattr(execution_router_mod, "append_execution_audit_event", lambda **kwargs: audit_events.append(dict(kwargs)))
+
+    router = ExecutionRouter()
+    trade = _trade("T-STATE-WIDE")
+    filled, price, report = router.execute(
+        trade,
+        bid=100.0,
+        ask=110.0,
+        volume=1000,
+        snapshot_fn=lambda: {"bid": 100.0, "ask": 110.0, "ts": time.time()},
+    )
+    assert filled is False
+    assert price is None
+    assert report["reason_if_aborted"] == "spread_too_wide"
+    assert "spread_too_wide" in list(report.get("reasons") or [])
+    assert audit_events and audit_events[-1]["order_action"] == "abort"
+    assert audit_events[-1]["reason"] == "spread_too_wide"

@@ -7,6 +7,8 @@ from core import advisory_schema
 
 def _valid_row(**overrides):
     row = {
+        "trade_id": "T-1",
+        "strategy_id": "CORE",
         "advisory_id": "ADV-1",
         "symbol": "NIFTY",
         "strategy_name": "CORE",
@@ -23,8 +25,11 @@ def _valid_row(**overrides):
         "entry": 72.5,
         "entry_status": "displayable",
         "confidence": 0.72,
+        "confidence_base": 0.72,
         "confidence_raw": 0.72,
         "confidence_penalty": 0.0,
+        "confidence_penalty_total": 0.0,
+        "confidence_penalty_reasons": [],
         "confidence_final": 0.72,
         "readiness": "ADVISORY_ONLY",
         "hard_blockers": [],
@@ -37,6 +42,8 @@ def _valid_row(**overrides):
         "entry_source": "ask",
         "quote_source": "tick_store",
         "quote_age_sec": 1.5,
+        "decision_explain": [{"code": "TRACE", "message": "kept"}],
+        "market_open": True,
     }
     row.update(overrides)
     return row
@@ -49,9 +56,16 @@ def test_advisory_schema_round_trip_survives_unchanged():
     deserialized = advisory_schema.deserialize_advisory_row(serialized)
 
     assert deserialized["advisory_id"] == "ADV-1"
+    assert deserialized["trade_id"] == "T-1"
+    assert deserialized["strategy_id"] == "CORE"
     assert deserialized["entry"] == 72.5
+    assert deserialized["confidence_base"] == 0.72
     assert deserialized["soft_penalties"] == ["STALE_OPTION_LTP"]
     assert deserialized["blockers"] == ["STALE_OPTION_LTP"]
+    assert deserialized["confidence_penalty_total"] == 0.0
+    assert deserialized["confidence_penalty_reasons"] == []
+    assert deserialized["decision_explain"] == [{"code": "TRACE", "message": "kept"}]
+    assert deserialized["market_open"] is True
     assert deserialized == serialized
 
 
@@ -60,6 +74,30 @@ def test_advisory_schema_missing_required_fields_raise():
         advisory_schema.validate_advisory_row({"symbol": "NIFTY"})
     except advisory_schema.AdvisorySchemaError as exc:
         assert "missing required field" in str(exc)
+    else:
+        raise AssertionError("expected AdvisorySchemaError")
+
+
+def test_advisory_schema_missing_trade_id_surfaces_schema_error():
+    row = _valid_row()
+    row.pop("trade_id")
+
+    try:
+        advisory_schema.validate_advisory_row(row)
+    except advisory_schema.AdvisorySchemaError as exc:
+        assert "missing required field: trade_id" in str(exc)
+    else:
+        raise AssertionError("expected AdvisorySchemaError")
+
+
+def test_advisory_schema_missing_strategy_id_surfaces_schema_error():
+    row = _valid_row()
+    row.pop("strategy_id")
+
+    try:
+        advisory_schema.validate_advisory_row(row)
+    except advisory_schema.AdvisorySchemaError as exc:
+        assert "missing required field: strategy_id" in str(exc)
     else:
         raise AssertionError("expected AdvisorySchemaError")
 
@@ -108,3 +146,19 @@ def test_advisory_schema_entry_invariant_rejects_contradiction():
         assert "missing display_entry requires display_entry_status=missing" in str(exc)
     else:
         raise AssertionError("expected AdvisorySchemaError")
+
+
+def test_advisory_schema_preserves_blocker_lists_exactly():
+    row = _valid_row(
+        hard_blockers=["NO_TOKEN"],
+        soft_penalties=["STALE_OPTION_LTP"],
+        warnings=["DISPLAY_ENTRY_FALLBACK"],
+        blockers=["NO_TOKEN", "STALE_OPTION_LTP", "DISPLAY_ENTRY_FALLBACK"],
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["hard_blockers"] == ["NO_TOKEN"]
+    assert out["soft_penalties"] == ["STALE_OPTION_LTP"]
+    assert out["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
+    assert out["blockers"] == ["NO_TOKEN", "STALE_OPTION_LTP", "DISPLAY_ENTRY_FALLBACK"]

@@ -397,12 +397,12 @@ EXPIRY_WEEKDAY_BY_SYMBOL = {
 # -------------------------------
 # Trade configuration
 # -------------------------------
-MIN_PREMIUM = 40          # Minimum option premium to consider
-MAX_PREMIUM = 150         # Maximum option premium to consider
+MIN_PREMIUM = 5           # Fallback minimum option premium when symbol-specific band is unavailable
+MAX_PREMIUM = 700         # Fallback maximum option premium when symbol-specific band is unavailable
 PREMIUM_BANDS = {
-    "NIFTY": (5, 250),
-    "BANKNIFTY": (40, 1500),
-    "SENSEX": (10, 700),
+    "NIFTY": (5, 400),
+    "BANKNIFTY": (20, 1800),
+    "SENSEX": (10, 1200),
 }
 OPTION_PREMIUM_SANITY_MIN = float(os.getenv("OPTION_PREMIUM_SANITY_MIN", "5"))
 OPTION_PREMIUM_SANITY_MAX = float(os.getenv("OPTION_PREMIUM_SANITY_MAX", "1000"))

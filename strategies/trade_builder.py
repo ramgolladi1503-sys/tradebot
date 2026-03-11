@@ -2688,19 +2688,42 @@ class TradeBuilder:
             except Exception:
                 pass
         if not signal:
-            self._reject_ctx = {"symbol": symbol, "reason": "no_signal"}
+            fallback_allowed = bool(market_data.get("allow_planning_no_signal_fallback"))
+            reject_reason = "no_signal"
+            if planning_relaxed and bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
+                logger.info(
+                    "planning_no_signal_fallback_check symbol=%s planning_relaxed=%s allow_planning_no_signal_fallback=%s planning_no_signal_fallback_enable=%s",
+                    symbol,
+                    bool(planning_relaxed),
+                    fallback_allowed,
+                    bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)),
+                )
+                if not fallback_allowed:
+                    reject_reason = "no_signal_planning_fallback_disabled"
+            self._reject_ctx = {"symbol": symbol, "reason": reject_reason}
             self._log_blocked_candidate(
                 symbol,
-                "no_signal",
+                reject_reason,
                 "No strategy signal generated for current snapshot",
                 market_data=market_data,
-                extra={"soft_veto": bool(planning_relaxed)},
+                extra={
+                    "soft_veto": bool(planning_relaxed),
+                    "allow_planning_no_signal_fallback": fallback_allowed,
+                    "planning_no_signal_fallback_enable": bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)),
+                },
             )
-            if planning_relaxed and bool(market_data.get("allow_planning_no_signal_fallback")):
+            if planning_relaxed and fallback_allowed:
                 fallback_trade = self._build_planning_no_signal_trade(
                     market_data,
                     ltp=float(ltp or 0.0),
                     vwap=float(vwap or ltp or 0.0),
+                )
+                logger.info(
+                    "planning_no_signal_fallback_result symbol=%s planning_relaxed=%s allow_planning_no_signal_fallback=%s returned_trade=%s",
+                    symbol,
+                    bool(planning_relaxed),
+                    fallback_allowed,
+                    bool(fallback_trade is not None),
                 )
                 if fallback_trade is not None:
                     return fallback_trade
@@ -3344,10 +3367,16 @@ class TradeBuilder:
                 min_p = max(0.0, float(min_p) * max(0.0, 1.0 - premium_relax_pct))
                 max_p = float(max_p) * (1.0 + premium_relax_pct)
             if (opt_ltp < min_p or opt_ltp > max_p) and not _relax("premium"):
+                execution_mode = str(
+                    market_data.get("execution_mode")
+                    or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+                    or getattr(cfg, "EXECUTION_MODE", "")
+                ).strip().upper()
+                soft_premium_advisory = execution_mode in {"SIM", "PAPER"}
                 spread_bad = bool(spread_pct > toxic_spread)
                 volume_bad = bool((opt.get("volume") or 0) < int(getattr(cfg, "MIN_VOLUME_FILTER", 500)) * 0.25)
                 quote_missing = bool(opt.get("quote_ok") is False or opt.get("bid") is None or opt.get("ask") is None)
-                hard_liquidity_reject = bool(spread_bad or volume_bad or quote_missing)
+                hard_liquidity_reject = bool(execution_mode == "LIVE" and (spread_bad or volume_bad or quote_missing))
                 if hard_liquidity_reject:
                     _count_option_reject("premium")
                     self._log_blocked_candidate(
@@ -3385,6 +3414,33 @@ class TradeBuilder:
                     continue
                 premium_soft_veto = True
                 soft_veto_codes.append("premium_out_of_band")
+                if soft_premium_advisory and "premium_band_fail" not in soft_veto_codes:
+                    soft_veto_codes.append("premium_band_fail")
+                if soft_premium_advisory:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "premium_band_fail",
+                        "Option premium outside configured premium band (soft advisory penalty)",
+                        market_data=market_data,
+                        extra={
+                            "direction": direction,
+                            "strike": opt.get("strike"),
+                            "option_type": opt.get("type"),
+                            "option_ltp": opt.get("ltp"),
+                            "premium_min": min_p,
+                            "premium_max": max_p,
+                            "spread_pct": spread_pct,
+                            "volume": opt.get("volume"),
+                            "hard_veto": False,
+                            "reason_codes": ["premium_band_fail"],
+                            "gate_name": "premium_band_gate",
+                            "instrument_token": opt.get("instrument_token"),
+                            "tradingsymbol": opt.get("tradingsymbol"),
+                            "expiry_date": opt.get("expiry_date") or opt.get("expiry"),
+                            "quote_source": opt.get("quote_source"),
+                            "option_ltp_source": opt.get("option_ltp_source"),
+                        },
+                    )
                 if "premium_out_of_band" not in execution_blockers:
                     execution_blockers.append("premium_out_of_band")
                 if opt_ltp < float(min_p):
@@ -3727,6 +3783,8 @@ class TradeBuilder:
                     rejected.append(rec)
                 continue
 
+            confidence_base = float(confidence)
+            confidence_penalty_reasons = list(dict.fromkeys(str(code) for code in soft_veto_codes if str(code)))
             if soft_veto_codes:
                 if any(code.startswith("orb_") for code in soft_veto_codes):
                     confidence *= float(getattr(cfg, "ORB_SOFT_VETO_CONF_MULT", 0.95))
@@ -3734,6 +3792,7 @@ class TradeBuilder:
                 if premium_soft_veto:
                     confidence *= premium_soft_penalty_conf
                     size_mult = min(size_mult, premium_soft_penalty_size)
+            confidence_penalty_total = max(0.0, float(confidence_base) - float(confidence))
 
             tier = "EXPLORATION" if quick_mode else "MAIN"
             resolved_contract = opt.get("_resolved_contract") if isinstance(opt.get("_resolved_contract"), dict) else {}
@@ -3938,6 +3997,9 @@ class TradeBuilder:
                 spot_source=spot_source,
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
+                confidence_base=round(confidence_base, 6),
+                confidence_penalty_total=round(confidence_penalty_total, 6),
+                confidence_penalty_reasons=confidence_penalty_reasons,
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
             if trade is not None:
@@ -4355,7 +4417,16 @@ class TradeBuilder:
             allowed_modes = [s.strip().upper() for s in allowed_modes.split(",") if s.strip()]
         allowed_modes = {str(m).strip().upper() for m in (allowed_modes or ["PAPER"])}
         if exec_mode not in allowed_modes:
+            if debug_reasons:
+                self._log_blocked_candidate(
+                    market_data.get("symbol"),
+                    "mode_block",
+                    "Zero-to-hero blocked: execution mode not allowed",
+                    market_data=market_data,
+                    extra={"execution_mode": exec_mode, "allowed_modes": sorted(allowed_modes)},
+                )
             return None
+        exploratory_mode = exec_mode in {"SIM", "PAPER"}
 
         symbol = market_data.get("symbol")
         regime_raw = market_data.get("regime") or market_data.get("primary_regime") or market_data.get("regime_day")
@@ -4389,7 +4460,7 @@ class TradeBuilder:
             if debug_reasons:
                 self._log_blocked_candidate(
                     symbol,
-                    "spot_invalid",
+                    "no_signal",
                     "Zero-to-hero blocked: spot missing or stale",
                     market_data=market_data,
                     extra={"underlying_spot": underlying_spot, "spot_source": spot_source, "spot_issue": spot_issue},
@@ -4399,9 +4470,22 @@ class TradeBuilder:
         atr = float(market_data.get("atr") or max(1.0, float(underlying_spot) * 0.002))
         ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)
         momentum_mult = float(getattr(cfg, "ZERO_TO_HERO_MOMENTUM_ATR_MULT", 0.12))
-        if abs(ltp_change_window) < atr * momentum_mult:
-            if debug_reasons:
-                _log_advisory_debug("zero_to_hero_reject symbol=%s reason=weak_momentum", symbol)
+        weak_momentum = abs(ltp_change_window) < atr * momentum_mult
+        if weak_momentum and debug_reasons:
+            self._log_blocked_candidate(
+                symbol,
+                "no_signal",
+                "Zero-to-hero blocked: momentum signal too weak",
+                market_data=market_data,
+                extra={
+                    "ltp_change_window": ltp_change_window,
+                    "atr": atr,
+                    "momentum_mult": momentum_mult,
+                    "exploratory_mode": exploratory_mode,
+                },
+            )
+            _log_advisory_debug("zero_to_hero_reject symbol=%s reason=weak_momentum", symbol)
+        if weak_momentum and not exploratory_mode:
             return None
 
         opt_type = "CE" if ltp_change_window >= 0 else "PE"
@@ -4424,6 +4508,9 @@ class TradeBuilder:
         atm_strike = min(strikes, key=lambda s: abs(s - float(underlying_spot)))
         otm_min_pct = float(getattr(cfg, "ZERO_TO_HERO_OTM_PCT_MIN", 0.01))
         otm_max_pct = float(getattr(cfg, "ZERO_TO_HERO_OTM_PCT_MAX", 0.02))
+        if exploratory_mode:
+            otm_min_pct = max(0.0, otm_min_pct * 0.5)
+            otm_max_pct = otm_max_pct * 1.75
         if opt_type == "CE":
             strike_low = atm_strike * (1.0 + otm_min_pct)
             strike_high = atm_strike * (1.0 + otm_max_pct)
@@ -4440,6 +4527,9 @@ class TradeBuilder:
             band_low, band_high, band_source = abs_min, abs_max, "fallback_abs"
         band_low = max(band_low, abs_min)
         band_high = min(band_high, abs_max)
+        if exploratory_mode:
+            band_low = max(abs_min, band_low * 0.5)
+            band_high = max(band_high, min(abs_max * 1.75, band_high * 1.5))
         if band_high <= band_low:
             return None
 
@@ -4464,9 +4554,18 @@ class TradeBuilder:
                 or opt.get("close")
                 or opt.get("price")
             )
-            if premium is None or premium < band_low or premium > band_high:
+            premium_out_of_band = bool(premium is None or premium < band_low or premium > band_high)
+            if premium_out_of_band and not exploratory_mode:
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "premium_band_fail",
+                        "Zero-to-hero blocked: premium outside allowed band",
+                        market_data=market_data,
+                        extra={"premium": premium, "band_low": band_low, "band_high": band_high},
+                    )
                 continue
-            if not self.execution.spread_ok(
+            spread_ok = self.execution.spread_ok(
                 opt.get("bid", 0),
                 opt.get("ask", 0),
                 premium,
@@ -4474,7 +4573,16 @@ class TradeBuilder:
                 instrument="OPT",
                 segment=segment,
                 market_open=bool(market_ctx.is_market_open),
-            ):
+            )
+            if (not spread_ok) and not exploratory_mode:
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "spread",
+                        "Zero-to-hero blocked: spread too wide",
+                        market_data=market_data,
+                        extra={"strike": opt.get("strike"), "option_type": opt.get("type")},
+                    )
                 continue
 
             momentum_score = min(1.0, abs(ltp_change_window) / max(atr * momentum_mult, 1.0))
@@ -4483,6 +4591,12 @@ class TradeBuilder:
             mom_w = float(getattr(cfg, "ZERO_TO_HERO_CONF_MOMENTUM_WEIGHT", 0.3))
             cheap_w = float(getattr(cfg, "ZERO_TO_HERO_CONF_CHEAPNESS_WEIGHT", 0.2))
             confidence = base_conf + (mom_w * momentum_score) + (cheap_w * cheapness)
+            if weak_momentum:
+                confidence -= 0.10
+            if premium_out_of_band:
+                confidence -= 0.08
+            if not spread_ok:
+                confidence -= 0.10
             confidence = max(0.0, min(1.0, confidence))
 
             candidates.append(
@@ -4493,10 +4607,20 @@ class TradeBuilder:
                     "cheapness": cheapness,
                     "momentum_score": momentum_score,
                     "band_source": band_source,
+                    "premium_band_fail": premium_out_of_band,
+                    "spread_warning": not spread_ok,
                 }
             )
 
         if not candidates:
+            if debug_reasons:
+                self._log_blocked_candidate(
+                    symbol,
+                    "no_viable_candidates",
+                    "Zero-to-hero blocked: no viable candidates",
+                    market_data=market_data,
+                    extra={"band_low": band_low, "band_high": band_high, "exploratory_mode": exploratory_mode},
+                )
             return None
         chosen = sorted(candidates, key=lambda c: c["confidence"], reverse=True)[0]
         opt = chosen["opt"]
@@ -4560,12 +4684,20 @@ class TradeBuilder:
             if debug_reasons:
                 self._log_blocked_candidate(
                     symbol,
-                    "unresolved_contract",
+                    "no_contract",
                     "Zero-to-hero blocked: unresolved contract",
                     market_data=market_data,
                     extra={"strike": opt.get("strike"), "option_type": opt.get("type")},
                 )
             return None
+        if instrument_token is None and debug_reasons:
+            self._log_blocked_candidate(
+                symbol,
+                "no_token",
+                "Zero-to-hero continuing without resolved instrument token",
+                market_data=market_data,
+                extra={"strike": opt.get("strike"), "option_type": opt.get("type"), "tradingsymbol": tradingsymbol},
+            )
 
         intent = self.trade_intent_flags(market_data, opt=opt, additional_blockers=[])
         intent["planning_only"] = True
@@ -4633,6 +4765,8 @@ class TradeBuilder:
                 "zero_to_hero_band_source": chosen.get("band_source"),
                 "zero_to_hero_otm_min": strike_low,
                 "zero_to_hero_otm_max": strike_high,
+                "premium_band_fail": bool(chosen.get("premium_band_fail")),
+                "spread_warning": bool(chosen.get("spread_warning")),
             }
         )
 
@@ -4701,18 +4835,47 @@ class TradeBuilder:
 
     def build_expiry_lotto_candidates(self, market_data, debug_reasons: bool = False) -> list[Trade]:
         if not bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)):
+            if debug_reasons:
+                self._log_blocked_candidate(
+                    (market_data or {}).get("symbol"),
+                    "mode_block",
+                    "Expiry lotto blocked: mode disabled",
+                    market_data=market_data,
+                    extra={"execution_mode": str(getattr(cfg, "EXECUTION_MODE", "PAPER")).upper()},
+                )
             return []
         data = market_data if isinstance(market_data, dict) else {}
         symbol = str(data.get("symbol") or "").upper()
+        execution_mode = str(
+            data.get("execution_mode")
+            or ((data.get("market_context") or {}).get("execution_mode") if isinstance(data.get("market_context"), dict) else "")
+            or getattr(cfg, "EXECUTION_MODE", "PAPER")
+        ).strip().upper()
+        exploratory_mode = execution_mode in {"SIM", "PAPER"}
         if symbol not in {"NIFTY", "BANKNIFTY", "SENSEX"}:
             return []
         if not self._is_expiry_day_for_symbol(symbol, data):
             if debug_reasons:
+                self._log_blocked_candidate(
+                    symbol,
+                    "mode_block",
+                    "Expiry lotto blocked: not expiry day",
+                    market_data=data,
+                    extra={"execution_mode": execution_mode},
+                )
                 self._reject_ctx = {"reason": "expiry_lotto_not_expiry_day", "symbol": symbol}
             return []
 
         chain = data.get("option_chain") or []
         if not isinstance(chain, list) or not chain:
+            if debug_reasons:
+                self._log_blocked_candidate(
+                    symbol,
+                    "no_viable_candidates",
+                    "Expiry lotto blocked: option chain unavailable",
+                    market_data=data,
+                    extra={"execution_mode": execution_mode},
+                )
             self._reject_ctx = {"reason": "expiry_lotto_no_option_chain", "symbol": symbol}
             return []
         min_option_tokens = max(
@@ -4725,6 +4888,8 @@ class TradeBuilder:
                 )
             ),
         )
+        if exploratory_mode:
+            min_option_tokens = max(1, min_option_tokens // 2)
         option_tokens = set()
         for row in chain:
             if not isinstance(row, dict):
@@ -4743,6 +4908,14 @@ class TradeBuilder:
                 "option_tokens_count": len(option_tokens),
                 "min_required": min_option_tokens,
             }
+            if debug_reasons:
+                self._log_blocked_candidate(
+                    symbol,
+                    "no_token",
+                    "Expiry lotto blocked: option token coverage under minimum",
+                    market_data=data,
+                    extra={"option_tokens_count": len(option_tokens), "min_required": min_option_tokens},
+                )
             now_epoch = float(now_utc_epoch())
             cooldown_sec = float(getattr(cfg, "OPTION_TOKEN_INCIDENT_COOLDOWN_SEC", 300.0))
             incident_key = f"{symbol}:{str(data.get('expiry_date') or '')}"
@@ -4769,7 +4942,16 @@ class TradeBuilder:
         atr = float(data.get("atr") or max(1.0, float(data.get("ltp") or 0.0) * 0.002))
         ltp_change_window = float(data.get("ltp_change_window") or 0.0)
         min_momentum = float(getattr(cfg, "EXPIRY_LOTTO_MIN_MOMENTUM_ATR", 0.10))
-        if abs(ltp_change_window) < (atr * min_momentum):
+        weak_momentum = abs(ltp_change_window) < (atr * min_momentum)
+        if weak_momentum and debug_reasons:
+            self._log_blocked_candidate(
+                symbol,
+                "no_signal",
+                "Expiry lotto blocked: momentum too low",
+                market_data=data,
+                extra={"momentum": ltp_change_window, "atr": atr, "min_momentum": min_momentum, "exploratory_mode": exploratory_mode},
+            )
+        if weak_momentum and not exploratory_mode:
             self._reject_ctx = {
                 "reason": "expiry_lotto_momentum_too_low",
                 "symbol": symbol,
@@ -4795,6 +4977,14 @@ class TradeBuilder:
             if underlying_spot is not None and quote_age_raw in (None, "", "None"):
                 spot_ok = True
         if not spot_ok:
+            if debug_reasons:
+                self._log_blocked_candidate(
+                    symbol,
+                    "no_signal",
+                    "Expiry lotto blocked: spot invalid",
+                    market_data=data,
+                    extra={"spot_issue": spot_issue, "spot_source": spot_source},
+                )
             self._reject_ctx = {
                 "reason": "expiry_lotto_spot_invalid",
                 "symbol": symbol,
@@ -4806,6 +4996,8 @@ class TradeBuilder:
         strike_step = float(strike_step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)))
         atm_steps_map = getattr(cfg, "EXPIRY_LOTTO_ATM_STRIKES_BY_SYMBOL", {}) or {}
         atm_steps = max(1, int(atm_steps_map.get(symbol, getattr(cfg, "EXPIRY_LOTTO_ATM_STRIKES", 2))))
+        if exploratory_mode:
+            atm_steps += 1
         atm = round(float(underlying_spot) / strike_step) * strike_step if strike_step > 0 else float(underlying_spot)
         low_strike = float(atm) - float(atm_steps * strike_step)
         high_strike = float(atm) + float(atm_steps * strike_step)
@@ -4814,15 +5006,38 @@ class TradeBuilder:
         orb_bias = str(data.get("orb_bias") or "").upper()
         trend_state = str(data.get("trend_state") or "").upper()
         require_trend_confirm = bool(getattr(cfg, "EXPIRY_LOTTO_REQUIRE_TREND_CONFIRM", True))
+        trend_soft_fail = False
         if require_trend_confirm:
             trend_up = ("UP" in trend_state) or ("BULL" in trend_state) or orb_bias == "UP"
             trend_down = ("DOWN" in trend_state) or ("BEAR" in trend_state) or orb_bias == "DOWN"
             if preferred_type == "CE" and not trend_up:
-                self._reject_ctx = {"reason": "expiry_lotto_trend_not_confirmed", "symbol": symbol, "direction": "UP"}
-                return []
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "no_signal",
+                        "Expiry lotto blocked: bullish trend not confirmed",
+                        market_data=data,
+                        extra={"direction": "UP", "exploratory_mode": exploratory_mode},
+                    )
+                if exploratory_mode:
+                    trend_soft_fail = True
+                else:
+                    self._reject_ctx = {"reason": "expiry_lotto_trend_not_confirmed", "symbol": symbol, "direction": "UP"}
+                    return []
             if preferred_type == "PE" and not trend_down:
-                self._reject_ctx = {"reason": "expiry_lotto_trend_not_confirmed", "symbol": symbol, "direction": "DOWN"}
-                return []
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "no_signal",
+                        "Expiry lotto blocked: bearish trend not confirmed",
+                        market_data=data,
+                        extra={"direction": "DOWN", "exploratory_mode": exploratory_mode},
+                    )
+                if exploratory_mode:
+                    trend_soft_fail = True
+                else:
+                    self._reject_ctx = {"reason": "expiry_lotto_trend_not_confirmed", "symbol": symbol, "direction": "DOWN"}
+                    return []
 
         max_spread_pct = float(getattr(cfg, "EXPIRY_LOTTO_MAX_SPREAD_PCT", 0.35))
         max_loss_per_trade = float(getattr(cfg, "EXPIRY_LOTTO_MAX_LOSS_PER_TRADE", 1500.0))
@@ -4860,15 +5075,32 @@ class TradeBuilder:
                 segment=segment,
                 market_open=bool(market_ctx.is_market_open),
             ):
-                reject_counts["spread_too_wide"] = reject_counts.get("spread_too_wide", 0) + 1
-                continue
+                reject_counts["spread"] = reject_counts.get("spread", 0) + 1
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "spread",
+                        "Expiry lotto candidate spread too wide",
+                        market_data=data,
+                        extra={"strike": strike, "option_type": opt_type, "exploratory_mode": exploratory_mode},
+                    )
+                if not exploratory_mode:
+                    continue
             if opt_type != preferred_type:
                 continue
 
             slippage = self.execution.estimate_slippage(bid, ask, raw.get("volume", 0))
             entry_base, entry_price_source = self._option_executable_price(raw, side="BUY")
             if entry_base is None:
-                reject_counts["missing_entry_proxy"] = reject_counts.get("missing_entry_proxy", 0) + 1
+                reject_counts["premium_band_fail"] = reject_counts.get("premium_band_fail", 0) + 1
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "premium_band_fail",
+                        "Expiry lotto candidate missing executable premium proxy",
+                        market_data=data,
+                        extra={"strike": strike, "option_type": opt_type},
+                    )
                 continue
             entry_price = max(0.01, float(entry_base))
             stop_loss = max(0.01, entry_price * 0.82)
@@ -4891,9 +5123,33 @@ class TradeBuilder:
                 1,
             )
             if ident_err or not tradingsymbol or not instrument_id or not expiry_use:
-                reject_counts["unresolved_contract"] = reject_counts.get("unresolved_contract", 0) + 1
+                reject_counts["no_contract"] = reject_counts.get("no_contract", 0) + 1
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "no_contract",
+                        "Expiry lotto candidate missing resolved contract",
+                        market_data=data,
+                        extra={"strike": strike, "option_type": opt_type},
+                    )
                 continue
+            if instrument_token is None:
+                reject_counts["no_token"] = reject_counts.get("no_token", 0) + 1
+                if debug_reasons:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "no_token",
+                        "Expiry lotto candidate unresolved token",
+                        market_data=data,
+                        extra={"strike": strike, "option_type": opt_type, "tradingsymbol": tradingsymbol},
+                    )
             confidence = max(0.55, min(0.95, abs(ltp_change_window) / max(atr, 1.0)))
+            if weak_momentum:
+                confidence -= 0.10
+            if trend_soft_fail:
+                confidence -= 0.08
+            if reject_counts.get("spread", 0):
+                confidence = max(0.0, confidence - 0.08)
             intent = self.trade_intent_flags(data, opt=raw, additional_blockers=[])
             intent["planning_only"] = True
             intent["execution_allowed"] = False
@@ -4956,6 +5212,14 @@ class TradeBuilder:
                 scored.append((score, decorated))
 
         if not scored:
+            if debug_reasons:
+                self._log_blocked_candidate(
+                    symbol,
+                    "no_viable_candidates",
+                    "Expiry lotto blocked: no viable candidates",
+                    market_data=data,
+                    extra={"reject_counts": reject_counts, "execution_mode": execution_mode},
+                )
             self._reject_ctx = {
                 "reason": "expiry_lotto_no_candidates",
                 "symbol": symbol,

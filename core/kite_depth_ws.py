@@ -409,7 +409,13 @@ def _latest_db_tick_epoch() -> float | None:
     if not db_path.exists():
         return None
     try:
-        with sqlite3.connect(str(db_path), timeout=1.0) as conn:
+        with sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False) as conn:
+            conn.execute("PRAGMA busy_timeout=30000")
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+            except Exception:
+                pass
             return _coerce_epoch(get_max_tick_epoch(conn))
     except Exception:
         return None
@@ -603,6 +609,7 @@ def _option_runtime_state(
             ws_connected=ws_connected,
             expected_option_count=expected_count,
             subscribed_option_count=subscribed_count,
+            option_ticks_received_count=int(ticks_received_count_by_symbol.get(symbol, 0) or 0),
             latest_option_tick_ts=last_tick_ts,
             latest_option_tick_age_sec=age_sec,
             feed_freshness_sec=option_sla_sec,
@@ -639,6 +646,11 @@ def _write_feed_runtime_snapshot(
     last_db_tick_epoch: float | None,
     last_db_tick_age_sec: float | None,
     last_ws_tick_epoch: float | None,
+    last_tick_age_sec: float | None,
+    last_depth_epoch: float | None,
+    last_depth_age_sec: float | None,
+    market_open: bool,
+    state_machine: dict | None = None,
     subscribed_option_tokens_count: int | None = None,
     option_last_tick_age_by_symbol: dict[str, float | None] | None = None,
     option_last_tick_sample: list[dict] | None = None,
@@ -648,8 +660,8 @@ def _write_feed_runtime_snapshot(
     last_option_tick_ts_by_symbol: dict[str, float | None] | None = None,
     option_feed_block_reason_by_symbol: dict[str, str] | None = None,
     option_active_blockers_by_symbol: dict[str, list[str]] | None = None,
-    restart_count_1h: int,
-    stale_strikes: int,
+    restart_count_1h: int = 0,
+    stale_strikes: int = 0,
     runtime_state: str | None = None,
     last_error: str | None = None,
 ) -> None:
@@ -666,6 +678,11 @@ def _write_feed_runtime_snapshot(
         "last_db_tick_epoch": _coerce_epoch(last_db_tick_epoch),
         "last_db_tick_age_sec": _safe_float(last_db_tick_age_sec),
         "last_ws_tick_epoch": _coerce_epoch(last_ws_tick_epoch),
+        "last_tick_age_sec": _safe_float(last_tick_age_sec),
+        "last_depth_epoch": _coerce_epoch(last_depth_epoch),
+        "last_depth_age_sec": _safe_float(last_depth_age_sec),
+        "market_open": bool(market_open),
+        "state_machine": dict(state_machine or {}),
         "subscribed_option_tokens_count": int(subscribed_option_tokens_count or 0),
         "option_last_tick_age_by_symbol": dict(option_last_tick_age_by_symbol or {}),
         "option_last_tick_sample": list(option_last_tick_sample or []),
@@ -719,10 +736,26 @@ def _persist_runtime_snapshot_row(
     err_text = str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000]
     sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
     missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
+    market_open = bool(is_market_open_ist())
     last_db_tick_epoch = _latest_db_tick_epoch()
     last_db_tick_age_sec = None
     if last_db_tick_epoch is not None:
         last_db_tick_age_sec = max(0.0, float(ts_epoch) - float(last_db_tick_epoch))
+    last_ws_tick_epoch = _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None
+    last_tick_epoch = last_ws_tick_epoch or last_db_tick_epoch
+    last_tick_age_sec = max(0.0, float(ts_epoch) - float(last_tick_epoch)) if last_tick_epoch is not None else None
+    last_depth_epoch = _latest_depth_epoch_from_store()
+    last_depth_age_sec = max(0.0, float(ts_epoch) - float(last_depth_epoch)) if last_depth_epoch is not None else None
+    if not market_open:
+        state_machine = {"state": "MARKET_CLOSED", "reason": "market_closed"}
+    elif ws_connected is False:
+        state_machine = {"state": "DOWN", "reason": "ws_disconnected"}
+    elif last_tick_age_sec is None:
+        state_machine = {"state": "STARTING", "reason": "awaiting_first_tick"}
+    elif last_tick_age_sec <= 10.0:
+        state_machine = {"state": "LIVE", "reason": "ticks_flowing"}
+    else:
+        state_machine = {"state": "DOWN", "reason": "no_ws_messages"}
     option_state = _option_runtime_state(
         now_epoch=ts_epoch,
         tokens=_LAST_TOKENS,
@@ -752,8 +785,12 @@ def _persist_runtime_snapshot_row(
         "last_option_tick_ts_by_symbol": dict(option_state.get("last_tick_ts_by_symbol") or {}),
         "option_feed_block_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
         "option_active_blockers_by_symbol": dict(option_state.get("active_blockers_by_symbol") or {}),
-        "last_ws_tick_epoch": _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None,
-        "last_depth_epoch": _latest_depth_epoch_from_store(),
+        "market_open": market_open,
+        "last_ws_tick_epoch": last_ws_tick_epoch,
+        "last_tick_age_sec": last_tick_age_sec,
+        "last_depth_epoch": last_depth_epoch,
+        "last_depth_age_sec": last_depth_age_sec,
+        "state_machine": dict(state_machine or {}),
         "source": source,
         "runtime_state": state_text,
         "last_error": err_text,
@@ -771,7 +808,12 @@ def _persist_runtime_snapshot_row(
         missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
         last_db_tick_epoch=last_db_tick_epoch,
         last_db_tick_age_sec=last_db_tick_age_sec,
-        last_ws_tick_epoch=_LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None,
+        last_ws_tick_epoch=last_ws_tick_epoch,
+        last_tick_age_sec=last_tick_age_sec,
+        last_depth_epoch=last_depth_epoch,
+        last_depth_age_sec=last_depth_age_sec,
+        market_open=market_open,
+        state_machine=state_machine,
         subscribed_option_tokens_count=int(option_state.get("option_count") or 0),
         option_last_tick_age_by_symbol=dict(option_state.get("option_age_by_symbol") or {}),
         option_last_tick_sample=list(option_state.get("sample_rows") or []),
@@ -2611,6 +2653,23 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         def _emit_snapshot(now_epoch: float) -> None:
             sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
             missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
+            market_open_now = bool(is_market_open_ist())
+            last_ws_tick_epoch = _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None
+            last_tick_epoch = last_ws_tick_epoch or last_db_tick_epoch
+            last_tick_age_sec = max(0.0, float(now_epoch) - float(last_tick_epoch)) if last_tick_epoch is not None else None
+            last_depth_epoch = _latest_depth_epoch_from_store()
+            last_depth_age_sec = max(0.0, float(now_epoch) - float(last_depth_epoch)) if last_depth_epoch is not None else None
+            ws_connected = _ws_connected_state()
+            if not market_open_now:
+                state_machine = {"state": "MARKET_CLOSED", "reason": "market_closed"}
+            elif ws_connected is False:
+                state_machine = {"state": "DOWN", "reason": "ws_disconnected"}
+            elif last_tick_age_sec is None:
+                state_machine = {"state": "STARTING", "reason": "awaiting_first_tick"}
+            elif last_tick_age_sec <= 10.0:
+                state_machine = {"state": "LIVE", "reason": "ticks_flowing"}
+            else:
+                state_machine = {"state": "DOWN", "reason": "no_ws_messages"}
             option_state = _option_runtime_state(
                 now_epoch=now_epoch,
                 tokens=_LAST_TOKENS,
@@ -2619,7 +2678,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             )
             _write_feed_runtime_snapshot(
                 now_epoch=now_epoch,
-                ws_connected=_ws_connected_state(),
+                ws_connected=ws_connected,
                 subscribed_tokens_count=len(_LAST_TOKENS or []),
                 intended_tokens_count=int(_INTENDED_TOKEN_COUNT if _INTENDED_TOKEN_COUNT > 0 else len(_LAST_TOKENS or [])),
                 subscribed_tokens_count_by_symbol=sub_counts,
@@ -2627,7 +2686,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 missing_option_tokens_count_by_symbol=missing_counts_by_symbol,
                 last_db_tick_epoch=last_db_tick_epoch,
                 last_db_tick_age_sec=last_db_tick_age,
-                last_ws_tick_epoch=_LAST_WS_TICK_EPOCH,
+                last_ws_tick_epoch=last_ws_tick_epoch,
+                last_tick_age_sec=last_tick_age_sec,
+                last_depth_epoch=last_depth_epoch,
+                last_depth_age_sec=last_depth_age_sec,
+                market_open=market_open_now,
+                state_machine=state_machine,
                 subscribed_option_tokens_count=int(option_state.get("option_count") or 0),
                 option_last_tick_age_by_symbol=dict(option_state.get("option_age_by_symbol") or {}),
                 option_last_tick_sample=list(option_state.get("sample_rows") or []),
@@ -2636,6 +2700,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
                 last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
                 option_feed_block_reason_by_symbol=dict(option_state.get("feed_block_reason_by_symbol") or {}),
+                option_active_blockers_by_symbol=dict(option_state.get("active_blockers_by_symbol") or {}),
                 restart_count_1h=_restart_count_1h(now_epoch),
                 stale_strikes=_STALE_STRIKES,
                 runtime_state=_RUNTIME_STATE,

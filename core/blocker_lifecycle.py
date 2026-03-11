@@ -7,6 +7,27 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+"""
+Canonical blocker lifecycle ownership.
+
+This module is the single owner of current-state blocker lifecycle for the
+runtime paths that need blocker transitions instead of sticky string lists.
+
+Lifecycle summary:
+
+| Code                | Owner                         | Scope              | Kind      | Clear condition                                  | TTL  |
+|---------------------|-------------------------------|--------------------|-----------|--------------------------------------------------|------|
+| NO_LIVE_OPTION_FEED | feed_health_evaluator         | feed/advisory      | edge_ttl  | feed connected + recent tick + within SLA        | 15s  |
+| STALE_OPTION_LTP    | quote_freshness_evaluator     | feed/advisory      | level     | quote/tick age back within threshold             | 2x   |
+| NO_TOKEN            | instrument_resolution_eval... | advisory_contract  | edge_ttl  | token resolution succeeds for current owner key  | 30s  |
+| PRICE_MISMATCH      | price_coherence_evaluator     | advisory_contract  | level     | prices reconcile or owner changes                | 15s  |
+
+Rules:
+- blockers are keyed by owner identity, not just blocker code
+- recovered healthy state clears active blockers immediately
+- expired or invalid-owner blockers are pruned and must not leak forward
+"""
+
 TARGET_BLOCKER_CODES = {
     "NO_LIVE_OPTION_FEED",
     "STALE_OPTION_LTP",
@@ -18,6 +39,67 @@ _TARGET_BLOCKER_PRIORITY = {
     "NO_LIVE_OPTION_FEED": 1,
     "STALE_OPTION_LTP": 2,
     "PRICE_MISMATCH": 3,
+}
+
+
+@dataclass(frozen=True)
+class BlockerSpec:
+    code: str
+    owner: str
+    scope: str
+    kind: str
+    severity: str
+    expiry_ttl_sec: float | None
+    set_condition: str
+    clear_condition: str
+    evidence_fields: tuple[str, ...]
+
+
+BLOCKER_SPECS: dict[str, BlockerSpec] = {
+    "NO_LIVE_OPTION_FEED": BlockerSpec(
+        code="NO_LIVE_OPTION_FEED",
+        owner="feed_health_evaluator",
+        scope="feed/advisory",
+        kind="edge_ttl",
+        severity="error",
+        expiry_ttl_sec=15.0,
+        set_condition="feed disconnected, expected subscriptions missing, or no fresh option tick within threshold",
+        clear_condition="feed connected and fresh option tick/tick age within threshold for current owner",
+        evidence_fields=("ws_connected", "expected_option_count", "subscribed_option_count", "latest_option_tick_ts", "latest_option_tick_age_sec"),
+    ),
+    "STALE_OPTION_LTP": BlockerSpec(
+        code="STALE_OPTION_LTP",
+        owner="quote_freshness_evaluator",
+        scope="feed/advisory",
+        kind="level",
+        severity="error",
+        expiry_ttl_sec=None,
+        set_condition="quote or tick age exceeds stale threshold",
+        clear_condition="quote or tick age returns within threshold for current owner",
+        evidence_fields=("quote_age_sec", "stale_threshold_sec", "latest_option_tick_age_sec", "feed_freshness_sec"),
+    ),
+    "NO_TOKEN": BlockerSpec(
+        code="NO_TOKEN",
+        owner="instrument_resolution_evaluator",
+        scope="advisory_contract",
+        kind="edge_ttl",
+        severity="error",
+        expiry_ttl_sec=30.0,
+        set_condition="selected contract lacks broker token and tradingsymbol identity",
+        clear_condition="instrument token resolution succeeds for current owner key",
+        evidence_fields=("symbol", "expiry", "strike", "right", "tradingsymbol", "advisory_generation"),
+    ),
+    "PRICE_MISMATCH": BlockerSpec(
+        code="PRICE_MISMATCH",
+        owner="price_coherence_evaluator",
+        scope="advisory_contract",
+        kind="level",
+        severity="error",
+        expiry_ttl_sec=15.0,
+        set_condition="live and reference prices differ beyond absolute and percentage tolerances",
+        clear_condition="prices reconcile, quote invalidates, or owner changes",
+        evidence_fields=("live_price", "reference_price", "quote_age_sec", "abs_tol", "pct_tol"),
+    ),
 }
 
 
@@ -232,6 +314,10 @@ def top_active_code(records: list[BlockerRecord]) -> str | None:
     return str(sorted(records, key=lambda item: (_TARGET_BLOCKER_PRIORITY.get(item.code, 99), item.code))[0].code)
 
 
+def blocker_spec(code: str) -> BlockerSpec:
+    return BLOCKER_SPECS[str(code)]
+
+
 def evaluate_feed_symbol_blockers(
     registry: BlockerRegistry,
     *,
@@ -240,6 +326,7 @@ def evaluate_feed_symbol_blockers(
     ws_connected: bool | None,
     expected_option_count: int,
     subscribed_option_count: int,
+    option_ticks_received_count: int = 0,
     latest_option_tick_ts: float | None,
     latest_option_tick_age_sec: float | None,
     feed_freshness_sec: float,
@@ -249,12 +336,22 @@ def evaluate_feed_symbol_blockers(
     expected_count = max(0, int(expected_option_count or 0))
     subscribed_count = max(0, int(subscribed_option_count or 0))
     min_required = max(0, int(min_required_count or 0))
+    ticks_received_count = max(0, int(option_ticks_received_count or 0))
     age_sec = _safe_float(latest_option_tick_age_sec)
     feed_limit = max(0.1, float(feed_freshness_sec))
+    fresh_tick_recovered = bool(
+        latest_option_tick_ts is not None
+        and age_sec is not None
+        and age_sec <= feed_limit
+        and ticks_received_count > 0
+    )
 
     no_live_fault = False
     no_live_reason = "feed_ok"
-    if ws_connected is False:
+    if fresh_tick_recovered:
+        no_live_fault = False
+        no_live_reason = "fresh_option_tick_recovered"
+    elif ws_connected is False:
         no_live_fault = True
         no_live_reason = "ws_disconnected"
     elif max(expected_count, min_required) > subscribed_count:
@@ -280,6 +377,7 @@ def evaluate_feed_symbol_blockers(
             "ws_connected": ws_connected,
             "expected_option_count": expected_count,
             "subscribed_option_count": subscribed_count,
+            "option_ticks_received_count": ticks_received_count,
             "latest_option_tick_ts": _safe_float(latest_option_tick_ts),
             "latest_option_tick_age_sec": age_sec,
             "feed_freshness_sec": feed_limit,

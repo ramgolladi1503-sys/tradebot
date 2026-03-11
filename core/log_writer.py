@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import atexit
 import json
+import logging
 import threading
 import time
 from pathlib import Path
 from typing import Dict
+
+logger = logging.getLogger(__name__)
 
 
 class JsonlWriter:
@@ -64,7 +67,7 @@ class JsonlWriter:
 
     def _print_error_once(self, now: float, msg: str) -> None:
         if (now - self._last_error_ts) >= self._error_cooldown_sec:
-            print(f"[LOG_WRITE_ERROR] path={self.path} err={msg}")
+            logger.warning("jsonl_log_write_error path=%s err=%s", self.path, msg)
             self._last_error_ts = now
 
 

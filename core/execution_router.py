@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from config import config as cfg
 from core.execution.chokepoint import ApprovalMissingOrInvalid, require_approval_or_abort
+from core.execution.execution_audit import append_execution_audit_event
+from core.execution.execution_guard import evaluate_execution_guard
 from core.execution_engine import ExecutionEngine
 from core.paper_fill_simulator import PaperFillSimulator
 from core.trade_store import insert_execution_stat
@@ -129,6 +131,13 @@ class ExecutionRouter:
             }
             if extra:
                 payload.update(extra)
+            append_execution_audit_event(
+                trade=trade,
+                order_action="abort",
+                guard_result=(extra if isinstance(extra, dict) and "execution_allowed" in extra else None),
+                broker_response=payload,
+                reason=reason,
+            )
             return False, None, _report(payload)
 
         if getattr(trade, "tradable", True) is False:
@@ -201,6 +210,21 @@ class ExecutionRouter:
                 return _abort("no_quote")
             bid = first.get("bid", bid)
             ask = first.get("ask", ask)
+            guard = evaluate_execution_guard(
+                side=getattr(trade, "side", None),
+                bid=bid,
+                ask=ask,
+                snapshot=first,
+                evaluated_at_epoch=time.time(),
+                max_quote_age_sec=getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0),
+                max_spread_pct=getattr(cfg, "EXEC_MAX_SPREAD_PCT", getattr(cfg, "MAX_SPREAD_PCT", 0.015)),
+                reference_price=getattr(trade, "entry_price", None),
+            )
+            if not guard.execution_allowed:
+                return _abort(
+                    guard.reasons[0] if guard.reasons else "execution_guard_failed",
+                    extra=guard.as_dict(),
+                )
             limit_price = trade.entry_price
             if limit_price is None:
                 limit_price, _ = self.engine.adaptive_limit_price(
@@ -299,6 +323,13 @@ class ExecutionRouter:
                     )
                 except Exception as exc:
                     logger.warning("execution_fill_event_warn err=%s", exc)
+                append_execution_audit_event(
+                    trade=trade,
+                    order_action=next_state.value,
+                    guard_result=guard.as_dict() if 'guard' in locals() and guard is not None else None,
+                    broker_response=report or {},
+                    reason="fill_confirmed",
+                )
                 return filled, price, _report(report or {})
 
             abort_reason = "execution_aborted"
@@ -376,6 +407,29 @@ class ExecutionRouter:
                         "feed_reason": feed_reason,
                         "feed_group": gate_details.get("group_key"),
                     },
+                )
+            live_snapshot = None
+            if snapshot_fn is not None and callable(snapshot_fn):
+                try:
+                    live_snapshot = snapshot_fn()
+                except Exception:
+                    live_snapshot = None
+            effective_bid = bid if bid is not None else (live_snapshot or {}).get("bid")
+            effective_ask = ask if ask is not None else (live_snapshot or {}).get("ask")
+            guard = evaluate_execution_guard(
+                side=getattr(trade, "side", None),
+                bid=effective_bid,
+                ask=effective_ask,
+                snapshot=live_snapshot,
+                evaluated_at_epoch=time.time(),
+                max_quote_age_sec=getattr(cfg, "LIVE_MAX_QUOTE_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)),
+                max_spread_pct=getattr(cfg, "EXEC_MAX_SPREAD_PCT", getattr(cfg, "MAX_SPREAD_PCT", 0.015)),
+                reference_price=getattr(trade, "entry_price", None),
+            )
+            if not guard.execution_allowed:
+                return _abort(
+                    guard.reasons[0] if guard.reasons else "execution_guard_failed",
+                    extra=guard.as_dict(),
                 )
             self._record_intent(
                 trade,

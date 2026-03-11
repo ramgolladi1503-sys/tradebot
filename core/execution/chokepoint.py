@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any, Optional
@@ -7,6 +8,8 @@ from typing import Any, Optional
 from config import config as cfg
 from core.approval_store import consume_valid_approval
 from core.audit_log import append_event
+
+logger = logging.getLogger(__name__)
 
 
 class ApprovalMissingOrInvalid(RuntimeError):
@@ -52,7 +55,7 @@ def _audit(intent_hash: str, mode: str, ok: bool, reason: str) -> None:
     try:
         append_event(payload)
     except Exception as exc:
-        print(f"[ORDER_APPROVAL_CHOKEPOINT_AUDIT_ERROR] {exc} | payload={payload}")
+        logger.warning("order_approval_chokepoint_audit_error err=%s payload=%s", exc, payload)
 
 
 def require_approval_or_abort(

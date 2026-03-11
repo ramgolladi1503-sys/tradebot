@@ -55,6 +55,7 @@ def _advisory_row(
     payload = {
         "advisory_id": trade_id,
         "trade_id": trade_id,
+        "strategy_id": "CORE",
         "symbol": symbol,
         "strategy_name": "CORE",
         "timestamp": _iso(timestamp_epoch),
@@ -84,6 +85,8 @@ def _advisory_row(
         "execution_status": execution_status,
         "advisory_visible": True,
         "is_executable": execution_status == "executable",
+        "decision_explain": ["incident_bundle_fixture"],
+        "market_open": True,
         "current_ltp": entry,
         "underlying_ltp": 22510.0,
         "instrument_token": instrument_token,
@@ -209,6 +212,25 @@ def _runtime_fixture(root: Path, *, symbol: str = "NIFTY", now_epoch: float = 1_
             ]
         },
     )
+    _write_jsonl(
+        runtime_logs / "execution_audit.jsonl",
+        [
+            {
+                "timestamp": _iso(now_epoch),
+                "ts_epoch": now_epoch,
+                "trade_id": "T-1",
+                "symbol": symbol,
+                "strategy_id": "CORE",
+                "display_entry": 72.5,
+                "execution_entry": 72.8,
+                "blocker_state": {"blockers": ["NO_LIVE_OPTION_FEED"], "hard_blockers": [], "soft_penalties": [], "warnings": []},
+                "guard_result": {"execution_allowed": False, "reasons": ["spread_too_wide"]},
+                "order_action": "abort",
+                "broker_response": {"reason_if_aborted": "spread_too_wide"},
+                "reason": "spread_too_wide",
+            }
+        ],
+    )
     return {
         "runtime_logs": runtime_logs,
         "runtime_data": runtime_data,
@@ -256,10 +278,14 @@ def test_incident_bundle_happy_path(tmp_path):
         "blocker_state",
         "option_chain_health",
         "token_resolution",
+        "execution_audit",
         "log_snippets",
         "raw_sources",
     ):
         assert key in payload
+    assert payload["execution_audit"]["latest_event"]["order_action"] == "abort"
+    assert payload["execution_audit"]["guard_result"]["reasons"] == ["spread_too_wide"]
+    assert "Execution audit:" in text
     assert payload["advisory"]["entry"] == 72.5
     assert payload["blocker_state"]["current_blockers"] == []
     assert payload["freshness"]["freshness_reason"] == "quote_within_threshold"

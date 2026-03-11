@@ -1,11 +1,14 @@
+import json
+import logging
 import sqlite3
 import time
-import json
 from datetime import datetime, timezone
 from config import config as cfg
 from pathlib import Path
 from core.incidents import trigger_db_write_fail
 from core.fs_utils import ensure_parent_dir
+
+logger = logging.getLogger(__name__)
 
 
 def _conn():
@@ -713,7 +716,7 @@ def insert_broker_fill(row):
             )
         except Exception as exc:
             # Reconciliation telemetry must never block broker fill persistence.
-            print(f"[EXECUTION_FILL_EVENT_WARN] {exc}")
+            logger.warning("execution_fill_event_warn err=%s", exc)
     except Exception as exc:
         trigger_db_write_fail({"table": "broker_fills", "error": str(exc)})
         raise

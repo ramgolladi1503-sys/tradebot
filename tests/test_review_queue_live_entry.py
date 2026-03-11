@@ -94,6 +94,7 @@ def test_review_queue_persists_freshness_evidence_from_validation(tmp_path, monk
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (565.0, 100.0))
     monkeypatch.setattr(review_queue.time, "time", lambda: 102.1)
     trade = _make_trade(
@@ -117,6 +118,7 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     now = {"ts": 112.0, "ltp_ts": 100.0}
     monkeypatch.setattr(review_queue.time, "time", lambda: now["ts"])
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (565.0, now["ltp_ts"]))
@@ -158,6 +160,7 @@ def test_freshness_reason_updates_after_recovery(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     now = {"ts": 120.0, "ltp_ts": 100.0}
     monkeypatch.setattr(review_queue.time, "time", lambda: now["ts"])
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (230.15, now["ltp_ts"]))
@@ -454,6 +457,7 @@ def test_market_open_transition_recomputes_readiness(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     now = {"ts": 120.0, "ltp_ts": 100.0}
     monkeypatch.setattr(review_queue.time, "time", lambda: now["ts"])
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (210.0, now["ltp_ts"]))
@@ -518,6 +522,7 @@ def test_advisory_row_replaces_old_blockers_after_recovery(tmp_path, monkeypatch
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     now = {"ts": 120.0, "ltp_ts": 100.0}
     monkeypatch.setattr(review_queue.time, "time", lambda: now["ts"])
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (230.15, now["ltp_ts"]))
@@ -676,7 +681,10 @@ def test_issue_classification_missing_enrichment_lowers_confidence_without_suppr
         "option_ltp_source": "tick_store",
         "current_ltp": 230.15,
         "validation_reference_price": 230.15,
-        "global_confidence": 0.64,
+        "confidence_base": 0.72,
+        "confidence": 0.64,
+        "confidence_penalty_total": 0.08,
+        "confidence_penalty_reasons": ["premium_out_of_band"],
         "tradable_reasons_blocking": ["MISSING_CROSS_ASSET_FEATURE"],
     }
 
@@ -689,9 +697,12 @@ def test_issue_classification_missing_enrichment_lowers_confidence_without_suppr
     assert out["hard_blockers"] == []
     assert out["soft_penalties"] == ["MISSING_CROSS_ASSET_FEATURE"]
     assert out["warnings"] == []
-    assert float(out["confidence_raw"]) == 0.64
-    assert float(out["confidence_penalty"]) > 0.0
-    assert float(out["confidence_final"]) < 0.64
+    assert float(out["confidence_base"]) == 0.72
+    assert float(out["confidence_raw"]) == 0.72
+    assert float(out["confidence_penalty_total"]) > 0.08
+    assert "premium_out_of_band" in list(out["confidence_penalty_reasons"])
+    assert "MISSING_CROSS_ASSET_FEATURE" in list(out["confidence_penalty_reasons"])
+    assert float(out["confidence_final"]) > 0.5
     assert out["advisory_visible"] is True
     assert out["is_executable"] is False
     assert out["execution_status"] == "queue_only"
@@ -708,6 +719,7 @@ def test_issue_classification_display_entry_fallback_is_warning_only():
         "entry_status": "OK",
         "quote_source": "tick_store",
         "option_ltp_source": "tick_store",
+        "confidence_base": 0.52,
         "global_confidence": 0.52,
         "tradable_reasons_blocking": ["DISPLAY_ENTRY_FALLBACK"],
     }
@@ -722,6 +734,8 @@ def test_issue_classification_display_entry_fallback_is_warning_only():
     assert out["soft_penalties"] == []
     assert out["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
     assert float(out["confidence_penalty"]) == 0.0
+    assert float(out["confidence_penalty_total"]) == 0.0
+    assert list(out["confidence_penalty_reasons"]) == []
     assert float(out["confidence_final"]) == 0.52
     assert out["advisory_visible"] is True
     assert out["execution_status"] == "advisory_only"
@@ -760,6 +774,8 @@ def test_issue_classification_wide_spread_blocks_execution():
 
 def test_advisory_schema_round_trip_preserves_severity_fields():
     row = {
+        "trade_id": "T-SEVERITY-1",
+        "strategy_id": "CORE",
         "advisory_id": "ADV-SEVERITY-1",
         "symbol": "NIFTY",
         "strategy_name": "CORE",
@@ -776,8 +792,11 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
         "entry": 72.5,
         "entry_status": "non_executable",
         "confidence": 0.7,
+        "confidence_base": 0.82,
         "confidence_raw": 0.82,
         "confidence_penalty": 0.12,
+        "confidence_penalty_total": 0.12,
+        "confidence_penalty_reasons": ["STALE_OPTION_LTP", "MISSING_CROSS_ASSET_FEATURE"],
         "confidence_final": 0.7,
         "readiness": "ADVISORY_ONLY",
         "hard_blockers": [],
@@ -790,6 +809,8 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
         "entry_source": "mark",
         "quote_source": "tick_store",
         "quote_age_sec": 1.25,
+        "decision_explain": [],
+        "market_open": True,
     }
 
     serialized = review_queue.serialize_advisory_row(row)
@@ -798,8 +819,11 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
     assert deserialized["hard_blockers"] == []
     assert deserialized["soft_penalties"] == ["STALE_OPTION_LTP", "MISSING_CROSS_ASSET_FEATURE"]
     assert deserialized["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
+    assert float(deserialized["confidence_base"]) == 0.82
     assert float(deserialized["confidence_raw"]) == 0.82
     assert float(deserialized["confidence_penalty"]) == 0.12
+    assert float(deserialized["confidence_penalty_total"]) == 0.12
+    assert deserialized["confidence_penalty_reasons"] == ["STALE_OPTION_LTP", "MISSING_CROSS_ASSET_FEATURE"]
     assert float(deserialized["confidence_final"]) == 0.7
     assert deserialized["advisory_visible"] is True
     assert deserialized["is_executable"] is False

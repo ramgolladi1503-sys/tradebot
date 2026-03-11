@@ -1271,11 +1271,22 @@ def _apply_issue_classification(
     issue_codes = _current_issue_codes(entry)
     current_ltp = _safe_float(entry.get("current_ltp"))
     validation_reference_price = _safe_float(entry.get("validation_reference_price"))
-    confidence_raw = _safe_float(entry.get("global_confidence"))
+    confidence_raw = _safe_float(entry.get("confidence_base"))
+    if confidence_raw is None:
+        confidence_raw = _safe_float(entry.get("global_confidence"))
     if confidence_raw is None:
         confidence_raw = _safe_float(entry.get("confidence"))
     if confidence_raw is None:
         confidence_raw = _safe_float(entry.get("raw_signal_confidence"))
+    existing_confidence_penalty = _safe_float(entry.get("confidence_penalty_total"))
+    if existing_confidence_penalty is None:
+        existing_confidence_penalty = _safe_float(entry.get("confidence_penalty"))
+    if existing_confidence_penalty is None and confidence_raw is not None:
+        softened_confidence = _safe_float(entry.get("confidence"))
+        if softened_confidence is not None:
+            existing_confidence_penalty = max(0.0, float(confidence_raw) - float(softened_confidence))
+    if existing_confidence_penalty is None:
+        existing_confidence_penalty = 0.0
     quote_age_sec = _safe_float(
         entry.get("quote_age_sec")
         or entry.get("price_age_sec")
@@ -1303,7 +1314,7 @@ def _apply_issue_classification(
     hard_blockers: list[str] = []
     soft_penalties: list[str] = []
     warnings: list[str] = []
-    confidence_penalty = 0.0
+    issue_penalty = 0.0
     issue_classifications: list[dict] = []
     for code in issue_codes:
         classification = classify_issue(code, ctx)
@@ -1322,7 +1333,7 @@ def _apply_issue_classification(
         elif classification.category == ISSUE_CATEGORY_SOFT:
             if classification.code not in soft_penalties:
                 soft_penalties.append(classification.code)
-            confidence_penalty += float(classification.penalty or 0.0)
+            issue_penalty += float(classification.penalty or 0.0)
         elif classification.category == ISSUE_CATEGORY_WARNING:
             if classification.code not in warnings:
                 warnings.append(classification.code)
@@ -1331,9 +1342,13 @@ def _apply_issue_classification(
         fallback_code = str(entry.get("hard_reason") or entry.get("permission_reason") or "execution_blocked").strip()
         if fallback_code and fallback_code not in hard_blockers:
             hard_blockers.append(fallback_code)
+    confidence_penalty_reasons = _dedupe_issue_codes(
+        list(entry.get("confidence_penalty_reasons") or []) + soft_penalties
+    )
+    confidence_penalty_total = max(0.0, float(existing_confidence_penalty) + float(issue_penalty))
     confidence_final = confidence_raw
     if confidence_final is not None:
-        confidence_final = max(0.0, min(1.0, float(confidence_final) - float(confidence_penalty)))
+        confidence_final = max(0.0, min(1.0, float(confidence_raw) - float(confidence_penalty_total)))
     blockers = _dedupe_issue_codes(hard_blockers + soft_penalties + warnings)
     if hard_blockers or permission == "BLOCK" or bool(entry.get("unresolved_contract")):
         readiness = "BLOCKED"
@@ -1356,8 +1371,11 @@ def _apply_issue_classification(
     entry["soft_penalties"] = soft_penalties
     entry["warnings"] = warnings
     entry["blockers"] = blockers
+    entry["confidence_base"] = confidence_raw
     entry["confidence_raw"] = confidence_raw
-    entry["confidence_penalty"] = round(float(confidence_penalty), 6)
+    entry["confidence_penalty"] = round(float(confidence_penalty_total), 6)
+    entry["confidence_penalty_total"] = round(float(confidence_penalty_total), 6)
+    entry["confidence_penalty_reasons"] = confidence_penalty_reasons
     entry["confidence_final"] = confidence_final
     if confidence_final is not None:
         entry["confidence"] = confidence_final
@@ -2073,6 +2091,9 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "permission_reason": get_attr(trade, "permission_reason", None),
         "countertrend": get_attr(trade, "countertrend", None),
         "raw_signal_confidence": get_attr(trade, "raw_signal_confidence", None),
+        "confidence_base": get_attr(trade, "confidence_base", None),
+        "confidence_penalty_total": get_attr(trade, "confidence_penalty_total", None),
+        "confidence_penalty_reasons": get_attr(trade, "confidence_penalty_reasons", None),
         "snapshot_id": get_attr(trade, "snapshot_id", None),
         "timestamp": str(get_attr(trade, "timestamp")),
         "upstox_instrument_key": get_attr(trade, "upstox_instrument_key"),

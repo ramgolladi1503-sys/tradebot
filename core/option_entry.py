@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from config import config as cfg
-from core.freshness import evaluate_quote_freshness, freshness_public_fields
+from core.freshness import record_freshness_decision
+from core.freshness_evaluator import evaluate_quote_freshness, freshness_public_fields
 from core.freshness_policy import resolve_freshness_policy
 from core.time_utils import now_utc_epoch, is_market_open_ist
 
@@ -121,8 +122,8 @@ def validate_live_entry(
         allow_candle_fallback=bool(allow_candle_fallback),
         decision_type="option_entry",
         now_epoch=now_epoch,
-        persist_runtime=True,
     )
+    record_freshness_decision(decision)
     out.update(freshness_public_fields(decision))
     out["freshness_decision"] = decision.to_dict()
     if current_ltp is None:

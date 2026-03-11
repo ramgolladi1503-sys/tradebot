@@ -221,6 +221,26 @@ def _matching_advisory_rows(path: Path, *, symbol: str, trade_id: str | None) ->
     return matches
 
 
+def _matching_execution_audit_rows(path: Path, *, symbol: str, trade_id: str | None, now_epoch: float, window_minutes: int) -> list[dict[str, Any]]:
+    rows = _tail_jsonl_rows(path)
+    cutoff = float(now_epoch) - (60.0 * max(1, int(window_minutes)))
+    matches: list[dict[str, Any]] = []
+    for row in rows:
+        row_trade_id = _norm_text(row.get("trade_id"))
+        row_symbol = _norm_upper(row.get("symbol"))
+        if trade_id:
+            if row_trade_id != str(trade_id):
+                continue
+        elif row_symbol != _norm_upper(symbol):
+            continue
+        row_epoch = _safe_float(row.get("ts_epoch"))
+        if row_epoch is not None and row_epoch < cutoff:
+            continue
+        matches.append(dict(row))
+    matches.sort(key=lambda row: _safe_float(row.get("ts_epoch")) or 0.0, reverse=True)
+    return matches
+
+
 def _deserialize_row_best_effort(row: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     try:
         return deserialize_advisory_row(row, allow_legacy=True), None
@@ -596,6 +616,23 @@ def _incident_summary(
     }
 
 
+def _build_execution_audit_section(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {
+            "missing": True,
+            "latest_event": None,
+            "recent_events": [],
+            "guard_result": {},
+        }
+    latest = dict(rows[0])
+    return {
+        "missing": False,
+        "latest_event": latest,
+        "recent_events": rows[:10],
+        "guard_result": latest.get("guard_result") if isinstance(latest.get("guard_result"), dict) else {},
+    }
+
+
 def _render_bundle_text(bundle: dict[str, Any]) -> str:
     meta = bundle.get("bundle_meta") or {}
     incident = bundle.get("incident_summary") or {}
@@ -604,6 +641,7 @@ def _render_bundle_text(bundle: dict[str, Any]) -> str:
     token_state = bundle.get("token_resolution") or {}
     blocker_state = bundle.get("blocker_state") or {}
     feed = bundle.get("feed_health") or {}
+    execution_audit = bundle.get("execution_audit") or {}
     lines = [
         f"Incident bundle v{meta.get('bundle_version')} for {meta.get('symbol')} trade_id={meta.get('trade_id') or '-'}",
         f"Generated: {meta.get('generated_at')} window_minutes={meta.get('window_minutes')}",
@@ -614,6 +652,7 @@ def _render_bundle_text(bundle: dict[str, Any]) -> str:
         f"Blockers: current={blocker_state.get('current_blockers')} previous={blocker_state.get('previous_blockers')}",
         f"Freshness: reason={freshness.get('freshness_reason')} quote_age_sec={freshness.get('quote_age_sec')} threshold={freshness.get('stale_threshold_sec')}",
         f"Token state: option_token_present={token_state.get('option_token_present')} resolution_status={token_state.get('last_resolution_status')} reason={token_state.get('last_resolution_reason')}",
+        f"Execution audit: action={((execution_audit.get('latest_event') or {}).get('order_action'))} reason={((execution_audit.get('latest_event') or {}).get('reason'))} guard={((execution_audit.get('guard_result') or {}).get('reasons'))}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -655,12 +694,18 @@ def build_incident_bundle_payload(
     freshness_latest = _load_and_track(runtime_logs / "freshness_latest.json", "freshness_latest") or {}
     token_resolution = _load_and_track(runtime_logs / "token_resolution.json", "token_resolution") or {}
     option_chain_latest = _load_and_track(runtime_data / "option_chain_latest.json", "option_chain_latest") or {}
+    execution_audit_path = runtime_logs / "execution_audit.jsonl"
 
     if suggestions_file.exists():
         raw_sources.append({"label": "suggestions_jsonl", "path": str(suggestions_file), "exists": True, "parse_ok": True, "missing": False, "error": None})
     else:
         raw_sources.append({"label": "suggestions_jsonl", "path": str(suggestions_file), "exists": False, "parse_ok": False, "missing": True, "error": None})
         notes.append("suggestions_jsonl: missing")
+    if execution_audit_path.exists():
+        raw_sources.append({"label": "execution_audit_jsonl", "path": str(execution_audit_path), "exists": True, "parse_ok": True, "missing": False, "error": None})
+    else:
+        raw_sources.append({"label": "execution_audit_jsonl", "path": str(execution_audit_path), "exists": False, "parse_ok": False, "missing": True, "error": None})
+        notes.append("execution_audit_jsonl: missing")
 
     advisory_rows_raw = _matching_advisory_rows(suggestions_file, symbol=symbol_key, trade_id=trade_id)
     advisory_rows: list[dict[str, Any]] = []
@@ -701,6 +746,14 @@ def build_incident_bundle_payload(
     except Exception:
         resolution_epoch = None
     token_section = _build_token_resolution_section(resolution_row, advisory_section, resolution_epoch=resolution_epoch)
+    execution_audit_rows = _matching_execution_audit_rows(
+        execution_audit_path,
+        symbol=symbol_key,
+        trade_id=trade_id,
+        now_epoch=now_ts,
+        window_minutes=minutes,
+    )
+    execution_audit_section = _build_execution_audit_section(execution_audit_rows)
     log_snippets = _collect_log_snippets(
         symbol=symbol_key,
         trade_id=trade_id,
@@ -733,6 +786,7 @@ def build_incident_bundle_payload(
         "blocker_state": blocker_state,
         "option_chain_health": option_chain_health,
         "token_resolution": token_section,
+        "execution_audit": execution_audit_section,
         "log_snippets": log_snippets,
         "raw_sources": raw_sources,
         "notes": notes,
@@ -745,6 +799,7 @@ def build_incident_bundle_payload(
         "freshness_latest": freshness_latest,
         "token_resolution": token_resolution,
         "option_chain_latest": option_chain_latest,
+        "execution_audit_rows": execution_audit_rows,
     }
 
 
@@ -799,6 +854,9 @@ def generate_incident_bundle(
             _copy_raw_file(source_path, raw_dir)
     if suggestions_file.exists():
         _write_raw_json(raw_dir, "advisory_rows.json", advisory_rows_raw)
+    execution_audit_rows = payloads.get("execution_audit_rows") if isinstance(payloads.get("execution_audit_rows"), list) else []
+    if execution_audit_rows:
+        _write_raw_json(raw_dir, "execution_audit_rows.json", execution_audit_rows)
     _copy_log_snippets(raw_dir, log_snippets)
 
     for name, payload in payloads.items():

@@ -1,5 +1,6 @@
-from .invariants import INVARIANTS, InvariantViolation, assert_invariants
-from .advisory_schema import (
+from __future__ import annotations
+
+from core.advisory_schema import (
     AdvisorySchemaError,
     deserialize_advisory_row,
     log_advisory_schema_error,
@@ -8,9 +9,6 @@ from .advisory_schema import (
 )
 
 __all__ = [
-    "INVARIANTS",
-    "InvariantViolation",
-    "assert_invariants",
     "AdvisorySchemaError",
     "validate_advisory_row",
     "serialize_advisory_row",

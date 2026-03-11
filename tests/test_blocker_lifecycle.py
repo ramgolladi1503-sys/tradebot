@@ -4,6 +4,7 @@ from datetime import datetime
 
 import core.readiness_gate as readiness_gate
 from core.blocker_lifecycle import (
+    BLOCKER_SPECS,
     build_contract_owner_key,
     evaluate_advisory_contract_blockers,
     evaluate_feed_symbol_blockers,
@@ -20,6 +21,19 @@ def setup_function():
 
 def _active_codes(records) -> list[str]:
     return [str(record.code) for record in list(records or [])]
+
+
+def test_blocker_specs_define_owner_severity_and_lifecycle_for_target_codes():
+    for code in ("NO_LIVE_OPTION_FEED", "STALE_OPTION_LTP", "NO_TOKEN", "PRICE_MISMATCH"):
+        spec = BLOCKER_SPECS[code]
+        assert spec.code == code
+        assert spec.owner
+        assert spec.scope
+        assert spec.kind
+        assert spec.severity
+        assert spec.set_condition
+        assert spec.clear_condition
+        assert isinstance(spec.evidence_fields, tuple)
 
 
 def test_no_live_option_feed_clears_on_recovery():

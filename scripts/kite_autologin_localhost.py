@@ -22,7 +22,8 @@ from core.security_guard import local_token_path, write_local_kite_access_token
 
 
 HOST = "127.0.0.1"
-PORT = 8000
+# Dedicated auth callback port. Do not share with webhook/test services.
+PORT = 8765
 CALLBACK_PATH = "/"
 DEFAULT_TIMEOUT_SEC = 180
 

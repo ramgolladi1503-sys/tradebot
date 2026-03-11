@@ -94,6 +94,7 @@ from core.market_snapshot_builder import (
     build_symbol_market_snapshot,
 )
 from core.market_snapshot_store import write_market_snapshot_atomic
+from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -929,6 +930,44 @@ class Orchestrator:
             except Exception:
                 pass
             logger.warning("gate_status_write_failed err=%s:%s", type(exc).__name__, exc)
+
+    def _log_cycle_symbol_summary(
+        self,
+        *,
+        symbol: str,
+        snapshot_ok: bool,
+        gate_allowed: bool,
+        quote_age_gate_pass,
+        trade_build_attempted: bool,
+        trade_generated: bool,
+        permission,
+        final_action,
+        reject_reason,
+        top_gate_reasons,
+    ) -> None:
+        try:
+            seen = getattr(self, "_decision_summary_cycle_seen", None)
+            if isinstance(seen, set):
+                key = (str(symbol or "").upper(), str(getattr(self, "_gate_status_cycle_id", "") or ""))
+                if key in seen:
+                    return
+                seen.add(key)
+            logger.info(
+                "cycle_symbol_decision_summary symbol=%s cycle_id=%s snapshot_ok=%s gate_allowed=%s quote_age_gate_pass=%s trade_build_attempted=%s trade_generated=%s permission=%s final_action=%s reject_reason=%s top_gate_reasons=%s",
+                symbol,
+                str(getattr(self, "_gate_status_cycle_id", "") or ""),
+                bool(snapshot_ok),
+                bool(gate_allowed),
+                quote_age_gate_pass,
+                bool(trade_build_attempted),
+                bool(trade_generated),
+                permission,
+                final_action,
+                reject_reason,
+                json.dumps(list(top_gate_reasons or [])[:5], separators=(",", ":")),
+            )
+        except Exception:
+            pass
 
     def _emit_global_halt_events(self, reason: str):
         reason = str(reason or "UNKNOWN_HALT")
@@ -1986,6 +2025,7 @@ class Orchestrator:
         market_mode: str,
         market_open: bool,
         symbols_scanned: int,
+        trade_build_attempts: int = 0,
         candidates_seen: int,
         candidates_blocked: int,
         candidates_enqueued: int,
@@ -2060,6 +2100,7 @@ class Orchestrator:
             "candidates_seen": int(candidates_seen),
             "candidates_blocked": int(candidates_blocked),
             "candidates_enqueued": int(candidates_enqueued),
+            "cycle_trade_build_attempts": int(trade_build_attempts),
             "current_cycle_candidates_seen": int(candidates_seen),
             "current_cycle_candidates_enqueued": int(candidates_enqueued),
             "current_cycle_suggestion_count": int(suggestion_count),
@@ -2339,13 +2380,16 @@ class Orchestrator:
             execution_route_ms = 0.0
             cycle_blockers: Counter = Counter()
             cycle_symbols_scanned: set[str] = set()
+            cycle_trade_build_attempts = 0
             cycle_candidates_seen = 0
             cycle_candidates_blocked = 0
             cycle_candidates_enqueued = 0
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
             cycle_market_open = False
             suggestion_rows_before = _count_jsonl_rows(canonical_suggestions_log_path())
+            visible_counts_before = _scan_visible_suggestions(canonical_suggestions_log_path())
             self._decision_traces = []
+            self._decision_summary_cycle_seen = set()
             self._gate_status_cycle_seen = set()
             self._gatekeeper_cycle_cache = {}
             self._gate_status_cycle_id = f"{int(now_utc_epoch() * 1000)}"
@@ -2392,9 +2436,10 @@ class Orchestrator:
                 cycle_market_open = bool(
                     any(bool((row or {}).get("market_open")) for row in (market_data_list or []))
                 )
+                dashboard_market_snapshot = None
                 try:
                     # Engine-owned compute: dashboard reads this compact artifact and must not recompute it.
-                    produce_and_store_market_snapshot(
+                    dashboard_market_snapshot = produce_and_store_market_snapshot(
                         market_data_list=market_data_list,
                         market_open=cycle_market_open,
                         compute_ms=(time.perf_counter() - feature_stage_start) * 1000.0,
@@ -2405,6 +2450,14 @@ class Orchestrator:
                 self._update_decision_breakers(market_data_list)
                 self._update_pilot_unlock_clean_cycles()
                 self._evaluate_suggestions(market_data_list)
+                try:
+                    produce_and_store_runtime_snapshots(
+                        market_snapshot=dashboard_market_snapshot,
+                        producer="orchestrator_cycle",
+                        loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
+                    )
+                except Exception as exc:
+                    logger.error("[RUNTIME_SNAPSHOT_WRITE_ERROR] phase=cycle error=%s:%s", type(exc).__name__, exc)
                 try:
                     self._maybe_run_suggestion_reliability_check()
                 except Exception as exc:
@@ -2660,6 +2713,18 @@ class Orchestrator:
                             gate_reasons=gate.reasons,
                             debug_flag=debug_flag,
                         )
+                        self._log_cycle_symbol_summary(
+                            symbol=sym,
+                            snapshot_ok=bool(market_snapshot),
+                            gate_allowed=False,
+                            quote_age_gate_pass=None,
+                            trade_build_attempted=False,
+                            trade_generated=False,
+                            permission=None,
+                            final_action=None,
+                            reject_reason="gatekeeper_blocked",
+                            top_gate_reasons=list(gate.reasons or []),
+                        )
                         continue
                     quote_age_snapshot = self._build_decision_snapshot(
                         market_data=market_data,
@@ -2707,15 +2772,43 @@ class Orchestrator:
                                 self._log_decision_safe(event)
                             except Exception:
                                 pass
+                            self._log_cycle_symbol_summary(
+                                symbol=sym,
+                                snapshot_ok=bool(market_snapshot),
+                                gate_allowed=True,
+                                quote_age_gate_pass=False,
+                                trade_build_attempted=False,
+                                trade_generated=False,
+                                permission=None,
+                                final_action=None,
+                                reject_reason=reason_code,
+                                top_gate_reasons=[reason_code],
+                            )
                             continue
                     decision_stage_start = time.perf_counter()
+                    cycle_trade_build_attempts += 1
+                    execution_mode = str(
+                        market_data.get("execution_mode")
+                        or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+                        or getattr(cfg, "EXECUTION_MODE", "")
+                    ).strip().upper()
+                    allow_builder_fallbacks = execution_mode in {"SIM", "PAPER"}
+                    allow_builder_baseline = execution_mode in {"SIM", "PAPER"}
+                    logger.debug(
+                        "trade_builder_build_with_trace symbol=%s execution_mode=%s allow_fallbacks=%s allow_baseline=%s gate_family=%s",
+                        sym,
+                        execution_mode,
+                        allow_builder_fallbacks,
+                        allow_builder_baseline,
+                        getattr(gate, "family", None),
+                    )
                     trade, decision_trace = self.trade_builder.build_with_trace(
                         market_data,
                         quick_mode=False,
                         debug_reasons=debug_flag,
                         force_family=gate.family,
-                        allow_fallbacks=False,
-                        allow_baseline=False,
+                        allow_fallbacks=allow_builder_fallbacks,
+                        allow_baseline=allow_builder_baseline,
                     )
                     decision_build_ms += (time.perf_counter() - decision_stage_start) * 1000.0
                     if decision_trace is not None:
@@ -2760,6 +2853,9 @@ class Orchestrator:
                                 gatekeeper_allowed=True,
                                 veto_reasons=reject_gate_reasons,
                             )
+                            if isinstance(event, dict):
+                                event["builder_reject_reason"] = reject_reason
+                                event["builder_gate_reasons"] = list(reject_gate_reasons or [])
                             self._log_decision_safe(event)
                         except Exception:
                             pass
@@ -2816,9 +2912,33 @@ class Orchestrator:
                                 self.decision_store.save_decision(decision)
                             except Exception as exc:
                                 logger.warning("decision_store_save_skipped_failed err=%s", exc)
+                        self._log_cycle_symbol_summary(
+                            symbol=sym,
+                            snapshot_ok=bool(market_snapshot),
+                            gate_allowed=True,
+                            quote_age_gate_pass=True,
+                            trade_build_attempted=True,
+                            trade_generated=False,
+                            permission=None,
+                            final_action=None,
+                            reject_reason=reject_reason or "no_trade_generated",
+                            top_gate_reasons=reject_gate_reasons,
+                        )
                         continue
                     cycle_candidates_seen += 1
                     self._observe_price_mismatch_breaker([])
+                    self._log_cycle_symbol_summary(
+                        symbol=sym,
+                        snapshot_ok=bool(market_snapshot),
+                        gate_allowed=True,
+                        quote_age_gate_pass=True,
+                        trade_build_attempted=True,
+                        trade_generated=True,
+                        permission=getattr(trade, "permission", None),
+                        final_action=getattr(trade, "final_action", None),
+                        reject_reason=None,
+                        top_gate_reasons=[],
+                    )
                     if str(trade.strategy).upper() in getattr(cfg, "HALT_STRATEGIES", []):
                         try:
                             update_execution(trade.trade_id, {"veto_reasons": ["halt_strategy"]})
@@ -3797,8 +3917,30 @@ class Orchestrator:
                 if not cycle_market_open:
                     cycle_market_mode = "OFFHOURS"
                 suggestion_rows_after = _count_jsonl_rows(canonical_suggestions_log_path())
-                cycle_suggestion_count = max(0, int(suggestion_rows_after) - int(suggestion_rows_before))
+                visible_counts_after = _scan_visible_suggestions(canonical_suggestions_log_path())
+                row_delta = max(0, int(suggestion_rows_after) - int(suggestion_rows_before))
+                visible_delta = max(
+                    0,
+                    int(visible_counts_after.get("visible_suggestion_count") or 0)
+                    - int(visible_counts_before.get("visible_suggestion_count") or 0),
+                )
+                cycle_suggestion_count = max(
+                    0,
+                    int(row_delta),
+                    int(visible_delta),
+                    int(cycle_candidates_enqueued),
+                )
                 cycle_candidates_enqueued = max(int(cycle_candidates_enqueued), int(cycle_suggestion_count))
+                logger.debug(
+                    "cycle_suggestion_accounting suggestion_rows_before=%s suggestion_rows_after=%s row_delta=%s visible_delta=%s cycle_suggestion_count=%s cycle_candidates_seen=%s cycle_candidates_enqueued=%s",
+                    suggestion_rows_before,
+                    suggestion_rows_after,
+                    row_delta,
+                    visible_delta,
+                    cycle_suggestion_count,
+                    cycle_candidates_seen,
+                    cycle_candidates_enqueued,
+                )
                 try:
                     config_snapshot = decision_config_snapshot()
                     config_snapshot.update(self._runtime_safety_snapshot())
@@ -3818,6 +3960,7 @@ class Orchestrator:
                         market_mode=cycle_market_mode,
                         market_open=cycle_market_open,
                         symbols_scanned=len(cycle_symbols_scanned),
+                        trade_build_attempts=cycle_trade_build_attempts,
                         candidates_seen=cycle_candidates_seen,
                         candidates_blocked=cycle_candidates_blocked,
                         candidates_enqueued=cycle_candidates_enqueued,
