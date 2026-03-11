@@ -25,7 +25,7 @@ from core.option_entry import get_option_ltp_sla_sec, validate_live_entry
 from core.gating import gate_decision
 from core.tick_store import get_ltp
 from core.kite_depth_ws import ensure_subscribed_tokens
-from core.entry_semantics import EntryContractViolation, enforce_entry_contract
+from core.entry_semantics import ENTRY_SOURCE_ENUM, EntryContractViolation, build_entry_state, enforce_entry_contract
 from core.advisory_schema import AdvisorySchemaError, deserialize_advisory_row, log_advisory_schema_error, serialize_advisory_row
 from core.blocker_lifecycle import TARGET_BLOCKER_CODES, evaluate_advisory_contract_blockers, get_blocker_registry
 from core.events import write_json_atomic
@@ -66,6 +66,165 @@ _LOW_GLOBAL_CONF_LOGGED_MINUTE_BY_SYMBOL: dict[str, int] = {}
 _ENTRY_REQUIRED_STATUSES = {"ACTIVE", "PLANNING", "PROPOSED", "READY", "QUEUE_ONLY"}
 _ENTRY_INTEGRITY_REASON = "MISSING_ENTRY"
 _EXPLICIT_REVIEW_STATUSES = {"PLANNING", "BLOCKED_CONTRACT", "BLOCKED_APPROVAL", "ADVISORY_ONLY", "QUEUE_ONLY", "READY"}
+_DISPLAY_ENTRY_STATUSES = {"displayable", "non_executable", "missing"}
+_EXECUTION_ENTRY_STATUSES = {"executable", "non_executable", "missing"}
+
+
+def _entry_lifecycle_payload(
+    *,
+    execution_entry=None,
+    execution_entry_source=None,
+    execution_entry_status=None,
+    display_entry=None,
+    display_entry_source=None,
+    display_entry_status=None,
+    clear_reason=None,
+    entry_reason=None,
+) -> dict:
+    return {
+        "execution_entry": _safe_float(execution_entry),
+        "execution_entry_source": str(execution_entry_source or "").strip().lower() or "none",
+        "execution_entry_status": str(execution_entry_status or "").strip().lower(),
+        "display_entry": _safe_float(display_entry),
+        "display_entry_source": str(display_entry_source or "").strip().lower() or "none",
+        "display_entry_status": str(display_entry_status or "").strip().lower(),
+        "clear_reason": str(clear_reason or "").strip().lower() or None,
+        "entry_reason": None if not str(entry_reason or "").strip() else str(entry_reason),
+    }
+
+
+def _entry_lifecycle_from_entry(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return _entry_lifecycle_payload()
+    return _entry_lifecycle_payload(
+        execution_entry=entry.get("execution_entry"),
+        execution_entry_source=entry.get("execution_entry_source"),
+        execution_entry_status=entry.get("execution_entry_status"),
+        display_entry=entry.get("display_entry"),
+        display_entry_source=entry.get("display_entry_source"),
+        display_entry_status=entry.get("display_entry_status"),
+        clear_reason=entry.get("entry_clear_reason"),
+        entry_reason=entry.get("entry_reason"),
+    )
+
+
+def _entry_lifecycle_is_valid(lifecycle: dict) -> bool:
+    if not isinstance(lifecycle, dict):
+        return False
+    display_entry = _safe_float(lifecycle.get("display_entry"))
+    execution_entry = _safe_float(lifecycle.get("execution_entry"))
+    display_entry_status = str(lifecycle.get("display_entry_status") or "").strip().lower()
+    execution_entry_status = str(lifecycle.get("execution_entry_status") or "").strip().lower()
+    clear_reason = str(lifecycle.get("clear_reason") or "").strip()
+    return bool(
+        display_entry_status in _DISPLAY_ENTRY_STATUSES
+        and execution_entry_status in _EXECUTION_ENTRY_STATUSES
+        and (
+            (display_entry is not None and display_entry_status in {"displayable", "non_executable"})
+            or (display_entry is None and display_entry_status == "missing" and bool(clear_reason))
+        )
+        and (
+            (execution_entry is not None and execution_entry_status == "executable")
+            or (execution_entry is None and execution_entry_status in {"non_executable", "missing"})
+        )
+    )
+
+
+def _normalize_entry_lifecycle(
+    lifecycle: dict,
+    *,
+    fallback_clear_reason: str | None = None,
+) -> dict:
+    normalized = _entry_lifecycle_payload(**(lifecycle or {}))
+    display_entry = normalized["display_entry"]
+    execution_entry = normalized["execution_entry"]
+
+    if execution_entry is None:
+        normalized["execution_entry_source"] = normalized.get("execution_entry_source") or "none"
+        if normalized.get("execution_entry_status") not in _EXECUTION_ENTRY_STATUSES or normalized.get("execution_entry_status") == "executable":
+            normalized["execution_entry_status"] = "non_executable" if display_entry is not None else "missing"
+    else:
+        normalized["execution_entry_status"] = "executable"
+
+    if display_entry is None:
+        normalized["display_entry_source"] = "none"
+        normalized["display_entry_status"] = "missing"
+        normalized["clear_reason"] = str(
+            normalized.get("clear_reason")
+            or fallback_clear_reason
+            or "missing_display_entry"
+        ).strip().lower()
+        normalized["entry_reason"] = None if not str(normalized.get("entry_reason") or "").strip() else normalized.get("entry_reason")
+    else:
+        if normalized.get("display_entry_status") not in {"displayable", "non_executable"}:
+            normalized["display_entry_status"] = "displayable" if execution_entry is not None else "non_executable"
+        normalized["clear_reason"] = None
+
+    return normalized
+
+
+def _apply_entry_lifecycle(
+    entry: dict,
+    lifecycle: dict,
+    *,
+    align_for_schema: bool,
+    entry_status_override: str | None = None,
+    entry_value_override=None,
+    entry_source_override=None,
+) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    normalized = _normalize_entry_lifecycle(lifecycle)
+    out = dict(entry)
+    out["execution_entry"] = normalized["execution_entry"]
+    out["execution_entry_source"] = normalized["execution_entry_source"]
+    out["execution_entry_status"] = normalized["execution_entry_status"]
+    out["display_entry"] = normalized["display_entry"]
+    out["display_entry_source"] = normalized["display_entry_source"]
+    out["display_entry_status"] = normalized["display_entry_status"]
+    out["entry_reason"] = normalized["entry_reason"]
+    out["entry_clear_reason"] = normalized["clear_reason"]
+
+    if normalized["display_entry"] is None:
+        if align_for_schema:
+            out["entry"] = None
+            out["entry_source"] = "none"
+            out["entry_status"] = "missing"
+        else:
+            out["entry"] = _safe_float(entry_value_override)
+            if out["entry"] is None:
+                out["entry_source"] = "none"
+            else:
+                out["entry_source"] = str(entry_source_override or out.get("entry_source") or "none")
+            out["entry_status"] = str(entry_status_override or "missing")
+    else:
+        out["entry"] = normalized["display_entry"]
+        out["entry_source"] = normalized["display_entry_source"]
+        out["entry_status"] = normalized["display_entry_status"] if align_for_schema else str(
+            entry_status_override or normalized["display_entry_status"]
+        )
+    return out
+
+
+def _display_entry_source_for_row(entry: dict) -> str:
+    quote_source = str(entry.get("quote_source") or entry.get("option_ltp_source") or "").strip().lower()
+    display_source = str(entry.get("display_entry_source") or entry.get("entry_source") or "").strip().lower()
+    if display_source in ENTRY_SOURCE_ENUM:
+        return display_source
+    if quote_source in {"tick_store", "rest_fallback", "synthetic_offhours", "unknown"}:
+        return "last"
+    if quote_source in {"mark", "mid", "last"}:
+        return quote_source
+    return "last"
+
+
+def _display_entry_reason_for_source(source: str) -> str:
+    source_key = str(source or "").strip().lower()
+    if source_key == "mark":
+        return "display_from_mark"
+    if source_key == "mid":
+        return "display_from_mid"
+    return "display_from_last"
 
 
 def _is_entry_status_blocking(status: str | None) -> bool:
@@ -93,6 +252,151 @@ def _log_entry_lifecycle_resolution(entry: dict) -> None:
         )
     except Exception:
         logger.debug("entry_lifecycle_resolved trade_id=%s", entry.get("trade_id"))
+
+
+def _canonicalize_entry_lifecycle(
+    entry: dict,
+    *,
+    mode_for_entry: str | None = None,
+    allow_stale_quotes_for_entry: bool | None = None,
+    market_open_for_entry: bool | None = None,
+    align_for_schema: bool = False,
+) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+
+    out = dict(entry)
+    legacy_entry_status = str(out.get("entry_status") or "").strip()
+    legacy_entry = _safe_float(out.get("entry"))
+    legacy_entry_source = out.get("entry_source")
+    if legacy_entry_status and legacy_entry_status.lower() not in _DISPLAY_ENTRY_STATUSES:
+        out.setdefault("quote_validation_status", legacy_entry_status)
+
+    lifecycle = _entry_lifecycle_from_entry(out)
+    has_valid_canonical_lifecycle = _entry_lifecycle_is_valid(lifecycle)
+
+    if not has_valid_canonical_lifecycle:
+        if mode_for_entry is None:
+            mode_for_entry = _entry_execution_mode(out)
+        if allow_stale_quotes_for_entry is None:
+            allow_stale_quotes_for_entry = _allow_rest_fallback_for_mode(mode_for_entry)
+        if market_open_for_entry is None:
+            market_open_for_entry, _ = _resolve_entry_market_open(
+                out,
+                mode_for_entry,
+                bool(allow_stale_quotes_for_entry),
+            )
+        token_missing_identified = out.get("instrument_token") in (None, "", "None") and bool(out.get("tradingsymbol"))
+        synthetic_offhours = _is_synthetic_offhours_row(out)
+        if synthetic_offhours:
+            lifecycle_last_keys = (
+                "expected_entry",
+                "suggested_entry",
+                "entry_price",
+                "entry",
+                "signal_price",
+                "current_ltp",
+                "opt_ltp",
+                "ltp",
+            )
+        elif token_missing_identified:
+            lifecycle_last_keys = (
+                "suggested_entry",
+                "entry",
+                "entry_price",
+                "expected_entry",
+                "signal_price",
+                "current_ltp",
+                "opt_ltp",
+                "ltp",
+            )
+        else:
+            lifecycle_last_keys = (
+                "current_ltp",
+                "suggested_entry",
+                "expected_entry",
+                "entry",
+                "entry_price",
+                "signal_price",
+                "opt_ltp",
+                "ltp",
+            )
+        lifecycle_last = _first_present_float(out, lifecycle_last_keys)
+        try:
+            built_state = build_entry_state(
+                symbol=out.get("symbol"),
+                expiry=out.get("expiry_date") or out.get("expiry"),
+                strike=out.get("strike"),
+                right=out.get("option_type") or out.get("type") or out.get("right"),
+                side=out.get("side"),
+                direction=out.get("direction"),
+                bid=out.get("best_bid") or out.get("bid") or out.get("opt_bid"),
+                ask=out.get("best_ask") or out.get("ask") or out.get("opt_ask"),
+                mark=out.get("mark_price"),
+                mid=out.get("mid_price"),
+                last=lifecycle_last,
+                quote_age_sec=out.get("quote_age_sec") if out.get("quote_age_sec") not in (None, "", "None") else out.get("price_age_sec"),
+                mode=mode_for_entry,
+                allow_stale_quotes=bool(allow_stale_quotes_for_entry),
+                market_open=market_open_for_entry,
+                instrument_matches=not bool(out.get("unresolved_contract")),
+                quote_source=out.get("quote_source") or out.get("option_ltp_source") or out.get("entry_source"),
+            )
+        except EntryContractViolation:
+            built_state = {}
+        lifecycle = _entry_lifecycle_payload(
+            execution_entry=built_state.get("execution_entry"),
+            execution_entry_source=built_state.get("execution_entry_source"),
+            execution_entry_status=built_state.get("execution_entry_status"),
+            display_entry=built_state.get("display_entry"),
+            display_entry_source=built_state.get("display_entry_source"),
+            display_entry_status=built_state.get("display_entry_status"),
+            clear_reason=built_state.get("entry_clear_reason"),
+            entry_reason=built_state.get("entry_reason"),
+        )
+        display_entry_after_build = _safe_float(lifecycle.get("display_entry"))
+        can_retain_legacy_display = bool(
+            legacy_entry is not None
+            and (
+                token_missing_identified
+                or synthetic_offhours
+                or str(out.get("quote_validation_status") or "").strip().upper() in {"NON_EXECUTABLE", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}
+                or legacy_entry_status.upper() in {"NON_EXECUTABLE", "REST_FALLBACK", "OFFHOURS_SYNTHETIC", "PRICE_MISMATCH"}
+            )
+        )
+        if display_entry_after_build is None and can_retain_legacy_display:
+            display_source = _display_entry_source_for_row(out)
+            lifecycle = _entry_lifecycle_payload(
+                execution_entry=lifecycle.get("execution_entry"),
+                execution_entry_source=lifecycle.get("execution_entry_source"),
+                execution_entry_status=lifecycle.get("execution_entry_status") if lifecycle.get("execution_entry") is not None else "non_executable",
+                display_entry=legacy_entry,
+                display_entry_source=display_source,
+                display_entry_status="non_executable",
+                clear_reason=None,
+                entry_reason=_display_entry_reason_for_source(display_source),
+            )
+
+    clear_reason_source = (
+        out.get("quote_validation_status")
+        or (legacy_entry_status if legacy_entry_status.lower() not in _DISPLAY_ENTRY_STATUSES else "")
+        or out.get("validation_issue_code")
+        or out.get("permission_reason")
+        or out.get("hard_reason")
+        or out.get("final_blocker")
+        or "missing_display_entry"
+    )
+    lifecycle = _normalize_entry_lifecycle(lifecycle, fallback_clear_reason=clear_reason_source)
+    out = _apply_entry_lifecycle(
+        out,
+        lifecycle,
+        align_for_schema=align_for_schema,
+        entry_status_override=(legacy_entry_status if not align_for_schema and legacy_entry_status else None),
+        entry_value_override=(legacy_entry if not align_for_schema and lifecycle.get("display_entry") is None else None),
+        entry_source_override=(legacy_entry_source if not align_for_schema and legacy_entry_source not in (None, "", "None") else None),
+    )
+
+    return out
 
 
 def _coerce_instrument_token(value) -> int | None:
@@ -398,15 +702,67 @@ def _clear_unresolved_contract_state(entry: dict) -> dict:
     return entry
 
 
-def _emit_review_queue_logs(entry: dict) -> None:
+def _build_advisory_emit_failure_payload(
+    entry: dict,
+    advisory_payload: dict,
+    exc: Exception,
+    *,
+    emission_target: str,
+) -> dict:
+    lifecycle_source = advisory_payload if isinstance(advisory_payload, dict) else entry
+    return {
+        "ts_epoch": float(time.time()),
+        "ts_local": datetime.now().astimezone().isoformat(),
+        "source": "review_queue.emit",
+        "emission_target": emission_target,
+        "failure_reason": str(exc),
+        "trade_id": entry.get("trade_id"),
+        "advisory_id": entry.get("advisory_id") or entry.get("trade_id"),
+        "symbol": entry.get("symbol"),
+        "strike": entry.get("strike"),
+        "option_type": entry.get("option_type") or entry.get("type") or entry.get("right"),
+        "permission": entry.get("permission"),
+        "permission_reason": entry.get("permission_reason"),
+        "readiness": entry.get("readiness"),
+        "execution_status": entry.get("execution_status"),
+        "final_action": entry.get("final_action"),
+        "entry": lifecycle_source.get("entry"),
+        "entry_source": lifecycle_source.get("entry_source"),
+        "entry_status": lifecycle_source.get("entry_status"),
+        "execution_entry": lifecycle_source.get("execution_entry"),
+        "execution_entry_source": lifecycle_source.get("execution_entry_source"),
+        "execution_entry_status": lifecycle_source.get("execution_entry_status"),
+        "display_entry": lifecycle_source.get("display_entry"),
+        "display_entry_source": lifecycle_source.get("display_entry_source"),
+        "display_entry_status": lifecycle_source.get("display_entry_status"),
+        "entry_reason": lifecycle_source.get("entry_reason"),
+        "entry_clear_reason": lifecycle_source.get("entry_clear_reason"),
+    }
+
+
+def _emit_review_queue_logs(entry: dict) -> dict:
     if not isinstance(entry, dict):
-        return
+        return {"ok": False, "target": "unknown", "diagnostic": None}
+    emission_target = "rejected_candidates" if _is_blocked_contract_row(entry) else "suggestions"
+    advisory_payload = _canonicalize_entry_lifecycle(
+        entry,
+        mode_for_entry=_entry_execution_mode(entry),
+        allow_stale_quotes_for_entry=_allow_rest_fallback_for_mode(_entry_execution_mode(entry)),
+        align_for_schema=True,
+    )
     try:
-        advisory_entry = serialize_advisory_row(entry, allow_legacy=True)
+        advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
     except AdvisorySchemaError as exc:
-        log_advisory_schema_error("review_queue.emit", entry, exc)
-        logger.warning("advisory_emit_schema_error trade_id=%s error=%s", entry.get("trade_id"), exc)
-        return
+        diagnostic = _build_advisory_emit_failure_payload(
+            entry,
+            advisory_payload,
+            exc,
+            emission_target=emission_target,
+        )
+        log_advisory_schema_error("review_queue.emit", advisory_payload, exc)
+        logger.error("advisory_emit_schema_error payload=%s", json.dumps(diagnostic, sort_keys=True))
+        _append_jsonl([logs_dir() / "advisory_emit_failures.jsonl"], diagnostic)
+        return {"ok": False, "target": emission_target, "diagnostic": diagnostic}
     suggestion_paths: list[Path] = []
     seen_paths: set[str] = set()
 
@@ -439,8 +795,9 @@ def _emit_review_queue_logs(entry: dict) -> None:
         blocked_payload.setdefault("reject_reason", "unresolved_contract")
         blocked_payload.setdefault("reason_code", "unresolved_contract")
         _append_jsonl(rejected_candidates_paths(), blocked_payload)
-        return
+        return {"ok": True, "target": emission_target, "diagnostic": None}
     _append_jsonl(suggestion_paths, advisory_entry)
+    return {"ok": True, "target": emission_target, "diagnostic": None}
 
 
 def _apply_manual_approval_state(entry: dict, now_epoch: float | None = None) -> dict:
@@ -1405,7 +1762,17 @@ def _apply_issue_classification(
         "symbol": entry.get("symbol"),
     }
     gating_payload = entry.get("gating") if isinstance(entry.get("gating"), dict) else {}
-    hard_blockers: list[str] = _dedupe_issue_codes(gating_payload.get("hard_reasons"))
+    permission = str(entry.get("permission") or "").strip().upper()
+    permission_base = str(entry.get("permission_base") or "").strip().upper()
+    permission_downgraded_from = str(entry.get("permission_downgraded_from") or "").strip().upper()
+    apply_execution_hard_gates = bool(
+        permission == "EXECUTE"
+        or permission_base == "EXECUTE"
+        or permission_downgraded_from == "EXECUTE"
+    )
+    hard_blockers: list[str] = _dedupe_issue_codes(
+        gating_payload.get("hard_reasons") if apply_execution_hard_gates else []
+    )
     soft_penalties: list[str] = []
     warnings: list[str] = []
     issue_penalty = 0.0
@@ -1431,7 +1798,22 @@ def _apply_issue_classification(
         elif classification.category == ISSUE_CATEGORY_WARNING:
             if classification.code not in warnings:
                 warnings.append(classification.code)
-    permission = str(entry.get("permission") or "").strip().upper()
+    subscription_failed_without_live_quote = bool(
+        str(entry.get("instrument") or entry.get("instrument_type") or "").strip().upper() == "OPT"
+        and permission == "BLOCK"
+        and current_ltp is None
+        and str(entry.get("entry_status") or "").strip().upper() in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}
+        and hard_blockers
+        and set(hard_blockers).issubset({"NO_TOKEN", "unresolved_contract", "MISSING_OPTION_TOKEN"})
+    )
+    if subscription_failed_without_live_quote:
+        hard_blockers = ["NO_LIVE_OPTION_FEED"]
+        if str(entry.get("permission_reason") or "").strip() in {"", "unresolved_contract"}:
+            entry["permission_reason"] = "NO_LIVE_OPTION_FEED"
+        if str(entry.get("hard_reason") or "").strip() in {"", "unresolved_contract"}:
+            entry["hard_reason"] = "NO_LIVE_OPTION_FEED"
+        if str(entry.get("final_blocker") or "").strip() in {"", "unresolved_contract"}:
+            entry["final_blocker"] = "NO_LIVE_OPTION_FEED"
     if (permission == "BLOCK" or bool(entry.get("unresolved_contract"))) and not hard_blockers:
         fallback_code = str(entry.get("hard_reason") or entry.get("permission_reason") or "execution_blocked").strip()
         if fallback_code and fallback_code not in hard_blockers:
@@ -1444,23 +1826,6 @@ def _apply_issue_classification(
     if confidence_final is not None:
         confidence_final = max(0.0, min(1.0, float(confidence_raw) - float(confidence_penalty_total)))
     blockers = _dedupe_issue_codes(hard_blockers + soft_penalties + warnings)
-    if hard_blockers or permission == "BLOCK" or bool(entry.get("unresolved_contract")):
-        readiness = "BLOCKED"
-        execution_status = "blocked"
-        is_executable = False
-    elif permission == "EXECUTE":
-        readiness = "READY"
-        execution_status = "executable"
-        is_executable = True
-    elif permission == "QUEUE_ONLY":
-        readiness = "QUEUE_ONLY"
-        execution_status = "queue_only"
-        is_executable = False
-    else:
-        readiness = "ADVISORY_ONLY"
-        execution_status = "advisory_only"
-        is_executable = False
-    advisory_visible = not _is_blocked_contract_row(entry)
     entry["hard_blockers"] = hard_blockers
     entry["soft_penalties"] = soft_penalties
     entry["warnings"] = warnings
@@ -1474,10 +1839,6 @@ def _apply_issue_classification(
     if confidence_final is not None:
         entry["confidence"] = confidence_final
         entry["global_confidence"] = confidence_final
-    entry["readiness"] = readiness
-    entry["advisory_visible"] = advisory_visible
-    entry["is_executable"] = is_executable
-    entry["execution_status"] = execution_status
     entry["entry_source"] = (
         entry.get("expected_entry_source")
         or entry.get("entry_price_source")
@@ -1490,13 +1851,7 @@ def _apply_issue_classification(
     entry["confidence_after_soft_veto"] = confidence_after_soft_veto
     entry["confidence_penalty_soft_veto_total"] = round(float(confidence_penalty_soft_veto_total), 6)
     entry["confidence_penalty_soft_veto_reasons"] = confidence_penalty_soft_veto_reasons
-    target_codes = {code for code in hard_blockers if code in TARGET_BLOCKER_CODES}
-    final_blocker = str(entry.get("final_blocker") or "").strip()
-    if target_codes:
-        entry["final_blocker"] = hard_blockers[0]
-    elif final_blocker in TARGET_BLOCKER_CODES:
-        entry["final_blocker"] = None
-    return entry
+    return finalize_trade_decision(entry)
 
 
 def _refresh_lifecycle_blockers(
@@ -1547,13 +1902,6 @@ def _refresh_lifecycle_blockers(
     lifecycle_codes = [str(record.code) for record in active_records]
     blockers = list(dict.fromkeys(lifecycle_codes + _current_non_lifecycle_blockers(entry)))
     entry["blockers"] = blockers
-    entry["readiness"] = _derive_advisory_readiness(entry, blockers)
-    target_codes = {code for code in lifecycle_codes if code in TARGET_BLOCKER_CODES}
-    final_blocker = str(entry.get("final_blocker") or "").strip()
-    if target_codes:
-        entry["final_blocker"] = lifecycle_codes[0] if lifecycle_codes else None
-    elif final_blocker in TARGET_BLOCKER_CODES:
-        entry["final_blocker"] = None
     return entry
 
 
@@ -1588,6 +1936,113 @@ def _apply_permission_state(
         entry["permission"] = new_permission
     if reason_text:
         entry["permission_reason"] = reason_text
+    return entry
+
+
+def finalize_trade_decision(
+    entry: dict,
+    *,
+    gate_decision_payload: dict | None = None,
+    permission_payload: dict | None = None,
+    entry_block_reason: str | None = None,
+) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    permission_payload = permission_payload if isinstance(permission_payload, dict) else {}
+    gate_decision_payload = gate_decision_payload if isinstance(gate_decision_payload, dict) else {}
+    base_permission = str(
+        permission_payload.get("permission")
+        or entry.get("permission_base")
+        or entry.get("permission")
+        or "ADVISORY_ONLY"
+    ).strip().upper() or "ADVISORY_ONLY"
+    base_reason = str(
+        permission_payload.get("permission_reason")
+        or entry.get("permission_reason_base")
+        or entry.get("permission_reason")
+        or ""
+    ).strip()
+    current_permission = str(entry.get("permission") or base_permission or "ADVISORY_ONLY").strip().upper() or "ADVISORY_ONLY"
+    current_reason = str(entry.get("permission_reason") or base_reason or "").strip()
+    hard_blockers = _dedupe_issue_codes(list(entry.get("hard_blockers") or []))
+    blockers = _dedupe_issue_codes(list(entry.get("blockers") or []))
+    gate_hard_reasons = _dedupe_issue_codes(list(gate_decision_payload.get("hard_reasons") or []))
+    gate_hard_reason = gate_hard_reasons[0] if gate_hard_reasons else ""
+    effective_entry_block_reason = str(
+        entry_block_reason
+        or entry.get("entry_block_reason")
+        or ""
+    ).strip()
+
+    final_permission = current_permission
+    final_reason = current_reason or base_reason
+    if bool(entry.get("unresolved_contract")):
+        final_permission = "BLOCK"
+        final_reason = final_reason or "unresolved_contract"
+    elif bool(entry.get("subscription_failed")) and str(entry.get("entry_status") or "").strip().upper() == "NO_LIVE_OPTION_FEED":
+        final_permission = "BLOCK"
+        final_reason = "NO_LIVE_OPTION_FEED"
+    elif gate_hard_reason:
+        if final_permission != "BLOCK":
+            final_permission = "ADVISORY_ONLY"
+        final_reason = gate_hard_reason
+    elif effective_entry_block_reason and _is_entry_status_blocking(effective_entry_block_reason):
+        if final_permission != "BLOCK":
+            final_permission = "ADVISORY_ONLY"
+        final_reason = effective_entry_block_reason
+    elif str(final_reason).upper() == "SOFT_CONFIDENCE_BELOW_THRESHOLD":
+        final_permission = "ADVISORY_ONLY"
+    elif final_permission not in {"BLOCK", "ADVISORY_ONLY", "QUEUE_ONLY", "EXECUTE"}:
+        final_permission = base_permission
+        final_reason = base_reason
+
+    entry = _apply_permission_state(
+        entry,
+        final_permission,
+        final_reason,
+        downgrade_reason=final_reason,
+    )
+
+    final_blocker = None
+    if hard_blockers:
+        final_blocker = hard_blockers[0]
+    elif bool(entry.get("unresolved_contract")):
+        final_blocker = "unresolved_contract"
+    elif final_permission == "BLOCK":
+        final_blocker = final_reason or effective_entry_block_reason or None
+    entry["final_blocker"] = final_blocker
+
+    if hard_blockers or final_permission == "BLOCK" or bool(entry.get("unresolved_contract")):
+        readiness = "BLOCKED"
+        execution_status = "blocked"
+        is_executable = False
+    elif final_permission == "EXECUTE":
+        readiness = "READY"
+        execution_status = "executable"
+        is_executable = True
+    elif final_permission == "QUEUE_ONLY":
+        readiness = "QUEUE_ONLY"
+        execution_status = "queue_only"
+        is_executable = False
+    else:
+        readiness = "ADVISORY_ONLY"
+        execution_status = "advisory_only"
+        is_executable = False
+
+    final_action = "BLOCK" if final_permission == "BLOCK" else (
+        "EXECUTE"
+        if final_permission == "EXECUTE" and not hard_blockers and not effective_entry_block_reason
+        else ("QUEUE_ONLY" if final_permission == "QUEUE_ONLY" and not hard_blockers and not effective_entry_block_reason else "ADVISORY_ONLY")
+    )
+
+    entry["permission"] = final_permission
+    entry["permission_reason"] = final_reason
+    entry["readiness"] = readiness
+    entry["execution_status"] = execution_status
+    entry["final_action"] = final_action
+    entry["advisory_visible"] = not _is_blocked_contract_row(entry)
+    entry["is_executable"] = is_executable
+    entry["entry_block_reason"] = effective_entry_block_reason or None
     return entry
 
 
@@ -1754,7 +2209,7 @@ def _write_json(path: Path, payload):
     os.replace(tmp_path, path)
 
 
-def _update_suggestions_status_latest(entry: dict) -> None:
+def _update_suggestions_status_latest(entry: dict, emission_result: dict | None = None) -> None:
     try:
         if not isinstance(entry, dict):
             return
@@ -1778,6 +2233,19 @@ def _update_suggestions_status_latest(entry: dict) -> None:
             or None
         )
         status = "blocked" if _is_entry_status_blocking(entry.get("entry_status")) or str(entry.get("permission") or "").upper() == "BLOCK" else "ok"
+        emission_ok = not isinstance(emission_result, dict) or bool(emission_result.get("ok"))
+        emission_target = (
+            str(emission_result.get("target") or "").strip()
+            if isinstance(emission_result, dict)
+            else ""
+        )
+        emission_diagnostic = (
+            dict(emission_result.get("diagnostic") or {})
+            if isinstance(emission_result, dict) and isinstance(emission_result.get("diagnostic"), dict)
+            else {}
+        )
+        if not emission_ok:
+            status = "error"
         payload = dict(current)
         payload.update(
             {
@@ -1790,9 +2258,34 @@ def _update_suggestions_status_latest(entry: dict) -> None:
                 "latest_permission": entry.get("permission"),
                 "latest_permission_reason": entry.get("permission_reason"),
                 "primary_blocker": primary_blocker or current.get("primary_blocker"),
+                "latest_emit_status": "ok" if emission_ok else "schema_failed",
+                "latest_emit_target": emission_target or None,
+                "latest_emit_reason": emission_diagnostic.get("failure_reason"),
             }
         )
         write_json_atomic(path, payload)
+        rejected_status_path = logs_dir() / "rejected_candidates_status.json"
+        if emission_target == "rejected_candidates" or _is_blocked_contract_row(entry):
+            rejected_current = _read_json(rejected_status_path, {})
+            if not isinstance(rejected_current, dict):
+                rejected_current = {}
+            rejected_payload = dict(rejected_current)
+            rejected_payload.update(
+                {
+                    "ts_epoch": float(time.time()),
+                    "ts_local": datetime.now().astimezone().isoformat(),
+                    "status": "ok" if emission_ok else "error",
+                    "latest_trade_id": entry.get("trade_id"),
+                    "latest_entry_status": entry.get("entry_status"),
+                    "latest_permission": entry.get("permission"),
+                    "latest_permission_reason": entry.get("permission_reason"),
+                    "latest_emit_status": "ok" if emission_ok else "schema_failed",
+                    "latest_emit_target": emission_target or "rejected_candidates",
+                    "latest_emit_reason": emission_diagnostic.get("failure_reason"),
+                    "primary_blocker": primary_blocker or rejected_current.get("primary_blocker"),
+                }
+            )
+            write_json_atomic(rejected_status_path, rejected_payload)
         engine_path = logs_dir() / "engine_cycle_status.json"
         engine_current = _read_json(engine_path, {})
         if isinstance(engine_current, dict):
@@ -1800,13 +2293,15 @@ def _update_suggestions_status_latest(entry: dict) -> None:
             engine_payload.update(
                 {
                     "ts_epoch": float(time.time()),
-                    "cycle_ok": True,
-                    "cycle_stage": "blocked" if status == "blocked" else "ok",
-                    "reason": primary_blocker if status == "blocked" else "ok",
-                    "subreason": "",
+                    "cycle_ok": bool(emission_ok),
+                    "cycle_stage": "emit_failed" if not emission_ok else ("blocked" if status == "blocked" else "ok"),
+                    "reason": "advisory_emit_schema_error" if not emission_ok else (primary_blocker if status == "blocked" else "ok"),
+                    "subreason": emission_diagnostic.get("failure_reason") if not emission_ok else "",
                     "candidates_seen": max(int(engine_current.get("candidates_seen") or 0), int(suggestion_count)),
                     "candidates_enqueued": max(int(engine_current.get("candidates_enqueued") or 0), int(suggestion_count)),
                     "primary_blocker": primary_blocker or engine_current.get("primary_blocker"),
+                    "latest_emit_status": "ok" if emission_ok else "schema_failed",
+                    "latest_emit_target": emission_target or None,
                 }
             )
             write_json_atomic(engine_path, engine_payload)
@@ -1827,6 +2322,7 @@ def _looks_like_trade(payload: dict) -> bool:
 
 
 def _normalize_queue_row(row: dict) -> dict:
+    had_explicit_quote_validation_status = isinstance(row, dict) and "quote_validation_status" in row
     out = dict(row or {})
     canonical_entry = any(
         key in out
@@ -1843,6 +2339,12 @@ def _normalize_queue_row(row: dict) -> dict:
     )
     original_status = str(out.get("status_raw") or out.get("status") or "PLANNING").strip().upper() or "PLANNING"
     out["status_raw"] = original_status
+    out = _canonicalize_entry_lifecycle(
+        out,
+        mode_for_entry=_entry_execution_mode(out),
+        allow_stale_quotes_for_entry=_allow_rest_fallback_for_mode(_entry_execution_mode(out)),
+        align_for_schema=False,
+    )
     out.setdefault("symbol", out.get("underlying"))
     if out.get("expiry_date") in (None, "", "None"):
         out["expiry_date"] = _coerce_expiry(out.get("expiry")) or out.get("expiry")
@@ -1862,11 +2364,26 @@ def _normalize_queue_row(row: dict) -> dict:
     quote_validation_status = str(out.get("quote_validation_status") or out.get("entry_status") or "").strip()
     if quote_validation_status:
         out["quote_validation_status"] = quote_validation_status
-    if "display_entry" in out:
+    if _safe_float(out.get("display_entry")) is not None and _safe_float(out.get("entry")) is None:
         out["entry"] = _safe_float(out.get("display_entry"))
-    if "display_entry_status" in out and out.get("display_entry_status") not in (None, "", "None"):
+    if (
+        (
+            ("entry_status" not in out or out.get("entry_status") in (None, "", "None"))
+            or (
+                canonical_entry
+                and not had_explicit_quote_validation_status
+                and str(out.get("entry_status") or "").strip().upper() in {"OK", "LIVE_OK", "VALID"}
+            )
+        )
+        and "display_entry_status" in out
+        and out.get("display_entry_status") not in (None, "", "None")
+    ):
         out["entry_status"] = str(out.get("display_entry_status")).lower()
-    if "display_entry_source" in out and out.get("display_entry_source") not in (None, "", "None"):
+    if (
+        ("entry_source" not in out or out.get("entry_source") in (None, "", "None"))
+        and "display_entry_source" in out
+        and out.get("display_entry_source") not in (None, "", "None")
+    ):
         out["entry_source"] = out.get("display_entry_source")
     out.setdefault("entry", out.get("entry_price"))
     entry_status = str(out.get("entry_status") or "").strip().upper()
@@ -2079,168 +2596,158 @@ def approval_status(trade_id, payload_hash=None, now_epoch=None):
         return False, "approval_missing_payload_hash"
     return True, "approved"
 
-def add_to_queue(trade, queue_path=None, extra=None):
-    try:
-        from config import config as cfg
-        instr = getattr(trade, "instrument", None)
-        if instr is None and isinstance(trade, dict):
-            instr = trade.get("instrument")
-        if instr == "EQ" and not getattr(cfg, "ENABLE_EQUITIES", True):
-            return
-    except Exception:
-        pass
-    path = queue_path or QUEUE_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = load_queue_rows(path)
-    mode_for_entry = "ADVISORY"
+def _trade_attr(obj, name, default=None):
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
+def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISORY") -> tuple[dict, str, bool, bool]:
+    mode_for_entry = default_mode
     allow_stale_quotes_for_entry = True
-    def get_attr(obj, name, default=None):
-        if isinstance(obj, dict):
-            return obj.get(name, default)
-        return getattr(obj, name, default)
-    strike_val = get_attr(trade, "strike")
-    trade_id = get_attr(trade, "trade_id")
+    strike_val = _trade_attr(trade, "strike")
+    trade_id = _trade_attr(trade, "trade_id")
     if strike_val in (None, 0) and trade_id and "ATM" in str(trade_id):
         strike_val = "ATM"
-    strategy_id = get_attr(trade, "strategy_id") or get_attr(trade, "strategy") or get_attr(trade, "generator")
+    strategy_id = _trade_attr(trade, "strategy_id") or _trade_attr(trade, "strategy") or _trade_attr(trade, "generator")
     entry = {
         "trade_id": trade_id,
-        "symbol": get_attr(trade, "symbol"),
-        "underlying": get_attr(trade, "underlying") or get_attr(trade, "symbol"),
-        "instrument_id": get_attr(trade, "instrument_id"),
-        "tradingsymbol": get_attr(trade, "tradingsymbol"),
+        "symbol": _trade_attr(trade, "symbol"),
+        "underlying": _trade_attr(trade, "underlying") or _trade_attr(trade, "symbol"),
+        "instrument_id": _trade_attr(trade, "instrument_id"),
+        "tradingsymbol": _trade_attr(trade, "tradingsymbol"),
         "strike": strike_val,
-        "instrument": get_attr(trade, "instrument"),
-        "instrument_token": get_attr(trade, "instrument_token"),
-        "expiry": get_attr(trade, "expiry"),
-        "expiry_date": get_attr(trade, "expiry_date"),
-        "type": get_attr(trade, "right") or get_attr(trade, "option_type"),
-        "option_type": get_attr(trade, "option_type") or get_attr(trade, "right"),
-        "side": get_attr(trade, "side"),
+        "instrument": _trade_attr(trade, "instrument"),
+        "instrument_token": _trade_attr(trade, "instrument_token"),
+        "expiry": _trade_attr(trade, "expiry"),
+        "expiry_date": _trade_attr(trade, "expiry_date"),
+        "type": _trade_attr(trade, "right") or _trade_attr(trade, "option_type"),
+        "option_type": _trade_attr(trade, "option_type") or _trade_attr(trade, "right"),
+        "side": _trade_attr(trade, "side"),
         # Preserve raw trade.entry when present, but keep entry_price as the
         # backward-compatible fallback so pre-validation state is not lost.
-        "entry": get_attr(trade, "entry", None) if get_attr(trade, "entry", None) not in (None, "", "None") else get_attr(trade, "entry_price"),
-        "entry_source": get_attr(trade, "entry_source", None),
-        "entry_price": get_attr(trade, "entry_price"),
-        "entry_price_source": get_attr(trade, "entry_price_source", None),
-        "entry_condition": get_attr(trade, "entry_condition") or "BREAKOUT",
-        "entry_ref_price": get_attr(trade, "entry_ref_price"),
-        "signal_price": get_attr(trade, "signal_price", None),
-        "stop": get_attr(trade, "stop_loss"),
-        "stop_price": get_attr(trade, "stop_price") or get_attr(trade, "stop_loss"),
-        "target": get_attr(trade, "target"),
-        "target_price": get_attr(trade, "target_price") or get_attr(trade, "target"),
-        "original_stop": get_attr(trade, "original_stop") or get_attr(trade, "stop_loss"),
-        "current_stop": get_attr(trade, "current_stop") or get_attr(trade, "stop_loss"),
-        "trail_enabled": get_attr(trade, "trail_enabled"),
-        "trail_rule": get_attr(trade, "trail_rule") or getattr(cfg, "TRAIL_RULE_DEFAULT", "MFE_MINUS_OFFSET"),
-        "trail_offset": get_attr(trade, "trail_offset"),
-        "trail_start": get_attr(trade, "trail_start") or getattr(cfg, "TRAIL_START_DEFAULT", "AFTER_1R"),
-        "mfe_price": get_attr(trade, "mfe_price"),
-        "trail_stop": get_attr(trade, "trail_stop"),
-        "last_update_ts": get_attr(trade, "last_update_ts"),
-        "exit_signal": get_attr(trade, "exit_signal"),
-        "exit_reason": get_attr(trade, "exit_reason"),
-        "status": get_attr(trade, "status") or "PLANNING",
-        "activated_ts": get_attr(trade, "activated_ts"),
-        "activation_price": get_attr(trade, "activation_price"),
-        "fill_price": get_attr(trade, "fill_price"),
-        "ltp_at_activation": get_attr(trade, "ltp_at_activation"),
-        "qty": get_attr(trade, "qty"),
-        "confidence": get_attr(trade, "confidence"),
-        "strategy": get_attr(trade, "strategy"),
+        "entry": _trade_attr(trade, "entry", None) if _trade_attr(trade, "entry", None) not in (None, "", "None") else _trade_attr(trade, "entry_price"),
+        "entry_source": _trade_attr(trade, "entry_source", None),
+        "entry_price": _trade_attr(trade, "entry_price"),
+        "entry_price_source": _trade_attr(trade, "entry_price_source", None),
+        "entry_condition": _trade_attr(trade, "entry_condition") or "BREAKOUT",
+        "entry_ref_price": _trade_attr(trade, "entry_ref_price"),
+        "signal_price": _trade_attr(trade, "signal_price", None),
+        "stop": _trade_attr(trade, "stop_loss"),
+        "stop_price": _trade_attr(trade, "stop_price") or _trade_attr(trade, "stop_loss"),
+        "target": _trade_attr(trade, "target"),
+        "target_price": _trade_attr(trade, "target_price") or _trade_attr(trade, "target"),
+        "original_stop": _trade_attr(trade, "original_stop") or _trade_attr(trade, "stop_loss"),
+        "current_stop": _trade_attr(trade, "current_stop") or _trade_attr(trade, "stop_loss"),
+        "trail_enabled": _trade_attr(trade, "trail_enabled"),
+        "trail_rule": _trade_attr(trade, "trail_rule") or getattr(cfg, "TRAIL_RULE_DEFAULT", "MFE_MINUS_OFFSET"),
+        "trail_offset": _trade_attr(trade, "trail_offset"),
+        "trail_start": _trade_attr(trade, "trail_start") or getattr(cfg, "TRAIL_START_DEFAULT", "AFTER_1R"),
+        "mfe_price": _trade_attr(trade, "mfe_price"),
+        "trail_stop": _trade_attr(trade, "trail_stop"),
+        "last_update_ts": _trade_attr(trade, "last_update_ts"),
+        "exit_signal": _trade_attr(trade, "exit_signal"),
+        "exit_reason": _trade_attr(trade, "exit_reason"),
+        "status": _trade_attr(trade, "status") or "PLANNING",
+        "activated_ts": _trade_attr(trade, "activated_ts"),
+        "activation_price": _trade_attr(trade, "activation_price"),
+        "fill_price": _trade_attr(trade, "fill_price"),
+        "ltp_at_activation": _trade_attr(trade, "ltp_at_activation"),
+        "qty": _trade_attr(trade, "qty"),
+        "confidence": _trade_attr(trade, "confidence"),
+        "strategy": _trade_attr(trade, "strategy"),
         "strategy_id": strategy_id,
-        "regime": get_attr(trade, "regime"),
-        "regime_confidence": get_attr(trade, "regime_confidence"),
-        "day_confidence": get_attr(trade, "day_confidence"),
-        "orb_bias": get_attr(trade, "orb_bias"),
-        "tier": get_attr(trade, "tier", None),
-        "legs": get_attr(trade, "legs", None),
-        "max_profit": get_attr(trade, "max_profit", None),
-        "max_loss": get_attr(trade, "max_loss", None),
-        "max_profit_label": get_attr(trade, "max_profit_label", None),
-        "max_loss_label": get_attr(trade, "max_loss_label", None),
-        "breakeven_low": get_attr(trade, "breakeven_low", None),
-        "breakeven_high": get_attr(trade, "breakeven_high", None),
-        "est_pnl_at_ltp": get_attr(trade, "est_pnl_at_ltp", None),
-        "opt_ltp": get_attr(trade, "opt_ltp", None),
-        "opt_bid": get_attr(trade, "opt_bid", None),
-        "opt_ask": get_attr(trade, "opt_ask", None),
-        "volume": get_attr(trade, "volume", None),
-        "current_volume": get_attr(trade, "current_volume", None),
-        "oi": get_attr(trade, "oi", None),
-        "oi_change": get_attr(trade, "oi_change", None),
-        "liquidity_source": get_attr(trade, "liquidity_source", None),
-        "liquidity_age_sec": get_attr(trade, "liquidity_age_sec", None),
-        "liquidity_cache_hit": get_attr(trade, "liquidity_cache_hit", None),
-        "liquidity_missing_fields": get_attr(trade, "liquidity_missing_fields", None),
-        "tick_volume": get_attr(trade, "tick_volume", None),
-        "spread_pct": get_attr(trade, "spread_pct", None),
-        "quote_ok": get_attr(trade, "quote_ok", None),
-        "underlying_spot": get_attr(trade, "underlying_spot", None),
-        "spot_source": get_attr(trade, "spot_source", None),
-        "option_ltp_source": get_attr(trade, "option_ltp_source", None),
-        "option_ltp_timestamp": get_attr(trade, "option_ltp_timestamp", None),
-        "current_ltp": get_attr(trade, "current_ltp", None),
-        "suggested_entry": get_attr(trade, "suggested_entry", None),
-        "expected_entry": get_attr(trade, "expected_entry", None),
-        "expected_entry_source": get_attr(trade, "expected_entry_source", None),
-        "fill_entry": get_attr(trade, "fill_entry", None),
-        "execution_entry": get_attr(trade, "execution_entry", None),
-        "execution_entry_source": get_attr(trade, "execution_entry_source", None),
-        "execution_entry_status": get_attr(trade, "execution_entry_status", None),
-        "display_entry": get_attr(trade, "display_entry", None),
-        "display_entry_source": get_attr(trade, "display_entry_source", None),
-        "display_entry_status": get_attr(trade, "display_entry_status", None),
-        "entry_reason": get_attr(trade, "entry_reason", None),
-        "entry_clear_reason": get_attr(trade, "entry_clear_reason", None),
-        "price_age_sec": get_attr(trade, "price_age_sec", None),
-        "quote_age_sec": get_attr(trade, "quote_age_sec", None),
-        "entry_status": get_attr(trade, "entry_status", None),
-        "price_source": get_attr(trade, "price_source", None),
-        "quote_source": get_attr(trade, "quote_source", None),
-        "mark_price": get_attr(trade, "mark_price", None),
-        "mid_price": get_attr(trade, "mid_price", None),
-        "best_bid": get_attr(trade, "best_bid", None),
-        "best_ask": get_attr(trade, "best_ask", None),
-        "entry_price_proxy": get_attr(trade, "entry_price_proxy", None),
-        "entry_price_proxy_buy": get_attr(trade, "entry_price_proxy_buy", None),
-        "entry_price_proxy_sell": get_attr(trade, "entry_price_proxy_sell", None),
-        "chain_source": get_attr(trade, "chain_source", None),
-        "trade_score": get_attr(trade, "trade_score", None),
-        "trade_alignment": get_attr(trade, "trade_alignment", None),
-        "trade_score_detail": get_attr(trade, "trade_score_detail", None),
-        "direction": get_attr(trade, "direction", None),
-        "execution_mode": get_attr(trade, "execution_mode", None),
-        "mode": get_attr(trade, "mode", None),
-        "market_open": get_attr(trade, "market_open", None),
-        "market_context": get_attr(trade, "market_context", None),
-        "global_confidence": get_attr(trade, "global_confidence", None),
-        "permission": get_attr(trade, "permission", None),
-        "permission_reason": get_attr(trade, "permission_reason", None),
-        "countertrend": get_attr(trade, "countertrend", None),
-        "raw_signal_confidence": get_attr(trade, "raw_signal_confidence", None),
-        "confidence_model_raw": get_attr(trade, "confidence_model_raw", None),
-        "confidence_model_component": get_attr(trade, "confidence_model_component", None),
-        "confidence_micro_component": get_attr(trade, "confidence_micro_component", None),
-        "confidence_micro_blend_method": get_attr(trade, "confidence_micro_blend_method", None),
-        "confidence_after_micro": get_attr(trade, "confidence_after_micro", None),
-        "confidence_after_alpha": get_attr(trade, "confidence_after_alpha", None),
-        "confidence_after_latency": get_attr(trade, "confidence_after_latency", None),
-        "confidence_before_soft_veto": get_attr(trade, "confidence_before_soft_veto", None),
-        "confidence_after_soft_veto": get_attr(trade, "confidence_after_soft_veto", None),
-        "confidence_penalty_soft_veto_total": get_attr(trade, "confidence_penalty_soft_veto_total", None),
-        "confidence_penalty_soft_veto_reasons": get_attr(trade, "confidence_penalty_soft_veto_reasons", None),
-        "confidence_gate_threshold": get_attr(trade, "confidence_gate_threshold", None),
-        "confidence_raw_gate_threshold": get_attr(trade, "confidence_raw_gate_threshold", None),
-        "confidence_final_gate_threshold": get_attr(trade, "confidence_final_gate_threshold", None),
-        "confidence_rejection_stage": get_attr(trade, "confidence_rejection_stage", None),
-        "confidence_base": get_attr(trade, "confidence_base", None),
-        "confidence_penalty_total": get_attr(trade, "confidence_penalty_total", None),
-        "confidence_penalty_reasons": get_attr(trade, "confidence_penalty_reasons", None),
-        "snapshot_id": get_attr(trade, "snapshot_id", None),
-        "timestamp": str(get_attr(trade, "timestamp")),
-        "upstox_instrument_key": get_attr(trade, "upstox_instrument_key"),
+        "regime": _trade_attr(trade, "regime"),
+        "regime_confidence": _trade_attr(trade, "regime_confidence"),
+        "day_confidence": _trade_attr(trade, "day_confidence"),
+        "orb_bias": _trade_attr(trade, "orb_bias"),
+        "tier": _trade_attr(trade, "tier", None),
+        "legs": _trade_attr(trade, "legs", None),
+        "max_profit": _trade_attr(trade, "max_profit", None),
+        "max_loss": _trade_attr(trade, "max_loss", None),
+        "max_profit_label": _trade_attr(trade, "max_profit_label", None),
+        "max_loss_label": _trade_attr(trade, "max_loss_label", None),
+        "breakeven_low": _trade_attr(trade, "breakeven_low", None),
+        "breakeven_high": _trade_attr(trade, "breakeven_high", None),
+        "est_pnl_at_ltp": _trade_attr(trade, "est_pnl_at_ltp", None),
+        "opt_ltp": _trade_attr(trade, "opt_ltp", None),
+        "opt_bid": _trade_attr(trade, "opt_bid", None),
+        "opt_ask": _trade_attr(trade, "opt_ask", None),
+        "volume": _trade_attr(trade, "volume", None),
+        "current_volume": _trade_attr(trade, "current_volume", None),
+        "oi": _trade_attr(trade, "oi", None),
+        "oi_change": _trade_attr(trade, "oi_change", None),
+        "liquidity_source": _trade_attr(trade, "liquidity_source", None),
+        "liquidity_age_sec": _trade_attr(trade, "liquidity_age_sec", None),
+        "liquidity_cache_hit": _trade_attr(trade, "liquidity_cache_hit", None),
+        "liquidity_missing_fields": _trade_attr(trade, "liquidity_missing_fields", None),
+        "tick_volume": _trade_attr(trade, "tick_volume", None),
+        "spread_pct": _trade_attr(trade, "spread_pct", None),
+        "quote_ok": _trade_attr(trade, "quote_ok", None),
+        "underlying_spot": _trade_attr(trade, "underlying_spot", None),
+        "spot_source": _trade_attr(trade, "spot_source", None),
+        "option_ltp_source": _trade_attr(trade, "option_ltp_source", None),
+        "option_ltp_timestamp": _trade_attr(trade, "option_ltp_timestamp", None),
+        "current_ltp": _trade_attr(trade, "current_ltp", None),
+        "suggested_entry": _trade_attr(trade, "suggested_entry", None),
+        "expected_entry": _trade_attr(trade, "expected_entry", None),
+        "expected_entry_source": _trade_attr(trade, "expected_entry_source", None),
+        "fill_entry": _trade_attr(trade, "fill_entry", None),
+        "execution_entry": _trade_attr(trade, "execution_entry", None),
+        "execution_entry_source": _trade_attr(trade, "execution_entry_source", None),
+        "execution_entry_status": _trade_attr(trade, "execution_entry_status", None),
+        "display_entry": _trade_attr(trade, "display_entry", None),
+        "display_entry_source": _trade_attr(trade, "display_entry_source", None),
+        "display_entry_status": _trade_attr(trade, "display_entry_status", None),
+        "entry_reason": _trade_attr(trade, "entry_reason", None),
+        "entry_clear_reason": _trade_attr(trade, "entry_clear_reason", None),
+        "price_age_sec": _trade_attr(trade, "price_age_sec", None),
+        "quote_age_sec": _trade_attr(trade, "quote_age_sec", None),
+        "entry_status": _trade_attr(trade, "entry_status", None),
+        "price_source": _trade_attr(trade, "price_source", None),
+        "quote_source": _trade_attr(trade, "quote_source", None),
+        "mark_price": _trade_attr(trade, "mark_price", None),
+        "mid_price": _trade_attr(trade, "mid_price", None),
+        "best_bid": _trade_attr(trade, "best_bid", None),
+        "best_ask": _trade_attr(trade, "best_ask", None),
+        "entry_price_proxy": _trade_attr(trade, "entry_price_proxy", None),
+        "entry_price_proxy_buy": _trade_attr(trade, "entry_price_proxy_buy", None),
+        "entry_price_proxy_sell": _trade_attr(trade, "entry_price_proxy_sell", None),
+        "chain_source": _trade_attr(trade, "chain_source", None),
+        "trade_score": _trade_attr(trade, "trade_score", None),
+        "trade_alignment": _trade_attr(trade, "trade_alignment", None),
+        "trade_score_detail": _trade_attr(trade, "trade_score_detail", None),
+        "direction": _trade_attr(trade, "direction", None),
+        "execution_mode": _trade_attr(trade, "execution_mode", None),
+        "mode": _trade_attr(trade, "mode", None),
+        "market_open": _trade_attr(trade, "market_open", None),
+        "market_context": _trade_attr(trade, "market_context", None),
+        "global_confidence": _trade_attr(trade, "global_confidence", None),
+        "permission": _trade_attr(trade, "permission", None),
+        "permission_reason": _trade_attr(trade, "permission_reason", None),
+        "countertrend": _trade_attr(trade, "countertrend", None),
+        "raw_signal_confidence": _trade_attr(trade, "raw_signal_confidence", None),
+        "confidence_model_raw": _trade_attr(trade, "confidence_model_raw", None),
+        "confidence_model_component": _trade_attr(trade, "confidence_model_component", None),
+        "confidence_micro_component": _trade_attr(trade, "confidence_micro_component", None),
+        "confidence_micro_blend_method": _trade_attr(trade, "confidence_micro_blend_method", None),
+        "confidence_after_micro": _trade_attr(trade, "confidence_after_micro", None),
+        "confidence_after_alpha": _trade_attr(trade, "confidence_after_alpha", None),
+        "confidence_after_latency": _trade_attr(trade, "confidence_after_latency", None),
+        "confidence_before_soft_veto": _trade_attr(trade, "confidence_before_soft_veto", None),
+        "confidence_after_soft_veto": _trade_attr(trade, "confidence_after_soft_veto", None),
+        "confidence_penalty_soft_veto_total": _trade_attr(trade, "confidence_penalty_soft_veto_total", None),
+        "confidence_penalty_soft_veto_reasons": _trade_attr(trade, "confidence_penalty_soft_veto_reasons", None),
+        "confidence_gate_threshold": _trade_attr(trade, "confidence_gate_threshold", None),
+        "confidence_raw_gate_threshold": _trade_attr(trade, "confidence_raw_gate_threshold", None),
+        "confidence_final_gate_threshold": _trade_attr(trade, "confidence_final_gate_threshold", None),
+        "confidence_rejection_stage": _trade_attr(trade, "confidence_rejection_stage", None),
+        "confidence_base": _trade_attr(trade, "confidence_base", None),
+        "confidence_penalty_total": _trade_attr(trade, "confidence_penalty_total", None),
+        "confidence_penalty_reasons": _trade_attr(trade, "confidence_penalty_reasons", None),
+        "snapshot_id": _trade_attr(trade, "snapshot_id", None),
+        "timestamp": str(_trade_attr(trade, "timestamp")),
+        "upstox_instrument_key": _trade_attr(trade, "upstox_instrument_key"),
     }
     if extra:
         entry.update(extra)
@@ -2253,6 +2760,16 @@ def add_to_queue(trade, queue_path=None, extra=None):
     )
     entry["market_open"] = market_open_for_entry
     entry["market_open_source"] = market_open_source
+    return entry, mode_for_entry, allow_stale_quotes_for_entry, market_open_for_entry
+
+
+def _apply_quote_and_entry_logic(
+    entry: dict,
+    *,
+    mode_for_entry: str,
+    allow_stale_quotes_for_entry: bool,
+    market_open_for_entry: bool,
+) -> dict:
     if entry.get("instrument") == "OPT":
         input_token_missing = entry.get("instrument_token") in (None, "", "None") and bool(entry.get("tradingsymbol"))
         entry = _enrich_contract_identity(entry)
@@ -2521,6 +3038,22 @@ def add_to_queue(trade, queue_path=None, extra=None):
                     entry["stop_premium"] = round(abs(entry_val - stop_val), 2)
             except Exception:
                 pass
+    return _canonicalize_entry_lifecycle(
+        entry,
+        mode_for_entry=mode_for_entry,
+        allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+        market_open_for_entry=market_open_for_entry,
+        align_for_schema=False,
+    )
+
+
+def _finalize_review_queue_entry(
+    entry: dict,
+    *,
+    mode_for_entry: str,
+    allow_stale_quotes_for_entry: bool,
+    market_open_for_entry: bool,
+) -> dict:
     perm = {}
     try:
         entry.pop("permission_downgraded_from", None)
@@ -2686,14 +3219,6 @@ def add_to_queue(trade, queue_path=None, extra=None):
         entry = _apply_unresolved_contract_state(entry)
     else:
         entry = _apply_manual_approval_state(entry, now_epoch=time.time())
-    permission = str(entry.get("permission") or permission or "ADVISORY_ONLY").upper()
-    permission_reason = str(entry.get("permission_reason") or permission_reason or "")
-    final_action = "BLOCK" if permission == "BLOCK" else (
-        "EXECUTE"
-        if permission == "EXECUTE" and entry_block_reason is None
-        else ("QUEUE_ONLY" if permission == "QUEUE_ONLY" and entry_block_reason is None else "ADVISORY_ONLY")
-    )
-    entry["final_action"] = final_action
     entry = _refresh_lifecycle_blockers(
         entry,
         mode_for_entry=mode_for_entry,
@@ -2711,6 +3236,12 @@ def add_to_queue(trade, queue_path=None, extra=None):
         confidence_value=_safe_float(entry.get("confidence_final")),
         execution_mode=mode_for_entry,
         hard_blockers=list(entry.get("hard_blockers") or []),
+        entry_block_reason=entry_block_reason,
+    )
+    entry = finalize_trade_decision(
+        entry,
+        gate_decision_payload=gate_eval,
+        permission_payload=perm,
         entry_block_reason=entry_block_reason,
     )
     entry["confidence_final_gate_threshold"] = final_conf_threshold
@@ -2804,24 +3335,55 @@ def add_to_queue(trade, queue_path=None, extra=None):
             or entry.get("price_age_sec")
             or entry.get("option_ltp_age_sec")
         ),
-        "final_action": final_action,
+        "final_action": entry.get("final_action"),
     }
     entry["decision_trace"] = decision_trace
-    entry["final_action"] = final_action
     _log_confidence_rejection(entry)
+    if (
+        str(entry.get("instrument") or entry.get("instrument_type") or "").strip().upper() == "OPT"
+        and str(entry.get("permission") or "").strip().upper() == "BLOCK"
+        and str(entry.get("entry_status") or "").strip().upper() in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}
+        and _safe_float(entry.get("current_ltp")) is None
+        and not str(entry.get("option_ltp_source") or "").strip()
+    ):
+        entry["option_ltp_source"] = "subscription_failed"
+        if not str(entry.get("quote_source") or "").strip():
+            entry["quote_source"] = "subscription_failed"
     entry = enforce_entry_contract(entry, stage="review_queue.add_to_queue")
     entry = _enforce_executable_entry_integrity(entry)
     _log_entry_lifecycle_resolution(entry)
-    try:
-        serialize_advisory_row(entry, allow_legacy=True)
-    except AdvisorySchemaError as exc:
-        log_advisory_schema_error("review_queue.add_to_queue", entry, exc)
-        logger.warning("advisory_queue_schema_error trade_id=%s error=%s", entry.get("trade_id"), exc)
     source_flags = entry.get("source_flags")
     if isinstance(source_flags, dict):
         merged_flags = dict(source_flags)
         merged_flags["decision_trace"] = decision_trace
         entry["source_flags"] = merged_flags
+    return entry
+
+
+def _validate_review_queue_advisory_row(
+    entry: dict,
+    *,
+    mode_for_entry: str,
+    allow_stale_quotes_for_entry: bool,
+    market_open_for_entry: bool,
+) -> None:
+    try:
+        serialize_advisory_row(
+            _canonicalize_entry_lifecycle(
+                entry,
+                mode_for_entry=mode_for_entry,
+                allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+                market_open_for_entry=market_open_for_entry,
+                align_for_schema=True,
+            ),
+            allow_legacy=True,
+        )
+    except AdvisorySchemaError as exc:
+        log_advisory_schema_error("review_queue.add_to_queue", entry, exc)
+        logger.warning("advisory_queue_schema_error trade_id=%s error=%s", entry.get("trade_id"), exc)
+
+
+def _write_review_queue_artifacts(path: Path, data: list[dict], entry: dict) -> None:
     entry["trade_key"] = compute_trade_key(
         entry.get("symbol"),
         entry.get("expiry_date") or entry.get("expiry"),
@@ -2832,9 +3394,47 @@ def add_to_queue(trade, queue_path=None, extra=None):
     )
     data = _merge_trade_entry(data, entry)
     write_queue_rows(path, data)
-    # Log suggestion for evaluation
-    _emit_review_queue_logs(entry)
-    _update_suggestions_status_latest(entry)
+    emission_result = _emit_review_queue_logs(entry)
+    _update_suggestions_status_latest(entry, emission_result=emission_result)
+
+
+def add_to_queue(trade, queue_path=None, extra=None):
+    try:
+        from config import config as cfg
+        instr = getattr(trade, "instrument", None)
+        if instr is None and isinstance(trade, dict):
+            instr = trade.get("instrument")
+        if instr == "EQ" and not getattr(cfg, "ENABLE_EQUITIES", True):
+            return
+    except Exception:
+        pass
+    path = queue_path or QUEUE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_queue_rows(path)
+    entry, mode_for_entry, allow_stale_quotes_for_entry, market_open_for_entry = _build_review_queue_entry(
+        trade,
+        extra=extra,
+        default_mode="ADVISORY",
+    )
+    entry = _apply_quote_and_entry_logic(
+        entry,
+        mode_for_entry=mode_for_entry,
+        allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+        market_open_for_entry=market_open_for_entry,
+    )
+    entry = _finalize_review_queue_entry(
+        entry,
+        mode_for_entry=mode_for_entry,
+        allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+        market_open_for_entry=market_open_for_entry,
+    )
+    _validate_review_queue_advisory_row(
+        entry,
+        mode_for_entry=mode_for_entry,
+        allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+        market_open_for_entry=market_open_for_entry,
+    )
+    _write_review_queue_artifacts(path, data, entry)
 
 def is_approved(trade_id, payload_hash=None):
     ok, _reason = approval_status(trade_id, payload_hash=payload_hash)

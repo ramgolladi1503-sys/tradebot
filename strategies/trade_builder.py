@@ -1761,6 +1761,7 @@ class TradeBuilder:
         intent["execution_allowed"] = False
         intent["execution_reason"] = "NO_SIGNAL_PLANNING_FALLBACK"
         liquidity_fields = self._option_liquidity_fields(chosen_opt) if instrument == "OPT" else {}
+        planning_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))
         trade = Trade(
             trade_id=f"{symbol}-PLAN-{ts}",
             timestamp=datetime.now(),
@@ -1784,7 +1785,7 @@ class TradeBuilder:
             validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
             capital_at_risk=round(abs(float(entry_price) - float(stop_loss)), 2),
             expected_slippage=0.0,
-            confidence=round(float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56)), 3),
+            confidence=round(planning_confidence, 3),
             strategy="NO_SIGNAL_PLANNING",
             regime=str(market_data.get("regime") or "NEUTRAL"),
             tier="EXPLORATION",
@@ -1797,8 +1798,21 @@ class TradeBuilder:
             execution_allowed=False,
             reason="NO_SIGNAL_PLANNING_FALLBACK",
             source_flags=dict(intent.get("source_flags") or {}),
+            **self._staged_confidence_payload(
+                confidence=planning_confidence,
+                model_raw=planning_confidence,
+                model_component=planning_confidence,
+                micro_blend_method="model_only",
+                before_soft_veto=planning_confidence,
+                after_soft_veto=planning_confidence,
+                penalty_soft_veto_total=0.0,
+                penalty_soft_veto_reasons=[],
+                base=planning_confidence,
+                penalty_total=0.0,
+                penalty_reasons=[],
+            ),
         )
-        return self._decorate_trade_context(trade, market_data, float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56)))
+        return self._decorate_trade_context(trade, market_data, planning_confidence)
 
     def _resolve_index_bid_ask(self, market_data: dict, exec_mode: str) -> dict:
         """
@@ -2565,6 +2579,95 @@ class TradeBuilder:
         except Exception:
             threshold = legacy_threshold
         return max(0.0, min(1.0, threshold))
+
+    def _staged_confidence_payload(
+        self,
+        *,
+        confidence: float | None,
+        model_raw: float | None = None,
+        model_component: float | None = None,
+        micro_component: float | None = None,
+        micro_blend_method: str | None = None,
+        after_micro: float | None = None,
+        after_alpha: float | None = None,
+        after_latency: float | None = None,
+        before_soft_veto: float | None = None,
+        after_soft_veto: float | None = None,
+        penalty_soft_veto_total: float | None = None,
+        penalty_soft_veto_reasons: list[str] | None = None,
+        gate_threshold: float | None = None,
+        raw_gate_threshold: float | None = None,
+        final_gate_threshold: float | None = None,
+        rejection_stage: str | None = None,
+        base: float | None = None,
+        penalty_total: float | None = None,
+        penalty_reasons: list[str] | None = None,
+        use_confidence_as_model: bool = True,
+        use_confidence_as_final_stage: bool = True,
+    ) -> dict:
+        final_conf = self._clamp_confidence(confidence)
+        model_raw_val = self._clamp_confidence(model_raw)
+        model_component_val = self._clamp_confidence(model_component)
+        if use_confidence_as_model and final_conf is not None:
+            if model_raw_val is None:
+                model_raw_val = final_conf
+            if model_component_val is None:
+                model_component_val = final_conf
+            if micro_blend_method is None and micro_component is None:
+                micro_blend_method = "model_only"
+        before_soft_veto_val = self._clamp_confidence(before_soft_veto)
+        after_soft_veto_val = self._clamp_confidence(after_soft_veto)
+        if use_confidence_as_final_stage and final_conf is not None:
+            if before_soft_veto_val is None:
+                before_soft_veto_val = final_conf
+            if after_soft_veto_val is None:
+                after_soft_veto_val = final_conf
+            if penalty_soft_veto_total is None:
+                penalty_soft_veto_total = 0.0
+        base_val = self._clamp_confidence(base)
+        if base_val is None:
+            base_val = final_conf
+        penalty_total_val = self._clamp_confidence(penalty_total)
+        if penalty_total_val is None:
+            if base_val is not None and final_conf is not None:
+                penalty_total_val = max(0.0, float(base_val) - float(final_conf))
+            elif base_val is not None or final_conf is not None:
+                penalty_total_val = 0.0
+        if gate_threshold is None and final_gate_threshold is not None:
+            gate_threshold = final_gate_threshold
+
+        def _round_optional(value: float | None) -> float | None:
+            clamped = self._clamp_confidence(value)
+            if clamped is None:
+                return None
+            return round(float(clamped), 6)
+
+        penalty_soft_veto_total_val = None
+        if penalty_soft_veto_total is not None:
+            penalty_soft_veto_total_val = round(max(0.0, float(penalty_soft_veto_total)), 6)
+
+        penalty_reasons_out = [str(reason) for reason in (penalty_reasons or []) if str(reason)]
+        soft_veto_reasons_out = [str(reason) for reason in (penalty_soft_veto_reasons or []) if str(reason)]
+        return {
+            "confidence_model_raw": _round_optional(model_raw_val),
+            "confidence_model_component": _round_optional(model_component_val),
+            "confidence_micro_component": _round_optional(micro_component),
+            "confidence_micro_blend_method": micro_blend_method,
+            "confidence_after_micro": _round_optional(after_micro),
+            "confidence_after_alpha": _round_optional(after_alpha),
+            "confidence_after_latency": _round_optional(after_latency),
+            "confidence_before_soft_veto": _round_optional(before_soft_veto_val),
+            "confidence_after_soft_veto": _round_optional(after_soft_veto_val),
+            "confidence_penalty_soft_veto_total": penalty_soft_veto_total_val,
+            "confidence_penalty_soft_veto_reasons": soft_veto_reasons_out,
+            "confidence_gate_threshold": _round_optional(gate_threshold),
+            "confidence_raw_gate_threshold": _round_optional(raw_gate_threshold),
+            "confidence_final_gate_threshold": _round_optional(final_gate_threshold),
+            "confidence_rejection_stage": rejection_stage,
+            "confidence_base": _round_optional(base_val),
+            "confidence_penalty_total": _round_optional(penalty_total_val),
+            "confidence_penalty_reasons": penalty_reasons_out,
+        }
 
     def _strategy_candidate_debug(self, market_data, strategy_name: str) -> dict:
         if not isinstance(market_data, dict):
@@ -3747,6 +3850,19 @@ class TradeBuilder:
                         execution_allowed=bool(intent["execution_allowed"]),
                         reason=intent["execution_reason"],
                         source_flags=dict(intent["source_flags"]),
+                        **self._staged_confidence_payload(
+                            confidence=0.0,
+                            model_raw=0.0,
+                            model_component=0.0,
+                            micro_blend_method="model_only",
+                            before_soft_veto=0.0,
+                            after_soft_veto=0.0,
+                            penalty_soft_veto_total=0.0,
+                            penalty_soft_veto_reasons=[],
+                            base=0.0,
+                            penalty_total=0.0,
+                            penalty_reasons=[],
+                        ),
                     )
                     blocked_trade = self._decorate_trade_context(blocked_trade, market_data, 0.0)
                     if blocked_trade is not None:
@@ -4230,24 +4346,28 @@ class TradeBuilder:
                 spot_source=spot_source,
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
-                confidence_model_raw=round(float(confidence_model_raw), 6) if confidence_model_raw is not None else None,
-                confidence_model_component=round(float(confidence_model_component), 6) if confidence_model_component is not None else None,
-                confidence_micro_component=round(float(confidence_micro_component), 6) if confidence_micro_component is not None else None,
-                confidence_micro_blend_method=confidence_micro_blend_method,
-                confidence_after_micro=round(float(confidence_after_micro), 6) if confidence_after_micro is not None else None,
-                confidence_after_alpha=round(float(confidence_after_alpha), 6) if confidence_after_alpha is not None else None,
-                confidence_after_latency=round(float(confidence_after_latency), 6) if confidence_after_latency is not None else None,
-                confidence_before_soft_veto=round(float(confidence_before_soft_veto), 6) if confidence_before_soft_veto is not None else None,
-                confidence_after_soft_veto=round(float(confidence_after_soft_veto), 6) if confidence_after_soft_veto is not None else None,
-                confidence_penalty_soft_veto_total=round(float(confidence_penalty_soft_veto_total), 6),
-                confidence_penalty_soft_veto_reasons=confidence_penalty_soft_veto_reasons,
-                confidence_gate_threshold=round(float(final_gate_threshold), 6) if final_gate_threshold is not None else None,
-                confidence_raw_gate_threshold=round(float(raw_gate_threshold), 6) if raw_gate_threshold is not None else None,
-                confidence_final_gate_threshold=round(float(final_gate_threshold), 6) if final_gate_threshold is not None else None,
-                confidence_rejection_stage=None,
-                confidence_base=round(confidence_base, 6),
-                confidence_penalty_total=round(confidence_penalty_total, 6),
-                confidence_penalty_reasons=confidence_penalty_reasons,
+                **self._staged_confidence_payload(
+                    confidence=confidence,
+                    model_raw=confidence_model_raw,
+                    model_component=confidence_model_component,
+                    micro_component=confidence_micro_component,
+                    micro_blend_method=confidence_micro_blend_method,
+                    after_micro=confidence_after_micro,
+                    after_alpha=confidence_after_alpha,
+                    after_latency=confidence_after_latency,
+                    before_soft_veto=confidence_before_soft_veto,
+                    after_soft_veto=confidence_after_soft_veto,
+                    penalty_soft_veto_total=confidence_penalty_soft_veto_total,
+                    penalty_soft_veto_reasons=confidence_penalty_soft_veto_reasons,
+                    gate_threshold=final_gate_threshold,
+                    raw_gate_threshold=raw_gate_threshold,
+                    final_gate_threshold=final_gate_threshold,
+                    rejection_stage=None,
+                    base=confidence_base,
+                    penalty_total=confidence_penalty_total,
+                    penalty_reasons=confidence_penalty_reasons,
+                    use_confidence_as_model=confidence_model_component is not None,
+                ),
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
             if trade is not None:
@@ -4362,6 +4482,16 @@ class TradeBuilder:
                     bid = round(ltp_opt * 0.995, 2)
                     ask = round(ltp_opt * 1.005, 2)
                     mark_price = round((bid + ask) / 2.0, 2)
+                    synthetic_opt = {
+                        "bid": bid,
+                        "ask": ask,
+                        "ltp": mark_price,
+                        "last_price": mark_price,
+                        "quote_ok": True,
+                        "quote_live": True,
+                        "volume": 1000,
+                        "spread_pct": ((ask - bid) / mark_price) if mark_price else None,
+                    }
                     slippage = self.execution.estimate_slippage(bid, ask, 1000)
                     entry_price = (ask if ask > 0 else mark_price) + slippage
                     entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
@@ -4404,6 +4534,9 @@ class TradeBuilder:
                         opt=intent_opt,
                         additional_blockers=extra_blockers,
                     )
+                    quick_final_gate_threshold = self._final_confidence_gate_threshold("NEUTRAL", quick_mode=True)
+                    quick_raw_gate_threshold = self._raw_confidence_gate_threshold("NEUTRAL", quick_mode=True)
+                    synthetic_confidence = float(max(0.5, quick_final_gate_threshold))
                     trade = Trade(
                         trade_id=f"{symbol}-{opt_type}-ATM-QK-{ts}",
                         timestamp=datetime.now(),
@@ -4428,7 +4561,7 @@ class TradeBuilder:
                         validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                         capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                         expected_slippage=round(slippage, 2),
-                        confidence=round(max(0.5, self._final_confidence_gate_threshold("NEUTRAL", quick_mode=True)), 3),
+                        confidence=round(synthetic_confidence, 3),
                         strategy="QUICK_SYNTH",
                         regime=market_data.get("regime", "NEUTRAL"),
                         tier="EXPLORATION",
@@ -4437,7 +4570,7 @@ class TradeBuilder:
                         entry_price_source="ask",
                         expected_entry=round(entry_price, 2),
                         expected_entry_source="ask",
-                        **self._option_liquidity_fields(opt),
+                        **self._option_liquidity_fields(synthetic_opt),
                         entry_condition=entry_condition,
                         entry_ref_price=entry_ref_price,
                         alpha_confidence=None,
@@ -4453,11 +4586,27 @@ class TradeBuilder:
                         spot_source=spot_source,
                         option_ltp_source="synthetic_offhours" if synthetic_offhours_seed else None,
                         chain_source=market_data.get("chain_source") or "synthetic",
+                        **self._staged_confidence_payload(
+                            confidence=synthetic_confidence,
+                            model_raw=synthetic_confidence,
+                            model_component=synthetic_confidence,
+                            micro_blend_method="model_only",
+                            before_soft_veto=synthetic_confidence,
+                            after_soft_veto=synthetic_confidence,
+                            penalty_soft_veto_total=0.0,
+                            penalty_soft_veto_reasons=[],
+                            gate_threshold=quick_final_gate_threshold,
+                            raw_gate_threshold=quick_raw_gate_threshold,
+                            final_gate_threshold=quick_final_gate_threshold,
+                            base=synthetic_confidence,
+                            penalty_total=0.0,
+                            penalty_reasons=[],
+                        ),
                     )
                     trade = self._decorate_trade_context(
                         trade,
                         market_data,
-                        float(max(0.5, self._final_confidence_gate_threshold("NEUTRAL", quick_mode=True))),
+                        synthetic_confidence,
                     )
                     return trade
                 except Exception:
@@ -4512,6 +4661,10 @@ class TradeBuilder:
                         "quote_age_sec": market_data.get("quote_age_sec"),
                     },
                 )
+                final_gate_threshold = self._final_confidence_gate_threshold(
+                    market_data.get("regime"),
+                    quick_mode=quick_mode,
+                )
                 trade = Trade(
                     trade_id=f"{symbol}-FUT-{int(datetime.now().timestamp())}",
                     timestamp=datetime.now(),
@@ -4546,14 +4699,25 @@ class TradeBuilder:
                     execution_allowed=bool(intent["execution_allowed"]),
                     reason=intent["execution_reason"],
                     source_flags=dict(intent["source_flags"]),
+                    **self._staged_confidence_payload(
+                        confidence=base_conf,
+                        model_raw=base_conf,
+                        model_component=base_conf,
+                        micro_blend_method="model_only",
+                        before_soft_veto=base_conf,
+                        after_soft_veto=base_conf,
+                        penalty_soft_veto_total=0.0,
+                        penalty_soft_veto_reasons=[],
+                        gate_threshold=final_gate_threshold,
+                        final_gate_threshold=final_gate_threshold,
+                        base=base_conf,
+                        penalty_total=0.0,
+                        penalty_reasons=[],
+                    ),
                 )
                 trade = self._decorate_trade_context(trade, market_data, base_conf)
                 if trade is None:
                     return None
-                final_gate_threshold = self._final_confidence_gate_threshold(
-                    getattr(trade, "regime", None) or market_data.get("regime"),
-                    quick_mode=quick_mode,
-                )
                 if trade.confidence >= final_gate_threshold:
                     return trade
                 self._log_blocked_candidate(
@@ -5036,6 +5200,7 @@ class TradeBuilder:
         intent["planning_only"] = True
         intent["execution_allowed"] = False
         intent["execution_reason"] = "PAPER_ONLY"
+        zero_hero_confidence = float(chosen["confidence"])
 
         trade = Trade(
             trade_id=f"{symbol}-{opt.get('type')}-{int(opt.get('strike'))}-ZTH-{ts}",
@@ -5061,7 +5226,7 @@ class TradeBuilder:
             validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
             capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
             expected_slippage=round(slippage, 2),
-            confidence=round(float(chosen["confidence"]), 3),
+            confidence=round(zero_hero_confidence, 3),
             strategy=getattr(cfg, "STRATEGY_ZERO_TO_HERO", "ZERO_TO_HERO"),
             regime=market_data.get("regime", "NEUTRAL"),
             tier="EXPLORATION",
@@ -5087,8 +5252,21 @@ class TradeBuilder:
             spot_source=spot_source,
             option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
             chain_source=market_data.get("chain_source") or opt.get("chain_source"),
+            **self._staged_confidence_payload(
+                confidence=zero_hero_confidence,
+                model_raw=zero_hero_confidence,
+                model_component=zero_hero_confidence,
+                micro_blend_method="model_only",
+                before_soft_veto=zero_hero_confidence,
+                after_soft_veto=zero_hero_confidence,
+                penalty_soft_veto_total=0.0,
+                penalty_soft_veto_reasons=[],
+                base=zero_hero_confidence,
+                penalty_total=0.0,
+                penalty_reasons=[],
+            ),
         )
-        trade = self._decorate_trade_context(trade, market_data, float(chosen["confidence"]))
+        trade = self._decorate_trade_context(trade, market_data, zero_hero_confidence)
         if trade is None:
             return None
 
@@ -5544,6 +5722,19 @@ class TradeBuilder:
                 spot_source=spot_source,
                 option_ltp_source=raw.get("option_ltp_source") or raw.get("quote_source"),
                 chain_source=data.get("chain_source") or raw.get("chain_source"),
+                **self._staged_confidence_payload(
+                    confidence=confidence,
+                    model_raw=confidence,
+                    model_component=confidence,
+                    micro_blend_method="model_only",
+                    before_soft_veto=confidence,
+                    after_soft_veto=confidence,
+                    penalty_soft_veto_total=0.0,
+                    penalty_soft_veto_reasons=[],
+                    base=confidence,
+                    penalty_total=0.0,
+                    penalty_reasons=[],
+                ),
             )
             # score favors lower spread and nearer ATM
             spread_penalty = (ask - bid) / max(entry_price, 1e-6)
@@ -5829,17 +6020,29 @@ class TradeBuilder:
             delta_proxy = d if d else 0.3
             target = entry_price + max(5, tgt_points * delta_proxy)
             stop_loss = max(entry_price - max(3, (tgt_points * delta_proxy) * 0.5), entry_price * 0.2)
-            confidence = max(0.52, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))
-            confidence = max(0.05, min(1.0, confidence - penalty))
+            confidence_base = max(0.52, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))
+            confidence_before_soft_veto = confidence_base
+            confidence_after_soft_veto = max(0.05, min(1.0, confidence_base - penalty))
+            confidence = confidence_after_soft_veto
 
             alpha_conf = None
             alpha_unc = None
             size_mult = 1.0
+            confidence_after_alpha = confidence
             adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
                 confidence, None, None, None, data, quick_mode=True
             )
             if adj_conf is not None:
                 confidence = max(0.05, min(1.0, float(adj_conf)))
+            confidence_after_alpha = confidence
+            confidence_penalty_reasons = list(soft_flags)
+            if (
+                confidence_after_alpha is not None
+                and confidence_after_soft_veto is not None
+                and abs(float(confidence_after_alpha) - float(confidence_after_soft_veto)) > 1e-9
+            ):
+                confidence_penalty_reasons.append("alpha_adjustment")
+            confidence_penalty_total = max(0.0, float(confidence_base) - float(confidence))
 
             expiry_resolved = self._option_expiry(opt, data)
             if not expiry_resolved:
@@ -5923,6 +6126,20 @@ class TradeBuilder:
                 spot_source=spot_source,
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
                 chain_source=data.get("chain_source") or opt.get("chain_source"),
+                **self._staged_confidence_payload(
+                    confidence=confidence,
+                    model_raw=confidence_base,
+                    model_component=confidence_base,
+                    micro_blend_method="model_only",
+                    after_alpha=confidence_after_alpha,
+                    before_soft_veto=confidence_before_soft_veto,
+                    after_soft_veto=confidence_after_soft_veto,
+                    penalty_soft_veto_total=penalty,
+                    penalty_soft_veto_reasons=soft_flags,
+                    base=confidence_base,
+                    penalty_total=confidence_penalty_total,
+                    penalty_reasons=confidence_penalty_reasons,
+                ),
             )
             trade = self._decorate_trade_context(trade, data, confidence)
             if trade is not None:
@@ -6255,6 +6472,8 @@ class TradeBuilder:
             size_mult = 1.0
             xgb_conf = None
             micro_conf = None
+            confidence_after_micro = None
+            confidence_after_alpha = None
             confidence_model_component = None
             confidence_micro_component = None
             confidence_micro_blend_method = None
@@ -6288,12 +6507,14 @@ class TradeBuilder:
                 micro_conf = self._get_micro_predictor().predict_confidence(micro_features)
                 confidence_micro_component = self._clamp_confidence(micro_conf)
                 confidence, confidence_micro_blend_method = self._blend_micro_confidence(confidence, micro_conf)
+                confidence_after_micro = confidence
             # Alpha ensemble fusion (exploratory: downsize but don't veto)
             adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
                 confidence, xgb_conf, None, micro_conf, market_data, quick_mode=True
             )
             if adj_conf is not None:
                 confidence = adj_conf
+            confidence_after_alpha = confidence
             allowed_life, _ = self._apply_lifecycle_gate("SCALP", mode="QUICK")
             if not allowed_life:
                 if debug_reasons:
@@ -6307,7 +6528,8 @@ class TradeBuilder:
             if adj_score is not None:
                 confidence = adj_score
             size_mult = min(size_mult, decay_size_mult)
-            if confidence < getattr(cfg, "SCALP_MIN_PROBA", 0.58):
+            scalp_final_gate_threshold = float(getattr(cfg, "SCALP_MIN_PROBA", 0.58))
+            if confidence < scalp_final_gate_threshold:
                 continue
             slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
             base_entry_price, entry_price_source = self._option_executable_price(opt, side="BUY")
@@ -6401,9 +6623,6 @@ class TradeBuilder:
                 shadow_confidence=shadow_confidence,
                 alpha_confidence=alpha_conf,
                 alpha_uncertainty=alpha_unc,
-                confidence_model_component=round(float(confidence_model_component), 6) if confidence_model_component is not None else None,
-                confidence_micro_component=round(float(confidence_micro_component), 6) if confidence_micro_component is not None else None,
-                confidence_micro_blend_method=confidence_micro_blend_method,
                 size_mult=size_mult,
                 tradable=bool(intent["tradable"]),
                 tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
@@ -6411,6 +6630,25 @@ class TradeBuilder:
                 execution_allowed=bool(intent["execution_allowed"]),
                 reason=intent["execution_reason"],
                 source_flags=dict(intent["source_flags"]),
+                **self._staged_confidence_payload(
+                    confidence=confidence,
+                    model_raw=confidence_model_component,
+                    model_component=confidence_model_component,
+                    micro_component=confidence_micro_component,
+                    micro_blend_method=confidence_micro_blend_method,
+                    after_micro=confidence_after_micro,
+                    after_alpha=confidence_after_alpha,
+                    before_soft_veto=confidence,
+                    after_soft_veto=confidence,
+                    penalty_soft_veto_total=0.0,
+                    penalty_soft_veto_reasons=[],
+                    gate_threshold=scalp_final_gate_threshold,
+                    final_gate_threshold=scalp_final_gate_threshold,
+                    base=confidence,
+                    penalty_total=0.0,
+                    penalty_reasons=[],
+                    use_confidence_as_model=confidence_model_component is not None,
+                ),
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
             if trade is not None:

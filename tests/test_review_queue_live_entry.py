@@ -155,6 +155,101 @@ def test_review_queue_preserves_executable_and_display_entry_fields(tmp_path, mo
     assert payload["entry"] == 72.8
     assert payload["entry_status"] == "displayable"
     assert "entry_lifecycle_resolved trade_id=ADV-EXEC-1" in caplog.text
+    assert "advisory_queue_schema_error" not in caplog.text
+    assert "advisory_emit_schema_error" not in caplog.text
+
+
+def test_suggestion_emission_schema_failure_records_diagnostic_and_status(tmp_path, monkeypatch, caplog):
+    qpath = tmp_path / "review_queue.json"
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    logs_root = tmp_path / "logs"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
+    monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(logs_root), raising=False)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (72.8, time.time()))
+
+    real_serialize = review_queue.serialize_advisory_row
+    calls = {"count": 0}
+
+    def _fail_emit_only(row, allow_legacy=True):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise review_queue.AdvisorySchemaError("forced_emit_failure")
+        return real_serialize(row, allow_legacy=allow_legacy)
+
+    monkeypatch.setattr(review_queue, "serialize_advisory_row", _fail_emit_only)
+
+    with caplog.at_level("ERROR"):
+        review_queue.add_to_queue(
+            _make_trade(
+                trade_id="T-EMIT-FAIL-SUGG",
+                instrument_token=77123,
+                tradingsymbol="NIFTY26MAR24600PE",
+                symbol="NIFTY",
+                expiry_date="2026-03-26",
+                expiry="2026-03-26",
+                strike=24600,
+                option_type="PE",
+                strategy="CORE",
+                entry_price=72.8,
+                execution_mode="LIVE",
+            )
+        )
+
+    assert not suggestions_path.exists() or suggestions_path.read_text().strip() == ""
+    diagnostic = json.loads((logs_root / "advisory_emit_failures.jsonl").read_text().strip())
+    assert diagnostic["trade_id"] == "T-EMIT-FAIL-SUGG"
+    assert diagnostic["symbol"] == "NIFTY"
+    assert diagnostic["emission_target"] == "suggestions"
+    assert diagnostic["failure_reason"] == "forced_emit_failure"
+    status = json.loads((logs_root / "suggestions_status.json").read_text())
+    assert status["status"] == "error"
+    assert status["latest_emit_status"] == "schema_failed"
+    assert status["latest_emit_target"] == "suggestions"
+    engine = json.loads((logs_root / "engine_cycle_status.json").read_text())
+    assert engine["cycle_stage"] == "emit_failed"
+    assert engine["latest_emit_status"] == "schema_failed"
+    assert "advisory_emit_schema_error payload=" in caplog.text
+
+
+def test_rejected_emission_schema_failure_records_diagnostic_and_status(tmp_path, monkeypatch):
+    qpath = tmp_path / "review_queue.json"
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    logs_root = tmp_path / "logs"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
+    monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(logs_root), raising=False)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: False)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(review_queue, "_fetch_option_ltp_rest", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("no rest fallback")))
+
+    real_serialize = review_queue.serialize_advisory_row
+    calls = {"count": 0}
+
+    def _fail_emit_only(row, allow_legacy=True):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise review_queue.AdvisorySchemaError("forced_rejected_emit_failure")
+        return real_serialize(row, allow_legacy=allow_legacy)
+
+    monkeypatch.setattr(review_queue, "serialize_advisory_row", _fail_emit_only)
+
+    review_queue.add_to_queue(_make_trade(trade_id="T-EMIT-FAIL-REJECT"))
+
+    rejected_path = logs_root / "rejected_candidates.jsonl"
+    assert not rejected_path.exists() or rejected_path.read_text().strip() == ""
+    diagnostic = json.loads((logs_root / "advisory_emit_failures.jsonl").read_text().strip())
+    assert diagnostic["trade_id"] == "T-EMIT-FAIL-REJECT"
+    assert diagnostic["emission_target"] == "rejected_candidates"
+    rejected_status = json.loads((logs_root / "rejected_candidates_status.json").read_text())
+    assert rejected_status["status"] == "error"
+    assert rejected_status["latest_emit_status"] == "schema_failed"
+    assert rejected_status["latest_emit_target"] == "rejected_candidates"
 
 
 def test_review_queue_persists_freshness_evidence_from_validation(tmp_path, monkeypatch):
@@ -434,6 +529,38 @@ def test_no_token_blocker_clears_after_token_resolution(tmp_path, monkeypatch):
     assert resolved_row["entry_status"] == "OK"
 
 
+def test_missing_token_advisory_emits_without_schema_warning(tmp_path, monkeypatch, caplog):
+    qpath = tmp_path / "review_queue.json"
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
+    monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (155.0, 100.0))
+    monkeypatch.setattr(review_queue.time, "time", lambda: 101.0)
+
+    trade = _make_trade(
+        trade_id="T-MISSING-TOKEN-SCHEMA",
+        symbol="NIFTY",
+        instrument_token=None,
+        tradingsymbol="NIFTY26MAR24600PE",
+        expiry_date="2026-03-26",
+        expiry="2026-03-26",
+        instrument_id="NIFTY26MAR24600PE",
+    )
+
+    with caplog.at_level("WARNING"):
+        review_queue.add_to_queue(trade)
+
+    payload = json.loads(suggestions_path.read_text().strip())
+    assert payload["display_entry"] == 150.0
+    assert payload["display_entry_status"] == "non_executable"
+    assert payload["execution_entry"] is None
+    assert "advisory_queue_schema_error" not in caplog.text
+    assert "advisory_emit_schema_error" not in caplog.text
+
+
 def test_entry_populates_after_token_and_quote_recovery(tmp_path, monkeypatch):
     reset_blocker_registries()
     qpath = tmp_path / "review_queue.json"
@@ -671,6 +798,33 @@ def test_advisory_rest_fallback_is_rate_limited(tmp_path, monkeypatch):
     assert calls["count"] == 1
     assert rows[0]["entry_status"] == "REST_FALLBACK"
     assert rows[0]["entry"] == 123.45
+
+
+def test_rest_fallback_emits_without_schema_warning(tmp_path, monkeypatch, caplog):
+    qpath = tmp_path / "review_queue.json"
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
+    monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(review_queue, "_ADVISORY_REST_LTP_CACHE", {})
+    monkeypatch.setattr(review_queue, "_ADVISORY_REST_LTP_LAST_ATTEMPT", {})
+    monkeypatch.setattr(review_queue, "_fetch_option_ltp_rest", lambda _tradingsymbol: (123.45, time.time()))
+
+    with caplog.at_level("WARNING"):
+        review_queue.add_to_queue(
+            _make_trade(instrument_token=77123, tradingsymbol="NIFTY26MAR24600PE"),
+            extra={"entry": 100.95},
+        )
+
+    rows = json.loads(qpath.read_text())
+    payload = json.loads(suggestions_path.read_text().strip())
+    assert rows[0]["entry_status"] == "REST_FALLBACK"
+    assert payload["display_entry"] == 123.45
+    assert payload["display_entry_status"] == "non_executable"
+    assert "advisory_queue_schema_error" not in caplog.text
+    assert "advisory_emit_schema_error" not in caplog.text
 
 
 def test_relaxed_mode_allows_rest_fallback_when_subscription_fails(tmp_path, monkeypatch):
@@ -1504,6 +1658,39 @@ def test_synthetic_offhours_row_skips_price_mismatch_and_marks_offhours_syntheti
     assert rows[0]["validation_reference_price"] == 225.15
     assert rows[0]["validation_reference_source"] == "synthetic_offhours"
     assert rows[0]["current_ltp"] is None
+
+
+def test_offhours_synthetic_emits_without_schema_warning(tmp_path, monkeypatch, caplog):
+    qpath = tmp_path / "review_queue.json"
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
+    monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (None, None))
+
+    trade = _make_trade(
+        trade_id="T-SYNTH-SCHEMA",
+        instrument_token=99144,
+        tradingsymbol="NIFTY26MAR22450CE",
+        instrument_id="NIFTY26MAR22450CE",
+        symbol="NIFTY",
+        entry=100.95,
+        entry_price=225.15,
+        expected_entry=None,
+        option_ltp_source="synthetic_offhours",
+        quote_source="synthetic_offhours",
+    )
+
+    with caplog.at_level("WARNING"):
+        review_queue.add_to_queue(trade)
+
+    payload = json.loads(suggestions_path.read_text().strip())
+    assert payload["display_entry"] == 225.15
+    assert payload["display_entry_status"] == "non_executable"
+    assert payload["entry_status"] == "non_executable"
+    assert "advisory_queue_schema_error" not in caplog.text
+    assert "advisory_emit_schema_error" not in caplog.text
 
 
 def test_synthetic_offhours_row_upgrades_to_live_tick_store_when_fresh_quote_exists(tmp_path, monkeypatch):

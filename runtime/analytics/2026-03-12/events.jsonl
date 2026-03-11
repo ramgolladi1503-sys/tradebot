@@ -1,0 +1,1 @@
+{"broker_order_id": null, "desk_id": "DEFAULT", "event_type": "EXECUTION_FILL", "mode": "PAPER", "order_id": "ord_6592f7f9d82d4e099c83baa1ad4a8160", "price": 101.0, "qty": 10.0, "run_id": "UNKNOWN_RUN", "side": "BUY", "symbol": "NIFTY", "trade_id": "T-STATE-FILL", "ts_utc": "2026-03-11T20:29:18.150679Z"}

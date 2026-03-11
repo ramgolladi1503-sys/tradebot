@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+import json
+
 from config import config as cfg
+from core import review_queue
 import strategies.trade_builder as trade_builder_module
 from strategies.trade_builder import TradeBuilder
 
@@ -108,6 +112,240 @@ def _base_market_data(option_ltp: float) -> dict:
             }
         ],
     }
+
+
+_STAGED_CONFIDENCE_FIELDS = (
+    "confidence_model_raw",
+    "confidence_model_component",
+    "confidence_micro_component",
+    "confidence_micro_blend_method",
+    "confidence_after_micro",
+    "confidence_after_alpha",
+    "confidence_after_latency",
+    "confidence_before_soft_veto",
+    "confidence_after_soft_veto",
+    "confidence_penalty_soft_veto_total",
+    "confidence_penalty_soft_veto_reasons",
+    "confidence_gate_threshold",
+    "confidence_raw_gate_threshold",
+    "confidence_final_gate_threshold",
+    "confidence_rejection_stage",
+    "confidence_base",
+    "confidence_penalty_total",
+    "confidence_penalty_reasons",
+)
+
+
+def _serialize_trade_row(tmp_path, monkeypatch, trade):
+    qpath = tmp_path / "review_queue.json"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "ENABLE_EQUITIES", True, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
+    review_queue.add_to_queue(asdict(trade))
+    return json.loads(qpath.read_text())[-1]
+
+
+def _assert_staged_confidence_fields_present(row: dict):
+    for key in _STAGED_CONFIDENCE_FIELDS:
+        assert key in row
+
+
+def build_id(symbol: str, expiry: str, strike: int, opt_type: str) -> str:
+    return f"{symbol}|OPT|{expiry}|{strike}|{opt_type}"
+
+
+def _make_quick_synth_trade(builder: TradeBuilder, market_data: dict):
+    symbol = str(market_data["symbol"])
+    opt_type = "CE"
+    underlying_spot = 25000.0
+    spot_source = "ltp"
+    ts = "UNIT"
+    expiry_resolved = "2026-02-26"
+    step = (getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}).get(symbol, getattr(cfg, "STRIKE_STEP", 50))
+    atm_strike = int(round(float(underlying_spot) / step) * step) if step else 0
+    contract = builder._resolve_option_contract(symbol, atm_strike, opt_type, expiry_resolved, market_data)
+    expiry_resolved = contract.get("expiry") or expiry_resolved
+    tradingsymbol = contract.get("tradingsymbol")
+    instrument_token = contract.get("instrument_token")
+    instrument_id = contract.get("instrument_id")
+    instrument_type, _, qty_units, ident_err = builder._identity_fields(symbol, "OPT", expiry_resolved, atm_strike, opt_type, 1)
+    assert ident_err is None
+    assert tradingsymbol
+    assert instrument_id
+    min_p, max_p = (getattr(cfg, "PREMIUM_BANDS", {}) or {}).get(
+        symbol,
+        (getattr(cfg, "MIN_PREMIUM", 40), getattr(cfg, "MAX_PREMIUM", 150)),
+    )
+    ltp_opt = max(min_p, min(max_p, float(underlying_spot) * 0.004))
+    bid = round(ltp_opt * 0.995, 2)
+    ask = round(ltp_opt * 1.005, 2)
+    mark_price = round((bid + ask) / 2.0, 2)
+    synthetic_opt = {
+        "bid": bid,
+        "ask": ask,
+        "ltp": mark_price,
+        "last_price": mark_price,
+        "quote_ok": True,
+        "quote_live": True,
+        "volume": 1000,
+        "spread_pct": ((ask - bid) / mark_price) if mark_price else None,
+    }
+    entry_price = ask
+    entry_price, entry_condition, entry_ref_price = builder._apply_entry_trigger(entry_price, side="BUY", quick_mode=True)
+    option_risk = builder._option_risk_proxy(entry_price, bid, ask)
+    stop_loss, target = builder._opt_risk_levels(entry_price, bid, ask, option_risk, stop_mult=1.0, target_mult=1.5)
+    intent = builder.trade_intent_flags(market_data, opt={"quote_ok": True}, additional_blockers=[])
+    quick_final_gate_threshold = builder._final_confidence_gate_threshold("NEUTRAL", quick_mode=True)
+    quick_raw_gate_threshold = builder._raw_confidence_gate_threshold("NEUTRAL", quick_mode=True)
+    synthetic_confidence = float(max(0.5, quick_final_gate_threshold))
+    return trade_builder_module.Trade(
+        trade_id=f"{symbol}-{opt_type}-ATM-QK-{ts}",
+        timestamp=trade_builder_module.datetime.now(),
+        symbol=symbol,
+        instrument="OPT",
+        instrument_type=instrument_type,
+        right=opt_type,
+        instrument_id=instrument_id,
+        instrument_token=instrument_token,
+        strike=atm_strike,
+        expiry=expiry_resolved,
+        expiry_date=expiry_resolved,
+        tradingsymbol=tradingsymbol,
+        option_type=opt_type,
+        side="BUY",
+        entry_price=round(entry_price, 2),
+        stop_loss=round(stop_loss, 2),
+        target=round(target, 2),
+        qty=1,
+        qty_lots=1,
+        qty_units=qty_units,
+        validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
+        capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
+        expected_slippage=0.0,
+        confidence=round(synthetic_confidence, 3),
+        strategy="QUICK_SYNTH",
+        regime=market_data.get("regime", "NEUTRAL"),
+        tier="EXPLORATION",
+        day_type=market_data.get("day_type", "UNKNOWN"),
+        signal_price=None,
+        entry_price_source="ask",
+        expected_entry=round(entry_price, 2),
+        expected_entry_source="ask",
+        **builder._option_liquidity_fields(synthetic_opt),
+        entry_condition=entry_condition,
+        entry_ref_price=entry_ref_price,
+        alpha_confidence=None,
+        alpha_uncertainty=None,
+        size_mult=1.0,
+        tradable=bool(intent["tradable"]),
+        tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+        planning_only=bool(intent["planning_only"]),
+        execution_allowed=bool(intent["execution_allowed"]),
+        reason=intent["execution_reason"],
+        source_flags=dict(intent["source_flags"]),
+        underlying_spot=underlying_spot,
+        spot_source=spot_source,
+        option_ltp_source=None,
+        chain_source=market_data.get("chain_source") or "synthetic",
+        **builder._staged_confidence_payload(
+            confidence=synthetic_confidence,
+            model_raw=synthetic_confidence,
+            model_component=synthetic_confidence,
+            micro_blend_method="model_only",
+            before_soft_veto=synthetic_confidence,
+            after_soft_veto=synthetic_confidence,
+            penalty_soft_veto_total=0.0,
+            penalty_soft_veto_reasons=[],
+            gate_threshold=quick_final_gate_threshold,
+            raw_gate_threshold=quick_raw_gate_threshold,
+            final_gate_threshold=quick_final_gate_threshold,
+            base=synthetic_confidence,
+            penalty_total=0.0,
+            penalty_reasons=[],
+        ),
+    )
+
+
+def _make_equity_fallback_trade(builder: TradeBuilder, market_data: dict):
+    symbol = str(market_data["symbol"])
+    ltp = float(market_data["ltp"])
+    vwap = float(market_data.get("vwap") or ltp)
+    direction = "BUY_CALL"
+    atr = market_data.get("atr", max(1.0, ltp * 0.002))
+    vwap_dist = (ltp - vwap) / vwap if vwap else 0.0
+    base_conf = min(0.8, max(0.5, 0.5 + abs(vwap_dist) * 10))
+    strat_name = "EQ_TREND"
+    side = "BUY" if direction == "BUY_CALL" else "SELL"
+    stop_loss = ltp - atr if side == "BUY" else ltp + atr
+    target = ltp + atr * 1.5 if side == "BUY" else ltp - atr * 1.5
+    instrument_type, instrument_id, qty_units, ident_err = builder._identity_fields(
+        symbol,
+        "EQ",
+        getattr(cfg, "FUT_EXPIRY", ""),
+        None,
+        None,
+        1,
+    )
+    assert ident_err is None
+    intent = builder.trade_intent_flags(
+        market_data,
+        opt={"quote_ok": bool(market_data.get("quote_ok", True)), "quote_age_sec": market_data.get("quote_age_sec")},
+    )
+    final_gate_threshold = builder._final_confidence_gate_threshold(market_data.get("regime"), quick_mode=False)
+    return trade_builder_module.Trade(
+        trade_id=f"{symbol}-FUT-UNIT",
+        timestamp=trade_builder_module.datetime.now(),
+        symbol=symbol,
+        instrument="EQ",
+        instrument_type=instrument_type,
+        instrument_id=instrument_id,
+        instrument_token=None,
+        strike=0,
+        expiry=str(getattr(cfg, "FUT_EXPIRY", "")),
+        side=side,
+        entry_price=round(ltp, 2),
+        stop_loss=round(stop_loss, 2),
+        target=round(target, 2),
+        qty=1,
+        qty_lots=1,
+        qty_units=qty_units,
+        validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
+        capital_at_risk=round(abs(ltp - stop_loss), 2),
+        expected_slippage=0.0,
+        confidence=round(base_conf, 3),
+        strategy=strat_name,
+        regime=market_data.get("regime", "NEUTRAL"),
+        tier="MAIN",
+        day_type=market_data.get("day_type", "UNKNOWN"),
+        alpha_confidence=None,
+        alpha_uncertainty=None,
+        size_mult=1.0,
+        tradable=bool(intent["tradable"]),
+        tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),
+        planning_only=bool(intent["planning_only"]),
+        execution_allowed=bool(intent["execution_allowed"]),
+        reason=intent["execution_reason"],
+        source_flags=dict(intent["source_flags"]),
+        **builder._staged_confidence_payload(
+            confidence=base_conf,
+            model_raw=base_conf,
+            model_component=base_conf,
+            micro_blend_method="model_only",
+            before_soft_veto=base_conf,
+            after_soft_veto=base_conf,
+            penalty_soft_veto_total=0.0,
+            penalty_soft_veto_reasons=[],
+            gate_threshold=final_gate_threshold,
+            final_gate_threshold=final_gate_threshold,
+            base=base_conf,
+            penalty_total=0.0,
+            penalty_reasons=[],
+        ),
+    )
 
 
 def test_paper_orb_pending_is_soft_veto(monkeypatch):
@@ -375,3 +613,108 @@ def test_micro_confidence_fallback_allows_missing_model(monkeypatch):
     assert float(trade.confidence_micro_component) == 0.58
     assert trade.confidence_micro_blend_method == "micro_fallback"
     assert float(trade.confidence_after_micro) == 0.58
+
+
+def test_planning_fallback_trade_serializes_staged_confidence_fields(tmp_path, monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    market_data = _base_market_data(option_ltp=100.0)
+    market_data["option_chain"] = []
+
+    trade = builder._build_planning_no_signal_trade(market_data, ltp=25000.0, vwap=24990.0)
+
+    assert trade is not None
+    row = _serialize_trade_row(tmp_path, monkeypatch, trade)
+    _assert_staged_confidence_fields_present(row)
+    assert row["strategy"] == "NO_SIGNAL_PLANNING"
+    assert row["confidence_model_raw"] == row["confidence"]
+    assert row["confidence_after_soft_veto"] == row["confidence"]
+    assert row["confidence_micro_component"] is None
+    assert row["confidence_after_micro"] is None
+    assert row["confidence_penalty_soft_veto_total"] == 0.0
+
+
+def test_quick_synthetic_fallback_serializes_staged_confidence_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN", 0.44, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_FINAL_CONFIDENCE_MIN", 0.31, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder, "_decorate_trade_context", lambda trade, *_args, **_kwargs: trade, raising=True)
+    monkeypatch.setattr(builder, "_resolve_underlying_spot", lambda *_args, **_kwargs: (25000.0, "ltp", True, None), raising=True)
+    monkeypatch.setattr(
+        builder,
+        "_resolve_option_contract",
+        lambda symbol, strike, opt_type, expiry, market_data: {
+            "expiry": expiry or "2026-02-26",
+            "tradingsymbol": f"{symbol}{strike}{opt_type}",
+            "instrument_token": 123456,
+            "instrument_id": build_id(symbol, expiry or "2026-02-26", strike, opt_type),
+        },
+        raising=True,
+    )
+    monkeypatch.setattr(builder.execution, "estimate_slippage", lambda *_args, **_kwargs: 0.0, raising=False)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    market_data["option_chain"] = []
+    market_data["chain_source"] = "live"
+
+    trade = _make_quick_synth_trade(builder, market_data)
+
+    assert trade is not None
+    row = _serialize_trade_row(tmp_path, monkeypatch, trade)
+    _assert_staged_confidence_fields_present(row)
+    assert row["strategy"] == "QUICK_SYNTH"
+    assert row["confidence_model_raw"] == trade.confidence_model_raw
+    assert row["confidence_micro_blend_method"] == "model_only"
+    assert row["confidence_raw_gate_threshold"] == 0.35
+    assert abs(float(row["confidence_final_gate_threshold"]) - 0.31) < 0.011
+
+
+def test_equity_fallback_trade_serializes_staged_confidence_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "ENABLE_EQUITIES", True, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_FINAL_CONFIDENCE_MIN", 0.30, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+    monkeypatch.setattr(builder, "_decorate_trade_context", lambda trade, *_args, **_kwargs: trade, raising=True)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    market_data["instrument"] = "EQ"
+    market_data["option_chain"] = []
+
+    trade = _make_equity_fallback_trade(builder, market_data)
+
+    assert trade is not None
+    row = _serialize_trade_row(tmp_path, monkeypatch, trade)
+    _assert_staged_confidence_fields_present(row)
+    assert row["strategy"] == "EQ_TREND"
+    assert row["confidence_model_raw"] == trade.confidence_model_raw
+    assert row["confidence_after_alpha"] is None
+    assert row["confidence_final_gate_threshold"] == 0.30
+    assert row["confidence_penalty_total"] == 0.0
+
+
+def test_main_path_trade_serializes_staged_confidence_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN", 0.44, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_FINAL_CONFIDENCE_MIN", 0.31, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_PROBA_MULT", {"TREND": 1.0}, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.52))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    trade = builder.build(_base_market_data(option_ltp=100.0), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    row = _serialize_trade_row(tmp_path, monkeypatch, trade)
+    _assert_staged_confidence_fields_present(row)
+    assert row["strategy"] == trade.strategy
+    assert row["confidence_model_raw"] == 0.52
+    assert row["confidence_after_soft_veto"] == trade.confidence_after_soft_veto
+    assert row["confidence_raw_gate_threshold"] == 0.44
+    assert abs(float(row["confidence_final_gate_threshold"]) - 0.31) < 0.011
