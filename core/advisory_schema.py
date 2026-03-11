@@ -253,6 +253,41 @@ def _derive_timestamp(payload: dict[str, Any]) -> str | None:
 
 
 def _legacy_entry_state(payload: dict[str, Any]) -> dict[str, Any]:
+    canonical_fields_present = any(
+        key in payload
+        for key in (
+            "execution_entry",
+            "execution_entry_source",
+            "execution_entry_status",
+            "display_entry",
+            "display_entry_source",
+            "display_entry_status",
+            "entry_reason",
+            "entry_clear_reason",
+        )
+    )
+    if canonical_fields_present:
+        execution_entry = _safe_float(payload.get("execution_entry"))
+        execution_entry_source = _safe_lower_text(payload.get("execution_entry_source")) or "none"
+        execution_entry_status = _safe_lower_text(payload.get("execution_entry_status")) or "missing"
+        display_entry = _safe_float(payload.get("display_entry"))
+        display_entry_source = _safe_lower_text(payload.get("display_entry_source")) or "none"
+        display_entry_status = _safe_lower_text(payload.get("display_entry_status")) or "missing"
+        return {
+            "execution_entry": execution_entry,
+            "execution_entry_source": execution_entry_source,
+            "execution_entry_status": execution_entry_status,
+            "display_entry": display_entry,
+            "display_entry_source": display_entry_source,
+            "display_entry_status": display_entry_status,
+            "entry_reason": _normalize_text(payload.get("entry_reason")),
+            "entry_clear_reason": _normalize_text(payload.get("entry_clear_reason")),
+            "entry": display_entry,
+            "entry_status": display_entry_status,
+            "entry_source": display_entry_source,
+            "display_max_age_sec": _safe_float(payload.get("display_max_age_sec")),
+            "execution_max_age_sec": _safe_float(payload.get("execution_max_age_sec")),
+        }
     quote_age_sec = _safe_float(payload.get("quote_age_sec"))
     if quote_age_sec is None:
         quote_age_sec = _safe_float(payload.get("price_age_sec"))
@@ -369,6 +404,24 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("confidence_raw", _safe_float(payload.get("confidence_raw")))
     if out.get("confidence_raw") in (None, "", "None"):
         out["confidence_raw"] = _safe_float(out.get("confidence"))
+    out.setdefault("confidence_model_raw", _safe_float(payload.get("confidence_model_raw")))
+    out.setdefault("confidence_model_component", _safe_float(payload.get("confidence_model_component")))
+    out.setdefault("confidence_micro_component", _safe_float(payload.get("confidence_micro_component")))
+    out.setdefault("confidence_micro_blend_method", _normalize_text(payload.get("confidence_micro_blend_method")))
+    out.setdefault("confidence_after_micro", _safe_float(payload.get("confidence_after_micro")))
+    out.setdefault("confidence_after_alpha", _safe_float(payload.get("confidence_after_alpha")))
+    out.setdefault("confidence_after_latency", _safe_float(payload.get("confidence_after_latency")))
+    out.setdefault("confidence_before_soft_veto", _safe_float(payload.get("confidence_before_soft_veto")))
+    out.setdefault("confidence_after_soft_veto", _safe_float(payload.get("confidence_after_soft_veto")))
+    out.setdefault("confidence_penalty_soft_veto_total", _safe_float(payload.get("confidence_penalty_soft_veto_total")))
+    out.setdefault(
+        "confidence_penalty_soft_veto_reasons",
+        _normalize_blockers(payload.get("confidence_penalty_soft_veto_reasons")),
+    )
+    out.setdefault("confidence_gate_threshold", _safe_float(payload.get("confidence_gate_threshold")))
+    out.setdefault("confidence_raw_gate_threshold", _safe_float(payload.get("confidence_raw_gate_threshold")))
+    out.setdefault("confidence_final_gate_threshold", _safe_float(payload.get("confidence_final_gate_threshold")))
+    out.setdefault("confidence_rejection_stage", _normalize_text(payload.get("confidence_rejection_stage")))
     out.setdefault("confidence_penalty", _safe_float(payload.get("confidence_penalty")) or 0.0)
     out.setdefault("confidence_final", _safe_float(payload.get("confidence_final")))
     if out.get("confidence_final") in (None, "", "None"):
@@ -413,8 +466,27 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     warnings = _normalize_blockers(out.get("warnings"))
     confidence = _safe_float(out.get("confidence"))
     confidence_raw = _safe_float(out.get("confidence_raw"))
+    confidence_model_raw = _safe_float(out.get("confidence_model_raw"))
+    confidence_model_component = _safe_float(out.get("confidence_model_component"))
+    confidence_micro_component = _safe_float(out.get("confidence_micro_component"))
+    confidence_micro_blend_method = _normalize_text(out.get("confidence_micro_blend_method"))
+    confidence_after_micro = _safe_float(out.get("confidence_after_micro"))
+    confidence_after_alpha = _safe_float(out.get("confidence_after_alpha"))
+    confidence_after_latency = _safe_float(out.get("confidence_after_latency"))
+    confidence_before_soft_veto = _safe_float(out.get("confidence_before_soft_veto"))
+    confidence_after_soft_veto = _safe_float(out.get("confidence_after_soft_veto"))
+    confidence_penalty_soft_veto_total = _safe_float(out.get("confidence_penalty_soft_veto_total"))
+    confidence_penalty_soft_veto_reasons = _normalize_blockers(out.get("confidence_penalty_soft_veto_reasons"))
+    confidence_gate_threshold = _safe_float(out.get("confidence_gate_threshold"))
+    confidence_raw_gate_threshold = _safe_float(out.get("confidence_raw_gate_threshold"))
+    confidence_final_gate_threshold = _safe_float(out.get("confidence_final_gate_threshold"))
+    confidence_rejection_stage = _normalize_text(out.get("confidence_rejection_stage"))
     confidence_penalty = _safe_float(out.get("confidence_penalty"))
     confidence_final = _safe_float(out.get("confidence_final"))
+    threshold_display = _safe_float(out.get("threshold_display"))
+    threshold_advisory = _safe_float(out.get("threshold_advisory"))
+    threshold_execution = _safe_float(out.get("threshold_execution"))
+    confidence_vs_threshold_reason = _normalize_text(out.get("confidence_vs_threshold_reason"))
     quote_age_sec = _safe_float(out.get("quote_age_sec"))
     entry = _safe_float(out.get("entry"))
     execution_status = str(out.get("execution_status") or "").strip().lower()
@@ -466,10 +538,45 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         raise AdvisorySchemaError("confidence must be within [0.0, 1.0]")
     if confidence_raw is not None and not (0.0 <= confidence_raw <= 1.0):
         raise AdvisorySchemaError("confidence_raw must be within [0.0, 1.0]")
+    for field_name, value in (
+        ("confidence_model_raw", confidence_model_raw),
+        ("confidence_model_component", confidence_model_component),
+        ("confidence_micro_component", confidence_micro_component),
+        ("confidence_after_micro", confidence_after_micro),
+        ("confidence_after_alpha", confidence_after_alpha),
+        ("confidence_after_latency", confidence_after_latency),
+        ("confidence_before_soft_veto", confidence_before_soft_veto),
+        ("confidence_after_soft_veto", confidence_after_soft_veto),
+        ("confidence_penalty_soft_veto_total", confidence_penalty_soft_veto_total),
+        ("confidence_gate_threshold", confidence_gate_threshold),
+        ("confidence_raw_gate_threshold", confidence_raw_gate_threshold),
+        ("confidence_final_gate_threshold", confidence_final_gate_threshold),
+    ):
+        if value is not None and not (0.0 <= value <= 1.0):
+            raise AdvisorySchemaError(f"{field_name} must be within [0.0, 1.0]")
     if confidence_penalty is not None and confidence_penalty < 0.0:
         raise AdvisorySchemaError("confidence_penalty must be non-negative")
     if confidence_final is not None and not (0.0 <= confidence_final <= 1.0):
         raise AdvisorySchemaError("confidence_final must be within [0.0, 1.0]")
+    for field_name, value in (
+        ("threshold_display", threshold_display),
+        ("threshold_advisory", threshold_advisory),
+        ("threshold_execution", threshold_execution),
+    ):
+        if value is not None and not (0.0 <= value <= 1.0):
+            raise AdvisorySchemaError(f"{field_name} must be within [0.0, 1.0]")
+    if (
+        threshold_display is not None
+        and threshold_advisory is not None
+        and threshold_display > threshold_advisory
+    ):
+        raise AdvisorySchemaError("threshold_display cannot exceed threshold_advisory")
+    if (
+        threshold_advisory is not None
+        and threshold_execution is not None
+        and threshold_advisory > threshold_execution
+    ):
+        raise AdvisorySchemaError("threshold_advisory cannot exceed threshold_execution")
     if quote_age_sec is not None and quote_age_sec < 0.0:
         raise AdvisorySchemaError("quote_age_sec must be non-negative")
     if market_open is None:
@@ -528,8 +635,27 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["entry_status"] = display_entry_status
     out["confidence"] = confidence
     out["confidence_raw"] = confidence_raw
+    out["confidence_model_raw"] = confidence_model_raw
+    out["confidence_model_component"] = confidence_model_component
+    out["confidence_micro_component"] = confidence_micro_component
+    out["confidence_micro_blend_method"] = confidence_micro_blend_method
+    out["confidence_after_micro"] = confidence_after_micro
+    out["confidence_after_alpha"] = confidence_after_alpha
+    out["confidence_after_latency"] = confidence_after_latency
+    out["confidence_before_soft_veto"] = confidence_before_soft_veto
+    out["confidence_after_soft_veto"] = confidence_after_soft_veto
+    out["confidence_penalty_soft_veto_total"] = confidence_penalty_soft_veto_total
+    out["confidence_penalty_soft_veto_reasons"] = confidence_penalty_soft_veto_reasons
+    out["confidence_gate_threshold"] = confidence_gate_threshold
+    out["confidence_raw_gate_threshold"] = confidence_raw_gate_threshold
+    out["confidence_final_gate_threshold"] = confidence_final_gate_threshold
+    out["confidence_rejection_stage"] = confidence_rejection_stage
     out["confidence_penalty"] = float(confidence_penalty or 0.0)
     out["confidence_final"] = confidence_final
+    out["threshold_display"] = threshold_display
+    out["threshold_advisory"] = threshold_advisory
+    out["threshold_execution"] = threshold_execution
+    out["confidence_vs_threshold_reason"] = confidence_vs_threshold_reason
     out["readiness"] = readiness
     out["hard_blockers"] = hard_blockers
     out["soft_penalties"] = soft_penalties

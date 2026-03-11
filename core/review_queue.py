@@ -13,7 +13,11 @@ from core.paths import logs_dir, data_root
 from core.upstox_resolver import resolve_upstox_key
 from core.market_calendar import choose_nearest_available_expiry
 from core.trade_schema import build_instrument_id
-from core.trade_permission import build_permission_payload
+from core.trade_permission import (
+    build_permission_payload,
+    classify_confidence_vs_threshold,
+    resolve_confidence_thresholds,
+)
 from core.trade_identity import compute_trade_key, derive_strategy_id
 from core.option_token_resolver import TokenCoverageError, resolve_option_token
 from core.option_liquidity_cache import hydrate_option_liquidity_fields
@@ -69,6 +73,26 @@ def _is_entry_status_blocking(status: str | None) -> bool:
     if not status_key:
         return False
     return status_key not in _NON_BLOCKING_ENTRY_STATUSES
+
+
+def _log_entry_lifecycle_resolution(entry: dict) -> None:
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+    try:
+        logger.debug(
+            "entry_lifecycle_resolved trade_id=%s symbol=%s execution_entry=%s execution_entry_source=%s execution_entry_status=%s display_entry=%s display_entry_source=%s display_entry_status=%s entry_status=%s",
+            entry.get("trade_id"),
+            entry.get("symbol"),
+            entry.get("execution_entry"),
+            entry.get("execution_entry_source"),
+            entry.get("execution_entry_status"),
+            entry.get("display_entry"),
+            entry.get("display_entry_source"),
+            entry.get("display_entry_status"),
+            entry.get("entry_status"),
+        )
+    except Exception:
+        logger.debug("entry_lifecycle_resolved trade_id=%s", entry.get("trade_id"))
 
 
 def _coerce_instrument_token(value) -> int | None:
@@ -505,7 +529,8 @@ def _log_low_global_conf_once_per_symbol_minute(
         if not sym:
             return
         global_val = _safe_float(global_conf)
-        if global_val is None or global_val >= 0.25:
+        advisory_threshold = float(getattr(cfg, "CONFIDENCE_THRESHOLD_ADVISORY", 0.15))
+        if global_val is None or global_val >= advisory_threshold:
             return
         minute_bucket = int(time.time() // 60)
         if _LOW_GLOBAL_CONF_LOGGED_MINUTE_BY_SYMBOL.get(sym) == minute_bucket:
@@ -1243,6 +1268,59 @@ def _dedupe_issue_codes(values) -> list[str]:
     return out
 
 
+def _derive_confidence_rejection_stage(entry: dict) -> str | None:
+    if not isinstance(entry, dict):
+        return None
+    hard_blockers = list(entry.get("hard_blockers") or [])
+    if hard_blockers:
+        return "hard_gate"
+    raw_threshold = _safe_float(entry.get("confidence_raw_gate_threshold"))
+    final_threshold = _safe_float(entry.get("confidence_final_gate_threshold"))
+    stages = [
+        ("model_raw", _safe_float(entry.get("confidence_model_raw"))),
+        ("micro", _safe_float(entry.get("confidence_after_micro"))),
+        ("alpha", _safe_float(entry.get("confidence_after_alpha"))),
+        ("latency", _safe_float(entry.get("confidence_after_latency"))),
+        ("soft_veto", _safe_float(entry.get("confidence_after_soft_veto"))),
+    ]
+    if raw_threshold is not None:
+        previous_value = None
+        for stage_name, stage_value in stages:
+            if stage_value is None:
+                continue
+            if stage_value < raw_threshold and (previous_value is None or previous_value >= raw_threshold):
+                return stage_name
+            previous_value = stage_value
+    final_conf = _safe_float(entry.get("confidence_final"))
+    after_soft_veto = _safe_float(entry.get("confidence_after_soft_veto"))
+    if final_threshold is not None and final_conf is not None and final_conf < final_threshold:
+        if after_soft_veto is not None and after_soft_veto < final_threshold:
+            return "soft_veto"
+        return "final_gate"
+    if str(entry.get("permission_reason") or "").strip().upper() == "SOFT_CONFIDENCE_BELOW_THRESHOLD":
+        return "final_gate"
+    return None
+
+
+def _log_confidence_rejection(entry: dict) -> None:
+    if not isinstance(entry, dict):
+        return
+    stage = str(entry.get("confidence_rejection_stage") or "").strip()
+    if not stage:
+        return
+    logger.info(
+        "confidence_rejection symbol=%s strike=%s type=%s stage=%s raw_conf=%s final_conf=%s raw_threshold=%s final_threshold=%s",
+        entry.get("symbol"),
+        entry.get("strike"),
+        entry.get("option_type") or entry.get("type") or entry.get("right"),
+        stage,
+        _safe_float(entry.get("confidence_raw")),
+        _safe_float(entry.get("confidence_final")),
+        _safe_float(entry.get("confidence_raw_gate_threshold")),
+        _safe_float(entry.get("confidence_final_gate_threshold")),
+    )
+
+
 def _current_issue_codes(entry: dict) -> list[str]:
     issue_codes = _dedupe_issue_codes(list(entry.get("blockers") or []) + _current_non_lifecycle_blockers(entry))
     for field in ("validation_issue_code", "quote_validation_status", "hard_reason", "final_blocker", "entry_status"):
@@ -1287,6 +1365,21 @@ def _apply_issue_classification(
             existing_confidence_penalty = max(0.0, float(confidence_raw) - float(softened_confidence))
     if existing_confidence_penalty is None:
         existing_confidence_penalty = 0.0
+    confidence_before_soft_veto = _safe_float(entry.get("confidence_before_soft_veto"))
+    if confidence_before_soft_veto is None:
+        confidence_before_soft_veto = confidence_raw
+    confidence_after_soft_veto = _safe_float(entry.get("confidence_after_soft_veto"))
+    if confidence_after_soft_veto is None and confidence_before_soft_veto is not None:
+        confidence_after_soft_veto = max(
+            0.0,
+            min(1.0, float(confidence_before_soft_veto) - float(existing_confidence_penalty)),
+        )
+    confidence_penalty_soft_veto_total = _safe_float(entry.get("confidence_penalty_soft_veto_total"))
+    if confidence_penalty_soft_veto_total is None:
+        confidence_penalty_soft_veto_total = 0.0
+    confidence_penalty_soft_veto_reasons = _dedupe_issue_codes(
+        list(entry.get("confidence_penalty_soft_veto_reasons") or [])
+    )
     quote_age_sec = _safe_float(
         entry.get("quote_age_sec")
         or entry.get("price_age_sec")
@@ -1311,7 +1404,8 @@ def _apply_issue_classification(
         "advisory_id": entry.get("advisory_id") or entry.get("trade_id") or entry.get("trade_key"),
         "symbol": entry.get("symbol"),
     }
-    hard_blockers: list[str] = []
+    gating_payload = entry.get("gating") if isinstance(entry.get("gating"), dict) else {}
+    hard_blockers: list[str] = _dedupe_issue_codes(gating_payload.get("hard_reasons"))
     soft_penalties: list[str] = []
     warnings: list[str] = []
     issue_penalty = 0.0
@@ -1392,6 +1486,10 @@ def _apply_issue_classification(
         or entry.get("quote_source")
     )
     entry["issue_classifications"] = issue_classifications
+    entry["confidence_before_soft_veto"] = confidence_before_soft_veto
+    entry["confidence_after_soft_veto"] = confidence_after_soft_veto
+    entry["confidence_penalty_soft_veto_total"] = round(float(confidence_penalty_soft_veto_total), 6)
+    entry["confidence_penalty_soft_veto_reasons"] = confidence_penalty_soft_veto_reasons
     target_codes = {code for code in hard_blockers if code in TARGET_BLOCKER_CODES}
     final_blocker = str(entry.get("final_blocker") or "").strip()
     if target_codes:
@@ -1490,6 +1588,29 @@ def _apply_permission_state(
         entry["permission"] = new_permission
     if reason_text:
         entry["permission_reason"] = reason_text
+    return entry
+
+
+def _apply_confidence_threshold_fields(
+    entry: dict,
+    *,
+    confidence_value: float | None,
+    execution_mode: str,
+    hard_blockers: list[str] | None = None,
+    entry_block_reason: str | None = None,
+) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    thresholds = resolve_confidence_thresholds(execution_mode)
+    entry["threshold_display"] = float(thresholds["display"])
+    entry["threshold_advisory"] = float(thresholds["advisory"])
+    entry["threshold_execution"] = float(thresholds["execution"])
+    entry["confidence_vs_threshold_reason"] = classify_confidence_vs_threshold(
+        confidence_value,
+        execution_mode=thresholds["mode"],
+        hard_blocker=bool(hard_blockers),
+        entry_blocked=bool(entry_block_reason) and not bool(hard_blockers),
+    )
     return entry
 
 
@@ -2065,6 +2186,14 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "expected_entry": get_attr(trade, "expected_entry", None),
         "expected_entry_source": get_attr(trade, "expected_entry_source", None),
         "fill_entry": get_attr(trade, "fill_entry", None),
+        "execution_entry": get_attr(trade, "execution_entry", None),
+        "execution_entry_source": get_attr(trade, "execution_entry_source", None),
+        "execution_entry_status": get_attr(trade, "execution_entry_status", None),
+        "display_entry": get_attr(trade, "display_entry", None),
+        "display_entry_source": get_attr(trade, "display_entry_source", None),
+        "display_entry_status": get_attr(trade, "display_entry_status", None),
+        "entry_reason": get_attr(trade, "entry_reason", None),
+        "entry_clear_reason": get_attr(trade, "entry_clear_reason", None),
         "price_age_sec": get_attr(trade, "price_age_sec", None),
         "quote_age_sec": get_attr(trade, "quote_age_sec", None),
         "entry_status": get_attr(trade, "entry_status", None),
@@ -2091,6 +2220,21 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "permission_reason": get_attr(trade, "permission_reason", None),
         "countertrend": get_attr(trade, "countertrend", None),
         "raw_signal_confidence": get_attr(trade, "raw_signal_confidence", None),
+        "confidence_model_raw": get_attr(trade, "confidence_model_raw", None),
+        "confidence_model_component": get_attr(trade, "confidence_model_component", None),
+        "confidence_micro_component": get_attr(trade, "confidence_micro_component", None),
+        "confidence_micro_blend_method": get_attr(trade, "confidence_micro_blend_method", None),
+        "confidence_after_micro": get_attr(trade, "confidence_after_micro", None),
+        "confidence_after_alpha": get_attr(trade, "confidence_after_alpha", None),
+        "confidence_after_latency": get_attr(trade, "confidence_after_latency", None),
+        "confidence_before_soft_veto": get_attr(trade, "confidence_before_soft_veto", None),
+        "confidence_after_soft_veto": get_attr(trade, "confidence_after_soft_veto", None),
+        "confidence_penalty_soft_veto_total": get_attr(trade, "confidence_penalty_soft_veto_total", None),
+        "confidence_penalty_soft_veto_reasons": get_attr(trade, "confidence_penalty_soft_veto_reasons", None),
+        "confidence_gate_threshold": get_attr(trade, "confidence_gate_threshold", None),
+        "confidence_raw_gate_threshold": get_attr(trade, "confidence_raw_gate_threshold", None),
+        "confidence_final_gate_threshold": get_attr(trade, "confidence_final_gate_threshold", None),
+        "confidence_rejection_stage": get_attr(trade, "confidence_rejection_stage", None),
         "confidence_base": get_attr(trade, "confidence_base", None),
         "confidence_penalty_total": get_attr(trade, "confidence_penalty_total", None),
         "confidence_penalty_reasons": get_attr(trade, "confidence_penalty_reasons", None),
@@ -2402,6 +2546,7 @@ def add_to_queue(trade, queue_path=None, extra=None):
             orb_bias=orb_bias,
             option_type=option_type,
             side=side,
+            execution_mode=mode_for_entry,
             last_candle=last_candle if isinstance(last_candle, dict) else None,
             atr_ratio=atr_ratio,
         )
@@ -2413,6 +2558,12 @@ def add_to_queue(trade, queue_path=None, extra=None):
         entry["permission_reason_base"] = str(entry.get("permission_reason") or "")
         entry["countertrend"] = perm.get("countertrend")
         entry["raw_signal_confidence"] = raw_conf
+        entry["threshold_display"] = _safe_float(perm.get("threshold_display"))
+        entry["threshold_advisory"] = _safe_float(perm.get("threshold_advisory"))
+        entry["threshold_execution"] = _safe_float(perm.get("threshold_execution"))
+        entry["confidence_vs_threshold_reason"] = str(
+            perm.get("confidence_vs_threshold_reason") or ""
+        )
         if perm.get("global_confidence") is not None:
             entry["confidence"] = perm.get("global_confidence")
         if perm.get("regime_confidence") is not None:
@@ -2501,13 +2652,14 @@ def add_to_queue(trade, queue_path=None, extra=None):
         entry["entry_status"] = entry_status or hard_reason
         entry_status = str(entry.get("entry_status") or "")
 
+    threshold_execution = _safe_float(entry.get("threshold_execution"))
+    if threshold_execution is None:
+        threshold_execution = float(resolve_confidence_thresholds(mode_for_entry)["execution"])
     final_conf_threshold = float(
-        getattr(
-            cfg,
-            "GATING_FINAL_CONFIDENCE_MIN",
-            getattr(cfg, "CONFIDENCE_MIN", 0.55),
-        )
+        getattr(cfg, "GATING_FINAL_CONFIDENCE_MIN", threshold_execution)
     )
+    entry["confidence_raw_gate_threshold"] = _safe_float(entry.get("confidence_raw_gate_threshold"))
+    entry["confidence_final_gate_threshold"] = final_conf_threshold
     gate_final_conf = _safe_float(gate_eval.get("final_confidence"))
     if gate_final_conf is not None:
         entry["global_confidence"] = gate_final_conf
@@ -2536,13 +2688,6 @@ def add_to_queue(trade, queue_path=None, extra=None):
         entry = _apply_manual_approval_state(entry, now_epoch=time.time())
     permission = str(entry.get("permission") or permission or "ADVISORY_ONLY").upper()
     permission_reason = str(entry.get("permission_reason") or permission_reason or "")
-    high_execute_threshold = float(getattr(cfg, "HIGH_EXECUTE_MIN_CONF", 0.65))
-    high_execute_eligible = bool(
-        permission == "EXECUTE"
-        and entry_block_reason is None
-        and global_conf is not None
-        and global_conf >= high_execute_threshold
-    )
     final_action = "BLOCK" if permission == "BLOCK" else (
         "EXECUTE"
         if permission == "EXECUTE" and entry_block_reason is None
@@ -2561,8 +2706,33 @@ def add_to_queue(trade, queue_path=None, extra=None):
         mode_for_entry=mode_for_entry,
         allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
     )
+    entry = _apply_confidence_threshold_fields(
+        entry,
+        confidence_value=_safe_float(entry.get("confidence_final")),
+        execution_mode=mode_for_entry,
+        hard_blockers=list(entry.get("hard_blockers") or []),
+        entry_block_reason=entry_block_reason,
+    )
+    entry["confidence_final_gate_threshold"] = final_conf_threshold
+    entry["confidence_rejection_stage"] = _derive_confidence_rejection_stage(entry)
+    global_conf = _safe_float(entry.get("confidence_final"))
+    permission = str(entry.get("permission") or permission or "ADVISORY_ONLY").upper()
+    permission_reason = str(entry.get("permission_reason") or permission_reason or "")
     entry["status_raw"] = str(entry.get("status_raw") or entry.get("status") or "PLANNING").strip().upper() or "PLANNING"
     entry["status"] = _derive_review_status(entry, fallback_status=entry["status_raw"])
+    high_execute_threshold = float(
+        getattr(
+            cfg,
+            "HIGH_EXECUTE_MIN_CONF",
+            _safe_float(entry.get("threshold_execution")) or 0.30,
+        )
+    )
+    high_execute_eligible = bool(
+        permission == "EXECUTE"
+        and entry_block_reason is None
+        and global_conf is not None
+        and global_conf >= high_execute_threshold
+    )
     high_execute_blockers: list[str] = []
     if global_conf is None or global_conf < high_execute_threshold:
         high_execute_blockers.append("global_conf_below_high_execute")
@@ -2593,6 +2763,25 @@ def add_to_queue(trade, queue_path=None, extra=None):
         "soft_score_adjustment": _safe_float(gate_eval.get("soft_score_adjustment")),
         "final_confidence_after_soft_gates": gate_final_conf,
         "final_confidence_min_threshold": final_conf_threshold,
+        "threshold_display": _safe_float(entry.get("threshold_display")),
+        "threshold_advisory": _safe_float(entry.get("threshold_advisory")),
+        "threshold_execution": _safe_float(entry.get("threshold_execution")),
+        "confidence_model_raw": _safe_float(entry.get("confidence_model_raw")),
+        "confidence_model_component": _safe_float(entry.get("confidence_model_component")),
+        "confidence_micro_component": _safe_float(entry.get("confidence_micro_component")),
+        "confidence_micro_blend_method": entry.get("confidence_micro_blend_method"),
+        "confidence_after_micro": _safe_float(entry.get("confidence_after_micro")),
+        "confidence_after_alpha": _safe_float(entry.get("confidence_after_alpha")),
+        "confidence_after_latency": _safe_float(entry.get("confidence_after_latency")),
+        "confidence_before_soft_veto": _safe_float(entry.get("confidence_before_soft_veto")),
+        "confidence_after_soft_veto": _safe_float(entry.get("confidence_after_soft_veto")),
+        "confidence_penalty_soft_veto_total": _safe_float(entry.get("confidence_penalty_soft_veto_total")),
+        "confidence_penalty_soft_veto_reasons": list(entry.get("confidence_penalty_soft_veto_reasons") or []),
+        "confidence_gate_threshold": _safe_float(entry.get("confidence_gate_threshold")),
+        "confidence_raw_gate_threshold": _safe_float(entry.get("confidence_raw_gate_threshold")),
+        "confidence_final_gate_threshold": _safe_float(entry.get("confidence_final_gate_threshold")),
+        "confidence_rejection_stage": entry.get("confidence_rejection_stage"),
+        "confidence_vs_threshold_reason": entry.get("confidence_vs_threshold_reason"),
         "high_execute_threshold": high_execute_threshold,
         "high_execute_eligible": high_execute_eligible,
         "high_execute_blockers": high_execute_blockers,
@@ -2619,8 +2808,10 @@ def add_to_queue(trade, queue_path=None, extra=None):
     }
     entry["decision_trace"] = decision_trace
     entry["final_action"] = final_action
+    _log_confidence_rejection(entry)
     entry = enforce_entry_contract(entry, stage="review_queue.add_to_queue")
     entry = _enforce_executable_entry_integrity(entry)
+    _log_entry_lifecycle_resolution(entry)
     try:
         serialize_advisory_row(entry, allow_legacy=True)
     except AdvisorySchemaError as exc:

@@ -118,6 +118,21 @@ class Trade:
     permission_reason: str | None = None
     countertrend: bool | None = None
     raw_signal_confidence: float | None = None
+    confidence_model_raw: float | None = None
+    confidence_model_component: float | None = None
+    confidence_micro_component: float | None = None
+    confidence_micro_blend_method: str | None = None
+    confidence_after_micro: float | None = None
+    confidence_after_alpha: float | None = None
+    confidence_after_latency: float | None = None
+    confidence_before_soft_veto: float | None = None
+    confidence_after_soft_veto: float | None = None
+    confidence_penalty_soft_veto_total: float | None = None
+    confidence_penalty_soft_veto_reasons: list[str] = field(default_factory=list)
+    confidence_gate_threshold: float | None = None
+    confidence_raw_gate_threshold: float | None = None
+    confidence_final_gate_threshold: float | None = None
+    confidence_rejection_stage: str | None = None
     confidence_base: float | None = None
     confidence_penalty_total: float | None = None
     confidence_penalty_reasons: list[str] = field(default_factory=list)

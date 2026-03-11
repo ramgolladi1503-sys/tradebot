@@ -30,6 +30,70 @@ def _norm_text(value: Any) -> str:
     return str(value or "").strip().upper()
 
 
+def normalize_execution_mode(execution_mode: str | None) -> str:
+    mode = _norm_text(execution_mode or getattr(cfg, "EXECUTION_MODE", "SIM"))
+    if mode in {"LIVE", "PAPER", "SIM", "OFFHOURS", "PLANNING", "ADVISORY"}:
+        return mode
+    return "SIM"
+
+
+def resolve_confidence_thresholds(execution_mode: str | None = None) -> dict[str, float]:
+    mode = normalize_execution_mode(execution_mode)
+    display_threshold = clamp(float(getattr(cfg, "CONFIDENCE_THRESHOLD_DISPLAY", 0.0)), 0.0, 1.0)
+    advisory_threshold = clamp(float(getattr(cfg, "CONFIDENCE_THRESHOLD_ADVISORY", 0.15)), 0.0, 1.0)
+    live_threshold = clamp(
+        float(getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_LIVE", 0.30)),
+        0.0,
+        1.0,
+    )
+    paper_threshold = clamp(
+        float(getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_PAPER", 0.27)),
+        0.0,
+        1.0,
+    )
+    sim_threshold = clamp(
+        float(getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_SIM", paper_threshold)),
+        0.0,
+        1.0,
+    )
+    execution_threshold = live_threshold
+    if mode in {"PAPER", "PLANNING", "OFFHOURS", "ADVISORY"}:
+        execution_threshold = paper_threshold
+    elif mode == "SIM":
+        execution_threshold = sim_threshold
+    advisory_threshold = min(advisory_threshold, execution_threshold)
+    display_threshold = min(display_threshold, advisory_threshold)
+    return {
+        "mode": mode,
+        "display": float(display_threshold),
+        "advisory": float(advisory_threshold),
+        "execution": float(execution_threshold),
+    }
+
+
+def classify_confidence_vs_threshold(
+    global_conf: float | None,
+    *,
+    execution_mode: str | None = None,
+    hard_blocker: bool = False,
+    entry_blocked: bool = False,
+) -> str:
+    if hard_blocker:
+        return "hard_blocker_overrides_threshold"
+    if entry_blocked:
+        return "entry_blocker_overrides_threshold"
+    if global_conf is None:
+        return "confidence_missing"
+    thresholds = resolve_confidence_thresholds(execution_mode)
+    if global_conf < thresholds["display"]:
+        return "below_display_threshold"
+    if global_conf < thresholds["advisory"]:
+        return "below_advisory_threshold"
+    if global_conf < thresholds["execution"]:
+        return "meets_advisory_below_execution_threshold"
+    return "meets_execution_threshold"
+
+
 def normalize_orb_bias(orb_bias: str | None) -> str:
     text = _norm_text(orb_bias)
     if text in {"UP", "BULLISH"}:
@@ -109,23 +173,19 @@ def decide_permission(
     regime_conf: float,
     direction: str | None,
     orb_bias: str | None,
+    execution_mode: str | None = None,
 ) -> tuple[str, str]:
     reg = _norm_text(regime)
+    thresholds = resolve_confidence_thresholds(execution_mode)
     if reg == "UNKNOWN" and float(regime_conf) < 0.35:
         return (Permission.ADVISORY_ONLY.value, "unknown_regime_low_conf")
-    if global_conf < 0.25:
+    if global_conf < thresholds["advisory"]:
         return (Permission.ADVISORY_ONLY.value, "low_global_conf")
-    if 0.25 <= global_conf < 0.45:
+    if global_conf < thresholds["execution"]:
         return (Permission.QUEUE_ONLY.value, "medium_global_conf")
-    if 0.45 <= global_conf < 0.65:
-        if is_countertrend(regime, direction):
-            return (Permission.QUEUE_ONLY.value, "countertrend")
-        return (Permission.EXECUTE.value, "aligned_mid_conf")
-    if global_conf >= 0.65:
-        if is_countertrend(regime, direction):
-            return (Permission.QUEUE_ONLY.value, "countertrend_high_conf")
-        return (Permission.EXECUTE.value, "aligned_high_conf")
-    return (Permission.ADVISORY_ONLY.value, "low_global_conf")
+    if is_countertrend(regime, direction):
+        return (Permission.QUEUE_ONLY.value, "countertrend_high_conf")
+    return (Permission.EXECUTE.value, "aligned_high_conf")
 
 
 def _safe_float(value: Any) -> float | None:
@@ -201,6 +261,7 @@ def build_permission_payload(
     orb_bias: str | None,
     option_type: str | None,
     side: str | None,
+    execution_mode: str | None = None,
     last_candle: dict[str, Any] | None = None,
     atr_ratio: float | None = None,
 ) -> dict[str, Any]:
@@ -208,6 +269,7 @@ def build_permission_payload(
     reg_conf = _safe_float(regime_conf)
     reg_conf_for_calc = 0.0 if reg_conf is None else float(reg_conf)
     direction = derive_direction(option_type, side)
+    thresholds = resolve_confidence_thresholds(execution_mode)
     orb_factor = orb_alignment_multiplier(orb_bias, direction)
     reg_pen = regime_penalty(regime)
     global_conf = compute_global_conf(
@@ -226,6 +288,7 @@ def build_permission_payload(
             regime_conf=reg_conf,
             direction=direction,
             orb_bias=orb_bias,
+            execution_mode=thresholds["mode"],
         )
     permission, reason = apply_bearish_impulse_guard(
         permission,
@@ -245,4 +308,11 @@ def build_permission_payload(
         "orb_factor": float(orb_factor),
         "regime_penalty": float(reg_pen),
         "regime_confidence": reg_conf,
+        "threshold_display": float(thresholds["display"]),
+        "threshold_advisory": float(thresholds["advisory"]),
+        "threshold_execution": float(thresholds["execution"]),
+        "confidence_vs_threshold_reason": classify_confidence_vs_threshold(
+            global_conf,
+            execution_mode=thresholds["mode"],
+        ),
     }

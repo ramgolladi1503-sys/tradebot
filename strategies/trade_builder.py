@@ -2065,6 +2065,56 @@ class TradeBuilder:
             self._reject_ctx = {"strategy": strategy_name, "reason": "lifecycle_error"}
             return False, "lifecycle_error"
 
+    @staticmethod
+    def _clamp_confidence(value: float | None) -> float | None:
+        try:
+            if value is None:
+                return None
+            return max(0.0, min(1.0, float(value)))
+        except Exception:
+            return None
+
+    def _blend_micro_confidence(self, model_conf: float | None, micro_conf: float | None) -> tuple[float | None, str | None]:
+        model_val = self._clamp_confidence(model_conf)
+        micro_val = self._clamp_confidence(micro_conf)
+        if model_val is None and micro_val is None:
+            return None, None
+        if model_val is None:
+            return micro_val, "micro_fallback"
+        if micro_val is None:
+            return model_val, "model_only"
+        weight = max(0.0, min(1.0, float(getattr(cfg, "MICRO_CONF_OVERLAY_WEIGHT", 0.25))))
+        max_delta = max(0.0, min(1.0, float(getattr(cfg, "MICRO_CONF_OVERLAY_MAX_DELTA", 0.10))))
+        adjustment = (micro_val - model_val) * weight
+        adjustment = max(-max_delta, min(max_delta, adjustment))
+        return self._clamp_confidence(model_val + adjustment), "bounded_overlay"
+
+    def _orb_soft_veto_conf_penalty(self) -> float:
+        legacy_default = max(0.0, 1.0 - float(getattr(cfg, "ORB_SOFT_VETO_CONF_MULT", 0.95)))
+        penalty = float(getattr(cfg, "ORB_SOFT_VETO_CONF_PENALTY", legacy_default))
+        return max(0.0, min(1.0, penalty))
+
+    def _premium_soft_veto_conf_penalty(self, penalty_scale: float | None) -> float:
+        penalty_min = max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    getattr(
+                        cfg,
+                        "PREMIUM_SOFT_VETO_CONF_PENALTY_MIN",
+                        max(0.0, 1.0 - float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_MULT", 0.92))),
+                    )
+                ),
+            ),
+        )
+        penalty_max = max(
+            penalty_min,
+            min(1.0, float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_PENALTY_MAX", max(penalty_min, 0.12)))),
+        )
+        scale = max(0.0, min(1.0, float(penalty_scale or 0.0)))
+        return max(0.0, min(1.0, penalty_min + ((penalty_max - penalty_min) * scale)))
+
     def _apply_alpha_ensemble(
         self,
         base_conf: float,
@@ -2293,8 +2343,26 @@ class TradeBuilder:
         else:
             # Probabilistic regime gating
             if regime_probs and force_family is None:
-                if unstable_regime or regime_entropy > getattr(cfg, "REGIME_ENTROPY_MAX", 1.3):
+                entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
+                entropy_soft_max = float(
+                    getattr(cfg, "REGIME_CANDIDATE_ENTROPY_SOFT_MAX", getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", 1.8))
+                )
+                if unstable_regime:
                     return None
+                if regime_entropy > entropy_max:
+                    if regime_entropy > entropy_soft_max:
+                        return None
+                    sig = ensemble_signal(market_data)
+                    if sig:
+                        penalty = float(getattr(cfg, "REGIME_CANDIDATE_ENTROPY_SOFT_PENALTY", 0.08))
+                        sig.score = max(0.05, float(sig.score) - penalty)
+                        sig.reason = f"{sig.reason}; high entropy fallback"
+                        return {
+                            "direction": sig.direction,
+                            "reason": sig.reason,
+                            "score": sig.score,
+                            "regime_day": "HIGH_ENTROPY",
+                        }
                 trend_p = float(regime_probs.get("TREND", 0.0))
                 range_p = max(float(regime_probs.get("RANGE", 0.0)), float(regime_probs.get("RANGE_VOLATILE", 0.0)))
                 event_p = float(regime_probs.get("EVENT", 0.0))
@@ -2465,6 +2533,110 @@ class TradeBuilder:
             ask_f = entry_f
         width = max(0.0, ask_f - bid_f)
         return max(width, entry_f * 0.08, 1.0)
+
+    def _raw_confidence_gate_threshold(self, regime_day: str | None, *, quick_mode: bool = False) -> float:
+        legacy_threshold = float(getattr(cfg, "ML_MIN_PROBA", 0.6))
+        threshold = float(getattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN", legacy_threshold))
+        explicit_default = getattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN_DEFAULT", None)
+        try:
+            if explicit_default is not None and abs(float(threshold) - float(explicit_default)) <= 1e-9:
+                threshold = legacy_threshold
+        except Exception:
+            threshold = legacy_threshold
+        threshold *= float(getattr(cfg, "REGIME_PROBA_MULT", {}).get(regime_day or "NEUTRAL", 1.0))
+        if quick_mode:
+            threshold = min(threshold, float(getattr(cfg, "QUICK_MIN_PROBA", 0.35)))
+        return max(0.0, min(1.0, threshold))
+
+    def _final_confidence_gate_threshold(self, regime_day: str | None, *, quick_mode: bool = False) -> float:
+        del regime_day, quick_mode
+        legacy_threshold = float(
+            getattr(
+                cfg,
+                "GATING_FINAL_CONFIDENCE_MIN",
+                getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_LIVE", 0.30),
+            )
+        )
+        threshold = float(getattr(cfg, "TRADE_BUILDER_FINAL_CONFIDENCE_MIN", legacy_threshold))
+        explicit_default = getattr(cfg, "TRADE_BUILDER_FINAL_CONFIDENCE_MIN_DEFAULT", None)
+        try:
+            if explicit_default is not None and abs(float(threshold) - float(explicit_default)) <= 1e-9:
+                threshold = legacy_threshold
+        except Exception:
+            threshold = legacy_threshold
+        return max(0.0, min(1.0, threshold))
+
+    def _strategy_candidate_debug(self, market_data, strategy_name: str) -> dict:
+        if not isinstance(market_data, dict):
+            return {}
+        root = market_data.setdefault("strategy_debug", {})
+        stats = root.setdefault(
+            strategy_name,
+            {
+                "candidates_considered": 0,
+                "candidates_rejected_pre_score": 0,
+                "rejection_reason_counts": {},
+                "candidates_scored": 0,
+            },
+        )
+        return stats
+
+    def _update_strategy_candidate_debug(
+        self,
+        stats: dict,
+        *,
+        considered: int = 0,
+        rejected: int = 0,
+        scored: int = 0,
+        reason: str | None = None,
+    ) -> None:
+        if not isinstance(stats, dict):
+            return
+        stats["candidates_considered"] = int(stats.get("candidates_considered", 0)) + int(considered)
+        stats["candidates_rejected_pre_score"] = int(
+            stats.get("candidates_rejected_pre_score", 0)
+        ) + int(rejected)
+        stats["candidates_scored"] = int(stats.get("candidates_scored", 0)) + int(scored)
+        if reason:
+            counts = stats.setdefault("rejection_reason_counts", {})
+            counts[str(reason)] = int(counts.get(str(reason), 0)) + 1
+
+    def _zero_hero_diag(self, market_data: dict | None) -> dict:
+        if not isinstance(market_data, dict):
+            return {}
+        diag = market_data.setdefault(
+            "zero_hero_diagnostics",
+            {
+                "zero_hero_considered": 0,
+                "zero_hero_rejected_reason": None,
+                "zero_hero_selected_premium_band": None,
+                "zero_hero_activation_window": None,
+            },
+        )
+        return diag
+
+    def _update_zero_hero_diag(
+        self,
+        market_data: dict | None,
+        *,
+        considered: int = 0,
+        rejected_reason: str | None = None,
+        selected_premium_band=None,
+        activation_window=None,
+        clear_rejected_reason: bool = False,
+    ) -> None:
+        diag = self._zero_hero_diag(market_data)
+        if not diag:
+            return
+        diag["zero_hero_considered"] = int(diag.get("zero_hero_considered", 0)) + int(considered)
+        if clear_rejected_reason:
+            diag["zero_hero_rejected_reason"] = None
+        elif rejected_reason:
+            diag["zero_hero_rejected_reason"] = str(rejected_reason)
+        if selected_premium_band is not None:
+            diag["zero_hero_selected_premium_band"] = selected_premium_band
+        if activation_window is not None:
+            diag["zero_hero_activation_window"] = activation_window
 
     def build(self, market_data, quick_mode=False, debug_reasons=False, force_family: str | None = None, allow_fallbacks: bool = True, allow_baseline: bool = True):
         """
@@ -3487,6 +3659,9 @@ class TradeBuilder:
             xgb_conf = None
             deep_conf = None
             micro_conf = None
+            confidence_model_component = None
+            confidence_micro_component = None
+            confidence_micro_blend_method = None
             if use_ml:
                 ok_features, feature_reason = self._validate_ml_features(feats)
                 if not ok_features:
@@ -3589,6 +3764,9 @@ class TradeBuilder:
                     model_type = "deep"
                     model_version = getattr(deep_pred, "model_version", model_version)
                 confidence = deep_conf if deep_conf is not None else xgb_conf
+                confidence_model_raw = confidence
+                confidence_model_component = self._clamp_confidence(confidence)
+                confidence_after_micro = None
                 # Microstructure overlay
                 if cfg.USE_MICRO_MODEL:
                     micro_features = [
@@ -3602,15 +3780,20 @@ class TradeBuilder:
                     ]
                     micro_conf = self._get_micro_predictor().predict_confidence(micro_features)
                     opt["micro_pred"] = micro_conf
-                    if confidence is None:
-                        confidence = micro_conf
-                    else:
-                        confidence = (confidence + micro_conf) / 2.0
+                    confidence_micro_component = self._clamp_confidence(micro_conf)
+                    confidence, confidence_micro_blend_method = self._blend_micro_confidence(confidence, micro_conf)
+                    confidence_after_micro = confidence
                 if confidence is None:
                     confidence = 0.5
+                if confidence_model_raw is None:
+                    confidence_model_raw = confidence
             else:
                 # Pure price/volume logic: use signal score as confidence proxy
                 confidence = max(0.5, min(1.0, signal.get("score", 0.5)))
+                confidence_model_raw = confidence
+                confidence_model_component = self._clamp_confidence(confidence)
+                confidence_micro_blend_method = "model_only"
+                confidence_after_micro = None
 
             # Alpha ensemble fusion
             adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
@@ -3626,16 +3809,15 @@ class TradeBuilder:
                     rejected.append(rec)
                 continue
             confidence = adj_conf
+            confidence_after_alpha = confidence
             size_mult = min(size_mult, decay_size_mult)
 
             # Latency penalty
             confidence *= self.execution.latency_penalty(opt.get("timestamp", datetime.now().timestamp()))
+            confidence_after_latency = confidence
 
-            min_proba = getattr(cfg, "ML_MIN_PROBA", 0.6)
-            proba_mult = getattr(cfg, "REGIME_PROBA_MULT", {}).get(regime_day, 1.0)
-            min_proba = min_proba * proba_mult
+            raw_gate_threshold = self._raw_confidence_gate_threshold(regime_day, quick_mode=quick_mode)
             if quick_mode:
-                min_proba = min(min_proba, getattr(cfg, "QUICK_MIN_PROBA", 0.35))
                 if getattr(cfg, "QUICK_USE_SIGNAL_SCORE", True):
                     try:
                         confidence = max(confidence, float(signal.get("score", 0.5)))
@@ -3644,23 +3826,26 @@ class TradeBuilder:
             if not quick_mode:
                 tune = _get_auto_tune()
                 if tune.get("enabled"):
-                    min_proba = float(tune.get("min_proba", min_proba))
-            if confidence < min_proba and not _relax("confidence"):
-                _count_option_reject("confidence")
+                    raw_gate_threshold = float(tune.get("min_proba", raw_gate_threshold))
+            confidence_before_soft_veto = float(confidence)
+            if confidence < raw_gate_threshold and not _relax("confidence"):
+                _count_option_reject("confidence_raw_gate")
                 if debug_reasons:
                     _log_advisory_debug(
-                        "trade_builder_confidence_reject symbol=%s strike=%s type=%s confidence=%.3f min_proba=%s regime=%s reason=%s",
+                        "trade_builder_confidence_reject symbol=%s strike=%s type=%s stage=raw raw_model_conf=%s final_conf=%s threshold=%s regime=%s reason=%s",
                         symbol,
                         opt["strike"],
                         opt_type,
-                        confidence,
-                        min_proba,
+                        round(float(confidence_model_raw), 3) if confidence_model_raw is not None else None,
+                        round(float(confidence), 3) if confidence is not None else None,
+                        raw_gate_threshold,
                         signal.get("regime_day"),
                         signal.get("reason"),
                     )
-                    rec = self._reject_record(symbol, opt, opt_type, "confidence", atr=atr)
+                    rec = self._reject_record(symbol, opt, opt_type, "confidence_raw_gate", atr=atr)
                     rec["confidence"] = round(confidence, 3)
-                    rec["min_proba"] = min_proba
+                    rec["min_proba"] = raw_gate_threshold
+                    rec["confidence_stage"] = "raw"
                     debug_candidates.append(rec)
                     rejected.append(rec)
                 continue
@@ -3785,14 +3970,57 @@ class TradeBuilder:
 
             confidence_base = float(confidence)
             confidence_penalty_reasons = list(dict.fromkeys(str(code) for code in soft_veto_codes if str(code)))
+            confidence_penalty_soft_veto_reasons: list[str] = []
+            confidence_penalty_soft_veto_total = 0.0
             if soft_veto_codes:
+                orb_soft_veto_penalty = 0.0
+                premium_soft_veto_penalty = 0.0
                 if any(code.startswith("orb_") for code in soft_veto_codes):
-                    confidence *= float(getattr(cfg, "ORB_SOFT_VETO_CONF_MULT", 0.95))
+                    orb_soft_veto_penalty = self._orb_soft_veto_conf_penalty()
+                    confidence_penalty_soft_veto_reasons.extend(
+                        str(code) for code in soft_veto_codes if str(code).startswith("orb_")
+                    )
                     size_mult = min(size_mult, float(getattr(cfg, "ORB_SOFT_VETO_SIZE_MULT", 0.95)))
                 if premium_soft_veto:
-                    confidence *= premium_soft_penalty_conf
+                    premium_soft_veto_penalty = self._premium_soft_veto_conf_penalty(penalty_scale)
+                    confidence_penalty_soft_veto_reasons.extend(
+                        str(code)
+                        for code in soft_veto_codes
+                        if str(code) in {"premium_out_of_band", "premium_band_fail"}
+                    )
                     size_mult = min(size_mult, premium_soft_penalty_size)
+                confidence_penalty_soft_veto_total = min(
+                    max(0.0, float(getattr(cfg, "SOFT_VETO_CONF_PENALTY_MAX_TOTAL", 0.16))),
+                    max(0.0, orb_soft_veto_penalty + premium_soft_veto_penalty),
+                )
+                confidence_penalty_soft_veto_reasons = list(
+                    dict.fromkeys(str(code) for code in confidence_penalty_soft_veto_reasons if str(code))
+                )
+                confidence = max(0.0, min(1.0, float(confidence) - float(confidence_penalty_soft_veto_total)))
+            confidence_after_soft_veto = float(confidence)
             confidence_penalty_total = max(0.0, float(confidence_base) - float(confidence))
+            final_gate_threshold = self._final_confidence_gate_threshold(regime_day, quick_mode=quick_mode)
+            if confidence < final_gate_threshold and not _relax("confidence"):
+                _count_option_reject("confidence_final_gate")
+                if debug_reasons:
+                    _log_advisory_debug(
+                        "trade_builder_confidence_reject symbol=%s strike=%s type=%s stage=final raw_model_conf=%s final_conf=%s threshold=%s regime=%s reason=%s",
+                        symbol,
+                        opt["strike"],
+                        opt_type,
+                        round(float(confidence_model_raw), 3) if confidence_model_raw is not None else None,
+                        round(float(confidence), 3) if confidence is not None else None,
+                        final_gate_threshold,
+                        signal.get("regime_day"),
+                        signal.get("reason"),
+                    )
+                    rec = self._reject_record(symbol, opt, opt_type, "confidence_final_gate", atr=atr)
+                    rec["confidence"] = round(confidence, 3)
+                    rec["min_proba"] = final_gate_threshold
+                    rec["confidence_stage"] = "final"
+                    debug_candidates.append(rec)
+                    rejected.append(rec)
+                continue
 
             tier = "EXPLORATION" if quick_mode else "MAIN"
             resolved_contract = opt.get("_resolved_contract") if isinstance(opt.get("_resolved_contract"), dict) else {}
@@ -3888,9 +4116,12 @@ class TradeBuilder:
                     "band_fallback": bool(band_key_used == "__GLOBAL__"),
                     "outside_ratio": round(float(premium_outside_ratio), 6),
                     "penalty_conf_mult": round(float(premium_soft_penalty_conf), 6),
+                    "penalty_conf": round(float(self._premium_soft_veto_conf_penalty(penalty_scale)), 6),
                     "penalty_size_mult": round(float(premium_soft_penalty_size), 6),
                 }
                 source_flags["premium_soft_veto"] = True
+            source_flags["confidence_penalty_soft_veto_total"] = round(float(confidence_penalty_soft_veto_total), 6)
+            source_flags["confidence_penalty_soft_veto_reasons"] = list(confidence_penalty_soft_veto_reasons)
             source_flags["decision_trace"] = {
                 "signal_score": float(signal.get("score", 0.0)),
                 "regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),
@@ -3913,6 +4144,8 @@ class TradeBuilder:
                 "final_score": float(score),
                 "hard_reject_reason": None,
                 "soft_vetos": list(dict.fromkeys(soft_veto_codes)),
+                "confidence_penalty_soft_veto_total": round(float(confidence_penalty_soft_veto_total), 6),
+                "confidence_penalty_soft_veto_reasons": list(confidence_penalty_soft_veto_reasons),
                 "gates_failed": list(dict.fromkeys(execution_blockers)),
                 "exec_allowed": bool(intent["execution_allowed"]),
             }
@@ -3997,6 +4230,21 @@ class TradeBuilder:
                 spot_source=spot_source,
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
+                confidence_model_raw=round(float(confidence_model_raw), 6) if confidence_model_raw is not None else None,
+                confidence_model_component=round(float(confidence_model_component), 6) if confidence_model_component is not None else None,
+                confidence_micro_component=round(float(confidence_micro_component), 6) if confidence_micro_component is not None else None,
+                confidence_micro_blend_method=confidence_micro_blend_method,
+                confidence_after_micro=round(float(confidence_after_micro), 6) if confidence_after_micro is not None else None,
+                confidence_after_alpha=round(float(confidence_after_alpha), 6) if confidence_after_alpha is not None else None,
+                confidence_after_latency=round(float(confidence_after_latency), 6) if confidence_after_latency is not None else None,
+                confidence_before_soft_veto=round(float(confidence_before_soft_veto), 6) if confidence_before_soft_veto is not None else None,
+                confidence_after_soft_veto=round(float(confidence_after_soft_veto), 6) if confidence_after_soft_veto is not None else None,
+                confidence_penalty_soft_veto_total=round(float(confidence_penalty_soft_veto_total), 6),
+                confidence_penalty_soft_veto_reasons=confidence_penalty_soft_veto_reasons,
+                confidence_gate_threshold=round(float(final_gate_threshold), 6) if final_gate_threshold is not None else None,
+                confidence_raw_gate_threshold=round(float(raw_gate_threshold), 6) if raw_gate_threshold is not None else None,
+                confidence_final_gate_threshold=round(float(final_gate_threshold), 6) if final_gate_threshold is not None else None,
+                confidence_rejection_stage=None,
                 confidence_base=round(confidence_base, 6),
                 confidence_penalty_total=round(confidence_penalty_total, 6),
                 confidence_penalty_reasons=confidence_penalty_reasons,
@@ -4180,7 +4428,7 @@ class TradeBuilder:
                         validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
                         capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),
                         expected_slippage=round(slippage, 2),
-                        confidence=round(max(0.5, getattr(cfg, "ML_MIN_PROBA", 0.5)), 3),
+                        confidence=round(max(0.5, self._final_confidence_gate_threshold("NEUTRAL", quick_mode=True)), 3),
                         strategy="QUICK_SYNTH",
                         regime=market_data.get("regime", "NEUTRAL"),
                         tier="EXPLORATION",
@@ -4209,7 +4457,7 @@ class TradeBuilder:
                     trade = self._decorate_trade_context(
                         trade,
                         market_data,
-                        float(max(0.5, getattr(cfg, "ML_MIN_PROBA", 0.5))),
+                        float(max(0.5, self._final_confidence_gate_threshold("NEUTRAL", quick_mode=True))),
                     )
                     return trade
                 except Exception:
@@ -4302,17 +4550,25 @@ class TradeBuilder:
                 trade = self._decorate_trade_context(trade, market_data, base_conf)
                 if trade is None:
                     return None
-                if trade.confidence >= getattr(cfg, "ML_MIN_PROBA", 0.6):
+                final_gate_threshold = self._final_confidence_gate_threshold(
+                    getattr(trade, "regime", None) or market_data.get("regime"),
+                    quick_mode=quick_mode,
+                )
+                if trade.confidence >= final_gate_threshold:
                     return trade
                 self._log_blocked_candidate(
                     symbol,
-                    "low_confidence",
-                    "Trade confidence below configured threshold",
+                    "confidence_final_gate",
+                    "Trade final confidence below configured threshold",
                     market_data=market_data,
-                    extra={"confidence": trade.confidence, "min_confidence": getattr(cfg, "ML_MIN_PROBA", 0.6)},
+                    extra={
+                        "confidence": trade.confidence,
+                        "min_confidence": final_gate_threshold,
+                        "confidence_stage": "final",
+                    },
                 )
                 if debug_reasons:
-                    _log_advisory_debug("trade_builder_low_confidence symbol=%s instrument=%s", symbol, instrument)
+                    _log_advisory_debug("trade_builder_low_confidence symbol=%s instrument=%s stage=final", symbol, instrument)
                 return None
             self._log_blocked_candidate(
                 symbol,
@@ -4409,7 +4665,22 @@ class TradeBuilder:
         Zero-to-hero (lotto): paper-only, high-convexity ideas.
         Uses OTM strikes (1-2% from ATM) and a dynamic low-premium band (p2-p25).
         """
+        stats = self._strategy_candidate_debug(market_data, "zero_to_hero")
+        symbol = (market_data or {}).get("symbol") if isinstance(market_data, dict) else None
+        self._update_zero_hero_diag(
+            market_data,
+            activation_window={
+                "strategy": "ZERO_TO_HERO",
+                "variant": "generic",
+                "expiry_day": bool(self._is_expiry_day_for_symbol(str(symbol or ""), market_data)),
+                "minutes_since_open": int((market_data or {}).get("minutes_since_open", 0) or 0)
+                if isinstance(market_data, dict)
+                else 0,
+            },
+        )
         if not getattr(cfg, "ZERO_TO_HERO_ENABLE", False):
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="mode_disabled")
+            self._update_zero_hero_diag(market_data, rejected_reason="mode_disabled")
             return None
         exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         allowed_modes = getattr(cfg, "ZERO_TO_HERO_ALLOWED_MODES", ["PAPER"])
@@ -4417,6 +4688,8 @@ class TradeBuilder:
             allowed_modes = [s.strip().upper() for s in allowed_modes.split(",") if s.strip()]
         allowed_modes = {str(m).strip().upper() for m in (allowed_modes or ["PAPER"])}
         if exec_mode not in allowed_modes:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="mode_block")
+            self._update_zero_hero_diag(market_data, rejected_reason="mode_block")
             if debug_reasons:
                 self._log_blocked_candidate(
                     market_data.get("symbol"),
@@ -4429,6 +4702,21 @@ class TradeBuilder:
         exploratory_mode = exec_mode in {"SIM", "PAPER"}
 
         symbol = market_data.get("symbol")
+        if bool(getattr(cfg, "ZERO_HERO_EXPIRY_ENABLE", True)) and self._is_expiry_day_for_symbol(symbol, market_data):
+            expiry_trade = self._build_zero_hero_expiry(market_data, debug_reasons=debug_reasons)
+            if expiry_trade is not None:
+                expiry_trade.source_flags.setdefault("zero_hero_variant", "expiry_day")
+                self._update_zero_hero_diag(market_data, clear_rejected_reason=True)
+                return expiry_trade
+            self._update_zero_hero_diag(
+                market_data,
+                activation_window={
+                    "strategy": "ZERO_TO_HERO",
+                    "variant": "generic_fallback",
+                    "expiry_day": True,
+                    "minutes_since_open": int(market_data.get("minutes_since_open", 0) or 0),
+                },
+            )
         regime_raw = market_data.get("regime") or market_data.get("primary_regime") or market_data.get("regime_day")
         regime = normalize_regime(regime_raw)
         allowed_regimes = getattr(cfg, "ZERO_TO_HERO_ALLOWED_REGIMES", ["TREND", "EVENT"])
@@ -4436,13 +4724,19 @@ class TradeBuilder:
             allowed_regimes = [s.strip().upper() for s in allowed_regimes.split(",") if s.strip()]
         allowed_regimes = {str(r).strip().upper() for r in (allowed_regimes or [])}
         if allowed_regimes and regime not in allowed_regimes:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="regime_block")
+            self._update_zero_hero_diag(market_data, rejected_reason="regime_block")
             return None
 
         if not self._zero_to_hero_daily_ok():
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="daily_limit")
+            self._update_zero_hero_diag(market_data, rejected_reason="daily_limit")
             return None
 
         chain = market_data.get("option_chain") or []
         if not chain:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="missing_option_chain")
+            self._update_zero_hero_diag(market_data, rejected_reason="missing_option_chain")
             return None
 
         segment = market_data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
@@ -4457,6 +4751,8 @@ class TradeBuilder:
 
         underlying_spot, spot_source, spot_ok, spot_issue = self._resolve_underlying_spot(market_data, market_ctx)
         if not spot_ok:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="spot_invalid")
+            self._update_zero_hero_diag(market_data, rejected_reason="spot_invalid")
             if debug_reasons:
                 self._log_blocked_candidate(
                     symbol,
@@ -4486,6 +4782,8 @@ class TradeBuilder:
             )
             _log_advisory_debug("zero_to_hero_reject symbol=%s reason=weak_momentum", symbol)
         if weak_momentum and not exploratory_mode:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="weak_momentum")
+            self._update_zero_hero_diag(market_data, rejected_reason="weak_momentum")
             return None
 
         opt_type = "CE" if ltp_change_window >= 0 else "PE"
@@ -4504,6 +4802,8 @@ class TradeBuilder:
             except Exception:
                 continue
         if not strikes:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="missing_strikes")
+            self._update_zero_hero_diag(market_data, rejected_reason="missing_strikes")
             return None
         atm_strike = min(strikes, key=lambda s: abs(s - float(underlying_spot)))
         otm_min_pct = float(getattr(cfg, "ZERO_TO_HERO_OTM_PCT_MIN", 0.01))
@@ -4531,7 +4831,19 @@ class TradeBuilder:
             band_low = max(abs_min, band_low * 0.5)
             band_high = max(band_high, min(abs_max * 1.75, band_high * 1.5))
         if band_high <= band_low:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="invalid_premium_band")
+            self._update_zero_hero_diag(market_data, rejected_reason="invalid_premium_band")
             return None
+        self._update_zero_hero_diag(
+            market_data,
+            selected_premium_band={
+                "strategy": "ZERO_TO_HERO",
+                "variant": "generic",
+                "low": round(float(band_low), 4),
+                "high": round(float(band_high), 4),
+                "source": str(band_source),
+            },
+        )
 
         candidates = []
         for opt in chain:
@@ -4539,14 +4851,22 @@ class TradeBuilder:
                 continue
             if opt.get("type") != opt_type:
                 continue
+            self._update_strategy_candidate_debug(stats, considered=1)
+            self._update_zero_hero_diag(market_data, considered=1)
             strike = opt.get("strike")
             if strike is None:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="missing_strike")
+                self._update_zero_hero_diag(market_data, rejected_reason="missing_strike")
                 continue
             try:
                 strike_val = float(strike)
             except Exception:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="invalid_strike")
+                self._update_zero_hero_diag(market_data, rejected_reason="invalid_strike")
                 continue
             if strike_val < strike_low or strike_val > strike_high:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="strike_window")
+                self._update_zero_hero_diag(market_data, rejected_reason="strike_window")
                 continue
             premium = self._coerce_positive_float(
                 opt.get("ltp")
@@ -4554,8 +4874,14 @@ class TradeBuilder:
                 or opt.get("close")
                 or opt.get("price")
             )
+            if premium is None:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="invalid_option_ltp")
+                self._update_zero_hero_diag(market_data, rejected_reason="invalid_option_ltp")
+                continue
             premium_out_of_band = bool(premium is None or premium < band_low or premium > band_high)
             if premium_out_of_band and not exploratory_mode:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="premium_band")
+                self._update_zero_hero_diag(market_data, rejected_reason="premium_band")
                 if debug_reasons:
                     self._log_blocked_candidate(
                         symbol,
@@ -4575,6 +4901,8 @@ class TradeBuilder:
                 market_open=bool(market_ctx.is_market_open),
             )
             if (not spread_ok) and not exploratory_mode:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="spread")
+                self._update_zero_hero_diag(market_data, rejected_reason="spread")
                 if debug_reasons:
                     self._log_blocked_candidate(
                         symbol,
@@ -4598,6 +4926,7 @@ class TradeBuilder:
             if not spread_ok:
                 confidence -= 0.10
             confidence = max(0.0, min(1.0, confidence))
+            self._update_strategy_candidate_debug(stats, scored=1)
 
             candidates.append(
                 {
@@ -4613,6 +4942,9 @@ class TradeBuilder:
             )
 
         if not candidates:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="no_viable_candidates")
+            if not ((market_data or {}).get("zero_hero_diagnostics") or {}).get("zero_hero_rejected_reason"):
+                self._update_zero_hero_diag(market_data, rejected_reason="no_viable_candidates")
             if debug_reasons:
                 self._log_blocked_candidate(
                     symbol,
@@ -4625,6 +4957,7 @@ class TradeBuilder:
         chosen = sorted(candidates, key=lambda c: c["confidence"], reverse=True)[0]
         opt = chosen["opt"]
         premium = float(chosen["premium"])
+        self._update_zero_hero_diag(market_data, clear_rejected_reason=True)
 
         bid = float(opt.get("bid") or 0.0)
         ask = float(opt.get("ask") or 0.0)
@@ -4762,6 +5095,15 @@ class TradeBuilder:
         trade.source_flags.update(
             {
                 "zero_to_hero": True,
+                "zero_hero_considered": int(
+                    ((market_data or {}).get("zero_hero_diagnostics") or {}).get("zero_hero_considered", 0)
+                ),
+                "zero_hero_selected_premium_band": dict(
+                    (((market_data or {}).get("zero_hero_diagnostics") or {}).get("zero_hero_selected_premium_band") or {})
+                ),
+                "zero_hero_activation_window": dict(
+                    (((market_data or {}).get("zero_hero_diagnostics") or {}).get("zero_hero_activation_window") or {})
+                ),
                 "zero_to_hero_band_source": chosen.get("band_source"),
                 "zero_to_hero_otm_min": strike_low,
                 "zero_to_hero_otm_max": strike_high,
@@ -5243,13 +5585,33 @@ class TradeBuilder:
         Expiry-day zero-hero: low premium, high delta, fast move required.
         Focused on small premium with potential ~50pts underlying move.
         """
-        symbol = market_data.get("symbol")
-        ltp = market_data.get("ltp", 0)
-        atr = market_data.get("atr", max(1.0, ltp * 0.002))
-        minutes_since_open = market_data.get("minutes_since_open", 0) or 0
-        if minutes_since_open > getattr(cfg, "ZERO_HERO_EXPIRY_TIME_CUTOFF_MIN", 120):
+        data = market_data if isinstance(market_data, dict) else {}
+        stats = self._strategy_candidate_debug(data, "zero_hero_expiry")
+        symbol = data.get("symbol")
+        ltp = float(data.get("ltp") or 0.0)
+        atr = float(data.get("atr") or max(1.0, ltp * 0.002 or 1.0))
+        minutes_since_open = int(data.get("minutes_since_open", 0) or 0)
+        soft_cutoff = int(getattr(cfg, "ZERO_HERO_EXPIRY_TIME_CUTOFF_MIN", 120))
+        hard_cutoff = max(soft_cutoff, int(getattr(cfg, "ZERO_HERO_EXPIRY_TIME_HARD_CUTOFF_MIN", 150)))
+        self._update_zero_hero_diag(
+            data,
+            activation_window={
+                "strategy": "ZERO_HERO_EXPIRY",
+                "variant": "expiry_day",
+                "expiry_day": True,
+                "minutes_since_open": minutes_since_open,
+                "soft_cutoff_min": soft_cutoff,
+                "hard_cutoff_min": hard_cutoff,
+            },
+        )
+        if minutes_since_open > hard_cutoff:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="time_window_hard")
+            self._update_zero_hero_diag(data, rejected_reason="time_window_hard")
             return None
+        late_window_soft = minutes_since_open > soft_cutoff
         if self._expiry_zero_hero_count >= getattr(cfg, "ZERO_HERO_EXPIRY_MAX_TRADES", 2):
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="max_trades")
+            self._update_zero_hero_diag(data, rejected_reason="max_trades")
             return None
         max_per_symbol = getattr(cfg, "ZERO_HERO_EXPIRY_MAX_TRADES_PER_SYMBOL", 1)
         if symbol == "NIFTY":
@@ -5257,69 +5619,205 @@ class TradeBuilder:
         if symbol == "SENSEX":
             max_per_symbol = getattr(cfg, "ZERO_HERO_EXPIRY_MAX_TRADES_SENSEX", max_per_symbol)
         if self._expiry_zero_hero_by_symbol.get(symbol, 0) >= max_per_symbol:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="max_trades_symbol")
+            self._update_zero_hero_diag(data, rejected_reason="max_trades_symbol")
             return None
-        # cooldown after loss streak
         try:
             until = self._expiry_zero_hero_disabled_until.get(symbol)
             if until and time.time() < until:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="cooldown_active")
+                self._update_zero_hero_diag(data, rejected_reason="cooldown_active")
                 return None
         except Exception:
             pass
-        # Direction by momentum + ORB bias
-        ltp_change_window = market_data.get("ltp_change_window", 0) or 0
-        vwap = market_data.get("vwap", ltp)
-        orb_bias = market_data.get("orb_bias", "NEUTRAL")
-        if orb_bias == "PENDING":
+
+        execution_mode = str(
+            data.get("execution_mode")
+            or ((data.get("market_context") or {}).get("execution_mode") if isinstance(data.get("market_context"), dict) else "")
+            or getattr(cfg, "EXECUTION_MODE", "PAPER")
+        ).strip().upper()
+        segment = data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        ctx_payload = dict(data.get("market_context") or {}) if isinstance(data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = execution_mode
+        if "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = data.get("market_open", True)
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = segment
+        market_ctx = derive_market_context(ctx_payload)
+        underlying_spot, spot_source, spot_ok, spot_issue = self._resolve_underlying_spot(data, market_ctx)
+        if not spot_ok:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="spot_invalid")
+            self._update_zero_hero_diag(data, rejected_reason="spot_invalid")
             return None
+        if ltp <= 0 and underlying_spot is not None:
+            ltp = float(underlying_spot)
+
+        ltp_change_window = float(data.get("ltp_change_window", 0) or 0.0)
+        vwap = float(data.get("vwap", ltp) or ltp or underlying_spot or 0.0)
+        orb_bias = str(data.get("orb_bias", "NEUTRAL") or "NEUTRAL").strip().upper()
         direction = "BUY_CALL" if (ltp_change_window >= 0 and ltp >= vwap) else "BUY_PUT"
-        if orb_bias == "UP" and direction == "BUY_PUT":
-            return None
-        if orb_bias == "DOWN" and direction == "BUY_CALL":
-            return None
+        orb_pending_soft = orb_bias == "PENDING"
+        orb_conflict_soft = (orb_bias == "UP" and direction == "BUY_PUT") or (
+            orb_bias == "DOWN" and direction == "BUY_CALL"
+        )
         opt_type = "CE" if direction == "BUY_CALL" else "PE"
 
-        min_p = getattr(cfg, "ZERO_HERO_EXPIRY_MIN_PREMIUM", 5)
-        max_p = getattr(cfg, "ZERO_HERO_EXPIRY_PREMIUM_MAX_BY_SYMBOL", {}).get(symbol, getattr(cfg, "ZERO_HERO_EXPIRY_MAX_PREMIUM", 40))
-        min_delta = getattr(cfg, "ZERO_HERO_EXPIRY_MIN_DELTA", 0.2)
-        max_delta = getattr(cfg, "ZERO_HERO_EXPIRY_MAX_DELTA", 0.5)
-        tgt_points = getattr(cfg, "ZERO_HERO_EXPIRY_TARGET_POINTS", {}).get(symbol, 50)
+        min_p = float(getattr(cfg, "ZERO_HERO_EXPIRY_MIN_PREMIUM", 5))
+        max_p = float(
+            getattr(cfg, "ZERO_HERO_EXPIRY_PREMIUM_MAX_BY_SYMBOL", {}).get(
+                symbol,
+                getattr(cfg, "ZERO_HERO_EXPIRY_MAX_PREMIUM", 40),
+            )
+        )
+        min_delta = float(getattr(cfg, "ZERO_HERO_EXPIRY_MIN_DELTA", 0.2))
+        max_delta = float(getattr(cfg, "ZERO_HERO_EXPIRY_MAX_DELTA", 0.5))
+        tgt_points = float(getattr(cfg, "ZERO_HERO_EXPIRY_TARGET_POINTS", {}).get(symbol, 50))
+        iv_min = float(getattr(cfg, "ZERO_HERO_IVCRUSH_MIN", 0.15))
+        iv_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_IV_MARGIN", 0.03))
+        tte_max = float(getattr(cfg, "ZERO_HERO_TIME_TO_EXPIRY_MAX_HRS", 6))
+        tte_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_TTE_MARGIN_HRS", 1.5))
+        delta_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_DELTA_MARGIN", 0.08))
+        premium_margin_ratio = float(getattr(cfg, "ZERO_HERO_EXPIRY_PREMIUM_SOFT_MARGIN_RATIO", 0.20))
+        min_p_soft = max(0.01, min_p * max(0.0, 1.0 - premium_margin_ratio))
+        max_p_soft = max_p * (1.0 + max(0.0, premium_margin_ratio))
+        momentum_threshold = atr * float(getattr(cfg, "ZERO_HERO_ATR_MULT", 0.08))
+        soft_momentum_threshold = momentum_threshold * float(
+            getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_MOMENTUM_RATIO", 0.65)
+        )
+        self._update_zero_hero_diag(
+            data,
+            selected_premium_band={
+                "strategy": "ZERO_HERO_EXPIRY",
+                "variant": "expiry_day",
+                "low": round(float(min_p), 4),
+                "high": round(float(max_p), 4),
+                "soft_low": round(float(min_p_soft), 4),
+                "soft_high": round(float(max_p_soft), 4),
+                "source": "expiry_config",
+            },
+        )
+        if abs(ltp_change_window) < soft_momentum_threshold:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="momentum_too_low")
+            self._update_zero_hero_diag(data, rejected_reason="momentum_too_low")
+            return None
+        weak_momentum = abs(ltp_change_window) < momentum_threshold
+        allowed_life, _ = self._apply_lifecycle_gate("ZERO_HERO_EXPIRY", mode="QUICK")
+        if not allowed_life:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="lifecycle_gate")
+            self._update_zero_hero_diag(data, rejected_reason="lifecycle_gate")
+            if debug_reasons:
+                _log_advisory_debug("zero_hero_expiry_reject symbol=%s reason=lifecycle_gate", symbol)
+            return None
 
         candidates = []
-        for opt in market_data.get("option_chain", []):
+        chain = data.get("option_chain", [])
+        for opt in chain:
+            if not isinstance(opt, dict):
+                continue
             if opt.get("type") != opt_type:
                 continue
+            self._update_strategy_candidate_debug(stats, considered=1)
+            self._update_zero_hero_diag(data, considered=1)
             has_required_quote, _ = self._validate_required_option_quote_fields(opt)
             if not has_required_quote:
-                if debug_reasons:
-                    rec = self._reject_record(symbol, opt, opt_type, "partial_option_row", atr=atr)
-                    rejected.append(rec)
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="partial_option_row")
+                self._update_zero_hero_diag(data, rejected_reason="partial_option_row")
                 continue
-            if opt.get("ltp", 0) < min_p or opt.get("ltp", 0) > max_p:
+            premium = self._coerce_positive_float(opt.get("ltp") or opt.get("last_price"))
+            if premium is None:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="invalid_option_ltp")
+                self._update_zero_hero_diag(data, rejected_reason="invalid_option_ltp")
                 continue
-            if not self.execution.spread_ok(opt.get("bid", 0), opt.get("ask", 0), opt.get("ltp", 0) or 1):
+            soft_flags: list[str] = []
+            penalty = 0.0
+            if premium < min_p_soft or premium > max_p_soft:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="premium_out_of_range")
+                self._update_zero_hero_diag(data, rejected_reason="premium_out_of_range")
                 continue
-            # Premium decay filter: IV crush + time to expiry
+            if premium < min_p or premium > max_p:
+                soft_flags.append("premium_soft_band")
+                penalty += 0.08
+
+            bid = self._coerce_positive_float(opt.get("bid"))
+            ask = self._coerce_positive_float(opt.get("ask"))
+            if bid is None or ask is None or ask < bid:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="invalid_bid_ask")
+                self._update_zero_hero_diag(data, rejected_reason="invalid_bid_ask")
+                continue
+            spread_ok = self.execution.spread_ok(
+                bid,
+                ask,
+                premium or 1.0,
+                instrument="OPT",
+                segment=segment,
+                market_open=bool(market_ctx.is_market_open),
+            )
+            spread_pct = max(0.0, ask - bid) / max(premium, 1e-6)
+            if not spread_ok:
+                if spread_pct > float(getattr(cfg, "ZERO_HERO_EXPIRY_SPREAD_HARD_PCT", 0.45)):
+                    self._update_strategy_candidate_debug(stats, rejected=1, reason="spread_too_wide")
+                    self._update_zero_hero_diag(data, rejected_reason="spread_too_wide")
+                    continue
+                soft_flags.append("spread_soft_fail")
+                penalty += 0.10
+
             iv = opt.get("iv")
-            iv_z = opt.get("iv_z")
+            if iv is not None:
+                iv_val = float(iv)
+                if iv_val < (iv_min - iv_margin):
+                    self._update_strategy_candidate_debug(stats, rejected=1, reason="iv_too_low")
+                    self._update_zero_hero_diag(data, rejected_reason="iv_too_low")
+                    continue
+                if iv_val < iv_min:
+                    soft_flags.append("iv_soft_fail")
+                    penalty += 0.06
             tte_hrs = opt.get("time_to_expiry_hrs")
             if tte_hrs is None:
-                tte_hrs = market_data.get("time_to_expiry_hrs")
+                tte_hrs = data.get("time_to_expiry_hrs")
             if tte_hrs is None:
-                tte_hrs = 0
-            if iv is not None and iv < getattr(cfg, "ZERO_HERO_IVCRUSH_MIN", 0.15):
+                tte_hrs = 0.0
+            try:
+                tte_val = float(tte_hrs)
+            except Exception:
+                tte_val = 0.0
+            if tte_val > (tte_max + tte_margin):
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="time_to_expiry_too_high")
+                self._update_zero_hero_diag(data, rejected_reason="time_to_expiry_too_high")
                 continue
-            if tte_hrs > getattr(cfg, "ZERO_HERO_TIME_TO_EXPIRY_MAX_HRS", 6):
-                continue
-            d = abs(opt.get("delta", 0.0)) if opt.get("delta") is not None else 0.0
-            if d and (d < min_delta or d > max_delta):
-                continue
-            # require strong immediate momentum
-            if abs(ltp_change_window) < atr * getattr(cfg, "ZERO_HERO_ATR_MULT", 0.08):
-                continue
+            if tte_val > tte_max:
+                soft_flags.append("time_to_expiry_soft_fail")
+                penalty += 0.05
 
-            slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
+            delta_raw = opt.get("delta")
+            d = abs(float(delta_raw)) if delta_raw is not None else 0.0
+            if d:
+                if d < (min_delta - delta_margin) or d > (max_delta + delta_margin):
+                    self._update_strategy_candidate_debug(stats, rejected=1, reason="delta_out_of_range")
+                    self._update_zero_hero_diag(data, rejected_reason="delta_out_of_range")
+                    continue
+                if d < min_delta or d > max_delta:
+                    soft_flags.append("delta_soft_fail")
+                    penalty += 0.07
+
+            if weak_momentum:
+                soft_flags.append("momentum_soft_fail")
+                penalty += 0.09
+            if late_window_soft:
+                soft_flags.append("late_window_soft_fail")
+                penalty += 0.07
+            if orb_pending_soft:
+                soft_flags.append("orb_bias_pending")
+                penalty += 0.05
+            elif orb_conflict_soft:
+                soft_flags.append("orb_bias_conflict")
+                penalty += 0.10
+
+            slippage = self.execution.estimate_slippage(bid, ask, opt.get("volume", 0))
             base_entry_price, entry_price_source = self._option_executable_price(opt, side="BUY")
             if base_entry_price is None or base_entry_price <= 0:
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="invalid_entry_proxy")
+                self._update_zero_hero_diag(data, rejected_reason="invalid_entry_proxy")
                 continue
             entry_price = float(base_entry_price)
             _trigger_entry_price, entry_condition, entry_ref_price = self._apply_entry_trigger(
@@ -5327,34 +5825,31 @@ class TradeBuilder:
             )
             if entry_ref_price is None:
                 entry_ref_price = entry_price
-            # target based on underlying points * delta proxy
-            delta = d if d else 0.3
-            target = entry_price + max(5, tgt_points * delta)
-            stop_loss = max(entry_price - max(3, (tgt_points * delta) * 0.5), entry_price * 0.2)
 
-            confidence = max(0.6, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))
+            delta_proxy = d if d else 0.3
+            target = entry_price + max(5, tgt_points * delta_proxy)
+            stop_loss = max(entry_price - max(3, (tgt_points * delta_proxy) * 0.5), entry_price * 0.2)
+            confidence = max(0.52, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))
+            confidence = max(0.05, min(1.0, confidence - penalty))
+
             alpha_conf = None
             alpha_unc = None
             size_mult = 1.0
             adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
-                confidence, None, None, None, market_data, quick_mode=True
+                confidence, None, None, None, data, quick_mode=True
             )
             if adj_conf is not None:
-                confidence = adj_conf
-            allowed_life, _ = self._apply_lifecycle_gate("ZERO_HERO_EXPIRY", mode="QUICK")
-            if not allowed_life:
-                if debug_reasons:
-                    _log_advisory_debug("zero_hero_expiry_reject symbol=%s reason=lifecycle_gate", symbol)
-                return None
-            expiry_resolved = self._option_expiry(opt, market_data)
+                confidence = max(0.05, min(1.0, float(adj_conf)))
+
+            expiry_resolved = self._option_expiry(opt, data)
             if not expiry_resolved:
-                expiry_resolved = self._resolve_expiry_for_symbol(symbol, market_data)
+                expiry_resolved = self._resolve_expiry_for_symbol(symbol, data)
             contract = self._resolve_option_contract(
                 symbol,
                 opt.get("strike"),
                 opt.get("type"),
                 expiry_resolved,
-                market_data,
+                data,
             )
             expiry_resolved = contract.get("expiry") or expiry_resolved
             tradingsymbol = contract.get("tradingsymbol") or opt.get("tradingsymbol")
@@ -5368,14 +5863,13 @@ class TradeBuilder:
                 1,
             )
             if ident_err or not expiry_resolved or not tradingsymbol or not instrument_id:
-                if debug_reasons:
-                    rec = self._reject_record(symbol, opt, opt_type, "unresolved_contract", atr=atr)
-                    rejected.append(rec)
+                self._update_strategy_candidate_debug(stats, rejected=1, reason="unresolved_contract")
+                self._update_zero_hero_diag(data, rejected_reason="unresolved_contract")
                 continue
             extra_blockers = []
             if instrument_token is None:
                 extra_blockers.append("instrument_token_missing")
-            intent = self.trade_intent_flags(market_data, opt=opt, additional_blockers=extra_blockers)
+            intent = self.trade_intent_flags(data, opt=opt, additional_blockers=extra_blockers)
             trade = Trade(
                 trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-ZEROEXP-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
                 timestamp=datetime.now(),
@@ -5402,12 +5896,12 @@ class TradeBuilder:
                 expected_slippage=round(slippage, 2),
                 confidence=round(confidence, 3),
                 strategy="ZERO_HERO_EXPIRY",
-                regime=market_data.get("regime", "NEUTRAL"),
+                regime=data.get("regime", "NEUTRAL"),
                 tier="EXPLORATION",
-                day_type=market_data.get("day_type", "UNKNOWN"),
+                day_type=data.get("day_type", "UNKNOWN"),
                 entry_condition=entry_condition,
                 entry_ref_price=entry_ref_price,
-                signal_price=self._option_signal_price(opt, market_data),
+                signal_price=self._option_signal_price(opt, data),
                 entry_price_source=entry_price_source,
                 expected_entry=round(entry_price, 2),
                 expected_entry_source=entry_price_source,
@@ -5428,14 +5922,34 @@ class TradeBuilder:
                 underlying_spot=underlying_spot,
                 spot_source=spot_source,
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
-                chain_source=market_data.get("chain_source") or opt.get("chain_source"),
+                chain_source=data.get("chain_source") or opt.get("chain_source"),
             )
-            trade = self._decorate_trade_context(trade, market_data, confidence)
+            trade = self._decorate_trade_context(trade, data, confidence)
             if trade is not None:
+                trade.source_flags.update(
+                    {
+                        "zero_hero_expiry": True,
+                        "zero_hero_variant": "expiry_day",
+                        "zero_hero_considered": int((self._zero_hero_diag(data) or {}).get("zero_hero_considered", 0)),
+                        "zero_hero_selected_premium_band": dict(
+                            (self._zero_hero_diag(data) or {}).get("zero_hero_selected_premium_band") or {}
+                        ),
+                        "zero_hero_activation_window": dict(
+                            (self._zero_hero_diag(data) or {}).get("zero_hero_activation_window") or {}
+                        ),
+                        "candidate_soft_flags": list(soft_flags),
+                        "spot_issue": spot_issue,
+                    }
+                )
                 candidates.append(trade)
+                self._update_strategy_candidate_debug(stats, scored=1)
         if not candidates:
+            self._update_strategy_candidate_debug(stats, rejected=1, reason="no_viable_candidates")
+            if not (self._zero_hero_diag(data) or {}).get("zero_hero_rejected_reason"):
+                self._update_zero_hero_diag(data, rejected_reason="no_viable_candidates")
             return None
         trade = sorted(candidates, key=lambda t: t.confidence, reverse=True)[0]
+        self._update_zero_hero_diag(data, clear_rejected_reason=True)
         self._expiry_zero_hero_count += 1
         self._expiry_zero_hero_by_symbol[symbol] = self._expiry_zero_hero_by_symbol.get(symbol, 0) + 1
         return trade
@@ -5741,6 +6255,9 @@ class TradeBuilder:
             size_mult = 1.0
             xgb_conf = None
             micro_conf = None
+            confidence_model_component = None
+            confidence_micro_component = None
+            confidence_micro_blend_method = None
             if use_ml:
                 ok_features, feature_reason = self._validate_ml_features(feats)
                 if not ok_features:
@@ -5755,10 +6272,13 @@ class TradeBuilder:
                     continue
                 xgb_conf = self.predictor.predict_confidence(feats)
                 confidence = xgb_conf
+                confidence_model_component = self._clamp_confidence(confidence)
                 if getattr(cfg, "ML_AB_ENABLE", False):
                     shadow_confidence = self.predictor.predict_confidence_shadow(feats)
             else:
                 confidence = max(0.5, min(1.0, 0.6 + (atr / max(ltp, 1)) * 10))
+                confidence_model_component = self._clamp_confidence(confidence)
+                confidence_micro_blend_method = "model_only"
             if cfg.USE_MICRO_MODEL:
                 micro_features = [
                     float(opt.get("spread_pct", (opt["ask"] - opt["bid"]) / opt["ltp"] if opt["ltp"] else 0)),
@@ -5766,7 +6286,8 @@ class TradeBuilder:
                     float(opt.get("oi_change", 0))
                 ]
                 micro_conf = self._get_micro_predictor().predict_confidence(micro_features)
-                confidence = (confidence + micro_conf) / 2.0
+                confidence_micro_component = self._clamp_confidence(micro_conf)
+                confidence, confidence_micro_blend_method = self._blend_micro_confidence(confidence, micro_conf)
             # Alpha ensemble fusion (exploratory: downsize but don't veto)
             adj_conf, alpha_conf, alpha_unc, size_mult = self._apply_alpha_ensemble(
                 confidence, xgb_conf, None, micro_conf, market_data, quick_mode=True
@@ -5880,6 +6401,9 @@ class TradeBuilder:
                 shadow_confidence=shadow_confidence,
                 alpha_confidence=alpha_conf,
                 alpha_uncertainty=alpha_unc,
+                confidence_model_component=round(float(confidence_model_component), 6) if confidence_model_component is not None else None,
+                confidence_micro_component=round(float(confidence_micro_component), 6) if confidence_micro_component is not None else None,
+                confidence_micro_blend_method=confidence_micro_blend_method,
                 size_mult=size_mult,
                 tradable=bool(intent["tradable"]),
                 tradable_reasons_blocking=list(intent["tradable_reasons_blocking"]),

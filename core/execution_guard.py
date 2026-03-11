@@ -82,10 +82,55 @@ class ExecutionGuard:
         self.survival_gates = survival_gates or SurvivalGates()
         self.last_decision = None
 
-    def _min_conf(self, regime):
-        min_conf = getattr(cfg, "ML_MIN_PROBA", 0.6)
+    @staticmethod
+    def _configured_threshold(*, override_name: str, override_default_name: str, fallback: float) -> float:
+        threshold = float(getattr(cfg, override_name, fallback))
+        explicit_default = getattr(cfg, override_default_name, None)
+        try:
+            if explicit_default is not None and abs(float(threshold) - float(explicit_default)) <= 1e-9:
+                return float(fallback)
+        except Exception:
+            return float(fallback)
+        return float(threshold)
+
+    def _min_conf(self, regime, *, stage: str = "final"):
+        if str(stage or "final").strip().lower() == "raw":
+            min_conf = self._configured_threshold(
+                override_name="TRADE_BUILDER_RAW_CONFIDENCE_MIN",
+                override_default_name="TRADE_BUILDER_RAW_CONFIDENCE_MIN_DEFAULT",
+                fallback=float(getattr(cfg, "ML_MIN_PROBA", 0.6)),
+            )
+        else:
+            builder_final_fallback = self._configured_threshold(
+                override_name="TRADE_BUILDER_FINAL_CONFIDENCE_MIN",
+                override_default_name="TRADE_BUILDER_FINAL_CONFIDENCE_MIN_DEFAULT",
+                fallback=float(
+                    getattr(
+                        cfg,
+                        "GATING_FINAL_CONFIDENCE_MIN",
+                        getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_LIVE", 0.30),
+                    )
+                ),
+            )
+            min_conf = self._configured_threshold(
+                override_name="EXECUTION_GUARD_FINAL_CONFIDENCE_MIN",
+                override_default_name="EXECUTION_GUARD_FINAL_CONFIDENCE_MIN_DEFAULT",
+                fallback=builder_final_fallback,
+            )
         mult = getattr(cfg, "REGIME_PROBA_MULT", {}).get(regime or "NEUTRAL", 1.0)
-        return min_conf * mult
+        return float(min_conf) * float(mult)
+
+    @staticmethod
+    def _trade_confidence(trade) -> float | None:
+        for field in ("confidence_final", "confidence_after_soft_veto", "confidence"):
+            try:
+                value = getattr(trade, field, None)
+                if value is None:
+                    continue
+                return float(value)
+            except Exception:
+                continue
+        return None
 
     @staticmethod
     def _reason_code(reason: str) -> str:
@@ -148,6 +193,13 @@ class ExecutionGuard:
     def evaluate(self, trade, portfolio, regime, *, market_data=None, mode=None):
         market_ctx = self._market_context(market_data=market_data, mode=mode)
         requested_mode = self._requested_mode(market_data=market_data, mode=mode)
+        trade_confidence = self._trade_confidence(trade)
+        min_conf = self._min_conf(regime, stage="final")
+        confidence_context = {
+            "trade_confidence": trade_confidence,
+            "min_confidence": min_conf,
+            "confidence_stage": "final",
+        }
         planning_only = bool(
             market_ctx.planning_only
             or getattr(trade, "planning_only", False)
@@ -160,7 +212,7 @@ class ExecutionGuard:
                     reason="Market closed",
                     mode=requested_mode,
                     planning_only=False,
-                    context={"require_live_quotes": bool(market_ctx.require_live_quotes)},
+                    context={"require_live_quotes": bool(market_ctx.require_live_quotes), **confidence_context},
                 )
             if bool(getattr(cfg, "ENFORCE_EXECUTION_ALLOWED_FLAG", True)) and (
                 not bool(getattr(trade, "execution_allowed", True))
@@ -170,7 +222,7 @@ class ExecutionGuard:
                     reason="Execution not allowed",
                     mode=requested_mode,
                     planning_only=False,
-                    context={"trade_reason": getattr(trade, "reason", None)},
+                    context={"trade_reason": getattr(trade, "reason", None), **confidence_context},
                 )
         if getattr(trade, "tradable", True) is False:
             reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
@@ -182,7 +234,7 @@ class ExecutionGuard:
                 reason=msg,
                 mode=market_ctx.mode,
                 planning_only=planning_only,
-                context={"tradable_reasons_blocking": reasons},
+                context={"tradable_reasons_blocking": reasons, **confidence_context},
             )
 
         survival_decision = self.survival_gates.evaluate(
@@ -198,7 +250,7 @@ class ExecutionGuard:
                 reason="Survival gate breach",
                 mode=market_ctx.mode,
                 planning_only=planning_only,
-                context=base_context,
+                context={**base_context, **confidence_context},
             )
 
         if bool(getattr(cfg, "REGIME_MONITOR_ENABLED", True)):
@@ -211,7 +263,7 @@ class ExecutionGuard:
                     reason="Regime monitor severe collapse",
                     mode=market_ctx.mode,
                     planning_only=planning_only,
-                    context={"regime_monitor": regime_status},
+                    context={"regime_monitor": regime_status, **confidence_context},
                 )
             if collapsed and _is_regime_dependent_strategy(getattr(trade, "strategy", None)):
                 size_mult = float(getattr(cfg, "REGIME_MONITOR_SIZE_MULT_ON_COLLAPSE", 0.5))
@@ -221,13 +273,18 @@ class ExecutionGuard:
                         reason="Regime monitor collapse",
                         mode=market_ctx.mode,
                         planning_only=planning_only,
-                        context={**base_context, "regime_monitor": regime_status},
+                        context={**base_context, "regime_monitor": regime_status, **confidence_context},
                     )
-                context = {**base_context, "regime_monitor": regime_status, "size_multiplier": max(0.0, min(1.0, size_mult))}
+                context = {
+                    **base_context,
+                    "regime_monitor": regime_status,
+                    "size_multiplier": max(0.0, min(1.0, size_mult)),
+                    **confidence_context,
+                }
             else:
-                context = dict(base_context)
+                context = {**base_context, **confidence_context}
         else:
-            context = dict(base_context)
+            context = {**base_context, **confidence_context}
         if float(survival_decision.size_multiplier) < 1.0:
             context["size_multiplier"] = max(
                 0.0,
@@ -241,15 +298,15 @@ class ExecutionGuard:
                     reason=f"RiskState: {reason}",
                     mode=market_ctx.mode,
                     planning_only=planning_only,
+                    context=dict(confidence_context),
                 )
-        min_conf = self._min_conf(regime)
-        if trade.confidence < min_conf:
+        if trade_confidence is not None and trade_confidence < min_conf:
             return self._decision(
                 allowed=False,
                 reason="Low confidence",
                 mode=market_ctx.mode,
                 planning_only=planning_only,
-                context={"trade_confidence": trade.confidence, "min_confidence": min_conf},
+                context=dict(confidence_context),
             )
 
         if trade.capital_at_risk > portfolio.get("capital", 0):
@@ -258,7 +315,11 @@ class ExecutionGuard:
                 reason="Insufficient capital",
                 mode=market_ctx.mode,
                 planning_only=planning_only,
-                context={"capital_at_risk": trade.capital_at_risk, "capital": portfolio.get("capital", 0)},
+                context={
+                    "capital_at_risk": trade.capital_at_risk,
+                    "capital": portfolio.get("capital", 0),
+                    **confidence_context,
+                },
             )
 
         if regime == "RANGE" and trade.strategy == "TREND":
@@ -267,7 +328,7 @@ class ExecutionGuard:
                 reason="Regime mismatch",
                 mode=market_ctx.mode,
                 planning_only=planning_only,
-                context={"regime": regime, "strategy": trade.strategy},
+                context={"regime": regime, "strategy": trade.strategy, **confidence_context},
             )
 
         if planning_only and bool(getattr(cfg, "EXECUTION_GUARD_ALLOW_PLANNING", True)):

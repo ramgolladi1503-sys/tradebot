@@ -141,3 +141,60 @@ def test_execution_guard_blocks_on_survival_gate_breach():
     assert decision.allowed is False
     assert decision.reason_code == "SURVIVAL_GATE_BREACH"
     assert "MAX_CONSECUTIVE_LOSSES_BREACH" in list((decision.context or {}).get("reason_codes") or [])
+    assert decision.context["confidence_stage"] == "final"
+
+
+def test_execution_guard_allows_when_final_confidence_meets_threshold(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_GUARD_FINAL_CONFIDENCE_MIN", 0.40, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_PROBA_MULT", {"TREND": 1.0}, raising=False)
+
+    guard = ExecutionGuard()
+    decision = guard.evaluate(
+        _trade(confidence=0.55),
+        {"capital": 10000.0},
+        "TREND",
+        market_data={"market_context": {"execution_mode": "LIVE", "market_open": True}},
+    )
+
+    assert decision.allowed is True
+    assert decision.context["trade_confidence"] == 0.55
+    assert decision.context["min_confidence"] == 0.40
+    assert decision.context["confidence_stage"] == "final"
+
+
+def test_execution_guard_blocks_when_final_confidence_below_threshold(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_GUARD_FINAL_CONFIDENCE_MIN", 0.40, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_PROBA_MULT", {"TREND": 1.0}, raising=False)
+
+    guard = ExecutionGuard()
+    decision = guard.evaluate(
+        _trade(confidence=0.34),
+        {"capital": 10000.0},
+        "TREND",
+        market_data={"market_context": {"execution_mode": "LIVE", "market_open": True}},
+    )
+
+    assert decision.allowed is False
+    assert decision.reason_code == "LOW_CONFIDENCE"
+    assert decision.context["trade_confidence"] == 0.34
+    assert decision.context["min_confidence"] == 0.40
+    assert decision.context["confidence_stage"] == "final"
+
+
+def test_execution_guard_high_confidence_can_still_fail_non_confidence_reason(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_GUARD_FINAL_CONFIDENCE_MIN", 0.30, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_PROBA_MULT", {"TREND": 1.0}, raising=False)
+
+    guard = ExecutionGuard()
+    decision = guard.evaluate(
+        _trade(confidence=0.92, capital_at_risk=25000.0),
+        {"capital": 10000.0},
+        "TREND",
+        market_data={"market_context": {"execution_mode": "LIVE", "market_open": True}},
+    )
+
+    assert decision.allowed is False
+    assert decision.reason_code == "INSUFFICIENT_CAPITAL"
+    assert decision.context["trade_confidence"] == 0.92
+    assert decision.context["min_confidence"] == 0.30
+    assert decision.context["confidence_stage"] == "final"

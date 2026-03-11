@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 from config import config as cfg
+from core.entry_semantics import build_entry_state
 from core import review_queue
 from core.blocker_lifecycle import reset_blocker_registries
 from core.option_liquidity_cache import clear_option_liquidity_cache, update_option_liquidity_cache
@@ -87,6 +88,73 @@ def test_advisory_entry_keeps_ltp_when_price_mismatch(tmp_path, monkeypatch):
     assert rows[0]["validation_reference_source"] == "entry_price"
     assert rows[0]["pre_validation_entry"] == 257.0
     assert rows[0]["post_validation_entry"] == 565.0
+
+
+def test_review_queue_preserves_executable_and_display_entry_fields(tmp_path, monkeypatch, caplog):
+    qpath = tmp_path / "review_queue.json"
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(review_queue, "APPROVED_PATH", tmp_path / "approved.json")
+    monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
+    monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (72.8, time.time()))
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
+
+    lifecycle = build_entry_state(
+        symbol="NIFTY",
+        expiry="2026-03-26",
+        strike=24600,
+        right="PE",
+        side="BUY",
+        bid=72.2,
+        ask=72.8,
+        mark=72.5,
+        last=72.4,
+        quote_age_sec=1.0,
+        mode="LIVE",
+        allow_stale_quotes=False,
+        market_open=True,
+        instrument_matches=True,
+        quote_source="tick_store",
+    )
+    trade = _make_trade(
+        trade_id="ADV-EXEC-1",
+        instrument_token=77123,
+        tradingsymbol="NIFTY26MAR24600PE",
+        symbol="NIFTY",
+        expiry_date="2026-03-26",
+        expiry="2026-03-26",
+        strike=24600,
+        option_type="PE",
+        strategy="CORE",
+        entry_price=72.8,
+        execution_mode="LIVE",
+        quote_source="tick_store",
+        option_ltp_source="tick_store",
+        quote_age_sec=1.0,
+        bid=72.2,
+        ask=72.8,
+        mark_price=72.5,
+        current_ltp=72.8,
+        **lifecycle,
+    )
+
+    with caplog.at_level("DEBUG"):
+        review_queue.add_to_queue(trade, extra={"permission": "EXECUTE"})
+
+    payload = json.loads(suggestions_path.read_text().strip())
+    assert payload["execution_entry"] == 72.8
+    assert payload["execution_entry_source"] == "ask"
+    assert payload["execution_entry_status"] == "executable"
+    assert payload["display_entry"] == 72.8
+    assert payload["display_entry_source"] == "ask"
+    assert payload["display_entry_status"] == "displayable"
+    assert payload["entry"] == 72.8
+    assert payload["entry_status"] == "displayable"
+    assert "entry_lifecycle_resolved trade_id=ADV-EXEC-1" in caplog.text
 
 
 def test_review_queue_persists_freshness_evidence_from_validation(tmp_path, monkeypatch):
@@ -794,6 +862,21 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
         "confidence": 0.7,
         "confidence_base": 0.82,
         "confidence_raw": 0.82,
+        "confidence_model_raw": 0.88,
+        "confidence_model_component": 0.88,
+        "confidence_micro_component": 0.70,
+        "confidence_micro_blend_method": "bounded_overlay",
+        "confidence_after_micro": 0.84,
+        "confidence_after_alpha": 0.81,
+        "confidence_after_latency": 0.79,
+        "confidence_before_soft_veto": 0.79,
+        "confidence_after_soft_veto": 0.74,
+        "confidence_penalty_soft_veto_total": 0.05,
+        "confidence_penalty_soft_veto_reasons": ["premium_out_of_band"],
+        "confidence_gate_threshold": 0.30,
+        "confidence_raw_gate_threshold": 0.55,
+        "confidence_final_gate_threshold": 0.30,
+        "confidence_rejection_stage": "soft_veto",
         "confidence_penalty": 0.12,
         "confidence_penalty_total": 0.12,
         "confidence_penalty_reasons": ["STALE_OPTION_LTP", "MISSING_CROSS_ASSET_FEATURE"],
@@ -821,6 +904,21 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
     assert deserialized["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
     assert float(deserialized["confidence_base"]) == 0.82
     assert float(deserialized["confidence_raw"]) == 0.82
+    assert float(deserialized["confidence_model_raw"]) == 0.88
+    assert float(deserialized["confidence_model_component"]) == 0.88
+    assert float(deserialized["confidence_micro_component"]) == 0.70
+    assert deserialized["confidence_micro_blend_method"] == "bounded_overlay"
+    assert float(deserialized["confidence_after_micro"]) == 0.84
+    assert float(deserialized["confidence_after_alpha"]) == 0.81
+    assert float(deserialized["confidence_after_latency"]) == 0.79
+    assert float(deserialized["confidence_before_soft_veto"]) == 0.79
+    assert float(deserialized["confidence_after_soft_veto"]) == 0.74
+    assert float(deserialized["confidence_penalty_soft_veto_total"]) == 0.05
+    assert deserialized["confidence_penalty_soft_veto_reasons"] == ["premium_out_of_band"]
+    assert float(deserialized["confidence_gate_threshold"]) == 0.30
+    assert float(deserialized["confidence_raw_gate_threshold"]) == 0.55
+    assert float(deserialized["confidence_final_gate_threshold"]) == 0.30
+    assert deserialized["confidence_rejection_stage"] == "soft_veto"
     assert float(deserialized["confidence_penalty"]) == 0.12
     assert float(deserialized["confidence_penalty_total"]) == 0.12
     assert deserialized["confidence_penalty_reasons"] == ["STALE_OPTION_LTP", "MISSING_CROSS_ASSET_FEATURE"]
@@ -1566,6 +1664,7 @@ def test_queue_only_permission_preserves_queue_only_final_action(tmp_path, monke
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
     monkeypatch.setattr(
@@ -1574,10 +1673,19 @@ def test_queue_only_permission_preserves_queue_only_final_action(tmp_path, monke
         lambda **kwargs: {
             "permission": "QUEUE_ONLY",
             "permission_reason": "medium_global_conf",
-            "global_confidence": 0.35,
+            "global_confidence": 0.29,
         },
     )
-    monkeypatch.setattr(review_queue, "gate_decision", lambda *_args, **_kwargs: {"hard_pass": True, "hard_reasons": [], "soft_reasons": [], "final_confidence": 0.35})
+    monkeypatch.setattr(
+        review_queue,
+        "gate_decision",
+        lambda *_args, **_kwargs: {
+            "hard_pass": True,
+            "hard_reasons": [],
+            "soft_reasons": [],
+            "final_confidence": 0.29,
+        },
+    )
 
     review_queue.add_to_queue(
         _make_trade(
@@ -1594,12 +1702,17 @@ def test_queue_only_permission_preserves_queue_only_final_action(tmp_path, monke
     assert rows[0]["final_action"] == "QUEUE_ONLY"
     assert rows[0]["status"] == "QUEUE_ONLY"
     assert rows[0]["status_raw"] == "PLANNING"
+    assert float(rows[0]["threshold_display"]) == 0.0
+    assert float(rows[0]["threshold_advisory"]) == 0.15
+    assert float(rows[0]["threshold_execution"]) == 0.30
+    assert rows[0]["confidence_vs_threshold_reason"] == "meets_advisory_below_execution_threshold"
 
 
 def test_advisory_only_permission_stays_advisory_only_for_low_confidence(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
     monkeypatch.setattr(
@@ -1608,10 +1721,19 @@ def test_advisory_only_permission_stays_advisory_only_for_low_confidence(tmp_pat
         lambda **kwargs: {
             "permission": "ADVISORY_ONLY",
             "permission_reason": "low_global_conf",
-            "global_confidence": 0.2,
+            "global_confidence": 0.14,
         },
     )
-    monkeypatch.setattr(review_queue, "gate_decision", lambda *_args, **_kwargs: {"hard_pass": True, "hard_reasons": [], "soft_reasons": [], "final_confidence": 0.2})
+    monkeypatch.setattr(
+        review_queue,
+        "gate_decision",
+        lambda *_args, **_kwargs: {
+            "hard_pass": True,
+            "hard_reasons": [],
+            "soft_reasons": [],
+            "final_confidence": 0.14,
+        },
+    )
 
     review_queue.add_to_queue(
         _make_trade(
@@ -1628,12 +1750,17 @@ def test_advisory_only_permission_stays_advisory_only_for_low_confidence(tmp_pat
     assert rows[0]["permission"] == "ADVISORY_ONLY"
     assert rows[0]["final_action"] == "ADVISORY_ONLY"
     assert rows[0]["status"] == "ADVISORY_ONLY"
+    assert float(rows[0]["threshold_display"]) == 0.0
+    assert float(rows[0]["threshold_advisory"]) == 0.15
+    assert float(rows[0]["threshold_execution"]) == 0.30
+    assert rows[0]["confidence_vs_threshold_reason"] == "below_advisory_threshold"
 
 
 def test_execute_permission_stays_execute_when_aligned_and_high_confidence(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
     monkeypatch.setattr(
@@ -1662,21 +1789,26 @@ def test_execute_permission_stays_execute_when_aligned_and_high_confidence(tmp_p
     assert rows[0]["permission"] == "EXECUTE"
     assert rows[0]["final_action"] == "EXECUTE"
     assert rows[0]["status"] == "READY"
+    assert float(rows[0]["threshold_display"]) == 0.0
+    assert float(rows[0]["threshold_advisory"]) == 0.15
+    assert float(rows[0]["threshold_execution"]) == 0.30
+    assert rows[0]["confidence_vs_threshold_reason"] == "meets_execution_threshold"
 
 
-def test_queue_only_permission_downgrade_records_hard_gate_provenance(tmp_path, monkeypatch):
+def test_high_confidence_permission_downgrade_records_hard_gate_provenance(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
     monkeypatch.setattr(
         review_queue,
         "build_permission_payload",
         lambda **kwargs: {
-            "permission": "QUEUE_ONLY",
-            "permission_reason": "medium_global_conf",
-            "global_confidence": 0.35,
+            "permission": "EXECUTE",
+            "permission_reason": "aligned_high_conf",
+            "global_confidence": 0.91,
         },
     )
     monkeypatch.setattr(
@@ -1684,9 +1816,9 @@ def test_queue_only_permission_downgrade_records_hard_gate_provenance(tmp_path, 
         "gate_decision",
         lambda *_args, **_kwargs: {
             "hard_pass": False,
-            "hard_reasons": ["HARD_GATE_FAILED"],
+            "hard_reasons": ["HARD_SPREAD_TOO_WIDE"],
             "soft_reasons": [],
-            "final_confidence": 0.35,
+            "final_confidence": 0.91,
         },
     )
 
@@ -1702,12 +1834,15 @@ def test_queue_only_permission_downgrade_records_hard_gate_provenance(tmp_path, 
     )
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["permission_base"] == "QUEUE_ONLY"
-    assert rows[0]["permission_reason_base"] == "medium_global_conf"
+    assert rows[0]["permission_base"] == "EXECUTE"
+    assert rows[0]["permission_reason_base"] == "aligned_high_conf"
     assert rows[0]["permission"] == "ADVISORY_ONLY"
-    assert rows[0]["permission_reason"] == "HARD_GATE_FAILED"
-    assert rows[0]["permission_downgraded_from"] == "QUEUE_ONLY"
-    assert rows[0]["permission_downgrade_reason"] == "HARD_GATE_FAILED"
+    assert rows[0]["permission_reason"] == "HARD_SPREAD_TOO_WIDE"
+    assert rows[0]["permission_downgraded_from"] == "EXECUTE"
+    assert rows[0]["permission_downgrade_reason"] == "HARD_SPREAD_TOO_WIDE"
+    assert rows[0]["readiness"] == "BLOCKED"
+    assert rows[0]["execution_status"] == "blocked"
+    assert rows[0]["confidence_vs_threshold_reason"] == "hard_blocker_overrides_threshold"
 
 
 def test_unknown_volume_stays_none_in_gate_candidate_and_does_not_fall_back_to_oi(tmp_path, monkeypatch):
@@ -2055,10 +2190,19 @@ def test_low_conf_advisory_only_keeps_base_permission_reason(tmp_path, monkeypat
         lambda **kwargs: {
             "permission": "ADVISORY_ONLY",
             "permission_reason": "low_global_conf",
-            "global_confidence": 0.2,
+            "global_confidence": 0.14,
         },
     )
-    monkeypatch.setattr(review_queue, "gate_decision", lambda *_args, **_kwargs: {"hard_pass": True, "hard_reasons": [], "soft_reasons": [], "final_confidence": 0.2})
+    monkeypatch.setattr(
+        review_queue,
+        "gate_decision",
+        lambda *_args, **_kwargs: {
+            "hard_pass": True,
+            "hard_reasons": [],
+            "soft_reasons": [],
+            "final_confidence": 0.14,
+        },
+    )
 
     review_queue.add_to_queue(
         _make_trade(
@@ -2080,13 +2224,14 @@ def test_low_conf_advisory_only_keeps_base_permission_reason(tmp_path, monkeypat
     assert rows[0]["permission_reason"] == "low_global_conf"
     assert rows[0].get("permission_downgraded_from") in (None, "")
     assert rows[0].get("permission_downgrade_reason") in (None, "")
+    assert rows[0]["confidence_vs_threshold_reason"] == "below_advisory_threshold"
 
 
 def test_execute_permission_soft_conf_reject_records_downgrade_provenance(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
-    monkeypatch.setattr(cfg, "GATING_FINAL_CONFIDENCE_MIN", 0.55, raising=False)
+    monkeypatch.setattr(cfg, "GATING_FINAL_CONFIDENCE_MIN", 0.30, raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
     monkeypatch.setattr(
@@ -2105,7 +2250,7 @@ def test_execute_permission_soft_conf_reject_records_downgrade_provenance(tmp_pa
             "hard_pass": True,
             "hard_reasons": [],
             "soft_reasons": [],
-            "final_confidence": 0.45,
+            "final_confidence": 0.25,
         },
     )
 
@@ -2127,3 +2272,4 @@ def test_execute_permission_soft_conf_reject_records_downgrade_provenance(tmp_pa
     assert rows[0]["permission_reason"] == "SOFT_CONFIDENCE_BELOW_THRESHOLD"
     assert rows[0]["permission_downgraded_from"] == "EXECUTE"
     assert rows[0]["permission_downgrade_reason"] == "SOFT_CONFIDENCE_BELOW_THRESHOLD"
+    assert rows[0]["confidence_vs_threshold_reason"] == "meets_advisory_below_execution_threshold"

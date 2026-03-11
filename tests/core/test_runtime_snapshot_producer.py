@@ -30,6 +30,21 @@ def _sample_advisory() -> dict:
             "entry_source": "ask",
             "confidence": 0.71,
             "confidence_raw": 0.71,
+            "confidence_model_raw": 0.77,
+            "confidence_model_component": 0.77,
+            "confidence_micro_component": 0.66,
+            "confidence_micro_blend_method": "bounded_overlay",
+            "confidence_after_micro": 0.75,
+            "confidence_after_alpha": 0.73,
+            "confidence_after_latency": 0.72,
+            "confidence_before_soft_veto": 0.72,
+            "confidence_after_soft_veto": 0.71,
+            "confidence_penalty_soft_veto_total": 0.06,
+            "confidence_penalty_soft_veto_reasons": ["premium_out_of_band"],
+            "confidence_gate_threshold": 0.30,
+            "confidence_raw_gate_threshold": 0.55,
+            "confidence_final_gate_threshold": 0.30,
+            "confidence_rejection_stage": "final_gate",
             "confidence_penalty": 0.0,
             "confidence_final": 0.71,
             "readiness": "QUEUE_ONLY",
@@ -117,3 +132,12 @@ def test_runtime_snapshot_advisory_roundtrip_preserves_required_fields(tmp_path,
     assert row["entry"] == advisory["entry"]
     assert row["quote_source"] == advisory["quote_source"]
     assert row["warnings"] == advisory["warnings"]
+    assert row["confidence_model_raw"] == advisory["confidence_model_raw"]
+    assert row["confidence_model_component"] == advisory["confidence_model_component"]
+    assert row["confidence_micro_component"] == advisory["confidence_micro_component"]
+    assert row["confidence_micro_blend_method"] == advisory["confidence_micro_blend_method"]
+    assert row["confidence_after_soft_veto"] == advisory["confidence_after_soft_veto"]
+    assert row["confidence_penalty_soft_veto_total"] == advisory["confidence_penalty_soft_veto_total"]
+    assert row["confidence_penalty_soft_veto_reasons"] == advisory["confidence_penalty_soft_veto_reasons"]
+    assert row["confidence_gate_threshold"] == advisory["confidence_gate_threshold"]
+    assert row["confidence_rejection_stage"] == advisory["confidence_rejection_stage"]

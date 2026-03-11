@@ -27,10 +27,29 @@ def _valid_row(**overrides):
         "confidence": 0.72,
         "confidence_base": 0.72,
         "confidence_raw": 0.72,
+        "confidence_model_raw": 0.78,
+        "confidence_model_component": 0.78,
+        "confidence_micro_component": 0.62,
+        "confidence_micro_blend_method": "bounded_overlay",
+        "confidence_after_micro": 0.74,
+        "confidence_after_alpha": 0.73,
+        "confidence_after_latency": 0.71,
+        "confidence_before_soft_veto": 0.71,
+        "confidence_after_soft_veto": 0.72,
+        "confidence_penalty_soft_veto_total": 0.04,
+        "confidence_penalty_soft_veto_reasons": ["orb_pending"],
+        "confidence_gate_threshold": 0.30,
+        "confidence_raw_gate_threshold": 0.55,
+        "confidence_final_gate_threshold": 0.30,
+        "confidence_rejection_stage": None,
         "confidence_penalty": 0.0,
         "confidence_penalty_total": 0.0,
         "confidence_penalty_reasons": [],
         "confidence_final": 0.72,
+        "threshold_display": 0.0,
+        "threshold_advisory": 0.15,
+        "threshold_execution": 0.30,
+        "confidence_vs_threshold_reason": "meets_execution_threshold",
         "readiness": "ADVISORY_ONLY",
         "hard_blockers": [],
         "soft_penalties": ["STALE_OPTION_LTP"],
@@ -60,13 +79,75 @@ def test_advisory_schema_round_trip_survives_unchanged():
     assert deserialized["strategy_id"] == "CORE"
     assert deserialized["entry"] == 72.5
     assert deserialized["confidence_base"] == 0.72
+    assert deserialized["confidence_model_raw"] == 0.78
+    assert deserialized["confidence_model_component"] == 0.78
+    assert deserialized["confidence_micro_component"] == 0.62
+    assert deserialized["confidence_micro_blend_method"] == "bounded_overlay"
+    assert deserialized["confidence_after_micro"] == 0.74
+    assert deserialized["confidence_after_alpha"] == 0.73
+    assert deserialized["confidence_after_latency"] == 0.71
+    assert deserialized["confidence_before_soft_veto"] == 0.71
+    assert deserialized["confidence_after_soft_veto"] == 0.72
+    assert deserialized["confidence_penalty_soft_veto_total"] == 0.04
+    assert deserialized["confidence_penalty_soft_veto_reasons"] == ["orb_pending"]
+    assert deserialized["confidence_gate_threshold"] == 0.30
+    assert deserialized["confidence_raw_gate_threshold"] == 0.55
+    assert deserialized["confidence_final_gate_threshold"] == 0.30
+    assert deserialized["confidence_rejection_stage"] is None
     assert deserialized["soft_penalties"] == ["STALE_OPTION_LTP"]
     assert deserialized["blockers"] == ["STALE_OPTION_LTP"]
     assert deserialized["confidence_penalty_total"] == 0.0
     assert deserialized["confidence_penalty_reasons"] == []
+    assert deserialized["threshold_display"] == 0.0
+    assert deserialized["threshold_advisory"] == 0.15
+    assert deserialized["threshold_execution"] == 0.30
+    assert deserialized["confidence_vs_threshold_reason"] == "meets_execution_threshold"
     assert deserialized["decision_explain"] == [{"code": "TRACE", "message": "kept"}]
     assert deserialized["market_open"] is True
     assert deserialized == serialized
+
+
+def test_advisory_schema_normalizes_missing_confidence_stage_fields_to_null():
+    row = _valid_row()
+    stage_keys = (
+        "confidence_model_raw",
+        "confidence_model_component",
+        "confidence_micro_component",
+        "confidence_micro_blend_method",
+        "confidence_after_micro",
+        "confidence_after_alpha",
+        "confidence_after_latency",
+        "confidence_before_soft_veto",
+        "confidence_after_soft_veto",
+        "confidence_penalty_soft_veto_total",
+        "confidence_penalty_soft_veto_reasons",
+        "confidence_gate_threshold",
+        "confidence_raw_gate_threshold",
+        "confidence_final_gate_threshold",
+        "confidence_rejection_stage",
+    )
+    for key in stage_keys:
+        row.pop(key, None)
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    for key in stage_keys:
+        assert key in out
+    assert out["confidence_model_raw"] is None
+    assert out["confidence_model_component"] is None
+    assert out["confidence_micro_component"] is None
+    assert out["confidence_micro_blend_method"] is None
+    assert out["confidence_after_micro"] is None
+    assert out["confidence_after_alpha"] is None
+    assert out["confidence_after_latency"] is None
+    assert out["confidence_before_soft_veto"] is None
+    assert out["confidence_after_soft_veto"] is None
+    assert out["confidence_penalty_soft_veto_total"] is None
+    assert out["confidence_penalty_soft_veto_reasons"] == []
+    assert out["confidence_gate_threshold"] is None
+    assert out["confidence_raw_gate_threshold"] is None
+    assert out["confidence_final_gate_threshold"] is None
+    assert out["confidence_rejection_stage"] is None
 
 
 def test_advisory_schema_missing_required_fields_raise():

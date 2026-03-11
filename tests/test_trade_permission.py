@@ -71,10 +71,15 @@ def test_permission_payload_strong_signal_reaches_execute_confidence():
         orb_bias="BULLISH",
         option_type="CE",
         side="BUY",
+        execution_mode="LIVE",
     )
     assert payload["global_confidence"] == 0.72
     assert payload["permission"] == Permission.EXECUTE.value
     assert payload["permission_reason"] == "aligned_high_conf"
+    assert payload["threshold_display"] == 0.0
+    assert payload["threshold_advisory"] == 0.15
+    assert payload["threshold_execution"] == 0.30
+    assert payload["confidence_vs_threshold_reason"] == "meets_execution_threshold"
 
 
 def test_permission_payload_missing_regime_conf_is_explicit_advisory():
@@ -85,6 +90,7 @@ def test_permission_payload_missing_regime_conf_is_explicit_advisory():
         orb_bias="BULLISH",
         option_type="CE",
         side="BUY",
+        execution_mode="LIVE",
     )
     assert payload["permission"] == Permission.ADVISORY_ONLY.value
     assert payload["permission_reason"] == "missing_regime_conf"
@@ -98,6 +104,23 @@ def test_permission_payload_normalizes_percentage_signal_once():
         orb_bias="BULLISH",
         option_type="CE",
         side="BUY",
+        execution_mode="LIVE",
     )
     assert payload["signal_score"] == 0.8
     assert payload["global_confidence"] == 0.72
+
+
+def test_permission_payload_mid_confidence_is_queue_only_when_above_advisory_below_execution():
+    payload = build_permission_payload(
+        signal_score=0.29,
+        regime="TREND_UP",
+        regime_conf=1.0,
+        orb_bias="BULLISH",
+        option_type="CE",
+        side="BUY",
+        execution_mode="LIVE",
+    )
+    assert payload["global_confidence"] == 0.29
+    assert payload["permission"] == Permission.QUEUE_ONLY.value
+    assert payload["permission_reason"] == "medium_global_conf"
+    assert payload["confidence_vs_threshold_reason"] == "meets_advisory_below_execution_threshold"
