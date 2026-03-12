@@ -352,7 +352,7 @@ class RiskEngine:
                 )
 
         stop_distance_rupees = self._extract_stop_distance_rupees(trade, lot_size)
-        ml_proba, confluence = self._extract_confidence_inputs(trade)
+        ml_proba, confluence, ml_proba_source, confluence_source = self._extract_confidence_inputs(trade)
         result = self.position_sizer.size_from_budget(
             risk_budget,
             stop_distance_rupees,
@@ -366,8 +366,19 @@ class RiskEngine:
             "effective_stop_distance": result.effective_stop_distance,
             "regime": regime,
             "ml_proba": ml_proba,
+            "ml_proba_source": ml_proba_source,
             "confluence_score": confluence,
+            "confluence_source": confluence_source,
             "confidence_size_multiplier": result.confidence_multiplier,
+            "opportunity_score": (
+                trade.get("opportunity_score") if isinstance(trade, dict) else getattr(trade, "opportunity_score", None)
+            ),
+            "opportunity_rank": (
+                trade.get("opportunity_rank") if isinstance(trade, dict) else getattr(trade, "opportunity_rank", None)
+            ),
+            "selected_for_execution": (
+                trade.get("selected_for_execution") if isinstance(trade, dict) else getattr(trade, "selected_for_execution", None)
+            ),
             "base_qty": result.base_qty,
             "final_qty": result.qty,
         }
@@ -402,35 +413,40 @@ class RiskEngine:
 
     def _extract_confidence_inputs(self, trade):
         if isinstance(trade, dict):
-            proba = trade.get("confidence")
+            proba = trade.get("builder_confidence")
+            proba_source = "builder_confidence"
+            if proba is None:
+                proba = trade.get("confidence_raw")
+                proba_source = "confidence_raw"
+            if proba is None:
+                proba = trade.get("confidence")
+                proba_source = "confidence" if proba is not None else proba_source
             detail = trade.get("trade_score_detail") or {}
-            score = trade.get("trade_score")
-            alignment = trade.get("trade_alignment")
+            confluence = trade.get("sizing_confluence_score")
         else:
-            proba = getattr(trade, "confidence", None)
+            proba = getattr(trade, "builder_confidence", None)
+            proba_source = "builder_confidence"
+            if proba is None:
+                proba = getattr(trade, "confidence_raw", None)
+                proba_source = "confidence_raw"
+            if proba is None:
+                proba = getattr(trade, "confidence", None)
+                proba_source = "confidence" if proba is not None else proba_source
             detail = getattr(trade, "trade_score_detail", {}) or {}
-            score = getattr(trade, "trade_score", None)
-            alignment = getattr(trade, "trade_alignment", None)
+            confluence = getattr(trade, "sizing_confluence_score", None)
 
-        confluence = detail.get("confluence_score")
+        confluence_source = "sizing_confluence_score"
         if confluence is None:
-            raw_score = score if score is not None else detail.get("score")
-            raw_align = alignment if alignment is not None else detail.get("alignment")
-            if raw_score is None and raw_align is None:
-                confluence = None
-            else:
-                try:
-                    score_val = float(raw_score or 0.0)
-                    align_val = float(raw_align or 0.0)
-                    confluence = max(0.0, min(1.0, ((0.6 * score_val) + (0.4 * align_val)) / 100.0))
-                except (TypeError, ValueError):
-                    confluence = None
+            confluence = detail.get("confluence_score")
+            confluence_source = "trade_score_detail.confluence_score"
         try:
             proba = float(proba) if proba is not None else None
         except (TypeError, ValueError):
             proba = None
+            proba_source = "unavailable"
         try:
             confluence = float(confluence) if confluence is not None else None
         except (TypeError, ValueError):
             confluence = None
-        return proba, confluence
+            confluence_source = "unavailable"
+        return proba, confluence, proba_source, confluence_source

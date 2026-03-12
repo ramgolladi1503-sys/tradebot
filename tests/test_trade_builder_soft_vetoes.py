@@ -626,8 +626,10 @@ def test_planning_fallback_trade_serializes_staged_confidence_fields(tmp_path, m
     row = _serialize_trade_row(tmp_path, monkeypatch, trade)
     _assert_staged_confidence_fields_present(row)
     assert row["strategy"] == "NO_SIGNAL_PLANNING"
-    assert row["confidence_model_raw"] == row["confidence"]
-    assert row["confidence_after_soft_veto"] == row["confidence"]
+    assert row["confidence_model_raw"] == row["builder_confidence"]
+    assert row["confidence_after_soft_veto"] == row["builder_confidence"]
+    assert row["confidence_final"] == row["gating_final_confidence"]
+    assert row["confidence"] == row["confidence_final"]
     assert row["confidence_micro_component"] is None
     assert row["confidence_after_micro"] is None
     assert row["confidence_penalty_soft_veto_total"] == 0.0

@@ -127,6 +127,9 @@ def test_trade_builder_uses_depth_proxy_and_sets_price_source(monkeypatch):
     assert float(trade.current_volume) == 5000.0
     assert float(trade.oi) == 20000.0
     assert float(trade.oi_change) == 1000.0
+    assert trade.opportunity_rank == 1
+    assert trade.opportunity_score is not None
+    assert trade.selection_reason is not None
 
 
 def test_trade_builder_hydrates_option_liquidity_from_cache(monkeypatch):
@@ -258,6 +261,7 @@ def test_trade_builder_live_option_sets_canonical_executable_entry(monkeypatch):
     assert round(float(trade.execution_entry), 2) == 102.00
     assert trade.execution_entry_source == "ask"
     assert trade.execution_entry_status == "executable"
+    assert trade.builder_confidence == trade.confidence
     assert round(float(trade.display_entry), 2) == 102.00
     assert trade.display_entry_status == "displayable"
     assert round(float(trade.entry_price), 2) == 102.00
@@ -302,7 +306,17 @@ def test_trade_builder_live_option_with_only_mark_is_display_only(monkeypatch):
         expected_entry=102.0,
         expected_entry_source="proxy",
         execution_allowed=True,
-        source_flags={},
+        source_flags={
+            "decision_trace": {
+                "preliminary_permission": "EXECUTE",
+                "preliminary_permission_reason": "execution_allowed",
+                "preliminary_exec_allowed": True,
+                "permission": None,
+                "permission_reason": None,
+                "final_action": None,
+                "exec_allowed": True,
+            }
+        },
     )
     trade = builder._decorate_trade_context(
         trade,
@@ -316,9 +330,15 @@ def test_trade_builder_live_option_with_only_mark_is_display_only(monkeypatch):
     assert trade.execution_entry_status == "non_executable"
     assert round(float(trade.display_entry), 2) == 101.00
     assert trade.display_entry_source == "mark"
-    assert trade.display_entry_status == "non_executable"
+    assert trade.display_entry_status == "displayable"
+    assert trade.builder_confidence == trade.confidence
     assert round(float(trade.expected_entry), 2) == 101.00
     assert trade.expected_entry_source == "mark"
+    assert trade.source_flags["decision_trace"]["preliminary_permission"] == "EXECUTE"
+    assert trade.source_flags["decision_trace"]["permission"] == "ADVISORY_ONLY"
+    assert trade.source_flags["decision_trace"]["final_action"] == "ADVISORY_ONLY"
+    assert trade.source_flags["decision_trace"]["entry_status"] == "DISPLAYABLE"
+    assert trade.source_flags["decision_trace"]["exec_allowed"] is False
 
 
 def test_trade_builder_live_option_last_only_does_not_leak_into_executable_entry(monkeypatch):
@@ -371,7 +391,8 @@ def test_trade_builder_live_option_last_only_does_not_leak_into_executable_entry
     assert trade.execution_entry_status == "non_executable"
     assert round(float(trade.display_entry), 2) == 99.50
     assert trade.display_entry_source == "last"
-    assert trade.display_entry_status == "non_executable"
+    assert trade.display_entry_status == "displayable"
+    assert trade.builder_confidence == trade.confidence
     assert trade.entry_price_source != "ask"
 
 

@@ -114,6 +114,24 @@ class Trade:
     chain_source: str | None = None
     direction: str | None = None
     global_confidence: float | None = None
+    builder_confidence: float | None = None
+    permission_confidence: float | None = None
+    gating_base_confidence: float | None = None
+    gating_final_confidence: float | None = None
+    sizing_confluence_score: float | None = None
+    opportunity_score: float | None = None
+    opportunity_rank: int | None = None
+    selected_for_execution: bool | None = None
+    selection_reason: str | None = None
+    size_multiplier_reason: str | None = None
+    opportunity_size_multiplier: float | None = None
+    sizing_reason: str | None = None
+    ml_proba_input: float | None = None
+    confluence_input: float | None = None
+    ml_proba_source: str | None = None
+    confluence_source: str | None = None
+    confidence_size_multiplier: float | None = None
+    final_qty: int | None = None
     permission: str | None = None
     permission_reason: str | None = None
     countertrend: bool | None = None
@@ -144,6 +162,22 @@ class Trade:
     update_count: int | None = None
 
     def __post_init__(self):
+        if self.builder_confidence is None:
+            object.__setattr__(self, "builder_confidence", self.confidence)
+        if self.gating_base_confidence is None:
+            base_confidence = self.confidence_base
+            if base_confidence is None:
+                base_confidence = self.builder_confidence
+            object.__setattr__(self, "gating_base_confidence", base_confidence)
+        if self.gating_final_confidence is None:
+            final_confidence = self.confidence_after_soft_veto
+            if final_confidence is None:
+                final_confidence = self.confidence
+            object.__setattr__(self, "gating_final_confidence", final_confidence)
+        if self.permission_confidence is None:
+            object.__setattr__(self, "permission_confidence", self.global_confidence)
+        if self.sizing_confluence_score is None and isinstance(self.trade_score_detail, dict):
+            object.__setattr__(self, "sizing_confluence_score", self.trade_score_detail.get("confluence_score"))
         if self.stop_distance is not None:
             return
         try:

@@ -1348,6 +1348,53 @@ def _select_visible_advisory_rows(df: pd.DataFrame) -> pd.DataFrame:
     return _prepare_trade_display_df(out)
 
 
+def _select_executable_suggestion_rows(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = _prepare_trade_display_df(df.copy())
+    if out.empty:
+        return out
+
+    status = out.get("status", pd.Series(index=out.index, dtype=object)).fillna("").astype(str).str.upper().str.strip()
+    readiness = out.get("readiness", pd.Series(index=out.index, dtype=object)).fillna("").astype(str).str.upper().str.strip()
+    execution_status = out.get("execution_status", pd.Series(index=out.index, dtype=object)).fillna("").astype(str).str.lower().str.strip()
+    entry_status = out.get("entry_status", pd.Series(index=out.index, dtype=object)).fillna("").astype(str).str.lower().str.strip()
+    entry_source = out.get("entry_source", pd.Series(index=out.index, dtype=object)).fillna("").astype(str).str.lower().str.strip()
+    execution_entry_status = out.get("execution_entry_status", pd.Series(index=out.index, dtype=object)).fillna("").astype(str).str.lower().str.strip()
+    execution_entry_source = out.get("execution_entry_source", pd.Series(index=out.index, dtype=object)).fillna("").astype(str).str.lower().str.strip()
+
+    entry_value = pd.to_numeric(out.get("entry"), errors="coerce")
+    execution_entry = pd.to_numeric(out.get("execution_entry"), errors="coerce")
+
+    blocked_status = status.isin({"INVALID", "BLOCKED", "BLOCKED_CONTRACT", "BLOCKED_APPROVAL"})
+    blocked_readiness = readiness.isin({"BLOCKED", "QUEUE_ONLY", "ADVISORY_ONLY"})
+    blocked_execution_status = execution_status.isin({"blocked", "queue_only", "advisory_only"})
+    invalid_entry_status = entry_status.isin({"", "missing", "non_executable"})
+    invalid_entry_source = entry_source.isin({"last", "mark", "mid"})
+    valid_execution_source = execution_entry_source.isin({"ask", "bid", "retained_prior_ask", "retained_prior_bid"})
+    valid_execution_status = execution_entry_status.eq("executable")
+    has_no_hard_blockers = out.get("hard_blockers", pd.Series(index=out.index, dtype=object)).apply(
+        lambda value: len(value) == 0 if isinstance(value, (list, tuple, set)) else str(value or "").strip() == ""
+    )
+
+    executable_mask = (
+        status.eq("READY")
+        & readiness.eq("READY")
+        & execution_status.eq("executable")
+        & entry_value.notna()
+        & execution_entry.notna()
+        & valid_execution_status
+        & valid_execution_source
+        & (~invalid_entry_status)
+        & (~invalid_entry_source)
+        & (~blocked_status)
+        & (~blocked_readiness)
+        & (~blocked_execution_status)
+        & has_no_hard_blockers
+    )
+    return out[executable_mask].copy()
+
+
 def _simulation_display_cols(df: pd.DataFrame) -> list[str]:
     if df is None or df.empty:
         return []
@@ -7128,8 +7175,8 @@ if nav == "Home":
                 raise _SkipSection()
             status_payload = _load_live_suggestions_status()
             suggested_live_df = _load_live_suggestions_df(limit=100)
-            st.caption("Shows latest emitted live suggestions from suggestions.jsonl. Advisory-only queues are listed below.")
-            suggested_df = _select_visible_advisory_rows(suggested_live_df)
+            st.caption("Shows only latest executable live suggestions. Advisory-only queues are listed below.")
+            suggested_df = _select_executable_suggestion_rows(suggested_live_df)
             suggested_display = select_display_df(suggested_df, "advisory").head(25)
             show_cols = [c for c in suggested_display.columns if c not in {"trade_key", "tradingsymbol"}]
             if show_cols and not suggested_display.empty:

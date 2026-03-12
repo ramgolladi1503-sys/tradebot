@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from core import advisory_schema
 
@@ -25,6 +26,24 @@ def _valid_row(**overrides):
         "entry": 72.5,
         "entry_status": "displayable",
         "confidence": 0.72,
+        "builder_confidence": 0.72,
+        "permission_confidence": 0.68,
+        "gating_base_confidence": 0.72,
+        "gating_final_confidence": 0.72,
+        "sizing_confluence_score": 0.81,
+        "sizing_reason": "OK",
+        "ml_proba_input": 0.72,
+        "confluence_input": 0.81,
+        "ml_proba_source": "builder_confidence",
+        "confluence_source": "sizing_confluence_score",
+        "confidence_size_multiplier": 0.71,
+        "final_qty": 2,
+        "opportunity_score": 0.76,
+        "opportunity_rank": 1,
+        "selected_for_execution": True,
+        "selection_reason": "selected_top_rank",
+        "size_multiplier_reason": "score=0.760;rank=1",
+        "opportunity_size_multiplier": 0.84,
         "confidence_base": 0.72,
         "confidence_raw": 0.72,
         "confidence_model_raw": 0.78,
@@ -61,6 +80,8 @@ def _valid_row(**overrides):
         "entry_source": "ask",
         "quote_source": "tick_store",
         "quote_age_sec": 1.5,
+        "price_age_sec": 1.5,
+        "option_age_sec": 1.5,
         "decision_explain": [{"code": "TRACE", "message": "kept"}],
         "market_open": True,
     }
@@ -78,14 +99,39 @@ def test_advisory_schema_round_trip_survives_unchanged():
     assert deserialized["trade_id"] == "T-1"
     assert deserialized["strategy_id"] == "CORE"
     assert deserialized["entry"] == 72.5
+    assert deserialized["builder_confidence"] == 0.72
+    assert deserialized["permission_confidence"] == 0.68
+    assert deserialized["gating_base_confidence"] == 0.72
+    assert deserialized["gating_final_confidence"] == 0.72
+    assert deserialized["sizing_confluence_score"] == 0.81
+    assert deserialized["sizing_reason"] == "OK"
+    assert deserialized["ml_proba_input"] == 0.72
+    assert deserialized["confluence_input"] == 0.81
+    assert deserialized["ml_proba_source"] == "builder_confidence"
+    assert deserialized["confluence_source"] == "sizing_confluence_score"
+    assert deserialized["confidence_size_multiplier"] == 0.71
+    assert deserialized["final_qty"] == 2
+    assert deserialized["opportunity_score"] == 0.76
+    assert deserialized["opportunity_rank"] == 1
+    assert deserialized["selected_for_execution"] is True
+    assert deserialized["selection_reason"] == "selected_top_rank"
+    assert deserialized["size_multiplier_reason"] == "score=0.760;rank=1"
+    assert deserialized["opportunity_size_multiplier"] == 0.84
     assert deserialized["confidence_base"] == 0.72
     assert deserialized["confidence_model_raw"] == 0.78
     assert deserialized["confidence_model_component"] == 0.78
+    assert deserialized["quote_age_sec"] == 1.5
+    assert deserialized["price_age_sec"] == 1.5
+    assert deserialized["option_age_sec"] == 1.5
     assert deserialized["confidence_micro_component"] == 0.62
     assert deserialized["confidence_micro_blend_method"] == "bounded_overlay"
     assert deserialized["confidence_after_micro"] == 0.74
     assert deserialized["confidence_after_alpha"] == 0.73
     assert deserialized["confidence_after_latency"] == 0.71
+    assert isinstance(deserialized["ts_epoch"], float)
+    assert deserialized["timestamp"] == datetime.fromtimestamp(deserialized["ts_epoch"], tz=timezone.utc).isoformat()
+    assert deserialized["ts_utc"] == deserialized["timestamp"]
+    assert deserialized["ts_ist"].endswith("+05:30")
     assert deserialized["confidence_before_soft_veto"] == 0.71
     assert deserialized["confidence_after_soft_veto"] == 0.72
     assert deserialized["confidence_penalty_soft_veto_total"] == 0.04
@@ -111,6 +157,17 @@ def test_advisory_schema_normalizes_missing_confidence_stage_fields_to_null():
     row = _valid_row()
     stage_keys = (
         "confidence_model_raw",
+        "builder_confidence",
+        "permission_confidence",
+        "gating_base_confidence",
+        "gating_final_confidence",
+        "sizing_confluence_score",
+        "opportunity_score",
+        "opportunity_rank",
+        "selected_for_execution",
+        "selection_reason",
+        "size_multiplier_reason",
+        "opportunity_size_multiplier",
         "confidence_model_component",
         "confidence_micro_component",
         "confidence_micro_blend_method",
@@ -148,6 +205,12 @@ def test_advisory_schema_normalizes_missing_confidence_stage_fields_to_null():
     assert out["confidence_raw_gate_threshold"] is None
     assert out["confidence_final_gate_threshold"] is None
     assert out["confidence_rejection_stage"] is None
+    assert out["opportunity_score"] is None
+    assert out["opportunity_rank"] is None
+    assert out["selected_for_execution"] is False
+    assert out["selection_reason"] is None
+    assert out["size_multiplier_reason"] is None
+    assert out["opportunity_size_multiplier"] is None
 
 
 def test_advisory_schema_missing_required_fields_raise():
@@ -218,11 +281,11 @@ def test_advisory_schema_downgrades_executable_claim_when_entry_missing():
 
     assert out["entry"] is None
     assert out["entry_status"] == "missing"
-    assert out["execution_status"] == "queue_only"
-    assert out["readiness"] == "QUEUE_ONLY"
-    assert out["final_action"] == "QUEUE_ONLY"
-    assert out["permission"] == "QUEUE_ONLY"
-    assert out["status"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "blocked"
+    assert out["readiness"] == "BLOCKED"
+    assert out["final_action"] == "BLOCK"
+    assert out["permission"] == "BLOCK"
+    assert out["status"] == "INVALID"
     assert out["is_executable"] is False
 
 
@@ -300,11 +363,116 @@ def test_advisory_schema_downgrades_display_only_executable_claim():
     assert out["entry"] == 72.5
     assert out["execution_entry"] is None
     assert out["execution_entry_status"] == "non_executable"
-    assert out["display_entry_status"] == "non_executable"
-    assert out["entry_status"] == "non_executable"
-    assert out["execution_status"] == "queue_only"
-    assert out["readiness"] == "QUEUE_ONLY"
+    assert out["display_entry_status"] == "displayable"
+    assert out["entry_status"] == "displayable"
+    assert out["execution_status"] == "advisory_only"
+    assert out["readiness"] == "ADVISORY_ONLY"
+    assert out["final_action"] == "ADVISORY_ONLY"
+    assert out["permission"] == "ADVISORY_ONLY"
+    assert out["status"] == "ADVISORY_ONLY"
     assert out["is_executable"] is False
+
+
+def test_advisory_schema_downgrades_executable_claim_from_untrusted_entry_source():
+    row = _valid_row(
+        execution_entry=72.5,
+        execution_entry_source="last",
+        execution_entry_status="executable",
+        display_entry=72.5,
+        display_entry_source="last",
+        display_entry_status="displayable",
+        entry=72.5,
+        entry_source="last",
+        entry_status="displayable",
+        execution_status="executable",
+        readiness="READY",
+        is_executable=True,
+        permission="EXECUTE",
+        final_action="EXECUTE",
+        status="READY",
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["execution_entry"] is None
+    assert out["execution_entry_status"] == "non_executable"
+    assert out["execution_entry_source"] == "none"
+    assert out["display_entry"] == 72.5
+    assert out["display_entry_status"] == "displayable"
+    assert out["entry_status"] == "displayable"
+    assert out["execution_status"] == "advisory_only"
+    assert out["readiness"] == "ADVISORY_ONLY"
+    assert out["final_action"] == "ADVISORY_ONLY"
+    assert out["permission"] == "ADVISORY_ONLY"
+
+
+def test_advisory_schema_derives_ts_epoch_from_timestamp_when_missing():
+    row = _valid_row(ts_epoch=None, ts_utc=None, ts_ist=None)
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert isinstance(out["ts_epoch"], float)
+    assert out["timestamp"] == "2026-03-08T10:00:00+00:00"
+    assert out["ts_utc"] == "2026-03-08T10:00:00+00:00"
+    assert out["ts_ist"] == "2026-03-08T15:30:00+05:30"
+
+
+def test_advisory_schema_injects_ts_epoch_when_timestamp_missing_entirely():
+    row = _valid_row(timestamp=None, ts_epoch=None, ts_utc=None, ts_ist=None)
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert isinstance(out["ts_epoch"], float)
+    assert out["timestamp"] == datetime.fromtimestamp(out["ts_epoch"], tz=timezone.utc).isoformat()
+    assert out["ts_utc"] == out["timestamp"]
+    assert out["ts_ist"].endswith("+05:30")
+
+
+def test_advisory_schema_syncs_confidence_final_to_gating_final_confidence():
+    row = _valid_row(
+        builder_confidence=0.55,
+        gating_final_confidence=0.068,
+        confidence_final=0.55,
+        confidence=0.55,
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["builder_confidence"] == 0.55
+    assert out["gating_final_confidence"] == 0.068
+    assert out["confidence_final"] == 0.068
+    assert out["confidence"] == 0.068
+
+
+def test_advisory_schema_normalizes_canonical_quote_age_from_mixed_inputs():
+    row = _valid_row(
+        quote_age_sec=0.0,
+        price_age_sec=102.9,
+        option_age_sec=None,
+        option_ltp_age_sec=102.9,
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["quote_age_sec"] == 0.0
+    assert out["price_age_sec"] == 0.0
+    assert out["option_age_sec"] == 0.0
+
+
+def test_advisory_schema_drops_internal_stale_age_sentinel():
+    row = _valid_row(
+        quote_age_sec=10**9,
+        price_age_sec=None,
+        option_age_sec=None,
+        option_ltp_age_sec=None,
+        quote_source="none",
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["quote_age_sec"] is None
+    assert out["price_age_sec"] is None
+    assert out["option_age_sec"] is None
 
 
 def test_advisory_schema_errors_are_logged(tmp_path, monkeypatch):

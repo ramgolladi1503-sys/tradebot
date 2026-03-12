@@ -124,7 +124,7 @@ def test_load_live_suggestions_df_reads_latest_rows_only(tmp_path, monkeypatch):
     df_live = runtime._load_live_suggestions_df(limit=2)
 
     assert list(df_live["trade_id"]) == ["T-4", "T-3"]
-    assert all(df_live["entry_status"].astype(str).str.lower() == "non_executable")
+    assert all(df_live["entry_status"].astype(str).str.lower() == "displayable")
     assert float(df_live.iloc[0]["entry"]) == 104.0
     assert list(df_live.iloc[0]["blockers"]) == ["STALE_OPTION_LTP"]
 
@@ -235,8 +235,8 @@ def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_pa
     loaded = df_live.iloc[0]
     assert pd.isna(loaded["entry"])
     assert str(loaded["entry_status"]) == "missing"
-    assert str(loaded["execution_status"]) == "queue_only"
-    assert str(loaded["readiness"]) == "QUEUE_ONLY"
+    assert str(loaded["execution_status"]) == "blocked"
+    assert str(loaded["readiness"]) == "BLOCKED"
     assert bool(loaded["is_executable"]) is False
 
 
@@ -272,11 +272,11 @@ def test_load_live_suggestions_df_downgrades_display_only_executable_row(tmp_pat
     assert list(df_live["trade_id"]) == ["T-SNAPSHOT-DISPLAY-ONLY"]
     loaded = df_live.iloc[0]
     assert float(loaded["entry"]) == 72.5
-    assert str(loaded["execution_status"]) == "queue_only"
-    assert str(loaded["readiness"]) == "QUEUE_ONLY"
+    assert str(loaded["execution_status"]) == "advisory_only"
+    assert str(loaded["readiness"]) == "ADVISORY_ONLY"
     assert str(loaded["execution_entry_status"]) == "non_executable"
-    assert str(loaded["display_entry_status"]) == "non_executable"
-    assert str(loaded["entry_status"]) == "non_executable"
+    assert str(loaded["display_entry_status"]) == "displayable"
+    assert str(loaded["entry_status"]) == "displayable"
     assert bool(loaded["is_executable"]) is False
 
 
@@ -651,7 +651,7 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
     assert list(loaded["warnings"]) == ["NO_LIVE_OPTION_FEED"]
     assert str(loaded["execution_status"]) == "advisory_only"
     assert str(loaded["entry_source"]) == "mark"
-    assert str(loaded["display_entry_status"]) == "non_executable"
+    assert str(loaded["display_entry_status"]) == "displayable"
     assert loaded["decision_explain"] == [{"code": "TRACE", "message": "kept"}]
     assert bool(loaded["market_open"]) is True
 
@@ -852,6 +852,81 @@ def test_select_visible_advisory_rows_keeps_visible_non_executable_rows():
     out = runtime._select_visible_advisory_rows(df)
 
     assert set(out["trade_id"]) == {"T-ADV", "T-BLOCK"}
+
+
+def test_select_executable_suggestion_rows_excludes_queue_only_non_executable_row():
+    df = pd.DataFrame(
+        [
+            {
+                "trade_id": "T-QUEUE",
+                "status": "QUEUE_ONLY",
+                "readiness": "QUEUE_ONLY",
+                "execution_status": "queue_only",
+                "entry": 72.5,
+                "entry_status": "non_executable",
+                "entry_source": "mark",
+                "execution_entry": None,
+                "execution_entry_status": "non_executable",
+                "execution_entry_source": "none",
+                "hard_blockers": [],
+                "last_seen_ts": _iso_now(),
+            }
+        ]
+    )
+
+    out = runtime._select_executable_suggestion_rows(df)
+
+    assert out.empty
+
+
+def test_select_executable_suggestion_rows_excludes_invalid_or_blocked_rows():
+    df = pd.DataFrame(
+        [
+            {
+                "trade_id": "T-INVALID",
+                "status": "INVALID",
+                "readiness": "BLOCKED",
+                "execution_status": "blocked",
+                "entry": 72.5,
+                "entry_status": "displayable",
+                "entry_source": "ask",
+                "execution_entry": 72.5,
+                "execution_entry_status": "executable",
+                "execution_entry_source": "ask",
+                "hard_blockers": ["NO_LIVE_OPTION_FEED"],
+                "last_seen_ts": _iso_now(),
+            }
+        ]
+    )
+
+    out = runtime._select_executable_suggestion_rows(df)
+
+    assert out.empty
+
+
+def test_select_executable_suggestion_rows_keeps_ready_executable_row():
+    df = pd.DataFrame(
+        [
+            {
+                "trade_id": "T-READY",
+                "status": "READY",
+                "readiness": "READY",
+                "execution_status": "executable",
+                "entry": 73.0,
+                "entry_status": "displayable",
+                "entry_source": "ask",
+                "execution_entry": 73.0,
+                "execution_entry_status": "executable",
+                "execution_entry_source": "ask",
+                "hard_blockers": [],
+                "last_seen_ts": _iso_now(),
+            }
+        ]
+    )
+
+    out = runtime._select_executable_suggestion_rows(df)
+
+    assert list(out["trade_id"]) == ["T-READY"]
 
 
 def test_chart_view_does_not_fetch_history_until_requested(monkeypatch):

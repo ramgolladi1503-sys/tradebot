@@ -97,6 +97,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         except Exception:
             return None
 
+    _quote_age = orch._quote_age_sec(market_data.get("quote_ts"))
     event = {
         "trade_id": trade.trade_id if trade else None,
         "ts": now_text,
@@ -519,7 +520,7 @@ def log_meta_shadow(orch, trade, market_data):
         "bid_qty": None,
         "ask_qty": None,
         "depth_imbalance": market_data.get("depth_imbalance"),
-        "quote_age_sec": orch._quote_age_sec(market_data.get("quote_ts")) or market_data.get("quote_age_sec"),
+        "quote_age_sec": _quote_age if _quote_age is not None else market_data.get("quote_age_sec"),
         "quote_ts_epoch": market_data.get("quote_ts_epoch"),
         "depth_age_sec": market_data.get("depth_age_sec"),
         "fill_prob_est": getattr(cfg, "EXEC_FILL_PROB", None),

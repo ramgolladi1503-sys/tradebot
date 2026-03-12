@@ -30,6 +30,7 @@ from core.advisory_schema import AdvisorySchemaError, QUOTE_SOURCES, deserialize
 from core.blocker_lifecycle import TARGET_BLOCKER_CODES, evaluate_advisory_contract_blockers, get_blocker_registry
 from core.events import write_json_atomic
 from core.issue_policy import ISSUE_CATEGORY_HARD, ISSUE_CATEGORY_SOFT, ISSUE_CATEGORY_WARNING, classify_issue
+from core.position_sizer import PositionSizer
 from core.time_utils import is_market_open_ist
 
 try:
@@ -38,6 +39,7 @@ except Exception:
     cfg = None
 
 logger = logging.getLogger(__name__)
+_POSITION_SIZER = PositionSizer()
 
 
 def _runtime_path(cfg_key: str, filename: str) -> Path:
@@ -68,7 +70,9 @@ _ENTRY_INTEGRITY_REASON = "MISSING_ENTRY"
 _EXPLICIT_REVIEW_STATUSES = {"PLANNING", "BLOCKED_CONTRACT", "BLOCKED_APPROVAL", "ADVISORY_ONLY", "QUEUE_ONLY", "READY"}
 _DISPLAY_ENTRY_STATUSES = {"displayable", "non_executable", "missing"}
 _EXECUTION_ENTRY_STATUSES = {"executable", "non_executable", "missing"}
+_EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "retained_prior_ask", "retained_prior_bid"}
 _LIFECYCLE_SNAPSHOT_KEY = "_lifecycle_snapshot"
+_STALE_QUOTE_AGE_SENTINEL = float(10**9)
 _LIFECYCLE_IMMUTABLE_FIELDS = (
     "execution_entry",
     "execution_entry_source",
@@ -171,10 +175,101 @@ def _normalize_entry_lifecycle(
         normalized["entry_reason"] = None if not str(normalized.get("entry_reason") or "").strip() else normalized.get("entry_reason")
     else:
         if normalized.get("display_entry_status") not in {"displayable", "non_executable"}:
-            normalized["display_entry_status"] = "displayable" if execution_entry is not None else "non_executable"
+            normalized["display_entry_status"] = "displayable"
         normalized["clear_reason"] = None
 
     return normalized
+
+
+def _apply_sizing_telemetry(entry: dict) -> dict:
+    out = dict(entry)
+    ml_proba = _safe_float(out.get("ml_proba_input"))
+    ml_proba_source = str(out.get("ml_proba_source") or "").strip() or None
+    if ml_proba is None:
+        ml_proba = _safe_float(out.get("builder_confidence"))
+        if ml_proba is not None:
+            ml_proba_source = "builder_confidence"
+    if ml_proba is None:
+        ml_proba = _safe_float(out.get("confidence_raw"))
+        if ml_proba is not None:
+            ml_proba_source = "confidence_raw"
+    if ml_proba is None:
+        ml_proba = _safe_float(out.get("confidence"))
+        if ml_proba is not None:
+            ml_proba_source = "confidence"
+
+    confluence = _safe_float(out.get("confluence_input"))
+    confluence_source = str(out.get("confluence_source") or "").strip() or None
+    if confluence is None:
+        confluence = _safe_float(out.get("sizing_confluence_score"))
+        if confluence is not None:
+            confluence_source = "sizing_confluence_score"
+    if confluence is None:
+        detail = out.get("trade_score_detail") or {}
+        if isinstance(detail, dict):
+            confluence = _safe_float(detail.get("confluence_score"))
+            if confluence is not None:
+                confluence_source = "trade_score_detail.confluence_score"
+
+    ok, conf_mult, reason = _POSITION_SIZER.confidence_multiplier(ml_proba, confluence)
+    if out.get("sizing_reason") in (None, "", "None"):
+        out["sizing_reason"] = str(reason)
+    out["ml_proba_input"] = ml_proba
+    out["confluence_input"] = confluence
+    out["ml_proba_source"] = ml_proba_source or ("unavailable" if ml_proba is None else "unknown")
+    out["confluence_source"] = confluence_source or ("unavailable" if confluence is None else "unknown")
+    existing_mult = _safe_float(out.get("confidence_size_multiplier"))
+    out["confidence_size_multiplier"] = existing_mult if existing_mult is not None else float(conf_mult)
+    if out.get("final_qty") in (None, "", "None"):
+        qty = out.get("qty")
+        try:
+            out["final_qty"] = int(qty) if qty not in (None, "", "None") else None
+        except Exception:
+            out["final_qty"] = None
+    return out
+
+
+def _synchronize_final_confidence(entry: dict) -> dict:
+    out = dict(entry)
+    final_confidence = _safe_float(out.get("gating_final_confidence"))
+    if final_confidence is None:
+        final_confidence = _safe_float(out.get("confidence_final"))
+    if final_confidence is None:
+        return out
+    out["gating_final_confidence"] = final_confidence
+    out["confidence_final"] = final_confidence
+    out["confidence"] = final_confidence
+    return out
+
+
+def _normalize_quote_age_value(value) -> float | None:
+    age = _safe_float(value)
+    if age is None:
+        return None
+    if age < 0.0:
+        return None
+    if float(age) >= _STALE_QUOTE_AGE_SENTINEL:
+        return None
+    return float(age)
+
+
+def _canonical_quote_age_sec(entry: dict) -> float | None:
+    if not isinstance(entry, dict):
+        return None
+    for field in ("quote_age_sec", "option_age_sec", "price_age_sec", "option_ltp_age_sec"):
+        age = _normalize_quote_age_value(entry.get(field))
+        if age is not None:
+            return age
+    return None
+
+
+def _apply_canonical_quote_age(entry: dict) -> dict:
+    out = dict(entry)
+    canonical_age = _canonical_quote_age_sec(out)
+    out["quote_age_sec"] = canonical_age
+    out["price_age_sec"] = canonical_age
+    out["option_age_sec"] = canonical_age
+    return out
 
 
 def _apply_entry_lifecycle(
@@ -294,11 +389,17 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
     out = dict(entry)
     execution_entry = _safe_float(out.get("execution_entry"))
     execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    execution_entry_source = str(out.get("execution_entry_source") or "").strip().lower()
     display_entry = _safe_float(out.get("display_entry"))
     entry_value = _safe_float(out.get("entry"))
     entry_status = str(out.get("entry_status") or "").strip().lower()
+    executable_ready = (
+        execution_entry is not None
+        and execution_entry_status == "executable"
+        and execution_entry_source in _EXECUTABLE_ENTRY_SOURCES
+    )
 
-    if execution_entry is not None and execution_entry_status == "executable" and display_entry is None:
+    if executable_ready and display_entry is None:
         out["display_entry"] = execution_entry
         out["display_entry_source"] = out.get("execution_entry_source") or "ask"
         out["display_entry_status"] = "displayable"
@@ -313,6 +414,11 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
         entry_status = str(out.get("entry_status") or "").strip().lower()
     if entry_value is not None and str(out.get("entry_source") or "").strip().lower() in {"", "none"}:
         out["entry_source"] = out.get("display_entry_source") or out.get("execution_entry_source") or "none"
+    if display_entry is not None and execution_entry is None:
+        out["display_entry_status"] = "displayable"
+        if entry_value is not None:
+            out["entry_status"] = "displayable"
+            entry_status = "displayable"
 
     execution_status = str(out.get("execution_status") or "").strip().lower()
     readiness = str(out.get("readiness") or "").strip().upper()
@@ -323,28 +429,37 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
     if not claims_executable:
         return out
     missing_entry = entry_value is None or entry_status == "missing"
-    missing_executable_entry = execution_entry is None or execution_entry_status != "executable"
+    missing_executable_entry = not executable_ready
     if missing_executable_entry and display_entry is not None:
+        out["execution_entry"] = None
         out["execution_entry_source"] = "none"
         out["execution_entry_status"] = "non_executable"
-        out["display_entry_status"] = "non_executable"
-        out["entry_status"] = "non_executable"
+        out["display_entry_status"] = "displayable"
+        out["entry_status"] = "displayable"
+        execution_entry = None
         execution_entry_status = "non_executable"
-        entry_status = "non_executable"
+        entry_status = "displayable"
     if not missing_entry and not missing_executable_entry:
         return out
 
     has_hard_blockers = bool(_dedupe_issue_codes(list(out.get("hard_blockers") or [])))
-    out["execution_status"] = "blocked" if has_hard_blockers else "queue_only"
+    display_only_entry = display_entry is not None and missing_executable_entry and entry_status == "displayable"
+    if not display_only_entry and not has_hard_blockers:
+        hard_blockers = _dedupe_issue_codes(list(out.get("hard_blockers") or []) + ["MISSING_ENTRY"])
+        blockers = _dedupe_issue_codes(list(out.get("blockers") or []) + ["MISSING_ENTRY"])
+        out["hard_blockers"] = hard_blockers
+        out["blockers"] = blockers
+        has_hard_blockers = True
+    out["execution_status"] = "blocked" if has_hard_blockers or not display_only_entry else "advisory_only"
     out["is_executable"] = False
     if readiness == "READY":
-        out["readiness"] = "BLOCKED" if has_hard_blockers else "QUEUE_ONLY"
+        out["readiness"] = "BLOCKED" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if final_action == "EXECUTE":
-        out["final_action"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
+        out["final_action"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if permission == "EXECUTE":
-        out["permission"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
+        out["permission"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if row_status == "READY":
-        out["status"] = "INVALID" if has_hard_blockers else "QUEUE_ONLY"
+        out["status"] = "INVALID" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if not str(out.get("entry_clear_reason") or "").strip():
         reason = "missing_execution_entry" if missing_executable_entry else str(out.get("entry_status") or "missing_entry").strip().lower()
         out["entry_clear_reason"] = reason or "missing_entry"
@@ -470,7 +585,7 @@ def _canonicalize_entry_lifecycle(
     if not isinstance(entry, dict):
         return entry
 
-    out = dict(entry)
+    out = _apply_canonical_quote_age(entry)
     legacy_entry_status = str(out.get("entry_status") or "").strip()
     legacy_entry = _safe_float(out.get("entry"))
     legacy_entry_source = out.get("entry_source")
@@ -540,7 +655,7 @@ def _canonicalize_entry_lifecycle(
                 mark=out.get("mark_price"),
                 mid=out.get("mid_price"),
                 last=lifecycle_last,
-                quote_age_sec=out.get("quote_age_sec") if out.get("quote_age_sec") not in (None, "", "None") else out.get("price_age_sec"),
+                quote_age_sec=out.get("quote_age_sec"),
                 mode=mode_for_entry,
                 allow_stale_quotes=bool(allow_stale_quotes_for_entry),
                 market_open=market_open_for_entry,
@@ -577,7 +692,7 @@ def _canonicalize_entry_lifecycle(
                 execution_entry_status=lifecycle.get("execution_entry_status") if lifecycle.get("execution_entry") is not None else "non_executable",
                 display_entry=legacy_entry,
                 display_entry_source=display_source,
-                display_entry_status="non_executable",
+                display_entry_status="displayable",
                 clear_reason=None,
                 entry_reason=_display_entry_reason_for_source(display_source),
             )
@@ -601,7 +716,7 @@ def _canonicalize_entry_lifecycle(
         entry_source_override=(legacy_entry_source if not align_for_schema and legacy_entry_source not in (None, "", "None") else None),
     )
 
-    return out
+    return _apply_canonical_quote_age(out)
 
 
 def _coerce_instrument_token(value) -> int | None:
@@ -1921,6 +2036,12 @@ def _apply_issue_classification(
     validation_reference_price = _safe_float(entry.get("validation_reference_price"))
     confidence_raw = _safe_float(entry.get("confidence_base"))
     if confidence_raw is None:
+        confidence_raw = _safe_float(entry.get("gating_base_confidence"))
+    if confidence_raw is None:
+        confidence_raw = _safe_float(entry.get("builder_confidence"))
+    if confidence_raw is None:
+        confidence_raw = _safe_float(entry.get("permission_confidence"))
+    if confidence_raw is None:
         confidence_raw = _safe_float(entry.get("global_confidence"))
     if confidence_raw is None:
         confidence_raw = _safe_float(entry.get("confidence"))
@@ -1930,7 +2051,7 @@ def _apply_issue_classification(
     if existing_confidence_penalty is None:
         existing_confidence_penalty = _safe_float(entry.get("confidence_penalty"))
     if existing_confidence_penalty is None and confidence_raw is not None:
-        softened_confidence = _safe_float(entry.get("confidence"))
+        softened_confidence = _safe_float(entry.get("confidence_final"))
         if softened_confidence is not None:
             existing_confidence_penalty = max(0.0, float(confidence_raw) - float(softened_confidence))
     if existing_confidence_penalty is None:
@@ -1951,9 +2072,7 @@ def _apply_issue_classification(
         list(entry.get("confidence_penalty_soft_veto_reasons") or [])
     )
     quote_age_sec = _safe_float(
-        entry.get("quote_age_sec")
-        or entry.get("price_age_sec")
-        or entry.get("option_ltp_age_sec")
+        _canonical_quote_age_sec(entry)
     )
     market_open_for_entry, _market_open_source = _resolve_entry_market_open(
         entry,
@@ -2043,15 +2162,20 @@ def _apply_issue_classification(
     entry["soft_penalties"] = soft_penalties
     entry["warnings"] = warnings
     entry["blockers"] = blockers
+    entry["builder_confidence"] = _safe_float(entry.get("builder_confidence"))
+    if entry["builder_confidence"] is None:
+        entry["builder_confidence"] = confidence_raw
     entry["confidence_base"] = confidence_raw
+    entry["gating_base_confidence"] = confidence_raw
     entry["confidence_raw"] = confidence_raw
     entry["confidence_penalty"] = round(float(confidence_penalty_total), 6)
     entry["confidence_penalty_total"] = round(float(confidence_penalty_total), 6)
     entry["confidence_penalty_reasons"] = confidence_penalty_reasons
     entry["confidence_final"] = confidence_final
-    if confidence_final is not None:
-        entry["confidence"] = confidence_final
-        entry["global_confidence"] = confidence_final
+    existing_gating_final = _safe_float(entry.get("gating_final_confidence"))
+    entry["gating_final_confidence"] = (
+        existing_gating_final if existing_gating_final is not None else confidence_final
+    )
     entry["entry_source"] = (
         entry.get("expected_entry_source")
         or entry.get("entry_price_source")
@@ -2064,6 +2188,8 @@ def _apply_issue_classification(
     entry["confidence_after_soft_veto"] = confidence_after_soft_veto
     entry["confidence_penalty_soft_veto_total"] = round(float(confidence_penalty_soft_veto_total), 6)
     entry["confidence_penalty_soft_veto_reasons"] = confidence_penalty_soft_veto_reasons
+    entry = _synchronize_final_confidence(entry)
+    entry = _apply_sizing_telemetry(entry)
     return finalize_trade_decision(entry)
 
 
@@ -2106,7 +2232,7 @@ def _refresh_lifecycle_blockers(
         tradingsymbol=entry.get("tradingsymbol"),
         live_price=current_ltp,
         reference_price=validation_reference_price,
-        quote_age_sec=entry.get("price_age_sec"),
+        quote_age_sec=_canonical_quote_age_sec(entry),
         stale_threshold_sec=stale_threshold,
         abs_tol=float(getattr(cfg, "OPTION_ENTRY_MISMATCH_ABS", 1.0)),
         pct_tol=float(getattr(cfg, "OPTION_ENTRY_MISMATCH_PCT", 0.03)),
@@ -2897,6 +3023,24 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "ltp_at_activation": _trade_attr(trade, "ltp_at_activation"),
         "qty": _trade_attr(trade, "qty"),
         "confidence": _trade_attr(trade, "confidence"),
+        "builder_confidence": _trade_attr(trade, "builder_confidence", _trade_attr(trade, "confidence")),
+        "permission_confidence": _trade_attr(trade, "permission_confidence", None),
+        "gating_base_confidence": _trade_attr(trade, "gating_base_confidence", None),
+        "gating_final_confidence": _trade_attr(trade, "gating_final_confidence", None),
+        "sizing_confluence_score": _trade_attr(trade, "sizing_confluence_score", None),
+        "sizing_reason": _trade_attr(trade, "sizing_reason", None),
+        "ml_proba_input": _trade_attr(trade, "ml_proba_input", None),
+        "confluence_input": _trade_attr(trade, "confluence_input", None),
+        "ml_proba_source": _trade_attr(trade, "ml_proba_source", None),
+        "confluence_source": _trade_attr(trade, "confluence_source", None),
+        "confidence_size_multiplier": _trade_attr(trade, "confidence_size_multiplier", None),
+        "final_qty": _trade_attr(trade, "final_qty", None),
+        "opportunity_score": _trade_attr(trade, "opportunity_score", None),
+        "opportunity_rank": _trade_attr(trade, "opportunity_rank", None),
+        "selected_for_execution": _trade_attr(trade, "selected_for_execution", None),
+        "selection_reason": _trade_attr(trade, "selection_reason", None),
+        "size_multiplier_reason": _trade_attr(trade, "size_multiplier_reason", None),
+        "opportunity_size_multiplier": _trade_attr(trade, "opportunity_size_multiplier", None),
         "strategy": _trade_attr(trade, "strategy"),
         "strategy_id": strategy_id,
         "strategy_name": strategy_name,
@@ -3163,7 +3307,7 @@ def _apply_quote_and_entry_logic(
                     entry["validation_reference_price"] = advisory_entry
                     entry["validation_reference_source"] = "tradingsymbol_without_token"
                     entry["pre_validation_entry"] = pre_validation_entry
-                    entry["entry_status"] = "non_executable"
+                    entry["entry_status"] = "displayable"
                     entry["suggested_entry"] = advisory_entry
                     if _safe_float(entry.get("expected_entry")) is None and advisory_entry is not None:
                         entry["expected_entry"] = advisory_entry
@@ -3330,6 +3474,7 @@ def _finalize_review_queue_entry(
         )
         entry["direction"] = perm.get("direction")
         entry["global_confidence"] = perm.get("global_confidence")
+        entry["permission_confidence"] = _safe_float(perm.get("global_confidence"))
         computed_permission = str(perm.get("permission") or "").strip().upper() or None
         computed_reason = str(perm.get("permission_reason") or "").strip() or None
         if not incoming_decision.get("permission") and computed_permission:
@@ -3346,8 +3491,6 @@ def _finalize_review_queue_entry(
         entry["confidence_vs_threshold_reason"] = str(
             perm.get("confidence_vs_threshold_reason") or ""
         )
-        if perm.get("global_confidence") is not None:
-            entry["confidence"] = perm.get("global_confidence")
         if perm.get("regime_confidence") is not None:
             entry["regime_confidence"] = perm.get("regime_confidence")
         _log_low_global_conf_once_per_symbol_minute(
@@ -3380,7 +3523,7 @@ def _finalize_review_queue_entry(
     global_conf = _safe_float(entry.get("global_confidence"))
     gate_snapshot = {
         "freshness": {
-            "max_tick_age_sec": _safe_float(entry.get("price_age_sec")),
+            "max_tick_age_sec": _safe_float(_canonical_quote_age_sec(entry)),
             "sla_threshold_sec": _safe_float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0)),
         },
         "feed_state": (
@@ -3391,11 +3534,7 @@ def _finalize_review_queue_entry(
     }
     gate_candidate = {
         "current_ltp": _safe_float(entry.get("current_ltp") or entry.get("live_ltp") or entry.get("entry")),
-        "option_age_sec": _safe_float(
-            entry.get("option_age_sec")
-            or entry.get("price_age_sec")
-            or entry.get("option_ltp_age_sec")
-        ),
+        "option_age_sec": _safe_float(_canonical_quote_age_sec(entry)),
         "spread_pct": _quote_spread_pct(entry),
         "volume": _first_present_float(entry, ("volume", "current_volume", "tick_volume")),
         "best_bid": _safe_float(entry.get("best_bid") or entry.get("bid") or entry.get("opt_bid")),
@@ -3427,9 +3566,7 @@ def _finalize_review_queue_entry(
     entry["confidence_final_gate_threshold"] = final_conf_threshold
     gate_final_conf = _safe_float(gate_eval.get("final_confidence"))
     if gate_final_conf is not None:
-        entry["global_confidence"] = gate_final_conf
-        entry["confidence"] = gate_final_conf
-        global_conf = gate_final_conf
+        entry["gating_final_confidence"] = gate_final_conf
     soft_conf_reject = bool(
         bool(gate_eval.get("hard_pass"))
         and permission == "EXECUTE"
@@ -3457,11 +3594,16 @@ def _finalize_review_queue_entry(
     )
     entry = _apply_confidence_threshold_fields(
         entry,
-        confidence_value=_safe_float(entry.get("confidence_final")),
+        confidence_value=(
+            _safe_float(entry.get("gating_final_confidence"))
+            if _safe_float(entry.get("gating_final_confidence")) is not None
+            else _safe_float(entry.get("confidence_final"))
+        ),
         execution_mode=mode_for_entry,
         hard_blockers=list(entry.get("hard_blockers") or []),
         entry_block_reason=entry_block_reason,
     )
+    entry = _apply_canonical_quote_age(entry)
     entry = finalize_trade_decision(
         entry,
         gate_decision_payload=gate_eval,
@@ -3469,6 +3611,9 @@ def _finalize_review_queue_entry(
         entry_block_reason=entry_block_reason,
         decision_seed=decision_seed,
     )
+    entry = _enforce_executable_entry_invariant(entry)
+    entry = _synchronize_final_confidence(entry)
+    entry = _apply_sizing_telemetry(entry)
     entry["confidence_final_gate_threshold"] = final_conf_threshold
     entry["confidence_rejection_stage"] = _derive_confidence_rejection_stage(entry)
     global_conf = _safe_float(entry.get("confidence_final"))
@@ -3538,6 +3683,21 @@ def _finalize_review_queue_entry(
         "confidence_final_gate_threshold": _safe_float(entry.get("confidence_final_gate_threshold")),
         "confidence_rejection_stage": entry.get("confidence_rejection_stage"),
         "confidence_vs_threshold_reason": entry.get("confidence_vs_threshold_reason"),
+        "builder_confidence": _safe_float(entry.get("builder_confidence")),
+        "permission_confidence": _safe_float(entry.get("permission_confidence")),
+        "gating_final_confidence": _safe_float(entry.get("gating_final_confidence")),
+        "sizing_reason": entry.get("sizing_reason"),
+        "ml_proba_input": _safe_float(entry.get("ml_proba_input")),
+        "confluence_input": _safe_float(entry.get("confluence_input")),
+        "ml_proba_source": entry.get("ml_proba_source"),
+        "confluence_source": entry.get("confluence_source"),
+        "confidence_size_multiplier": _safe_float(entry.get("confidence_size_multiplier")),
+        "final_qty": entry.get("final_qty"),
+        "opportunity_score": _safe_float(entry.get("opportunity_score")),
+        "opportunity_rank": entry.get("opportunity_rank"),
+        "selected_for_execution": bool(entry.get("selected_for_execution", False)),
+        "selection_reason": entry.get("selection_reason"),
+        "size_multiplier_reason": entry.get("size_multiplier_reason"),
         "high_execute_threshold": high_execute_threshold,
         "high_execute_eligible": high_execute_eligible,
         "high_execute_blockers": high_execute_blockers,
@@ -3555,11 +3715,8 @@ def _finalize_review_queue_entry(
             or None
         ),
         "quote_age_sec": _safe_float(entry.get("quote_age_sec")),
-        "option_age_sec": _safe_float(
-            entry.get("option_age_sec")
-            or entry.get("price_age_sec")
-            or entry.get("option_ltp_age_sec")
-        ),
+        "price_age_sec": _safe_float(entry.get("price_age_sec")),
+        "option_age_sec": _safe_float(entry.get("option_age_sec")),
         "final_action": entry.get("final_action"),
     }
     entry["decision_trace"] = decision_trace

@@ -82,7 +82,7 @@ def test_advisory_entry_keeps_ltp_when_price_mismatch(tmp_path, monkeypatch):
     rows = json.loads(qpath.read_text())
     assert rows[0]["entry"] == 565.0
     assert rows[0]["suggested_entry"] == 565.0
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["option_ltp_source"] == "tick_store"
     assert rows[0]["validation_signal_price"] is None
@@ -148,6 +148,7 @@ def test_review_queue_preserves_executable_and_display_entry_fields(tmp_path, mo
         review_queue.add_to_queue(trade, extra={"permission": "EXECUTE"})
 
     payload = json.loads(suggestions_path.read_text().strip())
+    assert isinstance(payload["ts_epoch"], float)
     assert payload["execution_entry"] == 72.8
     assert payload["execution_entry_source"] == "ask"
     assert payload["execution_entry_status"] == "executable"
@@ -512,7 +513,7 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
     assert fresh_row["readiness"] == "ADVISORY_ONLY"
     assert fresh_row["execution_status"] == "advisory_only"
     assert fresh_row["entry"] == 565.0
-    assert fresh_row["entry_status"] == "non_executable"
+    assert fresh_row["entry_status"] == "displayable"
     assert fresh_row["quote_validation_status"] == "OK"
     assert fresh_row["freshness_reason"] == "quote_within_threshold"
     assert float(fresh_row["price_age_sec"]) <= float(fresh_row["freshness_threshold_sec"])
@@ -708,7 +709,7 @@ def test_no_token_blocker_clears_after_token_resolution(tmp_path, monkeypatch):
     assert "NO_TOKEN" not in list(missing_row.get("blockers") or [])
     assert missing_row["readiness"] == "ADVISORY_ONLY"
     assert missing_row["entry"] == 150.0
-    assert missing_row["entry_status"] == "non_executable"
+    assert missing_row["entry_status"] == "displayable"
 
     resolved_trade = _make_trade(
         trade_id="T-TOKEN-RECOVER",
@@ -725,7 +726,7 @@ def test_no_token_blocker_clears_after_token_resolution(tmp_path, monkeypatch):
     resolved_row = _row_by_trade_id(qpath, "T-TOKEN-RECOVER")
     assert "NO_TOKEN" not in list(resolved_row.get("blockers") or [])
     assert resolved_row["entry"] == 155.0
-    assert resolved_row["entry_status"] == "non_executable"
+    assert resolved_row["entry_status"] == "displayable"
     assert resolved_row["quote_validation_status"] == "OK"
 
 
@@ -755,7 +756,7 @@ def test_missing_token_advisory_emits_without_schema_warning(tmp_path, monkeypat
 
     payload = json.loads(suggestions_path.read_text().strip())
     assert payload["display_entry"] == 150.0
-    assert payload["display_entry_status"] == "non_executable"
+    assert payload["display_entry_status"] == "displayable"
     assert payload["execution_entry"] is None
     assert "advisory_queue_schema_error" not in caplog.text
     assert "advisory_emit_schema_error" not in caplog.text
@@ -784,7 +785,7 @@ def test_entry_populates_after_token_and_quote_recovery(tmp_path, monkeypatch):
     )
     initial_row = _row_by_trade_id(qpath, "T-ENTRY-RECOVER")
     assert initial_row["entry"] == 150.0
-    assert initial_row["entry_status"] == "non_executable"
+    assert initial_row["entry_status"] == "displayable"
 
     review_queue.add_to_queue(
         _make_trade(
@@ -802,7 +803,7 @@ def test_entry_populates_after_token_and_quote_recovery(tmp_path, monkeypatch):
     recovered = _row_by_trade_id(qpath, "T-ENTRY-RECOVER")
     assert recovered["entry"] == 180.0
     assert recovered["expected_entry"] == 180.0
-    assert recovered["entry_status"] == "non_executable"
+    assert recovered["entry_status"] == "displayable"
     assert recovered["quote_validation_status"] == "OK"
     assert "NO_TOKEN" not in list(recovered.get("blockers") or [])
 
@@ -964,7 +965,7 @@ def test_relaxed_price_mismatch_becomes_soft_penalty_not_hard_blocker(tmp_path, 
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["hard_blockers"] == []
     assert rows[0]["soft_penalties"] == []
@@ -972,7 +973,8 @@ def test_relaxed_price_mismatch_becomes_soft_penalty_not_hard_blocker(tmp_path, 
     assert rows[0]["readiness"] != "BLOCKED"
     assert rows[0]["execution_status"] != "blocked"
     assert float(rows[0]["confidence_penalty"]) == 0.0
-    assert float(rows[0]["confidence_final"]) == float(rows[0]["confidence_raw"])
+    assert float(rows[0]["confidence_final"]) == float(rows[0]["gating_final_confidence"])
+    assert float(rows[0]["confidence"]) == float(rows[0]["confidence_final"])
 
 
 def test_advisory_rest_fallback_is_rate_limited(tmp_path, monkeypatch):
@@ -997,7 +999,7 @@ def test_advisory_rest_fallback_is_rate_limited(tmp_path, monkeypatch):
 
     rows = json.loads(qpath.read_text())
     assert calls["count"] == 1
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["entry"] == 123.45
     assert rows[0]["option_ltp_source"] == "rest_fallback"
@@ -1023,11 +1025,11 @@ def test_rest_fallback_emits_without_schema_warning(tmp_path, monkeypatch, caplo
 
     rows = json.loads(qpath.read_text())
     payload = json.loads(suggestions_path.read_text().strip())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["option_ltp_source"] == "rest_fallback"
     assert payload["display_entry"] == 123.45
-    assert payload["display_entry_status"] == "non_executable"
+    assert payload["display_entry_status"] == "displayable"
     assert payload["quote_source"] == "rest_fallback"
     assert "advisory_queue_schema_error" not in caplog.text
     assert "advisory_emit_schema_error" not in caplog.text
@@ -1052,7 +1054,7 @@ def test_relaxed_mode_allows_rest_fallback_when_subscription_fails(tmp_path, mon
     review_queue.add_to_queue(trade, extra={"entry": 100.95})
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["entry"] == 123.45
     assert rows[0]["option_ltp_source"] == "rest_fallback"
@@ -1087,7 +1089,7 @@ def test_review_queue_emits_canonical_advisory_row_to_suggestions_log(tmp_path, 
     assert payload["entry"] == 72.5
     assert payload["display_entry"] == 72.5
     assert payload["display_entry_source"] == "last"
-    assert payload["display_entry_status"] == "non_executable"
+    assert payload["display_entry_status"] == "displayable"
     assert payload["execution_entry"] is None
     assert payload["execution_entry_status"] == "non_executable"
     assert "HARD_MISSING_VOLUME" in payload["blockers"]
@@ -1095,7 +1097,7 @@ def test_review_queue_emits_canonical_advisory_row_to_suggestions_log(tmp_path, 
     assert payload["soft_penalties"] == []
     assert payload["warnings"] == []
     assert payload["entry_source"] == "last"
-    assert payload["entry_status"] == "non_executable"
+    assert payload["entry_status"] == "displayable"
     assert payload["quote_source"] == "tick_store"
 
 
@@ -1127,16 +1129,50 @@ def test_issue_classification_missing_enrichment_lowers_confidence_without_suppr
     assert out["soft_penalties"] == ["MISSING_CROSS_ASSET_FEATURE"]
     assert out["warnings"] == []
     assert float(out["confidence_base"]) == 0.72
+    assert float(out["builder_confidence"]) == 0.72
+    assert float(out["gating_base_confidence"]) == 0.72
     assert float(out["confidence_raw"]) == 0.72
     assert float(out["confidence_penalty_total"]) > 0.08
     assert "premium_out_of_band" in list(out["confidence_penalty_reasons"])
     assert "MISSING_CROSS_ASSET_FEATURE" in list(out["confidence_penalty_reasons"])
     assert float(out["confidence_final"]) > 0.5
+    assert float(out["gating_final_confidence"]) == float(out["confidence_final"])
     assert out["advisory_visible"] is True
     assert out["is_executable"] is False
     assert out["execution_status"] == "queue_only"
     assert float(out["entry"]) == 230.15
     assert out["entry_status"] == "OK"
+
+
+def test_issue_classification_does_not_overwrite_builder_confidence_with_final_confidence():
+    entry = {
+        "trade_id": "T-CONF-PRESERVE",
+        "symbol": "NIFTY",
+        "permission": "QUEUE_ONLY",
+        "entry": 230.15,
+        "entry_status": "OK",
+        "quote_source": "tick_store",
+        "option_ltp_source": "tick_store",
+        "current_ltp": 230.15,
+        "validation_reference_price": 230.15,
+        "builder_confidence": 0.62,
+        "confidence": 0.62,
+        "confidence_base": 0.62,
+        "trade_score_detail": {"confluence_score": 0.77},
+        "tradable_reasons_blocking": ["MISSING_CROSS_ASSET_FEATURE"],
+    }
+
+    out = review_queue._apply_issue_classification(
+        dict(entry),
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+    )
+
+    assert float(out["builder_confidence"]) == 0.62
+    assert float(out["gating_base_confidence"]) == 0.62
+    assert float(out["gating_final_confidence"]) == float(out["confidence_final"])
+    assert float(out["gating_final_confidence"]) < 0.62
+    assert float(out["confidence"]) == float(out["confidence_final"])
 
 
 def test_issue_classification_display_entry_fallback_is_warning_only():
@@ -1199,6 +1235,115 @@ def test_issue_classification_wide_spread_blocks_execution():
     assert out["readiness"] == "ADVISORY_ONLY"
     assert float(out["entry"]) == 230.15
     assert out["entry_status"] == "HARD_SPREAD_TOO_WIDE"
+
+
+def test_executable_claim_with_only_display_entry_is_downgraded_during_review_finalization():
+    entry = {
+        "trade_id": "T-DISPLAY-ONLY-CLAIM",
+        "symbol": "NIFTY",
+        "permission": "EXECUTE",
+        "permission_reason": "execution_allowed",
+        "readiness": "READY",
+        "final_action": "EXECUTE",
+        "execution_status": "executable",
+        "status": "READY",
+        "entry": 230.15,
+        "entry_source": "last",
+        "entry_status": "displayable",
+        "display_entry": 230.15,
+        "display_entry_source": "last",
+        "display_entry_status": "displayable",
+        "execution_entry": None,
+        "execution_entry_source": "none",
+        "execution_entry_status": "missing",
+        "hard_blockers": [],
+        "blockers": [],
+    }
+
+    out = review_queue._enforce_executable_entry_invariant(entry)
+
+    assert out["execution_status"] == "advisory_only"
+    assert out["readiness"] == "ADVISORY_ONLY"
+    assert out["final_action"] == "ADVISORY_ONLY"
+    assert out["permission"] == "ADVISORY_ONLY"
+    assert out["status"] == "ADVISORY_ONLY"
+    assert out["entry"] == 230.15
+    assert out["execution_entry"] is None
+    assert out["entry_status"] == "displayable"
+    assert out["display_entry_status"] == "displayable"
+
+
+def test_review_queue_syncs_final_confidence_and_derives_sizing_telemetry():
+    entry = {
+        "trade_id": "T-CONF-SIZE",
+        "symbol": "NIFTY",
+        "permission": "ADVISORY_ONLY",
+        "entry": 230.15,
+        "entry_status": "displayable",
+        "display_entry": 230.15,
+        "display_entry_source": "last",
+        "display_entry_status": "displayable",
+        "execution_entry": None,
+        "execution_entry_source": "none",
+        "execution_entry_status": "non_executable",
+        "builder_confidence": 0.55,
+        "gating_final_confidence": 0.068,
+        "confidence_final": 0.55,
+        "confidence": 0.55,
+        "sizing_confluence_score": 0.81,
+        "qty": 2,
+    }
+
+    out = review_queue._synchronize_final_confidence(dict(entry))
+    out = review_queue._apply_sizing_telemetry(out)
+
+    assert out["builder_confidence"] == 0.55
+    assert out["gating_final_confidence"] == 0.068
+    assert out["confidence_final"] == 0.068
+    assert out["confidence"] == 0.068
+    assert out["sizing_reason"] == "OK"
+    assert out["ml_proba_input"] == 0.55
+    assert out["confluence_input"] == 0.81
+    assert out["ml_proba_source"] == "builder_confidence"
+    assert out["confluence_source"] == "sizing_confluence_score"
+    assert out["confidence_size_multiplier"] is not None
+    assert out["final_qty"] == 2
+
+
+def test_review_queue_normalizes_canonical_quote_age_before_gating_and_emit():
+    entry = {
+        "trade_id": "T-AGE-NORM",
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "quote_age_sec": 0.0,
+        "price_age_sec": 102.9,
+        "option_age_sec": None,
+        "option_ltp_age_sec": 102.9,
+    }
+
+    out = review_queue._apply_canonical_quote_age(dict(entry))
+
+    assert out["quote_age_sec"] == 0.0
+    assert out["price_age_sec"] == 0.0
+    assert out["option_age_sec"] == 0.0
+
+
+def test_review_queue_drops_internal_stale_age_sentinel_from_emitted_fields():
+    entry = {
+        "trade_id": "T-AGE-SENTINEL",
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "quote_age_sec": 10**9,
+        "price_age_sec": None,
+        "option_age_sec": None,
+        "option_ltp_age_sec": None,
+    }
+
+    out = review_queue._apply_canonical_quote_age(dict(entry))
+
+    assert out["quote_age_sec"] is None
+    assert out["price_age_sec"] is None
+    assert out["option_age_sec"] is None
 
 
 def test_advisory_schema_round_trip_preserves_severity_fields():
@@ -1288,7 +1433,7 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
     assert deserialized["is_executable"] is False
     assert deserialized["execution_status"] == "advisory_only"
     assert float(deserialized["entry"]) == 72.5
-    assert deserialized["entry_status"] == "non_executable"
+    assert deserialized["entry_status"] == "displayable"
     assert deserialized["display_entry"] == 72.5
     assert deserialized["display_entry_source"] == "mark"
 
@@ -1322,7 +1467,7 @@ def test_missing_option_token_does_not_use_underlying_or_rest_fallback(tmp_path,
     )
     review_queue.add_to_queue(trade, extra={"entry": 100.95})
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0].get("entry") == 123.45
     assert rows[0]["permission"] == "ADVISORY_ONLY"
     assert rows[0]["execution_allowed"] is False
@@ -1408,7 +1553,7 @@ def test_tradingsymbol_known_but_token_missing_remains_non_executable_advisory(t
     rows = json.loads(qpath.read_text())
     assert rows[0]["unresolved_contract"] is False
     assert rows[0]["status"] != "BLOCKED_CONTRACT"
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["entry"] == 123.45
     assert "NO_TOKEN" not in list(rows[0].get("blockers") or [])
 
@@ -1661,9 +1806,9 @@ def test_valid_row_still_emits_normal_suggestion(tmp_path, monkeypatch):
     assert suggestion_rows[-1]["trade_id"] == "T-SUGGEST"
     assert suggestion_rows[-1]["status"] == "ADVISORY_ONLY"
     assert suggestion_rows[-1]["status_raw"] == "PLANNING"
-    assert suggestion_rows[-1]["entry_status"] == "non_executable"
+    assert suggestion_rows[-1]["entry_status"] == "displayable"
     assert suggestion_rows[-1]["display_entry"] == 565.0
-    assert suggestion_rows[-1]["display_entry_status"] == "non_executable"
+    assert suggestion_rows[-1]["display_entry_status"] == "displayable"
     assert suggestion_rows[-1]["soft_penalties"] == []
     assert suggestion_rows[-1]["warnings"] == ["PRICE_MISMATCH"]
     assert not rejected_path.exists()
@@ -1735,7 +1880,7 @@ def test_validation_uses_executable_reference_over_stale_signal_price(tmp_path, 
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "OK"
     assert rows[0]["entry"] == 565.0
     assert rows[0]["suggested_entry"] == 565.0
@@ -1769,7 +1914,7 @@ def test_validation_keeps_price_mismatch_when_executable_reference_is_off(tmp_pa
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["validation_signal_price"] == 150.0
     assert rows[0]["validation_reference_price"] == 257.0
@@ -1800,7 +1945,7 @@ def test_validation_reference_price_does_not_depend_on_expected_entry_being_popu
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "OK"
     assert rows[0]["validation_signal_price"] == 100.93
     assert rows[0]["validation_reference_price"] == 224.25
@@ -1830,7 +1975,7 @@ def test_stale_pre_validation_entry_is_backfilled_before_validation(tmp_path, mo
     review_queue.add_to_queue(trade, extra={"entry": 100.95})
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "OK"
     assert rows[0]["validation_signal_price"] == 100.95
     assert rows[0]["validation_reference_price"] == 225.15
@@ -1863,7 +2008,7 @@ def test_synthetic_offhours_row_skips_price_mismatch_and_marks_offhours_syntheti
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "OFFHOURS_SYNTHETIC"
     assert rows[0]["suggested_entry"] == 225.15
     assert rows[0]["entry"] == 225.15
@@ -1900,8 +2045,8 @@ def test_offhours_synthetic_emits_without_schema_warning(tmp_path, monkeypatch, 
 
     payload = json.loads(suggestions_path.read_text().strip())
     assert payload["display_entry"] == 225.15
-    assert payload["display_entry_status"] == "non_executable"
-    assert payload["entry_status"] == "non_executable"
+    assert payload["display_entry_status"] == "displayable"
+    assert payload["entry_status"] == "displayable"
     assert "advisory_queue_schema_error" not in caplog.text
     assert "advisory_emit_schema_error" not in caplog.text
 
@@ -1931,7 +2076,7 @@ def test_synthetic_offhours_row_upgrades_to_live_tick_store_when_fresh_quote_exi
     assert row["current_ltp"] == 225.15
     assert row["entry"] == 225.15
     assert row["expected_entry"] == 225.15
-    assert row["entry_status"] == "non_executable"
+    assert row["entry_status"] == "displayable"
     assert row["quote_validation_status"] == "OK"
     assert row["option_ltp_source"] == "tick_store"
     assert row["quote_source"] == "tick_store"
@@ -1972,7 +2117,7 @@ def test_synthetic_offhours_row_clears_stale_expected_entry_before_live_validati
     assert row["validation_reference_source"] != "expected_entry"
     assert row["validation_reference_price"] == 206.6
     assert row["validation_reference_source"] == "tick_store"
-    assert row["entry_status"] == "non_executable"
+    assert row["entry_status"] == "displayable"
     assert row["quote_validation_status"] == "OK"
     assert "PRICE_MISMATCH" not in list(row.get("blockers") or [])
     assert "PRICE_MISMATCH" not in list(row.get("hard_blockers") or [])
@@ -2010,7 +2155,7 @@ def test_quick_synth_row_forces_live_reference_even_with_stale_expected_entry(tm
     assert row["expected_entry_source"] == "tick_store"
     assert row["validation_reference_source"] == "tick_store"
     assert row["validation_reference_source"] != "expected_entry"
-    assert row["entry_status"] == "non_executable"
+    assert row["entry_status"] == "displayable"
     assert row["quote_validation_status"] == "OK"
     assert "PRICE_MISMATCH" not in list(row.get("blockers") or [])
 
@@ -2033,7 +2178,7 @@ def test_live_row_still_produces_price_mismatch_when_entry_and_ltp_diverge(tmp_p
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["validation_reference_source"] == "expected_entry"
 

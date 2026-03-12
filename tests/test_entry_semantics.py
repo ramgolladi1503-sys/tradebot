@@ -82,9 +82,9 @@ def test_build_entry_state_uses_mark_for_display_when_executable_quote_missing()
     assert out["execution_entry_status"] == "non_executable"
     assert float(out["display_entry"]) == 73.1
     assert out["display_entry_source"] == "mark"
-    assert out["display_entry_status"] == "non_executable"
+    assert out["display_entry_status"] == "displayable"
     assert float(out["entry"]) == 73.1
-    assert out["entry_status"] == "non_executable"
+    assert out["entry_status"] == "displayable"
 
 
 def test_build_entry_state_uses_mid_when_display_only_bid_ask_are_available():
@@ -111,7 +111,7 @@ def test_build_entry_state_uses_mid_when_display_only_bid_ask_are_available():
     assert out["execution_entry_status"] == "non_executable"
     assert float(out["display_entry"]) == 72.2
     assert out["display_entry_source"] == "mid"
-    assert out["display_entry_status"] == "non_executable"
+    assert out["display_entry_status"] == "displayable"
 
 
 def test_build_entry_state_uses_last_when_mark_and_mid_missing():
@@ -137,7 +137,7 @@ def test_build_entry_state_uses_last_when_mark_and_mid_missing():
     assert out["execution_entry"] is None
     assert out["display_entry"] == 72.9
     assert out["display_entry_source"] == "last"
-    assert out["display_entry_status"] == "non_executable"
+    assert out["display_entry_status"] == "displayable"
 
 
 def test_build_entry_state_clears_stale_quote_when_all_candidates_expire():

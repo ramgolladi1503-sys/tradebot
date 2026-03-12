@@ -116,8 +116,8 @@ def test_read_advisory_snapshot_rows_downgrades_executable_row_without_entry(tmp
     assert loaded["state"] == "ok"
     assert loaded["rows"][0]["entry"] is None
     assert loaded["rows"][0]["entry_status"] == "missing"
-    assert loaded["rows"][0]["execution_status"] == "queue_only"
-    assert loaded["rows"][0]["readiness"] == "QUEUE_ONLY"
+    assert loaded["rows"][0]["execution_status"] == "blocked"
+    assert loaded["rows"][0]["readiness"] == "BLOCKED"
     assert loaded["rows"][0]["is_executable"] is False
 
 
@@ -148,11 +148,11 @@ def test_read_advisory_snapshot_rows_downgrades_display_only_executable_row(tmp_
 
     assert loaded["state"] == "ok"
     assert loaded["rows"][0]["entry"] == 72.5
-    assert loaded["rows"][0]["execution_status"] == "queue_only"
-    assert loaded["rows"][0]["readiness"] == "QUEUE_ONLY"
+    assert loaded["rows"][0]["execution_status"] == "advisory_only"
+    assert loaded["rows"][0]["readiness"] == "ADVISORY_ONLY"
     assert loaded["rows"][0]["execution_entry_status"] == "non_executable"
-    assert loaded["rows"][0]["display_entry_status"] == "non_executable"
-    assert loaded["rows"][0]["entry_status"] == "non_executable"
+    assert loaded["rows"][0]["display_entry_status"] == "displayable"
+    assert loaded["rows"][0]["entry_status"] == "displayable"
     assert loaded["rows"][0]["is_executable"] is False
 
 

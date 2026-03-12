@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,9 @@ REQUIRED_FIELDS = (
 _LEGACY_NON_ERROR_ENTRY_STATUSES = {"VALID", "OK", "LIVE_OK", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}
 _OPTION_SIDE_RE = re.compile(r"(?:^|[^A-Z0-9])(CE|PE)(?:$|[^A-Z0-9])")
 _LIST_FIELDS = ("hard_blockers", "soft_penalties", "warnings")
+_EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "retained_prior_ask", "retained_prior_bid"}
+_IST = timezone(timedelta(hours=5, minutes=30))
+_STALE_QUOTE_AGE_SENTINEL = float(10**9)
 
 
 def advisory_schema_error_path() -> Path:
@@ -130,6 +134,64 @@ def _normalize_text(value: Any) -> str | None:
 def _safe_lower_text(value: Any) -> str | None:
     text = str(value or "").strip().lower()
     return text or None
+
+
+def _normalize_quote_age_value(value: Any) -> float | None:
+    age = _safe_float(value)
+    if age is None:
+        return None
+    if age < 0.0:
+        return None
+    if float(age) >= _STALE_QUOTE_AGE_SENTINEL:
+        return None
+    return float(age)
+
+
+def _canonical_quote_age_sec(payload: dict[str, Any]) -> float | None:
+    if not isinstance(payload, dict):
+        return None
+    for field in ("quote_age_sec", "option_age_sec", "price_age_sec", "option_ltp_age_sec"):
+        age = _normalize_quote_age_value(payload.get(field))
+        if age is not None:
+            return age
+    return None
+
+
+def _parse_datetime_text(value: Any) -> datetime | None:
+    text = _normalize_text(value)
+    if not text:
+        return None
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _coerce_ts_epoch(value: Any) -> float | None:
+    if value in (None, "", "None"):
+        return None
+    try:
+        epoch = float(value)
+    except Exception:
+        dt = _parse_datetime_text(value)
+        return dt.timestamp() if dt is not None else None
+    if not math.isfinite(epoch):
+        return None
+    if abs(epoch) >= 1.0e11:
+        epoch /= 1000.0
+    return float(epoch)
+
+
+def _utc_timestamp_from_epoch(ts_epoch: float) -> str:
+    return datetime.fromtimestamp(float(ts_epoch), tz=timezone.utc).isoformat()
+
+
+def _ist_timestamp_from_epoch(ts_epoch: float) -> str:
+    return datetime.fromtimestamp(float(ts_epoch), tz=_IST).isoformat()
 
 
 def _normalize_option_type(value: Any) -> str | None:
@@ -205,6 +267,19 @@ def _normalize_blockers(value: Any) -> list[str]:
     if "," in text:
         return _normalize_blockers([part.strip() for part in text.split(",")])
     return [text]
+
+
+def _has_executable_entry_truth(
+    *,
+    execution_entry: float | None,
+    execution_entry_source: str | None,
+    execution_entry_status: str | None,
+) -> bool:
+    return (
+        execution_entry is not None
+        and str(execution_entry_status or "").strip().lower() == "executable"
+        and str(execution_entry_source or "").strip().lower() in _EXECUTABLE_ENTRY_SOURCES
+    )
 
 
 def _normalize_decision_explain(value: Any) -> list[Any]:
@@ -289,11 +364,26 @@ def _derive_quote_source(payload: dict[str, Any]) -> str:
 
 
 def _derive_timestamp(payload: dict[str, Any]) -> str | None:
+    ts_epoch = _derive_ts_epoch(payload)
+    if ts_epoch is not None:
+        return _utc_timestamp_from_epoch(ts_epoch)
     for field in ("timestamp", "last_seen_ts", "timestamp_utc_iso", "last_seen", "created_at"):
         text = _normalize_text(payload.get(field))
         if text:
             return text
     return None
+
+
+def _derive_ts_epoch(payload: dict[str, Any]) -> float | None:
+    for field in ("ts_epoch", "snapshot_ts_epoch", "timestamp", "last_seen_ts", "timestamp_utc_iso", "last_seen", "created_at"):
+        ts_epoch = _coerce_ts_epoch(payload.get(field))
+        if ts_epoch is not None:
+            return float(ts_epoch)
+    return None
+
+
+def _has_timestamp_hint(payload: dict[str, Any]) -> bool:
+    return any(payload.get(field) not in (None, "", "None") for field in ("ts_epoch", "snapshot_ts_epoch", "timestamp", "last_seen_ts", "timestamp_utc_iso", "last_seen", "created_at"))
 
 
 def _legacy_entry_state(payload: dict[str, Any]) -> dict[str, Any]:
@@ -332,9 +422,7 @@ def _legacy_entry_state(payload: dict[str, Any]) -> dict[str, Any]:
             "display_max_age_sec": _safe_float(payload.get("display_max_age_sec")),
             "execution_max_age_sec": _safe_float(payload.get("execution_max_age_sec")),
         }
-    quote_age_sec = _safe_float(payload.get("quote_age_sec"))
-    if quote_age_sec is None:
-        quote_age_sec = _safe_float(payload.get("price_age_sec"))
+    quote_age_sec = _canonical_quote_age_sec(payload)
     quote_source = _derive_quote_source(payload)
     validation_issue_code = str(payload.get("validation_issue_code") or "").strip().upper()
     if not validation_issue_code:
@@ -442,9 +530,49 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out["readiness"] = _derive_readiness(payload, out["hard_blockers"])
     out["quote_source"] = _derive_quote_source(payload)
     if out.get("quote_age_sec") in (None, "", "None"):
-        out["quote_age_sec"] = _safe_float(payload.get("price_age_sec"))
+        out["quote_age_sec"] = _canonical_quote_age_sec(payload)
+    canonical_quote_age = _canonical_quote_age_sec(out)
+    out["quote_age_sec"] = canonical_quote_age
+    out["price_age_sec"] = canonical_quote_age
+    out["option_age_sec"] = canonical_quote_age
     if out.get("confidence") in (None, "", "None"):
         out["confidence"] = _safe_float(payload.get("global_confidence"))
+    out.setdefault("builder_confidence", _safe_float(payload.get("builder_confidence")))
+    if out.get("builder_confidence") in (None, "", "None"):
+        out["builder_confidence"] = _safe_float(payload.get("confidence_base"))
+    if out.get("builder_confidence") in (None, "", "None"):
+        out["builder_confidence"] = _safe_float(out.get("confidence"))
+    out.setdefault("permission_confidence", _safe_float(payload.get("permission_confidence")))
+    if out.get("permission_confidence") in (None, "", "None"):
+        out["permission_confidence"] = _safe_float(payload.get("global_confidence"))
+    out.setdefault("gating_base_confidence", _safe_float(payload.get("gating_base_confidence")))
+    if out.get("gating_base_confidence") in (None, "", "None"):
+        out["gating_base_confidence"] = _safe_float(payload.get("confidence_base"))
+    out.setdefault("gating_final_confidence", _safe_float(payload.get("gating_final_confidence")))
+    if out.get("gating_final_confidence") in (None, "", "None"):
+        out["gating_final_confidence"] = _safe_float(payload.get("confidence_final"))
+    out.setdefault("sizing_confluence_score", _safe_float(payload.get("sizing_confluence_score")))
+    if out.get("sizing_confluence_score") in (None, "", "None"):
+        detail = payload.get("trade_score_detail") or {}
+        if isinstance(detail, dict):
+            out["sizing_confluence_score"] = _safe_float(detail.get("confluence_score"))
+    out.setdefault("sizing_reason", _normalize_text(payload.get("sizing_reason")))
+    out.setdefault("ml_proba_input", _safe_float(payload.get("ml_proba_input")))
+    out.setdefault("confluence_input", _safe_float(payload.get("confluence_input")))
+    out.setdefault("ml_proba_source", _normalize_text(payload.get("ml_proba_source")))
+    out.setdefault("confluence_source", _normalize_text(payload.get("confluence_source")))
+    out.setdefault("confidence_size_multiplier", _safe_float(payload.get("confidence_size_multiplier")))
+    out.setdefault("final_qty", _safe_float(payload.get("final_qty")))
+    out.setdefault("opportunity_score", _safe_float(payload.get("opportunity_score")))
+    try:
+        opportunity_rank = payload.get("opportunity_rank")
+        out.setdefault("opportunity_rank", int(opportunity_rank) if opportunity_rank not in (None, "", "None") else None)
+    except Exception:
+        out.setdefault("opportunity_rank", None)
+    out.setdefault("selected_for_execution", _normalize_bool(payload.get("selected_for_execution")))
+    out.setdefault("selection_reason", _normalize_text(payload.get("selection_reason")))
+    out.setdefault("size_multiplier_reason", _normalize_text(payload.get("size_multiplier_reason")))
+    out.setdefault("opportunity_size_multiplier", _safe_float(payload.get("opportunity_size_multiplier")))
     out.setdefault("confidence_raw", _safe_float(payload.get("confidence_raw")))
     if out.get("confidence_raw") in (None, "", "None"):
         out["confidence_raw"] = _safe_float(out.get("confidence"))
@@ -470,6 +598,9 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("confidence_final", _safe_float(payload.get("confidence_final")))
     if out.get("confidence_final") in (None, "", "None"):
         out["confidence_final"] = _safe_float(out.get("confidence"))
+    if out.get("gating_final_confidence") not in (None, "", "None"):
+        out["confidence_final"] = _safe_float(out.get("gating_final_confidence"))
+        out["confidence"] = _safe_float(out.get("gating_final_confidence"))
     out.setdefault("advisory_visible", bool(payload.get("advisory_visible", True)))
     out.setdefault("is_executable", bool(payload.get("is_executable", False)))
     out.setdefault("entry_source", payload.get("entry_source") or payload.get("entry_price_source") or payload.get("quote_source"))
@@ -494,7 +625,12 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
 
     # Preserve a real executable entry if a downstream normalizer dropped the
     # duplicated display/entry fields but kept the canonical execution entry.
-    if execution_entry is not None and execution_entry_status == "executable" and display_entry is None:
+    executable_ready = _has_executable_entry_truth(
+        execution_entry=execution_entry,
+        execution_entry_source=execution_entry_source,
+        execution_entry_status=execution_entry_status,
+    )
+    if executable_ready and display_entry is None:
         display_entry = execution_entry
         out["display_entry"] = display_entry
         if display_entry_source not in ENTRY_SOURCE_ENUM or display_entry_source == "none":
@@ -514,6 +650,11 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
         if entry_status not in ENTRY_STATUSES or entry_status == "missing":
             out["entry_status"] = display_entry_status
             entry_status = display_entry_status
+    if display_entry is not None and execution_entry is None:
+        out["display_entry_status"] = "displayable"
+        if entry is not None:
+            out["entry_status"] = "displayable"
+            entry_status = "displayable"
 
     missing_entry = entry is None or entry_status == "missing"
     execution_status = str(out.get("execution_status") or "").strip().lower()
@@ -522,32 +663,45 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
     permission = str(out.get("permission") or "").strip().upper()
     row_status = str(out.get("status") or "").strip().upper()
     claims_executable = execution_status == "executable" or bool(out.get("is_executable")) or readiness == "READY" or final_action == "EXECUTE" or permission == "EXECUTE" or row_status == "READY"
-    missing_executable_entry = execution_entry is None or execution_entry_status != "executable"
+    missing_executable_entry = not executable_ready
     if not claims_executable:
         return out
     if missing_executable_entry and display_entry is not None:
+        out["execution_entry"] = None
         out["execution_entry_source"] = "none"
         out["execution_entry_status"] = "non_executable"
-        out["display_entry_status"] = "non_executable"
-        out["entry_status"] = "non_executable"
+        out["display_entry_status"] = "displayable"
+        out["entry_status"] = "displayable"
+        execution_entry = None
         execution_entry_source = "none"
         execution_entry_status = "non_executable"
-        display_entry_status = "non_executable"
-        entry_status = "non_executable"
+        display_entry_status = "displayable"
+        entry_status = "displayable"
     if not missing_entry and not missing_executable_entry:
         return out
 
     has_hard_blockers = bool(_normalize_blockers(out.get("hard_blockers")))
-    out["execution_status"] = "blocked" if has_hard_blockers else "queue_only"
+    display_only_entry = display_entry is not None and missing_executable_entry and entry_status == "displayable"
+    if not display_only_entry and not has_hard_blockers:
+        hard_blockers = _normalize_blockers(out.get("hard_blockers"))
+        blockers = _normalize_blockers(out.get("blockers"))
+        if "MISSING_ENTRY" not in hard_blockers:
+            hard_blockers.append("MISSING_ENTRY")
+        if "MISSING_ENTRY" not in blockers:
+            blockers.append("MISSING_ENTRY")
+        out["hard_blockers"] = hard_blockers
+        out["blockers"] = blockers
+        has_hard_blockers = True
+    out["execution_status"] = "blocked" if has_hard_blockers or not display_only_entry else "advisory_only"
     out["is_executable"] = False
     if readiness == "READY":
-        out["readiness"] = "BLOCKED" if has_hard_blockers else "QUEUE_ONLY"
+        out["readiness"] = "BLOCKED" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if final_action == "EXECUTE":
-        out["final_action"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
+        out["final_action"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if permission == "EXECUTE":
-        out["permission"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
+        out["permission"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if row_status == "READY":
-        out["status"] = "INVALID" if has_hard_blockers else "QUEUE_ONLY"
+        out["status"] = "INVALID" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if not _normalize_text(out.get("entry_clear_reason")):
         reason = "missing_execution_entry" if missing_executable_entry else str(out.get("entry_status") or "missing_entry").strip().lower()
         out["entry_clear_reason"] = reason or "missing_entry"
@@ -558,6 +712,16 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     if not isinstance(payload, dict):
         raise AdvisorySchemaError("advisory row must be a dict")
     out = _legacy_adapter(payload) if allow_legacy and not _looks_like_canonical(payload) else dict(payload)
+    derived_ts_epoch = _derive_ts_epoch(out)
+    if derived_ts_epoch is None:
+        if _has_timestamp_hint(out):
+            raise AdvisorySchemaError("ts_epoch must be numeric or derivable from timestamp")
+        derived_ts_epoch = datetime.now(timezone.utc).timestamp()
+    if derived_ts_epoch is not None:
+        out["ts_epoch"] = float(derived_ts_epoch)
+        out["timestamp"] = _utc_timestamp_from_epoch(derived_ts_epoch)
+        out["ts_utc"] = out["timestamp"]
+        out["ts_ist"] = _ist_timestamp_from_epoch(derived_ts_epoch)
     for field in REQUIRED_FIELDS:
         if field not in out:
             raise AdvisorySchemaError(f"missing required field: {field}")
@@ -568,6 +732,7 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     advisory_id = _normalize_text(out.get("advisory_id"))
     symbol = _normalize_text(out.get("symbol"))
     strategy_name = _normalize_text(out.get("strategy_name"))
+    ts_epoch = _coerce_ts_epoch(out.get("ts_epoch"))
     timestamp = _normalize_text(out.get("timestamp"))
     instrument_type = _normalize_text(out.get("instrument_type"))
     execution_entry = _safe_float(out.get("execution_entry"))
@@ -608,7 +773,7 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     threshold_advisory = _safe_float(out.get("threshold_advisory"))
     threshold_execution = _safe_float(out.get("threshold_execution"))
     confidence_vs_threshold_reason = _normalize_text(out.get("confidence_vs_threshold_reason"))
-    quote_age_sec = _safe_float(out.get("quote_age_sec"))
+    quote_age_sec = _canonical_quote_age_sec(out)
     entry = _safe_float(out.get("entry"))
     execution_status = str(out.get("execution_status") or "").strip().lower()
     entry_source = _normalize_text(out.get("entry_source"))
@@ -661,6 +826,16 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         raise AdvisorySchemaError("confidence_raw must be within [0.0, 1.0]")
     for field_name, value in (
         ("confidence_model_raw", confidence_model_raw),
+        ("builder_confidence", _safe_float(out.get("builder_confidence"))),
+        ("permission_confidence", _safe_float(out.get("permission_confidence"))),
+        ("gating_base_confidence", _safe_float(out.get("gating_base_confidence"))),
+        ("gating_final_confidence", _safe_float(out.get("gating_final_confidence"))),
+        ("sizing_confluence_score", _safe_float(out.get("sizing_confluence_score"))),
+        ("ml_proba_input", _safe_float(out.get("ml_proba_input"))),
+        ("confluence_input", _safe_float(out.get("confluence_input"))),
+        ("confidence_size_multiplier", _safe_float(out.get("confidence_size_multiplier"))),
+        ("opportunity_score", _safe_float(out.get("opportunity_score"))),
+        ("opportunity_size_multiplier", _safe_float(out.get("opportunity_size_multiplier"))),
         ("confidence_model_component", confidence_model_component),
         ("confidence_micro_component", confidence_micro_component),
         ("confidence_after_micro", confidence_after_micro),
@@ -742,7 +917,10 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["advisory_id"] = advisory_id
     out["symbol"] = symbol
     out["strategy_name"] = strategy_name
-    out["timestamp"] = timestamp
+    out["ts_epoch"] = float(ts_epoch)
+    out["timestamp"] = _utc_timestamp_from_epoch(ts_epoch)
+    out["ts_utc"] = out["timestamp"]
+    out["ts_ist"] = _ist_timestamp_from_epoch(ts_epoch)
     out["instrument_type"] = instrument_type.upper()
     out["execution_entry"] = execution_entry
     out["execution_entry_source"] = execution_entry_source
@@ -755,6 +933,27 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["entry"] = entry
     out["entry_status"] = display_entry_status
     out["confidence"] = confidence
+    out["builder_confidence"] = _safe_float(out.get("builder_confidence"))
+    out["permission_confidence"] = _safe_float(out.get("permission_confidence"))
+    out["gating_base_confidence"] = _safe_float(out.get("gating_base_confidence"))
+    out["gating_final_confidence"] = _safe_float(out.get("gating_final_confidence"))
+    if out["gating_final_confidence"] is not None:
+        confidence_final = out["gating_final_confidence"]
+        confidence = confidence_final
+    out["sizing_confluence_score"] = _safe_float(out.get("sizing_confluence_score"))
+    out["sizing_reason"] = _normalize_text(out.get("sizing_reason"))
+    out["ml_proba_input"] = _safe_float(out.get("ml_proba_input"))
+    out["confluence_input"] = _safe_float(out.get("confluence_input"))
+    out["ml_proba_source"] = _normalize_text(out.get("ml_proba_source"))
+    out["confluence_source"] = _normalize_text(out.get("confluence_source"))
+    out["confidence_size_multiplier"] = _safe_float(out.get("confidence_size_multiplier"))
+    out["final_qty"] = int(out["final_qty"]) if _safe_float(out.get("final_qty")) is not None else None
+    out["opportunity_score"] = _safe_float(out.get("opportunity_score"))
+    out["opportunity_rank"] = out.get("opportunity_rank")
+    out["selected_for_execution"] = bool(out.get("selected_for_execution", False))
+    out["selection_reason"] = _normalize_text(out.get("selection_reason"))
+    out["size_multiplier_reason"] = _normalize_text(out.get("size_multiplier_reason"))
+    out["opportunity_size_multiplier"] = _safe_float(out.get("opportunity_size_multiplier"))
     out["confidence_raw"] = confidence_raw
     out["confidence_model_raw"] = confidence_model_raw
     out["confidence_model_component"] = confidence_model_component
@@ -773,6 +972,7 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["confidence_rejection_stage"] = confidence_rejection_stage
     out["confidence_penalty"] = float(confidence_penalty or 0.0)
     out["confidence_final"] = confidence_final
+    out["confidence"] = confidence_final
     out["threshold_display"] = threshold_display
     out["threshold_advisory"] = threshold_advisory
     out["threshold_execution"] = threshold_execution
@@ -788,6 +988,8 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["entry_source"] = display_entry_source
     out["quote_source"] = quote_source
     out["quote_age_sec"] = quote_age_sec
+    out["price_age_sec"] = quote_age_sec
+    out["option_age_sec"] = quote_age_sec
     out["decision_explain"] = decision_explain
     out["market_open"] = market_open
     return out

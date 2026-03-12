@@ -251,7 +251,7 @@ def build_entry_state(
             if candidate_value is not None:
                 display_entry = candidate_value
                 display_entry_source = candidate_source
-                display_entry_status = "non_executable"
+                display_entry_status = "displayable"
                 entry_reason = candidate_reason
                 break
         if display_entry is None:

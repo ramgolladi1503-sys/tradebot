@@ -33,6 +33,7 @@ from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
 from core.reject_telemetry import append_reject_telemetry
 from core.entry_semantics import EntryContractViolation, build_entry_state
+from core.opportunity_engine import annotate_ranked_opportunities, select_best_opportunity
 from core.option_entry import get_option_ltp_sla_sec
 from core.option_liquidity_cache import hydrate_option_liquidity_fields
 from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
@@ -396,6 +397,12 @@ class TradeBuilder:
                 executable_ready = executable_entry is not None and executable_status == "executable"
                 updates.update(
                     {
+                        "builder_confidence": getattr(trade, "builder_confidence", None) or conf,
+                        "sizing_confluence_score": (
+                            (getattr(trade, "trade_score_detail", {}) or {}).get("confluence_score")
+                            if isinstance(getattr(trade, "trade_score_detail", {}) or {}, dict)
+                            else None
+                        ),
                         "execution_entry": executable_entry,
                         "execution_entry_source": execution_source,
                         "execution_entry_status": executable_status or ("missing" if executable_entry is None else None),
@@ -426,12 +433,38 @@ class TradeBuilder:
                     updates["tradable_reasons_blocking"] = tradable_reasons
                 decision_trace = dict(trade_source_flags.get("decision_trace", {}) or {})
                 if decision_trace:
+                    preliminary_permission = (
+                        str(decision_trace.get("preliminary_permission") or decision_trace.get("permission") or "").strip().upper()
+                        or ("EXECUTE" if bool(getattr(trade, "execution_allowed", False)) else "ADVISORY_ONLY")
+                    )
+                    preliminary_reason = str(
+                        decision_trace.get("preliminary_permission_reason")
+                        or decision_trace.get("permission_reason")
+                        or getattr(trade, "reason", None)
+                        or ""
+                    ).strip() or ("execution_allowed" if bool(getattr(trade, "execution_allowed", False)) else "intent_blocked")
+                    decision_trace["preliminary_permission"] = preliminary_permission
+                    decision_trace["preliminary_permission_reason"] = preliminary_reason
+                    decision_trace["preliminary_exec_allowed"] = bool(
+                        decision_trace.get("preliminary_exec_allowed", getattr(trade, "execution_allowed", False))
+                    )
                     if executable_ready:
+                        decision_trace["permission"] = "EXECUTE" if bool(getattr(trade, "execution_allowed", False)) else preliminary_permission
+                        decision_trace["permission_reason"] = (
+                            preliminary_reason if bool(getattr(trade, "execution_allowed", False)) else preliminary_reason
+                        )
+                        decision_trace["final_action"] = "EXECUTE" if bool(getattr(trade, "execution_allowed", False)) else (
+                            "QUEUE_ONLY" if display_entry is not None else "ADVISORY_ONLY"
+                        )
                         decision_trace["entry_status"] = "OK"
                         decision_trace["entry_block_reason"] = None
+                        decision_trace["exec_allowed"] = bool(getattr(trade, "execution_allowed", False))
                     else:
+                        decision_trace["permission"] = "ADVISORY_ONLY"
+                        decision_trace["permission_reason"] = str(entry_clear_reason or entry_reason or "missing_execution_entry")
+                        decision_trace["final_action"] = "ADVISORY_ONLY"
                         decision_trace["entry_status"] = (
-                            "NON_EXECUTABLE" if display_entry is not None else str(entry_clear_reason or "missing_entry").strip().upper()
+                            "DISPLAYABLE" if display_entry is not None else str(entry_clear_reason or "missing_entry").strip().upper()
                         )
                         decision_trace["entry_block_reason"] = str(entry_clear_reason or entry_reason or "missing_execution_entry")
                         decision_trace["exec_allowed"] = False
@@ -2817,6 +2850,9 @@ class TradeBuilder:
         penalty_reasons_out = [str(reason) for reason in (penalty_reasons or []) if str(reason)]
         soft_veto_reasons_out = [str(reason) for reason in (penalty_soft_veto_reasons or []) if str(reason)]
         return {
+            "builder_confidence": _round_optional(final_conf),
+            "gating_base_confidence": _round_optional(base_val),
+            "gating_final_confidence": _round_optional(after_soft_veto_val if after_soft_veto_val is not None else final_conf),
             "confidence_model_raw": _round_optional(model_raw_val),
             "confidence_model_component": _round_optional(model_component_val),
             "confidence_micro_component": _round_optional(micro_component),
@@ -4417,13 +4453,16 @@ class TradeBuilder:
                 "orb_factor": None,
                 "reg_penalty": None,
                 "global_conf": None,
-                "permission": "EXECUTE" if bool(intent["execution_allowed"]) else "ADVISORY_ONLY",
-                "permission_reason": intent.get("execution_reason") or (
+                "preliminary_permission": "EXECUTE" if bool(intent["execution_allowed"]) else "ADVISORY_ONLY",
+                "preliminary_permission_reason": intent.get("execution_reason") or (
                     "execution_allowed" if bool(intent["execution_allowed"]) else "intent_blocked"
                 ),
+                "preliminary_exec_allowed": bool(intent["execution_allowed"]),
+                "permission": None,
+                "permission_reason": None,
                 "entry_status": None,
                 "entry_block_reason": None,
-                "final_action": "EXECUTE" if bool(intent["execution_allowed"]) else "ADVISORY_ONLY",
+                "final_action": None,
                 "initial_score": float(signal.get("score", 0.0)) * 100.0,
                 "score_penalties": [
                     {"name": str(code), "type": "soft_veto"}
@@ -4915,8 +4954,16 @@ class TradeBuilder:
             )
             return None
 
+        best_trade, ranked_candidates = select_best_opportunity(
+            candidates,
+            scope=f"build:{symbol}:{candidate_strategy_tag}",
+            top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
+        )
+        if best_trade is None:
+            return None
+
         # Persist decision traces for all retained candidates (selected and non-selected).
-        for cand in candidates:
+        for cand in ranked_candidates:
             try:
                 sf = dict(getattr(cand, "source_flags", {}) or {})
                 decision_trace = dict(sf.get("decision_trace", {}) or {})
@@ -4950,6 +4997,14 @@ class TradeBuilder:
                         "orb_factor": decision_trace.get("orb_factor"),
                         "reg_penalty": decision_trace.get("reg_penalty"),
                         "global_conf": decision_trace.get("global_conf"),
+                        "builder_confidence": getattr(cand, "builder_confidence", None),
+                        "permission_confidence": getattr(cand, "permission_confidence", None),
+                        "gating_final_confidence": getattr(cand, "gating_final_confidence", None),
+                        "opportunity_score": getattr(cand, "opportunity_score", None),
+                        "opportunity_rank": getattr(cand, "opportunity_rank", None),
+                        "selected_for_execution": getattr(cand, "selected_for_execution", None),
+                        "selection_reason": getattr(cand, "selection_reason", None),
+                        "size_multiplier_reason": getattr(cand, "size_multiplier_reason", None),
                         "permission": decision_trace.get("permission"),
                         "permission_reason": decision_trace.get("permission_reason"),
                         "entry_status": decision_trace.get("entry_status"),
@@ -4962,13 +5017,7 @@ class TradeBuilder:
             except Exception:
                 pass
 
-        # Choose highest-confidence candidate
-        self._scan_accepted = int(len(candidates))
-        best_trade = sorted(
-            candidates,
-            key=lambda t: (1 if getattr(t, "tradable", True) else 0, t.confidence),
-            reverse=True,
-        )[0]
+        self._scan_accepted = int(len(ranked_candidates))
         return best_trade
 
     def build_with_trace(
@@ -5262,6 +5311,7 @@ class TradeBuilder:
             if not spread_ok:
                 confidence -= 0.10
             confidence = max(0.0, min(1.0, confidence))
+            builder_confidence = confidence
             self._update_strategy_candidate_debug(stats, scored=1)
 
             candidates.append(
@@ -5269,6 +5319,7 @@ class TradeBuilder:
                     "opt": opt,
                     "premium": premium,
                     "confidence": confidence,
+                    "builder_confidence": builder_confidence,
                     "cheapness": cheapness,
                     "momentum_score": momentum_score,
                     "band_source": band_source,
@@ -5941,6 +5992,11 @@ class TradeBuilder:
             return []
         scored.sort(key=lambda x: x[0], reverse=True)
         out = [row[1] for row in scored[:desired]]
+        out = annotate_ranked_opportunities(
+            out,
+            scope=f"expiry_lotto:{symbol}",
+            top_n=min(int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)), max(1, desired)),
+        )
         if len(out) < 3:
             self._reject_ctx = {
                 "reason": "expiry_lotto_insufficient_candidates",
@@ -6345,7 +6401,13 @@ class TradeBuilder:
             if not (self._zero_hero_diag(data) or {}).get("zero_hero_rejected_reason"):
                 self._update_zero_hero_diag(data, rejected_reason="no_viable_candidates")
             return None
-        trade = sorted(candidates, key=lambda t: t.confidence, reverse=True)[0]
+        trade, _ranked_candidates = select_best_opportunity(
+            candidates,
+            scope=f"zero_hero_expiry:{symbol}",
+            top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
+        )
+        if trade is None:
+            return None
         self._update_zero_hero_diag(data, clear_rejected_reason=True)
         self._expiry_zero_hero_count += 1
         self._expiry_zero_hero_by_symbol[symbol] = self._expiry_zero_hero_by_symbol.get(symbol, 0) + 1
@@ -6835,7 +6897,12 @@ class TradeBuilder:
                 candidates.append(trade)
         if not candidates:
             return None
-        return sorted(candidates, key=lambda t: (1 if getattr(t, "tradable", True) else 0, t.confidence), reverse=True)[0]
+        trade, _ranked_candidates = select_best_opportunity(
+            candidates,
+            scope=f"scalp:{symbol}",
+            top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
+        )
+        return trade
 
     def _reject_record(self, symbol, opt, opt_type, reason, atr=None):
         try:

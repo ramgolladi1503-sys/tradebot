@@ -198,3 +198,36 @@ def test_execution_guard_high_confidence_can_still_fail_non_confidence_reason(mo
     assert decision.context["trade_confidence"] == 0.92
     assert decision.context["min_confidence"] == 0.30
     assert decision.context["confidence_stage"] == "final"
+
+
+def test_risk_engine_extracts_builder_confidence_not_mutated_confidence():
+    engine = RiskEngine()
+    proba, confluence, proba_source, confluence_source = engine._extract_confidence_inputs(
+        {
+            "confidence": 0.41,
+            "builder_confidence": 0.62,
+            "confidence_raw": 0.58,
+            "trade_score_detail": {"confluence_score": 0.73},
+        }
+    )
+
+    assert proba == 0.62
+    assert confluence == 0.73
+    assert proba_source == "builder_confidence"
+    assert confluence_source == "trade_score_detail.confluence_score"
+
+
+def test_risk_engine_falls_back_to_confidence_raw_when_builder_confidence_missing():
+    engine = RiskEngine()
+    proba, confluence, proba_source, confluence_source = engine._extract_confidence_inputs(
+        {
+            "confidence": 0.41,
+            "confidence_raw": 0.58,
+            "sizing_confluence_score": 0.81,
+        }
+    )
+
+    assert proba == 0.58
+    assert confluence == 0.81
+    assert proba_source == "confidence_raw"
+    assert confluence_source == "sizing_confluence_score"
