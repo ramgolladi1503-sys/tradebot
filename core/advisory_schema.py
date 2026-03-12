@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -78,6 +79,7 @@ REQUIRED_FIELDS = (
     "market_open",
 )
 _LEGACY_NON_ERROR_ENTRY_STATUSES = {"VALID", "OK", "LIVE_OK", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}
+_OPTION_SIDE_RE = re.compile(r"(?:^|[^A-Z0-9])(CE|PE)(?:$|[^A-Z0-9])")
 _LIST_FIELDS = ("hard_blockers", "soft_penalties", "warnings")
 
 
@@ -128,6 +130,48 @@ def _normalize_text(value: Any) -> str | None:
 def _safe_lower_text(value: Any) -> str | None:
     text = str(value or "").strip().lower()
     return text or None
+
+
+def _normalize_option_type(value: Any) -> str | None:
+    text = str(value or "").strip().upper()
+    if text in {"CE", "CALL", "C"}:
+        return "CE"
+    if text in {"PE", "PUT", "P"}:
+        return "PE"
+    return None
+
+
+def _parse_option_type(value: Any) -> str | None:
+    text = str(value or "").strip().upper()
+    if not text:
+        return None
+    if text.endswith("CE"):
+        return "CE"
+    if text.endswith("PE"):
+        return "PE"
+    match = _OPTION_SIDE_RE.search(text)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _normalize_option_identity(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    instrument_type = _normalize_text(out.get("instrument_type") or out.get("instrument"))
+    option_type = (
+        _normalize_option_type(out.get("option_type"))
+        or _normalize_option_type(out.get("type"))
+        or _normalize_option_type(out.get("right"))
+        or _parse_option_type(out.get("tradingsymbol"))
+        or _parse_option_type(out.get("instrument_id"))
+    )
+    if instrument_type and instrument_type.upper() == "OPT" and option_type:
+        out["option_type"] = option_type
+        out["type"] = option_type
+        out["right"] = option_type
+    return out
 
 
 def _normalize_bool(value: Any) -> bool | None:
@@ -437,7 +481,7 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
 def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return payload
-    out = dict(payload)
+    out = _normalize_option_identity(payload)
 
     execution_entry = _safe_float(out.get("execution_entry"))
     execution_entry_source = _safe_lower_text(out.get("execution_entry_source")) or "none"
@@ -473,22 +517,40 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
 
     missing_entry = entry is None or entry_status == "missing"
     execution_status = str(out.get("execution_status") or "").strip().lower()
-    if execution_status != "executable" or not missing_entry:
+    readiness = str(out.get("readiness") or "").strip().upper()
+    final_action = str(out.get("final_action") or "").strip().upper()
+    permission = str(out.get("permission") or "").strip().upper()
+    row_status = str(out.get("status") or "").strip().upper()
+    claims_executable = execution_status == "executable" or bool(out.get("is_executable")) or readiness == "READY" or final_action == "EXECUTE" or permission == "EXECUTE" or row_status == "READY"
+    missing_executable_entry = execution_entry is None or execution_entry_status != "executable"
+    if not claims_executable:
+        return out
+    if missing_executable_entry and display_entry is not None:
+        out["execution_entry_source"] = "none"
+        out["execution_entry_status"] = "non_executable"
+        out["display_entry_status"] = "non_executable"
+        out["entry_status"] = "non_executable"
+        execution_entry_source = "none"
+        execution_entry_status = "non_executable"
+        display_entry_status = "non_executable"
+        entry_status = "non_executable"
+    if not missing_entry and not missing_executable_entry:
         return out
 
     has_hard_blockers = bool(_normalize_blockers(out.get("hard_blockers")))
     out["execution_status"] = "blocked" if has_hard_blockers else "queue_only"
     out["is_executable"] = False
-    if str(out.get("readiness") or "").strip().upper() == "READY":
+    if readiness == "READY":
         out["readiness"] = "BLOCKED" if has_hard_blockers else "QUEUE_ONLY"
-    if str(out.get("final_action") or "").strip().upper() == "EXECUTE":
+    if final_action == "EXECUTE":
         out["final_action"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
-    if str(out.get("permission") or "").strip().upper() == "EXECUTE":
+    if permission == "EXECUTE":
         out["permission"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
-    if str(out.get("status") or "").strip().upper() == "READY":
+    if row_status == "READY":
         out["status"] = "INVALID" if has_hard_blockers else "QUEUE_ONLY"
     if not _normalize_text(out.get("entry_clear_reason")):
-        out["entry_clear_reason"] = str(out.get("entry_status") or "missing_entry").strip().lower() or "missing_entry"
+        reason = "missing_execution_entry" if missing_executable_entry else str(out.get("entry_status") or "missing_entry").strip().lower()
+        out["entry_clear_reason"] = reason or "missing_entry"
     return out
 
 

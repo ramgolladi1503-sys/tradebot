@@ -1986,7 +1986,8 @@ class TradeBuilder:
             reasons.append("quote_age_missing")
         elif strict_quote_checks and float(quote_age_sec) > max_quote_age:
             reasons.append("stale_option_quote")
-        if strict_quote_checks and ltp_source != "live":
+        live_ltp_required = bool(market_ctx.mode == "LIVE" and market_open and (not allow_stale_quotes))
+        if live_ltp_required and ltp_source != "live":
             reasons.append("ltp_not_live")
         if strict_quote_checks and (ltp is None or float(ltp) <= 0):
             reasons.append("invalid_ltp")

@@ -292,9 +292,18 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    execution_entry = _safe_float(out.get("execution_entry"))
+    execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
     display_entry = _safe_float(out.get("display_entry"))
     entry_value = _safe_float(out.get("entry"))
     entry_status = str(out.get("entry_status") or "").strip().lower()
+
+    if execution_entry is not None and execution_entry_status == "executable" and display_entry is None:
+        out["display_entry"] = execution_entry
+        out["display_entry_source"] = out.get("execution_entry_source") or "ask"
+        out["display_entry_status"] = "displayable"
+        out["entry_clear_reason"] = None
+        display_entry = execution_entry
 
     if entry_value is None and display_entry is not None:
         out["entry"] = display_entry
@@ -305,24 +314,40 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
     if entry_value is not None and str(out.get("entry_source") or "").strip().lower() in {"", "none"}:
         out["entry_source"] = out.get("display_entry_source") or out.get("execution_entry_source") or "none"
 
-    if str(out.get("execution_status") or "").strip().lower() != "executable":
+    execution_status = str(out.get("execution_status") or "").strip().lower()
+    readiness = str(out.get("readiness") or "").strip().upper()
+    final_action = str(out.get("final_action") or "").strip().upper()
+    permission = str(out.get("permission") or "").strip().upper()
+    row_status = str(out.get("status") or "").strip().upper()
+    claims_executable = execution_status == "executable" or bool(out.get("is_executable")) or readiness == "READY" or final_action == "EXECUTE" or permission == "EXECUTE" or row_status == "READY"
+    if not claims_executable:
         return out
-    if entry_value is not None and entry_status != "missing":
+    missing_entry = entry_value is None or entry_status == "missing"
+    missing_executable_entry = execution_entry is None or execution_entry_status != "executable"
+    if missing_executable_entry and display_entry is not None:
+        out["execution_entry_source"] = "none"
+        out["execution_entry_status"] = "non_executable"
+        out["display_entry_status"] = "non_executable"
+        out["entry_status"] = "non_executable"
+        execution_entry_status = "non_executable"
+        entry_status = "non_executable"
+    if not missing_entry and not missing_executable_entry:
         return out
 
     has_hard_blockers = bool(_dedupe_issue_codes(list(out.get("hard_blockers") or [])))
     out["execution_status"] = "blocked" if has_hard_blockers else "queue_only"
     out["is_executable"] = False
-    if str(out.get("readiness") or "").strip().upper() == "READY":
+    if readiness == "READY":
         out["readiness"] = "BLOCKED" if has_hard_blockers else "QUEUE_ONLY"
-    if str(out.get("final_action") or "").strip().upper() == "EXECUTE":
+    if final_action == "EXECUTE":
         out["final_action"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
-    if str(out.get("permission") or "").strip().upper() == "EXECUTE":
+    if permission == "EXECUTE":
         out["permission"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
-    if str(out.get("status") or "").strip().upper() == "READY":
+    if row_status == "READY":
         out["status"] = "INVALID" if has_hard_blockers else "QUEUE_ONLY"
     if not str(out.get("entry_clear_reason") or "").strip():
-        out["entry_clear_reason"] = str(out.get("entry_status") or "missing_entry").strip().lower() or "missing_entry"
+        reason = "missing_execution_entry" if missing_executable_entry else str(out.get("entry_status") or "missing_entry").strip().lower()
+        out["entry_clear_reason"] = reason or "missing_entry"
     return out
 
 

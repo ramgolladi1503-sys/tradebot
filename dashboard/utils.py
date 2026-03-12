@@ -15,6 +15,7 @@ import pandas as pd
 
 from core.trade_permission import build_permission_payload, normalize_orb_bias
 from core.trade_identity import compute_trade_key, derive_strategy_id
+from dashboard.ui.utils.derive_fields import parse_option_side
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +179,10 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
                 norm.at[idx, "expiry_date"] = expiry_val
 
             opt_type = _coerce_opt_type(row.get("option_type"))
+            if not opt_type:
+                opt_type = _coerce_opt_type(parse_option_side(row.get("tradingsymbol")))
+            if not opt_type:
+                opt_type = _coerce_opt_type(parse_option_side(row.get("instrument_id")))
             if opt_type:
                 norm.at[idx, "option_type"] = opt_type
 

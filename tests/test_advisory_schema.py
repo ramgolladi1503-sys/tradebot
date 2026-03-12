@@ -258,6 +258,55 @@ def test_advisory_schema_restores_valid_entry_from_execution_entry():
     assert out["is_executable"] is True
 
 
+def test_advisory_schema_normalizes_option_type_from_tradingsymbol():
+    row = _valid_row(
+        instrument_type="OPT",
+        option_type=None,
+        right=None,
+        type=None,
+        tradingsymbol="NIFTY26MAR1723850PE",
+        strike=23850,
+        expiry_date="2026-03-17",
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["option_type"] == "PE"
+    assert out["right"] == "PE"
+    assert out["type"] == "PE"
+
+
+def test_advisory_schema_downgrades_display_only_executable_claim():
+    row = _valid_row(
+        execution_entry=None,
+        execution_entry_source="none",
+        execution_entry_status="missing",
+        display_entry=72.5,
+        display_entry_source="mark",
+        display_entry_status="displayable",
+        entry=72.5,
+        entry_source="mark",
+        entry_status="displayable",
+        execution_status="executable",
+        readiness="READY",
+        is_executable=True,
+        permission="EXECUTE",
+        final_action="EXECUTE",
+        status="READY",
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["entry"] == 72.5
+    assert out["execution_entry"] is None
+    assert out["execution_entry_status"] == "non_executable"
+    assert out["display_entry_status"] == "non_executable"
+    assert out["entry_status"] == "non_executable"
+    assert out["execution_status"] == "queue_only"
+    assert out["readiness"] == "QUEUE_ONLY"
+    assert out["is_executable"] is False
+
+
 def test_advisory_schema_errors_are_logged(tmp_path, monkeypatch):
     logs_root = tmp_path / "logs"
     monkeypatch.setattr(advisory_schema, "logs_dir", lambda: logs_root)

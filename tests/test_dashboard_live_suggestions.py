@@ -8,6 +8,7 @@ import dashboard.streamlit_app_runtime as runtime
 import pandas as pd
 from core import advisory_schema
 from dashboard.readers.advisory_reader import read_advisory_snapshot_rows
+from dashboard.ui.table_model import select_display_df
 
 
 def _iso_now() -> str:
@@ -161,6 +162,46 @@ def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, mon
     assert float(df_live.iloc[0]["entry"]) == 123.45
 
 
+def test_load_live_suggestions_df_identity_includes_option_side(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    row = _snapshot_row(
+        "T-SNAPSHOT-PE",
+        entry=123.45,
+        execution_entry=123.45,
+        display_entry_source="ask",
+        display_entry_status="displayable",
+        execution_entry_source="ask",
+        execution_entry_status="executable",
+        readiness="READY",
+        execution_status="executable",
+        is_executable=True,
+        status="READY",
+    )
+    row["option_type"] = None
+    row["type"] = None
+    row["right"] = None
+    row["tradingsymbol"] = "NIFTY26MAR1723850PE"
+    row["expiry_date"] = "2026-03-17"
+    row["strike"] = 23850
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
+        encoding="utf-8",
+    )
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    suggestions_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+
+    df_live = runtime._load_live_suggestions_df(limit=5)
+    display = select_display_df(df_live, "advisory")
+
+    assert len(display) == 1
+    assert display.iloc[0]["identity"] == "NIFTY\n2026-03-17\n23850 PE"
+
+
 def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_path, monkeypatch):
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
@@ -196,6 +237,46 @@ def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_pa
     assert str(loaded["entry_status"]) == "missing"
     assert str(loaded["execution_status"]) == "queue_only"
     assert str(loaded["readiness"]) == "QUEUE_ONLY"
+    assert bool(loaded["is_executable"]) is False
+
+
+def test_load_live_suggestions_df_downgrades_display_only_executable_row(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    row = _snapshot_row(
+        "T-SNAPSHOT-DISPLAY-ONLY",
+        entry=72.5,
+        execution_entry=None,
+        display_entry_source="mark",
+        display_entry_status="displayable",
+        execution_entry_source="none",
+        execution_entry_status="missing",
+        readiness="READY",
+        execution_status="executable",
+        is_executable=True,
+        status="READY",
+    )
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
+        encoding="utf-8",
+    )
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    suggestions_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+
+    df_live = runtime._load_live_suggestions_df(limit=5)
+
+    assert list(df_live["trade_id"]) == ["T-SNAPSHOT-DISPLAY-ONLY"]
+    loaded = df_live.iloc[0]
+    assert float(loaded["entry"]) == 72.5
+    assert str(loaded["execution_status"]) == "queue_only"
+    assert str(loaded["readiness"]) == "QUEUE_ONLY"
+    assert str(loaded["execution_entry_status"]) == "non_executable"
+    assert str(loaded["display_entry_status"]) == "non_executable"
+    assert str(loaded["entry_status"]) == "non_executable"
     assert bool(loaded["is_executable"]) is False
 
 

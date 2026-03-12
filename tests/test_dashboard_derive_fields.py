@@ -9,6 +9,7 @@ def test_parse_option_side():
     assert parse_option_side("NIFTY26MAR22500CE") == "CE"
     assert parse_option_side("BANKNIFTY 51000 PE") == "PE"
     assert parse_option_side("SENSEX-CALL") == "CE"
+    assert parse_option_side("NIFTY|2026-03-17|23850|PE") == "PE"
     assert parse_option_side("NIFTYSPOT") == "UNKNOWN"
 
 

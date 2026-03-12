@@ -2043,6 +2043,7 @@ def test_ready_status_preserves_raw_planning_for_executable_row(tmp_path, monkey
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(review_queue, "build_permission_payload", lambda **kwargs: {"permission": "EXECUTE", "permission_reason": "aligned_high_conf", "global_confidence": 0.91})
     monkeypatch.setattr(review_queue, "gate_decision", lambda *_args, **_kwargs: {"hard_pass": True, "hard_reasons": [], "soft_reasons": [], "final_confidence": 0.91})
 
@@ -2055,7 +2056,16 @@ def test_ready_status_preserves_raw_planning_for_executable_row(tmp_path, monkey
             permission="EXECUTE",
             execution_allowed=True,
             final_action="EXECUTE",
+            execution_mode="LIVE",
+            quote_source="tick_store",
+            option_ltp_source="tick_store",
+            quote_age_sec=0.5,
             signal_price=150.0,
+            current_ltp=150.0,
+            best_bid=149.5,
+            best_ask=150.0,
+            bid=149.5,
+            ask=150.0,
         )
     )
 
@@ -2217,6 +2227,7 @@ def test_execute_permission_stays_execute_when_aligned_and_high_confidence(tmp_p
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(
         review_queue,
         "build_permission_payload",
@@ -2235,7 +2246,16 @@ def test_execute_permission_stays_execute_when_aligned_and_high_confidence(tmp_p
             tradingsymbol="SENSEX26MAR81800PE",
             instrument_id="SENSEX26MAR81800PE",
             strike=81800,
+            execution_mode="LIVE",
+            quote_source="tick_store",
+            option_ltp_source="tick_store",
+            quote_age_sec=0.5,
             signal_price=150.0,
+            current_ltp=150.0,
+            best_bid=149.5,
+            best_ask=150.0,
+            bid=149.5,
+            ask=150.0,
         )
     )
 
@@ -2256,6 +2276,7 @@ def test_high_confidence_permission_downgrade_records_hard_gate_provenance(tmp_p
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(
         review_queue,
         "build_permission_payload",
@@ -2283,7 +2304,16 @@ def test_high_confidence_permission_downgrade_records_hard_gate_provenance(tmp_p
             tradingsymbol="SENSEX26MAR81900PE",
             instrument_id="SENSEX26MAR81900PE",
             strike=81900,
+            execution_mode="LIVE",
+            quote_source="tick_store",
+            option_ltp_source="tick_store",
+            quote_age_sec=0.5,
             signal_price=150.0,
+            current_ltp=150.0,
+            best_bid=149.5,
+            best_ask=150.0,
+            bid=149.5,
+            ask=150.0,
         )
     )
 
@@ -2691,6 +2721,7 @@ def test_execute_permission_soft_conf_reject_records_downgrade_provenance(tmp_pa
     monkeypatch.setattr(cfg, "GATING_FINAL_CONFIDENCE_MIN", 0.30, raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (150.0, time.time()))
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(
         review_queue,
         "build_permission_payload",
@@ -2718,7 +2749,16 @@ def test_execute_permission_soft_conf_reject_records_downgrade_provenance(tmp_pa
             tradingsymbol="SENSEX26MAR82100PE",
             instrument_id="SENSEX26MAR82100PE",
             strike=82100,
+            execution_mode="LIVE",
+            quote_source="tick_store",
+            option_ltp_source="tick_store",
+            quote_age_sec=0.5,
             signal_price=150.0,
+            current_ltp=150.0,
+            best_bid=149.5,
+            best_ask=150.0,
+            bid=149.5,
+            ask=150.0,
         )
     )
 

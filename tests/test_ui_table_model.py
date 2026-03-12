@@ -1,6 +1,6 @@
 import pandas as pd
 
-from dashboard.ui.table_model import normalize_df, filter_non_active, select_display_df, dedupe
+from dashboard.ui.table_model import build_identity_col, normalize_df, filter_non_active, select_display_df, dedupe
 
 
 def test_normalize_df_adds_missing_cols():
@@ -156,3 +156,56 @@ def test_dedupe_uses_stable_trade_identity_not_entry_price():
     out = dedupe(df)
     assert len(out) == 1
     assert float(out.iloc[0]["entry"]) == 44.3
+
+
+def test_build_identity_col_includes_ce_for_option_row():
+    df = pd.DataFrame(
+        [
+            {
+                "symbol": "NIFTY",
+                "instrument_type": "OPT",
+                "expiry_date": "2026-03-17",
+                "strike": 23850,
+                "right": "CE",
+            }
+        ]
+    )
+
+    out = build_identity_col(df)
+
+    assert out.iloc[0]["identity"] == "NIFTY\n2026-03-17\n23850 CE"
+
+
+def test_build_identity_col_includes_pe_from_tradingsymbol_suffix():
+    df = pd.DataFrame(
+        [
+            {
+                "symbol": "NIFTY",
+                "instrument_type": "OPT",
+                "expiry_date": "2026-03-17",
+                "strike": 23850,
+                "tradingsymbol": "NIFTY26MAR1723850PE",
+            }
+        ]
+    )
+
+    out = build_identity_col(df)
+
+    assert out.iloc[0]["identity"] == "NIFTY\n2026-03-17\n23850 PE"
+
+
+def test_build_identity_col_preserves_non_option_identity_behavior():
+    df = pd.DataFrame(
+        [
+            {
+                "symbol": "NIFTY",
+                "instrument_type": "IDX",
+                "expiry_date": "2026-03-17",
+                "strike": 23850,
+            }
+        ]
+    )
+
+    out = build_identity_col(df)
+
+    assert out.iloc[0]["identity"] == "NIFTY\n2026-03-17\n23850"

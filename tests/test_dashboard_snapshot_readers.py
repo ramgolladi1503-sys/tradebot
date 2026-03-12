@@ -121,6 +121,41 @@ def test_read_advisory_snapshot_rows_downgrades_executable_row_without_entry(tmp
     assert loaded["rows"][0]["is_executable"] is False
 
 
+def test_read_advisory_snapshot_rows_downgrades_display_only_executable_row(tmp_path):
+    path = tmp_path / "advisory_latest.json"
+    row = _canonical_row() | {
+        "trade_id": "ADV-DISPLAY-ONLY",
+        "advisory_id": "ADV-DISPLAY-ONLY",
+        "execution_entry": None,
+        "execution_entry_source": "none",
+        "execution_entry_status": "missing",
+        "display_entry": 72.5,
+        "display_entry_source": "mark",
+        "display_entry_status": "displayable",
+        "entry": 72.5,
+        "entry_source": "mark",
+        "entry_status": "displayable",
+        "execution_status": "executable",
+        "readiness": "READY",
+        "is_executable": True,
+    }
+    path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": "2026-03-10T12:00:00Z", "producer": "test", "payload": {"rows": [row]}}),
+        encoding="utf-8",
+    )
+
+    loaded = read_advisory_snapshot_rows(path, limit=10)
+
+    assert loaded["state"] == "ok"
+    assert loaded["rows"][0]["entry"] == 72.5
+    assert loaded["rows"][0]["execution_status"] == "queue_only"
+    assert loaded["rows"][0]["readiness"] == "QUEUE_ONLY"
+    assert loaded["rows"][0]["execution_entry_status"] == "non_executable"
+    assert loaded["rows"][0]["display_entry_status"] == "non_executable"
+    assert loaded["rows"][0]["entry_status"] == "non_executable"
+    assert loaded["rows"][0]["is_executable"] is False
+
+
 def test_read_advisory_snapshot_rows_keeps_latest_recovery_row_exactly(tmp_path):
     path = tmp_path / "advisory_latest.json"
     stale = _canonical_row() | {

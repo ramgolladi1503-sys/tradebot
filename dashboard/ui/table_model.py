@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import hashlib
 
 import pandas as pd
+from dashboard.ui.utils.derive_fields import parse_option_side
 
 _ENTRY_STATUSES_WITH_QUOTE_BACKFILL = {
     "",
@@ -98,6 +99,36 @@ NUMERIC_COLUMNS = [
 ]
 
 
+def _normalize_option_right(value) -> str:
+    text = str(value or "").strip().upper()
+    if text in {"CE", "CALL", "C"}:
+        return "CE"
+    if text in {"PE", "PUT", "P"}:
+        return "PE"
+    return ""
+
+
+def _option_right_for_identity(row) -> str:
+    for field in ("opt_type", "option_type", "type", "right", "option_side", "contract_side"):
+        right = _normalize_option_right(row.get(field))
+        if right:
+            return right
+    for field in ("tradingsymbol", "instrument_id", "symbol"):
+        right = parse_option_side(row.get(field))
+        if right in {"CE", "PE"}:
+            return right
+    return ""
+
+
+def _is_option_row(row) -> bool:
+    instrument_type = str(row.get("instrument_type") or row.get("instrument") or "").strip().upper()
+    if instrument_type == "OPT":
+        return True
+    if _option_right_for_identity(row):
+        return True
+    return False
+
+
 def _empty_df() -> pd.DataFrame:
     return pd.DataFrame(columns=CANONICAL_COLUMNS + ["identity"])
 
@@ -146,6 +177,9 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         "last_seen": "last_seen_ts",
         "type": "opt_type",
         "option_type": "opt_type",
+        "right": "opt_type",
+        "option_side": "opt_type",
+        "contract_side": "opt_type",
         "pnl_1qty": "pnl_points",
         "pnl_1lot": "pnl_cash",
     }
@@ -199,7 +233,14 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         out["last_seen_ts"] = out["last_seen_ts"].fillna(pd.Timestamp.utcnow())
     for col in NUMERIC_COLUMNS:
         out[col] = pd.to_numeric(out[col], errors="coerce")
-    out["opt_type"] = out["opt_type"].astype(str).str.upper().replace({"CALL": "CE", "PUT": "PE"})
+    out["opt_type"] = out["opt_type"].apply(_normalize_option_right)
+    if "tradingsymbol" in out.columns:
+        inferred = out["tradingsymbol"].map(parse_option_side)
+        out["opt_type"] = out["opt_type"].where(out["opt_type"].isin(["CE", "PE"]), inferred)
+    if "instrument_id" in out.columns:
+        inferred = out["instrument_id"].map(parse_option_side)
+        out["opt_type"] = out["opt_type"].where(out["opt_type"].isin(["CE", "PE"]), inferred)
+    out["opt_type"] = out["opt_type"].where(out["opt_type"].isin(["CE", "PE"]), "")
     out["status"] = out["status"].astype(str).str.upper()
     return out
 
@@ -245,16 +286,17 @@ def build_identity_col(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return _empty_df()
     out = df.copy()
-    out["identity"] = out.apply(
-        lambda r: "\n".join(
-            [
-                str(r.get("symbol") or "--"),
-                str(r.get("expiry_date") or "--"),
-                f"{str(r.get('strike') if pd.notna(r.get('strike')) else '--')} {str(r.get('opt_type') or '--')}",
-            ]
-        ),
-        axis=1,
-    )
+
+    def _build_identity(row) -> str:
+        symbol = str(row.get("symbol") or row.get("underlying") or "--")
+        expiry = str(row.get("expiry_date") or row.get("expiry") or "--")
+        strike = str(row.get("strike") if pd.notna(row.get("strike")) else "--")
+        right = _option_right_for_identity(row)
+        if _is_option_row(row):
+            return "\n".join([symbol, expiry, f"{strike} {right or '--'}"])
+        return "\n".join([symbol, expiry, strike])
+
+    out["identity"] = out.apply(_build_identity, axis=1)
     return out
 
 
