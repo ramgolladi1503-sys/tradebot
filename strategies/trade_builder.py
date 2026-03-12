@@ -32,6 +32,7 @@ from core.market_context import derive_market_context
 from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
 from core.reject_telemetry import append_reject_telemetry
+from core.entry_semantics import EntryContractViolation, build_entry_state
 from core.option_entry import get_option_ltp_sla_sec
 from core.option_liquidity_cache import hydrate_option_liquidity_fields
 from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
@@ -371,15 +372,181 @@ class TradeBuilder:
             reg_conf = data.get("regime_confidence")
             if reg_conf is None:
                 reg_conf = data.get("day_confidence")
+            updates = {
+                "regime_confidence": reg_conf,
+                "day_confidence": data.get("day_confidence"),
+                "orb_bias": data.get("orb_bias"),
+                "raw_signal_confidence": conf,
+            }
+            trade_source_flags = dict(getattr(trade, "source_flags", {}) or {})
+            if str(getattr(trade, "instrument", None) or getattr(trade, "instrument_type", None) or "").upper() == "OPT":
+                lifecycle = self._build_trade_entry_lifecycle(
+                    trade,
+                    market_data=data,
+                    instrument_matches=option_ok,
+                )
+                executable_entry = lifecycle.get("execution_entry")
+                executable_status = str(lifecycle.get("execution_entry_status") or "").strip().lower()
+                display_entry = lifecycle.get("display_entry")
+                display_source = lifecycle.get("display_entry_source")
+                display_status = lifecycle.get("display_entry_status")
+                execution_source = lifecycle.get("execution_entry_source")
+                entry_reason = lifecycle.get("entry_reason")
+                entry_clear_reason = lifecycle.get("entry_clear_reason")
+                executable_ready = executable_entry is not None and executable_status == "executable"
+                updates.update(
+                    {
+                        "execution_entry": executable_entry,
+                        "execution_entry_source": execution_source,
+                        "execution_entry_status": executable_status or ("missing" if executable_entry is None else None),
+                        "display_entry": display_entry,
+                        "display_entry_source": display_source,
+                        "display_entry_status": display_status,
+                        "entry_reason": entry_reason,
+                        "entry_clear_reason": entry_clear_reason,
+                        "entry_status": lifecycle.get("entry_status"),
+                    }
+                )
+                if executable_ready:
+                    updates["entry_price"] = round(float(executable_entry), 2)
+                    updates["entry_price_source"] = execution_source
+                    if display_entry is not None:
+                        updates["expected_entry"] = round(float(display_entry), 2)
+                        updates["expected_entry_source"] = display_source
+                elif display_entry is not None:
+                    updates["expected_entry"] = round(float(display_entry), 2)
+                    updates["expected_entry_source"] = display_source
+                if bool(getattr(trade, "execution_allowed", False)) and (not executable_ready):
+                    lifecycle_reason = str(entry_clear_reason or entry_reason or "missing_execution_entry").strip() or "missing_execution_entry"
+                    tradable_reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
+                    if lifecycle_reason not in tradable_reasons:
+                        tradable_reasons.append(lifecycle_reason)
+                    updates["execution_allowed"] = False
+                    updates["reason"] = lifecycle_reason
+                    updates["tradable_reasons_blocking"] = tradable_reasons
+                decision_trace = dict(trade_source_flags.get("decision_trace", {}) or {})
+                if decision_trace:
+                    if executable_ready:
+                        decision_trace["entry_status"] = "OK"
+                        decision_trace["entry_block_reason"] = None
+                    else:
+                        decision_trace["entry_status"] = (
+                            "NON_EXECUTABLE" if display_entry is not None else str(entry_clear_reason or "missing_entry").strip().upper()
+                        )
+                        decision_trace["entry_block_reason"] = str(entry_clear_reason or entry_reason or "missing_execution_entry")
+                        decision_trace["exec_allowed"] = False
+                    trade_source_flags["decision_trace"] = decision_trace
+            updates["source_flags"] = trade_source_flags
             return replace(
                 trade,
-                regime_confidence=reg_conf,
-                day_confidence=data.get("day_confidence"),
-                orb_bias=data.get("orb_bias"),
-                raw_signal_confidence=conf,
+                **updates,
             )
         except Exception:
             return trade
+
+    def _build_trade_entry_lifecycle(
+        self,
+        trade: Trade,
+        *,
+        market_data: dict | None,
+        instrument_matches: bool,
+    ) -> dict:
+        data = market_data if isinstance(market_data, dict) else {}
+        source_flags = dict(getattr(trade, "source_flags", {}) or {})
+        ctx_payload = dict(data.get("market_context") or {}) if isinstance(data.get("market_context"), dict) else {}
+        if "execution_mode" not in ctx_payload:
+            ctx_payload["execution_mode"] = getattr(cfg, "EXECUTION_MODE", "SIM")
+        if "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = data.get("market_open", True)
+        if "segment" not in ctx_payload:
+            ctx_payload["segment"] = data.get("segment") or getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO")
+        market_ctx = derive_market_context(ctx_payload)
+
+        best_bid = getattr(trade, "best_bid", None)
+        if best_bid is None:
+            best_bid = getattr(trade, "opt_bid", None)
+        best_ask = getattr(trade, "best_ask", None)
+        if best_ask is None:
+            best_ask = getattr(trade, "opt_ask", None)
+        mark_price = getattr(trade, "mark_price", None)
+        if mark_price is None:
+            mark_price = source_flags.get("mark_price")
+        mid_price = source_flags.get("mid_price")
+        if mid_price is None and best_bid is not None and best_ask is not None:
+            try:
+                mid_price = (float(best_bid) + float(best_ask)) / 2.0
+            except Exception:
+                mid_price = None
+        last_price = getattr(trade, "current_ltp", None)
+        if last_price is None:
+            last_price = getattr(trade, "opt_ltp", None)
+        if last_price is None:
+            last_price = data.get("current_ltp")
+        if last_price is None:
+            last_price = data.get("ltp")
+
+        quote_source = (
+            getattr(trade, "option_ltp_source", None)
+            or source_flags.get("option_ltp_source")
+            or getattr(trade, "price_source", None)
+            or source_flags.get("price_source")
+            or data.get("option_ltp_source")
+            or data.get("quote_source")
+            or data.get("ltp_source")
+        )
+        if not quote_source:
+            if best_bid is not None and best_ask is not None:
+                quote_source = "live"
+            elif mark_price is not None:
+                quote_source = "mark"
+            elif mid_price is not None:
+                quote_source = "mid"
+            elif last_price is not None:
+                quote_source = "last"
+            else:
+                quote_source = "none"
+
+        try:
+            return build_entry_state(
+                symbol=getattr(trade, "symbol", None),
+                expiry=getattr(trade, "expiry_date", None) or getattr(trade, "expiry", None),
+                strike=getattr(trade, "strike", None),
+                right=getattr(trade, "right", None) or getattr(trade, "option_type", None),
+                side=getattr(trade, "side", None),
+                direction=getattr(trade, "direction", None),
+                bid=best_bid,
+                ask=best_ask,
+                mark=mark_price,
+                mid=mid_price,
+                last=last_price,
+                quote_age_sec=getattr(trade, "quote_age_sec", None),
+                mode=market_ctx.mode,
+                allow_stale_quotes=bool(market_ctx.allow_stale_quotes),
+                market_open=bool(market_ctx.is_market_open),
+                instrument_matches=bool(instrument_matches),
+                quote_source=quote_source,
+            )
+        except EntryContractViolation as exc:
+            logger.warning(
+                "trade_entry_lifecycle_invalid trade_id=%s symbol=%s code=%s err=%s",
+                getattr(trade, "trade_id", None),
+                getattr(trade, "symbol", None),
+                exc.code,
+                exc.message,
+            )
+            return {
+                "execution_entry": None,
+                "execution_entry_source": "none",
+                "execution_entry_status": "missing",
+                "display_entry": None,
+                "display_entry_source": "none",
+                "display_entry_status": "missing",
+                "entry_reason": None,
+                "entry_clear_reason": str(exc.code or "entry_contract_invalid").lower(),
+                "entry": None,
+                "entry_status": "missing",
+                "entry_source": "none",
+            }
 
     def _blocked_candidates_path(self) -> Path:
         desk_log_dir = getattr(cfg, "DESK_LOG_DIR", None)
@@ -4254,8 +4421,8 @@ class TradeBuilder:
                 "permission_reason": intent.get("execution_reason") or (
                     "execution_allowed" if bool(intent["execution_allowed"]) else "intent_blocked"
                 ),
-                "entry_status": "OK" if bool(intent["execution_allowed"]) else "INTENT_BLOCKED",
-                "entry_block_reason": None if bool(intent["execution_allowed"]) else (intent.get("execution_reason") or "intent_blocked"),
+                "entry_status": None,
+                "entry_block_reason": None,
                 "final_action": "EXECUTE" if bool(intent["execution_allowed"]) else "ADVISORY_ONLY",
                 "initial_score": float(signal.get("score", 0.0)) * 100.0,
                 "score_penalties": [
@@ -5333,8 +5500,16 @@ class TradeBuilder:
                     "orb_bias": market_data.get("orb_bias"),
                     "permission": "ADVISORY_ONLY",
                     "permission_reason": "PAPER_ONLY",
-                    "entry_status": "OK",
-                    "entry_block_reason": None,
+                    "entry_status": (
+                        "OK"
+                        if (trade.execution_entry is not None and str(trade.execution_entry_status or "").lower() == "executable")
+                        else ("NON_EXECUTABLE" if trade.display_entry is not None else str(trade.entry_clear_reason or "missing_entry").strip().upper())
+                    ),
+                    "entry_block_reason": (
+                        None
+                        if (trade.execution_entry is not None and str(trade.execution_entry_status or "").lower() == "executable")
+                        else str(trade.entry_clear_reason or trade.entry_reason or "missing_execution_entry")
+                    ),
                     "final_action": "ADVISORY_ONLY",
                 }
             )

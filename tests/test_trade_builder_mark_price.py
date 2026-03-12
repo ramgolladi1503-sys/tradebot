@@ -209,6 +209,172 @@ def test_quick_option_entry_price_prefers_ask_over_mark_and_ltp(monkeypatch):
     assert round(float(trade.signal_price), 2) == 100.99
 
 
+def test_trade_builder_live_option_sets_canonical_executable_entry(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    trade = trade_builder_module.Trade(
+        trade_id="unit-live-exec",
+        timestamp=trade_builder_module.datetime.now(),
+        symbol="SENSEX",
+        instrument="OPT",
+        instrument_type="OPT",
+        instrument_token=556677,
+        strike=82000,
+        expiry="2026-03-05",
+        expiry_date="2026-03-05",
+        side="BUY",
+        entry_price=102.0,
+        stop_loss=90.0,
+        target=120.0,
+        qty=1,
+        capital_at_risk=12.0,
+        expected_slippage=0.0,
+        confidence=0.9,
+        strategy="UNIT",
+        regime="TREND",
+        right="CE",
+        option_type="CE",
+        tradingsymbol="SENSEX2630582000CE",
+        instrument_id="SENSEX|2026-03-05|82000|CE",
+        best_bid=100.0,
+        best_ask=102.0,
+        mark_price=101.0,
+        opt_ltp=100.5,
+        quote_age_sec=1.0,
+        option_ltp_source="live",
+        entry_price_source="proxy",
+        expected_entry=105.0,
+        expected_entry_source="proxy",
+        execution_allowed=True,
+        source_flags={"mid_price": 101.0},
+    )
+    trade = builder._decorate_trade_context(
+        trade,
+        {"market_context": {"execution_mode": "LIVE", "market_open": True}, "day_confidence": 0.8},
+        0.9,
+    )
+
+    assert trade is not None
+    assert trade.execution_allowed is True
+    assert round(float(trade.execution_entry), 2) == 102.00
+    assert trade.execution_entry_source == "ask"
+    assert trade.execution_entry_status == "executable"
+    assert round(float(trade.display_entry), 2) == 102.00
+    assert trade.display_entry_status == "displayable"
+    assert round(float(trade.entry_price), 2) == 102.00
+    assert trade.entry_price_source == "ask"
+    assert round(float(trade.expected_entry), 2) == 102.00
+    assert trade.expected_entry_source == "ask"
+
+
+def test_trade_builder_live_option_with_only_mark_is_display_only(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    trade = trade_builder_module.Trade(
+        trade_id="unit-live-mark-only",
+        timestamp=trade_builder_module.datetime.now(),
+        symbol="SENSEX",
+        instrument="OPT",
+        instrument_type="OPT",
+        instrument_token=556677,
+        strike=82000,
+        expiry="2026-03-05",
+        expiry_date="2026-03-05",
+        side="BUY",
+        entry_price=102.0,
+        stop_loss=90.0,
+        target=120.0,
+        qty=1,
+        capital_at_risk=12.0,
+        expected_slippage=0.0,
+        confidence=0.9,
+        strategy="UNIT",
+        regime="TREND",
+        right="CE",
+        option_type="CE",
+        tradingsymbol="SENSEX2630582000CE",
+        instrument_id="SENSEX|2026-03-05|82000|CE",
+        best_bid=None,
+        best_ask=None,
+        mark_price=101.0,
+        opt_ltp=100.0,
+        quote_age_sec=1.0,
+        option_ltp_source="mark",
+        entry_price_source="proxy",
+        expected_entry=102.0,
+        expected_entry_source="proxy",
+        execution_allowed=True,
+        source_flags={},
+    )
+    trade = builder._decorate_trade_context(
+        trade,
+        {"market_context": {"execution_mode": "LIVE", "market_open": True}},
+        0.9,
+    )
+
+    assert trade is not None
+    assert trade.execution_allowed is False
+    assert trade.execution_entry is None
+    assert trade.execution_entry_status == "non_executable"
+    assert round(float(trade.display_entry), 2) == 101.00
+    assert trade.display_entry_source == "mark"
+    assert trade.display_entry_status == "non_executable"
+    assert round(float(trade.expected_entry), 2) == 101.00
+    assert trade.expected_entry_source == "mark"
+
+
+def test_trade_builder_live_option_last_only_does_not_leak_into_executable_entry(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    trade = trade_builder_module.Trade(
+        trade_id="unit-live-last-only",
+        timestamp=trade_builder_module.datetime.now(),
+        symbol="SENSEX",
+        instrument="OPT",
+        instrument_type="OPT",
+        instrument_token=556677,
+        strike=82000,
+        expiry="2026-03-05",
+        expiry_date="2026-03-05",
+        side="BUY",
+        entry_price=102.0,
+        stop_loss=90.0,
+        target=120.0,
+        qty=1,
+        capital_at_risk=12.0,
+        expected_slippage=0.0,
+        confidence=0.9,
+        strategy="UNIT",
+        regime="TREND",
+        right="CE",
+        option_type="CE",
+        tradingsymbol="SENSEX2630582000CE",
+        instrument_id="SENSEX|2026-03-05|82000|CE",
+        best_bid=None,
+        best_ask=None,
+        mark_price=None,
+        opt_ltp=99.5,
+        quote_age_sec=1.0,
+        option_ltp_source="last",
+        entry_price_source="proxy",
+        expected_entry=102.0,
+        expected_entry_source="proxy",
+        execution_allowed=True,
+        source_flags={},
+    )
+    trade = builder._decorate_trade_context(
+        trade,
+        {"market_context": {"execution_mode": "LIVE", "market_open": True}},
+        0.9,
+    )
+
+    assert trade is not None
+    assert trade.execution_allowed is False
+    assert trade.execution_entry is None
+    assert trade.execution_entry_status == "non_executable"
+    assert round(float(trade.display_entry), 2) == 99.50
+    assert trade.display_entry_source == "last"
+    assert trade.display_entry_status == "non_executable"
+    assert trade.entry_price_source != "ask"
+
+
 def test_option_executable_price_falls_back_to_mark_price_when_ask_missing(monkeypatch):
     builder = TradeBuilder(predictor=_PredictorStub())
     price, source = builder._option_executable_price(
