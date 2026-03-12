@@ -4,8 +4,90 @@ from config import config as cfg
 
 def test_restart_skips_without_cached_tokens(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_TOKENS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [], raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"stop": 0, "start": 0, "persist": 0}
+    monkeypatch.setattr(
+        ws,
+        "stop_depth_ws",
+        lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_persist_runtime_snapshot_row",
+        lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1),
+    )
     assert ws.restart_depth_ws(reason="unit_test_no_tokens") is False
+    assert calls == {"stop": 0, "start": 0, "persist": 0}
+
+
+def test_restart_skips_without_tokens_even_with_stale_ticker(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [], raising=False)
+    monkeypatch.setattr(ws, "_KITE_TICKER", object(), raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"stop": 0, "start": 0, "persist": 0, "soft": 0}
+    monkeypatch.setattr(
+        ws,
+        "stop_depth_ws",
+        lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_persist_runtime_snapshot_row",
+        lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_soft_resubscribe_current",
+        lambda reason: calls.__setitem__("soft", calls["soft"] + 1) or True,
+    )
+
+    assert ws.restart_depth_ws(reason="unit_test_no_tokens_stale_ticker") is False
+    assert calls == {"stop": 0, "start": 0, "persist": 0, "soft": 0}
+
+
+def test_stop_depth_ws_noop_without_ticker_or_watchdog(monkeypatch):
+    monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"persist": 0, "close": 0, "join_thread": 0, "join_ticker": 0}
+    monkeypatch.setattr(
+        ws,
+        "_persist_runtime_snapshot_row",
+        lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_close_ticker_instance",
+        lambda ticker: calls.__setitem__("close", calls["close"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_join_thread_safe",
+        lambda thread, timeout: calls.__setitem__("join_thread", calls["join_thread"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_join_ticker_threads",
+        lambda ticker, timeout: calls.__setitem__("join_ticker", calls["join_ticker"] + 1),
+    )
+
+    ws.stop_depth_ws(reason="unit_test_noop")
+
+    assert calls == {"persist": 0, "close": 0, "join_thread": 0, "join_ticker": 0}
 
 
 def test_restart_respects_cooldown(monkeypatch):

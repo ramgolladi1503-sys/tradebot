@@ -2016,6 +2016,12 @@ def stop_depth_ws(reason: str = "manual_stop"):
     ticker_instance = None
     stop_timeout_sec = float(getattr(cfg, "DEPTH_WATCHDOG_STOP_TIMEOUT_SEC", 3.0))
     with _KITE_TICKER_LOCK:
+        has_active_ticker = _KITE_TICKER is not None
+        has_active_watchdog = _WATCHDOG_THREAD is not None or _WATCHDOG_STOP is not None
+        if not has_active_ticker and not has_active_watchdog:
+            _STOP_REQUESTED = True
+            _RUNTIME_STATE = "STOPPED"
+            return
         _STOP_REQUESTED = True
         _log_ws("FEED_STOP", {"reason": reason})
         if _WATCHDOG_STOP is not None:
@@ -2053,6 +2059,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
         return False
 
     tokens, selection_payload = _resubscribe_token_selection()
+    tokens = _normalize_positive_tokens(tokens)
     if not tokens:
         _log_ws(
             "FEED_RESTART_SKIPPED",

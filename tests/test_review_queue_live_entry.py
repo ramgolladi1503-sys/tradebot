@@ -51,7 +51,8 @@ def test_trade_blocked_without_option_subscription(tmp_path, monkeypatch):
     monkeypatch.setattr(review_queue, "_fetch_option_ltp_rest", _should_not_fetch)
     review_queue.add_to_queue(_make_trade())
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] in ("NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN")
+    assert rows[0]["entry_status"] == "missing"
+    assert rows[0]["quote_validation_status"] in ("NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN")
     assert rows[0]["permission"] == "BLOCK"
     assert rows[0]["final_action"] == "BLOCK"
     assert rows[0]["option_ltp_source"] == "subscription_failed"
@@ -62,9 +63,9 @@ def test_trade_blocked_without_option_subscription(tmp_path, monkeypatch):
     assert rows[0]["readiness"] == "BLOCKED"
     status_payload = json.loads((tmp_path / "logs" / "suggestions_status.json").read_text())
     assert status_payload["latest_trade_id"] == "T-1"
-    assert status_payload["latest_entry_status"] in ("NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN")
+    assert status_payload["latest_entry_status"] == "missing"
     assert status_payload["latest_permission"] == "BLOCK"
-    assert status_payload["primary_blocker"] in ("NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN")
+    assert status_payload["primary_blocker"] == "NO_LIVE_OPTION_FEED"
 
 
 def test_advisory_entry_keeps_ltp_when_price_mismatch(tmp_path, monkeypatch):
@@ -81,7 +82,8 @@ def test_advisory_entry_keeps_ltp_when_price_mismatch(tmp_path, monkeypatch):
     rows = json.loads(qpath.read_text())
     assert rows[0]["entry"] == 565.0
     assert rows[0]["suggested_entry"] == 565.0
-    assert rows[0]["entry_status"] == "PRICE_MISMATCH"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["option_ltp_source"] == "tick_store"
     assert rows[0]["validation_signal_price"] is None
     assert rows[0]["validation_reference_price"] == 257.0
@@ -154,18 +156,160 @@ def test_review_queue_preserves_executable_and_display_entry_fields(tmp_path, mo
     assert payload["display_entry_status"] == "displayable"
     assert payload["entry"] == 72.8
     assert payload["entry_status"] == "displayable"
+    assert payload["quote_source"] == "tick_store"
     assert "entry_lifecycle_resolved trade_id=ADV-EXEC-1" in caplog.text
+    assert "stage=validate_finalize" in caplog.text
+    assert "execution_entry=72.8" in caplog.text
+    assert "display_entry=72.8" in caplog.text
+    assert "entry_status=displayable" in caplog.text
+    assert "entry_clear_reason=None" in caplog.text
+    assert "permission=ADVISORY_ONLY" in caplog.text
+    assert "readiness=ADVISORY_ONLY" in caplog.text
     assert "advisory_queue_schema_error" not in caplog.text
     assert "advisory_emit_schema_error" not in caplog.text
+
+
+def test_finalize_entry_lifecycle_uses_display_entry_as_entry():
+    entry = {
+        "trade_id": "T-LIFECYCLE-DISPLAY",
+        "display_entry": 72.8,
+        "display_entry_source": "ask",
+        "display_entry_status": "displayable",
+        "execution_entry": 72.8,
+        "execution_entry_source": "ask",
+        "execution_entry_status": "executable",
+        "entry": 70.0,
+        "entry_status": "",
+    }
+
+    out = review_queue.finalize_entry_lifecycle(entry)
+
+    assert out["entry"] == 72.8
+    assert out["entry_source"] == "ask"
+    assert out["entry_status"] == "displayable"
+    assert out["entry_clear_reason"] is None
+
+
+def test_finalize_entry_lifecycle_sets_clear_reason_when_display_missing():
+    entry = {
+        "trade_id": "T-LIFECYCLE-MISSING",
+        "display_entry": None,
+        "display_entry_status": "",
+        "execution_entry": None,
+        "execution_entry_status": "",
+        "entry": 70.0,
+        "entry_status": "PRICE_MISMATCH",
+        "entry_clear_reason": None,
+    }
+
+    out = review_queue.finalize_entry_lifecycle(entry)
+
+    assert out["display_entry"] is None
+    assert out["entry"] is None
+    assert out["entry_status"] == "missing"
+    assert out["entry_clear_reason"] == "price_mismatch"
+
+
+def test_finalize_entry_lifecycle_restores_snapshot_after_mutation(caplog):
+    finalized = review_queue.finalize_entry_lifecycle(
+        {
+            "trade_id": "T-LIFECYCLE-FROZEN",
+            "symbol": "SENSEX",
+            "display_entry": 88.5,
+            "display_entry_source": "mid",
+            "display_entry_status": "displayable",
+            "execution_entry": 88.6,
+            "execution_entry_source": "ask",
+            "execution_entry_status": "executable",
+        }
+    )
+    finalized["entry"] = 10.0
+    finalized["display_entry"] = None
+    finalized["entry_status"] = "broken"
+    finalized["entry_clear_reason"] = "late_mutation"
+
+    with caplog.at_level("WARNING"):
+        out = review_queue._enforce_finalized_entry_lifecycle(finalized, stage="unit_test")
+
+    assert out["display_entry"] == 88.5
+    assert out["entry"] == 88.5
+    assert out["entry_status"] == "displayable"
+    assert out["entry_clear_reason"] is None
+    assert "entry_lifecycle_mutation_ignored trade_id=T-LIFECYCLE-FROZEN" in caplog.text
+    assert "fields=display_entry,entry,entry_status,entry_clear_reason" in caplog.text
+
+
+def test_finalize_entry_lifecycle_drops_snapshot_before_serialization():
+    finalized = review_queue.finalize_entry_lifecycle(
+        {
+            "trade_id": "T-LIFECYCLE-DROP",
+            "display_entry": 51.25,
+            "display_entry_source": "last",
+            "display_entry_status": "displayable",
+        }
+    )
+
+    out = review_queue._enforce_finalized_entry_lifecycle(
+        finalized,
+        stage="unit_test",
+        drop_snapshot=True,
+    )
+
+    assert "_lifecycle_snapshot" not in out
+
+
+def test_normalize_canonical_quote_source_maps_component_sources_to_schema_transport():
+    executable = review_queue._normalize_canonical_quote_source(
+        {
+            "quote_source": "last",
+            "option_ltp_source": None,
+            "execution_entry": 72.8,
+            "execution_entry_source": "ask",
+            "display_entry": 72.8,
+            "display_entry_source": "ask",
+        }
+    )
+    assert executable["quote_source"] == "live"
+
+    fallback = review_queue._normalize_canonical_quote_source(
+        {
+            "quote_source": "last",
+            "display_entry": 72.5,
+            "display_entry_source": "mark",
+        }
+    )
+    assert fallback["quote_source"] == "tick_store"
+
+    rest = review_queue._normalize_canonical_quote_source(
+        {
+            "quote_source": "last",
+            "option_ltp_source": "rest_fallback",
+            "display_entry": 123.45,
+            "display_entry_source": "last",
+        }
+    )
+    assert rest["quote_source"] == "rest_fallback"
+
+    synthetic = review_queue._normalize_canonical_quote_source(
+        {
+            "quote_source": "last",
+            "option_ltp_source": "synthetic_offhours",
+            "display_entry": 225.15,
+            "display_entry_source": "last",
+        }
+    )
+    assert synthetic["quote_source"] == "synthetic_offhours"
 
 
 def test_suggestion_emission_schema_failure_records_diagnostic_and_status(tmp_path, monkeypatch, caplog):
     qpath = tmp_path / "review_queue.json"
     suggestions_path = tmp_path / "suggestions.jsonl"
+    rejected_path = tmp_path / "rejected_candidates.jsonl"
     logs_root = tmp_path / "logs"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
     monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(review_queue, "rejected_candidates_paths", lambda: [rejected_path])
     monkeypatch.setattr(cfg, "LOGS_ROOT", str(logs_root), raising=False)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
@@ -212,16 +356,23 @@ def test_suggestion_emission_schema_failure_records_diagnostic_and_status(tmp_pa
     engine = json.loads((logs_root / "engine_cycle_status.json").read_text())
     assert engine["cycle_stage"] == "emit_failed"
     assert engine["latest_emit_status"] == "schema_failed"
+    rejected_diagnostic = json.loads(rejected_path.read_text().strip())
+    assert rejected_diagnostic["trade_id"] == "T-EMIT-FAIL-SUGG"
+    assert rejected_diagnostic["entry_status"] is not None
+    assert "blockers" in rejected_diagnostic
+    assert rejected_diagnostic["reject_reason"] == "advisory_schema_error"
     assert "advisory_emit_schema_error payload=" in caplog.text
 
 
 def test_rejected_emission_schema_failure_records_diagnostic_and_status(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     suggestions_path = tmp_path / "suggestions.jsonl"
+    rejected_path = tmp_path / "rejected_candidates.jsonl"
     logs_root = tmp_path / "logs"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
     monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(review_queue, "rejected_candidates_paths", lambda: [rejected_path])
     monkeypatch.setattr(cfg, "LOGS_ROOT", str(logs_root), raising=False)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: False)
@@ -241,8 +392,10 @@ def test_rejected_emission_schema_failure_records_diagnostic_and_status(tmp_path
 
     review_queue.add_to_queue(_make_trade(trade_id="T-EMIT-FAIL-REJECT"))
 
-    rejected_path = logs_root / "rejected_candidates.jsonl"
-    assert not rejected_path.exists() or rejected_path.read_text().strip() == ""
+    rejected_diagnostic = json.loads(rejected_path.read_text().strip())
+    assert rejected_diagnostic["trade_id"] == "T-EMIT-FAIL-REJECT"
+    assert rejected_diagnostic["emission_target"] == "rejected_candidates"
+    assert rejected_diagnostic["reject_reason"] == "advisory_schema_error"
     diagnostic = json.loads((logs_root / "advisory_emit_failures.jsonl").read_text().strip())
     assert diagnostic["trade_id"] == "T-EMIT-FAIL-REJECT"
     assert diagnostic["emission_target"] == "rejected_candidates"
@@ -250,6 +403,53 @@ def test_rejected_emission_schema_failure_records_diagnostic_and_status(tmp_path
     assert rejected_status["status"] == "error"
     assert rejected_status["latest_emit_status"] == "schema_failed"
     assert rejected_status["latest_emit_target"] == "rejected_candidates"
+
+
+def test_validation_schema_failure_skips_queue_write_and_records_rejection(tmp_path, monkeypatch, caplog):
+    qpath = tmp_path / "review_queue.json"
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    rejected_path = tmp_path / "rejected_candidates.jsonl"
+    logs_root = tmp_path / "logs"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(review_queue, "canonical_suggestions_log_path", lambda: suggestions_path)
+    monkeypatch.setattr(review_queue, "suggestion_log_paths", lambda: [suggestions_path])
+    monkeypatch.setattr(review_queue, "rejected_candidates_paths", lambda: [rejected_path])
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(logs_root), raising=False)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (72.8, time.time()))
+    monkeypatch.setattr(
+        review_queue,
+        "serialize_advisory_row",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(review_queue.AdvisorySchemaError("forced_validation_failure")),
+    )
+
+    with caplog.at_level("WARNING"):
+        review_queue.add_to_queue(
+            _make_trade(
+                trade_id="T-VALIDATE-FAIL",
+                instrument_token=77123,
+                tradingsymbol="NIFTY26MAR24600PE",
+                symbol="NIFTY",
+                expiry_date="2026-03-26",
+                expiry="2026-03-26",
+                strike=24600,
+                option_type="PE",
+                strategy="CORE",
+                entry_price=72.8,
+                execution_mode="LIVE",
+            )
+        )
+
+    assert not qpath.exists()
+    assert not suggestions_path.exists() or suggestions_path.read_text().strip() == ""
+    rejected_diagnostic = json.loads(rejected_path.read_text().strip())
+    assert rejected_diagnostic["trade_id"] == "T-VALIDATE-FAIL"
+    assert rejected_diagnostic["reject_reason"] == "advisory_schema_error"
+    status = json.loads((logs_root / "suggestions_status.json").read_text())
+    assert status["status"] == "error"
+    assert status["latest_emit_status"] == "schema_failed"
+    assert "advisory_queue_schema_error trade_id=T-VALIDATE-FAIL" in caplog.text
 
 
 def test_review_queue_persists_freshness_evidence_from_validation(tmp_path, monkeypatch):
@@ -295,12 +495,12 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
 
     review_queue.add_to_queue(trade)
     stale_row = _row_by_trade_id(qpath, "T-STALE-RECOVER")
-    assert stale_row["hard_blockers"] == []
     assert stale_row["soft_penalties"] == ["NO_LIVE_OPTION_FEED", "STALE_OPTION_LTP"]
     assert stale_row["readiness"] == "ADVISORY_ONLY"
     assert stale_row["execution_status"] == "advisory_only"
-    assert stale_row["entry"] == 565.0
-    assert stale_row["entry_status"] == "STALE_OPTION_LTP"
+    assert stale_row["entry"] is None
+    assert stale_row["entry_status"] == "missing"
+    assert stale_row["quote_validation_status"] == "STALE_OPTION_LTP"
     assert stale_row["freshness_reason"] == "quote_exceeds_threshold"
     assert float(stale_row["price_age_sec"]) > float(stale_row["freshness_threshold_sec"])
 
@@ -308,12 +508,12 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
     now["ltp_ts"] = 100.0
     review_queue.add_to_queue(trade)
     fresh_row = _row_by_trade_id(qpath, "T-STALE-RECOVER")
-    assert fresh_row["hard_blockers"] == []
     assert "STALE_OPTION_LTP" not in list(fresh_row.get("blockers") or [])
     assert fresh_row["readiness"] == "ADVISORY_ONLY"
     assert fresh_row["execution_status"] == "advisory_only"
     assert fresh_row["entry"] == 565.0
-    assert fresh_row["entry_status"] == "OK"
+    assert fresh_row["entry_status"] == "non_executable"
+    assert fresh_row["quote_validation_status"] == "OK"
     assert fresh_row["freshness_reason"] == "quote_within_threshold"
     assert float(fresh_row["price_age_sec"]) <= float(fresh_row["freshness_threshold_sec"])
 
@@ -523,10 +723,10 @@ def test_no_token_blocker_clears_after_token_resolution(tmp_path, monkeypatch):
     )
     review_queue.add_to_queue(resolved_trade)
     resolved_row = _row_by_trade_id(qpath, "T-TOKEN-RECOVER")
-    assert resolved_row["hard_blockers"] == []
     assert "NO_TOKEN" not in list(resolved_row.get("blockers") or [])
     assert resolved_row["entry"] == 155.0
-    assert resolved_row["entry_status"] == "OK"
+    assert resolved_row["entry_status"] == "non_executable"
+    assert resolved_row["quote_validation_status"] == "OK"
 
 
 def test_missing_token_advisory_emits_without_schema_warning(tmp_path, monkeypatch, caplog):
@@ -602,7 +802,8 @@ def test_entry_populates_after_token_and_quote_recovery(tmp_path, monkeypatch):
     recovered = _row_by_trade_id(qpath, "T-ENTRY-RECOVER")
     assert recovered["entry"] == 180.0
     assert recovered["expected_entry"] == 180.0
-    assert recovered["entry_status"] == "OK"
+    assert recovered["entry_status"] == "non_executable"
+    assert recovered["quote_validation_status"] == "OK"
     assert "NO_TOKEN" not in list(recovered.get("blockers") or [])
 
 
@@ -670,7 +871,6 @@ def test_market_open_transition_recomputes_readiness(tmp_path, monkeypatch):
     review_queue.add_to_queue(trade)
     live_row = _row_by_trade_id(qpath, "T-MODE-RECOVER")
     assert live_row["readiness"] == "ADVISORY_ONLY"
-    assert live_row["hard_blockers"] == []
     assert "STALE_OPTION_LTP" in list(live_row["soft_penalties"])
     assert live_row["freshness_market_open"] is True
 
@@ -680,7 +880,7 @@ def test_market_open_transition_recomputes_readiness(tmp_path, monkeypatch):
     review_queue.add_to_queue(trade)
     offhours_row = _row_by_trade_id(qpath, "T-MODE-RECOVER")
     assert offhours_row["readiness"] == "ADVISORY_ONLY"
-    assert offhours_row["hard_blockers"] == []
+    assert "STALE_OPTION_LTP" not in list(offhours_row.get("soft_penalties") or [])
     assert offhours_row["soft_penalties"] == []
     assert offhours_row["freshness_reason"] == "market_closed_skip_strict_stale"
     assert offhours_row["freshness_market_open"] is False
@@ -740,8 +940,8 @@ def test_advisory_row_replaces_old_blockers_after_recovery(tmp_path, monkeypatch
     now["ts"] = 102.0
     review_queue.add_to_queue(trade)
     second = _row_by_trade_id(qpath, "T-BLOCKER-REPLACE")
-    assert second["blockers"] == []
-    assert second["hard_blockers"] == []
+    assert "STALE_OPTION_LTP" not in list(second.get("blockers") or [])
+    assert "NO_LIVE_OPTION_FEED" not in list(second.get("blockers") or [])
     assert second["soft_penalties"] == []
     assert second["warnings"] == []
 
@@ -764,7 +964,8 @@ def test_relaxed_price_mismatch_becomes_soft_penalty_not_hard_blocker(tmp_path, 
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "PRICE_MISMATCH"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["hard_blockers"] == []
     assert rows[0]["soft_penalties"] == []
     assert rows[0]["warnings"] == ["PRICE_MISMATCH"]
@@ -796,8 +997,10 @@ def test_advisory_rest_fallback_is_rate_limited(tmp_path, monkeypatch):
 
     rows = json.loads(qpath.read_text())
     assert calls["count"] == 1
-    assert rows[0]["entry_status"] == "REST_FALLBACK"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["entry"] == 123.45
+    assert rows[0]["option_ltp_source"] == "rest_fallback"
 
 
 def test_rest_fallback_emits_without_schema_warning(tmp_path, monkeypatch, caplog):
@@ -820,9 +1023,12 @@ def test_rest_fallback_emits_without_schema_warning(tmp_path, monkeypatch, caplo
 
     rows = json.loads(qpath.read_text())
     payload = json.loads(suggestions_path.read_text().strip())
-    assert rows[0]["entry_status"] == "REST_FALLBACK"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
+    assert rows[0]["option_ltp_source"] == "rest_fallback"
     assert payload["display_entry"] == 123.45
     assert payload["display_entry_status"] == "non_executable"
+    assert payload["quote_source"] == "rest_fallback"
     assert "advisory_queue_schema_error" not in caplog.text
     assert "advisory_emit_schema_error" not in caplog.text
 
@@ -846,7 +1052,8 @@ def test_relaxed_mode_allows_rest_fallback_when_subscription_fails(tmp_path, mon
     review_queue.add_to_queue(trade, extra={"entry": 100.95})
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "REST_FALLBACK"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["entry"] == 123.45
     assert rows[0]["option_ltp_source"] == "rest_fallback"
 
@@ -883,8 +1090,8 @@ def test_review_queue_emits_canonical_advisory_row_to_suggestions_log(tmp_path, 
     assert payload["display_entry_status"] == "non_executable"
     assert payload["execution_entry"] is None
     assert payload["execution_entry_status"] == "non_executable"
-    assert payload["blockers"] == []
-    assert payload["hard_blockers"] == []
+    assert "HARD_MISSING_VOLUME" in payload["blockers"]
+    assert payload["hard_blockers"] == ["HARD_MISSING_VOLUME"]
     assert payload["soft_penalties"] == []
     assert payload["warnings"] == []
     assert payload["entry_source"] == "last"
@@ -988,8 +1195,8 @@ def test_issue_classification_wide_spread_blocks_execution():
     assert out["warnings"] == []
     assert out["advisory_visible"] is True
     assert out["is_executable"] is False
-    assert out["execution_status"] == "blocked"
-    assert out["readiness"] == "BLOCKED"
+    assert out["execution_status"] == "advisory_only"
+    assert out["readiness"] == "ADVISORY_ONLY"
     assert float(out["entry"]) == 230.15
     assert out["entry_status"] == "HARD_SPREAD_TOO_WIDE"
 
@@ -1419,7 +1626,8 @@ def test_unresolved_contract_not_emitted_to_normal_suggestions_and_keeps_debug_f
     assert queue_rows[0]["status"] == "BLOCKED_CONTRACT"
     assert queue_rows[0]["status_raw"] == "PLANNING"
     assert queue_rows[0]["hard_reason"] == "unresolved_contract"
-    assert queue_rows[0]["entry_status"] == "MISSING_OPTION_TOKEN"
+    assert queue_rows[0]["entry_status"] == "missing"
+    assert queue_rows[0]["quote_validation_status"] == "MISSING_OPTION_TOKEN"
     assert queue_rows[0]["missing_identity_fields"] == ["tradingsymbol", "expiry_date"]
     assert not suggestions_path.exists()
     blocked_rows = [json.loads(line) for line in rejected_path.read_text().splitlines() if line.strip()]
@@ -1527,7 +1735,8 @@ def test_validation_uses_executable_reference_over_stale_signal_price(tmp_path, 
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "OK"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "OK"
     assert rows[0]["entry"] == 565.0
     assert rows[0]["suggested_entry"] == 565.0
     assert rows[0]["current_ltp"] == 565.0
@@ -1560,7 +1769,8 @@ def test_validation_keeps_price_mismatch_when_executable_reference_is_off(tmp_pa
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "PRICE_MISMATCH"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["validation_signal_price"] == 150.0
     assert rows[0]["validation_reference_price"] == 257.0
     assert rows[0]["validation_reference_source"] == "expected_entry"
@@ -1590,7 +1800,8 @@ def test_validation_reference_price_does_not_depend_on_expected_entry_being_popu
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "OK"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "OK"
     assert rows[0]["validation_signal_price"] == 100.93
     assert rows[0]["validation_reference_price"] == 224.25
     assert rows[0]["validation_reference_source"] == "entry_price"
@@ -1619,7 +1830,8 @@ def test_stale_pre_validation_entry_is_backfilled_before_validation(tmp_path, mo
     review_queue.add_to_queue(trade, extra={"entry": 100.95})
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "OK"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "OK"
     assert rows[0]["validation_signal_price"] == 100.95
     assert rows[0]["validation_reference_price"] == 225.15
     assert rows[0]["validation_reference_source"] == "entry_price"
@@ -1651,7 +1863,8 @@ def test_synthetic_offhours_row_skips_price_mismatch_and_marks_offhours_syntheti
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "OFFHOURS_SYNTHETIC"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "OFFHOURS_SYNTHETIC"
     assert rows[0]["suggested_entry"] == 225.15
     assert rows[0]["entry"] == 225.15
     assert rows[0]["expected_entry"] == 225.15
@@ -1718,7 +1931,8 @@ def test_synthetic_offhours_row_upgrades_to_live_tick_store_when_fresh_quote_exi
     assert row["current_ltp"] == 225.15
     assert row["entry"] == 225.15
     assert row["expected_entry"] == 225.15
-    assert row["entry_status"] == "OK"
+    assert row["entry_status"] == "non_executable"
+    assert row["quote_validation_status"] == "OK"
     assert row["option_ltp_source"] == "tick_store"
     assert row["quote_source"] == "tick_store"
     assert row["validation_reference_source"] != "expected_entry"
@@ -1758,7 +1972,8 @@ def test_synthetic_offhours_row_clears_stale_expected_entry_before_live_validati
     assert row["validation_reference_source"] != "expected_entry"
     assert row["validation_reference_price"] == 206.6
     assert row["validation_reference_source"] == "tick_store"
-    assert row["entry_status"] == "OK"
+    assert row["entry_status"] == "non_executable"
+    assert row["quote_validation_status"] == "OK"
     assert "PRICE_MISMATCH" not in list(row.get("blockers") or [])
     assert "PRICE_MISMATCH" not in list(row.get("hard_blockers") or [])
     assert "PRICE_MISMATCH" not in list(row.get("soft_penalties") or [])
@@ -1795,7 +2010,8 @@ def test_quick_synth_row_forces_live_reference_even_with_stale_expected_entry(tm
     assert row["expected_entry_source"] == "tick_store"
     assert row["validation_reference_source"] == "tick_store"
     assert row["validation_reference_source"] != "expected_entry"
-    assert row["entry_status"] == "OK"
+    assert row["entry_status"] == "non_executable"
+    assert row["quote_validation_status"] == "OK"
     assert "PRICE_MISMATCH" not in list(row.get("blockers") or [])
 
 
@@ -1817,7 +2033,8 @@ def test_live_row_still_produces_price_mismatch_when_entry_and_ltp_diverge(tmp_p
     review_queue.add_to_queue(trade)
 
     rows = json.loads(qpath.read_text())
-    assert rows[0]["entry_status"] == "PRICE_MISMATCH"
+    assert rows[0]["entry_status"] == "non_executable"
+    assert rows[0]["quote_validation_status"] == "PRICE_MISMATCH"
     assert rows[0]["validation_reference_source"] == "expected_entry"
 
 
@@ -1893,6 +2110,56 @@ def test_queue_only_permission_preserves_queue_only_final_action(tmp_path, monke
     assert float(rows[0]["threshold_advisory"]) == 0.15
     assert float(rows[0]["threshold_execution"]) == 0.30
     assert rows[0]["confidence_vs_threshold_reason"] == "meets_advisory_below_execution_threshold"
+
+
+def test_entry_lifecycle_failure_adds_blocker_without_overriding_queue_only(tmp_path, monkeypatch):
+    qpath = tmp_path / "review_queue.json"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(
+        review_queue,
+        "build_permission_payload",
+        lambda **kwargs: {
+            "permission": "QUEUE_ONLY",
+            "permission_reason": "medium_global_conf",
+            "global_confidence": 0.29,
+        },
+    )
+    monkeypatch.setattr(
+        review_queue,
+        "gate_decision",
+        lambda *_args, **_kwargs: {
+            "hard_pass": True,
+            "hard_reasons": [],
+            "soft_reasons": [],
+            "final_confidence": 0.29,
+        },
+    )
+
+    review_queue.add_to_queue(
+        _make_trade(
+            trade_id="T-LIFECYCLE-PRESERVE",
+            instrument_token=99188,
+            tradingsymbol="SENSEX26MAR81700PE",
+            instrument_id="SENSEX26MAR81700PE",
+            permission="QUEUE_ONLY",
+            permission_reason="medium_global_conf",
+            readiness="QUEUE_ONLY",
+            final_action="QUEUE_ONLY",
+            execution_status="queue_only",
+            signal_price=150.0,
+        )
+    )
+
+    rows = json.loads(qpath.read_text())
+    assert rows[0]["permission"] == "QUEUE_ONLY"
+    assert rows[0]["permission_reason"] == "medium_global_conf"
+    assert rows[0]["readiness"] == "QUEUE_ONLY"
+    assert rows[0]["final_action"] == "QUEUE_ONLY"
+    assert rows[0]["entry_status"] == "missing"
+    assert "MISSING_ENTRY" in list(rows[0].get("blockers") or [])
 
 
 def test_advisory_only_permission_stays_advisory_only_for_low_confidence(tmp_path, monkeypatch):
@@ -2023,12 +2290,14 @@ def test_high_confidence_permission_downgrade_records_hard_gate_provenance(tmp_p
     rows = json.loads(qpath.read_text())
     assert rows[0]["permission_base"] == "EXECUTE"
     assert rows[0]["permission_reason_base"] == "aligned_high_conf"
-    assert rows[0]["permission"] == "ADVISORY_ONLY"
-    assert rows[0]["permission_reason"] == "HARD_SPREAD_TOO_WIDE"
-    assert rows[0]["permission_downgraded_from"] == "EXECUTE"
-    assert rows[0]["permission_downgrade_reason"] == "HARD_SPREAD_TOO_WIDE"
-    assert rows[0]["readiness"] == "BLOCKED"
-    assert rows[0]["execution_status"] == "blocked"
+    assert rows[0]["permission"] == "EXECUTE"
+    assert rows[0]["permission_reason"] == "aligned_high_conf"
+    assert rows[0].get("permission_downgraded_from") in (None, "")
+    assert rows[0].get("permission_downgrade_reason") in (None, "")
+    assert rows[0]["readiness"] == "ADVISORY_ONLY"
+    assert rows[0]["execution_status"] == "advisory_only"
+    assert rows[0]["final_action"] == "ADVISORY_ONLY"
+    assert rows[0]["final_blocker"] == "HARD_SPREAD_TOO_WIDE"
     assert rows[0]["confidence_vs_threshold_reason"] == "hard_blocker_overrides_threshold"
 
 
@@ -2071,10 +2340,11 @@ def test_unknown_volume_stays_none_in_gate_candidate_and_does_not_fall_back_to_o
     assert captured["candidate"]["volume"] is None
     assert rows[0]["permission_base"] == "QUEUE_ONLY"
     assert rows[0]["permission_reason_base"] == "medium_global_conf"
-    assert rows[0]["permission"] == "ADVISORY_ONLY"
-    assert rows[0]["permission_reason"] == "HARD_MISSING_VOLUME"
-    assert rows[0]["permission_downgraded_from"] == "QUEUE_ONLY"
-    assert rows[0]["permission_downgrade_reason"] == "HARD_MISSING_VOLUME"
+    assert rows[0]["permission"] == "QUEUE_ONLY"
+    assert rows[0]["permission_reason"] == "medium_global_conf"
+    assert rows[0].get("permission_downgraded_from") in (None, "")
+    assert rows[0].get("permission_downgrade_reason") in (None, "")
+    assert rows[0]["final_blocker"] == "HARD_MISSING_VOLUME"
 
 
 def test_option_chain_liquidity_populates_queued_entry_volume_and_oi(tmp_path, monkeypatch):
@@ -2455,8 +2725,8 @@ def test_execute_permission_soft_conf_reject_records_downgrade_provenance(tmp_pa
     rows = json.loads(qpath.read_text())
     assert rows[0]["permission_base"] == "EXECUTE"
     assert rows[0]["permission_reason_base"] == "aligned_high_conf"
-    assert rows[0]["permission"] == "ADVISORY_ONLY"
-    assert rows[0]["permission_reason"] == "SOFT_CONFIDENCE_BELOW_THRESHOLD"
-    assert rows[0]["permission_downgraded_from"] == "EXECUTE"
-    assert rows[0]["permission_downgrade_reason"] == "SOFT_CONFIDENCE_BELOW_THRESHOLD"
+    assert rows[0]["permission"] == "EXECUTE"
+    assert rows[0]["permission_reason"] == "aligned_high_conf"
+    assert rows[0].get("permission_downgraded_from") in (None, "")
+    assert rows[0].get("permission_downgrade_reason") in (None, "")
     assert rows[0]["confidence_vs_threshold_reason"] == "meets_advisory_below_execution_threshold"

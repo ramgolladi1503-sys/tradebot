@@ -4,7 +4,7 @@ from config import config as cfg
 from core.health_scenarios import run_one_trade_can_build
 
 
-def test_one_trade_can_build_succeeds(tmp_path, monkeypatch):
+def test_one_trade_can_build_requires_true_executable_evidence(tmp_path, monkeypatch):
     runtime_root = tmp_path / "runtime"
     logs_root = runtime_root / "logs"
     db_path = runtime_root / "db" / "DEFAULT.sqlite"
@@ -20,5 +20,7 @@ def test_one_trade_can_build_succeeds(tmp_path, monkeypatch):
     assert str(out.get("final_action")) == "EXECUTE"
     assert out.get("final_blocker") in (None, "", "NONE")
     assert str(out.get("entry_status")) == "OK"
+    assert str(out.get("display_entry_status")) == "DISPLAYABLE"
+    assert str(out.get("execution_entry_status")) == "executable"
+    assert float(out.get("execution_entry") or 0.0) == 121.5
     assert int(out.get("instrument_token") or 0) > 0
-

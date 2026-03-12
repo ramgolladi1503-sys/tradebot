@@ -2873,8 +2873,12 @@ class TradeBuilder:
                     pre_execution_blockers.append(reject_reason)
                 _log_signal_event("trade_offhours_missing_bidask", symbol, reject_payload)
                 if debug_reasons:
+                    if exec_mode == "LIVE":
+                        print(
+                            f"SOFT_VETO: missing_live_bidask symbol={symbol} candidate_generation_continues=true"
+                        )
                     _log_freshness_debug(
-                        "trade_builder_soft_veto_missing_bidask symbol=%s candidate_generation_continues=true",
+                        "SOFT_VETO trade_builder_soft_veto_missing_bidask symbol=%s candidate_generation_continues=true",
                         symbol,
                     )
                 if ltp is not None and float(ltp or 0.0) > 0:

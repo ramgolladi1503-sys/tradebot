@@ -228,6 +228,11 @@ def _enforce_token_coverage_threshold(
     )
 
 
+def _allow_exact_match_below_threshold(data_source: str) -> bool:
+    source = str(data_source or "").strip().lower()
+    return source in {"local_cache", "file_cache"}
+
+
 def resolve_option_token(
     symbol: str,
     expiry_date: str | date,
@@ -283,7 +288,8 @@ def resolve_option_token(
     )
     key = (sym, segment, strike_val, opt_type, exp)
     entry = registry.get(key)
-    if isinstance(entry, dict) and entry.get("instrument_token"):
+    exact_match_exists = isinstance(entry, dict) and entry.get("instrument_token")
+    if _allow_exact_match_below_threshold(data_source) and exact_match_exists:
         token = int(entry.get("instrument_token"))
         payload = {
             "instrument_token": token,
@@ -317,6 +323,30 @@ def resolve_option_token(
         rows_for_expiry=rows_for_expiry,
         data_source=data_source,
     )
+    if exact_match_exists:
+        token = int(entry.get("instrument_token"))
+        payload = {
+            "instrument_token": token,
+            "tradingsymbol": entry.get("tradingsymbol"),
+            "exchange": exchange,
+            "segment": segment,
+        }
+        _LOGGER.write(
+            {
+                "ts": utc_now().isoformat(),
+                "event": "OPTION_TOKEN_RESOLVED",
+                "symbol": sym,
+                "expiry": str(exp),
+                "strike": float(strike_val),
+                "option_type": opt_type,
+                "instrument_token": token,
+                "tradingsymbol": entry.get("tradingsymbol"),
+                "exchange": exchange,
+                "data_source": data_source,
+                "resolution_path": "exact_contract_match",
+            }
+        )
+        return payload
     available_expiries = sorted(
         {
             k[4]

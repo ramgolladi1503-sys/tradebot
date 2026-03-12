@@ -194,6 +194,70 @@ def test_advisory_schema_invalid_semantic_combination_raises():
         raise AssertionError("expected AdvisorySchemaError")
 
 
+def test_advisory_schema_downgrades_executable_claim_when_entry_missing():
+    row = _valid_row(
+        execution_entry=None,
+        execution_entry_source="none",
+        execution_entry_status="missing",
+        display_entry=None,
+        display_entry_source="none",
+        display_entry_status="missing",
+        entry=None,
+        entry_source="none",
+        entry_status="missing",
+        entry_clear_reason="missing_entry",
+        execution_status="executable",
+        readiness="READY",
+        is_executable=True,
+        permission="EXECUTE",
+        final_action="EXECUTE",
+        status="READY",
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["entry"] is None
+    assert out["entry_status"] == "missing"
+    assert out["execution_status"] == "queue_only"
+    assert out["readiness"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["status"] == "QUEUE_ONLY"
+    assert out["is_executable"] is False
+
+
+def test_advisory_schema_restores_valid_entry_from_execution_entry():
+    row = _valid_row(
+        execution_entry=121.5,
+        execution_entry_source="ask",
+        execution_entry_status="executable",
+        display_entry=None,
+        display_entry_source="none",
+        display_entry_status="missing",
+        entry=None,
+        entry_source="none",
+        entry_status="missing",
+        entry_clear_reason="missing_display_entry",
+        execution_status="executable",
+        readiness="READY",
+        is_executable=True,
+        permission="EXECUTE",
+        final_action="EXECUTE",
+        status="READY",
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["execution_status"] == "executable"
+    assert out["entry"] == 121.5
+    assert out["display_entry"] == 121.5
+    assert out["entry_source"] == "ask"
+    assert out["entry_status"] == "displayable"
+    assert out["display_entry_status"] == "displayable"
+    assert out["entry_clear_reason"] is None
+    assert out["is_executable"] is True
+
+
 def test_advisory_schema_errors_are_logged(tmp_path, monkeypatch):
     logs_root = tmp_path / "logs"
     monkeypatch.setattr(advisory_schema, "logs_dir", lambda: logs_root)
@@ -219,7 +283,18 @@ def test_advisory_schema_blocked_requires_hard_blockers():
 
 
 def test_advisory_schema_entry_invariant_rejects_contradiction():
-    row = _valid_row(display_entry=None, display_entry_status="displayable", entry=None, entry_status="displayable", entry_clear_reason="missing_executable_quote")
+    row = _valid_row(
+        execution_entry=None,
+        execution_entry_source="none",
+        execution_entry_status="missing",
+        display_entry=None,
+        display_entry_source="none",
+        display_entry_status="displayable",
+        entry=None,
+        entry_source="none",
+        entry_status="displayable",
+        entry_clear_reason="missing_executable_quote",
+    )
 
     try:
         advisory_schema.validate_advisory_row(row)

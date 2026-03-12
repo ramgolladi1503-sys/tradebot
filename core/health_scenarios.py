@@ -153,7 +153,7 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
     resolved_token = int(resolved.get("instrument_token"))
     # Fresh ticks for index + option leg.
     insert_tick(ts=now_epoch, token=256265, last_price=22500.0, volume=1000, oi=0)
-    insert_tick(ts=now_epoch, token=resolved_token, last_price=121.0, volume=500, oi=10000)
+    insert_tick(ts=now_epoch, token=resolved_token, last_price=121.5, volume=500, oi=10000)
     depth_store.update(
         resolved_token,
         {
@@ -176,7 +176,21 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
         "tradingsymbol": str(resolved.get("tradingsymbol") or tradingsymbol),
         "instrument_token": resolved_token,
         "side": "BUY",
-        "entry_price": 120.0,
+        "execution_mode": "PAPER",
+        "entry_price": 121.5,
+        "entry_price_source": "ask",
+        "expected_entry": 121.5,
+        "expected_entry_source": "ask",
+        "bid": 120.5,
+        "ask": 121.5,
+        "best_bid": 120.5,
+        "best_ask": 121.5,
+        "mark_price": 121.0,
+        "mid_price": 121.0,
+        "current_ltp": 121.5,
+        "quote_source": "tick_store",
+        "option_ltp_source": "tick_store",
+        "quote_age_sec": 0.0,
         "stop_loss": 110.0,
         "target": 135.0,
         "volume": 500,
@@ -219,10 +233,18 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
 
     final_action = str(row.get("final_action") or "").upper()
     final_blocker = row.get("final_blocker")
-    entry_status = str(row.get("entry_status") or "").upper()
-    blocked_statuses = {"STALE_OPTION_LTP", "NO_TOKEN", "MISSING_OPTION_TOKEN", "FEED_UNKNOWN"}
+    entry_status = str(row.get("quote_validation_status") or row.get("entry_status") or "").upper()
+    display_entry_status = str(row.get("entry_status") or "").upper()
+    execution_entry_status = str(row.get("execution_entry_status") or "").lower()
+    execution_entry = row.get("execution_entry")
 
-    ok = final_action != "ADVISORY_ONLY" and final_blocker in (None, "", "NONE") and entry_status not in blocked_statuses
+    ok = (
+        final_action == "EXECUTE"
+        and final_blocker in (None, "", "NONE")
+        and entry_status == "OK"
+        and execution_entry_status == "executable"
+        and execution_entry not in (None, "", "None")
+    )
     return {
         "ok": bool(ok),
         "scenario": "ONE_TRADE_CAN_BUILD",
@@ -231,6 +253,9 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
         "final_action": final_action,
         "final_blocker": final_blocker,
         "entry_status": entry_status,
+        "display_entry_status": display_entry_status,
+        "execution_entry_status": execution_entry_status,
+        "execution_entry": execution_entry,
         "instrument_token": resolved_token,
         "resolved_tradingsymbol": row.get("tradingsymbol"),
     }

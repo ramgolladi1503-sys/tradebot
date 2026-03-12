@@ -434,6 +434,64 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+
+    execution_entry = _safe_float(out.get("execution_entry"))
+    execution_entry_source = _safe_lower_text(out.get("execution_entry_source")) or "none"
+    execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    display_entry = _safe_float(out.get("display_entry"))
+    display_entry_source = _safe_lower_text(out.get("display_entry_source")) or "none"
+    display_entry_status = str(out.get("display_entry_status") or "").strip().lower()
+    entry = _safe_float(out.get("entry"))
+    entry_status = str(out.get("entry_status") or "").strip().lower()
+
+    # Preserve a real executable entry if a downstream normalizer dropped the
+    # duplicated display/entry fields but kept the canonical execution entry.
+    if execution_entry is not None and execution_entry_status == "executable" and display_entry is None:
+        display_entry = execution_entry
+        out["display_entry"] = display_entry
+        if display_entry_source not in ENTRY_SOURCE_ENUM or display_entry_source == "none":
+            display_entry_source = execution_entry_source if execution_entry_source in ENTRY_SOURCE_ENUM else "last"
+            out["display_entry_source"] = display_entry_source
+        if display_entry_status not in DISPLAY_ENTRY_STATUSES or display_entry_status == "missing":
+            display_entry_status = "displayable"
+            out["display_entry_status"] = display_entry_status
+        out["entry_clear_reason"] = None
+
+    if display_entry is not None and entry is None:
+        entry = display_entry
+        out["entry"] = entry
+    if display_entry is not None:
+        if (_safe_lower_text(out.get("entry_source")) or "none") == "none":
+            out["entry_source"] = display_entry_source
+        if entry_status not in ENTRY_STATUSES or entry_status == "missing":
+            out["entry_status"] = display_entry_status
+            entry_status = display_entry_status
+
+    missing_entry = entry is None or entry_status == "missing"
+    execution_status = str(out.get("execution_status") or "").strip().lower()
+    if execution_status != "executable" or not missing_entry:
+        return out
+
+    has_hard_blockers = bool(_normalize_blockers(out.get("hard_blockers")))
+    out["execution_status"] = "blocked" if has_hard_blockers else "queue_only"
+    out["is_executable"] = False
+    if str(out.get("readiness") or "").strip().upper() == "READY":
+        out["readiness"] = "BLOCKED" if has_hard_blockers else "QUEUE_ONLY"
+    if str(out.get("final_action") or "").strip().upper() == "EXECUTE":
+        out["final_action"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
+    if str(out.get("permission") or "").strip().upper() == "EXECUTE":
+        out["permission"] = "BLOCK" if has_hard_blockers else "QUEUE_ONLY"
+    if str(out.get("status") or "").strip().upper() == "READY":
+        out["status"] = "INVALID" if has_hard_blockers else "QUEUE_ONLY"
+    if not _normalize_text(out.get("entry_clear_reason")):
+        out["entry_clear_reason"] = str(out.get("entry_status") or "missing_entry").strip().lower() or "missing_entry"
+    return out
+
+
 def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise AdvisorySchemaError("advisory row must be a dict")
@@ -441,6 +499,7 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     for field in REQUIRED_FIELDS:
         if field not in out:
             raise AdvisorySchemaError(f"missing required field: {field}")
+    out = _enforce_executable_entry_invariant(out)
 
     trade_id = _normalize_text(out.get("trade_id"))
     strategy_id = _normalize_text(out.get("strategy_id"))

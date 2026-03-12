@@ -124,6 +124,13 @@ def _normalize_snapshot(snapshot: dict, *, fixture_name: str, idx: int, now_epoc
     return out
 
 
+def _canonical_no_trade_reason(reason: str) -> str:
+    text = str(reason or "").strip().lower()
+    if text == "no_signal" or text.startswith("no_signal_"):
+        return "no_signal"
+    return text or "unknown"
+
+
 def run_replay(fixture_path: Path, *, seed: int = 7) -> dict:
     fixture = _load_fixture(fixture_path)
     fixture_name = str(fixture.get("name") or fixture_path.stem)
@@ -228,7 +235,7 @@ def run_replay(fixture_path: Path, *, seed: int = 7) -> dict:
 
     top_reasons: dict[str, int] = {}
     for row in rejects:
-        reason = str(row.get("reason") or "unknown")
+        reason = _canonical_no_trade_reason(str(row.get("reason") or "unknown"))
         top_reasons[reason] = int(top_reasons.get(reason, 0)) + 1
 
     payload = {

@@ -220,7 +220,10 @@ def _decision_gate_health(now_epoch: float, market_open: bool, execution_mode: s
 
     unique_feed_stale_symbols = sorted(set(feed_stale_symbols))
     if market_open and unique_feed_stale_symbols:
+        for sym in unique_feed_stale_symbols:
+            blockers.append(f"feed_health:feed_stale:{sym}")
         reasons.append("feed_stale:" + ",".join(unique_feed_stale_symbols))
+    blockers = list(dict.fromkeys(blockers))
 
     execution_ready = len(allowed_rows) > 0
     decision_ok = (not market_open) or (not blockers)
@@ -394,11 +397,16 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
             )
         ),
     )
+    decision_engine_active = bool(
+        decision_health.get("decision_engine_active", False)
+        or decision_health.get("symbols")
+        or decision_health.get("rows")
+    )
     for reason in decision_health.get("blockers", []):
         blockers.append(reason)
     checks["decision_gate"] = {
         "ok": bool(decision_health.get("ok")),
-        "decision_engine_active": bool(decision_health.get("decision_engine_active", False)),
+        "decision_engine_active": decision_engine_active,
         "execution_ready": bool(decision_health.get("execution_ready", False)),
         "symbols": decision_health.get("symbols") or [],
         "allowed_symbols": decision_health.get("allowed_symbols") or [],
@@ -429,7 +437,7 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
                 continue
             if text not in active_feed_blockers:
                 active_feed_blockers.append(text)
-    if market_open and active_feed_blockers:
+    if market_open and active_feed_blockers and not decision_engine_active:
         feed_ok = False
         feed_reasons = list(dict.fromkeys(active_feed_blockers + feed_reasons))
     if require_live_quotes and (not feed_ok):

@@ -7,10 +7,78 @@ from pathlib import Path
 import dashboard.streamlit_app_runtime as runtime
 import pandas as pd
 from core import advisory_schema
+from dashboard.readers.advisory_reader import read_advisory_snapshot_rows
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _snapshot_row(
+    trade_id: str,
+    *,
+    entry: float,
+    execution_entry: float | None = None,
+    display_entry_source: str = "last",
+    display_entry_status: str = "non_executable",
+    execution_entry_source: str = "none",
+    execution_entry_status: str = "non_executable",
+    quote_source: str = "tick_store",
+    readiness: str = "ADVISORY_ONLY",
+    execution_status: str = "advisory_only",
+    is_executable: bool = False,
+    status: str = "ADVISORY_ONLY",
+) -> dict:
+    return advisory_schema.serialize_advisory_row(
+        {
+            "trade_id": trade_id,
+            "advisory_id": trade_id,
+            "timestamp": _iso_now(),
+            "last_seen_ts": _iso_now(),
+            "symbol": "NIFTY",
+            "instrument": "OPT",
+            "instrument_type": "OPT",
+            "strategy_name": "CORE",
+            "strategy_id": "CORE",
+            "status": status,
+            "permission": "EXECUTE" if is_executable else "ADVISORY_ONLY",
+            "entry_status": display_entry_status,
+            "readiness": readiness,
+            "execution_status": execution_status,
+            "advisory_visible": True,
+            "is_executable": is_executable,
+            "blockers": [],
+            "quote_source": quote_source,
+            "quote_age_sec": 0.5,
+            "confidence": 0.7,
+            "entry": entry,
+            "entry_source": display_entry_source,
+            "display_entry": entry,
+            "display_entry_source": display_entry_source,
+            "display_entry_status": display_entry_status,
+            "execution_entry": execution_entry,
+            "execution_entry_source": execution_entry_source,
+            "execution_entry_status": execution_entry_status,
+            "entry_reason": "display_from_last" if display_entry_source == "last" else "display_from_mark",
+            "entry_clear_reason": None,
+            "current_ltp": entry,
+            "entry_price": entry,
+            "expected_entry": entry,
+            "warnings": [],
+            "soft_penalties": [],
+            "hard_blockers": [],
+            "decision_explain": ["snapshot"],
+            "market_open": True,
+            "tradingsymbol": "NIFTYTESTCE",
+            "instrument_token": 123456,
+            "option_type": "CE",
+            "type": "CE",
+            "expiry_date": "2026-03-26",
+            "strike": 23000,
+            "side": "BUY",
+        },
+        allow_legacy=True,
+    )
 
 
 def test_load_live_suggestions_df_reads_latest_rows_only(tmp_path, monkeypatch):
@@ -64,44 +132,19 @@ def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, mon
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
     advisory_snapshot_path = runtime_root / "advisory_latest.json"
-    row = {
-        "trade_id": "T-SNAPSHOT-1",
-        "advisory_id": "T-SNAPSHOT-1",
-        "timestamp": _iso_now(),
-        "last_seen_ts": _iso_now(),
-        "symbol": "NIFTY",
-        "instrument": "OPT",
-        "instrument_type": "OPT",
-        "strategy_name": "CORE",
-        "strategy_id": "CORE",
-        "status": "READY",
-        "permission": "EXECUTE",
-        "entry_status": "OK",
-        "readiness": "READY",
-        "blockers": [],
-        "quote_source": "tick_store",
-        "quote_age_sec": 0.5,
-        "confidence": 0.7,
-        "entry": 123.45,
-        "display_entry": 123.45,
-        "execution_entry": 123.45,
-        "entry_source": "ask",
-        "current_ltp": 123.45,
-        "entry_price": 123.45,
-        "expected_entry": 123.45,
-        "warnings": [],
-        "soft_penalties": [],
-        "hard_blockers": [],
-        "decision_explain": "snapshot",
-        "market_open": True,
-        "tradingsymbol": "NIFTYTESTCE",
-        "instrument_token": 123456,
-        "option_type": "CE",
-        "type": "CE",
-        "expiry_date": "2026-03-26",
-        "strike": 23000,
-        "side": "BUY",
-    }
+    row = _snapshot_row(
+        "T-SNAPSHOT-1",
+        entry=123.45,
+        execution_entry=123.45,
+        display_entry_source="ask",
+        display_entry_status="displayable",
+        execution_entry_source="ask",
+        execution_entry_status="executable",
+        readiness="READY",
+        execution_status="executable",
+        is_executable=True,
+        status="READY",
+    )
     advisory_snapshot_path.write_text(
         json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
         encoding="utf-8",
@@ -116,6 +159,99 @@ def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, mon
 
     assert list(df_live["trade_id"]) == ["T-SNAPSHOT-1"]
     assert float(df_live.iloc[0]["entry"]) == 123.45
+
+
+def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    row = _snapshot_row(
+        "T-SNAPSHOT-MISSING-ENTRY",
+        entry=None,
+        execution_entry=None,
+        display_entry_source="none",
+        display_entry_status="missing",
+        execution_entry_source="none",
+        execution_entry_status="missing",
+        readiness="READY",
+        execution_status="executable",
+        is_executable=True,
+        status="READY",
+    )
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
+        encoding="utf-8",
+    )
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    suggestions_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+
+    df_live = runtime._load_live_suggestions_df(limit=5)
+
+    assert list(df_live["trade_id"]) == ["T-SNAPSHOT-MISSING-ENTRY"]
+    loaded = df_live.iloc[0]
+    assert pd.isna(loaded["entry"])
+    assert str(loaded["entry_status"]) == "missing"
+    assert str(loaded["execution_status"]) == "queue_only"
+    assert str(loaded["readiness"]) == "QUEUE_ONLY"
+    assert bool(loaded["is_executable"]) is False
+
+
+def test_read_advisory_snapshot_rows_supports_top_level_rows(tmp_path):
+    advisory_snapshot_path = tmp_path / "advisory_latest.json"
+    row = _snapshot_row("T-TOP-LEVEL", entry=101.0)
+    advisory_snapshot_path.write_text(json.dumps({"rows": [row]}), encoding="utf-8")
+
+    out = read_advisory_snapshot_rows(advisory_snapshot_path, limit=5)
+
+    assert out["state"] == "ok"
+    assert out["errors"] == []
+    assert [r["trade_id"] for r in out["rows"]] == ["T-TOP-LEVEL"]
+
+
+def test_read_advisory_snapshot_rows_supports_payload_list(tmp_path):
+    advisory_snapshot_path = tmp_path / "advisory_latest.json"
+    row = _snapshot_row("T-PAYLOAD-LIST", entry=102.0)
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": [row]}),
+        encoding="utf-8",
+    )
+
+    out = read_advisory_snapshot_rows(advisory_snapshot_path, limit=5)
+
+    assert out["state"] == "ok"
+    assert out["errors"] == []
+    assert [r["trade_id"] for r in out["rows"]] == ["T-PAYLOAD-LIST"]
+
+
+def test_read_advisory_snapshot_rows_marks_malformed_envelope_invalid(tmp_path):
+    advisory_snapshot_path = tmp_path / "advisory_latest.json"
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": {}}}),
+        encoding="utf-8",
+    )
+
+    out = read_advisory_snapshot_rows(advisory_snapshot_path, limit=5)
+
+    assert out["state"] == "invalid"
+    assert out["rows"] == []
+    assert "advisory_rows_not_list" in list(out["errors"])
+
+
+def test_read_advisory_snapshot_rows_empty_snapshot_is_ok(tmp_path):
+    advisory_snapshot_path = tmp_path / "advisory_latest.json"
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": []}}),
+        encoding="utf-8",
+    )
+
+    out = read_advisory_snapshot_rows(advisory_snapshot_path, limit=5)
+
+    assert out["state"] == "ok"
+    assert out["errors"] == []
+    assert out["rows"] == []
 
 
 def test_load_live_suggestions_df_returns_empty_on_invalid_advisory_snapshot(tmp_path, monkeypatch):
@@ -437,6 +573,60 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
     assert str(loaded["display_entry_status"]) == "non_executable"
     assert loaded["decision_explain"] == [{"code": "TRACE", "message": "kept"}]
     assert bool(loaded["market_open"]) is True
+
+
+def test_load_live_suggestions_df_keeps_queue_only_row_honest_when_entry_missing(tmp_path, monkeypatch):
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    row = {
+        "trade_id": "T-QUEUE-MISSING",
+        "strategy_id": "CORE",
+        "advisory_id": "ADV-QUEUE-MISSING",
+        "timestamp": _iso_now(),
+        "last_seen_ts": _iso_now(),
+        "symbol": "NIFTY",
+        "instrument_type": "OPT",
+        "strategy_name": "CORE",
+        "execution_entry": None,
+        "execution_entry_source": "none",
+        "execution_entry_status": "missing",
+        "display_entry": None,
+        "display_entry_source": "none",
+        "display_entry_status": "missing",
+        "entry_reason": None,
+        "entry_clear_reason": "missing_entry",
+        "entry": None,
+        "entry_status": "missing",
+        "confidence": 0.41,
+        "confidence_raw": 0.41,
+        "confidence_penalty": 0.0,
+        "confidence_final": 0.41,
+        "readiness": "QUEUE_ONLY",
+        "hard_blockers": [],
+        "soft_penalties": [],
+        "warnings": [],
+        "blockers": [],
+        "quote_source": "tick_store",
+        "quote_age_sec": 2.0,
+        "advisory_visible": True,
+        "is_executable": False,
+        "execution_status": "queue_only",
+        "entry_source": "none",
+        "decision_explain": [],
+        "market_open": True,
+    }
+    suggestions_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+
+    df_live = runtime._load_live_suggestions_df(limit=10)
+
+    assert len(df_live) == 1
+    loaded = df_live.iloc[0]
+    assert pd.isna(loaded["entry"])
+    assert str(loaded["entry_status"]) == "missing"
+    assert str(loaded["execution_status"]) == "queue_only"
+    assert str(loaded["readiness"]) == "QUEUE_ONLY"
+    assert bool(loaded["is_executable"]) is False
 
 
 def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch):
