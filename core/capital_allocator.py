@@ -1,223 +1,319 @@
 from __future__ import annotations
-from core.paths import db_dir, desks_dir
 
-import math
-import sqlite3
-import time
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Tuple
-
-from config import config as cfg
+from collections import Counter
+from dataclasses import replace
+from typing import Any, Iterable
 
 
-def calculate_qty(capital, risk_pct, entry, stop):
-    risk_amount = capital * risk_pct
-    per_unit_risk = abs(entry - stop)
-
-    if per_unit_risk == 0:
-        return 0
-
-    return int(risk_amount / per_unit_risk)
-
-
-@dataclass
-class DeskBudget:
-    desk_id: str
-    budget_pct: float
-    budget_amount: float
-    reason: str | None
-    metrics: Dict[str, float]
-    limits: Dict[str, float]
-
-
-def _utc_iso(epoch: float) -> str:
-    return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _discover_desk_dbs() -> Dict[str, Path]:
-    desks: Dict[str, Path] = {}
-    base = desks_dir()
-    if base.exists():
-        for entry in base.iterdir():
-            if not entry.is_dir():
-                continue
-            db = entry / "trades.db"
-            if db.exists():
-                desks[entry.name] = db
-    # Always include current desk config path
-    current_id = getattr(cfg, "DESK_ID", "DEFAULT")
-    fallback_db = db_dir() / f"{current_id}.sqlite"
-    current_db = Path(str(getattr(cfg, "TRADE_DB_PATH", str(fallback_db))))
-    desks.setdefault(current_id, current_db)
-    return desks
-
-
-def _load_outcomes(db_path: Path, start_epoch: float) -> List[Tuple[float, float]]:
-    if not db_path.exists():
-        return []
-    rows: List[Tuple[float, float]] = []
+def _safe_float(value: Any) -> float | None:
     try:
-        with sqlite3.connect(db_path) as conn:
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT timestamp_epoch, r_multiple FROM outcomes WHERE timestamp_epoch IS NOT NULL AND timestamp_epoch >= ?",
-                (start_epoch,),
-            )
-            for ts, r in cur.fetchall():
-                if ts is None or r is None:
-                    continue
-                rows.append((float(ts), float(r)))
+        if value in (None, "", "None"):
+            return None
+        return float(value)
     except Exception:
-        return []
-    return rows
-
-
-def _daily_series(rows: List[Tuple[float, float]]) -> Dict[str, float]:
-    daily: Dict[str, float] = {}
-    for ts, r in rows:
-        day = datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat()
-        daily[day] = daily.get(day, 0.0) + float(r)
-    return daily
-
-
-def _drawdown(daily: Dict[str, float]) -> float:
-    if not daily:
-        return 0.0
-    cum = 0.0
-    peak = 0.0
-    dd = 0.0
-    for day in sorted(daily.keys()):
-        cum += daily[day]
-        peak = max(peak, cum)
-        dd = min(dd, cum - peak)
-    return dd
-
-
-def _corr(series_a: Dict[str, float], series_b: Dict[str, float]) -> float | None:
-    overlap = sorted(set(series_a.keys()) & set(series_b.keys()))
-    if len(overlap) < int(getattr(cfg, "DESK_MIN_CORR_DAYS", 5)):
         return None
-    a_vals = [series_a[d] for d in overlap]
-    b_vals = [series_b[d] for d in overlap]
-    mean_a = sum(a_vals) / len(a_vals)
-    mean_b = sum(b_vals) / len(b_vals)
-    num = sum((x - mean_a) * (y - mean_b) for x, y in zip(a_vals, b_vals))
-    den_a = math.sqrt(sum((x - mean_a) ** 2 for x in a_vals))
-    den_b = math.sqrt(sum((y - mean_b) ** 2 for y in b_vals))
-    if den_a == 0 or den_b == 0:
-        return None
-    return num / (den_a * den_b)
 
 
-def compute_desk_budgets(
-    days: int = 60,
-    global_capital: float | None = None,
-    desk_db_paths: Dict[str, Path] | None = None,
-) -> Dict[str, object]:
-    now = time.time()
-    start_epoch = now - (days * 86400)
-    global_capital = float(global_capital or getattr(cfg, "GLOBAL_CAPITAL", getattr(cfg, "CAPITAL", 0.0)))
-    desk_db_paths = desk_db_paths or _discover_desk_dbs()
+def _get_value(candidate: Any, field: str, default: Any = None) -> Any:
+    if isinstance(candidate, dict):
+        return candidate.get(field, default)
+    return getattr(candidate, field, default)
 
-    min_trades = int(getattr(cfg, "DESK_MIN_TRADES", 10))
-    min_days = int(getattr(cfg, "DESK_MIN_DAYS", 5))
-    max_corr = float(getattr(cfg, "DESK_MAX_CORR", 0.8))
-    corr_penalty = float(getattr(cfg, "DESK_CORR_PENALTY", 0.3))
-    max_budget_pct = float(getattr(cfg, "DESK_MAX_BUDGET_PCT", 0.6))
-    min_budget_pct = float(getattr(cfg, "DESK_MIN_BUDGET_PCT", 0.0))
-    max_gross_pct = float(getattr(cfg, "DESK_MAX_GROSS_PCT", 0.6))
-    max_symbol_pct = float(getattr(cfg, "DESK_MAX_SYMBOL_PCT", 0.3))
 
-    desk_series: Dict[str, Dict[str, float]] = {}
-    desk_metrics: Dict[str, Dict[str, float]] = {}
-    desk_reasons: Dict[str, str | None] = {}
+def _update_candidate(candidate: Any, updates: dict[str, Any]) -> Any:
+    if isinstance(candidate, dict):
+        out = dict(candidate)
+        out.update(updates)
+        return out
+    return replace(candidate, **updates)
 
-    for desk_id, db_path in desk_db_paths.items():
-        rows = _load_outcomes(db_path, start_epoch)
-        if not rows:
-            desk_reasons[desk_id] = "no_outcomes"
-            continue
-        daily = _daily_series(rows)
-        if len(rows) < min_trades:
-            desk_reasons[desk_id] = "insufficient_trades"
-        elif len(daily) < min_days:
-            desk_reasons[desk_id] = "insufficient_days"
-        else:
-            desk_reasons[desk_id] = None
 
-        r_vals = [r for _, r in rows]
-        mean_r = sum(r_vals) / len(r_vals)
-        std_r = math.sqrt(sum((r - mean_r) ** 2 for r in r_vals) / max(1, len(r_vals) - 1))
-        win_rate = sum(1 for r in r_vals if r > 0) / len(r_vals)
-        dd = _drawdown(daily)
-        peak = max(1.0, max(0.0, sum(daily.values())))
-        dd_pct = dd / peak if peak != 0 else 0.0
-        vol = std_r
+def _candidate_source_flags(candidate: Any) -> dict[str, Any]:
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
+    return dict(source_flags) if isinstance(source_flags, dict) else {}
 
-        desk_series[desk_id] = daily
-        desk_metrics[desk_id] = {
-            "trades": float(len(r_vals)),
-            "days": float(len(daily)),
-            "mean_r": float(mean_r),
-            "std_r": float(std_r),
-            "win_rate": float(win_rate),
-            "drawdown": float(dd),
-            "drawdown_pct": float(dd_pct),
-            "vol": float(vol),
-        }
 
-    valid_desks = [d for d, reason in desk_reasons.items() if reason is None]
-    weights: Dict[str, float] = {d: 0.0 for d in desk_db_paths.keys()}
-    if valid_desks:
-        base = 1.0 / len(valid_desks)
-        for desk_id in valid_desks:
-            m = desk_metrics.get(desk_id, {})
-            dd_pct = float(m.get("drawdown_pct", 0.0))
-            vol = float(m.get("vol", 0.0))
-            dd_pen = max(0.1, 1.0 + dd_pct)
-            vol_pen = 1.0 / (1.0 + vol)
-            weights[desk_id] = base * dd_pen * vol_pen
+def _candidate_theme(candidate: Any) -> str:
+    source_flags = _candidate_source_flags(candidate)
+    origin = source_flags.get("candidate_origin") if isinstance(source_flags.get("candidate_origin"), dict) else {}
+    theme = (
+        origin.get("setup_family")
+        or source_flags.get("setup_family")
+        or _get_value(candidate, "setup_family")
+        or _get_value(candidate, "strategy")
+        or "UNKNOWN"
+    )
+    return str(theme).strip().lower() or "unknown"
 
-        # Correlation penalties
-        for desk_id in valid_desks:
-            max_seen = 0.0
-            for other in valid_desks:
-                if other == desk_id:
-                    continue
-                corr = _corr(desk_series.get(desk_id, {}), desk_series.get(other, {}))
-                if corr is None:
-                    continue
-                max_seen = max(max_seen, corr)
-            if max_seen > max_corr:
-                weights[desk_id] *= max(0.0, 1.0 - corr_penalty * max_seen)
 
-        total = sum(weights[d] for d in valid_desks)
-        if total > 0:
-            for desk_id in valid_desks:
-                weights[desk_id] = weights[desk_id] / total
+def _candidate_symbol(candidate: Any) -> str:
+    symbol = _get_value(candidate, "symbol") or _get_value(candidate, "underlying") or "UNKNOWN"
+    return str(symbol).strip().upper() or "UNKNOWN"
 
-    budgets: List[DeskBudget] = []
-    for desk_id in desk_db_paths.keys():
-        reason = desk_reasons.get(desk_id)
-        raw_pct = float(weights.get(desk_id, 0.0))
-        if reason is not None:
-            budget_pct = 0.0
-        else:
-            budget_pct = min(raw_pct, max_budget_pct)
-            if budget_pct < min_budget_pct:
-                budget_pct = min_budget_pct
-        budget_amount = global_capital * budget_pct
-        metrics = desk_metrics.get(desk_id, {}).copy()
-        metrics.update({"raw_weight": raw_pct})
-        limits = {"max_gross_pct": max_gross_pct, "max_symbol_pct": max_symbol_pct}
-        budgets.append(DeskBudget(desk_id, budget_pct, budget_amount, reason, metrics, limits))
 
-    report = {
-        "as_of_epoch": now,
-        "as_of_iso": _utc_iso(now),
-        "global_capital": global_capital,
-        "budgets": [b.__dict__ for b in budgets],
+def _allocation_score(candidate: Any) -> float:
+    return float(
+        _safe_float(_get_value(candidate, "opportunity_score"))
+        or _safe_float(_get_value(candidate, "gating_final_confidence"))
+        or _safe_float(_get_value(candidate, "permission_confidence"))
+        or _safe_float(_get_value(candidate, "builder_confidence"))
+        or _safe_float(_get_value(candidate, "confidence"))
+        or 0.0
+    )
+
+
+def _requested_capital(candidate: Any) -> float:
+    requested = _safe_float(_get_value(candidate, "capital_at_risk"))
+    if requested is not None and requested > 0:
+        return float(requested)
+    entry_price = _safe_float(_get_value(candidate, "entry_price")) or _safe_float(_get_value(candidate, "display_entry")) or 0.0
+    qty = _safe_float(_get_value(candidate, "qty_units"))
+    if qty is None or qty <= 0:
+        qty = _safe_float(_get_value(candidate, "qty"))
+    if qty is None or qty <= 0:
+        qty = 1.0
+    notional = float(entry_price) * float(qty)
+    return max(0.0, notional)
+
+
+def _is_allocation_eligible(candidate: Any) -> bool:
+    selected = _get_value(candidate, "selected_for_execution")
+    if selected is not None:
+        return bool(selected)
+    execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
+    tradable = bool(_get_value(candidate, "tradable", False))
+    execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
+    execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
+    return bool(execution_allowed and tradable and execution_entry is not None and execution_entry_status == "executable")
+
+
+def _annotate_default(candidate: Any) -> Any:
+    source_flags = _candidate_source_flags(candidate)
+    source_flags.setdefault("allocation_scope", "capital_allocator")
+    current_size_mult = _safe_float(_get_value(candidate, "size_mult")) or 0.0
+    return _update_candidate(
+        candidate,
+        {
+            "slot_id": _get_value(candidate, "slot_id"),
+            "allocation_reason": _get_value(candidate, "allocation_reason"),
+            "allocation_score": round(_allocation_score(candidate), 6),
+            "capital_assigned": _safe_float(_get_value(candidate, "capital_assigned")) or 0.0,
+            "size_multiplier_effective": _safe_float(_get_value(candidate, "size_multiplier_effective")) or current_size_mult,
+            "source_flags": source_flags,
+        },
+    )
+
+
+def _apply_deferred(candidate: Any, *, reason: str, selection_reason: str | None = None) -> Any:
+    source_flags = _candidate_source_flags(candidate)
+    source_flags["allocation_reason"] = reason
+    if selection_reason:
+        source_flags["ranking_selection_reason"] = selection_reason
+    updates = {
+        "slot_id": None,
+        "allocation_reason": reason,
+        "allocation_score": round(_allocation_score(candidate), 6),
+        "capital_assigned": 0.0,
+        "size_multiplier_effective": 0.0,
+        "selected_for_execution": False,
+        "source_flags": source_flags,
     }
-    return report
+    if selection_reason:
+        updates["selection_reason"] = selection_reason
+    return _update_candidate(candidate, updates)
+
+
+def _apply_allocated(candidate: Any, *, slot_id: str, capital_assigned: float, selection_reason: str | None = None) -> Any:
+    source_flags = _candidate_source_flags(candidate)
+    source_flags["allocation_reason"] = "allocated"
+    source_flags["slot_id"] = slot_id
+    current_size_mult = _safe_float(_get_value(candidate, "size_mult")) or 0.0
+    updates = {
+        "slot_id": slot_id,
+        "allocation_reason": "allocated",
+        "allocation_score": round(_allocation_score(candidate), 6),
+        "capital_assigned": round(float(capital_assigned), 6),
+        "size_multiplier_effective": round(float(current_size_mult), 6),
+        "selected_for_execution": True,
+        "source_flags": source_flags,
+    }
+    if selection_reason:
+        updates["selection_reason"] = selection_reason
+    return _update_candidate(candidate, updates)
+
+
+def _build_state(candidate: Any, index: int, *, slot_id: str) -> dict[str, Any]:
+    return {
+        "index": int(index),
+        "symbol": _candidate_symbol(candidate),
+        "theme": _candidate_theme(candidate),
+        "score": float(_allocation_score(candidate)),
+        "capital": float(_requested_capital(candidate)),
+        "slot_id": slot_id,
+        "trade_id": str(_get_value(candidate, "trade_id") or _get_value(candidate, "trade_key") or f"candidate-{index}"),
+    }
+
+
+def _fits_constraints(
+    states: list[dict[str, Any]],
+    candidate_state: dict[str, Any],
+    *,
+    max_slots: int,
+    per_symbol_cap: int,
+    per_theme_cap: int,
+    capital_budget_cap: float | None,
+) -> bool:
+    all_states = list(states) + [candidate_state]
+    if len(all_states) > max_slots:
+        return False
+    symbol_counts = Counter(state["symbol"] for state in all_states)
+    if per_symbol_cap > 0 and symbol_counts[candidate_state["symbol"]] > per_symbol_cap:
+        return False
+    theme_counts = Counter(state["theme"] for state in all_states)
+    if per_theme_cap > 0 and theme_counts[candidate_state["theme"]] > per_theme_cap:
+        return False
+    if capital_budget_cap is not None:
+        total_capital = sum(float(state["capital"]) for state in all_states)
+        if total_capital > capital_budget_cap:
+            return False
+    return True
+
+
+def _candidate_slot_conflicts(
+    allocated_states: list[dict[str, Any]],
+    candidate_state: dict[str, Any],
+    *,
+    max_slots: int,
+    per_symbol_cap: int,
+    per_theme_cap: int,
+    capital_budget_cap: float | None,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    reasons: list[str] = []
+    pool: dict[int, dict[str, Any]] = {}
+    if max_slots > 0 and len(allocated_states) >= max_slots:
+        reasons.append("deferred_slot_cap")
+        for state in allocated_states:
+            pool[state["index"]] = state
+    if per_symbol_cap > 0:
+        symbol_matches = [state for state in allocated_states if state["symbol"] == candidate_state["symbol"]]
+        if len(symbol_matches) >= per_symbol_cap:
+            reasons.append("deferred_per_symbol_cap")
+            for state in symbol_matches:
+                pool[state["index"]] = state
+    if per_theme_cap > 0:
+        theme_matches = [state for state in allocated_states if state["theme"] == candidate_state["theme"]]
+        if len(theme_matches) >= per_theme_cap:
+            reasons.append("deferred_per_theme_cap")
+            for state in theme_matches:
+                pool[state["index"]] = state
+    if capital_budget_cap is not None:
+        current_budget = sum(float(state["capital"]) for state in allocated_states)
+        if current_budget + float(candidate_state["capital"]) > capital_budget_cap:
+            reasons.append("deferred_budget_cap")
+            for state in allocated_states:
+                pool[state["index"]] = state
+    return reasons, list(pool.values())
+
+
+def allocate_capital_slots(
+    candidates: Iterable[Any],
+    *,
+    max_slots: int,
+    per_symbol_cap: int,
+    per_theme_cap: int,
+    capital_budget_cap: float | None,
+    minimum_quality_threshold: float,
+    replacement_enabled: bool,
+    replacement_min_delta: float,
+) -> list[Any]:
+    candidate_list = [_annotate_default(candidate) for candidate in list(candidates or [])]
+    allocated_states: list[dict[str, Any]] = []
+    next_slot_num = 1
+
+    for index, candidate in enumerate(candidate_list):
+        score = float(_allocation_score(candidate))
+        current_selection_reason = str(_get_value(candidate, "selection_reason") or "").strip() or None
+        if not _is_allocation_eligible(candidate):
+            candidate_list[index] = _apply_deferred(candidate, reason="not_selected_for_execution", selection_reason=current_selection_reason)
+            continue
+        if score < float(minimum_quality_threshold):
+            candidate_list[index] = _apply_deferred(candidate, reason="below_minimum_quality", selection_reason="allocation_deferred")
+            continue
+
+        state = _build_state(candidate, index, slot_id=f"slot-{next_slot_num}")
+        fits_directly = _fits_constraints(
+            allocated_states,
+            state,
+            max_slots=max_slots,
+            per_symbol_cap=per_symbol_cap,
+            per_theme_cap=per_theme_cap,
+            capital_budget_cap=capital_budget_cap,
+        )
+        if fits_directly:
+            assigned_slot = state["slot_id"]
+            candidate_list[index] = _apply_allocated(candidate, slot_id=assigned_slot, capital_assigned=state["capital"])
+            allocated_states.append(_build_state(candidate_list[index], index, slot_id=assigned_slot))
+            next_slot_num += 1
+            continue
+
+        reasons, replacement_pool = _candidate_slot_conflicts(
+            allocated_states,
+            state,
+            max_slots=max_slots,
+            per_symbol_cap=per_symbol_cap,
+            per_theme_cap=per_theme_cap,
+            capital_budget_cap=capital_budget_cap,
+        )
+        if replacement_enabled and replacement_pool:
+            weakest = min(replacement_pool, key=lambda item: (float(item["score"]), item["slot_id"], item["trade_id"]))
+            score_delta = float(state["score"]) - float(weakest["score"])
+            replacement_states = [item for item in allocated_states if item["index"] != weakest["index"]]
+            replacement_state = dict(state)
+            replacement_state["slot_id"] = weakest["slot_id"]
+            if score_delta >= float(replacement_min_delta) and _fits_constraints(
+                replacement_states,
+                replacement_state,
+                max_slots=max_slots,
+                per_symbol_cap=per_symbol_cap,
+                per_theme_cap=per_theme_cap,
+                capital_budget_cap=capital_budget_cap,
+            ):
+                replaced_candidate = candidate_list[weakest["index"]]
+                replacement_reason = f"replaced_by_better_candidate:{state['trade_id']}"
+                candidate_list[weakest["index"]] = _apply_deferred(
+                    replaced_candidate,
+                    reason=replacement_reason,
+                    selection_reason="allocation_replaced",
+                )
+                candidate_list[index] = _apply_allocated(
+                    candidate,
+                    slot_id=weakest["slot_id"],
+                    capital_assigned=replacement_state["capital"],
+                )
+                allocated_states = replacement_states + [_build_state(candidate_list[index], index, slot_id=weakest["slot_id"])]
+                continue
+
+        defer_reason = reasons[0] if reasons else "deferred_allocation"
+        candidate_list[index] = _apply_deferred(candidate, reason=defer_reason, selection_reason="allocation_deferred")
+
+    return candidate_list
+    return candidate_list
+
+
+def compute_desk_budgets(*, days: int, global_capital: float, desk_db_paths: dict) -> dict:
+    budgets: dict[str, float] = {}
+    notes: list[str] = []
+
+    if not desk_db_paths:
+        notes.append("no_desk_data")
+    else:
+        for desk_name in sorted(desk_db_paths):
+            budgets[str(desk_name)] = 0.0
+        notes.append("desk_data_not_loaded")
+
+    return {
+        "days": int(days),
+        "global_capital": float(global_capital),
+        "budgets": budgets,
+        "notes": notes,
+    }

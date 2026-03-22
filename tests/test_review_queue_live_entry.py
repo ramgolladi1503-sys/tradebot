@@ -68,6 +68,40 @@ def test_trade_blocked_without_option_subscription(tmp_path, monkeypatch):
     assert status_payload["primary_blocker"] == "NO_LIVE_OPTION_FEED"
 
 
+def test_review_queue_emits_lifecycle_events_for_blocked_and_emitted_trades(tmp_path, monkeypatch):
+    qpath = tmp_path / "review_queue.json"
+    lifecycle_path = tmp_path / "observability" / "trade_lifecycle.jsonl"
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    monkeypatch.setattr(cfg, "PIPELINE_OBSERVABILITY_ENABLE", True, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: False)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (None, None))
+
+    review_queue.add_to_queue(_make_trade(trade_id="T-LIFE-BLOCK"))
+
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (121.5, time.time()))
+    review_queue.add_to_queue(
+        _make_trade(
+            trade_id="T-LIFE-EMIT",
+            instrument_token=99123,
+            tradingsymbol="SENSEX26MAR81700PE",
+            best_bid=120.5,
+            best_ask=121.5,
+            opt_bid=120.5,
+            opt_ask=121.5,
+            quote_ok=True,
+        )
+    )
+
+    rows = [json.loads(line) for line in lifecycle_path.read_text().splitlines() if line.strip()]
+    blocked_events = [row for row in rows if row.get("trade_id") == "T-LIFE-BLOCK"]
+    emitted_events = [row for row in rows if row.get("trade_id") == "T-LIFE-EMIT"]
+    assert blocked_events
+    assert emitted_events
+
+
 def test_advisory_entry_keeps_ltp_when_price_mismatch(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
@@ -1555,6 +1589,9 @@ def test_tradingsymbol_known_but_token_missing_remains_non_executable_advisory(t
     assert rows[0]["status"] != "BLOCKED_CONTRACT"
     assert rows[0]["entry_status"] == "displayable"
     assert rows[0]["entry"] == 123.45
+    assert rows[0]["tradable"] is True
+    assert rows[0]["execution_allowed"] is False
+    assert rows[0]["execution_status"] == "advisory_only"
     assert "NO_TOKEN" not in list(rows[0].get("blockers") or [])
 
 
@@ -1741,6 +1778,8 @@ def test_token_present_without_metadata_enrichment_blocks_as_unresolved_contract
     assert rows[0]["status_raw"] == "PLANNING"
     assert rows[0]["permission"] == "BLOCK"
     assert rows[0]["permission_reason"] == "unresolved_contract"
+    assert rows[0]["tradable"] is False
+    assert rows[0]["execution_allowed"] is False
     assert rows[0]["missing_identity_fields"] == ["tradingsymbol", "expiry_date"]
 
 
@@ -2807,6 +2846,9 @@ def test_medium_confidence_candidate_with_valid_volume_stays_queue_only(tmp_path
     assert rows[0]["permission_reason"] == "medium_global_conf"
     assert rows[0]["final_action"] == "QUEUE_ONLY"
     assert rows[0]["status"] == "QUEUE_ONLY"
+    assert rows[0]["tradable"] is True
+    assert rows[0]["execution_allowed"] is False
+    assert rows[0]["execution_status"] == "queue_only"
     assert rows[0].get("permission_downgraded_from") in (None, "")
 
 

@@ -32,6 +32,8 @@ from core.events import write_json_atomic
 from core.issue_policy import ISSUE_CATEGORY_HARD, ISSUE_CATEGORY_SOFT, ISSUE_CATEGORY_WARNING, classify_issue
 from core.position_sizer import PositionSizer
 from core.time_utils import is_market_open_ist
+from core.observability.pipeline import append_trade_lifecycle_event
+from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lifecycle
 
 try:
     from config import config as cfg
@@ -242,6 +244,83 @@ def _synchronize_final_confidence(entry: dict) -> dict:
     return out
 
 
+_DECISION_PARITY_FIELDS = (
+    "permission",
+    "permission_reason",
+    "readiness",
+    "final_action",
+    "execution_status",
+    "execution_entry",
+    "execution_entry_status",
+    "display_entry",
+    "display_entry_status",
+    "entry_status",
+    "blockers",
+    "hard_blockers",
+    "soft_penalties",
+    "warnings",
+)
+
+
+def _decision_fields_snapshot(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return {}
+    return {field: entry.get(field) for field in _DECISION_PARITY_FIELDS}
+
+
+def _decision_fields_present(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    for field in ("permission", "readiness", "final_action", "execution_status"):
+        if str(entry.get(field) or "").strip():
+            return True
+    return False
+
+
+def _record_decision_parity(entry: dict, before: dict) -> dict:
+    if not isinstance(entry, dict) or not isinstance(before, dict):
+        return entry
+    if not any(value is not None for value in before.values()):
+        return entry
+    diffs: dict[str, dict] = {}
+    for field in _DECISION_PARITY_FIELDS:
+        if before.get(field) != entry.get(field):
+            diffs[field] = {"before": before.get(field), "after": entry.get(field)}
+    entry["decision_parity"] = {"ok": not bool(diffs), "diffs": diffs}
+    if diffs:
+        logger.warning(
+            "review_queue_decision_parity_mismatch trade_id=%s symbol=%s fields=%s",
+            entry.get("trade_id"),
+            entry.get("symbol"),
+            ",".join(sorted(diffs.keys())),
+        )
+    return entry
+
+
+def _emit_trade_lifecycle_event(
+    entry: dict,
+    *,
+    stage: str,
+    status: str,
+    reason: str | None,
+    extra: dict | None = None,
+) -> None:
+    if not isinstance(entry, dict):
+        return
+    try:
+        append_trade_lifecycle_event(
+            trade_id=str(entry.get("trade_id") or ""),
+            symbol=str(entry.get("symbol") or ""),
+            strategy=str(entry.get("strategy") or entry.get("strategy_id") or ""),
+            stage=stage,
+            status=status,
+            reason=reason,
+            extra=extra,
+        )
+    except Exception:
+        return
+
+
 def _normalize_quote_age_value(value) -> float | None:
     age = _safe_float(value)
     if age is None:
@@ -425,6 +504,10 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
     final_action = str(out.get("final_action") or "").strip().upper()
     permission = str(out.get("permission") or "").strip().upper()
     row_status = str(out.get("status") or "").strip().upper()
+    if permission == "QUEUE_ONLY":
+        out["execution_status"] = "queue_only"
+        out["is_executable"] = False
+        return out
     claims_executable = execution_status == "executable" or bool(out.get("is_executable")) or readiness == "READY" or final_action == "EXECUTE" or permission == "EXECUTE" or row_status == "READY"
     if not claims_executable:
         return out
@@ -470,12 +553,15 @@ def _finalize_advisory_schema_decision(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = _enforce_executable_entry_invariant(entry)
+    permission = str(out.get("permission") or "").strip().upper()
+    final_action = str(out.get("final_action") or "").strip().upper()
+    if permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY":
+        return out
     hard_blockers = _dedupe_issue_codes(list(out.get("hard_blockers") or []))
     if not hard_blockers:
         return out
     readiness = str(out.get("readiness") or "").strip().upper()
     execution_status = str(out.get("execution_status") or "").strip().lower()
-    final_action = str(out.get("final_action") or "").strip().upper()
     if readiness == "READY":
         out["readiness"] = "ADVISORY_ONLY"
     if execution_status == "executable":
@@ -781,7 +867,7 @@ def _derive_review_status(entry: dict, fallback_status: str | None = None) -> st
         return "INVALID"
     if permission == "EXECUTE" and final_action == "EXECUTE":
         return "READY"
-    if permission == "QUEUE_ONLY" and final_action == "QUEUE_ONLY":
+    if permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY":
         return "QUEUE_ONLY"
     if permission == "ADVISORY_ONLY" or final_action == "ADVISORY_ONLY":
         return "ADVISORY_ONLY"
@@ -1006,16 +1092,31 @@ def _clear_unresolved_contract_state(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     status_raw = str(entry.get("status_raw") or "").strip().upper() or "PLANNING"
+    permission = str(entry.get("permission") or "").strip().upper()
+    final_action = str(entry.get("final_action") or "").strip().upper()
+    readiness = str(entry.get("readiness") or "").strip().upper()
+    execution_status = str(entry.get("execution_status") or "").strip().lower()
+    preserve_queue_only = (
+        permission == "QUEUE_ONLY"
+        or final_action == "QUEUE_ONLY"
+        or readiness == "QUEUE_ONLY"
+        or execution_status == "queue_only"
+    )
     entry["unresolved_contract"] = False
     entry["missing_identity_fields"] = []
     reasons = [reason for reason in list(entry.get("tradable_reasons_blocking") or []) if str(reason) != "unresolved_contract"]
     entry["tradable_reasons_blocking"] = reasons
     entry["status"] = status_raw if status_raw != "BLOCKED_CONTRACT" else "PLANNING"
     entry["hard_reason"] = None
-    entry["permission"] = None
-    entry["permission_reason"] = None
+    if not preserve_queue_only:
+        entry["permission"] = None
+        entry["permission_reason"] = None
     entry["entry_status"] = None if str(entry.get("entry_status") or "").strip() == "MISSING_OPTION_TOKEN" else entry.get("entry_status")
-    entry["final_action"] = None
+    if not preserve_queue_only:
+        entry["final_action"] = None
+    else:
+        entry["execution_status"] = "queue_only"
+        entry["is_executable"] = False
     entry["final_blocker"] = None
     entry["token_coverage_error_code"] = None
     entry["token_coverage_evidence"] = None
@@ -1082,6 +1183,8 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         stage="emit",
         drop_snapshot=True,
     )
+    advisory_payload = _refresh_opportunity_survival_state(advisory_payload)
+    advisory_payload = ensure_trade_lifecycle(advisory_payload, reason="emission_projection")
     try:
         advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
     except AdvisorySchemaError as exc:
@@ -1098,6 +1201,13 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         rejected_payload.setdefault("reject_reason", "advisory_schema_error")
         rejected_payload.setdefault("reason_code", "advisory_schema_error")
         _append_jsonl(rejected_candidates_paths(), rejected_payload)
+        _emit_trade_lifecycle_event(
+            entry,
+            stage="emission_projection",
+            status="failed",
+            reason="advisory_schema_error",
+            extra={"emission_target": emission_target},
+        )
         return {"ok": False, "target": emission_target, "diagnostic": diagnostic}
     suggestion_paths: list[Path] = []
     seen_paths: set[str] = set()
@@ -1131,8 +1241,22 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         blocked_payload.setdefault("reject_reason", "unresolved_contract")
         blocked_payload.setdefault("reason_code", "unresolved_contract")
         _append_jsonl(rejected_candidates_paths(), blocked_payload)
+        _emit_trade_lifecycle_event(
+            entry,
+            stage="emission_projection",
+            status="emitted",
+            reason="rejected_candidates",
+            extra={"emission_target": emission_target},
+        )
         return {"ok": True, "target": emission_target, "diagnostic": None}
     _append_jsonl(suggestion_paths, advisory_entry)
+    _emit_trade_lifecycle_event(
+        entry,
+        stage="emission_projection",
+        status="emitted",
+        reason="suggestions",
+        extra={"emission_target": emission_target},
+    )
     return {"ok": True, "target": emission_target, "diagnostic": None}
 
 
@@ -1856,9 +1980,57 @@ def _is_synthetic_offhours_row(entry: dict) -> bool:
     return option_ltp_source == "synthetic_offhours" or quote_source == "synthetic_offhours"
 
 
+def _is_live_feed_failure_status(value) -> bool:
+    return str(value or "").strip().upper() in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}
+
+
+def _repair_live_feed_failure_provenance(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    if _is_synthetic_offhours_row(entry):
+        return entry
+    if str(entry.get("instrument") or entry.get("instrument_type") or "").strip().upper() != "OPT":
+        return entry
+    if str(entry.get("permission") or "").strip().upper() != "BLOCK":
+        return entry
+    if not (
+        _is_live_feed_failure_status(entry.get("entry_status"))
+        or _is_live_feed_failure_status(entry.get("quote_validation_status"))
+    ):
+        return entry
+    if not (
+        bool(entry.get("subscription_failed"))
+        or _safe_float(entry.get("current_ltp")) is None
+    ):
+        return entry
+    if not str(entry.get("option_ltp_source") or "").strip():
+        entry["option_ltp_source"] = "subscription_failed"
+    if str(entry.get("quote_source") or "").strip().lower() in {"", "unknown"}:
+        entry["quote_source"] = "subscription_failed"
+    entry["subscription_failed"] = True
+    hard_blockers = [str(code or "").strip() for code in list(entry.get("hard_blockers") or []) if str(code or "").strip()]
+    if hard_blockers and set(hard_blockers).issubset({"NO_TOKEN", "unresolved_contract", "MISSING_OPTION_TOKEN"}):
+        entry["hard_blockers"] = ["NO_LIVE_OPTION_FEED"]
+        blockers = [
+            str(code or "").strip()
+            for code in list(entry.get("blockers") or [])
+            if str(code or "").strip() and str(code or "").strip() not in {"NO_TOKEN", "unresolved_contract", "MISSING_OPTION_TOKEN"}
+        ]
+        entry["blockers"] = ["NO_LIVE_OPTION_FEED", *blockers]
+    return entry
+
+
 def _clear_synthetic_offhours_state_for_live_takeover(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
+    entry_status = str(entry.get("entry_status") or "").strip().upper()
+    option_ltp_source = str(entry.get("option_ltp_source") or "").strip().lower()
+    quote_source = str(entry.get("quote_source") or "").strip().lower()
+    preserve_subscription_failed = bool(
+        _is_live_feed_failure_status(entry_status)
+        or option_ltp_source == "subscription_failed"
+        or quote_source == "subscription_failed"
+    )
     for field in ("blockers", "hard_blockers", "soft_penalties", "warnings", "tradable_reasons_blocking"):
         values = [
             str(value or "").strip()
@@ -1873,7 +2045,8 @@ def _clear_synthetic_offhours_state_for_live_takeover(entry: dict) -> dict:
         text = str(entry.get(field) or "").strip()
         if text in {"NO_LIVE_OPTION_FEED", "OFFHOURS_SYNTHETIC"}:
             entry.pop(field, None)
-    entry.pop("subscription_failed", None)
+    if not preserve_subscription_failed:
+        entry.pop("subscription_failed", None)
     if str(entry.get("validation_reference_source") or "").strip().lower() == "synthetic_offhours":
         entry.pop("validation_reference_source", None)
     if str(entry.get("entry_status") or "").strip().upper() == "OFFHOURS_SYNTHETIC":
@@ -2134,7 +2307,10 @@ def _apply_issue_classification(
         str(entry.get("instrument") or entry.get("instrument_type") or "").strip().upper() == "OPT"
         and permission == "BLOCK"
         and current_ltp is None
-        and str(entry.get("entry_status") or "").strip().upper() in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}
+        and (
+            _is_live_feed_failure_status(entry.get("entry_status"))
+            or _is_live_feed_failure_status(entry.get("quote_validation_status"))
+        )
         and hard_blockers
         and set(hard_blockers).issubset({"NO_TOKEN", "unresolved_contract", "MISSING_OPTION_TOKEN"})
     )
@@ -2287,6 +2463,66 @@ def _decision_defaults(permission: str | None) -> tuple[str, str, str]:
     if perm == "QUEUE_ONLY":
         return "QUEUE_ONLY", "queue_only", "QUEUE_ONLY"
     return "ADVISORY_ONLY", "advisory_only", "ADVISORY_ONLY"
+
+
+def _refresh_opportunity_survival_state(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    out = dict(entry)
+    permission = str(out.get("permission") or "").strip().upper()
+    final_action = str(out.get("final_action") or "").strip().upper()
+    readiness = str(out.get("readiness") or "").strip().upper()
+    status = str(out.get("status") or "").strip().upper()
+    display_entry = _safe_float(out.get("display_entry"))
+    if display_entry is None:
+        display_entry = _safe_float(out.get("entry"))
+    display_entry_status = str(out.get("display_entry_status") or out.get("entry_status") or "").strip().lower()
+    execution_entry = _safe_float(out.get("execution_entry"))
+    execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    approval_blocked = bool(out.get("approval_blocked"))
+    unresolved_contract = bool(out.get("unresolved_contract")) or status == "BLOCKED_CONTRACT"
+    executable_truth = execution_entry is not None and execution_entry_status == "executable"
+    displayable_truth = display_entry is not None and display_entry_status == "displayable"
+
+    if unresolved_contract or permission == "BLOCK" or final_action == "BLOCK" or readiness == "BLOCKED":
+        out["tradable"] = False
+        out["execution_allowed"] = False
+        out["is_executable"] = False
+        return out
+
+    if (
+        permission == "EXECUTE"
+        and final_action == "EXECUTE"
+        and readiness == "READY"
+        and executable_truth
+        and not approval_blocked
+    ):
+        out["tradable"] = True
+        out["execution_allowed"] = True
+        out["execution_status"] = "executable"
+        out["is_executable"] = True
+        return out
+
+    if displayable_truth and (
+        permission in {"QUEUE_ONLY", "ADVISORY_ONLY", "EXECUTE"}
+        or final_action in {"QUEUE_ONLY", "ADVISORY_ONLY"}
+        or readiness in {"QUEUE_ONLY", "ADVISORY_ONLY", "READY"}
+    ):
+        out["tradable"] = True
+        out["execution_allowed"] = False
+        out["is_executable"] = False
+        if permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
+            out["execution_status"] = "queue_only"
+        else:
+            out["execution_status"] = "advisory_only"
+        return out
+
+    out["tradable"] = False
+    out["execution_allowed"] = False
+    out["is_executable"] = False
+    if not str(out.get("execution_status") or "").strip():
+        out["execution_status"] = "blocked"
+    return out
 
 
 def finalize_trade_decision(
@@ -2566,8 +2802,11 @@ def _update_suggestions_status_latest(entry: dict, emission_result: dict | None 
                     suggestion_count = sum(1 for line in fh if str(line).strip())
         except Exception:
             pass
+        hard_blockers = [str(code or "").strip() for code in list(entry.get("hard_blockers") or []) if str(code or "").strip()]
         primary_blocker = (
-            str(entry.get("final_blocker") or "").strip()
+            (hard_blockers[0] if hard_blockers else "")
+            or str(entry.get("final_blocker") or "").strip()
+            or str(entry.get("entry_block_code") or "").strip()
             or str(entry.get("hard_reason") or "").strip()
             or str(entry.get("entry_status") or "").strip()
             or str(entry.get("permission_reason") or "").strip()
@@ -2786,6 +3025,7 @@ def _normalize_queue_row(row: dict) -> dict:
     else:
         out["status"] = _derive_review_status(out, fallback_status=original_status)
     out = _enforce_executable_entry_integrity(out)
+    out = _refresh_opportunity_survival_state(out)
     entry_missing = out.get("entry") in (None, "", "None") or _safe_float(out.get("entry")) is None
     if str(out.get("status") or "").strip().upper() == "PLANNING" and entry_missing:
         out["status"] = "INVALID"
@@ -2795,6 +3035,7 @@ def _normalize_queue_row(row: dict) -> dict:
         )
         out.setdefault("permission", "ADVISORY_ONLY")
     out = enforce_entry_contract(out, stage="review_queue.normalize")
+    out = rehydrate_trade_lifecycle(out, reason="queue_normalized")
     return out
 
 
@@ -3037,10 +3278,26 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "final_qty": _trade_attr(trade, "final_qty", None),
         "opportunity_score": _trade_attr(trade, "opportunity_score", None),
         "opportunity_rank": _trade_attr(trade, "opportunity_rank", None),
+        "rank_global": _trade_attr(trade, "rank_global", None),
+        "rank_within_symbol": _trade_attr(trade, "rank_within_symbol", None),
+        "opportunity_bucket": _trade_attr(trade, "opportunity_bucket", None),
         "selected_for_execution": _trade_attr(trade, "selected_for_execution", None),
         "selection_reason": _trade_attr(trade, "selection_reason", None),
         "size_multiplier_reason": _trade_attr(trade, "size_multiplier_reason", None),
         "opportunity_size_multiplier": _trade_attr(trade, "opportunity_size_multiplier", None),
+        "threshold_base": _trade_attr(trade, "threshold_base", None),
+        "threshold_effective": _trade_attr(trade, "threshold_effective", None),
+        "threshold_adjustment_reason": _trade_attr(trade, "threshold_adjustment_reason", None),
+        "spread_penalty": _trade_attr(trade, "spread_penalty", None),
+        "executable_price_estimate": _trade_attr(trade, "executable_price_estimate", None),
+        "execution_ok": _trade_attr(trade, "execution_ok", None),
+        "order_policy": _trade_attr(trade, "order_policy", None),
+        "order_policy_reason": _trade_attr(trade, "order_policy_reason", None),
+        "slot_id": _trade_attr(trade, "slot_id", None),
+        "allocation_reason": _trade_attr(trade, "allocation_reason", None),
+        "allocation_score": _trade_attr(trade, "allocation_score", None),
+        "capital_assigned": _trade_attr(trade, "capital_assigned", None),
+        "size_multiplier_effective": _trade_attr(trade, "size_multiplier_effective", None),
         "strategy": _trade_attr(trade, "strategy"),
         "strategy_id": strategy_id,
         "strategy_name": strategy_name,
@@ -3086,8 +3343,10 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "display_entry": _trade_attr(trade, "display_entry", None),
         "display_entry_source": _trade_attr(trade, "display_entry_source", None),
         "display_entry_status": _trade_attr(trade, "display_entry_status", None),
+        "entry_display_status": _trade_attr(trade, "entry_display_status", None),
         "entry_reason": _trade_attr(trade, "entry_reason", None),
         "entry_clear_reason": _trade_attr(trade, "entry_clear_reason", None),
+        "entry_block_code": _trade_attr(trade, "entry_block_code", None),
         "price_age_sec": _trade_attr(trade, "price_age_sec", None),
         "quote_age_sec": _trade_attr(trade, "quote_age_sec", None),
         "entry_status": _trade_attr(trade, "entry_status", None),
@@ -3104,6 +3363,9 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "trade_score": _trade_attr(trade, "trade_score", None),
         "trade_alignment": _trade_attr(trade, "trade_alignment", None),
         "trade_score_detail": _trade_attr(trade, "trade_score_detail", None),
+        "tradable": _trade_attr(trade, "tradable", None),
+        "tradable_reasons_blocking": _trade_attr(trade, "tradable_reasons_blocking", None),
+        "execution_allowed": _trade_attr(trade, "execution_allowed", None),
         "direction": _trade_attr(trade, "direction", None),
         "execution_mode": _trade_attr(trade, "execution_mode", None),
         "mode": _trade_attr(trade, "mode", None),
@@ -3437,6 +3699,8 @@ def _finalize_review_queue_entry(
     market_open_for_entry: bool,
 ) -> dict:
     perm = {}
+    decision_snapshot = _decision_fields_snapshot(entry)
+    preserve_decision = _decision_fields_present(entry)
     incoming_decision = {
         "permission": str(entry.get("permission") or "").strip().upper() or None,
         "permission_reason": str(entry.get("permission_reason") or "").strip() or None,
@@ -3444,6 +3708,37 @@ def _finalize_review_queue_entry(
         "final_action": str(entry.get("final_action") or "").strip().upper() or None,
         "execution_status": str(entry.get("execution_status") or "").strip().lower() or None,
     }
+    if preserve_decision:
+        if str(entry.get("permission") or "").strip() and not str(entry.get("permission_base") or "").strip():
+            entry["permission_base"] = str(entry.get("permission")).strip().upper()
+        if str(entry.get("permission_reason") or "").strip() and not str(entry.get("permission_reason_base") or "").strip():
+            entry["permission_reason_base"] = str(entry.get("permission_reason") or "")
+        entry = _apply_canonical_quote_age(entry)
+        entry = enforce_entry_contract(entry, stage="review_queue.add_to_queue")
+        _log_entry_lifecycle_resolution(entry)
+        _emit_trade_lifecycle_event(
+            entry,
+            stage="readiness_gating",
+            status=str(entry.get("readiness") or entry.get("permission") or "unknown"),
+            reason=str(entry.get("final_blocker") or entry.get("permission_reason") or entry.get("entry_block_code") or ""),
+            extra={
+                "execution_status": entry.get("execution_status"),
+                "final_action": entry.get("final_action"),
+            },
+        )
+        _emit_trade_lifecycle_event(
+            entry,
+            stage="execution_feasibility",
+            status=str(entry.get("execution_entry_status") or entry.get("execution_status") or "unknown"),
+            reason=str(entry.get("entry_block_code") or entry.get("execution_status") or entry.get("permission_reason") or ""),
+            extra={
+                "execution_entry": entry.get("execution_entry"),
+                "execution_entry_source": entry.get("execution_entry_source"),
+                "display_entry": entry.get("display_entry"),
+            },
+        )
+        entry = _record_decision_parity(entry, decision_snapshot)
+        return entry
     try:
         entry.pop("permission_downgraded_from", None)
         entry.pop("permission_downgrade_reason", None)
@@ -3612,6 +3907,7 @@ def _finalize_review_queue_entry(
         decision_seed=decision_seed,
     )
     entry = _enforce_executable_entry_invariant(entry)
+    entry = _refresh_opportunity_survival_state(entry)
     entry = _synchronize_final_confidence(entry)
     entry = _apply_sizing_telemetry(entry)
     entry["confidence_final_gate_threshold"] = final_conf_threshold
@@ -3695,9 +3991,17 @@ def _finalize_review_queue_entry(
         "final_qty": entry.get("final_qty"),
         "opportunity_score": _safe_float(entry.get("opportunity_score")),
         "opportunity_rank": entry.get("opportunity_rank"),
+        "rank_global": entry.get("rank_global"),
+        "rank_within_symbol": entry.get("rank_within_symbol"),
+        "opportunity_bucket": entry.get("opportunity_bucket"),
         "selected_for_execution": bool(entry.get("selected_for_execution", False)),
         "selection_reason": entry.get("selection_reason"),
         "size_multiplier_reason": entry.get("size_multiplier_reason"),
+        "spread_penalty": _safe_float(entry.get("spread_penalty")),
+        "executable_price_estimate": _safe_float(entry.get("executable_price_estimate")),
+        "execution_ok": entry.get("execution_ok"),
+        "order_policy": entry.get("order_policy"),
+        "order_policy_reason": entry.get("order_policy_reason"),
         "high_execute_threshold": high_execute_threshold,
         "high_execute_eligible": high_execute_eligible,
         "high_execute_blockers": high_execute_blockers,
@@ -3721,19 +4025,31 @@ def _finalize_review_queue_entry(
     }
     entry["decision_trace"] = decision_trace
     _log_confidence_rejection(entry)
-    if (
-        str(entry.get("instrument") or entry.get("instrument_type") or "").strip().upper() == "OPT"
-        and str(entry.get("permission") or "").strip().upper() == "BLOCK"
-        and str(entry.get("entry_status") or "").strip().upper() in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}
-        and _safe_float(entry.get("current_ltp")) is None
-        and not str(entry.get("option_ltp_source") or "").strip()
-    ):
-        entry["option_ltp_source"] = "subscription_failed"
-        if not str(entry.get("quote_source") or "").strip():
-            entry["quote_source"] = "subscription_failed"
+    entry = _repair_live_feed_failure_provenance(entry)
     entry = enforce_entry_contract(entry, stage="review_queue.add_to_queue")
     entry = _enforce_executable_entry_integrity(entry)
     _log_entry_lifecycle_resolution(entry)
+    _emit_trade_lifecycle_event(
+        entry,
+        stage="readiness_gating",
+        status=str(entry.get("readiness") or entry.get("permission") or "unknown"),
+        reason=str(entry.get("final_blocker") or entry.get("permission_reason") or entry.get("entry_block_code") or ""),
+        extra={
+            "execution_status": entry.get("execution_status"),
+            "final_action": entry.get("final_action"),
+        },
+    )
+    _emit_trade_lifecycle_event(
+        entry,
+        stage="execution_feasibility",
+        status=str(entry.get("execution_entry_status") or entry.get("execution_status") or "unknown"),
+        reason=str(entry.get("entry_block_code") or entry.get("execution_status") or entry.get("permission_reason") or ""),
+        extra={
+            "execution_entry": entry.get("execution_entry"),
+            "execution_entry_source": entry.get("execution_entry_source"),
+            "display_entry": entry.get("display_entry"),
+        },
+    )
     source_flags = entry.get("source_flags")
     if isinstance(source_flags, dict):
         merged_flags = dict(source_flags)
@@ -3765,7 +4081,10 @@ def _build_canonical_advisory_entry(
         stage="validate",
         drop_snapshot=True,
     )
-    return serialize_advisory_row(advisory_payload, allow_legacy=True)
+    advisory_payload = _refresh_opportunity_survival_state(advisory_payload)
+    advisory_payload = _repair_live_feed_failure_provenance(advisory_payload)
+    advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
+    return _repair_live_feed_failure_provenance(advisory_entry)
 
 
 def _record_advisory_validation_failure(
@@ -3852,19 +4171,7 @@ def _write_review_queue_artifacts(path: Path, data: list[dict], entry: dict) -> 
     _update_suggestions_status_latest(entry, emission_result=emission_result)
 
 
-def add_to_queue(trade, queue_path=None, extra=None):
-    try:
-        from config import config as cfg
-        instr = getattr(trade, "instrument", None)
-        if instr is None and isinstance(trade, dict):
-            instr = trade.get("instrument")
-        if instr == "EQ" and not getattr(cfg, "ENABLE_EQUITIES", True):
-            return
-    except Exception:
-        pass
-    path = queue_path or QUEUE_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = load_queue_rows(path)
+def project_advisory_row(trade, extra=None):
     entry, mode_for_entry, allow_stale_quotes_for_entry, market_open_for_entry = _build_review_queue_entry(
         trade,
         extra=extra,
@@ -3882,13 +4189,46 @@ def add_to_queue(trade, queue_path=None, extra=None):
         allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
         market_open_for_entry=market_open_for_entry,
     )
-    advisory_entry = _validate_review_queue_advisory_row(
+    return _validate_review_queue_advisory_row(
         entry,
         mode_for_entry=mode_for_entry,
         allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
         market_open_for_entry=market_open_for_entry,
     )
+
+
+def add_to_queue(trade, queue_path=None, extra=None):
+    try:
+        from config import config as cfg
+        instr = getattr(trade, "instrument", None)
+        if instr is None and isinstance(trade, dict):
+            instr = trade.get("instrument")
+        if instr == "EQ" and not getattr(cfg, "ENABLE_EQUITIES", True):
+            return None
+    except Exception:
+        pass
+    path = queue_path or QUEUE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_queue_rows(path)
+    advisory_entry = project_advisory_row(trade, extra=extra)
     if advisory_entry is None:
+        entry, mode_for_entry, allow_stale_quotes_for_entry, market_open_for_entry = _build_review_queue_entry(
+            trade,
+            extra=extra,
+            default_mode="ADVISORY",
+        )
+        entry = _apply_quote_and_entry_logic(
+            entry,
+            mode_for_entry=mode_for_entry,
+            allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+            market_open_for_entry=market_open_for_entry,
+        )
+        entry = _finalize_review_queue_entry(
+            entry,
+            mode_for_entry=mode_for_entry,
+            allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
+            market_open_for_entry=market_open_for_entry,
+        )
         emission_target = "rejected_candidates" if _is_blocked_contract_row(entry) else "suggestions"
         _update_suggestions_status_latest(
             entry,
@@ -3901,8 +4241,9 @@ def add_to_queue(trade, queue_path=None, extra=None):
                 },
             },
         )
-        return
+        return None
     _write_review_queue_artifacts(path, data, advisory_entry)
+    return advisory_entry
 
 def is_approved(trade_id, payload_hash=None):
     ok, _reason = approval_status(trade_id, payload_hash=payload_hash)
