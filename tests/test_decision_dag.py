@@ -16,6 +16,10 @@ from core.decision_dag import (
     NODE_N8_STRATEGY_SELECT,
     NODE_N9_STRATEGY_ELIGIBLE,
     NODE_N9_FINAL_DECISION,
+    REASON_MARKET_CLOSED,
+    REASON_QUOTE_INVALID,
+    REASON_REGIME_UNKNOWN,
+    REASON_WARMUP_INCOMPLETE,
     DecisionDAGEvaluator,
     build_market_snapshot,
     evaluate_decision,
@@ -141,6 +145,59 @@ def test_paper_hist_fetch_failed_is_degraded_not_blocking(monkeypatch):
     n5 = next(row for row in decision.explain if row["node"] == NODE_N5_REGIME_OK)
     assert n3["ok"] is True
     assert n5["ok"] is True
+
+
+def test_paper_market_closed_with_hist_fetch_failed_and_missing_depth_is_degraded_not_blocking(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "DECISION_DAG_ALLOW_NON_LIVE_MARKET_CLOSED", True, raising=False)
+    monkeypatch.setattr(cfg, "DECISION_DAG_ALLOW_NON_LIVE_OPTION_QUOTE_MISSING", True, raising=False)
+    now_epoch = 1_126.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "PAPER", "market_open": False},
+            "market_open": False,
+            "system_state": "DEGRADED",
+            "warmup_reasons": ["HIST_FETCH_FAILED"],
+            "indicators_ok": False,
+            "indicators_age_sec": 1e9,
+            "primary_regime": "UNKNOWN",
+            "regime_probs": {},
+            "regime_entropy": 0.0,
+            "quote_ok": False,
+            "quote_source": "missing_depth",
+            "bid": None,
+            "ask": None,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.allowed is True
+    assert REASON_MARKET_CLOSED not in decision.blockers
+    assert REASON_QUOTE_INVALID not in decision.blockers
+    assert REASON_WARMUP_INCOMPLETE not in decision.blockers
+    assert REASON_REGIME_UNKNOWN not in decision.blockers
+    n1 = next(row for row in decision.explain if row["node"] == NODE_N1_MARKET_OPEN)
+    n4 = next(row for row in decision.explain if row["node"] == NODE_N4_QUOTE_OK)
+    assert n1["ok"] is True
+    assert n1["facts"]["market_closed_degraded"] is True
+    assert n4["ok"] is True
+    assert n4["facts"]["quote_degraded"] is True
+
+
+def test_market_closed_blocks_when_non_live_relaxation_is_disabled(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "DECISION_DAG_ALLOW_NON_LIVE_MARKET_CLOSED", False, raising=False)
+    now_epoch = 1_127.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "LIVE", "market_open": False},
+            "market_open": False,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.allowed is False
+    assert REASON_MARKET_CLOSED in decision.blockers
 
 
 def test_live_future_ltp_timestamp_clock_skew_does_not_false_block_feed(monkeypatch):

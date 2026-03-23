@@ -38,8 +38,10 @@ class Trade:
     display_entry: float | None = None
     display_entry_source: str | None = None
     display_entry_status: str | None = None
+    entry_display_status: str | None = None
     entry_reason: str | None = None
     entry_clear_reason: str | None = None
+    entry_block_code: str | None = None
     entry_price_source: str | None = None
     expected_entry_source: str | None = None
     entry_price_proxy: float | None = None
@@ -113,18 +115,54 @@ class Trade:
     option_ltp_timestamp: float | None = None
     chain_source: str | None = None
     direction: str | None = None
+    candidate_type: str | None = None
+    strategy_family: str | None = None
+    setup_variant: str | None = None
+    candidate_status: str | None = None
     global_confidence: float | None = None
     builder_confidence: float | None = None
     permission_confidence: float | None = None
     gating_base_confidence: float | None = None
     gating_final_confidence: float | None = None
     sizing_confluence_score: float | None = None
+    rank_score: float | None = None
+    setup_strength: float | None = None
+    regime_fit: float | None = None
+    liquidity_score: float | None = None
+    spread_score: float | None = None
+    rr_score: float | None = None
+    timing_score: float | None = None
+    penalty_score: float | None = None
+    score_breakdown: dict = field(default_factory=dict)
+    penalty_reasons: list[str] = field(default_factory=list)
+    score_inputs_used: dict = field(default_factory=dict)
     opportunity_score: float | None = None
     opportunity_rank: int | None = None
+    rank_global: int | None = None
+    rank_within_symbol: int | None = None
+    opportunity_bucket: str | None = None
     selected_for_execution: bool | None = None
     selection_reason: str | None = None
     size_multiplier_reason: str | None = None
     opportunity_size_multiplier: float | None = None
+    threshold_base: float | None = None
+    threshold_effective: float | None = None
+    threshold_adjustment_reason: str | None = None
+    spread_penalty: float | None = None
+    executable_price_estimate: float | None = None
+    execution_ok: bool | None = None
+    order_policy: str | None = None
+    order_policy_reason: str | None = None
+    slot_id: str | None = None
+    allocation_reason: str | None = None
+    allocation_score: float | None = None
+    capital_assigned: float | None = None
+    size_multiplier_effective: float | None = None
+    portfolio_optimization_selected: bool | None = None
+    portfolio_optimization_reason: str | None = None
+    portfolio_optimization_score: float | None = None
+    portfolio_optimization_penalty: float | None = None
+    portfolio_optimization_penalty_reason: str | None = None
     sizing_reason: str | None = None
     ml_proba_input: float | None = None
     confluence_input: float | None = None
@@ -160,8 +198,19 @@ class Trade:
     first_seen: str | None = None
     last_seen: str | None = None
     update_count: int | None = None
+    trade_lifecycle_state: str | None = None
+    trade_lifecycle_reason: str | None = None
+    trade_lifecycle_ts: str | None = None
+    trade_lifecycle_history: list[dict] = field(default_factory=list)
 
     def __post_init__(self):
+        if self.entry_display_status is None:
+            object.__setattr__(self, "entry_display_status", self.display_entry_status)
+        if self.entry_block_code is None:
+            block_code = None
+            if self.entry_clear_reason:
+                block_code = str(self.entry_clear_reason).strip().lower() or None
+            object.__setattr__(self, "entry_block_code", block_code)
         if self.builder_confidence is None:
             object.__setattr__(self, "builder_confidence", self.confidence)
         if self.gating_base_confidence is None:
@@ -178,6 +227,20 @@ class Trade:
             object.__setattr__(self, "permission_confidence", self.global_confidence)
         if self.sizing_confluence_score is None and isinstance(self.trade_score_detail, dict):
             object.__setattr__(self, "sizing_confluence_score", self.trade_score_detail.get("confluence_score"))
+        try:
+            from core.trade_state_machine import build_trade_lifecycle_snapshot
+
+            lifecycle_snapshot = build_trade_lifecycle_snapshot(self)
+            if self.trade_lifecycle_state is None:
+                object.__setattr__(self, "trade_lifecycle_state", lifecycle_snapshot.get("trade_lifecycle_state"))
+            if self.trade_lifecycle_reason is None:
+                object.__setattr__(self, "trade_lifecycle_reason", lifecycle_snapshot.get("trade_lifecycle_reason"))
+            if self.trade_lifecycle_ts is None:
+                object.__setattr__(self, "trade_lifecycle_ts", lifecycle_snapshot.get("trade_lifecycle_ts"))
+            if not self.trade_lifecycle_history:
+                object.__setattr__(self, "trade_lifecycle_history", lifecycle_snapshot.get("trade_lifecycle_history") or [])
+        except Exception:
+            pass
         if self.stop_distance is not None:
             return
         try:

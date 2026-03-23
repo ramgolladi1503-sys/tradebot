@@ -18,6 +18,7 @@ from core.db_guard import ensure_db_ready
 from core.trade_log_paths import ensure_trade_log_exists
 from core.broker_truth_reconciler import BrokerTruthReconciler
 from core.kite_client import kite_client
+from core.observability.pipeline import observability_dir
 
 
 tok = os.getenv("KITE_ACCESS_TOKEN") or ""
@@ -42,6 +43,49 @@ def _check_env():
         print("[Config Warning] Missing env vars: " + ", ".join(missing))
 
 
+def _normalize_readiness_blocker(value: str) -> str:
+    return str(value or "").strip().lower()
+
+
+def _global_readiness_blocker_sets():
+    explicit = set()
+    prefixes = []
+    try:
+        explicit = {str(item).strip().lower() for item in (getattr(cfg, "READINESS_GLOBAL_ABORT_BLOCKERS", []) or []) if str(item).strip()}
+    except Exception:
+        explicit = set()
+    try:
+        prefixes = [str(item).strip().lower() for item in (getattr(cfg, "READINESS_GLOBAL_ABORT_PREFIXES", []) or []) if str(item).strip()]
+    except Exception:
+        prefixes = []
+    return explicit, prefixes
+
+
+def _is_global_readiness_blocker(blocker: str) -> bool:
+    text = _normalize_readiness_blocker(blocker)
+    if not text:
+        return False
+    explicit, prefixes = _global_readiness_blocker_sets()
+    if text in explicit:
+        return True
+    for prefix in prefixes:
+        if prefix and text.startswith(prefix):
+            return True
+    return False
+
+
+def _classify_readiness_abort(readiness: dict) -> tuple[bool, list[str]]:
+    market_open = readiness.get("market_open")
+    state = str(readiness.get("state") or "").strip().upper()
+    blockers = list(readiness.get("blockers") or readiness.get("reasons") or [])
+    if market_open is False or state == "MARKET_CLOSED":
+        return True, ["market_closed"]
+    if state != "BLOCKED":
+        return False, []
+    global_blockers = [b for b in blockers if _is_global_readiness_blocker(b)]
+    return bool(global_blockers), global_blockers
+
+
 def _ensure_runtime_dirs(repo_root: Path) -> None:
     """
     Best-effort creation of runtime directories that many subsystems expect.
@@ -52,6 +96,7 @@ def _ensure_runtime_dirs(repo_root: Path) -> None:
         logs_dir = runtime_dir / "logs"
         runtime_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
+        observability_dir()
         # Optional: ensure a common trade log exists even if caller forgets
         (logs_dir / "trade_log.jsonl").touch(exist_ok=True)
     except Exception as exc:
@@ -153,25 +198,38 @@ def main():
         readiness = run_readiness_check(write_log=True)
         state = readiness.get("state", "BLOCKED")
         can_trade = bool(readiness.get("can_trade", readiness.get("ready", False)))
+        should_abort, abort_reasons = _classify_readiness_abort(readiness)
 
-        if state == "BLOCKED":
-            reasons = readiness.get("blockers") or readiness.get("reasons") or []
-            risk_halt.set_halt("readiness_gate_fail", {"reasons": reasons})
-
+        if should_abort:
+            risk_halt.set_halt("readiness_gate_fail", {"reasons": abort_reasons})
             try:
                 audit_append(
                     {
                         "event": "READINESS_FAIL",
+                        "state": state,
+                        "reasons": abort_reasons,
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                    }
+                )
+            except Exception as exc:
+                print(f"[AUDIT_ERROR] readiness_fail err={exc}")
+            print(f"[Readiness] Not ready: {','.join(abort_reasons)}")
+            return
+
+        if state == "BLOCKED":
+            reasons = readiness.get("blockers") or readiness.get("reasons") or []
+            print(f"[Readiness] non_global_blockers={','.join(reasons)}")
+            try:
+                audit_append(
+                    {
+                        "event": "READINESS_NON_GLOBAL",
                         "state": state,
                         "reasons": reasons,
                         "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
                     }
                 )
             except Exception as exc:
-                print(f"[AUDIT_ERROR] readiness_fail err={exc}")
-
-            print(f"[Readiness] Not ready: {','.join(reasons)}")
-            return
+                print(f"[AUDIT_ERROR] readiness_non_global err={exc}")
 
         if not can_trade:
             warnings = readiness.get("warnings") or []

@@ -21,6 +21,7 @@ from core.orders.intent_store import get_intent, upsert_intent
 from core.orders.order_intent import OrderIntent
 from core.orders.state_machine import OrderState, OrderStateMachine
 from core.pretrade_risk_engine import PreTradeRiskEngine, PreTradeRiskRequest
+from core.reconciliation import restore_runtime_state
 from core.spread_guard import SpreadGuard, SpreadGuardDecision
 
 
@@ -148,6 +149,7 @@ class ExecutionEngine:
         self.kill_switch_reason = None
         self._startup_open_orders = []
         self._startup_reconcile_result = None
+        self._startup_runtime_restore_result = None
         self._bootstrap_order_storage()
 
     @staticmethod
@@ -330,6 +332,7 @@ class ExecutionEngine:
         1) load non-terminal orders from persistent store
         2) trigger one reconciliation cycle when open orders exist
         """
+        startup_orders_reconciled = False
         try:
             load_limit = max(1, int(getattr(cfg, "ORDER_STORE_STARTUP_LOAD_LIMIT", 2000)))
             self._startup_open_orders = self.order_state_machine.list_orders(
@@ -348,16 +351,33 @@ class ExecutionEngine:
             return
         should_reconcile = bool(getattr(cfg, "ORDER_RECONCILE_ON_STARTUP", True))
         if not should_reconcile:
-            return
-        if not self._startup_open_orders:
+            pass
+        elif self._startup_open_orders:
+            try:
+                self._startup_reconcile_result = self.reconcile_orders_once()
+                startup_orders_reconciled = True
+            except Exception as exc:
+                self._write_failure_log(
+                    {
+                        "ts_epoch": time.time(),
+                        "event": "order_store_startup_reconcile_failed",
+                        "open_orders": len(self._startup_open_orders),
+                        "error": f"{type(exc).__name__}:{exc}",
+                    }
+                )
+
+        if not bool(getattr(cfg, "RUNTIME_STATE_RESTORE_ON_STARTUP", True)):
             return
         try:
-            self._startup_reconcile_result = self.reconcile_orders_once()
+            self._startup_runtime_restore_result = restore_runtime_state(
+                order_state_machine=self.order_state_machine,
+                reconcile_order_state=(not startup_orders_reconciled),
+            )
         except Exception as exc:
             self._write_failure_log(
                 {
                     "ts_epoch": time.time(),
-                    "event": "order_store_startup_reconcile_failed",
+                    "event": "runtime_state_restore_failed",
                     "open_orders": len(self._startup_open_orders),
                     "error": f"{type(exc).__name__}:{exc}",
                 }
@@ -365,6 +385,11 @@ class ExecutionEngine:
 
     def get_startup_open_orders(self):
         return list(self._startup_open_orders)
+
+    def get_startup_runtime_restore_result(self):
+        if isinstance(self._startup_runtime_restore_result, dict):
+            return dict(self._startup_runtime_restore_result)
+        return self._startup_runtime_restore_result
 
     def create_order(
         self,

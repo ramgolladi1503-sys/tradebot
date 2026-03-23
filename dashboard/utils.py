@@ -13,7 +13,6 @@ from typing import Iterable
 
 import pandas as pd
 
-from core.trade_permission import build_permission_payload, normalize_orb_bias
 from core.trade_identity import compute_trade_key, derive_strategy_id
 from dashboard.ui.utils.derive_fields import parse_option_side
 
@@ -209,43 +208,7 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
             conf = _to_float(row.get("confidence"))
             norm.at[idx, "confidence"] = conf if conf is not None else None
 
-            if canonical_entry and _to_float(row.get("display_entry")) is not None:
-                norm.at[idx, "entry"] = _to_float(row.get("display_entry"))
-                norm.at[idx, "entry_status"] = row.get("display_entry_status")
-            # Never backfill executable entry from model/reference prices.
-            # Use suggested_entry only when quote validation is explicitly OK.
-            entry_val = _to_float(row.get("entry"))
-            if not canonical_entry and entry_val is None:
-                suggested_entry = _to_float(row.get("suggested_entry"))
-                current_ltp = _to_float(row.get("current_ltp"))
-                entry_status = str(row.get("entry_status") or "").strip().upper()
-                if suggested_entry is not None and entry_status in _ENTRY_STATUSES_WITH_QUOTE_BACKFILL:
-                    norm.at[idx, "entry"] = suggested_entry
-                elif current_ltp is not None and entry_status in _ENTRY_STATUSES_WITH_QUOTE_BACKFILL:
-                    norm.at[idx, "entry"] = current_ltp
-                elif _to_float(row.get("entry_price")) is not None and entry_status in _ENTRY_STATUSES_WITH_QUOTE_BACKFILL:
-                    norm.at[idx, "entry"] = _to_float(row.get("entry_price"))
-
-            # Keep model/planning expected entry visible in UI even when not executable.
-            # This is informational only; `entry` retains existing executable semantics.
-            expected_entry = _to_float(row.get("expected_entry"))
-            if canonical_entry and expected_entry is None:
-                expected_entry = _to_float(row.get("display_entry"))
-            if expected_entry is None:
-                for field in ("suggested_entry", "current_ltp", "entry_price", "signal_price", "entry"):
-                    value = _to_float(row.get(field))
-                    if value is not None:
-                        expected_entry = value
-                        break
-            if expected_entry is not None:
-                norm.at[idx, "expected_entry"] = expected_entry
-
-            # Fill entry is what execution could use now; mirror normalized entry behavior.
-            fill_entry = _to_float(row.get("fill_entry"))
-            if fill_entry is None:
-                fill_entry = _to_float(norm.at[idx, "entry"])
-            if fill_entry is not None:
-                norm.at[idx, "fill_entry"] = fill_entry
+            # Preserve engine-provided entry semantics; do not backfill entry here.
 
             status = str(row.get("status") or "PLANNING").upper()
             norm.at[idx, "status"] = status
@@ -286,62 +249,6 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
             logger.warning("normalize_trade_df row_failed: %s", exc)
             norm.at[idx, "ui_warning"] = "normalize_failed"
             warnings.append(str(exc))
-            continue
-
-    for idx, row in norm.iterrows():
-        try:
-            permission = row.get("permission")
-            global_conf = row.get("global_confidence")
-            if permission and global_conf is not None:
-                continue
-            raw_conf = row.get("raw_signal_confidence")
-            if raw_conf is None:
-                raw_conf = row.get("confidence")
-            regime = row.get("regime") or "UNKNOWN"
-            regime_conf = row.get("regime_confidence")
-            if regime_conf is None:
-                regime_conf = row.get("day_confidence")
-            orb_bias = row.get("orb_bias")
-            option_type = row.get("option_type")
-            side = row.get("side")
-            last_candle = row.get("last_candle") if isinstance(row.get("last_candle"), dict) else None
-            atr_ratio = row.get("atr_ratio") or row.get("atr_pct")
-            payload = build_permission_payload(
-                signal_score=raw_conf,
-                regime=regime,
-                regime_conf=regime_conf,
-                orb_bias=orb_bias,
-                option_type=option_type,
-                side=side,
-                last_candle=last_candle,
-                atr_ratio=atr_ratio,
-            )
-            norm.at[idx, "direction"] = payload.get("direction")
-            norm.at[idx, "global_confidence"] = payload.get("global_confidence")
-            norm.at[idx, "permission"] = payload.get("permission")
-            norm.at[idx, "permission_reason"] = payload.get("permission_reason")
-            norm.at[idx, "countertrend"] = payload.get("countertrend")
-            norm.at[idx, "raw_signal_confidence"] = raw_conf
-            if payload.get("global_confidence") is not None:
-                norm.at[idx, "confidence"] = payload.get("global_confidence")
-            if orb_bias:
-                norm.at[idx, "orb_bias"] = normalize_orb_bias(orb_bias)
-        except Exception as exc:
-            logger.warning("normalize_trade_df permission_failed: %s", exc)
-            norm.at[idx, "permission_reason"] = f"permission_compute_failed:{type(exc).__name__}"
-            norm.at[idx, "ui_warning"] = ",".join(
-                sorted(
-                    set(
-                        filter(
-                            None,
-                            [
-                                norm.at[idx, "ui_warning"],
-                                "permission_compute_failed",
-                            ],
-                        )
-                    )
-                )
-            )
             continue
 
     if warnings:

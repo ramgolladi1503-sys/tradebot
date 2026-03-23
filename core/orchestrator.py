@@ -53,6 +53,7 @@ from core.review_queue import (
     add_to_queue,
     approval_status,
     order_payload_hash,
+    project_advisory_row,
 )
 from core.blocked_tracker import BlockedTradeTracker
 from core.trade_store import insert_execution_stat, update_trailing_state, insert_trail_event, insert_trade_leg, update_trade_close
@@ -89,12 +90,16 @@ from core.telemetry_streams import (
 from core.trade_log_paths import ensure_trade_log_exists
 from core.runtime_health import write_runtime_health_snapshot
 from core.paths import logs_dir
+from core.observability.pipeline import write_pipeline_funnel
+from core.outcome_labels import attach_candidate_outcome_labels
+from core.opportunity_engine import select_top_opportunities
 from core.market_snapshot_builder import (
     build_market_snapshot as build_dashboard_market_snapshot,
     build_symbol_market_snapshot,
 )
 from core.market_snapshot_store import write_market_snapshot_atomic
 from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
+from core.runtime_snapshot_store import TOP_OPPORTUNITIES_LATEST_PATH, write_snapshot_atomic
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -232,6 +237,8 @@ def _scan_visible_suggestions(path: Path) -> dict:
         "visible_advisory_count": 0,
         "visible_queue_only_count": 0,
         "visible_executable_count": 0,
+        "visible_ready_count": 0,
+        "visible_executable_status_count": 0,
         "primary_blocker": None,
     }
     blocker_counts: Counter = Counter()
@@ -255,6 +262,10 @@ def _scan_visible_suggestions(path: Path) -> dict:
                 execution_status = str(row.get("execution_status") or "").strip().lower()
                 final_action = str(row.get("final_action") or "").strip().upper()
                 readiness = str(row.get("readiness") or "").strip().upper()
+                if readiness == "READY":
+                    counts["visible_ready_count"] += 1
+                if execution_status == "executable":
+                    counts["visible_executable_status_count"] += 1
                 if execution_status == "executable" or final_action == "EXECUTE" or readiness == "READY":
                     counts["visible_executable_count"] += 1
                 elif execution_status == "queue_only" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
@@ -275,6 +286,66 @@ def _scan_visible_suggestions(path: Path) -> dict:
         return counts
     except Exception:
         return counts
+
+
+def _build_pipeline_funnel_payload(
+    *,
+    universe: int,
+    candidates: int,
+    scored: int,
+    visible_counts: dict | None,
+    emitted: int,
+    returned: int = 0,
+) -> dict:
+    counts = dict(visible_counts or {})
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "universe": int(universe),
+        "candidates": int(candidates),
+        "scored": int(scored),
+        "ready": int(counts.get("visible_ready_count") or 0),
+        "executable": int(counts.get("visible_executable_status_count") or 0),
+        "emitted": int(emitted),
+        "advisory": int(counts.get("visible_advisory_count") or 0),
+        "queue_only": int(counts.get("visible_queue_only_count") or 0),
+        "returned": int(returned),
+    }
+
+
+def _build_top_opportunities_payload(
+    *,
+    candidates: list,
+    executable_top_n: int | None = None,
+    advisory_top_n: int | None = None,
+) -> dict:
+    selected = select_top_opportunities(
+        candidates or [],
+        executable_top_n=executable_top_n,
+        advisory_top_n=advisory_top_n,
+    )
+    notes: list[str] = []
+
+    def _project(rows: list, label: str) -> list[dict]:
+        projected: list[dict] = []
+        for candidate in rows or []:
+            advisory_row = project_advisory_row(candidate)
+            if isinstance(advisory_row, dict):
+                projected.append(advisory_row)
+            else:
+                trade_id = getattr(candidate, "trade_id", None) if not isinstance(candidate, dict) else candidate.get("trade_id")
+                notes.append(f"{label}_projection_failed:{trade_id}")
+        return projected
+
+    top_executable = _project(list(selected.get("top_executable_opportunities") or []), "executable")
+    top_advisory = _project(list(selected.get("top_advisory_opportunities") or []), "advisory")
+    return {
+        "top_executable_opportunities": top_executable,
+        "top_advisory_opportunities": top_advisory,
+        "top_executable_count": int(len(top_executable)),
+        "top_advisory_count": int(len(top_advisory)),
+        "source_candidate_count": int(selected.get("candidates_considered") or 0),
+        "notes": notes,
+    }
 
 
 def _top_blockers_payload(blocker_counts: Counter, limit: int = 5) -> list[dict]:
@@ -490,6 +561,191 @@ def _queue_review_candidate(
         },
     )
     return False, prepared_trade
+
+
+def _queue_rejected_candidate_for_analytics(
+    ranked_candidates,
+    *,
+    gate_reasons: list[str] | None = None,
+    reject_reason: str | None = None,
+    queue_path=None,
+    reject_source: str = "orchestrator_gate_rejected_candidate",
+    extra: dict | None = None,
+):
+    if not bool(getattr(cfg, "QUEUE_REJECTED_CANDIDATES_ENABLE", True)):
+        return False, None
+    candidates = [candidate for candidate in list(ranked_candidates or []) if candidate is not None]
+    if not candidates:
+        return False, None
+    selected = candidates[0]
+    reasons = [str(reason) for reason in (gate_reasons or []) if str(reason).strip()]
+    block_reason = str(reject_reason or (reasons[0] if reasons else "gate_rejected")).strip() or "gate_rejected"
+    if bool(getattr(cfg, "GATE_REJECT_TRACE_ENABLE", True)):
+        print(
+            "ORCH_GATE_REJECT_SOURCE",
+            {
+                "reject_source": reject_source,
+                "reject_reason": reject_reason,
+                "reasons": list(reasons),
+                "symbol": _trade_attr(selected, "symbol"),
+            },
+        )
+    payload_extra = dict(extra or {})
+    payload_extra.setdefault("category", "gate_rejected_candidate")
+    payload_extra.setdefault("tier", "ANALYTICS")
+    payload_extra.setdefault("gate_reasons", list(reasons))
+    payload_extra.setdefault("builder_reject_reason", block_reason)
+    payload_extra.setdefault("execution_blocked", True)
+    payload_extra.setdefault("execution_block_reason", block_reason)
+    if bool(getattr(cfg, "QUEUE_REJECTED_CANDIDATES_FORCE_ADVISORY", True)):
+        payload_extra.setdefault("permission", "ADVISORY_ONLY")
+        payload_extra.setdefault("readiness", "ADVISORY_ONLY")
+        payload_extra.setdefault("final_action", "ADVISORY_ONLY")
+        payload_extra.setdefault("execution_status", "advisory_only")
+    return _queue_review_candidate(
+        selected,
+        queue_path=queue_path,
+        extra=payload_extra,
+        reject_source=reject_source,
+        allow_unresolved_for_analytics=True,
+    )
+
+
+def _queue_market_data_fallback_candidate_for_analytics(
+    market_data: dict,
+    *,
+    gate_reasons: list[str] | None = None,
+    reject_reason: str | None = None,
+    queue_path=None,
+    reject_source: str = "orchestrator_market_data_fallback",
+    enabled_flag: str = "QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE",
+    candidate_origin: str = "pre_builder_gate",
+    strategy_name: str = "PRE_BUILDER_FALLBACK",
+    setup_variant: str = "pre_builder_gate",
+    category: str = "pre_builder_gate_candidate",
+    decision_stage: str = "pre_builder_gate",
+):
+    if not bool(getattr(cfg, enabled_flag, True)):
+        return False, None
+    data = dict(market_data or {})
+    symbol = str(data.get("symbol") or "").strip().upper()
+    if not symbol:
+        return False, None
+    reasons = [str(reason) for reason in (gate_reasons or []) if str(reason).strip()]
+    normalized_origin = str(candidate_origin or "fallback").strip().lower() or "fallback"
+    block_reason = str(reject_reason or (reasons[0] if reasons else normalized_origin)).strip() or normalized_origin
+    trade_prefix = normalized_origin.upper().replace("-", "_").replace(" ", "_")
+    candidate = {
+        "trade_id": f"{trade_prefix[:24]}-{symbol}-{int(time.time() * 1000)}",
+        "symbol": symbol,
+        "underlying": symbol,
+        "instrument": str(data.get("instrument") or "OPT").strip().upper() or "OPT",
+        "instrument_id": data.get("instrument_id") or f"PREBUILDER::{symbol}",
+        "instrument_token": data.get("instrument_token"),
+        "tradingsymbol": data.get("tradingsymbol"),
+        "expiry": data.get("expiry"),
+        "expiry_date": data.get("expiry_date"),
+        "strike": data.get("strike"),
+        "option_type": data.get("option_type") or data.get("right"),
+        "right": data.get("right") or data.get("option_type"),
+        "side": data.get("side") or data.get("direction"),
+        "entry_price": None,
+        "expected_entry": None,
+        "signal_price": data.get("ltp") or data.get("spot") or data.get("underlying_spot"),
+        "stop_loss": None,
+        "target": None,
+        "strategy": strategy_name,
+        "strategy_family": "fallback",
+        "candidate_type": "fallback",
+        "setup_variant": setup_variant,
+        "confidence": 0.1,
+        "builder_confidence": 0.1,
+        "global_confidence": 0.1,
+        "permission_confidence": 0.1,
+        "timestamp": now_ist().isoformat(),
+        "source_flags": {
+            "candidate_origin": normalized_origin,
+            "gate_reasons": list(reasons),
+        },
+    }
+    return _queue_review_candidate(
+        candidate,
+        queue_path=queue_path,
+        extra={
+            "category": category,
+            "tier": "ANALYTICS",
+            "decision_stage": decision_stage,
+            "gate_reasons": list(reasons),
+            "builder_reject_reason": block_reason,
+            "execution_blocked": True,
+            "execution_block_reason": block_reason,
+            "permission": "ADVISORY_ONLY",
+            "readiness": "ADVISORY_ONLY",
+            "final_action": "ADVISORY_ONLY",
+            "execution_status": "advisory_only",
+        },
+        reject_source=reject_source,
+        allow_unresolved_for_analytics=True,
+    )
+
+
+def _queue_prebuilder_gate_candidate_for_analytics(
+    market_data: dict,
+    *,
+    gate_reasons: list[str] | None = None,
+    reject_reason: str | None = None,
+    queue_path=None,
+    reject_source: str = "orchestrator_prebuilder_gate",
+):
+    return _queue_market_data_fallback_candidate_for_analytics(
+        market_data,
+        gate_reasons=gate_reasons,
+        reject_reason=reject_reason,
+        queue_path=queue_path,
+        reject_source=reject_source,
+        enabled_flag="QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE",
+        candidate_origin="pre_builder_gate",
+        strategy_name="PRE_BUILDER_FALLBACK",
+        setup_variant="pre_builder_gate",
+        category="pre_builder_gate_candidate",
+        decision_stage="pre_builder_gate",
+    )
+
+
+def _queue_invalid_snapshot_candidate_for_analytics(
+    market_data: dict,
+    *,
+    gate_reasons: list[str] | None = None,
+    reject_reason: str | None = None,
+    queue_path=None,
+    reject_source: str = "orchestrator_invalid_snapshot",
+):
+    return _queue_market_data_fallback_candidate_for_analytics(
+        market_data,
+        gate_reasons=gate_reasons,
+        reject_reason=reject_reason,
+        queue_path=queue_path,
+        reject_source=reject_source,
+        enabled_flag="QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE",
+        candidate_origin="invalid_snapshot",
+        strategy_name="INVALID_SNAPSHOT_FALLBACK",
+        setup_variant="invalid_snapshot",
+        category="invalid_snapshot_candidate",
+        decision_stage="invalid_snapshot",
+    )
+
+
+def _consume_trade_builder_ranked_candidates(builder) -> list:
+    ranked = list(getattr(builder, "_last_ranked_candidates", []) or [])
+    try:
+        builder._set_last_ranked_candidates([])
+    except Exception:
+        try:
+            builder._last_ranked_candidates = []
+        except Exception:
+            pass
+    return ranked
+
 
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
@@ -2382,8 +2638,11 @@ class Orchestrator:
             cycle_symbols_scanned: set[str] = set()
             cycle_trade_build_attempts = 0
             cycle_candidates_seen = 0
+            cycle_candidate_pool_count = 0
+            cycle_scored_candidate_count = 0
             cycle_candidates_blocked = 0
             cycle_candidates_enqueued = 0
+            cycle_ranked_candidates = []
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
             cycle_market_open = False
             suggestion_rows_before = _count_jsonl_rows(canonical_suggestions_log_path())
@@ -2534,6 +2793,26 @@ class Orchestrator:
                                 cycle_stage = "auth_required"
                                 self._emit_global_halt_events("AUTH_REQUIRED")
                                 break
+                        except Exception:
+                            pass
+                        try:
+                            queued_invalid_snapshot, _ = _queue_invalid_snapshot_candidate_for_analytics(
+                                market_data,
+                                gate_reasons=list(invalid_reasons or []) or ["invalid_market_snapshot"],
+                                reject_reason=invalid_reason or "invalid_market_snapshot",
+                                reject_source="orchestrator_invalid_snapshot",
+                            )
+                            if queued_invalid_snapshot:
+                                cycle_candidates_enqueued += 1
+                                audit_append(
+                                    {
+                                        "event": "INVALID_SNAPSHOT_ANALYTICS_QUEUED",
+                                        "symbol": market_data.get("symbol"),
+                                        "reason": invalid_reason or "invalid_market_snapshot",
+                                        "reason_codes": list(invalid_reasons or []),
+                                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                                    }
+                                )
                         except Exception:
                             pass
                         if halt_cycle:
@@ -2708,6 +2987,17 @@ class Orchestrator:
                             debug_flag=debug_flag,
                             gate_reasons=gate.reasons,
                         )
+                        try:
+                            queued_prebuilder, _ = _queue_prebuilder_gate_candidate_for_analytics(
+                                market_data,
+                                gate_reasons=list(gate.reasons or []),
+                                reject_reason="gatekeeper_blocked",
+                                reject_source="orchestrator_gatekeeper_block",
+                            )
+                            if queued_prebuilder:
+                                cycle_candidates_enqueued += 1
+                        except Exception:
+                            pass
                         self._maybe_queue_pilot_unlock(
                             market_data,
                             gate_reasons=gate.reasons,
@@ -2772,6 +3062,17 @@ class Orchestrator:
                                 self._log_decision_safe(event)
                             except Exception:
                                 pass
+                            try:
+                                queued_prebuilder, _ = _queue_prebuilder_gate_candidate_for_analytics(
+                                    market_data,
+                                    gate_reasons=[reason_code],
+                                    reject_reason=reason_code,
+                                    reject_source="orchestrator_quote_age_gate",
+                                )
+                                if queued_prebuilder:
+                                    cycle_candidates_enqueued += 1
+                            except Exception:
+                                pass
                             self._log_cycle_symbol_summary(
                                 symbol=sym,
                                 snapshot_ok=bool(market_snapshot),
@@ -2810,12 +3111,58 @@ class Orchestrator:
                         allow_fallbacks=allow_builder_fallbacks,
                         allow_baseline=allow_builder_baseline,
                     )
+                    trace_payload = {}
+                    if decision_trace is not None:
+                        try:
+                            if hasattr(decision_trace, "to_dict"):
+                                trace_payload = dict(decision_trace.to_dict() or {})
+                            elif isinstance(decision_trace, dict):
+                                trace_payload = dict(decision_trace or {})
+                        except Exception:
+                            trace_payload = {}
+                    if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+                        print(
+                            "TB_RESULT",
+                            {
+                                "symbol": sym,
+                                "trade_is_none": trade is None,
+                                "decision_stage": trace_payload.get("decision_stage"),
+                                "final_action": trace_payload.get("final_action"),
+                                "reject_reason": trace_payload.get("reject_reason"),
+                            },
+                        )
+                    scan_summary = dict(getattr(self.trade_builder, "_last_scan_summary", {}) or {})
+                    cycle_candidate_pool_count += int(scan_summary.get("total_candidates") or 0)
+                    cycle_scored_candidate_count += int(scan_summary.get("accepted") or 0)
                     decision_build_ms += (time.perf_counter() - decision_stage_start) * 1000.0
                     if decision_trace is not None:
                         try:
                             self._decision_traces.append(decision_trace.to_dict())
                         except Exception:
                             pass
+                    ranked_candidates = _consume_trade_builder_ranked_candidates(self.trade_builder)
+                    if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+                        print(
+                            "TB_RANKED_COUNT",
+                            {
+                                "symbol": sym,
+                                "count": len(ranked_candidates or []),
+                            },
+                        )
+                        if ranked_candidates:
+                            top = ranked_candidates[0]
+                            print(
+                                "TB_TOP_CANDIDATE",
+                                {
+                                    "symbol": sym,
+                                    "trade_id": _trade_attr(top, "trade_id"),
+                                    "strategy_family": _trade_attr(top, "strategy_family"),
+                                    "candidate_type": _trade_attr(top, "candidate_type"),
+                                    "rank_score": _trade_attr(top, "rank_score"),
+                                },
+                            )
+                    if ranked_candidates:
+                        cycle_ranked_candidates.extend(ranked_candidates)
                     if trade is None:
                         cycle_candidates_blocked += 1
                         reject_ctx = {}
@@ -2864,6 +3211,21 @@ class Orchestrator:
                             debug_flag=debug_flag,
                             gate_reasons=reject_gate_reasons,
                         )
+                        try:
+                            queued_rejected, _queued_trade = _queue_rejected_candidate_for_analytics(
+                                ranked_candidates,
+                                gate_reasons=reject_gate_reasons,
+                                reject_reason=reject_reason,
+                                reject_source="orchestrator_trade_builder_reject",
+                                extra={
+                                    "symbol": sym,
+                                    "decision_stage": "trade_builder_gate",
+                                },
+                            )
+                            if queued_rejected:
+                                cycle_candidates_enqueued += 1
+                        except Exception:
+                            pass
                         if self.decision_store is not None:
                             try:
                                 decision_snapshot = self._build_decision_snapshot(
@@ -2997,6 +3359,7 @@ class Orchestrator:
                                     market_data,
                                     debug_reasons=debug_flag,
                                 )
+                                cycle_ranked_candidates.extend(_consume_trade_builder_ranked_candidates(self.trade_builder))
                                 if lotto_trades:
                                     for lotto_trade in lotto_trades:
                                         queued, _ = _queue_review_candidate(
@@ -3029,6 +3392,7 @@ class Orchestrator:
                                     market_data,
                                     debug_reasons=debug_flag
                                 )
+                                cycle_ranked_candidates.extend(_consume_trade_builder_ranked_candidates(self.trade_builder))
                                 if zero_trade:
                                     queued, _ = _queue_review_candidate(
                                         zero_trade,
@@ -3046,6 +3410,7 @@ class Orchestrator:
                                     market_data,
                                     debug_reasons=debug_flag
                                 )
+                                cycle_ranked_candidates.extend(_consume_trade_builder_ranked_candidates(self.trade_builder))
                                 if scalp_trade:
                                     queued, _ = _queue_review_candidate(
                                         scalp_trade,
@@ -3090,6 +3455,25 @@ class Orchestrator:
                             self._log_identity_error(trade, event)
                             try:
                                 self._log_decision_safe(event, trade)
+                            except Exception:
+                                pass
+                            try:
+                                queued_missing_contract, _ = _queue_review_candidate(
+                                    trade,
+                                    extra={
+                                        "decision_stage": "decision:gatekeeper",
+                                        "execution_blocked": True,
+                                        "execution_block_reason": "missing_contract_fields",
+                                        "permission": "ADVISORY_ONLY",
+                                        "readiness": "ADVISORY_ONLY",
+                                        "final_action": "ADVISORY_ONLY",
+                                        "execution_status": "advisory_only",
+                                    },
+                                    reject_source="orchestrator_missing_contract_review_queue",
+                                    allow_unresolved_for_analytics=True,
+                                )
+                                if queued_missing_contract:
+                                    cycle_candidates_enqueued += 1
                             except Exception:
                                 pass
                             continue
@@ -3970,6 +4354,31 @@ class Orchestrator:
                 except Exception as status_exc:
                     logger.warning("cycle_status_write_error err=%s", status_exc)
                 try:
+                    write_pipeline_funnel(
+                        _build_pipeline_funnel_payload(
+                            universe=len(cycle_symbols_scanned),
+                            candidates=int(cycle_candidate_pool_count),
+                            scored=int(cycle_scored_candidate_count),
+                            visible_counts=visible_counts_after,
+                            emitted=int(cycle_suggestion_count),
+                            returned=int(cycle_candidates_seen),
+                        )
+                    )
+                except Exception as funnel_exc:
+                    logger.warning("pipeline_funnel_write_failed err=%s", funnel_exc)
+                try:
+                    write_snapshot_atomic(
+                        TOP_OPPORTUNITIES_LATEST_PATH,
+                        payload=_build_top_opportunities_payload(
+                            candidates=list(cycle_ranked_candidates),
+                            executable_top_n=int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
+                            advisory_top_n=int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
+                        ),
+                        producer="orchestrator",
+                    )
+                except Exception as top_exc:
+                    logger.warning("top_opportunities_snapshot_write_failed err=%s", top_exc)
+                try:
                     write_runtime_health_snapshot(orchestrator=self)
                 except Exception as health_exc:
                     logger.warning("runtime_health_snapshot_error err=%s", health_exc)
@@ -4163,6 +4572,9 @@ class Orchestrator:
                 "category": s.get("category"),
                 "tier": s.get("tier"),
             }
+            labeled_payload = attach_candidate_outcome_labels({**dict(s or {}), **payload})
+            payload["candidate_outcome_label"] = labeled_payload.get("candidate_outcome_label")
+            payload["candidate_outcome_label_provenance"] = labeled_payload.get("candidate_outcome_label_provenance")
             for eval_path in suggestion_eval_log_paths():
                 try:
                     eval_path.parent.mkdir(parents=True, exist_ok=True)

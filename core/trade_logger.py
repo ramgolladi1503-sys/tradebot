@@ -16,6 +16,8 @@ from config import config as cfg
 from core import log_lock
 from pathlib import Path
 from core.trade_schema import build_instrument_id, validate_trade_identity
+from core.outcome_labels import attach_trade_outcome_labels
+from core.trade_state_machine import TradeLifecycleState, record_trade_lifecycle_observation
 from core.post_trade_labeler import PostTradeLabeler
 from core.trade_log_paths import ensure_trade_log_file
 from core.paths import logs_dir
@@ -120,6 +122,11 @@ def log_trade(trade, extra=None):
     }
     if extra:
         log_entry.update(extra)
+    log_entry = record_trade_lifecycle_observation(
+        log_entry,
+        TradeLifecycleState.ACTIVE,
+        reason="trade_logged",
+    )
 
     trade_log_path = _trade_log_path()
     with trade_log_path.open("a", encoding="utf-8") as f:
@@ -187,6 +194,29 @@ def _compute_realized_metrics(entry: dict, exit_price: float, actual: int, exit_
     }
 
 
+def _merge_outcome_context(target: dict, source: dict) -> dict:
+    for key in (
+        "timestamp",
+        "symbol",
+        "strategy",
+        "side",
+        "entry",
+        "entry_price",
+        "expected_entry",
+        "execution_entry",
+        "fill_price",
+        "slippage",
+        "stop_loss",
+        "stop",
+        "target",
+        "qty",
+        "qty_units",
+    ):
+        if target.get(key) in (None, "") and source.get(key) not in (None, ""):
+            target[key] = source.get(key)
+    return target
+
+
 def update_trade_outcome(
     trade_id,
     exit_price,
@@ -230,6 +260,7 @@ def update_trade_outcome(
                         continue
                     e = json.loads(line)
                     if e.get("trade_id") == trade_id:
+                        entry = _merge_outcome_context(entry, e)
                         entry_price = e.get("entry", 0)
                         stop = e.get("stop_loss", 0)
                         side = e.get("side", "BUY")
@@ -257,6 +288,12 @@ def update_trade_outcome(
                         break
         except Exception:
             pass
+        entry = attach_trade_outcome_labels(entry)
+        entry = record_trade_lifecycle_observation(
+            entry,
+            TradeLifecycleState.CLOSED,
+            reason=entry.get("exit_reason") or exit_reason or "trade_closed",
+        )
         _append_update(entry)
         try:
             insert_outcome(entry)
@@ -334,6 +371,12 @@ def update_trade_outcome(
                 entry["outcome_label"] = metrics["outcome_label"]
                 entry["outcome_grade"] = metrics["outcome_grade"]
                 entry["exit_reason"] = metrics["exit_reason"]
+                entry = attach_trade_outcome_labels(entry)
+                entry = record_trade_lifecycle_observation(
+                    entry,
+                    TradeLifecycleState.CLOSED,
+                    reason=entry.get("exit_reason") or exit_reason or "trade_closed",
+                )
                 updated = True
                 updated_entry = entry
             lines.append(json.dumps(entry))
@@ -392,6 +435,11 @@ def update_trade_fill(trade_id, fill_price, latency_ms=None, slippage=None):
             entry["latency_ms"] = latency_ms
         if slippage is not None:
             entry["slippage"] = slippage
+        entry = record_trade_lifecycle_observation(
+            entry,
+            TradeLifecycleState.PARTIALLY_FILLED,
+            reason="fill_recorded",
+        )
         _append_update(entry)
         try:
             update_trade_fill_db(trade_id, fill_price, latency_ms=latency_ms, slippage=slippage)
@@ -414,6 +462,11 @@ def update_trade_fill(trade_id, fill_price, latency_ms=None, slippage=None):
                     entry["latency_ms"] = latency_ms
                 if slippage is not None:
                     entry["slippage"] = slippage
+                entry = record_trade_lifecycle_observation(
+                    entry,
+                    TradeLifecycleState.PARTIALLY_FILLED,
+                    reason="fill_recorded",
+                )
                 updated = True
                 updated_entry = entry
             lines.append(json.dumps(entry))

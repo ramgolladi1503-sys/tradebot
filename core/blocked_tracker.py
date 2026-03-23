@@ -25,6 +25,7 @@ from core.learning_paths import (
     rejected_candidates_paths,
     suggestion_eval_log_paths,
 )
+from core.outcome_labels import attach_candidate_outcome_labels
 from core.strategy_tracker import StrategyTracker
 
 
@@ -285,13 +286,15 @@ class BlockedTradeTracker:
         if exit_px is None:
             exit_px = entry
         pnl = float(exit_px) - float(entry)
-        return {
+        payload = {
             "blocked_id": rec.get("blocked_id"),
             "timestamp": datetime.now().isoformat(),
             "symbol": rec.get("symbol"),
             "strike": rec.get("strike"),
             "type": rec.get("type"),
             "reason": rec.get("reason"),
+            "permission": "BLOCK",
+            "execution_status": "blocked",
             "entry": entry,
             "exit": float(exit_px),
             "pnl": round(pnl, 3),
@@ -300,6 +303,7 @@ class BlockedTradeTracker:
             "mae": _safe_float(rec.get("mae")) or 0.0,
             "atr": _safe_float(rec.get("atr")) or 0.0,
         }
+        return attach_candidate_outcome_labels(payload)
 
     def _processed_ids(self):
         path = blocked_outcomes_processed_path()

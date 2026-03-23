@@ -3,7 +3,7 @@ from core.paths import logs_dir, data_root
 # Trade builder now consumes central market context for LIVE/OFFHOURS/SIM gating.
 # Zero-to-hero (lotto) ideas are PAPER-only with explicit OTM + premium-band filters.
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from dataclasses import replace
 from functools import wraps
 from pathlib import Path
@@ -22,9 +22,17 @@ from core.decision_telemetry import build_scan_summary, emit_scan_summary
 from core.reject_shadow import record_candidate_decision
 from core.trade_schema import Trade, build_instrument_id, validate_trade_identity
 from typing import Optional
-from strategies.ensemble import ensemble_signal, equity_signal, futures_signal, mean_reversion_signal, event_breakout_signal, micro_pattern_signal
+from strategies.ensemble import (
+    ensemble_signal,
+    equity_signal,
+    futures_signal,
+    mean_reversion_signal,
+    event_breakout_signal,
+    micro_pattern_signal,
+)
 from core.feature_builder import build_trade_features, validate_trade_features
 from core.trade_scoring import compute_trade_score
+from core.trade_identity import infer_candidate_identity
 from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
 from core.instruments import select_expiry as select_registry_expiry
@@ -32,8 +40,11 @@ from core.market_context import derive_market_context
 from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
 from core.reject_telemetry import append_reject_telemetry
-from core.entry_semantics import EntryContractViolation, build_entry_state
+from core.entry_semantics import EntryContractViolation, build_entry_state, should_allow_last_execution_fallback
+from core.execution_entry_trace import append_execution_entry_trace
+from core.issue_policy import ISSUE_CATEGORY_HARD, ISSUE_CATEGORY_SOFT, ISSUE_CATEGORY_WARNING
 from core.opportunity_engine import annotate_ranked_opportunities, select_best_opportunity
+from core.observability.pipeline import append_trade_lifecycle_event
 from core.option_entry import get_option_ltp_sla_sec
 from core.option_liquidity_cache import hydrate_option_liquidity_fields
 from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
@@ -239,6 +250,51 @@ class TradeBuilder:
         self._scan_accepted = 0
         self._scan_profile_name = ""
         self._last_scan_summary = {}
+        self._last_ranked_candidates = []
+
+    def _set_last_ranked_candidates(self, candidates) -> None:
+        self._last_ranked_candidates = list(candidates or [])
+
+    def _ensure_candidate_identity(self, trade: Trade | None) -> Trade | None:
+        if trade is None:
+            return trade
+        identity = infer_candidate_identity(
+            {
+                "candidate_type": getattr(trade, "candidate_type", None),
+                "strategy_family": getattr(trade, "strategy_family", None),
+                "setup_variant": getattr(trade, "setup_variant", None),
+                "direction": getattr(trade, "direction", None),
+                "instrument": getattr(trade, "instrument", None),
+                "instrument_type": getattr(trade, "instrument_type", None),
+                "strategy": getattr(trade, "strategy", None),
+                "strategy_id": getattr(trade, "strategy_id", None),
+                "strategy_name": getattr(trade, "strategy_name", None),
+                "entry_condition": getattr(trade, "entry_condition", None),
+                "side": getattr(trade, "side", None),
+                "option_type": getattr(trade, "option_type", None),
+                "type": getattr(trade, "type", None),
+                "trade_id": getattr(trade, "trade_id", None),
+            }
+        )
+        strategy_family = str(getattr(trade, "strategy_family", None) or identity.get("strategy_family") or "").strip().lower()
+        if strategy_family in {"", "unknown"}:
+            strategy_family = "breakout"
+        candidate_type = str(getattr(trade, "candidate_type", None) or identity.get("candidate_type") or "").strip().lower()
+        if candidate_type in {"", "unknown"}:
+            candidate_type = "directional"
+        setup_variant = str(getattr(trade, "setup_variant", None) or identity.get("setup_variant") or "").strip().lower()
+        if setup_variant in {"", "unknown"}:
+            setup_variant = strategy_family or "breakout"
+        direction = str(getattr(trade, "direction", None) or identity.get("direction") or "").strip()
+        if not direction:
+            direction = "UNKNOWN"
+        return replace(
+            trade,
+            candidate_type=candidate_type,
+            strategy_family=strategy_family,
+            setup_variant=setup_variant,
+            direction=direction,
+        )
 
     def _heartbeat_feed_snapshot(self) -> dict:
         payload = {}
@@ -340,6 +396,7 @@ class TradeBuilder:
     def _decorate_trade_context(self, trade: Trade | None, market_data: dict | None, raw_conf: float | None):
         if trade is None:
             return trade
+        trade = self._ensure_candidate_identity(trade)
         data = market_data if isinstance(market_data, dict) else {}
         option_ok, missing_fields = self._option_identity_complete(
             instrument=getattr(trade, "instrument", None),
@@ -386,6 +443,30 @@ class TradeBuilder:
                     market_data=data,
                     instrument_matches=option_ok,
                 )
+                append_execution_entry_trace(
+                    module="strategies.trade_builder",
+                    stage="build_trade_entry_lifecycle",
+                    row={
+                        "trade_id": getattr(trade, "trade_id", None),
+                        "symbol": getattr(trade, "symbol", None) or data.get("symbol"),
+                        "strategy": getattr(trade, "strategy", None),
+                        "entry": getattr(trade, "entry", None) or getattr(trade, "entry_price", None),
+                        "expected_entry": getattr(trade, "expected_entry", None),
+                        "current_ltp": getattr(trade, "current_ltp", None) or data.get("current_ltp"),
+                        "option_ltp_source": getattr(trade, "option_ltp_source", None) or data.get("option_ltp_source"),
+                        "permission": getattr(trade, "permission", None),
+                        "execution_entry": lifecycle.get("execution_entry"),
+                        "execution_entry_status": lifecycle.get("execution_entry_status"),
+                        "execution_allowed": getattr(trade, "execution_allowed", None),
+                    },
+                    execution_entry_before=getattr(trade, "execution_entry", None),
+                    execution_entry_after=lifecycle.get("execution_entry"),
+                    extra={
+                        "execution_entry_source": lifecycle.get("execution_entry_source"),
+                        "display_entry": lifecycle.get("display_entry"),
+                        "display_entry_status": lifecycle.get("display_entry_status"),
+                    },
+                )
                 executable_entry = lifecycle.get("execution_entry")
                 executable_status = str(lifecycle.get("execution_entry_status") or "").strip().lower()
                 display_entry = lifecycle.get("display_entry")
@@ -409,8 +490,10 @@ class TradeBuilder:
                         "display_entry": display_entry,
                         "display_entry_source": display_source,
                         "display_entry_status": display_status,
+                        "entry_display_status": display_status,
                         "entry_reason": entry_reason,
                         "entry_clear_reason": entry_clear_reason,
+                        "entry_block_code": str(entry_clear_reason or "").strip().lower() or None,
                         "entry_status": lifecycle.get("entry_status"),
                     }
                 )
@@ -448,34 +531,108 @@ class TradeBuilder:
                     decision_trace["preliminary_exec_allowed"] = bool(
                         decision_trace.get("preliminary_exec_allowed", getattr(trade, "execution_allowed", False))
                     )
-                    if executable_ready:
-                        decision_trace["permission"] = "EXECUTE" if bool(getattr(trade, "execution_allowed", False)) else preliminary_permission
-                        decision_trace["permission_reason"] = (
-                            preliminary_reason if bool(getattr(trade, "execution_allowed", False)) else preliminary_reason
+                    decision_trace.update(
+                        self._finalize_advisory_decision(
+                            trade=trade,
+                            lifecycle=lifecycle,
+                            decision_trace=decision_trace,
                         )
-                        decision_trace["final_action"] = "EXECUTE" if bool(getattr(trade, "execution_allowed", False)) else (
-                            "QUEUE_ONLY" if display_entry is not None else "ADVISORY_ONLY"
-                        )
-                        decision_trace["entry_status"] = "OK"
-                        decision_trace["entry_block_reason"] = None
-                        decision_trace["exec_allowed"] = bool(getattr(trade, "execution_allowed", False))
-                    else:
-                        decision_trace["permission"] = "ADVISORY_ONLY"
-                        decision_trace["permission_reason"] = str(entry_clear_reason or entry_reason or "missing_execution_entry")
-                        decision_trace["final_action"] = "ADVISORY_ONLY"
-                        decision_trace["entry_status"] = (
-                            "DISPLAYABLE" if display_entry is not None else str(entry_clear_reason or "missing_entry").strip().upper()
-                        )
-                        decision_trace["entry_block_reason"] = str(entry_clear_reason or entry_reason or "missing_execution_entry")
-                        decision_trace["exec_allowed"] = False
+                    )
                     trade_source_flags["decision_trace"] = decision_trace
             updates["source_flags"] = trade_source_flags
-            return replace(
+            updated_trade = replace(
                 trade,
                 **updates,
             )
+            try:
+                append_trade_lifecycle_event(
+                    trade_id=str(getattr(updated_trade, "trade_id", None)),
+                    symbol=str(getattr(updated_trade, "symbol", None) or data.get("symbol") or ""),
+                    strategy=str(getattr(updated_trade, "strategy", None) or ""),
+                    stage="market_ingestion",
+                    status="seen",
+                    reason=str(data.get("invalid_reason") or "snapshot_valid"),
+                )
+                append_trade_lifecycle_event(
+                    trade_id=str(getattr(updated_trade, "trade_id", None)),
+                    symbol=str(getattr(updated_trade, "symbol", None) or data.get("symbol") or ""),
+                    strategy=str(getattr(updated_trade, "strategy", None) or ""),
+                    stage="candidate_generation",
+                    status="created",
+                    reason=str(getattr(updated_trade, "strategy", "") or "trade_builder"),
+                    extra={
+                        "opportunity_score": getattr(updated_trade, "opportunity_score", None),
+                        "opportunity_rank": getattr(updated_trade, "opportunity_rank", None),
+                    },
+                )
+            except Exception:
+                pass
+            return updated_trade
         except Exception:
             return trade
+
+    def _finalize_advisory_decision(
+        self,
+        *,
+        trade: Trade,
+        lifecycle: dict,
+        decision_trace: dict,
+    ) -> dict:
+        execution_entry = lifecycle.get("execution_entry")
+        execution_status = str(lifecycle.get("execution_entry_status") or "missing").strip().lower()
+        display_entry = lifecycle.get("display_entry")
+        display_status = str(lifecycle.get("display_entry_status") or "missing").strip().lower()
+        entry_reason = lifecycle.get("entry_reason")
+        entry_clear_reason = lifecycle.get("entry_clear_reason")
+        preliminary_permission = str(
+            decision_trace.get("preliminary_permission") or "ADVISORY_ONLY"
+        ).strip().upper() or "ADVISORY_ONLY"
+        preliminary_reason = str(
+            decision_trace.get("preliminary_permission_reason") or "intent_blocked"
+        ).strip() or "intent_blocked"
+        exec_allowed = bool(
+            decision_trace.get("preliminary_exec_allowed", getattr(trade, "execution_allowed", False))
+        )
+
+        if execution_entry is not None and execution_status == "executable":
+            if exec_allowed:
+                permission = "EXECUTE"
+                final_action = "EXECUTE"
+                permission_reason = preliminary_reason
+            else:
+                permission = preliminary_permission
+                final_action = "QUEUE_ONLY"
+                permission_reason = preliminary_reason
+        elif display_entry is not None and display_status == "displayable":
+            permission = "ADVISORY_ONLY"
+            final_action = "ADVISORY_ONLY"
+            permission_reason = str(entry_clear_reason or entry_reason or "missing_execution_entry")
+            exec_allowed = False
+        else:
+            permission = "BLOCK"
+            final_action = "BLOCK"
+            permission_reason = str(entry_clear_reason or entry_reason or "missing_entry")
+            exec_allowed = False
+
+        entry_block_code = str(entry_clear_reason or "").strip().lower() or None
+        entry_status = (
+            "EXECUTABLE"
+            if execution_status == "executable"
+            else "DISPLAYABLE"
+            if display_status == "displayable"
+            else str(entry_clear_reason or "missing_entry").strip().upper()
+        )
+        return {
+            "permission": permission,
+            "permission_reason": permission_reason,
+            "final_action": final_action,
+            "display_entry_status": display_status,
+            "execution_entry_status": execution_status,
+            "entry_block_code": entry_block_code,
+            "entry_status": entry_status,
+            "entry_block_reason": str(entry_clear_reason or entry_reason or "missing_execution_entry"),
+            "exec_allowed": exec_allowed,
+        }
 
     def _build_trade_entry_lifecycle(
         self,
@@ -558,6 +715,14 @@ class TradeBuilder:
                 market_open=bool(market_ctx.is_market_open),
                 instrument_matches=bool(instrument_matches),
                 quote_source=quote_source,
+                allow_last_execution=should_allow_last_execution_fallback(
+                    {
+                        "entry": getattr(trade, "entry", None) or getattr(trade, "entry_price", None),
+                        "current_ltp": last_price,
+                        "option_ltp_source": getattr(trade, "option_ltp_source", None) or quote_source,
+                        "quote_source": getattr(trade, "quote_source", None) or quote_source,
+                    }
+                ),
             )
         except EntryContractViolation as exc:
             logger.warning(
@@ -795,6 +960,24 @@ class TradeBuilder:
         }
         if extra:
             rec.update(extra)
+        try:
+            append_trade_lifecycle_event(
+                trade_id=str(rec.get("candidate_id") or ""),
+                symbol=str(symbol or ""),
+                strategy=str(meta.get("strategy") or data.get("strategy") or ""),
+                stage="candidate_generation",
+                status="blocked",
+                reason=str(reason_code),
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                extra={
+                    "entry": rec.get("entry"),
+                    "display_entry": rec.get("entry"),
+                    "entry_block_code": str(reason_code),
+                    "gate_name": gate_name,
+                },
+            )
+        except Exception:
+            pass
         try:
             append_reject_telemetry(
                 {
@@ -1247,6 +1430,12 @@ class TradeBuilder:
         except Exception:
             return None
 
+    def _allow_non_live_stale_option_tick_advisory(self, market_ctx) -> bool:
+        return bool(
+            getattr(cfg, "TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY", True)
+            and getattr(market_ctx, "allow_stale_quotes", False)
+        )
+
     def _option_tradability_precondition(
         self,
         *,
@@ -1504,6 +1693,134 @@ class TradeBuilder:
         except Exception:
             pass
         return self._option_expiry(None, data) or ""
+
+    def _candidate_setup_family(self, signal: dict | None, force_family: str | None = None) -> str:
+        family = str(force_family or "").strip().upper()
+        if family == "TREND":
+            return "continuation"
+        if family == "MEAN_REVERT":
+            return "mean-reversion"
+        if family == "DEFINED_RISK":
+            return "breakout"
+        reason = str((signal or {}).get("reason") or "").strip().lower()
+        if "pullback" in reason:
+            return "pullback"
+        if "mean reversion" in reason:
+            return "mean-reversion"
+        if "breakout" in reason or "breakdown" in reason:
+            return "breakout"
+        if "trend" in reason or "vwap" in reason or "momentum" in reason:
+            return "continuation"
+        return "continuation"
+
+    def _annotate_candidate_chain_rows(
+        self,
+        symbol: str,
+        market_data: dict | None,
+        underlying_spot: float | None,
+    ) -> list[dict]:
+        data = market_data or {}
+        raw_chain = data.get("option_chain")
+        if not isinstance(raw_chain, (list, tuple)):
+            return []
+        unique_expiries: list[str] = []
+        expiry_seen: set[str] = set()
+        for raw in raw_chain:
+            if not isinstance(raw, dict):
+                continue
+            expiry_text = self._coerce_date_str(self._option_expiry(raw, data))
+            if not expiry_text or expiry_text in expiry_seen:
+                continue
+            expiry_seen.add(expiry_text)
+            unique_expiries.append(expiry_text)
+        unique_expiries.sort()
+        same_expiry = self._coerce_date_str(self._resolve_expiry_for_symbol(symbol, data))
+        next_expiry = ""
+        if unique_expiries:
+            if same_expiry and same_expiry in unique_expiries:
+                same_index = unique_expiries.index(same_expiry)
+                if same_index + 1 < len(unique_expiries):
+                    next_expiry = unique_expiries[same_index + 1]
+            elif len(unique_expiries) >= 2:
+                same_expiry = unique_expiries[0]
+                next_expiry = unique_expiries[1]
+            elif not same_expiry:
+                same_expiry = unique_expiries[0]
+        try:
+            spot_ref = float(underlying_spot) if underlying_spot is not None else None
+        except Exception:
+            spot_ref = None
+        if spot_ref is None or spot_ref <= 0:
+            try:
+                spot_ref = float(data.get("ltp")) if data.get("ltp") is not None else None
+            except Exception:
+                spot_ref = None
+        step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
+        step = float(step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)) or 0.0)
+        atm_strike = None
+        if step > 0 and spot_ref is not None and spot_ref > 0:
+            atm_strike = int(round(float(spot_ref) / step) * step)
+        enforce_strike_ladder = bool(getattr(cfg, "TRADE_BUILDER_ENFORCE_STRIKE_LADDER", False))
+        strike_ladder_width = max(0, int(getattr(cfg, "TRADE_BUILDER_STRIKE_LADDER_WIDTH", 2) or 0))
+        expiry_bucket_mode = str(getattr(cfg, "TRADE_BUILDER_EXPIRY_BUCKET_MODE", "ALL") or "ALL").strip().upper()
+        bucket_rank = {"same_expiry": 0, "next_expiry": 1, "other_expiry": 2}
+        rows: list[dict] = []
+        seen_contracts: set[tuple] = set()
+        for raw in raw_chain:
+            if not isinstance(raw, dict):
+                continue
+            row = dict(raw)
+            expiry_text = self._coerce_date_str(self._option_expiry(row, data))
+            if expiry_text and same_expiry and expiry_text == same_expiry:
+                expiry_bucket = "same_expiry"
+            elif expiry_text and next_expiry and expiry_text == next_expiry:
+                expiry_bucket = "next_expiry"
+            else:
+                expiry_bucket = "other_expiry"
+            if expiry_bucket_mode == "SAME" and expiry_bucket != "same_expiry":
+                continue
+            if expiry_bucket_mode in {"SAME_AND_NEXT", "NEXT"} and expiry_bucket == "other_expiry":
+                continue
+            strike_offset = None
+            try:
+                strike_val = float(row.get("strike") or row.get("strike_price") or row.get("strikePrice"))
+            except Exception:
+                strike_val = None
+            if strike_val is not None and atm_strike is not None and step > 0:
+                strike_offset = int(round((float(strike_val) - float(atm_strike)) / float(step)))
+            if enforce_strike_ladder and strike_offset is not None and abs(int(strike_offset)) > strike_ladder_width:
+                continue
+            row["candidate_origin"] = {
+                "strike_offset": strike_offset,
+                "expiry_bucket": expiry_bucket,
+            }
+            tradingsymbol = str(row.get("tradingsymbol") or "").strip()
+            instrument_token = row.get("instrument_token")
+            contract_key = None
+            if expiry_text and (tradingsymbol or instrument_token is not None):
+                contract_key = (
+                    expiry_text,
+                    strike_val,
+                    str(row.get("type") or row.get("option_type") or row.get("right") or "").strip().upper(),
+                    tradingsymbol,
+                    instrument_token,
+                )
+            if contract_key is not None:
+                if contract_key in seen_contracts:
+                    continue
+                seen_contracts.add(contract_key)
+            rows.append(row)
+        rows.sort(
+            key=lambda row: (
+                bucket_rank.get(str((row.get("candidate_origin") or {}).get("expiry_bucket") or "other_expiry"), 3),
+                abs(int(((row.get("candidate_origin") or {}).get("strike_offset") or 0))),
+                int(((row.get("candidate_origin") or {}).get("strike_offset") or 0)),
+                self._coerce_date_str(self._option_expiry(row, data)),
+                str(row.get("type") or row.get("option_type") or row.get("right") or "").strip().upper(),
+                str(row.get("tradingsymbol") or row.get("instrument_token") or ""),
+            )
+        )
+        return rows
 
     def _resolve_underlying_spot(self, market_data: dict, market_ctx) -> tuple[float | None, str | None, bool, str | None]:
         spot = market_data.get("ltp")
@@ -2996,6 +3313,106 @@ class TradeBuilder:
         )
         pre_soft_veto_codes: list[str] = []
         pre_execution_blockers: list[str] = []
+        pre_warning_codes: list[str] = []
+
+        def _append_unique(items: list[str], code: str) -> None:
+            text = str(code or "").strip()
+            if text and text not in items:
+                items.append(text)
+
+        def _normalize_issue_code(code: str) -> str:
+            text = str(code or "").strip()
+            if text == "spread_ok":
+                return "spread_pct"
+            if text == "premium_band_fail":
+                return "premium_out_of_band"
+            return text
+
+        def _discard_issue(items: list[str], code: str) -> None:
+            text = str(code or "").strip()
+            if not text:
+                return
+            while text in items:
+                items.remove(text)
+
+        def _issue_primary_role(code: str) -> str:
+            normalized = _normalize_issue_code(code)
+            role_map = {
+                "stale_option_quote": ISSUE_CATEGORY_HARD,
+                "option_quote_missing": ISSUE_CATEGORY_HARD,
+                "option_quote_not_live": ISSUE_CATEGORY_HARD,
+                "option_bidask_missing": ISSUE_CATEGORY_HARD,
+                "missing_live_bidask": ISSUE_CATEGORY_HARD,
+                "instrument_token_missing": ISSUE_CATEGORY_HARD,
+                "premium_out_of_band": ISSUE_CATEGORY_SOFT,
+                "option_depth_missing": ISSUE_CATEGORY_WARNING,
+                "option_volume_missing": ISSUE_CATEGORY_WARNING,
+                "low_volume": ISSUE_CATEGORY_WARNING,
+                "spread_pct": ISSUE_CATEGORY_WARNING,
+                "missing_index_bid_ask": ISSUE_CATEGORY_WARNING,
+            }
+            return role_map.get(normalized, ISSUE_CATEGORY_HARD)
+
+        def _make_issue_recorder(
+            soft_codes: list[str],
+            hard_codes: list[str],
+            warning_codes: list[str],
+        ):
+            issue_primary_roles: dict[str, str] = {}
+
+            def _record_issue(code: str, role: str | None = None) -> str | None:
+                normalized = _normalize_issue_code(code)
+                if not normalized:
+                    return None
+                primary_role = str(role or _issue_primary_role(normalized))
+                existing_role = issue_primary_roles.get(normalized)
+                if existing_role == primary_role:
+                    return normalized
+                if existing_role == ISSUE_CATEGORY_HARD and primary_role != ISSUE_CATEGORY_HARD:
+                    return normalized
+                if primary_role == ISSUE_CATEGORY_HARD:
+                    _discard_issue(soft_codes, normalized)
+                    _discard_issue(warning_codes, normalized)
+                elif primary_role == ISSUE_CATEGORY_SOFT:
+                    _discard_issue(hard_codes, normalized)
+                    _discard_issue(warning_codes, normalized)
+                elif primary_role == ISSUE_CATEGORY_WARNING:
+                    _discard_issue(soft_codes, normalized)
+                    _discard_issue(hard_codes, normalized)
+                issue_primary_roles[normalized] = primary_role
+                if primary_role == ISSUE_CATEGORY_SOFT:
+                    _append_unique(soft_codes, normalized)
+                elif primary_role == ISSUE_CATEGORY_WARNING:
+                    _append_unique(warning_codes, normalized)
+                else:
+                    _append_unique(hard_codes, normalized)
+                return normalized
+
+            return _record_issue
+
+        _record_pre_issue = _make_issue_recorder(
+            pre_soft_veto_codes,
+            pre_execution_blockers,
+            pre_warning_codes,
+        )
+
+        def _display_only_candidate_source(opt: dict) -> str | None:
+            if not bool(getattr(cfg, "TRADE_BUILDER_ALLOW_DISPLAY_ONLY_OPTION_CANDIDATES", True)):
+                return None
+            if not isinstance(opt, dict):
+                return None
+            source = str(
+                opt.get("option_ltp_source")
+                or opt.get("quote_source")
+                or ""
+            ).strip().lower()
+            if not source or source in {"none", "synthetic_index"}:
+                return None
+            for field in ("mark_price", "mid_price", "ltp", "last_price"):
+                if self._coerce_positive_float(opt.get(field)) is not None:
+                    return source
+            return None
+
         # Hard disable quick/baseline paths in LIVE mode
         if exec_mode == "LIVE":
             if quick_mode:
@@ -3071,10 +3488,10 @@ class TradeBuilder:
                 runtime_profile.suggestion_require_live_quotes and (not market_ctx.allow_stale_quotes)
             )
             if not hard_block_missing_index_quote:
-                if reject_reason not in pre_soft_veto_codes:
-                    pre_soft_veto_codes.append(reject_reason)
-                if reject_reason not in pre_execution_blockers:
-                    pre_execution_blockers.append(reject_reason)
+                _record_pre_issue(
+                    reject_reason,
+                    role=ISSUE_CATEGORY_HARD if exec_mode == "LIVE" else ISSUE_CATEGORY_WARNING,
+                )
                 _log_signal_event("trade_offhours_missing_bidask", symbol, reject_payload)
                 if debug_reasons:
                     if exec_mode == "LIVE":
@@ -3221,6 +3638,7 @@ class TradeBuilder:
                     market_data.get("ltp_change_window"),
                 )
             return None
+        setup_family = self._candidate_setup_family(signal, force_family=force_family)
         strategy_tag = "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"
         if signal.get("reason") == "trend_vwap_fallback":
             strategy_tag = "TREND_VWAP_FALLBACK"
@@ -3434,6 +3852,7 @@ class TradeBuilder:
                 return None
         opt_type = "CE" if direction == "BUY_CALL" else "PE"
         candidates = []
+        candidate_seen_keys: set[tuple] = set()
         debug_candidates = []
         rejected = []
         candidate_strategy_tag = strategy_tag
@@ -3483,9 +3902,7 @@ class TradeBuilder:
 
         seq_buffer = market_data.get("seq_buffer")
         atr = market_data.get("atr", max(1.0, ltp * 0.002))
-        chain_rows = market_data.get("option_chain", [])
-        if not isinstance(chain_rows, (list, tuple)):
-            chain_rows = []
+        chain_rows = self._annotate_candidate_chain_rows(symbol, market_data, underlying_spot)
         premium_band_cache = self._dynamic_premium_bands(symbol, chain_rows)
         for raw_opt in chain_rows:
             opt, opt_row_error = self._normalize_option_row(raw_opt, opt_type)
@@ -3494,10 +3911,14 @@ class TradeBuilder:
                 if debug_reasons and opt_row_error not in {"type_mismatch"}:
                     rejected.append(self._reject_record(symbol, {}, opt_type, opt_row_error, atr=atr))
                 continue
+            display_only_candidate_source = _display_only_candidate_source(opt)
+            allow_display_only_candidate = bool(display_only_candidate_source)
             allow_missing_bid_ask = bool(
                 exec_mode == "PAPER"
                 and not bool(getattr(cfg, "PAPER_STRICT_MODE", False))
             )
+            if allow_display_only_candidate:
+                allow_missing_bid_ask = True
             has_required_quote, quote_reason = self._validate_required_option_quote_fields(
                 opt,
                 allow_missing_bid_ask=allow_missing_bid_ask,
@@ -3511,6 +3932,12 @@ class TradeBuilder:
             current_filter_profile = filter_profile_quick if quick_mode else filter_profile_main
             soft_veto_codes = list(orb_soft_veto_codes) + list(pre_soft_veto_codes)
             execution_blockers = list(pre_execution_blockers)
+            warning_codes = list(pre_warning_codes)
+            _record_issue = _make_issue_recorder(
+                soft_veto_codes,
+                execution_blockers,
+                warning_codes,
+            )
             premium_soft_veto = False
             premium_soft_penalty_conf = float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_MULT", 0.92))
             premium_soft_penalty_size = float(getattr(cfg, "PREMIUM_SOFT_VETO_SIZE_MULT", 0.90))
@@ -3575,10 +4002,7 @@ class TradeBuilder:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "stale_option_quote", atr=atr))
                     continue
             elif quote_ts_epoch is None or (quote_age is not None and quote_age > getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8)):
-                if "stale_option_quote" not in soft_veto_codes:
-                    soft_veto_codes.append("stale_option_quote")
-                if "stale_option_quote" not in execution_blockers:
-                    execution_blockers.append("stale_option_quote")
+                _record_issue("stale_option_quote", role=ISSUE_CATEGORY_HARD)
             # Hard reject missing bid/ask
             if opt.get("quote_ok") is False:
                 if strict_quotes:
@@ -3586,10 +4010,7 @@ class TradeBuilder:
                     if debug_reasons:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "no_quote", atr=atr))
                     continue
-                if "option_quote_missing" not in soft_veto_codes:
-                    soft_veto_codes.append("option_quote_missing")
-                if "option_quote_missing" not in execution_blockers:
-                    execution_blockers.append("option_quote_missing")
+                _record_issue("option_quote_missing", role=ISSUE_CATEGORY_HARD)
             # Skip synthetic quotes (no live price)
             require_live_option_quotes = bool(
                 runtime_profile.suggestion_require_live_quotes
@@ -3602,46 +4023,35 @@ class TradeBuilder:
                     if debug_reasons:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "no_quote", atr=atr))
                     continue
-                if "option_quote_not_live" not in soft_veto_codes:
-                    soft_veto_codes.append("option_quote_not_live")
-                if "option_quote_not_live" not in execution_blockers:
-                    execution_blockers.append("option_quote_not_live")
+                _record_issue("option_quote_not_live", role=ISSUE_CATEGORY_HARD)
             if getattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", False) and not opt.get("depth_ok", False):
-                if runtime_profile.suggestion_require_depth:
+                if runtime_profile.suggestion_require_depth and not allow_display_only_candidate:
                     _count_option_reject("no_depth")
                     if debug_reasons:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "no_depth", atr=atr))
                     continue
-                if "option_depth_missing" not in soft_veto_codes:
-                    soft_veto_codes.append("option_depth_missing")
-                if "option_depth_missing" not in execution_blockers:
-                    execution_blockers.append("option_depth_missing")
+                _record_issue("option_depth_missing", role=ISSUE_CATEGORY_WARNING)
             if opt.get("bid") is None or opt.get("ask") is None:
-                if strict_quotes:
+                if strict_quotes and not allow_display_only_candidate:
                     _count_option_reject("no_bid_ask")
                     if debug_reasons:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "no_bid_ask", atr=atr))
                     continue
-                synth_abs = float(getattr(cfg, "OPTION_SYNTH_SPREAD_ABS", 0.5))
-                synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))
-                synth_spread = max(synth_abs, opt_ltp * synth_pct)
-                opt["bid"] = round(max(0.01, opt_ltp - (synth_spread / 2.0)), 4)
-                opt["ask"] = round(max(0.01, opt_ltp + (synth_spread / 2.0)), 4)
-                opt["quote_ok"] = True
-                if "option_bidask_missing" not in soft_veto_codes:
-                    soft_veto_codes.append("option_bidask_missing")
-                if "option_bidask_missing" not in execution_blockers:
-                    execution_blockers.append("option_bidask_missing")
+                if not allow_display_only_candidate:
+                    synth_abs = float(getattr(cfg, "OPTION_SYNTH_SPREAD_ABS", 0.5))
+                    synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))
+                    synth_spread = max(synth_abs, opt_ltp * synth_pct)
+                    opt["bid"] = round(max(0.01, opt_ltp - (synth_spread / 2.0)), 4)
+                    opt["ask"] = round(max(0.01, opt_ltp + (synth_spread / 2.0)), 4)
+                    opt["quote_ok"] = True
+                _record_issue("option_bidask_missing", role=ISSUE_CATEGORY_HARD)
             if getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False) and not opt.get("volume", 0):
                 if runtime_profile.suggestion_require_volume:
                     _count_option_reject("no_volume")
                     if debug_reasons:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "no_volume", atr=atr))
                     continue
-                if "option_volume_missing" not in soft_veto_codes:
-                    soft_veto_codes.append("option_volume_missing")
-                if "option_volume_missing" not in execution_blockers:
-                    execution_blockers.append("option_volume_missing")
+                _record_issue("option_volume_missing", role=ISSUE_CATEGORY_WARNING)
 
             tradability_ok, tradability_ctx = self._option_tradability_precondition(
                 symbol=symbol,
@@ -3652,40 +4062,64 @@ class TradeBuilder:
             )
             if not tradability_ok:
                 reason_code = str(tradability_ctx.get("reason_code") or "option_tradability_precondition_failed")
-                _count_option_reject(reason_code)
-                self._reject_ctx = {
-                    "symbol": symbol,
-                    "reason": reason_code,
-                    "gate_name": tradability_ctx.get("gate_name"),
-                    "contract": tradability_ctx.get("contract"),
-                    "missing_fields": tradability_ctx.get("missing_fields"),
-                    "instrument_token": tradability_ctx.get("instrument_token"),
-                    "quote_source": tradability_ctx.get("quote_source"),
-                    "option_ltp_source": tradability_ctx.get("option_ltp_source"),
-                    "quote_age_sec": tradability_ctx.get("quote_age_sec"),
-                    "option_tick_sla_sec": tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
-                }
-                self._log_precondition_reject(
-                    symbol,
-                    reason_code,
-                    str(tradability_ctx.get("reason_text") or reason_code),
-                    market_data=market_data,
-                    extra=dict(tradability_ctx),
+                stale_advisory_ok = bool(
+                    reason_code == "STALE_OPTION_TICK"
+                    and self._allow_non_live_stale_option_tick_advisory(market_ctx)
                 )
-                if debug_reasons:
-                    rec = self._reject_record(symbol, opt, opt_type, reason_code, atr=atr)
-                    rec.update(
-                        {
-                            "gate_name": tradability_ctx.get("gate_name"),
-                            "quote_source": tradability_ctx.get("quote_source"),
-                            "option_ltp_source": tradability_ctx.get("option_ltp_source"),
-                            "quote_age_sec": tradability_ctx.get("quote_age_sec"),
-                            "option_tick_sla_sec": tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
-                            "contract": tradability_ctx.get("contract"),
-                        }
+                if stale_advisory_ok:
+                    _log_freshness_debug(
+                        "TRADE_BUILDER_STALE_OPTION_TICK_DOWNGRADED symbol=%s mode=%s quote_age_sec=%s sla_sec=%s quote_source=%s",
+                        symbol,
+                        str(getattr(market_ctx, "mode", "") or "").strip().upper(),
+                        tradability_ctx.get("quote_age_sec"),
+                        tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
+                        tradability_ctx.get("option_ltp_source") or tradability_ctx.get("quote_source"),
                     )
-                    rejected.append(rec)
-                continue
+                    _record_issue("stale_option_quote", role=ISSUE_CATEGORY_HARD)
+                    opt["stale_option_tick_downgraded"] = True
+                    opt["expiry"] = tradability_ctx.get("expiry_date") or opt.get("expiry")
+                    opt["expiry_date"] = tradability_ctx.get("expiry_date") or opt.get("expiry_date")
+                    opt["tradingsymbol"] = tradability_ctx.get("tradingsymbol") or opt.get("tradingsymbol")
+                    opt["instrument_token"] = tradability_ctx.get("instrument_token") or opt.get("instrument_token")
+                    opt["quote_source"] = tradability_ctx.get("quote_source") or opt.get("quote_source")
+                    opt["option_ltp_source"] = tradability_ctx.get("option_ltp_source") or opt.get("option_ltp_source")
+                    opt["quote_age_sec"] = tradability_ctx.get("quote_age_sec")
+                    opt["option_tick_sla_sec"] = tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec")
+                else:
+                    _count_option_reject(reason_code)
+                    self._reject_ctx = {
+                        "symbol": symbol,
+                        "reason": reason_code,
+                        "gate_name": tradability_ctx.get("gate_name"),
+                        "contract": tradability_ctx.get("contract"),
+                        "missing_fields": tradability_ctx.get("missing_fields"),
+                        "instrument_token": tradability_ctx.get("instrument_token"),
+                        "quote_source": tradability_ctx.get("quote_source"),
+                        "option_ltp_source": tradability_ctx.get("option_ltp_source"),
+                        "quote_age_sec": tradability_ctx.get("quote_age_sec"),
+                        "option_tick_sla_sec": tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
+                    }
+                    self._log_precondition_reject(
+                        symbol,
+                        reason_code,
+                        str(tradability_ctx.get("reason_text") or reason_code),
+                        market_data=market_data,
+                        extra=dict(tradability_ctx),
+                    )
+                    if debug_reasons:
+                        rec = self._reject_record(symbol, opt, opt_type, reason_code, atr=atr)
+                        rec.update(
+                            {
+                                "gate_name": tradability_ctx.get("gate_name"),
+                                "quote_source": tradability_ctx.get("quote_source"),
+                                "option_ltp_source": tradability_ctx.get("option_ltp_source"),
+                                "quote_age_sec": tradability_ctx.get("quote_age_sec"),
+                                "option_tick_sla_sec": tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
+                                "contract": tradability_ctx.get("contract"),
+                            }
+                        )
+                        rejected.append(rec)
+                    continue
 
             # Liquidity guard
             spread_pct = (float(opt.get("ask") or 0.0) - float(opt.get("bid") or 0.0)) / opt_ltp if opt_ltp else 1
@@ -3712,10 +4146,7 @@ class TradeBuilder:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=low_volume", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "low_volume", atr=atr))
                         continue
-                    if "low_volume" not in soft_veto_codes:
-                        soft_veto_codes.append("low_volume")
-                    if "low_volume" not in execution_blockers:
-                        execution_blockers.append("low_volume")
+                    _record_issue("low_volume", role=ISSUE_CATEGORY_WARNING)
                 if spread_pct > max_spread and not _relax("spread_pct"):
                     if spread_pct > toxic_spread and runtime_profile.suggestion_require_depth:
                         _count_option_reject("spread_pct")
@@ -3723,10 +4154,7 @@ class TradeBuilder:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=spread_pct spread_pct=%.4f", symbol, opt.get("strike"), opt_type, spread_pct)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "spread_pct", atr=atr))
                         continue
-                    if "spread_pct" not in soft_veto_codes:
-                        soft_veto_codes.append("spread_pct")
-                    if "spread_pct" not in execution_blockers:
-                        execution_blockers.append("spread_pct")
+                    _record_issue("spread_pct", role=ISSUE_CATEGORY_WARNING)
 
             # OI / Greeks filters
             if not quick_mode:
@@ -3896,9 +4324,7 @@ class TradeBuilder:
                         rejected.append(rec)
                     continue
                 premium_soft_veto = True
-                soft_veto_codes.append("premium_out_of_band")
-                if soft_premium_advisory and "premium_band_fail" not in soft_veto_codes:
-                    soft_veto_codes.append("premium_band_fail")
+                _record_issue("premium_out_of_band", role=ISSUE_CATEGORY_SOFT)
                 if soft_premium_advisory:
                     self._log_blocked_candidate(
                         symbol,
@@ -3924,8 +4350,6 @@ class TradeBuilder:
                             "option_ltp_source": opt.get("option_ltp_source"),
                         },
                     )
-                if "premium_out_of_band" not in execution_blockers:
-                    execution_blockers.append("premium_out_of_band")
                 if opt_ltp < float(min_p):
                     premium_outside_ratio = (float(min_p) - float(opt_ltp)) / max(float(min_p), 1e-6)
                 elif opt_ltp > float(max_p):
@@ -3950,13 +4374,25 @@ class TradeBuilder:
                         debug_candidates.append(rec)
                         rejected.append(rec)
                     continue
-                if "spread_ok" not in soft_veto_codes:
-                    soft_veto_codes.append("spread_ok")
-                if "spread_ok" not in execution_blockers:
-                    execution_blockers.append("spread_ok")
+                _record_issue("spread_ok", role=ISSUE_CATEGORY_WARNING)
 
             # ML confidence (only if enough history)
-            feats = pd.DataFrame([build_trade_features(market_data, opt)])
+            feature_opt = opt
+            if opt.get("bid") is None or opt.get("ask") is None:
+                feature_opt = dict(opt)
+                feature_price = (
+                    self._coerce_positive_float(opt.get("mark_price"))
+                    or self._coerce_positive_float(opt.get("mid_price"))
+                    or self._coerce_positive_float(opt.get("ltp"))
+                    or self._coerce_positive_float(opt.get("last_price"))
+                )
+                if feature_price is not None:
+                    synth_abs = float(getattr(cfg, "OPTION_SYNTH_SPREAD_ABS", 0.5))
+                    synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))
+                    synth_spread = max(synth_abs, float(feature_price) * synth_pct)
+                    feature_opt["bid"] = round(max(0.01, float(feature_price) - (synth_spread / 2.0)), 4)
+                    feature_opt["ask"] = round(max(0.01, float(feature_price) + (synth_spread / 2.0)), 4)
+            feats = pd.DataFrame([build_trade_features(market_data, feature_opt)])
             use_ml = True
             if getattr(cfg, "ML_USE_ONLY_WITH_HISTORY", True):
                 use_ml = self._ml_history_count() >= getattr(cfg, "ML_MIN_TRAIN_TRADES", 200)
@@ -4175,7 +4611,26 @@ class TradeBuilder:
                 continue
 
             # Slippage adjustment for limit
-            slippage = self.execution.estimate_slippage(opt["bid"], opt["ask"], opt.get("volume", 0))
+            calc_bid = self._coerce_positive_float(opt.get("bid"))
+            calc_ask = self._coerce_positive_float(opt.get("ask"))
+            if calc_bid is None or calc_ask is None:
+                display_price = (
+                    self._coerce_positive_float(opt.get("mark_price"))
+                    or self._coerce_positive_float(opt.get("mid_price"))
+                    or self._coerce_positive_float(opt.get("ltp"))
+                    or self._coerce_positive_float(opt.get("last_price"))
+                )
+                if display_price is not None:
+                    synth_abs = float(getattr(cfg, "OPTION_SYNTH_SPREAD_ABS", 0.5))
+                    synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))
+                    synth_spread = max(synth_abs, float(display_price) * synth_pct)
+                    calc_bid = round(max(0.01, float(display_price) - (synth_spread / 2.0)), 4)
+                    calc_ask = round(max(0.01, float(display_price) + (synth_spread / 2.0)), 4)
+            slippage = (
+                self.execution.estimate_slippage(calc_bid, calc_ask, opt.get("volume", 0))
+                if calc_bid is not None and calc_ask is not None
+                else 0.0
+            )
             base_entry_price, entry_price_source = self._option_executable_price(opt, side="BUY")
             if base_entry_price is None or base_entry_price <= 0:
                 _count_option_reject("invalid_entry_proxy")
@@ -4210,9 +4665,9 @@ class TradeBuilder:
                 stop_mult = stop_mult * float(getattr(cfg, "REGIME_EVENT_STOP_MULT", 1.1))
                 target_mult = target_mult * float(getattr(cfg, "REGIME_EVENT_TARGET_MULT", 1.4))
                 size_mult = size_mult * float(getattr(cfg, "REGIME_EVENT_SIZE_MULT", 0.6))
-            option_risk = self._option_risk_proxy(entry_price, opt.get("bid", 0), opt.get("ask", 0))
+            option_risk = self._option_risk_proxy(entry_price, calc_bid or 0, calc_ask or 0)
             stop_loss, target = self._opt_risk_levels(
-                entry_price, opt.get("bid", 0), opt.get("ask", 0), option_risk, stop_mult=stop_mult, target_mult=target_mult
+                entry_price, calc_bid or 0, calc_ask or 0, option_risk, stop_mult=stop_mult, target_mult=target_mult
             )
             if not (target > entry_price > stop_loss):
                 logger.error(
@@ -4424,11 +4879,24 @@ class TradeBuilder:
                 additional_blockers=list(dict.fromkeys(execution_blockers)),
             )
             source_flags = dict(intent["source_flags"])
+            raw_candidate_origin = dict(raw_opt.get("candidate_origin") or {}) if isinstance(raw_opt, dict) else {}
+            candidate_origin = {
+                "strike_offset": raw_candidate_origin.get("strike_offset"),
+                "setup_family": setup_family,
+                "expiry_bucket": raw_candidate_origin.get("expiry_bucket") or "other_expiry",
+            }
+            source_flags["candidate_origin"] = dict(candidate_origin)
+            source_flags["strike_offset"] = candidate_origin.get("strike_offset")
+            source_flags["setup_family"] = candidate_origin.get("setup_family")
+            source_flags["expiry_bucket"] = candidate_origin.get("expiry_bucket")
             if soft_veto_codes:
                 source_flags["soft_veto_codes"] = sorted(set(str(code) for code in soft_veto_codes if str(code)))
                 source_flags["orb_bias"] = market_data.get("orb_bias")
                 source_flags["orb_window_min"] = market_data.get("orb_window_min") or market_data.get("orb_lock_min")
                 source_flags["orb_state"] = market_data.get("orb_state")
+            if warning_codes:
+                source_flags["warning_codes"] = sorted(set(str(code) for code in warning_codes if str(code)))
+            if execution_blockers:
                 source_flags["gates_failed"] = list(dict.fromkeys(str(code) for code in execution_blockers if str(code)))
             if premium_soft_veto:
                 source_flags["premium_band"] = {
@@ -4471,6 +4939,7 @@ class TradeBuilder:
                 "final_score": float(score),
                 "hard_reject_reason": None,
                 "soft_vetos": list(dict.fromkeys(soft_veto_codes)),
+                "warnings": list(dict.fromkeys(warning_codes)),
                 "confidence_penalty_soft_veto_total": round(float(confidence_penalty_soft_veto_total), 6),
                 "confidence_penalty_soft_veto_reasons": list(confidence_penalty_soft_veto_reasons),
                 "gates_failed": list(dict.fromkeys(execution_blockers)),
@@ -4490,7 +4959,10 @@ class TradeBuilder:
                 }
             )
             trade = Trade(
-                trade_id=f"{symbol}-{opt['strike']}-{opt['type']}-{int(datetime.now().timestamp())}",
+                trade_id=(
+                    f"{symbol}-{expiry_resolved}-{int(float(opt['strike']))}-{opt['type']}-"
+                    f"{str(setup_family).replace(' ', '_')}-{int(datetime.now().timestamp())}"
+                ),
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
@@ -4557,6 +5029,7 @@ class TradeBuilder:
                 spot_source=spot_source,
                 option_ltp_source=opt.get("option_ltp_source") or opt.get("quote_source"),
                 chain_source=market_data.get("chain_source") or opt.get("chain_source"),
+                direction=direction,
                 **self._staged_confidence_payload(
                     confidence=confidence,
                     model_raw=confidence_model_raw,
@@ -4582,6 +5055,17 @@ class TradeBuilder:
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
             if trade is not None:
+                candidate_key = (
+                    str(trade.instrument_id or ""),
+                    str(trade.expiry or ""),
+                    str(trade.right or trade.option_type or ""),
+                    str(candidate_origin.get("setup_family") or ""),
+                    str(candidate_origin.get("expiry_bucket") or ""),
+                    candidate_origin.get("strike_offset"),
+                )
+                if candidate_key in candidate_seen_keys:
+                    continue
+                candidate_seen_keys.add(candidate_key)
                 candidates.append(trade)
 
         if debug_reasons and rejected:
@@ -4959,6 +5443,7 @@ class TradeBuilder:
             scope=f"build:{symbol}:{candidate_strategy_tag}",
             top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
         )
+        self._set_last_ranked_candidates(ranked_candidates)
         if best_trade is None:
             return None
 
@@ -4974,7 +5459,7 @@ class TradeBuilder:
                         "candidate_id": getattr(cand, "trade_id", None),
                         "ts_epoch": now_utc_epoch(),
                         "symbol": getattr(cand, "symbol", symbol),
-                        "side": direction,
+                        "side": getattr(cand, "direction", direction),
                         "entry": getattr(cand, "entry_price", None),
                         "stop": getattr(cand, "stop_loss", None),
                         "target": getattr(cand, "target", None),
@@ -5002,9 +5487,13 @@ class TradeBuilder:
                         "gating_final_confidence": getattr(cand, "gating_final_confidence", None),
                         "opportunity_score": getattr(cand, "opportunity_score", None),
                         "opportunity_rank": getattr(cand, "opportunity_rank", None),
+                        "rank_global": getattr(cand, "rank_global", None),
+                        "rank_within_symbol": getattr(cand, "rank_within_symbol", None),
+                        "opportunity_bucket": getattr(cand, "opportunity_bucket", None),
                         "selected_for_execution": getattr(cand, "selected_for_execution", None),
                         "selection_reason": getattr(cand, "selection_reason", None),
                         "size_multiplier_reason": getattr(cand, "size_multiplier_reason", None),
+                        "candidate_origin": (getattr(cand, "source_flags", {}) or {}).get("candidate_origin"),
                         "permission": decision_trace.get("permission"),
                         "permission_reason": decision_trace.get("permission_reason"),
                         "entry_status": decision_trace.get("entry_status"),
@@ -5013,6 +5502,23 @@ class TradeBuilder:
                         "ltp": market_data.get("ltp"),
                         "atr": market_data.get("atr"),
                     }
+                )
+                append_trade_lifecycle_event(
+                    trade_id=str(getattr(cand, "trade_id", None)),
+                    symbol=str(getattr(cand, "symbol", symbol) or ""),
+                    strategy=str(getattr(cand, "strategy", "") or ""),
+                    stage="scoring_ranking",
+                    status="selected" if bool(getattr(cand, "selected_for_execution", False)) else "skipped",
+                    reason=str(getattr(cand, "selection_reason", None) or "rank_below_cutoff"),
+                    extra={
+                        "opportunity_score": getattr(cand, "opportunity_score", None),
+                        "opportunity_rank": getattr(cand, "opportunity_rank", None),
+                        "rank_global": getattr(cand, "rank_global", None),
+                        "rank_within_symbol": getattr(cand, "rank_within_symbol", None),
+                        "opportunity_bucket": getattr(cand, "opportunity_bucket", None),
+                        "candidate_origin": (getattr(cand, "source_flags", {}) or {}).get("candidate_origin"),
+                        "selected_for_execution": bool(getattr(cand, "selected_for_execution", False)),
+                    },
                 )
             except Exception:
                 pass
@@ -5029,6 +5535,7 @@ class TradeBuilder:
         allow_fallbacks: bool = True,
         allow_baseline: bool = True,
     ):
+        self._set_last_ranked_candidates([])
         trade = self.build(
             market_data,
             quick_mode=quick_mode,
@@ -5997,6 +6504,7 @@ class TradeBuilder:
             scope=f"expiry_lotto:{symbol}",
             top_n=min(int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)), max(1, desired)),
         )
+        self._set_last_ranked_candidates(out)
         if len(out) < 3:
             self._reject_ctx = {
                 "reason": "expiry_lotto_insufficient_candidates",
@@ -6406,6 +6914,7 @@ class TradeBuilder:
             scope=f"zero_hero_expiry:{symbol}",
             top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
         )
+        self._set_last_ranked_candidates(_ranked_candidates)
         if trade is None:
             return None
         self._update_zero_hero_diag(data, clear_rejected_reason=True)
@@ -6902,6 +7411,7 @@ class TradeBuilder:
             scope=f"scalp:{symbol}",
             top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
         )
+        self._set_last_ranked_candidates(_ranked_candidates)
         return trade
 
     def _reject_record(self, symbol, opt, opt_type, reason, atr=None):

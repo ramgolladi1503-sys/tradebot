@@ -3,6 +3,7 @@ import pandas as pd
 from dashboard.streamlit_app_runtime import (
     _concat_frames_safely,
     _derive_final_blocker,
+    _derive_trade_explorer_fields,
     _derive_permission_bucket,
     _enforce_executable_entry_display,
     _partition_trade_universe,
@@ -134,12 +135,12 @@ def test_enforce_executable_entry_display_preserves_canonical_advisory_rows():
     assert float(out.iloc[0]["entry"]) == 72.5
 
 
-def test_derive_final_blocker_prefers_decision_trace_reason():
+def test_derive_final_blocker_uses_explicit_fields_only():
     df = pd.DataFrame(
         [
-            {"decision_trace": {"final_blocker": "quote_age_exceeded"}},
-            {"decision_trace": {"gating_reason": "permission_ADVISORY_ONLY"}},
-            {"entry_status": "STALE_OPTION_LTP"},
+            {"final_blocker": "quote_age_exceeded"},
+            {"entry_block_reason": "permission_ADVISORY_ONLY"},
+            {"permission_reason": "STALE_OPTION_LTP"},
         ]
     )
     out = _derive_final_blocker(df)
@@ -168,3 +169,15 @@ def test_permission_bucket_marks_high_execute_when_eligible():
     bucket = _derive_permission_bucket(df)
     assert str(bucket.iloc[0]) == "HIGH_EXECUTE"
     assert str(bucket.iloc[1]) == "EXECUTE"
+
+
+def test_trade_explorer_fields_preserve_final_action():
+    df = pd.DataFrame(
+        [
+            {"symbol": "NIFTY", "final_action": "EXECUTE"},
+            {"symbol": "NIFTY", "final_action": None},
+        ]
+    )
+    out = _derive_trade_explorer_fields(df)
+    assert str(out.loc[0, "final_action"]) == "EXECUTE"
+    assert str(out.loc[1, "final_action"]) == ""

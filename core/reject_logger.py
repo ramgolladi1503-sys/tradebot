@@ -136,6 +136,18 @@ def append_reject_reasons(
             decision_blockers = list(rows)
 
         for reason in rows:
+            if bool(getattr(cfg, "GATE_REJECT_TRACE_ENABLE", True)):
+                print(
+                    "GATE_REJECT_EMIT",
+                    {
+                        "symbol": str(symbol or "").upper() or None,
+                        "reason": str(reason),
+                        "stage": str(decision_stage) if decision_stage is not None else None,
+                        "blockers": [str(x) for x in (decision_blockers or []) if str(x).strip()],
+                        "category": payload_extra.get("category"),
+                        "trade_id": payload_extra.get("trade_id"),
+                    },
+                )
             emit_gate_rejected_event(
                 symbol=str(symbol or "").upper() or None,
                 strategy=str(strategy or "") or None,

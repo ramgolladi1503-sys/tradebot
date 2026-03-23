@@ -4,13 +4,24 @@ from config import config as cfg
 from core.gating import apply_hard_gates, apply_soft_gates, gate_decision
 
 
-def _snapshot(*, age: float = 1.0, threshold: float = 2.5, feed_state: str = "OK") -> dict:
+def _snapshot(
+    *,
+    age: float = 1.0,
+    threshold: float = 2.5,
+    feed_state: str = "OK",
+    market_open: bool | None = None,
+    execution_mode: str | None = None,
+    allow_stale_quotes: bool | None = None,
+) -> dict:
     return {
         "freshness": {
             "max_tick_age_sec": age,
             "sla_threshold_sec": threshold,
         },
         "feed_state": feed_state,
+        "market_open": market_open,
+        "execution_mode": execution_mode,
+        "allow_stale_quotes": allow_stale_quotes,
     }
 
 
@@ -119,3 +130,54 @@ def test_gate_decision_reports_contract_fields() -> None:
     }
     assert decision["hard_pass"] is True
     assert 0.0 <= float(decision["final_confidence"]) <= 1.0
+
+
+def test_gate_decision_relaxes_selected_hard_gates_for_non_live_context(monkeypatch) -> None:
+    monkeypatch.setattr(cfg, "GATING_RELAX_NON_LIVE_HARD_GATES", True, raising=False)
+    monkeypatch.setattr(cfg, "GATING_RELAX_NON_LIVE_SOFT_CODES", ("HARD_STALE_LTP", "HARD_MISSING_VOLUME"), raising=False)
+    monkeypatch.setattr(cfg, "GATING_RELAX_NON_LIVE_WARNING_CODES", ("HARD_NO_LTP",), raising=False)
+    monkeypatch.setattr(cfg, "GATING_RELAX_NON_LIVE_SOFT_PENALTY", 0.05, raising=False)
+    candidate = {
+        "current_ltp": None,
+        "option_age_sec": 9.0,
+        "spread_pct": 0.01,
+        "volume": None,
+        "confidence": 0.72,
+        "execution_mode": "PAPER",
+        "market_open": False,
+    }
+    decision = gate_decision(
+        candidate,
+        _snapshot(age=9.0, threshold=2.5, feed_state="OK", market_open=False, execution_mode="PAPER"),
+    )
+    assert decision["strict_hard_pass"] is False
+    assert set(decision["strict_hard_reasons"]) == {"HARD_NO_LTP", "HARD_STALE_LTP", "HARD_MISSING_VOLUME"}
+    assert decision["hard_pass"] is True
+    assert decision["hard_reasons"] == []
+    assert set(decision["relaxed_hard_reasons"]) == {"HARD_NO_LTP", "HARD_STALE_LTP", "HARD_MISSING_VOLUME"}
+    assert decision["relaxed_soft_reasons"] == ["HARD_STALE_LTP", "HARD_MISSING_VOLUME"]
+    assert decision["relaxed_warning_reasons"] == ["HARD_NO_LTP"]
+    assert float(decision["relaxed_soft_penalty_total"]) == 0.10
+    assert float(decision["final_confidence"]) < float(decision["base_confidence"])
+
+
+def test_gate_decision_keeps_live_missing_execution_data_hard_blocked(monkeypatch) -> None:
+    monkeypatch.setattr(cfg, "GATING_RELAX_NON_LIVE_HARD_GATES", True, raising=False)
+    candidate = {
+        "current_ltp": 99.0,
+        "option_age_sec": 9.0,
+        "spread_pct": 0.01,
+        "volume": None,
+        "confidence": 0.72,
+        "execution_mode": "LIVE",
+        "market_open": True,
+    }
+    decision = gate_decision(
+        candidate,
+        _snapshot(age=9.0, threshold=2.5, feed_state="OK", market_open=True, execution_mode="LIVE"),
+    )
+    assert decision["relaxed_context"] is False
+    assert decision["hard_pass"] is False
+    assert "HARD_STALE_LTP" in decision["hard_reasons"]
+    assert "HARD_MISSING_VOLUME" in decision["hard_reasons"]
+    assert decision["relaxed_hard_reasons"] == []

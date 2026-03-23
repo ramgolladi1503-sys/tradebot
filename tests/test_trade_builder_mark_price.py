@@ -331,6 +331,8 @@ def test_trade_builder_live_option_with_only_mark_is_display_only(monkeypatch):
     assert round(float(trade.display_entry), 2) == 101.00
     assert trade.display_entry_source == "mark"
     assert trade.display_entry_status == "displayable"
+    assert trade.entry_display_status == "displayable"
+    assert trade.entry_block_code is None
     assert trade.builder_confidence == trade.confidence
     assert round(float(trade.expected_entry), 2) == 101.00
     assert trade.expected_entry_source == "mark"
@@ -338,6 +340,9 @@ def test_trade_builder_live_option_with_only_mark_is_display_only(monkeypatch):
     assert trade.source_flags["decision_trace"]["permission"] == "ADVISORY_ONLY"
     assert trade.source_flags["decision_trace"]["final_action"] == "ADVISORY_ONLY"
     assert trade.source_flags["decision_trace"]["entry_status"] == "DISPLAYABLE"
+    assert trade.source_flags["decision_trace"]["display_entry_status"] == "displayable"
+    assert trade.source_flags["decision_trace"]["execution_entry_status"] == "non_executable"
+    assert trade.source_flags["decision_trace"]["entry_block_code"] is None
     assert trade.source_flags["decision_trace"]["exec_allowed"] is False
 
 

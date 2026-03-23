@@ -1,3 +1,6 @@
+from core.regime_router import get_strategy_regime_profile, record_strategy_regime_path, resolve_strategy_regime
+
+
 def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=None):
     if not isinstance(debug_stats, dict):
         return
@@ -21,7 +24,7 @@ def _normalize_bias(bias):
         return "bearish"
     return None
 
-def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_stats=None):
+def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_stats=None, regime=None, expiry_context=False):
     """
     Nifty intraday signal using VWAP context with bias as a quality input, not a hard gate.
     """
@@ -31,6 +34,11 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
         return None
 
     bias_norm = _normalize_bias(bias)
+    regime_name = resolve_strategy_regime(regime, bias=bias_norm, expiry_context=expiry_context)
+    profile = get_strategy_regime_profile("nifty_intraday", regime_name)
+    record_strategy_regime_path("nifty_intraday", regime_name, profile, debug_stats=debug_stats)
+    vwap_buffer = float(vwap_buffer) * float(profile.get("vwap_buffer_mult", 1.0))
+    min_move = float(min_move) * float(profile.get("min_move_mult", 1.0))
     diff = (ltp - vwap) / vwap
     abs_diff = abs(diff)
     weak_move_floor = float(min_move) * 0.6
@@ -42,9 +50,30 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
         _update_debug(debug_stats, rejected=1, reason="flat_vs_vwap")
         return None
 
+    setup_type = str(profile.get("setup_family") or "BREAKOUT")
     direction = "BUY_CALL" if diff > 0 else "BUY_PUT"
     soft_flags = []
-    score = 0.48 + min(0.32, abs_diff / max(vwap_buffer, 1e-6) * 0.10)
+    reason = "VWAP directional setup"
+    if regime_name == "RANGE":
+        if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.15))):
+            _update_debug(debug_stats, rejected=1, reason="range_extension_too_small")
+            return None
+        direction = "BUY_PUT" if diff > 0 else "BUY_CALL"
+        setup_type = "MEAN_REVERSION"
+        reason = "VWAP mean reversion setup"
+        soft_flags.append("breakout_suppressed_range_regime")
+        score = 0.44 + min(0.28, abs_diff / max(vwap_buffer, 1e-6) * 0.08)
+    else:
+        score = 0.48 + min(0.32, abs_diff / max(vwap_buffer, 1e-6) * 0.10)
+        if regime_name == "VOLATILE":
+            if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):
+                _update_debug(debug_stats, rejected=1, reason="volatile_move_too_small")
+                return None
+            soft_flags.append("volatile_regime_path")
+        elif regime_name == "EXPIRY_CONTEXT":
+            soft_flags.append("expiry_context_path")
+        else:
+            soft_flags.append(f"regime_{regime_name.lower()}")
     if abs_diff < vwap_buffer:
         soft_flags.append("below_primary_vwap_buffer")
         score -= 0.08
@@ -54,6 +83,9 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
     elif (bias_norm == "bullish" and direction == "BUY_PUT") or (
         bias_norm == "bearish" and direction == "BUY_CALL"
     ):
+        if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("trend_conflict_mult", 1.40))):
+            _update_debug(debug_stats, rejected=1, reason="trend_regime_conflict")
+            return None
         if abs_diff < (vwap_buffer * 1.35):
             _update_debug(debug_stats, rejected=1, reason="bias_conflict_without_price_override")
             return None
@@ -63,11 +95,14 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
         soft_flags.append("bias_aligned")
         score += 0.04
 
+    score += float(profile.get("score_bias", 0.0))
     score = max(0.05, min(0.95, score))
     _update_debug(debug_stats, scored=1)
     return {
         "direction": direction,
-        "reason": "VWAP directional setup",
+        "reason": reason,
         "score": round(score, 3),
         "soft_flags": soft_flags,
+        "setup_type": setup_type,
+        "regime_path": regime_name,
     }

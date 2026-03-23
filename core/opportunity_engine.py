@@ -4,6 +4,9 @@ from dataclasses import replace
 from typing import Any, Iterable
 
 from config import config as cfg
+from core.capital_allocator import allocate_capital_slots
+from core.execution_quality import evaluate_pretrade_execution_quality
+from core.portfolio_optimizer import optimize_portfolio_selection
 
 
 _HOSTILE_REGIMES = {"EVENT", "PANIC"}
@@ -92,16 +95,106 @@ def _regime_alignment(candidate: Any) -> float:
     return 0.65
 
 
-def _adaptive_execution_threshold(candidate: Any) -> float:
+def _strategy_priority(candidate: Any) -> float:
+    detail = _candidate_detail(candidate)
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
+    value = (
+        _safe_float(_get_value(candidate, "strategy_priority"))
+        or _safe_float(detail.get("strategy_priority"))
+        or _safe_float(source_flags.get("strategy_priority"))
+    )
+    return _clamp01(value, default=0.5) or 0.5
+
+
+def _risk_adjusted_quality(candidate: Any) -> float:
+    entry_price = _safe_float(_get_value(candidate, "entry_price"))
+    stop_loss = _safe_float(_get_value(candidate, "stop_loss"))
+    target = _safe_float(_get_value(candidate, "target"))
+    if entry_price in (None, 0.0) or stop_loss is None or target is None:
+        return 0.5
+    reward = abs(float(target) - float(entry_price))
+    risk = max(abs(float(entry_price) - float(stop_loss)), 1e-6)
+    rr = reward / risk
+    return _clamp01(min(rr / 3.0, 1.0), default=0.5) or 0.5
+
+
+def _opportunity_bucket(score: float | None) -> str:
+    value = _clamp01(score, default=0.0) or 0.0
+    if value >= 0.75:
+        return "TOP"
+    if value >= 0.60:
+        return "STRONG"
+    if value >= 0.45:
+        return "WATCH"
+    return "LOW"
+
+
+def _adaptive_execution_threshold_context(candidate: Any) -> dict[str, Any]:
     base = float(getattr(cfg, "OPPORTUNITY_EXECUTION_SCORE_BASE", 0.52))
-    threshold = base
-    if _liquidity_quality(candidate) >= float(getattr(cfg, "OPPORTUNITY_STRONG_LIQUIDITY_THRESHOLD", 0.80)):
-        threshold -= float(getattr(cfg, "OPPORTUNITY_EXECUTION_LIQUIDITY_BONUS", 0.03))
-    if str(_get_value(candidate, "regime") or "").strip().upper() in _HOSTILE_REGIMES:
-        threshold += float(getattr(cfg, "OPPORTUNITY_EXECUTION_HOSTILE_REGIME_PENALTY", 0.05))
+    adjustments: list[tuple[str, float]] = []
+    regime = str(_get_value(candidate, "regime") or "").strip().upper()
+    liquidity_quality = _liquidity_quality(candidate)
+    freshness_quality = _freshness_quality(candidate)
+    spread_quality = _spread_quality(candidate)
+    minutes_since_open = _safe_float(_get_value(candidate, "minutes_since_open"))
+    minutes_to_close = _safe_float(_get_value(candidate, "minutes_to_close"))
+
+    if regime in _HOSTILE_REGIMES:
+        adjustments.append(("hostile_regime", float(getattr(cfg, "OPPORTUNITY_EXECUTION_HOSTILE_REGIME_PENALTY", 0.05))))
+    elif regime in {"TREND", "RANGE"} and not bool(_get_value(candidate, "countertrend", False)):
+        adjustments.append(("supportive_regime", -float(getattr(cfg, "OPPORTUNITY_EXECUTION_SUPPORTIVE_REGIME_BONUS", 0.02))))
+
     if bool(_get_value(candidate, "countertrend", False)):
-        threshold += float(getattr(cfg, "OPPORTUNITY_EXECUTION_COUNTERTREND_PENALTY", 0.04))
-    return _clamp01(threshold, default=base) or base
+        adjustments.append(("countertrend", float(getattr(cfg, "OPPORTUNITY_EXECUTION_COUNTERTREND_PENALTY", 0.04))))
+
+    if liquidity_quality >= float(getattr(cfg, "OPPORTUNITY_STRONG_LIQUIDITY_THRESHOLD", 0.80)):
+        adjustments.append(("strong_liquidity", -float(getattr(cfg, "OPPORTUNITY_EXECUTION_LIQUIDITY_BONUS", 0.03))))
+    elif liquidity_quality <= float(getattr(cfg, "OPPORTUNITY_WEAK_LIQUIDITY_THRESHOLD", 0.45)):
+        adjustments.append(("weak_liquidity", float(getattr(cfg, "OPPORTUNITY_EXECUTION_WEAK_LIQUIDITY_PENALTY", 0.02))))
+
+    if freshness_quality >= float(getattr(cfg, "OPPORTUNITY_STRONG_FRESHNESS_THRESHOLD", 0.85)):
+        adjustments.append(("fresh_quote", -float(getattr(cfg, "OPPORTUNITY_EXECUTION_STRONG_FRESHNESS_BONUS", 0.015))))
+    elif freshness_quality <= float(getattr(cfg, "OPPORTUNITY_WEAK_FRESHNESS_THRESHOLD", 0.35)):
+        adjustments.append(("aging_quote", float(getattr(cfg, "OPPORTUNITY_EXECUTION_WEAK_FRESHNESS_PENALTY", 0.025))))
+
+    if spread_quality >= float(getattr(cfg, "OPPORTUNITY_STRONG_SPREAD_THRESHOLD", 0.85)):
+        adjustments.append(("tight_spread", -float(getattr(cfg, "OPPORTUNITY_EXECUTION_STRONG_SPREAD_BONUS", 0.01))))
+    elif spread_quality <= float(getattr(cfg, "OPPORTUNITY_WEAK_SPREAD_THRESHOLD", 0.35)):
+        adjustments.append(("wide_spread", float(getattr(cfg, "OPPORTUNITY_EXECUTION_WEAK_SPREAD_PENALTY", 0.02))))
+
+    opening_window = max(0.0, float(getattr(cfg, "OPPORTUNITY_EXECUTION_OPENING_WINDOW_MIN", 20) or 0.0))
+    closing_window = max(0.0, float(getattr(cfg, "OPPORTUNITY_EXECUTION_CLOSING_WINDOW_MIN", 30) or 0.0))
+    if minutes_since_open is not None and opening_window > 0 and minutes_since_open < opening_window:
+        adjustments.append(("opening_window", float(getattr(cfg, "OPPORTUNITY_EXECUTION_OPENING_PENALTY", 0.02))))
+    if minutes_to_close is not None and closing_window > 0 and minutes_to_close < closing_window:
+        adjustments.append(("closing_window", float(getattr(cfg, "OPPORTUNITY_EXECUTION_CLOSING_PENALTY", 0.03))))
+
+    max_adjustment = max(0.0, float(getattr(cfg, "OPPORTUNITY_EXECUTION_THRESHOLD_MAX_ADJUSTMENT", 0.08) or 0.0))
+    raw_adjustment = sum(float(delta) for _reason, delta in adjustments)
+    effective_adjustment = max(-max_adjustment, min(max_adjustment, raw_adjustment))
+    threshold_effective = _clamp01(base + effective_adjustment, default=base) or base
+    reason_parts = [f"{reason}:{delta:+.3f}" for reason, delta in adjustments]
+    if raw_adjustment != effective_adjustment:
+        reason_parts.append(f"bounded:{effective_adjustment:+.3f}")
+    if not reason_parts:
+        reason_parts.append("base:+0.000")
+    return {
+        "threshold_base": round(base, 6),
+        "threshold_effective": round(float(threshold_effective), 6),
+        "threshold_adjustment_reason": ";".join(reason_parts),
+    }
+
+
+def _ranking_score(candidate: Any, metrics: dict[str, Any] | None = None) -> float:
+    explicit_rank = _safe_float(_get_value(candidate, "rank_score"))
+    if explicit_rank is not None:
+        return float(explicit_rank)
+    explicit_opportunity = _safe_float(_get_value(candidate, "opportunity_score"))
+    if explicit_opportunity is not None:
+        return float(explicit_opportunity)
+    if metrics is None:
+        metrics = build_opportunity_score(candidate)
+    return float(metrics.get("opportunity_score") or 0.0)
 
 
 def build_opportunity_score(candidate: Any) -> dict[str, Any]:
@@ -133,6 +226,8 @@ def build_opportunity_score(candidate: Any) -> dict[str, Any]:
     liquidity_quality = _liquidity_quality(candidate)
     freshness_quality = _freshness_quality(candidate)
     regime_alignment = _regime_alignment(candidate)
+    strategy_priority = _strategy_priority(candidate)
+    risk_adjusted_quality = _risk_adjusted_quality(candidate)
     score = _weighted_average(
         [
             (builder_confidence, float(getattr(cfg, "OPPORTUNITY_WEIGHT_BUILDER_CONFIDENCE", 0.32))),
@@ -145,6 +240,9 @@ def build_opportunity_score(candidate: Any) -> dict[str, Any]:
             (freshness_quality, float(getattr(cfg, "OPPORTUNITY_WEIGHT_FRESHNESS", 0.03))),
         ]
     )
+    execution_quality = evaluate_pretrade_execution_quality(candidate)
+    score = _clamp01(score - float(execution_quality.spread_penalty or 0.0), default=0.0) or 0.0
+    threshold_context = _adaptive_execution_threshold_context(candidate)
     return {
         "builder_confidence": builder_confidence,
         "permission_confidence": permission_confidence,
@@ -154,8 +252,20 @@ def build_opportunity_score(candidate: Any) -> dict[str, Any]:
         "liquidity_quality": liquidity_quality,
         "spread_quality": spread_quality,
         "freshness_quality": freshness_quality,
+        "strategy_priority": strategy_priority,
+        "risk_adjusted_quality": risk_adjusted_quality,
         "opportunity_score": score,
-        "adaptive_execution_threshold": _adaptive_execution_threshold(candidate),
+        "expected_slippage": execution_quality.expected_slippage,
+        "expected_slippage_bps": execution_quality.expected_slippage_bps,
+        "spread_penalty": float(execution_quality.spread_penalty or 0.0),
+        "executable_price_estimate": execution_quality.executable_price_estimate,
+        "execution_ok": bool(execution_quality.execution_ok),
+        "order_policy": str(execution_quality.order_policy),
+        "order_policy_reason": str(execution_quality.reason_code),
+        "adaptive_execution_threshold": float(threshold_context["threshold_effective"]),
+        "threshold_base": float(threshold_context["threshold_base"]),
+        "threshold_effective": float(threshold_context["threshold_effective"]),
+        "threshold_adjustment_reason": str(threshold_context["threshold_adjustment_reason"]),
         "survival_floor": float(getattr(cfg, "OPPORTUNITY_SURVIVAL_SCORE_FLOOR", 0.35)),
     }
 
@@ -181,37 +291,250 @@ def derive_opportunity_size_multiplier(candidate: Any, rank_context: dict[str, A
     return multiplier, reason
 
 
+def annotate_relative_opportunity_ranks(
+    candidates: Iterable[Any],
+    *,
+    scope: str,
+) -> list[Any]:
+    candidate_list = list(candidates or [])
+    if not candidate_list:
+        return []
+    scored: list[tuple[tuple[float, float, float, float, float, float, str, str], Any, dict[str, Any]]] = []
+    for candidate in candidate_list:
+        metrics = build_opportunity_score(candidate)
+        rank_score = _ranking_score(candidate, metrics)
+        scored.append(
+            (
+                (
+                    float(rank_score),
+                    float(metrics["opportunity_score"]),
+                    float(metrics["strategy_priority"]),
+                    float(metrics["risk_adjusted_quality"]),
+                    float(metrics["builder_confidence"]),
+                    float(metrics["permission_confidence"] or 0.0),
+                    str(_get_value(candidate, "symbol") or ""),
+                    str(_get_value(candidate, "trade_id") or ""),
+                ),
+                candidate,
+                metrics,
+            )
+        )
+    scored.sort(
+        key=lambda item: (
+            -item[0][0],
+            -item[0][1],
+            -item[0][2],
+            -item[0][3],
+            -item[0][4],
+            -item[0][5],
+            item[0][6],
+            item[0][7],
+        )
+    )
+    per_symbol_rank: dict[str, int] = {}
+    annotated: list[Any] = []
+    for index, (_sort_key, candidate, metrics) in enumerate(scored, start=1):
+        symbol = str(_get_value(candidate, "symbol") or "").strip().upper()
+        per_symbol_rank[symbol] = int(per_symbol_rank.get(symbol, 0)) + 1
+        source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
+        source_flags.update(
+            {
+                "opportunity_scope": scope,
+                "rank_global": int(index),
+                "rank_within_symbol": int(per_symbol_rank[symbol]),
+                "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
+            }
+        )
+        if isinstance(candidate, dict):
+            updated = dict(candidate)
+            updated.update(
+                {
+                    "opportunity_score": round(float(metrics["opportunity_score"]), 6),
+                    "rank_global": int(index),
+                    "rank_within_symbol": int(per_symbol_rank[symbol]),
+                    "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
+                    "source_flags": source_flags,
+                }
+            )
+        else:
+            updated = replace(
+                candidate,
+                opportunity_score=round(float(metrics["opportunity_score"]), 6),
+                rank_global=int(index),
+                rank_within_symbol=int(per_symbol_rank[symbol]),
+                opportunity_bucket=_opportunity_bucket(metrics.get("opportunity_score")),
+                source_flags=source_flags,
+            )
+        annotated.append(updated)
+    return annotated
+
+
+def _visibility_sort_key(candidate: Any) -> tuple[float, float, float, float, float, float, str, str]:
+    metrics = build_opportunity_score(candidate)
+    return (
+        float(_ranking_score(candidate, metrics)),
+        float(_safe_float(_get_value(candidate, "opportunity_score")) or metrics["opportunity_score"] or 0.0),
+        float(metrics["strategy_priority"]),
+        float(metrics["risk_adjusted_quality"]),
+        float(metrics["builder_confidence"]),
+        float(metrics["permission_confidence"] or 0.0),
+        str(_get_value(candidate, "symbol") or ""),
+        str(_get_value(candidate, "trade_id") or _get_value(candidate, "trade_key") or ""),
+    )
+
+
+def _is_executable_opportunity(candidate: Any) -> bool:
+    execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
+    execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
+    execution_ok = _get_value(candidate, "execution_ok", None)
+    if execution_ok is False:
+        return False
+    return bool(execution_entry is not None and execution_entry_status == "executable")
+
+
+def _is_portfolio_selected(candidate: Any) -> bool:
+    optimized = _get_value(candidate, "portfolio_optimization_selected")
+    if optimized is not None:
+        return bool(optimized)
+    return bool(_get_value(candidate, "selected_for_execution", False))
+
+
+def _is_advisory_opportunity(candidate: Any) -> bool:
+    if _is_executable_opportunity(candidate):
+        return False
+    display_entry = _safe_float(_get_value(candidate, "display_entry"))
+    display_entry_status = str(_get_value(candidate, "display_entry_status") or "").strip().lower()
+    return bool(display_entry is not None and display_entry_status in {"displayable", "non_executable"})
+
+
+def _dedupe_opportunity_candidates(candidates: Iterable[Any]) -> list[Any]:
+    out: list[Any] = []
+    seen: set[str] = set()
+    for candidate in candidates or []:
+        key = str(
+            _get_value(candidate, "trade_id")
+            or _get_value(candidate, "trade_key")
+            or _get_value(candidate, "instrument_id")
+            or ""
+        ).strip()
+        if not key:
+            key = f"candidate:{len(out)}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(candidate)
+    return out
+
+
+def select_top_opportunities(
+    candidates: Iterable[Any],
+    *,
+    executable_top_n: int | None = None,
+    advisory_top_n: int | None = None,
+    current_portfolio_exposure: Any = None,
+) -> dict[str, Any]:
+    executable_limit = max(0, int(executable_top_n if executable_top_n is not None else getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)))
+    advisory_limit = max(0, int(advisory_top_n if advisory_top_n is not None else getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)))
+    candidate_list = _dedupe_opportunity_candidates(candidates)
+    scored = [(_visibility_sort_key(candidate), candidate) for candidate in candidate_list]
+    scored.sort(
+        key=lambda item: (
+            -item[0][0],
+            -item[0][1],
+            -item[0][2],
+            -item[0][3],
+            -item[0][4],
+            -item[0][5],
+            item[0][6],
+            item[0][7],
+        )
+    )
+    top_executable: list[Any] = []
+    top_advisory: list[Any] = []
+    for _sort_key, candidate in scored:
+        if _is_executable_opportunity(candidate):
+            if len(top_executable) < executable_limit:
+                top_executable.append(candidate)
+            continue
+        if _is_advisory_opportunity(candidate) and len(top_advisory) < advisory_limit:
+            top_advisory.append(candidate)
+        if len(top_executable) >= executable_limit and len(top_advisory) >= advisory_limit:
+            break
+    if top_executable and bool(getattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", True)):
+        executable_seed: list[Any] = []
+        for candidate in top_executable:
+            if isinstance(candidate, dict):
+                seeded = dict(candidate)
+                seeded.setdefault("selected_for_execution", True)
+            else:
+                selected = _get_value(candidate, "selected_for_execution")
+                seeded = candidate if selected is True else replace(candidate, selected_for_execution=True)
+            executable_seed.append(seeded)
+        top_executable = allocate_capital_slots(
+            executable_seed,
+            max_slots=max(1, int(getattr(cfg, "CAPITAL_ALLOCATOR_MAX_SLOTS", executable_limit or 1) or 1)),
+            per_symbol_cap=max(0, int(getattr(cfg, "CAPITAL_ALLOCATOR_PER_SYMBOL_CAP", 1) or 0)),
+            per_theme_cap=max(0, int(getattr(cfg, "CAPITAL_ALLOCATOR_PER_THEME_CAP", 1) or 0)),
+            capital_budget_cap=(
+                float(getattr(cfg, "CAPITAL_ALLOCATOR_BUDGET_CAP", 0) or 0.0)
+                if float(getattr(cfg, "CAPITAL_ALLOCATOR_BUDGET_CAP", 0) or 0.0) > 0
+                else None
+            ),
+            minimum_quality_threshold=max(0.0, float(getattr(cfg, "CAPITAL_ALLOCATOR_MIN_QUALITY_THRESHOLD", 0.0) or 0.0)),
+            replacement_enabled=bool(getattr(cfg, "CAPITAL_ALLOCATOR_REPLACEMENT_ENABLE", True)),
+            replacement_min_delta=max(0.0, float(getattr(cfg, "CAPITAL_ALLOCATOR_REPLACEMENT_MIN_DELTA", 0.03) or 0.0)),
+        )
+    if top_executable and bool(getattr(cfg, "PORTFOLIO_OPTIMIZER_ENABLE", False)):
+        optimized = optimize_portfolio_selection(
+            top_executable,
+            current_portfolio_exposure=current_portfolio_exposure,
+        )
+        top_executable = [candidate for candidate in optimized if _is_portfolio_selected(candidate)]
+    return {
+        "top_executable_opportunities": top_executable,
+        "top_advisory_opportunities": top_advisory,
+        "candidates_considered": len(candidate_list),
+    }
+
+
 def annotate_ranked_opportunities(
     candidates: Iterable[Any],
     *,
     scope: str,
     top_n: int | None = None,
+    current_portfolio_exposure: Any = None,
 ) -> list[Any]:
-    candidate_list = list(candidates or [])
+    candidate_list = annotate_relative_opportunity_ranks(candidates, scope=scope)
     if not candidate_list:
         return []
     if not bool(getattr(cfg, "OPPORTUNITY_ENGINE_ENABLE", True)):
         return candidate_list
     executable_top_n = max(1, int(top_n or getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)))
-    scored: list[tuple[tuple[int, float, float], Any, dict[str, Any]]] = []
+    scored: list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]] = []
     for candidate in candidate_list:
         metrics = build_opportunity_score(candidate)
+        ranking_score = _ranking_score(candidate, metrics)
         execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
         tradable = bool(_get_value(candidate, "tradable", False))
         execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
         execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
         executable_truth = execution_entry is not None and execution_entry_status == "executable"
-        execution_eligible = bool(tradable and execution_allowed and executable_truth)
+        execution_eligible = bool(tradable and execution_allowed and executable_truth and bool(metrics["execution_ok"]))
         scored.append(
             (
                 (
                     1 if execution_eligible else 0,
+                    float(ranking_score),
                     float(metrics["opportunity_score"]),
                     float(metrics["builder_confidence"]),
                 ),
                 candidate,
                 {
                     **metrics,
+                    "ranking_score": float(ranking_score),
+                    "execution_allowed": execution_allowed,
+                    "tradable": tradable,
+                    "executable_truth": executable_truth,
                     "execution_eligible": execution_eligible,
                 },
             )
@@ -232,8 +555,10 @@ def annotate_ranked_opportunities(
         )
         if selected:
             selection_reason = "selected_top_rank"
-        elif not metrics["execution_eligible"]:
+        elif not bool(metrics["executable_truth"]) or not bool(metrics["tradable"]) or not bool(metrics["execution_allowed"]):
             selection_reason = "not_execution_eligible"
+        elif not bool(metrics["execution_ok"]):
+            selection_reason = "execution_quality_reject"
         elif score < floor:
             selection_reason = "below_survival_floor"
         elif score < adaptive_threshold:
@@ -251,6 +576,15 @@ def annotate_ranked_opportunities(
                 "size_multiplier_reason": size_reason,
                 "opportunity_size_multiplier": round(size_multiplier, 6),
                 "adaptive_execution_threshold": round(adaptive_threshold, 6),
+                "threshold_base": round(float(metrics["threshold_base"]), 6),
+                "threshold_effective": round(float(metrics["threshold_effective"]), 6),
+                "threshold_adjustment_reason": str(metrics["threshold_adjustment_reason"]),
+                "expected_slippage": metrics["expected_slippage"],
+                "spread_penalty": round(float(metrics["spread_penalty"]), 6),
+                "executable_price_estimate": metrics["executable_price_estimate"],
+                "execution_ok": bool(metrics["execution_ok"]),
+                "order_policy": str(metrics["order_policy"]),
+                "order_policy_reason": str(metrics["order_policy_reason"]),
             }
         )
         if isinstance(candidate, dict):
@@ -263,6 +597,15 @@ def annotate_ranked_opportunities(
                     "selection_reason": selection_reason,
                     "size_multiplier_reason": size_reason,
                     "opportunity_size_multiplier": round(size_multiplier, 6),
+                    "threshold_base": round(float(metrics["threshold_base"]), 6),
+                    "threshold_effective": round(float(metrics["threshold_effective"]), 6),
+                    "threshold_adjustment_reason": str(metrics["threshold_adjustment_reason"]),
+                    "expected_slippage": metrics["expected_slippage"],
+                    "spread_penalty": round(float(metrics["spread_penalty"]), 6),
+                    "executable_price_estimate": metrics["executable_price_estimate"],
+                    "execution_ok": bool(metrics["execution_ok"]),
+                    "order_policy": str(metrics["order_policy"]),
+                    "order_policy_reason": str(metrics["order_policy_reason"]),
                     "size_mult": (
                         (_safe_float(updated.get("size_mult")) or 1.0) * size_multiplier
                         if selected
@@ -281,10 +624,39 @@ def annotate_ranked_opportunities(
                 selection_reason=selection_reason,
                 size_multiplier_reason=size_reason,
                 opportunity_size_multiplier=round(size_multiplier, 6),
+                threshold_base=round(float(metrics["threshold_base"]), 6),
+                threshold_effective=round(float(metrics["threshold_effective"]), 6),
+                threshold_adjustment_reason=str(metrics["threshold_adjustment_reason"]),
+                expected_slippage=metrics["expected_slippage"],
+                spread_penalty=round(float(metrics["spread_penalty"]), 6),
+                executable_price_estimate=metrics["executable_price_estimate"],
+                execution_ok=bool(metrics["execution_ok"]),
+                order_policy=str(metrics["order_policy"]),
+                order_policy_reason=str(metrics["order_policy_reason"]),
                 size_mult=(current_size_mult * size_multiplier) if selected else current_size_mult,
                 source_flags=source_flags,
             )
         annotated.append(updated)
+    if annotated and bool(getattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", True)):
+        annotated = allocate_capital_slots(
+            annotated,
+            max_slots=max(1, int(getattr(cfg, "CAPITAL_ALLOCATOR_MAX_SLOTS", executable_top_n) or executable_top_n)),
+            per_symbol_cap=max(0, int(getattr(cfg, "CAPITAL_ALLOCATOR_PER_SYMBOL_CAP", 1) or 0)),
+            per_theme_cap=max(0, int(getattr(cfg, "CAPITAL_ALLOCATOR_PER_THEME_CAP", 1) or 0)),
+            capital_budget_cap=(
+                float(getattr(cfg, "CAPITAL_ALLOCATOR_BUDGET_CAP", 0) or 0.0)
+                if float(getattr(cfg, "CAPITAL_ALLOCATOR_BUDGET_CAP", 0) or 0.0) > 0
+                else None
+            ),
+            minimum_quality_threshold=max(0.0, float(getattr(cfg, "CAPITAL_ALLOCATOR_MIN_QUALITY_THRESHOLD", 0.0) or 0.0)),
+            replacement_enabled=bool(getattr(cfg, "CAPITAL_ALLOCATOR_REPLACEMENT_ENABLE", True)),
+            replacement_min_delta=max(0.0, float(getattr(cfg, "CAPITAL_ALLOCATOR_REPLACEMENT_MIN_DELTA", 0.03) or 0.0)),
+        )
+    if annotated and bool(getattr(cfg, "PORTFOLIO_OPTIMIZER_ENABLE", False)):
+        annotated = optimize_portfolio_selection(
+            annotated,
+            current_portfolio_exposure=current_portfolio_exposure,
+        )
     return annotated
 
 
@@ -293,25 +665,42 @@ def select_best_opportunity(
     *,
     scope: str,
     top_n: int | None = None,
+    current_portfolio_exposure: Any = None,
 ) -> tuple[Any | None, list[Any]]:
-    ranked = annotate_ranked_opportunities(candidates, scope=scope, top_n=top_n)
+    ranked = annotate_ranked_opportunities(
+        candidates,
+        scope=scope,
+        top_n=top_n,
+        current_portfolio_exposure=current_portfolio_exposure,
+    )
     if not ranked:
         return None, []
-    best = ranked[0]
-    if bool(_get_value(best, "execution_allowed", False)) and not bool(_get_value(best, "selected_for_execution", False)):
+    allocated = [
+        candidate
+        for candidate in ranked
+        if _is_portfolio_selected(candidate) and bool(_get_value(candidate, "slot_id", None))
+    ]
+    best = allocated[0] if allocated else ranked[0]
+    if bool(_get_value(best, "execution_allowed", False)) and not _is_portfolio_selected(best):
         source_flags = dict(_get_value(best, "source_flags", {}) or {})
         source_flags["opportunity_execution_downgraded"] = True
-        source_flags["opportunity_execution_downgrade_reason"] = _get_value(best, "selection_reason")
+        source_flags["opportunity_execution_downgrade_reason"] = (
+            _get_value(best, "portfolio_optimization_reason")
+            or _get_value(best, "selection_reason")
+        )
         if isinstance(best, dict):
             best = dict(best)
             best["execution_allowed"] = False
-            best["reason"] = best.get("reason") or f"opportunity_{best.get('selection_reason') or 'not_selected'}"
+            best["reason"] = best.get("reason") or f"opportunity_{best.get('portfolio_optimization_reason') or best.get('selection_reason') or 'not_selected'}"
             best["source_flags"] = source_flags
         else:
             best = replace(
                 best,
                 execution_allowed=False,
-                reason=(getattr(best, "reason", None) or f"opportunity_{_get_value(best, 'selection_reason') or 'not_selected'}"),
+                reason=(
+                    getattr(best, "reason", None)
+                    or f"opportunity_{_get_value(best, 'portfolio_optimization_reason') or _get_value(best, 'selection_reason') or 'not_selected'}"
+                ),
                 source_flags=source_flags,
             )
         ranked[0] = best

@@ -13,6 +13,11 @@ def _valid_row(**overrides):
         "advisory_id": "ADV-1",
         "symbol": "NIFTY",
         "strategy_name": "CORE",
+        "candidate_type": "options",
+        "strategy_family": "breakout",
+        "setup_variant": "opening_range_breakout",
+        "direction": "BUY_PUT",
+        "candidate_status": "advisory_only",
         "timestamp": "2026-03-08T10:00:00+00:00",
         "instrument_type": "OPT",
         "execution_entry": 72.5,
@@ -21,8 +26,10 @@ def _valid_row(**overrides):
         "display_entry": 72.5,
         "display_entry_source": "ask",
         "display_entry_status": "displayable",
+        "entry_display_status": "displayable",
         "entry_reason": "execution_from_ask",
         "entry_clear_reason": None,
+        "entry_block_code": None,
         "entry": 72.5,
         "entry_status": "displayable",
         "confidence": 0.72,
@@ -38,8 +45,22 @@ def _valid_row(**overrides):
         "confluence_source": "sizing_confluence_score",
         "confidence_size_multiplier": 0.71,
         "final_qty": 2,
+        "rank_score": 0.74,
+        "setup_strength": 0.78,
+        "regime_fit": 0.69,
+        "liquidity_score": 0.81,
+        "spread_score": 0.84,
+        "rr_score": 0.72,
+        "timing_score": 0.68,
+        "penalty_score": 0.12,
+        "score_breakdown": {"components": {"setup_strength": 0.78}, "confidence_final": 0.72},
+        "penalty_reasons": ["STALE_OPTION_LTP"],
+        "score_inputs_used": {"quote_source": "tick_store", "volume": 24000},
         "opportunity_score": 0.76,
         "opportunity_rank": 1,
+        "rank_global": 1,
+        "rank_within_symbol": 1,
+        "opportunity_bucket": "TOP",
         "selected_for_execution": True,
         "selection_reason": "selected_top_rank",
         "size_multiplier_reason": "score=0.760;rank=1",
@@ -98,7 +119,14 @@ def test_advisory_schema_round_trip_survives_unchanged():
     assert deserialized["advisory_id"] == "ADV-1"
     assert deserialized["trade_id"] == "T-1"
     assert deserialized["strategy_id"] == "CORE"
+    assert deserialized["candidate_type"] == "options"
+    assert deserialized["strategy_family"] == "breakout"
+    assert deserialized["setup_variant"] == "opening_range_breakout"
+    assert deserialized["direction"] == "BUY_PUT"
+    assert deserialized["candidate_status"] == "advisory_only"
     assert deserialized["entry"] == 72.5
+    assert deserialized["entry_display_status"] == "displayable"
+    assert deserialized["entry_block_code"] is None
     assert deserialized["builder_confidence"] == 0.72
     assert deserialized["permission_confidence"] == 0.68
     assert deserialized["gating_base_confidence"] == 0.72
@@ -111,8 +139,22 @@ def test_advisory_schema_round_trip_survives_unchanged():
     assert deserialized["confluence_source"] == "sizing_confluence_score"
     assert deserialized["confidence_size_multiplier"] == 0.71
     assert deserialized["final_qty"] == 2
+    assert deserialized["rank_score"] == 0.74
+    assert deserialized["setup_strength"] == 0.78
+    assert deserialized["regime_fit"] == 0.69
+    assert deserialized["liquidity_score"] == 0.81
+    assert deserialized["spread_score"] == 0.84
+    assert deserialized["rr_score"] == 0.72
+    assert deserialized["timing_score"] == 0.68
+    assert deserialized["penalty_score"] == 0.12
+    assert deserialized["score_breakdown"] == {"components": {"setup_strength": 0.78}, "confidence_final": 0.72}
+    assert deserialized["penalty_reasons"] == ["STALE_OPTION_LTP"]
+    assert deserialized["score_inputs_used"] == {"quote_source": "tick_store", "volume": 24000}
     assert deserialized["opportunity_score"] == 0.76
     assert deserialized["opportunity_rank"] == 1
+    assert deserialized["rank_global"] == 1
+    assert deserialized["rank_within_symbol"] == 1
+    assert deserialized["opportunity_bucket"] == "TOP"
     assert deserialized["selected_for_execution"] is True
     assert deserialized["selection_reason"] == "selected_top_rank"
     assert deserialized["size_multiplier_reason"] == "score=0.760;rank=1"
@@ -164,6 +206,9 @@ def test_advisory_schema_normalizes_missing_confidence_stage_fields_to_null():
         "sizing_confluence_score",
         "opportunity_score",
         "opportunity_rank",
+        "rank_global",
+        "rank_within_symbol",
+        "opportunity_bucket",
         "selected_for_execution",
         "selection_reason",
         "size_multiplier_reason",
@@ -207,6 +252,9 @@ def test_advisory_schema_normalizes_missing_confidence_stage_fields_to_null():
     assert out["confidence_rejection_stage"] is None
     assert out["opportunity_score"] is None
     assert out["opportunity_rank"] is None
+    assert out["rank_global"] is None
+    assert out["rank_within_symbol"] is None
+    assert out["opportunity_bucket"] is None
     assert out["selected_for_execution"] is False
     assert out["selection_reason"] is None
     assert out["size_multiplier_reason"] is None
@@ -220,6 +268,23 @@ def test_advisory_schema_missing_required_fields_raise():
         assert "missing required field" in str(exc)
     else:
         raise AssertionError("expected AdvisorySchemaError")
+
+
+def test_advisory_schema_defaults_identity_fields_to_unknown_when_missing():
+    row = _valid_row(
+        candidate_type=None,
+        strategy_family=None,
+        setup_variant=None,
+        direction=None,
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["candidate_type"] == "options"
+    assert out["strategy_family"] == "unknown"
+    assert out["setup_variant"] == "unknown"
+    assert out["direction"] == "UNKNOWN"
+    assert out["candidate_status"] == "advisory_only"
 
 
 def test_advisory_schema_missing_trade_id_surfaces_schema_error():
@@ -265,6 +330,7 @@ def test_advisory_schema_downgrades_executable_claim_when_entry_missing():
         display_entry=None,
         display_entry_source="none",
         display_entry_status="missing",
+        entry_display_status="missing",
         entry=None,
         entry_source="none",
         entry_status="missing",
@@ -297,6 +363,7 @@ def test_advisory_schema_restores_valid_entry_from_execution_entry():
         display_entry=None,
         display_entry_source="none",
         display_entry_status="missing",
+        entry_display_status="missing",
         entry=None,
         entry_source="none",
         entry_status="missing",
@@ -473,6 +540,49 @@ def test_advisory_schema_drops_internal_stale_age_sentinel():
     assert out["quote_age_sec"] is None
     assert out["price_age_sec"] is None
     assert out["option_age_sec"] is None
+
+
+def test_advisory_schema_downgrades_executable_alias_without_executable_entry():
+    row = _valid_row(
+        execution_entry=None,
+        execution_entry_status="missing",
+        display_entry=100.0,
+        display_entry_source="last",
+        display_entry_status="displayable",
+        entry_display_status="displayable",
+        entry_block_code="missing_executable_quote",
+        entry=100.0,
+        entry_status="executable",
+        permission="ADVISORY_ONLY",
+        final_action="ADVISORY_ONLY",
+    )
+    out = advisory_schema.serialize_advisory_row(row)
+    assert out["execution_status"] == "advisory_only"
+    assert out["readiness"] == "ADVISORY_ONLY"
+    assert out["final_action"] == "ADVISORY_ONLY"
+    assert out["permission"] == "ADVISORY_ONLY"
+    assert out["entry_status"] == "displayable"
+
+def test_advisory_schema_downgrades_displayable_alias_with_execute_action():
+    row = _valid_row(
+        execution_entry=None,
+        execution_entry_status="missing",
+        display_entry=100.0,
+        display_entry_source="last",
+        display_entry_status="displayable",
+        entry_display_status="displayable",
+        entry_block_code="missing_executable_quote",
+        entry=100.0,
+        entry_status="displayable",
+        permission="EXECUTE",
+        final_action="EXECUTE",
+    )
+    out = advisory_schema.serialize_advisory_row(row)
+    assert out["execution_status"] == "advisory_only"
+    assert out["readiness"] == "ADVISORY_ONLY"
+    assert out["final_action"] == "ADVISORY_ONLY"
+    assert out["permission"] == "ADVISORY_ONLY"
+    assert out["entry_status"] == "displayable"
 
 
 def test_advisory_schema_errors_are_logged(tmp_path, monkeypatch):

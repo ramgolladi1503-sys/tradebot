@@ -405,10 +405,156 @@ def test_premium_out_of_band_is_soft_veto_when_liquid(monkeypatch):
     assert trade is not None
     assert trade.source_flags.get("premium_soft_veto") is True
     assert "premium_out_of_band" in (trade.source_flags.get("soft_veto_codes") or [])
+    assert "premium_out_of_band" not in (trade.source_flags.get("gates_failed") or [])
+    assert "premium_out_of_band" not in (trade.source_flags.get("warning_codes") or [])
     assert float(trade.confidence_before_soft_veto) == 0.95
     assert 0.85 <= float(trade.confidence_after_soft_veto) <= 0.89
     assert 0.06 <= float(trade.confidence_penalty_soft_veto_total) <= 0.10
     assert "premium_out_of_band" in list(trade.confidence_penalty_soft_veto_reasons)
+
+
+def test_stale_quote_survives_as_advisory_gate_without_soft_penalty(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY", True, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    md = _base_market_data(option_ltp=100.0)
+    md["market_open"] = False
+    opt = md["option_chain"][0]
+    opt["quote_ts_epoch"] = None
+    opt["quote_age_sec"] = 999.0
+
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert trade.execution_allowed is False
+    assert "stale_option_quote" in (trade.source_flags.get("gates_failed") or [])
+    assert "stale_option_quote" not in (trade.source_flags.get("soft_veto_codes") or [])
+    assert "stale_option_quote" not in (trade.source_flags.get("warning_codes") or [])
+
+
+def test_paper_stale_option_tick_survives_as_advisory_gate_without_soft_penalty(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY", True, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    md = _base_market_data(option_ltp=100.0)
+    opt = md["option_chain"][0]
+    opt["quote_ts_epoch"] = None
+    opt["quote_age_sec"] = 999.0
+
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert trade.execution_allowed is False
+    assert "stale_option_quote" in (trade.source_flags.get("gates_failed") or [])
+    assert "stale_option_quote" not in (trade.source_flags.get("soft_veto_codes") or [])
+    assert "stale_option_quote" not in (trade.source_flags.get("warning_codes") or [])
+
+
+def test_live_market_open_stale_option_tick_remains_rejected(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY", True, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    md = _base_market_data(option_ltp=100.0)
+    opt = md["option_chain"][0]
+    opt["quote_ts_epoch"] = None
+    opt["quote_age_sec"] = 999.0
+
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is None
+    assert int(builder._scan_reject_counts.get("STALE_OPTION_TICK", 0)) >= 1
+
+
+def test_low_volume_becomes_warning_without_duplicate_suppression(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "MIN_VOLUME_FILTER", 500, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    md = _base_market_data(option_ltp=100.0)
+    md["option_chain"][0]["volume"] = 25
+
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert "low_volume" in (trade.source_flags.get("warning_codes") or [])
+    assert "low_volume" not in (trade.source_flags.get("soft_veto_codes") or [])
+    assert "low_volume" not in (trade.source_flags.get("gates_failed") or [])
+
+
+def test_live_missing_option_bidask_survives_as_non_executable_candidate(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_ALLOW_DISPLAY_ONLY_OPTION_CANDIDATES", True, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    md = _base_market_data(option_ltp=100.0)
+    md["quote_ok"] = True
+    md["bid"] = 24999.0
+    md["ask"] = 25001.0
+    opt = md["option_chain"][0]
+    opt["bid"] = None
+    opt["ask"] = None
+    opt["quote_source"] = "last"
+    opt["option_ltp_source"] = "last"
+    opt["last_price"] = 100.0
+
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert trade.execution_allowed is False
+    assert trade.selected_for_execution is False
+    assert "option_bidask_missing" in (trade.source_flags.get("gates_failed") or [])
+
+
+def test_display_only_last_price_candidate_survives_but_is_not_executable(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", True, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_ALLOW_DISPLAY_ONLY_OPTION_CANDIDATES", True, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    md = _base_market_data(option_ltp=100.0)
+    opt = md["option_chain"][0]
+    opt["bid"] = None
+    opt["ask"] = None
+    opt["best_bid"] = None
+    opt["best_ask"] = None
+    opt["depth_ok"] = False
+    opt["quote_ok"] = True
+    opt["quote_live"] = True
+    opt["price_source"] = "last"
+    opt["quote_source"] = "last"
+    opt["option_ltp_source"] = "last"
+    opt["last_price"] = 100.0
+
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert trade.execution_allowed is False
+    assert trade.selected_for_execution is False
+    assert "option_bidask_missing" in (trade.source_flags.get("gates_failed") or [])
+    assert "option_depth_missing" in (trade.source_flags.get("warning_codes") or [])
+    assert int(builder._last_scan_summary.get("total_candidates") or 0) >= 1
+    assert int(builder._last_scan_summary.get("accepted") or 0) >= 1
 
 
 def test_dynamic_premium_band_uses_chain_percentiles_not_global_clamp(monkeypatch):
@@ -437,6 +583,7 @@ def test_paper_missing_quote_depth_is_rejected_by_option_tradability_preconditio
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
     monkeypatch.setattr(cfg, "PAPER_STRICT_MODE", False, raising=False)
     monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY", False, raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", True, raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", True, raising=False)
 
@@ -525,7 +672,7 @@ def test_multiple_soft_vetoes_are_bounded_and_interpretable(monkeypatch):
     assert float(trade.confidence_before_soft_veto) == 0.85
     assert float(trade.confidence_penalty_soft_veto_total) == 0.10
     assert float(trade.confidence_after_soft_veto) == 0.75
-    assert trade.confidence_penalty_soft_veto_reasons == ["orb_pending", "premium_out_of_band", "premium_band_fail"]
+    assert trade.confidence_penalty_soft_veto_reasons == ["orb_pending", "premium_out_of_band"]
 
 
 def test_trade_builder_candidate_fails_raw_confidence_gate_early(monkeypatch):

@@ -63,6 +63,8 @@ def test_target_points_evaluation_records_category_and_strategy_bucket(tmp_path,
     assert rows[0]["category"] == "target_points"
     assert rows[0]["strategy"] == "QUICK_OPT"
     assert rows[0]["outcome"] == "target"
+    assert rows[0]["candidate_outcome_label"] == "favorable_excursion"
+    assert rows[0]["candidate_outcome_label_provenance"]["scope"] == "candidate"
 
     perf_path = Path(cfg.LOGS_ROOT) / "suggestion_strategy_perf.json"
     perf = json.loads(perf_path.read_text())

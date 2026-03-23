@@ -13,6 +13,7 @@ SNAPSHOT_WRAPPER_SCHEMA_VERSION = 1
 
 MARKET_SNAPSHOT_PATH = runtime_dir() / "market_snapshot.json"
 ADVISORY_LATEST_PATH = runtime_dir() / "advisory_latest.json"
+TOP_OPPORTUNITIES_LATEST_PATH = runtime_dir() / "top_opportunities_latest.json"
 FEED_RUNTIME_LATEST_PATH = runtime_dir() / "feed_runtime_latest.json"
 TOKEN_RESOLUTION_LATEST_PATH = runtime_dir() / "token_resolution_latest.json"
 RISK_SNAPSHOT_PATH = runtime_dir() / "risk_snapshot.json"

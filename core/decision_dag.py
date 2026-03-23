@@ -531,9 +531,19 @@ def build_market_snapshot(
 
 
 def _node_market_open(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
+    facts = {
+        "market_open": bool(snapshot.market_open),
+        "allow_stale_quotes": bool(snapshot.allow_stale_quotes),
+        "offhours_mode": bool(snapshot.offhours_mode),
+        "mode": str(snapshot.mode or "SIM").upper(),
+    }
     if snapshot.market_open:
-        return NodeResult(ok=True, facts={"market_open": True})
-    return NodeResult(ok=False, reasons=(REASON_MARKET_CLOSED,), facts={"market_open": False})
+        return NodeResult(ok=True, facts=facts)
+    if snapshot.allow_stale_quotes and bool(getattr(cfg, "DECISION_DAG_ALLOW_NON_LIVE_MARKET_CLOSED", True)):
+        facts["market_closed_degraded"] = True
+        facts["market_closed_degraded_reason"] = "non_live_market_closed"
+        return NodeResult(ok=True, facts=facts)
+    return NodeResult(ok=False, reasons=(REASON_MARKET_CLOSED,), facts=facts)
 
 
 def _node_feed_fresh(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapping[str, NodeResult]) -> NodeResult:
@@ -641,6 +651,16 @@ def _node_quote_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mappi
         "instrument": snapshot.instrument,
     }
     if quote_ok:
+        return NodeResult(ok=True, facts=facts)
+    if (
+        snapshot.allow_stale_quotes
+        and bool(getattr(cfg, "DECISION_DAG_ALLOW_NON_LIVE_OPTION_QUOTE_MISSING", True))
+        and snapshot.ltp is not None
+        and float(snapshot.ltp) > 0
+    ):
+        facts["quote_degraded"] = True
+        facts["quote_degraded_reason"] = "non_live_missing_option_quote"
+        facts["quote_reference_ltp"] = float(snapshot.ltp)
         return NodeResult(ok=True, facts=facts)
     return NodeResult(ok=False, reasons=(REASON_QUOTE_INVALID,), facts=facts)
 

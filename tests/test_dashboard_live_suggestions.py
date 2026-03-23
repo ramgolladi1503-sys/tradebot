@@ -21,7 +21,7 @@ def _snapshot_row(
     entry: float,
     execution_entry: float | None = None,
     display_entry_source: str = "last",
-    display_entry_status: str = "non_executable",
+    display_entry_status: str = "displayable",
     execution_entry_source: str = "none",
     execution_entry_status: str = "non_executable",
     quote_source: str = "tick_store",
@@ -82,57 +82,57 @@ def _snapshot_row(
     )
 
 
-def test_load_live_suggestions_df_reads_latest_rows_only(tmp_path, monkeypatch):
-    suggestions_path = tmp_path / "suggestions.jsonl"
-    rows = []
-    for idx in range(5):
-        rows.append(
-            {
-                "trade_id": f"T-{idx}",
-                "advisory_id": f"T-{idx}",
-                "timestamp": _iso_now(),
-                "last_seen_ts": _iso_now(),
-                "symbol": "NIFTY",
-                "instrument": "OPT",
-                "instrument_type": "OPT",
-                "strategy_name": "CORE",
-                "status": "READY",
-                "permission": "EXECUTE",
-                "entry_status": "OK",
-                "readiness": "ADVISORY_ONLY" if idx == 4 else "READY",
-                "blockers": ["STALE_OPTION_LTP"] if idx == 4 else [],
-                "quote_source": "tick_store",
-                "quote_age_sec": 0.5,
-                "confidence": 0.7,
-                "entry": 100.0 + idx,
-                "current_ltp": 100.0 + idx,
-                "entry_price": 100.0 + idx,
-                "expected_entry": 100.0 + idx,
-                "tradingsymbol": f"NIFTYTEST{idx}CE",
-                "instrument_token": 1000 + idx,
-                "option_type": "CE",
-                "type": "CE",
-                "expiry_date": "2026-03-26",
-                "strike": 23000 + idx,
-                "side": "BUY",
-            }
-        )
-    suggestions_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+def _write_advisory_snapshot(tmp_path, rows):
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    advisory_snapshot_path.write_text(
+        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": rows}}),
+        encoding="utf-8",
+    )
+    return advisory_snapshot_path
 
+
+def _write_top_opportunities_snapshot(tmp_path, top_executable, top_advisory):
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    path = runtime_root / "top_opportunities_latest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": _iso_now(),
+                "producer": "test",
+                "payload": {
+                    "top_executable_opportunities": list(top_executable),
+                    "top_advisory_opportunities": list(top_advisory),
+                    "top_executable_count": len(top_executable),
+                    "top_advisory_count": len(top_advisory),
+                    "source_candidate_count": len(top_executable) + len(top_advisory),
+                    "notes": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_load_live_suggestions_df_returns_empty_when_snapshot_missing_even_if_tail_exists(tmp_path, monkeypatch):
+    suggestions_path = tmp_path / "suggestions.jsonl"
+    suggestions_path.write_text(json.dumps({"trade_id": "T-TAIL"}) + "\n", encoding="utf-8")
+    advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
+
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
     monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
 
     df_live = runtime._load_live_suggestions_df(limit=2)
 
-    assert list(df_live["trade_id"]) == ["T-4", "T-3"]
-    assert all(df_live["entry_status"].astype(str).str.lower() == "displayable")
-    assert float(df_live.iloc[0]["entry"]) == 104.0
-    assert list(df_live.iloc[0]["blockers"]) == ["STALE_OPTION_LTP"]
+    assert df_live.empty
 
 
 def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, monkeypatch):
-    runtime_root = tmp_path / "runtime"
-    runtime_root.mkdir(parents=True, exist_ok=True)
-    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
     row = _snapshot_row(
         "T-SNAPSHOT-1",
         entry=123.45,
@@ -146,10 +146,7 @@ def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, mon
         is_executable=True,
         status="READY",
     )
-    advisory_snapshot_path.write_text(
-        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
-        encoding="utf-8",
-    )
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, [row])
     suggestions_path = tmp_path / "suggestions.jsonl"
     suggestions_path.write_text("", encoding="utf-8")
 
@@ -163,9 +160,7 @@ def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, mon
 
 
 def test_load_live_suggestions_df_identity_includes_option_side(tmp_path, monkeypatch):
-    runtime_root = tmp_path / "runtime"
-    runtime_root.mkdir(parents=True, exist_ok=True)
-    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
     row = _snapshot_row(
         "T-SNAPSHOT-PE",
         entry=123.45,
@@ -185,10 +180,7 @@ def test_load_live_suggestions_df_identity_includes_option_side(tmp_path, monkey
     row["tradingsymbol"] = "NIFTY26MAR1723850PE"
     row["expiry_date"] = "2026-03-17"
     row["strike"] = 23850
-    advisory_snapshot_path.write_text(
-        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
-        encoding="utf-8",
-    )
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, [row])
     suggestions_path = tmp_path / "suggestions.jsonl"
     suggestions_path.write_text("", encoding="utf-8")
 
@@ -203,9 +195,7 @@ def test_load_live_suggestions_df_identity_includes_option_side(tmp_path, monkey
 
 
 def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_path, monkeypatch):
-    runtime_root = tmp_path / "runtime"
-    runtime_root.mkdir(parents=True, exist_ok=True)
-    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
     row = _snapshot_row(
         "T-SNAPSHOT-MISSING-ENTRY",
         entry=None,
@@ -219,10 +209,7 @@ def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_pa
         is_executable=True,
         status="READY",
     )
-    advisory_snapshot_path.write_text(
-        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
-        encoding="utf-8",
-    )
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, [row])
     suggestions_path = tmp_path / "suggestions.jsonl"
     suggestions_path.write_text("", encoding="utf-8")
 
@@ -241,9 +228,7 @@ def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_pa
 
 
 def test_load_live_suggestions_df_downgrades_display_only_executable_row(tmp_path, monkeypatch):
-    runtime_root = tmp_path / "runtime"
-    runtime_root.mkdir(parents=True, exist_ok=True)
-    advisory_snapshot_path = runtime_root / "advisory_latest.json"
+    advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
     row = _snapshot_row(
         "T-SNAPSHOT-DISPLAY-ONLY",
         entry=72.5,
@@ -257,10 +242,7 @@ def test_load_live_suggestions_df_downgrades_display_only_executable_row(tmp_pat
         is_executable=True,
         status="READY",
     )
-    advisory_snapshot_path.write_text(
-        json.dumps({"schema_version": 1, "generated_at": _iso_now(), "producer": "test", "payload": {"rows": [row]}}),
-        encoding="utf-8",
-    )
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, [row])
     suggestions_path = tmp_path / "suggestions.jsonl"
     suggestions_path.write_text("", encoding="utf-8")
 
@@ -278,6 +260,53 @@ def test_load_live_suggestions_df_downgrades_display_only_executable_row(tmp_pat
     assert str(loaded["display_entry_status"]) == "displayable"
     assert str(loaded["entry_status"]) == "displayable"
     assert bool(loaded["is_executable"]) is False
+
+
+def test_load_top_opportunities_frames_preserves_executable_and_advisory_lists(tmp_path, monkeypatch):
+    top_exec_path = _write_top_opportunities_snapshot(
+        tmp_path,
+        top_executable=[
+            _snapshot_row(
+                "T-TOP-EXEC",
+                entry=123.45,
+                execution_entry=123.45,
+                display_entry_source="ask",
+                display_entry_status="displayable",
+                execution_entry_source="ask",
+                execution_entry_status="executable",
+                readiness="READY",
+                execution_status="executable",
+                is_executable=True,
+                status="READY",
+            )
+        ],
+        top_advisory=[
+            _snapshot_row(
+                "T-TOP-ADV",
+                entry=72.5,
+                execution_entry=None,
+                display_entry_source="mark",
+                display_entry_status="displayable",
+                execution_entry_source="none",
+                execution_entry_status="non_executable",
+                readiness="ADVISORY_ONLY",
+                execution_status="advisory_only",
+                is_executable=False,
+                status="ADVISORY_ONLY",
+            )
+        ],
+    )
+
+    monkeypatch.setattr(runtime, "TOP_OPPORTUNITIES_LATEST_PATH", top_exec_path)
+
+    frames = runtime._load_top_opportunities_frames(limit=5)
+
+    assert list(frames["top_executable"]["trade_id"]) == ["T-TOP-EXEC"]
+    assert list(frames["top_advisory"]["trade_id"]) == ["T-TOP-ADV"]
+    assert str(frames["top_executable"].iloc[0]["execution_status"]) == "executable"
+    assert str(frames["top_advisory"].iloc[0]["execution_status"]) == "advisory_only"
+    assert float(frames["top_executable"].iloc[0]["entry"]) == 123.45
+    assert float(frames["top_advisory"].iloc[0]["entry"]) == 72.5
 
 
 def test_read_advisory_snapshot_rows_supports_top_level_rows(tmp_path):
@@ -551,7 +580,7 @@ def test_fetch_day_type_events_dashboard_reads_without_backfill(monkeypatch):
 
 
 def test_load_live_suggestions_df_logs_invalid_schema_rows(tmp_path, monkeypatch):
-    suggestions_path = tmp_path / "suggestions.jsonl"
+    advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
     logs_root = tmp_path / "logs"
     rows = [
         {
@@ -560,38 +589,23 @@ def test_load_live_suggestions_df_logs_invalid_schema_rows(tmp_path, monkeypatch
             "symbol": "NIFTY",
             "entry_status": "OK",
         },
-        {
-            "trade_id": "T-GOOD",
-            "advisory_id": "T-GOOD",
-            "timestamp": _iso_now(),
-            "last_seen_ts": _iso_now(),
-            "symbol": "NIFTY",
-            "instrument_type": "OPT",
-            "strategy_name": "CORE",
-            "entry": 72.5,
-            "entry_status": "VALID",
-            "confidence": 0.8,
-            "readiness": "ADVISORY_ONLY",
-            "blockers": ["STALE_OPTION_LTP"],
-            "quote_source": "tick_store",
-            "quote_age_sec": 0.4,
-        },
+        _snapshot_row("T-GOOD", entry=72.5),
     ]
-    suggestions_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, rows)
 
-    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(tmp_path / "suggestions.jsonl"))
     monkeypatch.setattr(advisory_schema, "logs_dir", lambda: logs_root)
 
     df_live = runtime._load_live_suggestions_df(limit=10)
 
     assert list(df_live["advisory_id"]) == ["T-GOOD"]
     payload = json.loads((logs_root / "advisory_schema_errors.jsonl").read_text().strip())
-    assert payload["source"] == "dashboard.live_suggestions"
+    assert payload["source"] == "dashboard.advisory_snapshot"
     assert payload["trade_id"] == "T-BAD"
 
 
 def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, monkeypatch):
-    suggestions_path = tmp_path / "suggestions.jsonl"
     row = {
         "trade_id": "T-CANONICAL",
         "strategy_id": "CORE",
@@ -606,11 +620,11 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
         "execution_entry_status": "non_executable",
         "display_entry": 72.5,
         "display_entry_source": "mark",
-        "display_entry_status": "non_executable",
+        "display_entry_status": "displayable",
         "entry_reason": "display_from_mark",
         "entry_clear_reason": None,
         "entry": 72.5,
-        "entry_status": "non_executable",
+        "entry_status": "displayable",
         "confidence": 0.71,
         "confidence_base": 0.82,
         "confidence_raw": 0.82,
@@ -633,9 +647,10 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
         "decision_explain": [{"code": "TRACE", "message": "kept"}],
         "market_open": True,
     }
-    suggestions_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, [row])
 
-    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(tmp_path / "suggestions.jsonl"))
 
     df_live = runtime._load_live_suggestions_df(limit=10)
 
@@ -657,7 +672,6 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
 
 
 def test_load_live_suggestions_df_keeps_queue_only_row_honest_when_entry_missing(tmp_path, monkeypatch):
-    suggestions_path = tmp_path / "suggestions.jsonl"
     row = {
         "trade_id": "T-QUEUE-MISSING",
         "strategy_id": "CORE",
@@ -695,9 +709,10 @@ def test_load_live_suggestions_df_keeps_queue_only_row_honest_when_entry_missing
         "decision_explain": [],
         "market_open": True,
     }
-    suggestions_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, [row])
 
-    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(tmp_path / "suggestions.jsonl"))
 
     df_live = runtime._load_live_suggestions_df(limit=10)
 
@@ -711,7 +726,6 @@ def test_load_live_suggestions_df_keeps_queue_only_row_honest_when_entry_missing
 
 
 def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch):
-    suggestions_path = tmp_path / "suggestions.jsonl"
     stale_row = {
         "trade_id": "T-RECOVER",
         "strategy_id": "CORE",
@@ -790,12 +804,10 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "decision_explain": [],
         "market_open": True,
     }
-    suggestions_path.write_text(
-        json.dumps(stale_row) + "\n" + json.dumps(fresh_row) + "\n",
-        encoding="utf-8",
-    )
+    advisory_snapshot_path = _write_advisory_snapshot(tmp_path, [stale_row, fresh_row])
 
-    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(suggestions_path))
+    monkeypatch.setattr(runtime, "ADVISORY_LATEST_PATH", advisory_snapshot_path)
+    monkeypatch.setattr(runtime, "canonical_suggestions_log_path", lambda: str(tmp_path / "suggestions.jsonl"))
 
     df_live = runtime._load_live_suggestions_df(limit=10)
 

@@ -21,7 +21,14 @@ if str(ROOT) not in sys.path:
 logger = logging.getLogger(__name__)
 
 import dashboard.ui as ui
+from dashboard.components import (
+    render_allocation_summary,
+    render_candidate_pool_summary,
+    render_rejection_reason_breakdown,
+    render_score_distribution,
+)
 from dashboard.loaders import load_depth_vm, load_execution_vm, load_recon_vm
+from dashboard.metrics_runtime import load_runtime_metrics
 from dashboard.renderers import render_depth_panel, render_execution_panel, render_recon_panel
 from dashboard.runtime import run_state_engine_if_due
 from dashboard.utils import normalize_trade_df, filter_by_permission, dedupe_by_trade_key
@@ -95,7 +102,7 @@ from core.market_snapshot_store import (
     get_market_snapshot_status,
     read_market_snapshot,
 )
-from core.runtime_snapshot_store import ADVISORY_LATEST_PATH
+from core.runtime_snapshot_store import ADVISORY_LATEST_PATH, TOP_OPPORTUNITIES_LATEST_PATH
 from core.telemetry_streams import iter_recent_events
 from core.advisory_schema import AdvisorySchemaError, deserialize_advisory_row, log_advisory_schema_error
 from dashboard.readers.advisory_reader import read_advisory_snapshot_rows
@@ -983,13 +990,11 @@ def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
         )
         return pd.DataFrame()
     else:
-        suggestions_path = Path(canonical_suggestions_log_path())
-        rows = _perf_timed_load(
-            "suggestions_jsonl_tail",
-            _load_jsonl_tail_uncached,
-            suggestions_path,
-            max(1, int(limit)),
+        logger.warning(
+            "dashboard_live_advisory_snapshot_missing path=%s",
+            ADVISORY_LATEST_PATH,
         )
+        return pd.DataFrame()
     filtered_rows = _filter_rows_today(rows)
     if filtered_rows:
         rows = filtered_rows
@@ -998,7 +1003,7 @@ def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
     validated_rows: list[dict] = []
     for row in rows:
         try:
-            validated_rows.append(deserialize_advisory_row(row, allow_legacy=True))
+            validated_rows.append(deserialize_advisory_row(row, allow_legacy=False))
         except AdvisorySchemaError as exc:
             log_advisory_schema_error("dashboard.live_suggestions", row, exc)
             logger.warning("dashboard_live_advisory_schema_error trade_id=%s error=%s", row.get("trade_id") if isinstance(row, dict) else None, exc)
@@ -1018,6 +1023,48 @@ def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
     df_live = _add_upstox_links(df_live)
     df_live = _prepare_trade_display_df(df_live)
     return df_live
+
+
+def _load_top_opportunities_frames(limit: int = 25) -> dict[str, pd.DataFrame]:
+    snapshot = _perf_timed_load(
+        "top_opportunities_snapshot_json",
+        read_snapshot_payload,
+        TOP_OPPORTUNITIES_LATEST_PATH,
+    )
+    if str(snapshot.get("state") or "") != "ok":
+        return {"top_executable": pd.DataFrame(), "top_advisory": pd.DataFrame()}
+    payload = snapshot.get("payload") if isinstance(snapshot, dict) else {}
+    if not isinstance(payload, dict):
+        return {"top_executable": pd.DataFrame(), "top_advisory": pd.DataFrame()}
+
+    def _build_df(rows_key: str) -> pd.DataFrame:
+        rows = payload.get(rows_key)
+        if not isinstance(rows, list) or not rows:
+            return pd.DataFrame()
+        validated_rows: list[dict] = []
+        for row in list(rows)[: max(1, int(limit))]:
+            try:
+                validated_rows.append(deserialize_advisory_row(row, allow_legacy=False))
+            except AdvisorySchemaError as exc:
+                log_advisory_schema_error(f"dashboard.{rows_key}", row, exc)
+                logger.warning(
+                    "dashboard_top_opportunities_schema_error list=%s trade_id=%s error=%s",
+                    rows_key,
+                    row.get("trade_id") if isinstance(row, dict) else None,
+                    exc,
+                )
+        if not validated_rows:
+            return pd.DataFrame()
+        df = _perf_timed_load(f"{rows_key}_dataframe_build", pd.DataFrame, validated_rows)
+        if df.empty:
+            return df
+        df = _add_upstox_links(df)
+        return _prepare_trade_display_df(df)
+
+    return {
+        "top_executable": _build_df("top_executable_opportunities"),
+        "top_advisory": _build_df("top_advisory_opportunities"),
+    }
 
 
 def _is_dashboard_auth_fetch_error(exc: Exception) -> bool:
@@ -1182,9 +1229,10 @@ def _fetch_live_market_data_dashboard(
         except Exception:
             pass
         return artifact_rows
-    if _dashboard_read_only_mode() and not allow_broker_fetch:
+    if _dashboard_read_only_mode() or not allow_broker_fetch:
         _log_read_only_block("live_market_data_fetch", caller, "artifact_missing")
-        return cached if allow_stale_cache else []
+        logger.warning("dashboard_market_data_artifact_missing caller=%s", caller)
+        return []
     if cooldown_until > now_ts:
         logger.info(
             "dashboard_history_fetch_suppressed caller=%s cooldown_remaining_sec=%.2f reason=%s",
@@ -1597,8 +1645,6 @@ def _derive_permission_bucket(df: pd.DataFrame) -> pd.Series:
 
 
 def _derive_final_blocker(df: pd.DataFrame) -> pd.Series:
-    trace_blocker = _extract_trace_field(df, "final_blocker")
-    trace_gating_reason = _extract_trace_field(df, "gating_reason")
     blocker = _series_first_non_null(
         df,
         [
@@ -1609,10 +1655,6 @@ def _derive_final_blocker(df: pd.DataFrame) -> pd.Series:
             "reject_reason",
         ],
     )
-    blocker = blocker.where(blocker.notna(), trace_blocker)
-    blocker = blocker.where(blocker.notna(), trace_gating_reason)
-    entry_status = _series_first_non_null(df, ["entry_status"], default="")
-    blocker = blocker.where(blocker.notna(), entry_status)
     blocker = blocker.fillna("NONE").astype(str).str.strip()
     blocker = blocker.where(blocker.ne(""), "NONE")
     return blocker
@@ -1705,29 +1747,13 @@ def _derive_trade_explorer_fields(df: pd.DataFrame) -> pd.DataFrame:
         errors="coerce",
     )
 
-    final_action = _series_first_non_null(work, ["final_action"]).where(
-        _series_first_non_null(work, ["final_action"]).notna(),
-        _extract_trace_field(work, "final_action"),
-    )
-    final_action = final_action.fillna("ADVISORY_ONLY").astype(str).str.upper().str.strip()
-    final_action = final_action.where(final_action.ne(""), "ADVISORY_ONLY")
+    final_action = _series_first_non_null(work, ["final_action"])
+    final_action = final_action.fillna("").astype(str).str.upper().str.strip()
 
-    entry_block_reason = _series_first_non_null(work, ["entry_block_reason"]).where(
-        _series_first_non_null(work, ["entry_block_reason"]).notna(),
-        _extract_trace_field(work, "entry_block_reason"),
-    )
-    permission_reason = _series_first_non_null(work, ["permission_reason"]).where(
-        _series_first_non_null(work, ["permission_reason"]).notna(),
-        _extract_trace_field(work, "permission_reason"),
-    )
-    entry_status = _series_first_non_null(work, ["entry_status"]).where(
-        _series_first_non_null(work, ["entry_status"]).notna(),
-        _extract_trace_field(work, "entry_status"),
-    )
-    permission = _series_first_non_null(work, ["permission"]).where(
-        _series_first_non_null(work, ["permission"]).notna(),
-        _extract_trace_field(work, "permission"),
-    )
+    entry_block_reason = _series_first_non_null(work, ["entry_block_reason"])
+    permission_reason = _series_first_non_null(work, ["permission_reason"])
+    entry_status = _series_first_non_null(work, ["entry_status"])
+    permission = _series_first_non_null(work, ["permission"])
 
     ts_source = _series_first_non_null(
         work,
@@ -7175,8 +7201,19 @@ if nav == "Home":
                 raise _SkipSection()
             status_payload = _load_live_suggestions_status()
             suggested_live_df = _load_live_suggestions_df(limit=100)
-            st.caption("Shows only latest executable live suggestions. Advisory-only queues are listed below.")
-            suggested_df = _select_executable_suggestion_rows(suggested_live_df)
+            show_exec_only = st.checkbox(
+                "Executable only",
+                value=False,
+                key="suggested_trades_exec_only",
+            )
+            st.caption(
+                "Showing emitted rows as-is. Use 'Executable only' to filter to live executable suggestions."
+            )
+            suggested_df = (
+                _select_executable_suggestion_rows(suggested_live_df)
+                if show_exec_only
+                else _select_visible_advisory_rows(suggested_live_df)
+            )
             suggested_display = select_display_df(suggested_df, "advisory").head(25)
             show_cols = [c for c in suggested_display.columns if c not in {"trade_key", "tradingsymbol"}]
             if show_cols and not suggested_display.empty:
@@ -7184,6 +7221,50 @@ if nav == "Home":
             else:
                 primary_blocker = str(status_payload.get("primary_blocker") or status_payload.get("reason") or "NO_CANDIDATES")
                 empty_state(f"No visible advisory rows right now. Primary blocker: {primary_blocker}.")
+            top_frames = _load_top_opportunities_frames(
+                limit=max(
+                    int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
+                    int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
+                )
+            )
+            top_exec = top_frames.get("top_executable", pd.DataFrame())
+            top_adv = top_frames.get("top_advisory", pd.DataFrame())
+            if not top_exec.empty or not top_adv.empty:
+                with st.expander("Top Opportunities (Cycle)", expanded=False):
+                    st.caption("Engine-ranked opportunities from the latest cycle. Displayed read-only from persisted snapshot truth.")
+                    if not top_exec.empty:
+                        st.caption("Top Executable Opportunities")
+                        exec_display = select_display_df(top_exec, "advisory").head(
+                            int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5))
+                        )
+                        exec_cols = [c for c in exec_display.columns if c not in {"trade_key", "tradingsymbol"}]
+                        if exec_cols:
+                            _render_upstox_table(exec_display, exec_cols, "top_exec_opportunities")
+                    if not top_adv.empty:
+                        st.caption("Top Advisory Opportunities")
+                        adv_display = select_display_df(top_adv, "advisory").head(
+                            int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5))
+                        )
+                        adv_cols = [c for c in adv_display.columns if c not in {"trade_key", "tradingsymbol"}]
+                        if adv_cols:
+                            _render_upstox_table(adv_display, adv_cols, "top_advisory_opportunities")
+            if bool(getattr(cfg, "DASHBOARD_RUNTIME_METRICS_ENABLE", True)):
+                runtime_metrics = _perf_timed_load(
+                    "runtime_metrics",
+                    load_runtime_metrics,
+                    desk_id=str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT"),
+                    max_rows=int(getattr(cfg, "DASHBOARD_RUNTIME_METRICS_MAX_ROWS", 5000) or 5000),
+                    cycle_limit=int(getattr(cfg, "DASHBOARD_RUNTIME_METRICS_CYCLE_LIMIT", 20) or 20),
+                )
+                with st.expander("Runtime Metrics", expanded=False):
+                    st.caption("Read-only aggregates from persisted runtime artifacts. Missing files degrade to empty summaries.")
+                    render_candidate_pool_summary(runtime_metrics)
+                    render_score_distribution(runtime_metrics)
+                    render_rejection_reason_breakdown(runtime_metrics)
+                    render_allocation_summary(runtime_metrics)
+                    notes = list(runtime_metrics.get("notes") or [])
+                    if notes:
+                        st.caption("Notes: " + " | ".join([str(note) for note in notes[:6]]))
         except _SkipSection:
             pass
         except Exception as exc:

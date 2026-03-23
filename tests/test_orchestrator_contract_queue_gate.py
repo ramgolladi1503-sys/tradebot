@@ -90,3 +90,129 @@ def test_queue_review_candidate_rejects_unresolved_contract_before_queue(monkeyp
     assert len(rejected) == 1
     assert rejected[0]["reasons"] == ["unresolved_contract"]
     assert rejected[0]["extra"]["missing_fields"] == ["tradingsymbol", "expiry_date"]
+
+
+def test_queue_review_candidate_allows_unresolved_contract_for_analytics(monkeypatch):
+    queued = []
+    rejected = []
+
+    monkeypatch.setattr(orchestrator_mod, "add_to_queue", lambda trade, queue_path=None, extra=None: queued.append((trade, queue_path, extra or {})))
+    monkeypatch.setattr(orchestrator_mod, "append_reject_reasons", lambda **kwargs: rejected.append(dict(kwargs)))
+    monkeypatch.setattr(orchestrator_mod, "_enrich_contract_identity", lambda entry: dict(entry))
+
+    ok, prepared = orchestrator_mod._queue_review_candidate(
+        _trade(tradingsymbol=None, expiry_date=None, expiry=None),
+        reject_source="unit_test_analytics",
+        allow_unresolved_for_analytics=True,
+        extra={"tier": "ANALYTICS"},
+    )
+
+    assert ok is True
+    assert prepared.instrument_token == 12345
+    assert len(queued) == 1
+    assert queued[0][2]["tier"] == "ANALYTICS"
+    assert rejected == []
+
+
+def test_queue_rejected_candidate_for_analytics_queues_top_ranked_candidate(monkeypatch):
+    queued = []
+
+    def _queue(trade, **kwargs):
+        queued.append((trade, kwargs))
+        return True, trade
+
+    monkeypatch.setattr(orchestrator_mod, "_queue_review_candidate", _queue)
+    monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_REJECTED_CANDIDATES_ENABLE", True, raising=False)
+    monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_REJECTED_CANDIDATES_FORCE_ADVISORY", True, raising=False)
+
+    ok, prepared = orchestrator_mod._queue_rejected_candidate_for_analytics(
+        [
+            _trade(trade_id="T-RANKED-1"),
+            _trade(trade_id="T-RANKED-2"),
+        ],
+        gate_reasons=["HIST_EMPTY"],
+        reject_reason="no_trade_generated",
+        reject_source="unit_test_ranked_reject",
+        extra={"decision_stage": "trade_builder_gate"},
+    )
+
+    assert ok is True
+    assert prepared.trade_id == "T-RANKED-1"
+    assert len(queued) == 1
+    assert queued[0][1]["allow_unresolved_for_analytics"] is True
+    assert queued[0][1]["reject_source"] == "unit_test_ranked_reject"
+    assert queued[0][1]["extra"]["decision_stage"] == "trade_builder_gate"
+    assert queued[0][1]["extra"]["execution_blocked"] is True
+    assert queued[0][1]["extra"]["execution_block_reason"] == "no_trade_generated"
+    assert queued[0][1]["extra"]["permission"] == "ADVISORY_ONLY"
+    assert queued[0][1]["extra"]["final_action"] == "ADVISORY_ONLY"
+
+
+def test_queue_prebuilder_gate_candidate_for_analytics_builds_fallback_candidate(monkeypatch):
+    queued = []
+
+    def _queue(trade, **kwargs):
+        queued.append((trade, kwargs))
+        return True, trade
+
+    monkeypatch.setattr(orchestrator_mod, "_queue_review_candidate", _queue)
+    monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE", True, raising=False)
+
+    ok, prepared = orchestrator_mod._queue_prebuilder_gate_candidate_for_analytics(
+        {
+            "symbol": "SENSEX",
+            "instrument": "OPT",
+            "ltp": 7419.05,
+        },
+        gate_reasons=["HIST_EMPTY"],
+        reject_reason="pre_builder_gate",
+        reject_source="unit_test_prebuilder_gate",
+    )
+
+    assert ok is True
+    assert prepared["symbol"] == "SENSEX"
+    assert prepared["strategy_family"] == "fallback"
+    assert prepared["candidate_type"] == "fallback"
+    assert prepared["confidence"] == 0.1
+    assert len(queued) == 1
+    assert queued[0][1]["allow_unresolved_for_analytics"] is True
+    assert queued[0][1]["reject_source"] == "unit_test_prebuilder_gate"
+    assert queued[0][1]["extra"]["execution_blocked"] is True
+    assert queued[0][1]["extra"]["execution_block_reason"] == "pre_builder_gate"
+    assert queued[0][1]["extra"]["final_action"] == "ADVISORY_ONLY"
+
+
+def test_queue_invalid_snapshot_candidate_for_analytics_builds_fallback_candidate(monkeypatch):
+    queued = []
+
+    def _queue(trade, **kwargs):
+        queued.append((trade, kwargs))
+        return True, trade
+
+    monkeypatch.setattr(orchestrator_mod, "_queue_review_candidate", _queue)
+    monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE", True, raising=False)
+
+    ok, prepared = orchestrator_mod._queue_invalid_snapshot_candidate_for_analytics(
+        {
+            "symbol": "BANKNIFTY",
+            "instrument": "OPT",
+            "invalid_reason": "historical_empty",
+        },
+        gate_reasons=["historical_empty", "invalid_market_snapshot"],
+        reject_reason="historical_empty",
+        reject_source="unit_test_invalid_snapshot",
+    )
+
+    assert ok is True
+    assert prepared["symbol"] == "BANKNIFTY"
+    assert prepared["strategy"] == "INVALID_SNAPSHOT_FALLBACK"
+    assert prepared["strategy_family"] == "fallback"
+    assert prepared["candidate_type"] == "fallback"
+    assert prepared["setup_variant"] == "invalid_snapshot"
+    assert prepared["trade_id"].startswith("INVALID_SNAPSHOT-BANKNIFTY-")
+    assert len(queued) == 1
+    assert queued[0][1]["allow_unresolved_for_analytics"] is True
+    assert queued[0][1]["reject_source"] == "unit_test_invalid_snapshot"
+    assert queued[0][1]["extra"]["decision_stage"] == "invalid_snapshot"
+    assert queued[0][1]["extra"]["execution_blocked"] is True
+    assert queued[0][1]["extra"]["execution_block_reason"] == "historical_empty"

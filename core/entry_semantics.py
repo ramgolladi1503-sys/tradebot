@@ -9,6 +9,7 @@ try:
 except Exception:  # pragma: no cover - config import guard
     cfg = None
 
+from core.execution_entry_trace import append_execution_entry_trace
 from core.option_entry import get_option_ltp_sla_sec
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ ENTRY_SOURCE_ENUM = {
     "mark",
     "mid",
     "last",
+    "recovered_fallback",
     "retained_prior_ask",
     "retained_prior_bid",
     "retained_prior_mark",
@@ -69,7 +71,15 @@ ENTRY_SOURCE_ENUM = {
 }
 EXECUTION_ENTRY_STATUSES = {"executable", "non_executable", "missing"}
 DISPLAY_ENTRY_STATUSES = {"displayable", "non_executable", "missing"}
-_UNTRUSTED_QUOTE_SOURCES = {"synthetic_index", "subscription_failed", "missing_ltp", "stale_ltp", "none"}
+_UNTRUSTED_QUOTE_SOURCES = {
+    "synthetic_index",
+    "synthetic_offhours",
+    "subscription_failed",
+    "missing_ltp",
+    "stale_ltp",
+    "none",
+}
+_LAST_EXECUTION_FALLBACK_SOURCES = {"tick_store", "rest_fallback"}
 
 
 def _safe_float(value: Any) -> float | None:
@@ -112,6 +122,160 @@ def _valid_positive_quote(value: Any) -> float | None:
 def _safe_lower_text(value: Any) -> str | None:
     text = str(value or "").strip().lower()
     return text or None
+
+
+def should_allow_last_execution_fallback(row: Mapping[str, Any]) -> bool:
+    if not isinstance(row, Mapping):
+        return False
+    try:
+        enabled = bool(getattr(cfg, "EXECUTION_ENTRY_ALLOW_LAST_FALLBACK", True))
+    except Exception:
+        enabled = True
+    if not enabled:
+        return False
+    permission = str(row.get("permission") or "").strip().upper()
+    final_action = str(row.get("final_action") or "").strip().upper()
+    readiness = str(row.get("readiness") or "").strip().upper()
+    if permission == "BLOCK" or final_action == "BLOCK" or readiness == "BLOCKED":
+        return False
+    if bool(row.get("unresolved_contract")) or bool(row.get("approval_blocked")):
+        return False
+    entry_value = (
+        _safe_float(row.get("entry"))
+        or _safe_float(row.get("display_entry"))
+        or _safe_float(row.get("entry_price"))
+    )
+    current_ltp = (
+        _safe_float(row.get("current_ltp"))
+        or _safe_float(row.get("last_price"))
+        or _safe_float(row.get("ltp"))
+        or _safe_float(row.get("last"))
+    )
+    option_ltp_source = _safe_lower_text(row.get("option_ltp_source") or row.get("quote_source"))
+    return bool(
+        entry_value is not None
+        and current_ltp is not None
+        and option_ltp_source in _LAST_EXECUTION_FALLBACK_SOURCES
+    )
+
+
+def derive_execution_entry_recovery(row: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(row, Mapping):
+        return {
+            "execution_entry": None,
+            "execution_entry_source": "none",
+            "execution_entry_status": "missing",
+            "derivation_reason": "row_not_mapping",
+            "derivation_source_chain": [],
+        }
+
+    derivation_source_chain: list[str] = []
+    exec_max_age_sec, _display_max_age_sec = _derive_entry_thresholds(
+        mode=_resolve_mode(row, None),
+        allow_stale_quotes=False,
+        market_open=row.get("market_open"),
+    )
+    quote_age_sec = (
+        _safe_float(row.get("quote_age_sec"))
+        or _safe_float(row.get("option_age_sec"))
+        or _safe_float(row.get("price_age_sec"))
+    )
+
+    def _fresh_or_unaged(value: Any) -> float | None:
+        if quote_age_sec is None:
+            return _valid_positive_quote(value)
+        return _valid_quote_by_age(value, quote_age_sec, exec_max_age_sec)
+
+    def _record(name: str, value: Any) -> float | None:
+        numeric = _valid_positive_quote(value)
+        derivation_source_chain.append(f"{name}={'set' if numeric is not None else 'missing'}")
+        return numeric
+
+    quote_source_key = _safe_lower_text(row.get("option_ltp_source") or row.get("quote_source")) or "none"
+    trusted_quote_source = quote_source_key not in _UNTRUSTED_QUOTE_SOURCES
+    hard_blockers = [
+        str(code or "").strip()
+        for code in list(row.get("hard_blockers") or [])
+        if str(code or "").strip()
+    ]
+    blockers = [
+        str(code or "").strip()
+        for code in list(row.get("blockers") or [])
+        if str(code or "").strip()
+    ]
+
+    current_ltp = (
+        _fresh_or_unaged(row.get("current_ltp"))
+        or _fresh_or_unaged(row.get("last_price"))
+        or _fresh_or_unaged(row.get("ltp"))
+        or _fresh_or_unaged(row.get("last"))
+    )
+    derivation_source_chain.append(f"current_ltp={'set' if current_ltp is not None else 'missing'}")
+    ask = _fresh_or_unaged(row.get("ask"))
+    derivation_source_chain.append(f"ask={'set' if ask is not None else 'missing'}")
+    best_ask = _fresh_or_unaged(row.get("best_ask"))
+    derivation_source_chain.append(f"best_ask={'set' if best_ask is not None else 'missing'}")
+    mid_price = _record("mid_price", row.get("mid_price")) or _record("mid", row.get("mid"))
+    mark_price = _record("mark_price", row.get("mark_price")) or _record("mark", row.get("mark"))
+    display_entry = _record("display_entry", row.get("display_entry"))
+    entry = _record("entry", row.get("entry")) or _record("entry_price", row.get("entry_price"))
+
+    if hard_blockers or blockers:
+        if any(value is not None for value in (current_ltp, ask, best_ask, mid_price, mark_price, display_entry, entry)):
+            return {
+                "execution_entry": None,
+                "execution_entry_source": "none",
+                "execution_entry_status": "non_executable",
+                "derivation_reason": "blocked_reference",
+                "derivation_source_chain": derivation_source_chain,
+            }
+        return {
+            "execution_entry": None,
+            "execution_entry_source": "none",
+            "execution_entry_status": "missing",
+            "derivation_reason": "blocked_without_reference",
+            "derivation_source_chain": derivation_source_chain,
+        }
+
+    if current_ltp is not None and should_allow_last_execution_fallback(row):
+        return {
+            "execution_entry": current_ltp,
+            "execution_entry_source": "last",
+            "execution_entry_status": "executable",
+            "derivation_reason": "trusted_current_ltp",
+            "derivation_source_chain": derivation_source_chain,
+        }
+    if ask is not None and trusted_quote_source:
+        return {
+            "execution_entry": ask,
+            "execution_entry_source": "ask",
+            "execution_entry_status": "executable",
+            "derivation_reason": "trusted_ask",
+            "derivation_source_chain": derivation_source_chain,
+        }
+    if best_ask is not None and trusted_quote_source:
+        return {
+            "execution_entry": best_ask,
+            "execution_entry_source": "ask",
+            "execution_entry_status": "executable",
+            "derivation_reason": "trusted_best_ask",
+            "derivation_source_chain": derivation_source_chain,
+        }
+    if any(value is not None for value in (mid_price, mark_price, display_entry, entry)):
+        return {
+            "execution_entry": None,
+            "execution_entry_source": "none",
+            "execution_entry_status": "non_executable",
+            "derivation_reason": "display_only_reference",
+            "derivation_source_chain": derivation_source_chain,
+        }
+    return {
+        "execution_entry": None,
+        "execution_entry_source": "none",
+        "execution_entry_status": "missing",
+        "derivation_reason": "no_numeric_reference",
+        "derivation_source_chain": derivation_source_chain,
+    }
 
 
 def _resolve_direction(side: Any = None, direction: Any = None) -> str:
@@ -189,6 +353,7 @@ def build_entry_state(
     market_open: bool | None = None,
     instrument_matches: bool = True,
     quote_source: Any = None,
+    allow_last_execution: bool = False,
 ) -> dict[str, Any]:
     exec_max_age_sec, display_max_age_sec = _derive_entry_thresholds(
         mode=mode,
@@ -212,6 +377,10 @@ def build_entry_state(
     execution_ask = _valid_quote_by_age(ask, age_val, exec_max_age_sec)
     execution_entry = execution_ask if direction_key == "BUY" else execution_bid
     execution_entry_source = "ask" if direction_key == "BUY" else "bid"
+    execution_last = _valid_quote_by_age(last, age_val, exec_max_age_sec)
+    if execution_entry is None and bool(allow_last_execution) and execution_last is not None:
+        execution_entry = execution_last
+        execution_entry_source = "last"
     execution_entry_status = "executable" if execution_entry is not None else (
         "non_executable" if any(v is not None for v in (display_mark, display_mid, display_last, display_bid, display_ask)) else "missing"
     )
@@ -283,8 +452,10 @@ def build_entry_state(
         "display_entry": display_entry,
         "display_entry_source": display_entry_source,
         "display_entry_status": display_entry_status,
+        "entry_display_status": display_entry_status,
         "entry_reason": entry_reason,
         "entry_clear_reason": entry_clear_reason,
+        "entry_block_code": entry_clear_reason,
         "entry": display_entry,
         "entry_status": display_entry_status,
         "entry_source": display_entry_source,
@@ -333,6 +504,38 @@ def build_entry_state(
         out["entry_reason"],
         out["entry_clear_reason"],
         quote_source_key,
+    )
+    append_execution_entry_trace(
+        module="core.entry_semantics",
+        stage="build_entry_state",
+        row={
+            "symbol": symbol,
+            "entry": None,
+            "expected_entry": None,
+            "current_ltp": last,
+            "option_ltp_source": quote_source_key,
+            "execution_entry": out["execution_entry"],
+            "execution_entry_status": out["execution_entry_status"],
+            "execution_allowed": None,
+        },
+        execution_entry_before=None,
+        execution_entry_after=out["execution_entry"],
+        execution_entry_status_before=None,
+        execution_entry_status_after=out["execution_entry_status"],
+        extra={
+            "allow_last_execution": bool(allow_last_execution),
+            "execution_entry_source": out["execution_entry_source"],
+            "display_entry": out["display_entry"],
+            "display_entry_status": out["display_entry_status"],
+            "derivation_reason": out["entry_reason"] or out["entry_clear_reason"],
+            "derivation_source_chain": [
+                "ask",
+                "bid",
+                "mark",
+                "mid",
+                "last",
+            ],
+        },
     )
     return out
 

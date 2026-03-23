@@ -28,6 +28,8 @@ def test_build_entry_state_buy_uses_fresh_ask_for_execution_and_display():
     assert float(out["display_entry"]) == 72.8
     assert out["display_entry_source"] == "ask"
     assert out["display_entry_status"] == "displayable"
+    assert out["entry_display_status"] == "displayable"
+    assert out["entry_block_code"] is None
     assert float(out["entry"]) == 72.8
     assert out["entry_status"] == "displayable"
 
@@ -83,6 +85,8 @@ def test_build_entry_state_uses_mark_for_display_when_executable_quote_missing()
     assert float(out["display_entry"]) == 73.1
     assert out["display_entry_source"] == "mark"
     assert out["display_entry_status"] == "displayable"
+    assert out["entry_display_status"] == "displayable"
+    assert out["entry_block_code"] is None
     assert float(out["entry"]) == 73.1
     assert out["entry_status"] == "displayable"
 
@@ -138,6 +142,7 @@ def test_build_entry_state_uses_last_when_mark_and_mid_missing():
     assert out["display_entry"] == 72.9
     assert out["display_entry_source"] == "last"
     assert out["display_entry_status"] == "displayable"
+    assert out["entry_display_status"] == "displayable"
 
 
 def test_build_entry_state_clears_stale_quote_when_all_candidates_expire():

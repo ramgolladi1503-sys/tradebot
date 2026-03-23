@@ -13,7 +13,10 @@ from core.entry_semantics import (
     EXECUTION_ENTRY_STATUSES,
     EntryContractViolation,
     build_entry_state,
+    derive_execution_entry_recovery,
+    should_allow_last_execution_fallback,
 )
+from core.execution_entry_trace import append_execution_entry_trace
 from core.issue_policy import (
     ISSUE_CATEGORY_HARD,
     ISSUE_CATEGORY_SOFT,
@@ -21,7 +24,8 @@ from core.issue_policy import (
     classify_issue,
 )
 from core.paths import logs_dir
-from core.trade_identity import derive_strategy_id
+from core.trade_identity import derive_strategy_id, infer_candidate_identity
+from core.trade_state_machine import TRADE_LIFECYCLE_STATES
 
 
 class AdvisorySchemaError(ValueError):
@@ -82,7 +86,7 @@ REQUIRED_FIELDS = (
 _LEGACY_NON_ERROR_ENTRY_STATUSES = {"VALID", "OK", "LIVE_OK", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}
 _OPTION_SIDE_RE = re.compile(r"(?:^|[^A-Z0-9])(CE|PE)(?:$|[^A-Z0-9])")
 _LIST_FIELDS = ("hard_blockers", "soft_penalties", "warnings")
-_EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "retained_prior_ask", "retained_prior_bid"}
+_EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "last", "recovered_fallback", "retained_prior_ask", "retained_prior_bid"}
 _IST = timezone(timedelta(hours=5, minutes=30))
 _STALE_QUOTE_AGE_SENTINEL = float(10**9)
 
@@ -290,6 +294,56 @@ def _normalize_decision_explain(value: Any) -> list[Any]:
     return [value]
 
 
+def _normalize_mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _derive_candidate_status(payload: dict[str, Any]) -> str:
+    existing = str(payload.get("candidate_status") or "").strip().lower()
+    if existing in {"scored", "ranked", "advisory_only", "blocked_contract", "executable"}:
+        return existing
+    status = str(payload.get("status") or "").strip().upper()
+    hard_reason = str(payload.get("hard_reason") or "").strip().lower()
+    permission_reason = str(payload.get("permission_reason") or "").strip().lower()
+    if (
+        bool(payload.get("unresolved_contract"))
+        or status == "BLOCKED_CONTRACT"
+        or hard_reason == "unresolved_contract"
+        or permission_reason == "unresolved_contract"
+    ):
+        return "blocked_contract"
+    execution_entry = _safe_float(payload.get("execution_entry"))
+    execution_entry_status = str(payload.get("execution_entry_status") or "").strip().lower()
+    execution_status = str(payload.get("execution_status") or "").strip().lower()
+    permission = str(payload.get("permission") or "").strip().upper()
+    final_action = str(payload.get("final_action") or "").strip().upper()
+    readiness = str(payload.get("readiness") or "").strip().upper()
+    if (
+        execution_entry is not None
+        and execution_entry_status == "executable"
+        and execution_status == "executable"
+        and permission == "EXECUTE"
+        and final_action == "EXECUTE"
+        and readiness == "READY"
+    ):
+        return "executable"
+    if (
+        _safe_float(payload.get("rank_score")) is not None
+        or _safe_float(payload.get("opportunity_score")) is not None
+        or payload.get("opportunity_rank") not in (None, "", "None")
+    ):
+        if execution_status in {"blocked", "advisory_only", "queue_only"} or permission in {"BLOCK", "ADVISORY_ONLY", "QUEUE_ONLY"}:
+            return "advisory_only"
+        return "ranked"
+    if (
+        _safe_float(payload.get("builder_confidence")) is not None
+        or _safe_float(payload.get("confidence_raw")) is not None
+        or bool(payload.get("score_breakdown"))
+    ):
+        return "advisory_only" if execution_status in {"blocked", "advisory_only", "queue_only"} or permission in {"BLOCK", "ADVISORY_ONLY", "QUEUE_ONLY"} else "scored"
+    return "scored"
+
+
 def _derive_blockers(payload: dict[str, Any]) -> list[str]:
     categorized: list[str] = []
     for field in _LIST_FIELDS:
@@ -328,6 +382,12 @@ def _derive_execution_status(payload: dict[str, Any], readiness: str, hard_block
         return str(existing).strip().lower()
     if hard_blockers:
         return "blocked"
+    if _has_executable_entry_truth(
+        execution_entry=_safe_float(payload.get("execution_entry")),
+        execution_entry_source=_safe_lower_text(payload.get("execution_entry_source")) or "none",
+        execution_entry_status=str(payload.get("execution_entry_status") or "").strip().lower(),
+    ):
+        return "executable"
     permission = str(payload.get("permission") or "").strip().upper()
     final_action = str(payload.get("final_action") or "").strip().upper()
     if permission == "EXECUTE" and final_action == "EXECUTE" and readiness == "READY":
@@ -414,8 +474,11 @@ def _legacy_entry_state(payload: dict[str, Any]) -> dict[str, Any]:
             "display_entry": display_entry,
             "display_entry_source": display_entry_source,
             "display_entry_status": display_entry_status,
+            "entry_display_status": display_entry_status,
             "entry_reason": _normalize_text(payload.get("entry_reason")),
             "entry_clear_reason": _normalize_text(payload.get("entry_clear_reason")),
+            "entry_block_code": _normalize_text(payload.get("entry_block_code"))
+            or _normalize_text(payload.get("entry_clear_reason")),
             "entry": display_entry,
             "entry_status": display_entry_status,
             "entry_source": display_entry_source,
@@ -448,11 +511,41 @@ def _legacy_entry_state(payload: dict[str, Any]) -> dict[str, Any]:
             market_open=str(payload.get("execution_mode") or payload.get("mode") or "").strip().upper() not in {"OFFHOURS", "ADVISORY", "PLANNING"},
             instrument_matches=not bool(payload.get("unresolved_contract")),
             quote_source=quote_source,
+            allow_last_execution=should_allow_last_execution_fallback(payload),
         )
     except EntryContractViolation as exc:
         raise AdvisorySchemaError(str(exc)) from exc
     if validation_issue_code and state.get("display_entry") is None and not state.get("entry_clear_reason"):
         state["entry_clear_reason"] = str(validation_issue_code).lower()
+    append_execution_entry_trace(
+        module="core.advisory_schema",
+        stage="legacy_entry_state",
+        row={
+            "trade_id": payload.get("trade_id"),
+            "symbol": payload.get("symbol"),
+            "strategy": payload.get("strategy") or payload.get("strategy_name"),
+            "entry": payload.get("entry"),
+            "expected_entry": payload.get("expected_entry"),
+            "current_ltp": payload.get("current_ltp"),
+            "option_ltp_source": payload.get("option_ltp_source"),
+            "quote_validation_status": payload.get("quote_validation_status"),
+            "permission": payload.get("permission"),
+            "execution_entry": state.get("execution_entry"),
+            "execution_entry_status": state.get("execution_entry_status"),
+            "execution_allowed": payload.get("execution_allowed"),
+        },
+        execution_entry_before=payload.get("execution_entry"),
+        execution_entry_after=state.get("execution_entry"),
+        execution_entry_status_before=payload.get("execution_entry_status"),
+        execution_entry_status_after=state.get("execution_entry_status"),
+        extra={
+            "execution_entry_source": state.get("execution_entry_source"),
+            "display_entry": state.get("display_entry"),
+            "display_entry_status": state.get("display_entry_status"),
+            "derivation_reason": state.get("_execution_entry_derivation_reason"),
+            "derivation_source_chain": state.get("_execution_entry_derivation_source_chain"),
+        },
+    )
     return state
 
 
@@ -477,6 +570,12 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
         "strategy_name",
         payload.get("strategy_name") or payload.get("strategy") or payload.get("generator") or payload.get("strategy_id"),
     )
+    identity = infer_candidate_identity(out)
+    out.setdefault("candidate_type", identity.get("candidate_type") or "unknown")
+    out.setdefault("strategy_family", identity.get("strategy_family") or "unknown")
+    out.setdefault("setup_variant", identity.get("setup_variant") or "unknown")
+    out.setdefault("direction", identity.get("direction") or "UNKNOWN")
+    out.setdefault("candidate_status", _derive_candidate_status(out))
     out.setdefault("timestamp", _derive_timestamp(payload))
     out.setdefault("instrument_type", payload.get("instrument_type") or payload.get("instrument"))
     out.setdefault("decision_explain", _normalize_decision_explain(payload.get("decision_explain")))
@@ -493,6 +592,10 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     lifecycle = _legacy_entry_state(payload)
     out.update(lifecycle)
     out["entry"] = lifecycle.get("display_entry")
+    out["entry_display_status"] = lifecycle.get("display_entry_status") or "missing"
+    out["entry_block_code"] = _normalize_text(
+        lifecycle.get("entry_block_code") or lifecycle.get("entry_clear_reason")
+    )
     out["entry_status"] = lifecycle.get("display_entry_status") or "missing"
     out["entry_source"] = lifecycle.get("display_entry_source")
     out["blockers"] = _derive_blockers(payload)
@@ -563,12 +666,37 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("confluence_source", _normalize_text(payload.get("confluence_source")))
     out.setdefault("confidence_size_multiplier", _safe_float(payload.get("confidence_size_multiplier")))
     out.setdefault("final_qty", _safe_float(payload.get("final_qty")))
+    out.setdefault("rank_score", _safe_float(payload.get("rank_score")))
+    out.setdefault("setup_strength", _safe_float(payload.get("setup_strength")))
+    out.setdefault("regime_fit", _safe_float(payload.get("regime_fit")))
+    out.setdefault("liquidity_score", _safe_float(payload.get("liquidity_score")))
+    out.setdefault("spread_score", _safe_float(payload.get("spread_score")))
+    out.setdefault("rr_score", _safe_float(payload.get("rr_score")))
+    out.setdefault("timing_score", _safe_float(payload.get("timing_score")))
+    out.setdefault("penalty_score", _safe_float(payload.get("penalty_score")))
+    out.setdefault("score_breakdown", _normalize_mapping(payload.get("score_breakdown")))
+    out.setdefault("penalty_reasons", _normalize_blockers(payload.get("penalty_reasons")))
+    out.setdefault("score_inputs_used", _normalize_mapping(payload.get("score_inputs_used")))
     out.setdefault("opportunity_score", _safe_float(payload.get("opportunity_score")))
     try:
         opportunity_rank = payload.get("opportunity_rank")
         out.setdefault("opportunity_rank", int(opportunity_rank) if opportunity_rank not in (None, "", "None") else None)
     except Exception:
         out.setdefault("opportunity_rank", None)
+    try:
+        rank_global = payload.get("rank_global")
+        out.setdefault("rank_global", int(rank_global) if rank_global not in (None, "", "None") else None)
+    except Exception:
+        out.setdefault("rank_global", None)
+    try:
+        rank_within_symbol = payload.get("rank_within_symbol")
+        out.setdefault(
+            "rank_within_symbol",
+            int(rank_within_symbol) if rank_within_symbol not in (None, "", "None") else None,
+        )
+    except Exception:
+        out.setdefault("rank_within_symbol", None)
+    out.setdefault("opportunity_bucket", _normalize_text(payload.get("opportunity_bucket")))
     out.setdefault("selected_for_execution", _normalize_bool(payload.get("selected_for_execution")))
     out.setdefault("selection_reason", _normalize_text(payload.get("selection_reason")))
     out.setdefault("size_multiplier_reason", _normalize_text(payload.get("size_multiplier_reason")))
@@ -606,6 +734,8 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("entry_source", payload.get("entry_source") or payload.get("entry_price_source") or payload.get("quote_source"))
     out["execution_status"] = _derive_execution_status(payload, out["readiness"], out["hard_blockers"])
     out.setdefault("validation_issue_code", payload.get("validation_issue_code"))
+    out.setdefault("entry_display_status", _safe_lower_text(payload.get("entry_display_status")) or out.get("display_entry_status"))
+    out.setdefault("entry_block_code", _normalize_text(payload.get("entry_block_code")) or _normalize_text(out.get("entry_clear_reason")))
     return out
 
 
@@ -620,8 +750,34 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
     display_entry = _safe_float(out.get("display_entry"))
     display_entry_source = _safe_lower_text(out.get("display_entry_source")) or "none"
     display_entry_status = str(out.get("display_entry_status") or "").strip().lower()
+    entry_display_status = str(out.get("entry_display_status") or display_entry_status or "").strip().lower()
     entry = _safe_float(out.get("entry"))
     entry_status = str(out.get("entry_status") or "").strip().lower()
+    entry_block_code = _normalize_text(out.get("entry_block_code"))
+    if execution_entry is None:
+        recovery = derive_execution_entry_recovery(out)
+        out["_execution_entry_derivation_reason"] = recovery.get("derivation_reason")
+        out["_execution_entry_derivation_source_chain"] = list(recovery.get("derivation_source_chain") or [])
+        recovered_entry = _safe_float(recovery.get("execution_entry"))
+        recovered_status = str(recovery.get("execution_entry_status") or "").strip().lower()
+        if recovered_entry is not None and recovered_status == "executable":
+            out["execution_entry"] = recovered_entry
+            out["execution_entry_source"] = _safe_lower_text(recovery.get("execution_entry_source")) or "none"
+            out["execution_entry_status"] = "executable"
+            execution_entry = recovered_entry
+            execution_entry_source = _safe_lower_text(out.get("execution_entry_source")) or "none"
+            execution_entry_status = "executable"
+        elif not execution_entry_status or execution_entry_status == "missing":
+            out["execution_entry_status"] = recovered_status or "missing"
+            execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    if execution_entry_source == "last" and not should_allow_last_execution_fallback(out):
+        out["execution_entry"] = None
+        out["execution_entry_source"] = "none"
+        if execution_entry_status == "executable":
+            out["execution_entry_status"] = "non_executable"
+            execution_entry_status = "non_executable"
+        execution_entry = None
+        execution_entry_source = "none"
 
     # Preserve a real executable entry if a downstream normalizer dropped the
     # duplicated display/entry fields but kept the canonical execution entry.
@@ -650,11 +806,16 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
         if entry_status not in ENTRY_STATUSES or entry_status == "missing":
             out["entry_status"] = display_entry_status
             entry_status = display_entry_status
+        if entry_display_status not in ENTRY_STATUSES or entry_display_status == "missing":
+            out["entry_display_status"] = display_entry_status
+            entry_display_status = display_entry_status
     if display_entry is not None and execution_entry is None:
         out["display_entry_status"] = "displayable"
         if entry is not None:
             out["entry_status"] = "displayable"
             entry_status = "displayable"
+        out["entry_display_status"] = "displayable"
+        entry_display_status = "displayable"
 
     missing_entry = entry is None or entry_status == "missing"
     execution_status = str(out.get("execution_status") or "").strip().lower()
@@ -705,6 +866,8 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
     if not _normalize_text(out.get("entry_clear_reason")):
         reason = "missing_execution_entry" if missing_executable_entry else str(out.get("entry_status") or "missing_entry").strip().lower()
         out["entry_clear_reason"] = reason or "missing_entry"
+    if not _normalize_text(out.get("entry_block_code")) and _normalize_text(out.get("entry_clear_reason")):
+        out["entry_block_code"] = _normalize_text(out.get("entry_clear_reason"))
     return out
 
 
@@ -725,13 +888,37 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     for field in REQUIRED_FIELDS:
         if field not in out:
             raise AdvisorySchemaError(f"missing required field: {field}")
+    execution_entry_before = out.get("execution_entry")
+    execution_entry_status_before = out.get("execution_entry_status")
     out = _enforce_executable_entry_invariant(out)
+    append_execution_entry_trace(
+        module="core.advisory_schema",
+        stage="validate_advisory_row",
+        row=out,
+        execution_entry_before=execution_entry_before,
+        execution_entry_after=out.get("execution_entry"),
+        execution_entry_status_before=execution_entry_status_before,
+        execution_entry_status_after=out.get("execution_entry_status"),
+        extra={
+            "execution_entry_source": out.get("execution_entry_source"),
+            "display_entry": out.get("display_entry"),
+            "display_entry_status": out.get("display_entry_status"),
+            "derivation_reason": out.get("_execution_entry_derivation_reason"),
+            "derivation_source_chain": out.get("_execution_entry_derivation_source_chain"),
+        },
+    )
 
     trade_id = _normalize_text(out.get("trade_id"))
     strategy_id = _normalize_text(out.get("strategy_id"))
     advisory_id = _normalize_text(out.get("advisory_id"))
     symbol = _normalize_text(out.get("symbol"))
     strategy_name = _normalize_text(out.get("strategy_name"))
+    identity = infer_candidate_identity(out)
+    candidate_type = _normalize_text(out.get("candidate_type")) or identity.get("candidate_type") or "unknown"
+    strategy_family = _normalize_text(out.get("strategy_family")) or identity.get("strategy_family") or "unknown"
+    setup_variant = _normalize_text(out.get("setup_variant")) or identity.get("setup_variant") or "unknown"
+    direction = _normalize_text(out.get("direction")) or identity.get("direction") or "UNKNOWN"
+    candidate_status = _normalize_text(out.get("candidate_status")) or _derive_candidate_status(out)
     ts_epoch = _coerce_ts_epoch(out.get("ts_epoch"))
     timestamp = _normalize_text(out.get("timestamp"))
     instrument_type = _normalize_text(out.get("instrument_type"))
@@ -741,8 +928,10 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     display_entry = _safe_float(out.get("display_entry"))
     display_entry_source = _safe_lower_text(out.get("display_entry_source")) or "none"
     display_entry_status = str(out.get("display_entry_status") or "").strip().lower()
+    entry_display_status = str(out.get("entry_display_status") or display_entry_status or "").strip().lower()
     entry_reason = _normalize_text(out.get("entry_reason"))
     entry_clear_reason = _normalize_text(out.get("entry_clear_reason"))
+    entry_block_code = _normalize_text(out.get("entry_block_code"))
     entry_status = str(out.get("entry_status") or "").strip().lower()
     readiness = str(out.get("readiness") or "").strip().upper()
     quote_source = str(out.get("quote_source") or "").strip().lower()
@@ -776,6 +965,8 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     quote_age_sec = _canonical_quote_age_sec(out)
     entry = _safe_float(out.get("entry"))
     execution_status = str(out.get("execution_status") or "").strip().lower()
+    permission = str(out.get("permission") or "").strip().upper()
+    final_action = str(out.get("final_action") or "").strip().upper()
     entry_source = _normalize_text(out.get("entry_source"))
     advisory_visible = bool(out.get("advisory_visible", True))
     is_executable = bool(out.get("is_executable", False))
@@ -891,6 +1082,12 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         raise AdvisorySchemaError("missing display_entry requires display_entry_status=missing")
     if display_entry is None and not entry_clear_reason:
         raise AdvisorySchemaError("missing display_entry requires entry_clear_reason")
+    if display_entry is not None and display_entry_status not in {"displayable"}:
+        raise AdvisorySchemaError("display_entry requires display_entry_status=displayable")
+    if execution_entry is not None and execution_entry_status != "executable":
+        raise AdvisorySchemaError("execution_entry requires execution_entry_status=executable")
+    if entry_display_status and entry_display_status != display_entry_status:
+        raise AdvisorySchemaError("entry_display_status must equal display_entry_status")
     if display_entry is not None and not display_entry_source:
         raise AdvisorySchemaError("display_entry requires display_entry_source")
     if execution_entry is not None and not execution_entry_source:
@@ -911,12 +1108,42 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         raise AdvisorySchemaError("non-null entry cannot have entry_status=missing")
     if entry is None and entry_status != "missing":
         raise AdvisorySchemaError("missing entry requires entry_status=missing")
+    if final_action == "BLOCK" and not hard_blockers and not entry_block_code:
+        raise AdvisorySchemaError("final_action=BLOCK requires hard_blockers or entry_block_code")
+
+    trade_lifecycle_state = _normalize_text(out.get("trade_lifecycle_state"))
+    trade_lifecycle_reason = _normalize_text(out.get("trade_lifecycle_reason"))
+    trade_lifecycle_ts = _normalize_text(out.get("trade_lifecycle_ts"))
+    trade_lifecycle_history = out.get("trade_lifecycle_history") or []
+    if trade_lifecycle_state and trade_lifecycle_state not in TRADE_LIFECYCLE_STATES:
+        raise AdvisorySchemaError(f"invalid trade_lifecycle_state: {trade_lifecycle_state}")
+    if not isinstance(trade_lifecycle_history, list):
+        raise AdvisorySchemaError("trade_lifecycle_history must be a list")
+    normalized_trade_lifecycle_history = []
+    for event in trade_lifecycle_history:
+        if not isinstance(event, dict):
+            raise AdvisorySchemaError("trade_lifecycle_history events must be dicts")
+        event_state = _normalize_text(event.get("state"))
+        if event_state and event_state not in TRADE_LIFECYCLE_STATES:
+            raise AdvisorySchemaError(f"invalid trade_lifecycle_history state: {event_state}")
+        normalized_trade_lifecycle_history.append(
+            {
+                "state": event_state or None,
+                "reason": _normalize_text(event.get("reason")),
+                "timestamp": _normalize_text(event.get("timestamp")),
+            }
+        )
 
     out["trade_id"] = trade_id
     out["strategy_id"] = strategy_id
     out["advisory_id"] = advisory_id
     out["symbol"] = symbol
     out["strategy_name"] = strategy_name
+    out["candidate_type"] = candidate_type
+    out["strategy_family"] = strategy_family
+    out["setup_variant"] = setup_variant
+    out["direction"] = direction
+    out["candidate_status"] = candidate_status
     out["ts_epoch"] = float(ts_epoch)
     out["timestamp"] = _utc_timestamp_from_epoch(ts_epoch)
     out["ts_utc"] = out["timestamp"]
@@ -928,8 +1155,10 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["display_entry"] = display_entry
     out["display_entry_source"] = display_entry_source
     out["display_entry_status"] = display_entry_status
+    out["entry_display_status"] = entry_display_status or display_entry_status
     out["entry_reason"] = entry_reason
     out["entry_clear_reason"] = entry_clear_reason
+    out["entry_block_code"] = entry_block_code or entry_clear_reason
     out["entry"] = entry
     out["entry_status"] = display_entry_status
     out["confidence"] = confidence
@@ -948,8 +1177,22 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["confluence_source"] = _normalize_text(out.get("confluence_source"))
     out["confidence_size_multiplier"] = _safe_float(out.get("confidence_size_multiplier"))
     out["final_qty"] = int(out["final_qty"]) if _safe_float(out.get("final_qty")) is not None else None
+    out["rank_score"] = _safe_float(out.get("rank_score"))
+    out["setup_strength"] = _safe_float(out.get("setup_strength"))
+    out["regime_fit"] = _safe_float(out.get("regime_fit"))
+    out["liquidity_score"] = _safe_float(out.get("liquidity_score"))
+    out["spread_score"] = _safe_float(out.get("spread_score"))
+    out["rr_score"] = _safe_float(out.get("rr_score"))
+    out["timing_score"] = _safe_float(out.get("timing_score"))
+    out["penalty_score"] = _safe_float(out.get("penalty_score"))
+    out["score_breakdown"] = _normalize_mapping(out.get("score_breakdown"))
+    out["penalty_reasons"] = _normalize_blockers(out.get("penalty_reasons"))
+    out["score_inputs_used"] = _normalize_mapping(out.get("score_inputs_used"))
     out["opportunity_score"] = _safe_float(out.get("opportunity_score"))
     out["opportunity_rank"] = out.get("opportunity_rank")
+    out["rank_global"] = out.get("rank_global")
+    out["rank_within_symbol"] = out.get("rank_within_symbol")
+    out["opportunity_bucket"] = _normalize_text(out.get("opportunity_bucket"))
     out["selected_for_execution"] = bool(out.get("selected_for_execution", False))
     out["selection_reason"] = _normalize_text(out.get("selection_reason"))
     out["size_multiplier_reason"] = _normalize_text(out.get("size_multiplier_reason"))
@@ -992,11 +1235,16 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["option_age_sec"] = quote_age_sec
     out["decision_explain"] = decision_explain
     out["market_open"] = market_open
+    out["trade_lifecycle_state"] = trade_lifecycle_state
+    out["trade_lifecycle_reason"] = trade_lifecycle_reason
+    out["trade_lifecycle_ts"] = trade_lifecycle_ts
+    out["trade_lifecycle_history"] = normalized_trade_lifecycle_history
     return out
 
 
 def serialize_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False) -> dict[str, Any]:
-    return validate_advisory_row(payload, allow_legacy=allow_legacy)
+    prepared = _enforce_executable_entry_invariant(dict(payload)) if isinstance(payload, dict) else payload
+    return validate_advisory_row(prepared, allow_legacy=allow_legacy)
 
 
 def deserialize_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False) -> dict[str, Any]:

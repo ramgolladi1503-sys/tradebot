@@ -3,8 +3,12 @@ from __future__ import annotations
 import pytest
 
 from core.trade_state_machine import (
+    TradeLifecycleState,
+    TradeLifecycleTransitionError,
     TradeStateTransitionError,
     TradeStateV1,
+    rehydrate_trade_lifecycle,
+    transition_trade_lifecycle,
     transition_trade_state,
 )
 
@@ -40,4 +44,54 @@ def test_approved_transition_passes_with_required_fields():
     }
     out = transition_trade_state(trade, TradeStateV1.APPROVED)
     assert out["trade_state_v1"] == "APPROVED"
+    assert out["trade_lifecycle_state"] == "execution_pending"
 
+
+def test_valid_canonical_trade_lifecycle_path_succeeds():
+    trade = {"trade_id": "t6"}
+
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.SCORED, reason="scored_candidate")
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.RANKED, reason="ranked_candidate")
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.ADVISORY, reason="display_only")
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.EXECUTION_PENDING, reason="ready_to_route")
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.ACTIVE, reason="execution_filled")
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.EXIT_PENDING, reason="exit_order_submitted")
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.CLOSED, reason="position_closed")
+    trade = transition_trade_lifecycle(trade, TradeLifecycleState.RECONCILED, reason="broker_reconciled")
+
+    assert trade["trade_lifecycle_state"] == "reconciled"
+    assert trade["trade_lifecycle_reason"] == "broker_reconciled"
+    assert [event["state"] for event in trade["trade_lifecycle_history"]] == [
+        "idea_created",
+        "scored",
+        "ranked",
+        "advisory",
+        "execution_pending",
+        "active",
+        "exit_pending",
+        "closed",
+        "reconciled",
+    ]
+
+
+def test_invalid_canonical_trade_lifecycle_transition_rejected_with_reason():
+    trade = {"trade_id": "t7"}
+    with pytest.raises(TradeLifecycleTransitionError, match="invalid_trade_lifecycle_transition:idea_created->active") as exc:
+        transition_trade_lifecycle(trade, TradeLifecycleState.ACTIVE, reason="skip_execution_pending")
+    assert exc.value.reason == "skip_execution_pending"
+
+
+def test_restart_recovery_rehydrates_canonical_state():
+    trade = {
+        "trade_id": "t8",
+        "trade_state_v1": "APPROVED",
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "execution_status": "executable",
+    }
+
+    out = rehydrate_trade_lifecycle(trade, reason="restart_rehydrated")
+
+    assert out["trade_lifecycle_state"] == "execution_pending"
+    assert out["trade_lifecycle_reason"] == "restart_rehydrated"
+    assert out["trade_lifecycle_history"][-1]["state"] == "execution_pending"

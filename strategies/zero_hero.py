@@ -4,6 +4,7 @@ from datetime import date
 
 from config import config as cfg
 from core.market_calendar import next_expiry
+from core.regime_router import get_strategy_regime_profile, record_strategy_regime_path, resolve_strategy_regime
 
 
 def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=None):
@@ -30,7 +31,7 @@ def _normalize_bias(bias):
         return "bearish"
     return None
 
-def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_window_days=None, debug_stats=None):
+def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_window_days=None, debug_stats=None, regime=None):
     """
     Zero-Hero logic for weekly expiry.
     Only generates manual approval trades
@@ -58,22 +59,41 @@ def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_wi
         else getattr(cfg, "ZERO_HERO_EXPIRY_WINDOW_DAYS", 1)
     )
     days_to_expiry = (expiry - today).days
-    if days_to_expiry < 0 or days_to_expiry > max(0, window_days):
+    expiry_context = 0 <= days_to_expiry <= max(0, window_days)
+    if not expiry_context and not bool(getattr(cfg, "ZERO_HERO_ALLOW_NON_EXPIRY_CONTEXT", True)):
         _update_debug(debug_stats, rejected=1, reason="outside_expiry_window")
         return trades
+    regime_name = resolve_strategy_regime(regime, bias=bias_norm, expiry_context=expiry_context)
+    profile = get_strategy_regime_profile("zero_hero", regime_name)
+    if not expiry_context and regime_name not in {"TRENDING_UP", "TRENDING_DOWN", "VOLATILE"}:
+        regime_name = "TRENDING_DOWN" if bias_norm == "bearish" else "TRENDING_UP"
+        profile = get_strategy_regime_profile("zero_hero", regime_name)
+    if not expiry_context:
+        profile = dict(profile)
+        profile["premium_floor"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_PREMIUM_FLOOR", profile.get("premium_floor", 15.0)))
+        profile["entry_price_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_ENTRY_MULT", profile.get("entry_price_mult", 0.0035)))
+        profile["target_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_TARGET_MULT", profile.get("target_mult", 1.6)))
+        profile["stop_loss_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_STOP_MULT", profile.get("stop_loss_mult", 0.85)))
+        profile["confidence"] = int(getattr(cfg, "ZERO_HERO_NON_EXPIRY_CONFIDENCE", profile.get("confidence", 46)))
+        profile.setdefault("variant", "non_expiry_context")
+        profile.setdefault("confidence_reason", "non_expiry_manual_advisory")
+    record_strategy_regime_path("zero_hero", regime_name, profile, debug_stats=debug_stats)
     if isinstance(debug_stats, dict):
         debug_stats["zero_hero_activation_window"] = {
             "strategy": "ZERO_HERO",
-            "variant": "manual_expiry_window",
+            "variant": str(profile.get("variant") or "manual_expiry_window"),
             "days_to_expiry": days_to_expiry,
             "expiry_window_days": max(0, window_days),
         }
 
     strike = round(float(ltp) / 100) * 100
     option_type = "CE" if bias_norm == "bullish" else "PE"
-    entry_price = max(float(ltp) * 0.005, 25)
-    stop_loss = round(entry_price * 0.8, 2)
-    target = round(entry_price * 2, 2)
+    entry_price = max(
+        float(ltp) * float(profile.get("entry_price_mult", 0.005)),
+        float(profile.get("premium_floor", 25.0)),
+    )
+    stop_loss = round(entry_price * float(profile.get("stop_loss_mult", 0.8)), 2)
+    target = round(entry_price * float(profile.get("target_mult", 2.0)), 2)
     lot_size = 1
 
     trades.append(
@@ -85,15 +105,17 @@ def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_wi
             "stop_loss": stop_loss,
             "target": target,
             "lot_size": lot_size,
-            "confidence": 60,
-            "confidence_reason": "expiry_window_manual_advisory",
+            "confidence": int(profile.get("confidence", 60)),
+            "confidence_reason": str(profile.get("confidence_reason", "expiry_window_manual_advisory")),
+            "regime_path": regime_name,
+            "variant": str(profile.get("variant") or "manual_expiry_window"),
         }
     )
     if isinstance(debug_stats, dict):
         debug_stats["zero_hero_selected_premium_band"] = {
             "strategy": "ZERO_HERO",
-            "variant": "manual_expiry_window",
-            "low": 25.0,
+            "variant": str(profile.get("variant") or "manual_expiry_window"),
+            "low": float(profile.get("premium_floor", 25.0)),
             "high": round(float(entry_price), 2),
             "source": "manual_fixed_premium",
         }
