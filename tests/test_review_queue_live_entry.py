@@ -55,7 +55,7 @@ def test_trade_blocked_without_option_subscription(tmp_path, monkeypatch):
     assert rows[0]["quote_validation_status"] in ("NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN")
     assert rows[0]["permission"] == "BLOCK"
     assert rows[0]["final_action"] == "BLOCK"
-    assert rows[0]["candidate_status"] in {"advisory_only", "blocked_contract"}
+    assert rows[0]["candidate_status"] in {"advisory_only", "blocked", "blocked_contract"}
     assert rows[0]["candidate_type"] == "options"
     assert rows[0]["strategy_family"] == "breakout"
     assert float(rows[0]["rank_score"]) > 0.0
@@ -637,8 +637,8 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
     assert stale_row["soft_penalties"] == ["NO_LIVE_OPTION_FEED", "STALE_OPTION_LTP"]
     assert stale_row["readiness"] == "ADVISORY_ONLY"
     assert stale_row["execution_status"] == "advisory_only"
-    assert stale_row["entry"] is None
-    assert stale_row["entry_status"] == "missing"
+    assert stale_row["entry"] == 565.0
+    assert stale_row["entry_status"] == "displayable"
     assert stale_row["quote_validation_status"] == "STALE_OPTION_LTP"
     assert stale_row["freshness_reason"] == "quote_exceeds_threshold"
     assert float(stale_row["price_age_sec"]) > float(stale_row["freshness_threshold_sec"])

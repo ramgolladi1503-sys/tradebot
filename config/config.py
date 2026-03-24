@@ -24,6 +24,16 @@ try:
 except Exception:
     pass
 
+
+def _float_env(name: str, default):
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return float(raw)
+    except Exception:
+        return default
+
 DATA_ROOT = os.getenv("DATA_ROOT", str(_DATA_ROOT))
 DESKS_ROOT = os.getenv("DESKS_ROOT", str(_DESKS_ROOT))
 LOGS_ROOT = os.getenv("LOGS_ROOT", str(_LOGS_ROOT))
@@ -55,6 +65,22 @@ KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "")
 # Telegram bot credentials
 # -------------------------------
 ENABLE_TELEGRAM = os.getenv("ENABLE_TELEGRAM", "true").lower() == "true"
+
+# ----------------------------------------------------
+# V2 Opportunity Pipeline (Phase 1 only, legacy default)
+# Only the candidate generator is active in Phase 1.
+# Future phase flags will be added later and are
+# intentionally omitted here to avoid false signals.
+# ----------------------------------------------------
+ENABLE_CANDIDATE_GENERATOR_V2 = os.getenv("ENABLE_CANDIDATE_GENERATOR_V2", "false").lower() == "true"
+
+# Candidate generator v2 defaults (shadow mode only).
+V2_CANDIDATE_SYMBOLS = os.getenv("V2_CANDIDATE_SYMBOLS", "NIFTY,BANKNIFTY")
+V2_CANDIDATE_STRIKE_WINDOW = int(os.getenv("V2_CANDIDATE_STRIKE_WINDOW", "2"))
+V2_CANDIDATE_STRATEGY_FAMILIES = os.getenv(
+    "V2_CANDIDATE_STRATEGY_FAMILIES",
+    "breakout,mean_reversion,volatility_expansion,expiry_momentum",
+)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_ONLY_TRADES = os.getenv("TELEGRAM_ONLY_TRADES", "true").lower() == "true"
@@ -663,6 +689,15 @@ OPPORTUNITY_ENGINE_ENABLE = os.getenv("OPPORTUNITY_ENGINE_ENABLE", "true").lower
 REVIEW_QUEUE_RUNTIME_RANKING_ENABLE = (
     os.getenv("REVIEW_QUEUE_RUNTIME_RANKING_ENABLE", "true").lower() == "true"
 )
+REVIEW_QUEUE_FINAL_ENTRY_LOCK_ENABLE = (
+    os.getenv("REVIEW_QUEUE_FINAL_ENTRY_LOCK_ENABLE", "true").lower() == "true"
+)
+CANDIDATE_ROW_KIND_CANONICAL_ONLY = (
+    os.getenv("CANDIDATE_ROW_KIND_CANONICAL_ONLY", "true").lower() == "true"
+)
+CANDIDATE_ROW_CORRUPTION_LOG_ENABLE = (
+    os.getenv("CANDIDATE_ROW_CORRUPTION_LOG_ENABLE", "true").lower() == "true"
+)
 CANDIDATE_SCORING_TRACE_ENABLE = (
     os.getenv("CANDIDATE_SCORING_TRACE_ENABLE", "false").lower() == "true"
 )
@@ -1005,6 +1040,77 @@ TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY = os.getenv(
     "TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY",
     "true",
 ).lower() == "true"
+ADVISORY_SCHEMA_STRICT_LEVEL_INVARIANTS = os.getenv(
+    "ADVISORY_SCHEMA_STRICT_LEVEL_INVARIANTS",
+    "true",
+).lower() == "true"
+ADVISORY_OPTION_STOP_TIGHTEN_ENABLE = os.getenv(
+    "ADVISORY_OPTION_STOP_TIGHTEN_ENABLE",
+    "true",
+).lower() == "true"
+ADVISORY_OPTION_STOP_MAX_PCT = _float_env("ADVISORY_OPTION_STOP_MAX_PCT", 0.35)
+ADVISORY_OPTION_STOP_MIN_PCT = _float_env("ADVISORY_OPTION_STOP_MIN_PCT", 0.1)
+ADVISORY_OPTION_STOP_SPREAD_MULT = _float_env("ADVISORY_OPTION_STOP_SPREAD_MULT", 2.0)
+ADVISORY_OPTION_STOP_MAX_ABS = _float_env("ADVISORY_OPTION_STOP_MAX_ABS", None)
+ADVISORY_OPTION_STOP_MIN_ABS = _float_env("ADVISORY_OPTION_STOP_MIN_ABS", None)
+ADVISORY_INSTRUMENT_TYPE_ASSUME_OPT_CANDIDATE_TYPES = os.getenv(
+    "ADVISORY_INSTRUMENT_TYPE_ASSUME_OPT_CANDIDATE_TYPES",
+    "directional,breakout,momentum",
+)
+ADVISORY_INSTRUMENT_TYPE_FALLBACK = os.getenv("ADVISORY_INSTRUMENT_TYPE_FALLBACK", "UNKNOWN")
+ADVISORY_OPTION_TYPE_FALLBACK = os.getenv("ADVISORY_OPTION_TYPE_FALLBACK", "CE")
+ADVISORY_HIDE_UNKNOWN_INSTRUMENT = os.getenv("ADVISORY_HIDE_UNKNOWN_INSTRUMENT", "true").lower() == "true"
+PREMIUM_BAND_DTE1_THRESHOLD = int(os.getenv("PREMIUM_BAND_DTE1_THRESHOLD", "1"))
+PREMIUM_BAND_DTE1_MIN_MULT = _float_env("PREMIUM_BAND_DTE1_MIN_MULT", 0.6)
+PREMIUM_BAND_DTE1_MAX_MULT = _float_env("PREMIUM_BAND_DTE1_MAX_MULT", 0.8)
+PREMIUM_BAND_HIGH_VOL_MAX_MULT = _float_env("PREMIUM_BAND_HIGH_VOL_MAX_MULT", 1.35)
+PREMIUM_BAND_TIGHT_SPREAD_PCT = _float_env("PREMIUM_BAND_TIGHT_SPREAD_PCT", 0.8)
+PREMIUM_BAND_TIGHT_SPREAD_MAX_MULT = _float_env("PREMIUM_BAND_TIGHT_SPREAD_MAX_MULT", 1.15)
+PREMIUM_BAND_HARD_REJECT_ENABLE = os.getenv("PREMIUM_BAND_HARD_REJECT_ENABLE", "false").lower() == "true"
+ZERO_TO_HERO_PREMIUM_FALLBACK_LOW = _float_env("ZERO_TO_HERO_PREMIUM_FALLBACK_LOW", 10.0)
+ZERO_TO_HERO_PREMIUM_FALLBACK_HIGH = _float_env("ZERO_TO_HERO_PREMIUM_FALLBACK_HIGH", 120.0)
+LATENCY_GUARD_ALLOW_ADVISORY = os.getenv("LATENCY_GUARD_ALLOW_ADVISORY", "true").lower() == "true"
+LATENCY_SOFT_PENALTY = _float_env("LATENCY_SOFT_PENALTY", 0.25)
+LATENCY_SOFTEN_PRESERVE_STRATEGY_FAMILY = os.getenv(
+    "LATENCY_SOFTEN_PRESERVE_STRATEGY_FAMILY",
+    "true",
+).lower() == "true"
+LATENCY_GUARD_ADVISORY_COOLDOWN_SEC = int(os.getenv("LATENCY_GUARD_ADVISORY_COOLDOWN_SEC", "60"))
+
+# Minimum candidate breadth (advisory backfill) before ranking.
+CANDIDATE_BREADTH_MIN = int(os.getenv("CANDIDATE_BREADTH_MIN", "1"))
+CANDIDATE_BREADTH_MIN_LIVE = int(os.getenv("CANDIDATE_BREADTH_MIN_LIVE", "0"))
+MIN_CANDIDATES_PER_SYMBOL = int(os.getenv("MIN_CANDIDATES_PER_SYMBOL", str(CANDIDATE_BREADTH_MIN)))
+MIN_CANDIDATES_PER_SYMBOL_LIVE = int(os.getenv("MIN_CANDIDATES_PER_SYMBOL_LIVE", str(CANDIDATE_BREADTH_MIN_LIVE)))
+MIN_BREADTH_FALLBACK_ENABLE = os.getenv("MIN_BREADTH_FALLBACK_ENABLE", "true").lower() == "true"
+MIN_BREADTH_FALLBACK_CONFIDENCE = _float_env("MIN_BREADTH_FALLBACK_CONFIDENCE", 0.12)
+MIN_BREADTH_FALLBACK_MAX_PER_SYMBOL = int(os.getenv("MIN_BREADTH_FALLBACK_MAX_PER_SYMBOL", "4"))
+MIN_BREADTH_USE_NEAREST_STRIKES = os.getenv("MIN_BREADTH_USE_NEAREST_STRIKES", "true").lower() == "true"
+MIN_BREADTH_DIRECTION_INFERENCE_ENABLE = os.getenv(
+    "MIN_BREADTH_DIRECTION_INFERENCE_ENABLE",
+    "true",
+).lower() == "true"
+ 
+# -------------------------------
+# Candidate soft-reject policy
+# -------------------------------
+CANDIDATE_SOFT_REJECT_ENABLE = os.getenv("CANDIDATE_SOFT_REJECT_ENABLE", "true").lower() == "true"
+CANDIDATE_SOFT_REJECT_ALLOW_LIVE = os.getenv("CANDIDATE_SOFT_REJECT_ALLOW_LIVE", "true").lower() == "true"
+CANDIDATE_SOFT_REJECT_MAX_PER_SYMBOL = int(os.getenv("CANDIDATE_SOFT_REJECT_MAX_PER_SYMBOL", "3"))
+CANDIDATE_SOFT_REJECT_CONFIDENCE = _float_env("CANDIDATE_SOFT_REJECT_CONFIDENCE", 0.1)
+CANDIDATE_SOFT_REJECT_UNKNOWN_CONFIDENCE = _float_env("CANDIDATE_SOFT_REJECT_UNKNOWN_CONFIDENCE", 0.08)
+CANDIDATE_SOFT_REJECT_ALLOW_UNKNOWN_CRITICAL = os.getenv(
+    "CANDIDATE_SOFT_REJECT_ALLOW_UNKNOWN_CRITICAL",
+    "false",
+).lower() == "true"
+CANDIDATE_SOFT_REJECT_CONF_MIN = _float_env("CANDIDATE_SOFT_REJECT_CONF_MIN", 0.05)
+CANDIDATE_SOFT_REJECT_PENALTY_PREMIUM = _float_env("CANDIDATE_SOFT_REJECT_PENALTY_PREMIUM", 0.05)
+CANDIDATE_SOFT_REJECT_PENALTY_SPREAD = _float_env("CANDIDATE_SOFT_REJECT_PENALTY_SPREAD", 0.07)
+CANDIDATE_SOFT_REJECT_PENALTY_LATENCY = _float_env("CANDIDATE_SOFT_REJECT_PENALTY_LATENCY", 0.1)
+CANDIDATE_SOFT_REJECT_CRITICAL_REASONS = os.getenv(
+    "CANDIDATE_SOFT_REJECT_CRITICAL_REASONS",
+    "missing_symbol,missing_instrument_id,malformed_option_row,invalid_symbol,invalid_trade,unresolved_contract,auth_required",
+)
 PAPER_REGIME_PROB_MIN = float(os.getenv("PAPER_REGIME_PROB_MIN", "0.30"))
 PAPER_REGIME_ENTROPY_MAX = float(os.getenv("PAPER_REGIME_ENTROPY_MAX", "1.8"))
 REGIME_CANDIDATE_ENTROPY_SOFT_MAX = float(
@@ -2116,6 +2222,23 @@ QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE = os.getenv("QUEUE_INVALID_SNAPSHOT_CAN
 TRADE_BUILDER_RESULT_TRACE_ENABLE = os.getenv("TRADE_BUILDER_RESULT_TRACE_ENABLE", "true").lower() == "true"
 GATE_REJECT_TRACE_ENABLE = os.getenv("GATE_REJECT_TRACE_ENABLE", "true").lower() == "true"
 TARGET_POINTS_MIN = float(os.getenv("TARGET_POINTS_MIN", "20.0"))
+TRADE_BUILDER_SOFT_REJECT_ENABLE = os.getenv("TRADE_BUILDER_SOFT_REJECT_ENABLE", "true").lower() == "true"
+TRADE_BUILDER_SOFT_REJECT_ALLOW_LIVE = os.getenv("TRADE_BUILDER_SOFT_REJECT_ALLOW_LIVE", "true").lower() == "true"
+TRADE_BUILDER_SOFT_REJECT_REASONS = os.getenv(
+    "TRADE_BUILDER_SOFT_REJECT_REASONS",
+    "premium_band_fail,no_viable_candidates,weak_momentum,move_too_small,flat_vs_vwap,trend_regime_conflict,spread_pct",
+)
+
+
+def v2_flags_snapshot() -> dict:
+    return {
+        "ENABLE_CANDIDATE_GENERATOR_V2": ENABLE_CANDIDATE_GENERATOR_V2,
+    }
+
+
+def v2_flags_active() -> dict:
+    flags = v2_flags_snapshot()
+    return {name: value for name, value in flags.items() if value}
 
 # Entry trigger logic (buy above / sell below)
 ENTRY_TRIGGER_MODE = os.getenv("ENTRY_TRIGGER_MODE", "BREAKOUT").upper()

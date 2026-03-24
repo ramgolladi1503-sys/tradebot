@@ -266,6 +266,20 @@ def _read_only_market_snapshot_rows() -> list[dict]:
     return rows
 
 
+def _normalize_display_ts_for_rows(rows: list[dict]) -> None:
+    from core.time_utils import format_ts_ist
+
+    for rec in rows:
+        if not isinstance(rec, dict):
+            continue
+        ts_epoch = rec.get("display_ts_epoch")
+        if ts_epoch is None:
+            continue
+        formatted = format_ts_ist(ts_epoch)
+        if formatted:
+            rec["display_ts_ist"] = formatted
+
+
 def _log_read_only_block(operation: str, caller: str, detail: str = "") -> None:
     logger.warning(
         "dashboard_read_only_guard_blocked operation=%s caller=%s detail=%s",
@@ -995,11 +1009,14 @@ def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
             ADVISORY_LATEST_PATH,
         )
         return pd.DataFrame()
-    filtered_rows = _filter_rows_today(rows)
+    filtered_rows = _filter_rows_today(rows, ts_key="display_ts_epoch")
+    if not filtered_rows:
+        filtered_rows = _filter_rows_today(rows, ts_key="timestamp")
     if filtered_rows:
         rows = filtered_rows
     if not rows:
         return pd.DataFrame()
+
     validated_rows: list[dict] = []
     for row in rows:
         try:
@@ -1009,7 +1026,28 @@ def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
             logger.warning("dashboard_live_advisory_schema_error trade_id=%s error=%s", row.get("trade_id") if isinstance(row, dict) else None, exc)
     if not validated_rows:
         return pd.DataFrame()
+    _normalize_display_ts_for_rows(validated_rows)
     df_live = _perf_timed_load("suggestions_dataframe_build", pd.DataFrame, validated_rows)
+    if df_live.empty:
+        return df_live
+    if bool(getattr(cfg, "CANDIDATE_ROW_KIND_CANONICAL_ONLY", True)):
+        if "row_kind" in df_live.columns:
+            row_kind = df_live["row_kind"].fillna("").astype(str).str.lower().str.strip()
+            df_live = df_live[row_kind.eq("canonical_suggestion")].copy()
+        if "non_canonical_levels" in df_live.columns:
+            non_canonical = df_live["non_canonical_levels"].fillna(False).astype(bool)
+            df_live = df_live[~non_canonical].copy()
+        if not df_live.empty:
+            required_cols = ["entry", "target"]
+            if "stop_loss" in df_live.columns:
+                required_cols.append("stop_loss")
+            elif "stop" in df_live.columns:
+                required_cols.append("stop")
+            for required_col in required_cols:
+                if required_col in df_live.columns:
+                    df_live = df_live[df_live[required_col].notna()].copy()
+            if "stop_loss" in df_live.columns and "stop" not in df_live.columns:
+                df_live["stop"] = df_live["stop_loss"]
     if df_live.empty:
         return df_live
     if "trade_key" not in df_live.columns:
@@ -1055,6 +1093,7 @@ def _load_top_opportunities_frames(limit: int = 25) -> dict[str, pd.DataFrame]:
                 )
         if not validated_rows:
             return pd.DataFrame()
+        _normalize_display_ts_for_rows(validated_rows)
         df = _perf_timed_load(f"{rows_key}_dataframe_build", pd.DataFrame, validated_rows)
         if df.empty:
             return df
@@ -1329,14 +1368,73 @@ def _safe_sort_by_last_seen(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
     work = df.copy()
-    if "last_seen_ts" not in work.columns:
-        if "timestamp" in work.columns:
-            work["last_seen_ts"] = work["timestamp"]
-        else:
-            work["last_seen_ts"] = datetime.now(timezone.utc).isoformat()
-    work["last_seen_ts"] = pd.to_datetime(work["last_seen_ts"], errors="coerce")
-    work["last_seen_ts"] = work["last_seen_ts"].fillna(pd.Timestamp.utcnow())
-    return work.sort_values("last_seen_ts", ascending=False)
+
+    def _coerce_epoch(series: pd.Series) -> pd.Series:
+        numeric = pd.to_numeric(series, errors="coerce")
+        if numeric.notna().any():
+            numeric = numeric.where(numeric <= 1e12, numeric / 1000.0)
+        text = series.astype(str)
+        text = text.where(text.str.strip().ne(""), None)
+        parsed = pd.to_datetime(text, errors="coerce", utc=True)
+        parsed_epoch = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
+        mask = parsed.notna()
+        if mask.any():
+            parsed_epoch.loc[mask] = parsed.loc[mask].astype("int64") / 1_000_000_000.0
+        return numeric.where(numeric.notna(), parsed_epoch)
+
+    display_epoch = None
+    if "display_ts_epoch" in work.columns:
+        display_epoch = _coerce_epoch(work["display_ts_epoch"])
+
+    decision_epoch = None
+    for field in (
+        "decision_ts_epoch",
+        "decision_ts_utc",
+        "decision_ts_ist",
+        "ts_epoch",
+        "ts_utc",
+        "ts_ist",
+        "timestamp_epoch_ms",
+        "timestamp_utc_iso",
+        "timestamp",
+        "created_ts_epoch",
+        "created_at",
+    ):
+        if field in work.columns:
+            candidate = _coerce_epoch(work[field])
+            decision_epoch = candidate if decision_epoch is None else decision_epoch.where(decision_epoch.notna(), candidate)
+
+    snapshot_epoch = None
+    for field in (
+        "snapshot_ts_epoch",
+        "snapshot_ts_utc",
+        "snapshot_ts_ist",
+    ):
+        if field in work.columns:
+            candidate = _coerce_epoch(work[field])
+            snapshot_epoch = candidate if snapshot_epoch is None else snapshot_epoch.where(snapshot_epoch.notna(), candidate)
+
+    if display_epoch is None:
+        if decision_epoch is not None:
+            display_epoch = decision_epoch
+        elif snapshot_epoch is not None:
+            display_epoch = snapshot_epoch
+    else:
+        if decision_epoch is not None:
+            display_epoch = display_epoch.where(display_epoch.notna(), decision_epoch)
+        elif snapshot_epoch is not None:
+            display_epoch = display_epoch.where(display_epoch.notna(), snapshot_epoch)
+
+    if display_epoch is None:
+        display_epoch = pd.Series(pd.NA, index=work.index, dtype="float64")
+    work["display_ts_epoch"] = display_epoch
+    if "last_seen_ts" in work.columns:
+        work["last_seen_ts"] = pd.to_datetime(work["last_seen_ts"], errors="coerce", utc=True)
+        work["last_seen_ts"] = work["last_seen_ts"].fillna(pd.Timestamp.now(tz="UTC"))
+    else:
+        work["last_seen_ts"] = pd.to_datetime(display_epoch, errors="coerce", unit="s", utc=True)
+        work["last_seen_ts"] = work["last_seen_ts"].fillna(pd.Timestamp.now(tz="UTC"))
+    return work.sort_values("display_ts_epoch", ascending=False, kind="mergesort")
 
 
 def _prepare_trade_display_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -6143,6 +6241,11 @@ def _filter_rows_today(rows, ts_key="timestamp"):
             if not ts:
                 ts = datetime.now(timezone.utc).isoformat()
                 r[ts_key] = ts
+            if isinstance(ts, (int, float)) or str(ts_key).endswith("_epoch"):
+                try:
+                    ts = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+                except Exception:
+                    continue
             if is_today_local(ts, now=now):
                 filtered.append(r)
         return filtered

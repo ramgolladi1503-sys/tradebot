@@ -45,7 +45,8 @@ _CANONICAL_ADVISORY_FIELDS = {
 
 
 CANONICAL_COLUMNS = [
-    "last_seen_ts",
+    "display_ts_ist",
+    "display_ts_epoch",
     "symbol",
     "expiry_date",
     "strike",
@@ -120,6 +121,38 @@ def _option_right_for_identity(row) -> str:
     return ""
 
 
+def _coerce_epoch_series(series: pd.Series) -> pd.Series:
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.notna().any():
+        # Heuristic: treat large values as ms and normalize to seconds.
+        numeric = numeric.where(numeric <= 1e12, numeric / 1000.0)
+    return numeric
+
+
+def _parse_ts_series(series: pd.Series) -> pd.Series:
+    if series is None:
+        return pd.to_datetime(series, errors="coerce", utc=True)
+    text = series.astype(str)
+    text = text.where(text.str.strip().ne(""), None)
+    return pd.to_datetime(text, errors="coerce", utc=True)
+
+
+def _coerce_ts_epoch(series: pd.Series) -> pd.Series:
+    numeric = _coerce_epoch_series(series)
+    parsed = _parse_ts_series(series)
+    parsed_epoch = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
+    mask = parsed.notna()
+    if mask.any():
+        parsed_epoch.loc[mask] = parsed.loc[mask].astype("int64") / 1_000_000_000.0
+    return numeric.where(numeric.notna(), parsed_epoch)
+
+
+def _format_ist_from_epoch(series: pd.Series) -> pd.Series:
+    dt = pd.to_datetime(series, errors="coerce", unit="s", utc=True)
+    out = dt.dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S IST")
+    return out.where(out.notna(), "—")
+
+
 def _is_option_row(row) -> bool:
     instrument_type = str(row.get("instrument_type") or row.get("instrument") or "").strip().upper()
     if instrument_type == "OPT":
@@ -171,9 +204,6 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         return _empty_df()
     out = df.copy()
     rename_map = {
-        "timestamp": "last_seen_ts",
-        "created_at": "last_seen_ts",
-        "ts": "last_seen_ts",
         "last_seen": "last_seen_ts",
         "type": "opt_type",
         "option_type": "opt_type",
@@ -229,8 +259,56 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
             out[col] = None
     if "last_seen_ts" in out.columns:
         out["last_seen_ts"] = out["last_seen_ts"].where(out["last_seen_ts"].notna(), datetime.now(timezone.utc))
-        out["last_seen_ts"] = pd.to_datetime(out["last_seen_ts"], errors="coerce")
-        out["last_seen_ts"] = out["last_seen_ts"].fillna(pd.Timestamp.utcnow())
+        out["last_seen_ts"] = pd.to_datetime(out["last_seen_ts"], errors="coerce", utc=True)
+        out["last_seen_ts"] = out["last_seen_ts"].fillna(pd.Timestamp.now(tz="UTC"))
+    display_epoch = None
+    if "display_ts_epoch" in out.columns:
+        display_epoch = _coerce_ts_epoch(out["display_ts_epoch"])
+
+    decision_epoch = None
+    for field in (
+        "decision_ts_epoch",
+        "decision_ts_utc",
+        "decision_ts_ist",
+        "ts_epoch",
+        "ts_utc",
+        "ts_ist",
+        "timestamp_epoch_ms",
+        "timestamp_utc_iso",
+        "timestamp",
+        "created_ts_epoch",
+        "created_at",
+    ):
+        if field in out.columns:
+            candidate = _coerce_ts_epoch(out[field])
+            decision_epoch = candidate if decision_epoch is None else decision_epoch.where(decision_epoch.notna(), candidate)
+
+    snapshot_epoch = None
+    for field in (
+        "snapshot_ts_epoch",
+        "snapshot_ts_utc",
+        "snapshot_ts_ist",
+    ):
+        if field in out.columns:
+            candidate = _coerce_ts_epoch(out[field])
+            snapshot_epoch = candidate if snapshot_epoch is None else snapshot_epoch.where(snapshot_epoch.notna(), candidate)
+
+    if display_epoch is None:
+        if decision_epoch is not None:
+            display_epoch = decision_epoch
+        elif snapshot_epoch is not None:
+            display_epoch = snapshot_epoch
+    else:
+        if decision_epoch is not None:
+            display_epoch = display_epoch.where(display_epoch.notna(), decision_epoch)
+        elif snapshot_epoch is not None:
+            display_epoch = display_epoch.where(display_epoch.notna(), snapshot_epoch)
+
+    if display_epoch is None:
+        display_epoch = pd.Series(pd.NA, index=out.index, dtype="float64")
+    out["display_ts_epoch"] = display_epoch
+    out["display_ts_utc"] = pd.to_datetime(out["display_ts_epoch"], errors="coerce", unit="s", utc=True)
+    out["display_ts_ist"] = _format_ist_from_epoch(out["display_ts_epoch"])
     for col in NUMERIC_COLUMNS:
         out[col] = pd.to_numeric(out[col], errors="coerce")
     out["opt_type"] = out["opt_type"].apply(_normalize_option_right)
@@ -276,7 +354,14 @@ def dedupe(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return _empty_df()
     out = compute_trade_key(normalize_df(df))
-    out = out.sort_values("last_seen_ts", ascending=False)
+    if "decision_ts_epoch" not in out.columns:
+        out["decision_ts_epoch"] = pd.Series([float("nan")] * len(out), index=out.index, dtype="float64")
+    if "display_ts_epoch" in out.columns:
+        out = out.sort_values(
+            ["display_ts_epoch", "decision_ts_epoch"],
+            ascending=False,
+            kind="mergesort",
+        )
     if "trade_key" in out.columns:
         out = out.drop_duplicates(subset=["trade_key"], keep="first")
     return out
@@ -307,7 +392,7 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
     view = str(view or "advisory").lower()
     if view == "active":
         cols = [
-            "last_seen_ts",
+            "display_ts_ist",
             "identity",
             "status",
             "side",
@@ -324,7 +409,7 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         ]
     elif view == "review":
         cols = [
-            "last_seen_ts",
+            "display_ts_ist",
             "identity",
             "status",
             "side",
@@ -337,7 +422,7 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         ]
     else:
         cols = [
-            "last_seen_ts",
+            "display_ts_ist",
             "identity",
             "status",
             "readiness",
@@ -375,10 +460,8 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
     ):
         if c in out.columns:
             out[c] = out[c].round(2)
-    if "last_seen_ts" in out.columns:
-        ts = pd.to_datetime(out["last_seen_ts"], errors="coerce", utc=True)
-        out["last_seen_ts"] = ts.dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S IST")
-        out["last_seen_ts"] = out["last_seen_ts"].where(out["last_seen_ts"].notna(), "—")
+    if "display_ts_ist" in out.columns:
+        out["display_ts_ist"] = out["display_ts_ist"].where(out["display_ts_ist"].notna(), "—")
     return out
 
 

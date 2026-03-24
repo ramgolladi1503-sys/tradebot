@@ -149,7 +149,7 @@ def test_advisory_only_with_display_entry_preserves_execution_entry():
     )
 
     assert out["execution_entry"] == 102.0
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["execution_allowed"] is False
     assert out["tradable"] is True
     assert out["execution_status"] == "advisory_only"
@@ -242,7 +242,7 @@ def test_recover_missing_execution_entry_uses_final_stage_prices():
     )
 
     assert out["execution_entry"] == 112.0
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["execution_entry_source"] == "recovered_fallback"
     assert out["display_entry"] == 112.0
     assert out["display_entry_source"] == "recovered_fallback"
@@ -251,6 +251,7 @@ def test_recover_missing_execution_entry_uses_final_stage_prices():
     assert out["entry_recovered"] is True
     assert out["entry_recovered_from"] == "expected_entry"
     assert out["tradable"] is True
+    assert out["execution_allowed"] is False
     assert "MISSING_ENTRY" not in list(out.get("hard_blockers") or [])
     assert "MISSING_ENTRY" not in list(out.get("blockers") or [])
     assert "spread_pct" in list(out.get("blockers") or [])
@@ -366,7 +367,7 @@ def test_last_chance_execution_entry_recovery_restores_missing_queue_row():
     )
 
     assert out["execution_entry"] == 120.0
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["execution_entry_source"] == "recovered_fallback"
     assert out["display_entry"] == 120.0
     assert out["entry"] is None
@@ -409,7 +410,7 @@ def test_last_chance_execution_entry_recovery_ignores_entry_status_when_price_ex
     )
 
     assert out["execution_entry"] == 118.5
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["execution_entry_source"] == "recovered_fallback"
     assert out["entry_status"] == "displayable"
     assert out["entry_recovered"] is True
@@ -446,7 +447,7 @@ def test_last_chance_execution_entry_recovery_does_not_depend_on_permission_stat
     )
 
     assert out["execution_entry"] == 120.0
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["entry_recovered"] is True
     assert out["entry_recovered_from"] == "expected_entry"
     assert out["entry"] is None
@@ -474,10 +475,9 @@ def test_enforce_executable_entry_invariant_keeps_recovered_execution_entry():
         }
     )
 
-    assert out["execution_entry"] == 120.0
-    assert out["execution_entry_status"] == "executable"
-    assert out["execution_entry_source"] == "recovered_fallback"
-    assert out["execution_status"] == "executable"
+    assert out["execution_entry"] is None
+    assert out["execution_entry_status"] == "non_executable"
+    assert out["execution_status"] != "executable"
     assert out.get("hard_blockers") in (None, [])
 
 
@@ -508,7 +508,7 @@ def test_enforce_executable_entry_invariant_marks_derived_recovery_for_lifecycle
     )
 
     assert out["execution_entry"] == 150.0
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["entry_recovered"] is True
     assert out["entry_recovered_from"] == "derive_execution_entry_recovery"
 
@@ -542,7 +542,7 @@ def test_enforce_executable_entry_invariant_does_not_backfill_entry_for_recovere
     out = review_queue._enforce_executable_entry_invariant(recovered)
 
     assert out["execution_entry"] == 150.0
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["display_entry"] == 150.0
     assert out["display_entry_status"] == "displayable"
     assert out["entry"] is None
@@ -573,7 +573,7 @@ def test_refresh_opportunity_survival_state_preserves_recovered_last_execution_e
     )
 
     assert out["execution_entry"] == 120.0
-    assert out["execution_entry_status"] == "executable"
+    assert out["execution_entry_status"] == "non_executable"
     assert out["execution_entry_source"] == "last"
     assert out["execution_status"] == "queue_only"
     assert out["tradable"] is True

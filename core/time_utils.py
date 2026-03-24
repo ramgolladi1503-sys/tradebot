@@ -49,6 +49,30 @@ def normalize_epoch_seconds(value: Any) -> Optional[float]:
     return raw
 
 
+def coerce_ts_epoch(value: Any) -> Optional[float]:
+    return normalize_epoch_seconds(value)
+
+
+def parse_ts_utc(value: Any) -> Optional[datetime]:
+    return _coerce_dt_utc(value)
+
+
+def utc_iso_from_epoch(ts_epoch: float) -> str:
+    return datetime.fromtimestamp(float(ts_epoch), tz=timezone.utc).isoformat()
+
+
+def ist_iso_from_epoch(ts_epoch: float) -> str:
+    return to_ist(datetime.fromtimestamp(float(ts_epoch), tz=timezone.utc)).isoformat()
+
+
+def format_ts_ist(value: Any, fmt: str = "%Y-%m-%d %H:%M:%S IST") -> Optional[str]:
+    epoch = normalize_epoch_seconds(value)
+    if epoch is None:
+        return None
+    dt_ist = to_ist(datetime.fromtimestamp(float(epoch), tz=timezone.utc))
+    return dt_ist.strftime(fmt)
+
+
 def compute_age_sec(ts_epoch: Any, now_epoch: Any) -> Optional[float]:
     """
     Deterministically compute non-negative age in seconds from epoch-like inputs.

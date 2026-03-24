@@ -42,3 +42,19 @@ def test_normalize_option_row_reads_bid_ask_from_depth():
     assert opt["bid"] == 94.5
     assert opt["ask"] == 95.5
     assert opt["depth_ok"] is True
+
+
+def test_normalize_option_row_infers_missing_type():
+    tb = TradeBuilder()
+    row = {
+        "strike": 25000,
+        "ltp": 100.0,
+        "best_bid": 99.5,
+        "best_ask": 100.5,
+        "quote_ts_epoch": 1771400000.0,
+    }
+    opt, err = tb._normalize_option_row(row, expected_type="CE")
+    assert err is None
+    assert opt is not None
+    assert opt["type"] == "CE"
+    assert opt.get("type_inferred") is True

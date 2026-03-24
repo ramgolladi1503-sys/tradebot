@@ -645,3 +645,34 @@ def test_advisory_schema_preserves_blocker_lists_exactly():
     assert out["soft_penalties"] == ["STALE_OPTION_LTP"]
     assert out["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
     assert out["blockers"] == ["NO_TOKEN", "STALE_OPTION_LTP", "DISPLAY_ENTRY_FALLBACK"]
+
+
+def test_advisory_schema_backfills_instrument_type_for_advisory_only():
+    row = _valid_row(
+        instrument_type=None,
+        instrument=None,
+        candidate_type="directional",
+        execution_entry=None,
+        execution_entry_source="none",
+        execution_entry_status="non_executable",
+        display_entry=None,
+        display_entry_source="none",
+        display_entry_status="missing",
+        entry_display_status="missing",
+        entry=None,
+        entry_status="missing",
+        entry_source="none",
+        entry_reason="soft_reject",
+        entry_clear_reason="soft_reject",
+        entry_block_code="soft_reject",
+        readiness="ADVISORY_ONLY",
+        execution_status="advisory_only",
+        final_action="ADVISORY_ONLY",
+        permission="ADVISORY_ONLY",
+        quote_source="none",
+    )
+
+    out = advisory_schema.serialize_advisory_row(row)
+
+    assert out["instrument_type"] == "OPT"
+    assert out.get("instrument_type_source") in {"candidate_type", "option_type", "explicit", "fallback"}

@@ -1,4 +1,5 @@
 from core.regime_router import get_strategy_regime_profile, record_strategy_regime_path, resolve_strategy_regime
+from strategies.soft_signal import soft_signal
 
 
 def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=None):
@@ -44,11 +45,23 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
     weak_move_floor = float(min_move) * 0.6
     if abs_diff < weak_move_floor:
         _update_debug(debug_stats, rejected=1, reason="move_too_small")
-        return None
+        direction = "BUY_CALL" if diff >= 0 else "BUY_PUT"
+        return soft_signal(
+            reason="move_too_small",
+            direction=direction,
+            setup_type="SOFT_REJECT",
+            regime_path=regime_name,
+        )
 
     if diff == 0:
         _update_debug(debug_stats, rejected=1, reason="flat_vs_vwap")
-        return None
+        direction = "BUY_CALL"
+        return soft_signal(
+            reason="flat_vs_vwap",
+            direction=direction,
+            setup_type="SOFT_REJECT",
+            regime_path=regime_name,
+        )
 
     setup_type = str(profile.get("setup_family") or "BREAKOUT")
     direction = "BUY_CALL" if diff > 0 else "BUY_PUT"
@@ -85,7 +98,12 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
     ):
         if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("trend_conflict_mult", 1.40))):
             _update_debug(debug_stats, rejected=1, reason="trend_regime_conflict")
-            return None
+            return soft_signal(
+                reason="trend_regime_conflict",
+                direction=direction,
+                setup_type="SOFT_REJECT",
+                regime_path=regime_name,
+            )
         if abs_diff < (vwap_buffer * 1.35):
             _update_debug(debug_stats, rejected=1, reason="bias_conflict_without_price_override")
             return None

@@ -55,6 +55,16 @@ from core.review_queue import (
     order_payload_hash,
     project_advisory_row,
 )
+from core.candidate_soft_reject import (
+    apply_latency_penalty,
+    build_min_breadth_candidates,
+    build_soft_reject_candidate,
+    critical_reject_reasons,
+    is_critical_reject_reason,
+    soft_reject_enabled,
+    soft_reject_max_per_symbol,
+)
+from core.v2_pipeline import run_v2_pipeline
 from core.blocked_tracker import BlockedTradeTracker
 from core.trade_store import insert_execution_stat, update_trailing_state, insert_trail_event, insert_trade_leg, update_trade_close
 from core.depth_store import depth_store
@@ -747,6 +757,151 @@ def _consume_trade_builder_ranked_candidates(builder) -> list:
     return ranked
 
 
+def _augment_ranked_candidates_with_soft_reject(
+    *,
+    trade_builder,
+    ranked_candidates: list | None,
+    market_data: dict,
+    execution_mode: str,
+    symbol: str,
+) -> tuple[list, list[dict], str, list[str]]:
+    ranked = list(ranked_candidates or [])
+    reject_ctx = {}
+    try:
+        reject_ctx = dict(getattr(trade_builder, "_reject_ctx", {}) or {})
+    except Exception:
+        reject_ctx = {}
+    reject_reason = str(reject_ctx.get("reason") or "").strip()
+    if not reject_reason:
+        reject_reason = "unspecified_trade_builder_reject"
+        logger.warning("trade_builder_reject_reason_missing symbol=%s", symbol)
+    reject_gate_reasons = [str(x) for x in (reject_ctx.get("gate_reasons") or []) if str(x).strip()]
+    if not reject_gate_reasons:
+        reject_gate_reasons = [reject_reason]
+    soft_reject_candidates: list[dict] = []
+    soft_enabled = soft_reject_enabled(execution_mode)
+    critical_reasons = critical_reject_reasons()
+    is_critical = is_critical_reject_reason(reject_reason, critical_reasons)
+    logger.info(
+        "soft_reject_check symbol=%s mode=%s enabled=%s critical=%s reason=%s",
+        symbol,
+        execution_mode,
+        soft_enabled,
+        is_critical,
+        reject_reason or "none",
+    )
+    if reject_reason == "unknown_reject":
+        logger.info(
+            "soft_reject_check_unknown symbol=%s reason=%s critical=%s",
+            symbol,
+            reject_reason,
+            is_critical,
+        )
+    if soft_enabled and not is_critical:
+        bases = list(ranked or [])
+        if not bases:
+            bases = [None]
+        max_soft = soft_reject_max_per_symbol()
+        for base in bases[:max_soft]:
+            soft_candidate = build_soft_reject_candidate(
+                market_data,
+                reject_reason=reject_reason or "trade_builder_reject",
+                reject_source="orchestrator_trade_builder_reject",
+                gate_reasons=reject_gate_reasons,
+                base_candidate=base if isinstance(base, dict) else None,
+                execution_mode=execution_mode,
+            )
+            if soft_candidate:
+                soft_reject_candidates.append(soft_candidate)
+        if soft_reject_candidates:
+            for soft_candidate in soft_reject_candidates:
+                logger.info(
+                    "soft_reject_candidate_ranked symbol=%s trade_id=%s rank_score=%s",
+                    soft_candidate.get("symbol"),
+                    soft_candidate.get("trade_id"),
+                    soft_candidate.get("rank_score"),
+                )
+            ranked.extend(soft_reject_candidates)
+            logger.warning(
+                "soft_reject_triggered symbol=%s count=%s reason=%s gate_reasons=%s",
+                symbol,
+                len(soft_reject_candidates),
+                reject_reason or "trade_builder_reject",
+                ",".join(reject_gate_reasons),
+            )
+    return ranked, soft_reject_candidates, reject_reason, reject_gate_reasons
+
+
+def _apply_latency_soften_to_candidates(
+    ranked_candidates: list[dict] | None,
+    *,
+    latency_action: str | None,
+    execution_mode: str,
+    symbol: str | None,
+) -> tuple[list[dict], int]:
+    candidates = list(ranked_candidates or [])
+    if not candidates:
+        return candidates, 0
+    softened: list[dict] = []
+    softened_count = 0
+    for candidate in candidates:
+        confidence_before = _trade_attr(candidate, "confidence_final") or _trade_attr(candidate, "confidence")
+        updated = apply_latency_penalty(
+            candidate,
+            latency_action=latency_action,
+            execution_mode=execution_mode,
+        )
+        confidence_after = _trade_attr(updated, "confidence_final") or _trade_attr(updated, "confidence")
+        logger.info(
+            "LATENCY_SOFTEN_APPLIED symbol=%s strategy_family=%s option_type=%s direction=%s confidence_before=%s confidence_after=%s",
+            symbol,
+            _trade_attr(updated, "strategy_family"),
+            _trade_attr(updated, "option_type"),
+            _trade_attr(updated, "direction"),
+            confidence_before,
+            confidence_after,
+        )
+        softened.append(updated)
+        softened_count += 1
+    return softened, softened_count
+
+
+def _min_breadth_target(execution_mode: str | None) -> int:
+    target = int(getattr(cfg, "MIN_CANDIDATES_PER_SYMBOL", getattr(cfg, "CANDIDATE_BREADTH_MIN", 0)))
+    if str(execution_mode or "").strip().upper() in {"LIVE", "REAL"}:
+        target = int(
+            getattr(
+                cfg,
+                "MIN_CANDIDATES_PER_SYMBOL_LIVE",
+                getattr(cfg, "CANDIDATE_BREADTH_MIN_LIVE", 0),
+            )
+        )
+    return target
+
+
+def _build_min_breadth_backfill(
+    *,
+    ranked_candidates: list[dict],
+    soft_reject_candidates: list[dict],
+    market_data: dict,
+    execution_mode: str | None,
+) -> tuple[list[dict], int]:
+    if not bool(getattr(cfg, "MIN_BREADTH_FALLBACK_ENABLE", True)):
+        return [], _min_breadth_target(execution_mode)
+    min_breadth = _min_breadth_target(execution_mode)
+    if min_breadth <= 0 or len(ranked_candidates or []) >= min_breadth:
+        return [], min_breadth
+    needed = max(0, min_breadth - len(ranked_candidates or []))
+    seed_candidate = ranked_candidates[0] if ranked_candidates else (soft_reject_candidates[0] if soft_reject_candidates else None)
+    fallback_candidates = build_min_breadth_candidates(
+        market_data,
+        execution_mode=execution_mode,
+        seed_candidate=seed_candidate,
+        min_needed=needed,
+    )
+    return fallback_candidates, min_breadth
+
+
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
         """
@@ -797,6 +952,12 @@ class Orchestrator:
         self._auth_runtime_guard = self._run_preopen_auth_warm_check()
         self.total_capital = total_capital
         self.poll_interval = poll_interval
+        try:
+            active_flags = cfg.v2_flags_active()
+            if active_flags:
+                logger.info("v2_flags_active %s", active_flags)
+        except Exception as exc:
+            logger.debug("v2_flags_active_log_failed err=%s", exc)
 
         # Unified RiskState
         self.risk_state = RiskState(start_capital=total_capital)
@@ -854,6 +1015,7 @@ class Orchestrator:
         self.last_trade_sync = 0
         self.blocked_tracker = BlockedTradeTracker()
         self.last_md_by_symbol = {}
+        self._latency_guard_soft_ts = {}
         self.best_trade_logged = False
         self.best_trade_by_regime = {}
         self._last_decay_date = None
@@ -1401,6 +1563,12 @@ class Orchestrator:
                 immutable_map[sym] = MappingProxyType(dict(row))
         self._cycle_market_snapshot_by_symbol = immutable_map
         return cycle_rows
+
+    def _run_v2_shadow_pipeline(self, market_data_list: list[dict] | None) -> None:
+        try:
+            run_v2_pipeline(market_data_list, now_ts=time.time())
+        except Exception as exc:
+            logger.exception("v2_shadow_pipeline_failed err=%s", exc)
 
     def _immutable_cycle_snapshot(self, market_data: dict):
         symbol = str((market_data or {}).get("symbol") or "").upper()
@@ -2642,6 +2810,8 @@ class Orchestrator:
             cycle_scored_candidate_count = 0
             cycle_candidates_blocked = 0
             cycle_candidates_enqueued = 0
+            cycle_candidates_softened = 0
+            cycle_candidates_fallback = 0
             cycle_ranked_candidates = []
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
             cycle_market_open = False
@@ -2709,6 +2879,10 @@ class Orchestrator:
                 self._update_decision_breakers(market_data_list)
                 self._update_pilot_unlock_clean_cycles()
                 self._evaluate_suggestions(market_data_list)
+                try:
+                    self._run_v2_shadow_pipeline(market_data_list)
+                except Exception as exc:
+                    logger.warning("v2_shadow_pipeline_cycle_error err=%s", exc)
                 try:
                     produce_and_store_runtime_snapshots(
                         market_snapshot=dashboard_market_snapshot,
@@ -2883,6 +3057,8 @@ class Orchestrator:
                             pass
                         continue
                     self._check_open_trades(market_data)
+                    latency_soften_active = False
+                    latency_action = None
                     if self._latency_blocks_entries():
                         latency_action = self._latency_guard_action().lower()
                         try:
@@ -2896,7 +3072,23 @@ class Orchestrator:
                             )
                         except Exception:
                             pass
-                        continue
+                        allow_advisory = bool(getattr(cfg, "LATENCY_GUARD_ALLOW_ADVISORY", False))
+                        if allow_advisory:
+                            latency_soften_active = True
+                            latency_reason = f"latency_guard_{latency_action}" if latency_action else "latency_guard"
+                            market_data["latency_soften"] = True
+                            market_data["latency_guard_action"] = latency_action or "unknown"
+                            market_data["execution_allowed"] = False
+                            market_data["execution_ok"] = False
+                            market_data["execution_status"] = "advisory_only"
+                            market_data["execution_blocked"] = True
+                            market_data["execution_block_reason"] = latency_reason
+                            blockers = list(market_data.get("execution_blockers") or [])
+                            if latency_reason not in blockers:
+                                blockers.append(latency_reason)
+                            market_data["execution_blockers"] = blockers
+                        else:
+                            continue
                     breaker_blocked, breaker_reasons = self._decision_breakers_block_entries()
                     if breaker_blocked:
                         try:
@@ -3111,6 +3303,24 @@ class Orchestrator:
                         allow_fallbacks=allow_builder_fallbacks,
                         allow_baseline=allow_builder_baseline,
                     )
+                    if isinstance(trade, dict):
+                        candidate_status = str(trade.get("candidate_status") or "").strip().lower()
+                        execution_status = str(trade.get("execution_status") or "").strip().lower()
+                        if candidate_status == "advisory_only" or execution_status == "advisory_only":
+                            soft_trade = trade
+                            trade = None
+                            try:
+                                ranked = list(getattr(self.trade_builder, "_last_ranked_candidates", []) or [])
+                                if soft_trade not in ranked:
+                                    ranked.append(soft_trade)
+                                    self.trade_builder._set_last_ranked_candidates(ranked)
+                                    logger.info(
+                                        "candidate_pool_append source=softened_builder_path symbol=%s reason=%s",
+                                        soft_trade.get("symbol"),
+                                        soft_trade.get("reject_reason"),
+                                    )
+                            except Exception:
+                                pass
                     trace_payload = {}
                     if decision_trace is not None:
                         try:
@@ -3141,6 +3351,29 @@ class Orchestrator:
                         except Exception:
                             pass
                     ranked_candidates = _consume_trade_builder_ranked_candidates(self.trade_builder)
+                    reject_reason = None
+                    reject_gate_reasons: list[str] = []
+                    soft_reject_candidates: list[dict] = []
+                    breadth_candidates: list[dict] = []
+                    if trade is None:
+                        cycle_candidates_blocked += 1
+                        ranked_candidates, soft_reject_candidates, reject_reason, reject_gate_reasons = (
+                            _augment_ranked_candidates_with_soft_reject(
+                                trade_builder=self.trade_builder,
+                                ranked_candidates=ranked_candidates,
+                                market_data=market_data,
+                                execution_mode=execution_mode,
+                                symbol=sym,
+                            )
+                        )
+                    if latency_soften_active and ranked_candidates:
+                        ranked_candidates, softened_count = _apply_latency_soften_to_candidates(
+                            ranked_candidates,
+                            latency_action=latency_action,
+                            execution_mode=execution_mode,
+                            symbol=sym,
+                        )
+                        cycle_candidates_softened += int(softened_count)
                     if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
                         print(
                             "TB_RANKED_COUNT",
@@ -3161,19 +3394,59 @@ class Orchestrator:
                                     "rank_score": _trade_attr(top, "rank_score"),
                                 },
                             )
+                    fallback_candidates, min_breadth = _build_min_breadth_backfill(
+                        ranked_candidates=ranked_candidates,
+                        soft_reject_candidates=soft_reject_candidates,
+                        market_data=market_data,
+                        execution_mode=execution_mode,
+                    )
+                    if fallback_candidates:
+                        logger.info(
+                            "MIN_BREADTH_TRIGGERED symbol=%s existing=%s target=%s",
+                            sym,
+                            len(ranked_candidates or []),
+                            min_breadth,
+                        )
+                        for fallback_candidate in fallback_candidates:
+                            breadth_candidates.append(fallback_candidate)
+                            cycle_candidates_fallback += 1
+                        ranked_candidates.extend(breadth_candidates)
+                        logger.info(
+                            "candidate_breadth_backfill symbol=%s count=%s min_required=%s",
+                            sym,
+                            len(breadth_candidates),
+                            min_breadth,
+                        )
+                        logger.info(
+                            "MIN_BREADTH_ADDED symbol=%s added=%s total=%s",
+                            sym,
+                            len(breadth_candidates),
+                            len(ranked_candidates),
+                        )
+                        logger.info(
+                            "candidate_pool_append source=fallback_min_breadth symbol=%s count=%s",
+                            sym,
+                            len(breadth_candidates),
+                        )
+                    if ranked_candidates:
+                        softened = sum(1 for cand in ranked_candidates if cand.get("latency_softened"))
+                        fallback = sum(
+                            1
+                            for cand in ranked_candidates
+                            if str(cand.get("candidate_origin") or "") == "fallback_min_breadth"
+                        )
+                        normal = max(0, len(ranked_candidates) - softened - fallback)
+                        logger.info("CANDIDATE_POOL symbol=%s size=%s", sym, len(ranked_candidates))
+                        logger.info(
+                            "CANDIDATE_POOL_SOURCES symbol=%s normal=%s softened=%s fallback_min_breadth=%s",
+                            sym,
+                            normal,
+                            softened,
+                            fallback,
+                        )
                     if ranked_candidates:
                         cycle_ranked_candidates.extend(ranked_candidates)
                     if trade is None:
-                        cycle_candidates_blocked += 1
-                        reject_ctx = {}
-                        try:
-                            reject_ctx = dict(self.trade_builder._reject_ctx or {})
-                        except Exception:
-                            reject_ctx = {}
-                        reject_reason = str(reject_ctx.get("reason") or "").strip()
-                        reject_gate_reasons = [str(x) for x in (reject_ctx.get("gate_reasons") or []) if str(x).strip()]
-                        if not reject_gate_reasons:
-                            reject_gate_reasons = [reject_reason] if reject_reason else ["no_trade_generated"]
                         for reason_code in reject_gate_reasons:
                             cycle_blockers[str(reason_code)] += 1
                         self._observe_price_mismatch_breaker(reject_gate_reasons)
@@ -3211,6 +3484,32 @@ class Orchestrator:
                             debug_flag=debug_flag,
                             gate_reasons=reject_gate_reasons,
                         )
+                        if soft_reject_candidates:
+                            for soft_candidate in soft_reject_candidates:
+                                try:
+                                    add_to_queue(soft_candidate)
+                                    cycle_candidates_enqueued += 1
+                                    logger.info(
+                                        "soft_reject_candidate_enqueued symbol=%s trade_id=%s reason=%s gate_reasons=%s",
+                                        soft_candidate.get("symbol"),
+                                        soft_candidate.get("trade_id"),
+                                        reject_reason or "trade_builder_reject",
+                                        ",".join(reject_gate_reasons),
+                                    )
+                                except Exception:
+                                    logger.exception("soft_reject_candidate_enqueue_failed symbol=%s", soft_candidate.get("symbol"))
+                        if breadth_candidates:
+                            for breadth_candidate in breadth_candidates:
+                                try:
+                                    add_to_queue(breadth_candidate)
+                                    cycle_candidates_enqueued += 1
+                                    logger.info(
+                                        "candidate_breadth_backfill_enqueued symbol=%s trade_id=%s",
+                                        breadth_candidate.get("symbol"),
+                                        breadth_candidate.get("trade_id"),
+                                    )
+                                except Exception:
+                                    logger.exception("candidate_breadth_backfill_enqueue_failed symbol=%s", sym)
                         try:
                             queued_rejected, _queued_trade = _queue_rejected_candidate_for_analytics(
                                 ranked_candidates,

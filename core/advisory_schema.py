@@ -23,9 +23,27 @@ from core.issue_policy import (
     ISSUE_CATEGORY_WARNING,
     classify_issue,
 )
+from core.advisory_row_integrity import (
+    ADVISORY_ONLY_ROW_KIND,
+    BLOCKED_DEBUG_ROW_KIND,
+    CANONICAL_ROW_KIND,
+    log_corrupt_advisory_row,
+    validate_price_level_invariants,
+)
 from core.paths import logs_dir
+from core.time_utils import (
+    coerce_ts_epoch as _normalize_ts_epoch,
+    format_ts_ist as _format_ts_ist,
+    ist_iso_from_epoch as _ist_iso_from_epoch,
+    utc_iso_from_epoch as _utc_iso_from_epoch,
+)
 from core.trade_identity import derive_strategy_id, infer_candidate_identity
 from core.trade_state_machine import TRADE_LIFECYCLE_STATES
+
+try:
+    from config import config as cfg
+except Exception:
+    cfg = None
 
 
 class AdvisorySchemaError(ValueError):
@@ -86,9 +104,23 @@ REQUIRED_FIELDS = (
 _LEGACY_NON_ERROR_ENTRY_STATUSES = {"VALID", "OK", "LIVE_OK", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}
 _OPTION_SIDE_RE = re.compile(r"(?:^|[^A-Z0-9])(CE|PE)(?:$|[^A-Z0-9])")
 _LIST_FIELDS = ("hard_blockers", "soft_penalties", "warnings")
-_EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "last", "recovered_fallback", "retained_prior_ask", "retained_prior_bid"}
+_EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}
 _IST = timezone(timedelta(hours=5, minutes=30))
 _STALE_QUOTE_AGE_SENTINEL = float(10**9)
+
+
+def _strict_level_invariants_enabled() -> bool:
+    try:
+        return bool(getattr(cfg, "ADVISORY_SCHEMA_STRICT_LEVEL_INVARIANTS", True))
+    except Exception:
+        return True
+
+
+def _candidate_row_corruption_log_enabled() -> bool:
+    try:
+        return bool(getattr(cfg, "CANDIDATE_ROW_CORRUPTION_LOG_ENABLE", True))
+    except Exception:
+        return True
 
 
 def advisory_schema_error_path() -> Path:
@@ -176,26 +208,22 @@ def _parse_datetime_text(value: Any) -> datetime | None:
 
 
 def _coerce_ts_epoch(value: Any) -> float | None:
-    if value in (None, "", "None"):
-        return None
-    try:
-        epoch = float(value)
-    except Exception:
-        dt = _parse_datetime_text(value)
-        return dt.timestamp() if dt is not None else None
-    if not math.isfinite(epoch):
-        return None
-    if abs(epoch) >= 1.0e11:
-        epoch /= 1000.0
-    return float(epoch)
+    return _normalize_ts_epoch(value)
 
 
 def _utc_timestamp_from_epoch(ts_epoch: float) -> str:
-    return datetime.fromtimestamp(float(ts_epoch), tz=timezone.utc).isoformat()
+    return _utc_iso_from_epoch(ts_epoch)
 
 
 def _ist_timestamp_from_epoch(ts_epoch: float) -> str:
-    return datetime.fromtimestamp(float(ts_epoch), tz=_IST).isoformat()
+    return _ist_iso_from_epoch(ts_epoch)
+
+
+def _ist_display_timestamp_from_epoch(ts_epoch: float) -> str:
+    val = _format_ts_ist(ts_epoch)
+    if val:
+        return val
+    return "INVALID_TS"
 
 
 def _normalize_option_type(value: Any) -> str | None:
@@ -219,6 +247,52 @@ def _parse_option_type(value: Any) -> str | None:
     if match:
         return match.group(1)
     return None
+
+
+def _normalize_instrument_type(value: Any) -> str:
+    text = (_normalize_text(value) or "").upper()
+    if not text:
+        return ""
+    if text in {"OPT", "OPTION", "OPTIONS", "OPTIDX", "OPTSTK", "CE", "PE", "CALL", "PUT"}:
+        return "OPT"
+    if text in {"EQ", "STK", "STOCK"}:
+        return "EQ"
+    if text in {"FUT", "FUTURE", "FUTURES"}:
+        return "FUT"
+    if text in {"INDEX", "IDX"}:
+        return "INDEX"
+    return text
+
+
+def _assume_opt_candidate_types() -> set[str]:
+    raw = _normalize_text(getattr(cfg, "ADVISORY_INSTRUMENT_TYPE_ASSUME_OPT_CANDIDATE_TYPES", "")) if cfg else ""
+    if not raw:
+        return set()
+    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+
+def _instrument_type_fallback() -> str:
+    fallback = _normalize_text(getattr(cfg, "ADVISORY_INSTRUMENT_TYPE_FALLBACK", "UNKNOWN")) if cfg else "UNKNOWN"
+    return fallback.upper() if fallback else "UNKNOWN"
+
+
+def _infer_instrument_type(payload: dict[str, Any]) -> tuple[str, str]:
+    explicit = _normalize_instrument_type(payload.get("instrument_type") or payload.get("instrument"))
+    if explicit:
+        return explicit, "explicit"
+    option_type = (
+        _normalize_option_type(payload.get("option_type"))
+        or _normalize_option_type(payload.get("type"))
+        or _normalize_option_type(payload.get("right"))
+        or _parse_option_type(payload.get("tradingsymbol"))
+        or _parse_option_type(payload.get("instrument_id"))
+    )
+    if option_type:
+        return "OPT", "option_type"
+    candidate_type = (_normalize_text(payload.get("candidate_type")) or "").lower()
+    if candidate_type and candidate_type in _assume_opt_candidate_types():
+        return "OPT", "candidate_type"
+    return _instrument_type_fallback(), "fallback"
 
 
 def _normalize_option_identity(payload: dict[str, Any]) -> dict[str, Any]:
@@ -300,7 +374,7 @@ def _normalize_mapping(value: Any) -> dict[str, Any]:
 
 def _derive_candidate_status(payload: dict[str, Any]) -> str:
     existing = str(payload.get("candidate_status") or "").strip().lower()
-    if existing in {"scored", "ranked", "advisory_only", "blocked_contract", "executable"}:
+    if existing in {"scored", "ranked", "advisory_only", "near_executable", "blocked", "blocked_contract", "executable"}:
         return existing
     status = str(payload.get("status") or "").strip().upper()
     hard_reason = str(payload.get("hard_reason") or "").strip().lower()
@@ -312,6 +386,8 @@ def _derive_candidate_status(payload: dict[str, Any]) -> str:
         or permission_reason == "unresolved_contract"
     ):
         return "blocked_contract"
+    if status in {"BLOCKED", "BLOCK"} or execution_status == "blocked" or permission in {"BLOCK"} or final_action in {"BLOCK"}:
+        return "blocked"
     execution_entry = _safe_float(payload.get("execution_entry"))
     execution_entry_status = str(payload.get("execution_entry_status") or "").strip().lower()
     execution_status = str(payload.get("execution_status") or "").strip().lower()
@@ -332,7 +408,9 @@ def _derive_candidate_status(payload: dict[str, Any]) -> str:
         or _safe_float(payload.get("opportunity_score")) is not None
         or payload.get("opportunity_rank") not in (None, "", "None")
     ):
-        if execution_status in {"blocked", "advisory_only", "queue_only"} or permission in {"BLOCK", "ADVISORY_ONLY", "QUEUE_ONLY"}:
+        if execution_status == "queue_only" or permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
+            return "near_executable"
+        if execution_status in {"blocked", "advisory_only"} or permission in {"BLOCK", "ADVISORY_ONLY", "QUEUE_ONLY"}:
             return "advisory_only"
         return "ranked"
     if (
@@ -340,7 +418,9 @@ def _derive_candidate_status(payload: dict[str, Any]) -> str:
         or _safe_float(payload.get("confidence_raw")) is not None
         or bool(payload.get("score_breakdown"))
     ):
-        return "advisory_only" if execution_status in {"blocked", "advisory_only", "queue_only"} or permission in {"BLOCK", "ADVISORY_ONLY", "QUEUE_ONLY"} else "scored"
+        if execution_status == "queue_only" or permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
+            return "near_executable"
+        return "advisory_only" if execution_status in {"blocked", "advisory_only"} or permission in {"BLOCK", "ADVISORY_ONLY", "QUEUE_ONLY"} else "scored"
     return "scored"
 
 
@@ -423,27 +503,174 @@ def _derive_quote_source(payload: dict[str, Any]) -> str:
     return "unknown"
 
 
+_DECISION_TS_FIELDS = (
+    "decision_ts_epoch",
+    "decision_ts_utc",
+    "decision_ts_ist",
+    "ts_epoch",
+    "ts_utc",
+    "ts_ist",
+    "timestamp_epoch_ms",
+    "timestamp_utc_iso",
+    "timestamp",
+    "created_ts_epoch",
+    "created_at",
+)
+
+_SNAPSHOT_TS_FIELDS = (
+    "snapshot_ts_epoch",
+    "snapshot_ts_utc",
+    "snapshot_ts_ist",
+    "quote_ts_epoch",
+    "option_ltp_timestamp",
+    "ltp_ts_epoch",
+    "freshness_quote_epoch",
+    "candle_ts_epoch",
+    "last_candle_ts_epoch",
+    "signal_candle_epoch",
+)
+
+
+def _select_ts_epoch(payload: dict[str, Any], fields: tuple[str, ...]) -> tuple[float | None, str | None]:
+    if not isinstance(payload, dict):
+        return None, None
+    for field in fields:
+        ts_epoch = _coerce_ts_epoch(payload.get(field))
+        if ts_epoch is not None:
+            return float(ts_epoch), field
+    return None, None
+
+
 def _derive_timestamp(payload: dict[str, Any]) -> str | None:
-    ts_epoch = _derive_ts_epoch(payload)
+    ts_epoch, _ = _select_ts_epoch(payload, _DECISION_TS_FIELDS)
     if ts_epoch is not None:
         return _utc_timestamp_from_epoch(ts_epoch)
-    for field in ("timestamp", "last_seen_ts", "timestamp_utc_iso", "last_seen", "created_at"):
-        text = _normalize_text(payload.get(field))
-        if text:
-            return text
     return None
 
 
 def _derive_ts_epoch(payload: dict[str, Any]) -> float | None:
-    for field in ("ts_epoch", "snapshot_ts_epoch", "timestamp", "last_seen_ts", "timestamp_utc_iso", "last_seen", "created_at"):
-        ts_epoch = _coerce_ts_epoch(payload.get(field))
-        if ts_epoch is not None:
-            return float(ts_epoch)
+    ts_epoch, _ = _select_ts_epoch(payload, _DECISION_TS_FIELDS)
+    if ts_epoch is not None:
+        return float(ts_epoch)
+    ts_epoch, _ = _select_ts_epoch(payload, _SNAPSHOT_TS_FIELDS)
+    if ts_epoch is not None:
+        return float(ts_epoch)
     return None
 
 
+def _apply_explicit_display_timestamps(payload: dict[str, Any], derived_ts_epoch: float) -> dict[str, Any]:
+    out = dict(payload)
+    existing_display_ts_epoch = _coerce_ts_epoch(out.get("display_ts_epoch"))
+    existing_display_source = _normalize_text(out.get("display_ts_source"))
+    existing_decision_ts_epoch = _coerce_ts_epoch(out.get("decision_ts_epoch"))
+    existing_decision_source = _normalize_text(out.get("decision_ts_source"))
+    existing_snapshot_ts_epoch = _coerce_ts_epoch(out.get("snapshot_ts_epoch"))
+    existing_snapshot_source = _normalize_text(out.get("snapshot_ts_source"))
+
+    if existing_decision_ts_epoch is not None:
+        decision_ts_epoch = float(existing_decision_ts_epoch)
+        decision_source = existing_decision_source or "preserved"
+    else:
+        decision_ts_epoch, decision_source = _select_ts_epoch(out, _DECISION_TS_FIELDS)
+
+    if existing_snapshot_ts_epoch is not None:
+        snapshot_ts_epoch = float(existing_snapshot_ts_epoch)
+        snapshot_source = existing_snapshot_source or "preserved"
+    else:
+        snapshot_ts_epoch, snapshot_source = _select_ts_epoch(out, _SNAPSHOT_TS_FIELDS)
+
+    if decision_ts_epoch is None and snapshot_ts_epoch is not None:
+        decision_ts_epoch = float(snapshot_ts_epoch)
+        decision_source = f"fallback:{snapshot_source}"
+    if decision_ts_epoch is None:
+        decision_ts_epoch = float(derived_ts_epoch)
+        decision_source = "derived_ts_epoch"
+
+    created_ts_epoch = _coerce_ts_epoch(out.get("created_ts_epoch"))
+    if created_ts_epoch is None:
+        created_ts_epoch = _coerce_ts_epoch(out.get("created_at"))
+    if created_ts_epoch is None:
+        created_ts_epoch = float(decision_ts_epoch)
+
+    if existing_display_ts_epoch is not None:
+        display_ts_epoch = float(existing_display_ts_epoch)
+        display_source = existing_display_source or "preserved"
+    else:
+        display_ts_epoch = decision_ts_epoch if decision_ts_epoch is not None else snapshot_ts_epoch
+        display_source = "decision_ts_epoch" if decision_ts_epoch is not None else "snapshot_ts_epoch"
+        if decision_source and str(decision_source).startswith("fallback:"):
+            display_source = "snapshot_ts_epoch"
+        if display_ts_epoch is None:
+            display_ts_epoch = float(derived_ts_epoch)
+            display_source = "derived_ts_epoch"
+
+    last_seen_ts_epoch = _coerce_ts_epoch(out.get("last_seen_ts_epoch"))
+    if last_seen_ts_epoch is None:
+        last_seen_ts_epoch = _coerce_ts_epoch(out.get("last_seen_ts"))
+    if last_seen_ts_epoch is None:
+        last_seen_ts_epoch = _coerce_ts_epoch(out.get("last_seen"))
+
+    out["decision_ts_epoch"] = float(decision_ts_epoch)
+    if not _normalize_text(out.get("decision_ts_utc")):
+        out["decision_ts_utc"] = _utc_timestamp_from_epoch(decision_ts_epoch)
+    if not _normalize_text(out.get("decision_ts_ist")):
+        out["decision_ts_ist"] = _ist_timestamp_from_epoch(decision_ts_epoch)
+    out["decision_ts_source"] = decision_source or out.get("decision_ts_source")
+
+    out["snapshot_ts_epoch"] = float(snapshot_ts_epoch) if snapshot_ts_epoch is not None else None
+    if snapshot_ts_epoch is not None:
+        if not _normalize_text(out.get("snapshot_ts_utc")):
+            out["snapshot_ts_utc"] = _utc_timestamp_from_epoch(snapshot_ts_epoch)
+        if not _normalize_text(out.get("snapshot_ts_ist")):
+            out["snapshot_ts_ist"] = _ist_timestamp_from_epoch(snapshot_ts_epoch)
+    out["snapshot_ts_source"] = snapshot_source or out.get("snapshot_ts_source")
+
+    out["display_ts_epoch"] = float(display_ts_epoch)
+    if not _normalize_text(out.get("display_ts_utc")):
+        out["display_ts_utc"] = _utc_timestamp_from_epoch(display_ts_epoch)
+    if not _normalize_text(out.get("display_ts_ist")):
+        out["display_ts_ist"] = _ist_display_timestamp_from_epoch(display_ts_epoch)
+    out["display_ts_source"] = display_source or out.get("display_ts_source")
+
+    out["created_ts_epoch"] = float(created_ts_epoch)
+    if not _normalize_text(out.get("created_ts_utc")):
+        out["created_ts_utc"] = _utc_timestamp_from_epoch(created_ts_epoch)
+    if not _normalize_text(out.get("created_ts_ist")):
+        out["created_ts_ist"] = _ist_timestamp_from_epoch(created_ts_epoch)
+
+    out["last_seen_ts_epoch"] = float(last_seen_ts_epoch) if last_seen_ts_epoch is not None else None
+    out["last_seen_ts_utc"] = _utc_timestamp_from_epoch(last_seen_ts_epoch) if last_seen_ts_epoch is not None else None
+    out["last_seen_ts_ist"] = _ist_timestamp_from_epoch(last_seen_ts_epoch) if last_seen_ts_epoch is not None else None
+    return out
+
+
+def _derive_row_kind(payload: dict[str, Any]) -> str:
+    explicit = _safe_lower_text(payload.get("row_kind"))
+    if explicit:
+        return explicit
+    if str(payload.get("stage") or "").strip().lower() == "trade_builder":
+        return BLOCKED_DEBUG_ROW_KIND
+    if bool(payload.get("non_canonical_levels")):
+        return ADVISORY_ONLY_ROW_KIND
+    if not bool(payload.get("advisory_visible", True)):
+        return ADVISORY_ONLY_ROW_KIND
+    entry = _safe_float(payload.get("entry"))
+    stop_loss = _safe_float(payload.get("stop_loss"))
+    if stop_loss is None:
+        stop_loss = _safe_float(payload.get("stop"))
+    target = _safe_float(payload.get("target"))
+    if entry is not None and stop_loss is not None and target is not None:
+        return CANONICAL_ROW_KIND
+    return ADVISORY_ONLY_ROW_KIND
+
+
 def _has_timestamp_hint(payload: dict[str, Any]) -> bool:
-    return any(payload.get(field) not in (None, "", "None") for field in ("ts_epoch", "snapshot_ts_epoch", "timestamp", "last_seen_ts", "timestamp_utc_iso", "last_seen", "created_at"))
+    hint_fields = (
+        _DECISION_TS_FIELDS
+        + _SNAPSHOT_TS_FIELDS
+        + ("last_seen_ts", "last_seen", "last_seen_ts_epoch")
+    )
+    return any(payload.get(field) not in (None, "", "None") for field in hint_fields)
 
 
 def _legacy_entry_state(payload: dict[str, Any]) -> dict[str, Any]:
@@ -576,6 +803,10 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("setup_variant", identity.get("setup_variant") or "unknown")
     out.setdefault("direction", identity.get("direction") or "UNKNOWN")
     out.setdefault("candidate_status", _derive_candidate_status(out))
+    out.setdefault("row_kind", _derive_row_kind(out))
+    out.setdefault("non_canonical_levels", out.get("row_kind") != CANONICAL_ROW_KIND)
+    out.setdefault("levels_recomputed_from_final_entry", bool(payload.get("levels_recomputed_from_final_entry", False)))
+    out.setdefault("level_recompute_reason", _normalize_text(payload.get("level_recompute_reason")))
     out.setdefault("timestamp", _derive_timestamp(payload))
     out.setdefault("instrument_type", payload.get("instrument_type") or payload.get("instrument"))
     out.setdefault("decision_explain", _normalize_decision_explain(payload.get("decision_explain")))
@@ -739,10 +970,54 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _apply_post_level_entry_mutation_policy(
+    payload: dict[str, Any],
+    *,
+    entry_before: float | None,
+    display_before: float | None,
+    execution_before: float | None,
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    entry_after = _safe_float(out.get("entry"))
+    display_after = _safe_float(out.get("display_entry"))
+    execution_after = _safe_float(out.get("execution_entry"))
+    entry_changed = (
+        entry_before != entry_after
+        or display_before != display_after
+        or execution_before != execution_after
+    )
+    out["entry_changed_post_levels"] = bool(entry_changed)
+    if not entry_changed:
+        return out
+    if _derive_row_kind(out) != CANONICAL_ROW_KIND:
+        return out
+    if _candidate_row_corruption_log_enabled():
+        log_corrupt_advisory_row(out, "entry_changed_post_levels")
+    if not _strict_level_invariants_enabled():
+        return out
+    out["row_kind"] = ADVISORY_ONLY_ROW_KIND
+    out["non_canonical_levels"] = True
+    out["levels_recomputed_from_final_entry"] = False
+    out["level_recompute_reason"] = "entry_changed_post_levels"
+    out["stop"] = None
+    out["stop_loss"] = None
+    out["stop_price"] = None
+    out["original_stop"] = None
+    out["current_stop"] = None
+    out["target"] = None
+    out["target_price"] = None
+    return out
+
+
 def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return payload
     out = _normalize_option_identity(payload)
+    entry_before = _safe_float(out.get("entry"))
+    display_before = _safe_float(out.get("display_entry"))
+    execution_before = _safe_float(out.get("execution_entry"))
 
     execution_entry = _safe_float(out.get("execution_entry"))
     execution_entry_source = _safe_lower_text(out.get("execution_entry_source")) or "none"
@@ -770,6 +1045,9 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
         elif not execution_entry_status or execution_entry_status == "missing":
             out["execution_entry_status"] = recovered_status or "missing"
             execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    if bool(out.get("entry_recovered")) and execution_entry is not None and execution_entry_source in {"", "none"}:
+        out["execution_entry_source"] = "recovered_fallback"
+        execution_entry_source = "recovered_fallback"
     if execution_entry_source == "last" and not should_allow_last_execution_fallback(out):
         out["execution_entry"] = None
         out["execution_entry_source"] = "none"
@@ -778,6 +1056,12 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
             execution_entry_status = "non_executable"
         execution_entry = None
         execution_entry_source = "none"
+    if bool(out.get("entry_recovered")) and execution_entry is not None:
+        out["execution_entry_status"] = "non_executable"
+        out["execution_allowed"] = False
+        out["execution_status"] = "advisory_only"
+        out["is_executable"] = False
+        execution_entry_status = "non_executable"
 
     # Preserve a real executable entry if a downstream normalizer dropped the
     # duplicated display/entry fields but kept the canonical execution entry.
@@ -826,7 +1110,12 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
     claims_executable = execution_status == "executable" or bool(out.get("is_executable")) or readiness == "READY" or final_action == "EXECUTE" or permission == "EXECUTE" or row_status == "READY"
     missing_executable_entry = not executable_ready
     if not claims_executable:
-        return out
+        return _apply_post_level_entry_mutation_policy(
+            out,
+            entry_before=entry_before,
+            display_before=display_before,
+            execution_before=execution_before,
+        )
     if missing_executable_entry and display_entry is not None:
         out["execution_entry"] = None
         out["execution_entry_source"] = "none"
@@ -839,7 +1128,12 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
         display_entry_status = "displayable"
         entry_status = "displayable"
     if not missing_entry and not missing_executable_entry:
-        return out
+        return _apply_post_level_entry_mutation_policy(
+            out,
+            entry_before=entry_before,
+            display_before=display_before,
+            execution_before=execution_before,
+        )
 
     has_hard_blockers = bool(_normalize_blockers(out.get("hard_blockers")))
     display_only_entry = display_entry is not None and missing_executable_entry and entry_status == "displayable"
@@ -868,7 +1162,12 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
         out["entry_clear_reason"] = reason or "missing_entry"
     if not _normalize_text(out.get("entry_block_code")) and _normalize_text(out.get("entry_clear_reason")):
         out["entry_block_code"] = _normalize_text(out.get("entry_clear_reason"))
-    return out
+    return _apply_post_level_entry_mutation_policy(
+        out,
+        entry_before=entry_before,
+        display_before=display_before,
+        execution_before=execution_before,
+    )
 
 
 def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False) -> dict[str, Any]:
@@ -885,12 +1184,24 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         out["timestamp"] = _utc_timestamp_from_epoch(derived_ts_epoch)
         out["ts_utc"] = out["timestamp"]
         out["ts_ist"] = _ist_timestamp_from_epoch(derived_ts_epoch)
+        out = _apply_explicit_display_timestamps(out, float(derived_ts_epoch))
+    instrument_type_before = _normalize_text(out.get("instrument_type") or out.get("instrument"))
+    inferred_type, inferred_source = _infer_instrument_type(out)
+    if inferred_type:
+        out["instrument_type"] = inferred_type
+        out.setdefault("instrument_type_source", inferred_source)
+        if not instrument_type_before and inferred_source == "fallback":
+            out.setdefault("failure_reason", "instrument_type_backfilled")
     for field in REQUIRED_FIELDS:
         if field not in out:
             raise AdvisorySchemaError(f"missing required field: {field}")
     execution_entry_before = out.get("execution_entry")
     execution_entry_status_before = out.get("execution_entry_status")
     out = _enforce_executable_entry_invariant(out)
+    out["row_kind"] = _derive_row_kind(out)
+    out["non_canonical_levels"] = bool(out.get("non_canonical_levels")) or out["row_kind"] != CANONICAL_ROW_KIND
+    out["levels_recomputed_from_final_entry"] = bool(out.get("levels_recomputed_from_final_entry", False))
+    out["level_recompute_reason"] = _normalize_text(out.get("level_recompute_reason"))
     append_execution_entry_trace(
         module="core.advisory_schema",
         stage="validate_advisory_row",
@@ -907,6 +1218,11 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
             "derivation_source_chain": out.get("_execution_entry_derivation_source_chain"),
         },
     )
+    level_invariant_error = validate_price_level_invariants(out)
+    if level_invariant_error:
+        if _candidate_row_corruption_log_enabled():
+            log_corrupt_advisory_row(out, level_invariant_error)
+        raise AdvisorySchemaError(level_invariant_error)
 
     trade_id = _normalize_text(out.get("trade_id"))
     strategy_id = _normalize_text(out.get("strategy_id"))
@@ -1144,10 +1460,15 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["setup_variant"] = setup_variant
     out["direction"] = direction
     out["candidate_status"] = candidate_status
+    out["row_kind"] = _derive_row_kind(out)
+    out["non_canonical_levels"] = bool(out.get("non_canonical_levels")) or out["row_kind"] != CANONICAL_ROW_KIND
+    out["levels_recomputed_from_final_entry"] = bool(out.get("levels_recomputed_from_final_entry", False))
+    out["level_recompute_reason"] = _normalize_text(out.get("level_recompute_reason"))
     out["ts_epoch"] = float(ts_epoch)
     out["timestamp"] = _utc_timestamp_from_epoch(ts_epoch)
     out["ts_utc"] = out["timestamp"]
     out["ts_ist"] = _ist_timestamp_from_epoch(ts_epoch)
+    out = _apply_explicit_display_timestamps(out, float(ts_epoch))
     out["instrument_type"] = instrument_type.upper()
     out["execution_entry"] = execution_entry
     out["execution_entry_source"] = execution_entry_source

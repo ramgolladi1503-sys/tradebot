@@ -31,12 +31,14 @@ from strategies.ensemble import (
     micro_pattern_signal,
 )
 from core.feature_builder import build_trade_features, validate_trade_features
+from core.advisory_row_integrity import BLOCKED_DEBUG_ROW_KIND
 from core.trade_scoring import compute_trade_score
 from core.trade_identity import infer_candidate_identity
 from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
 from core.instruments import select_expiry as select_registry_expiry
 from core.market_context import derive_market_context
+from core.candidate_soft_reject import build_soft_reject_candidate, critical_reject_reasons, is_critical_reject_reason
 from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
 from core.reject_telemetry import append_reject_telemetry
@@ -251,6 +253,132 @@ class TradeBuilder:
         self._scan_profile_name = ""
         self._last_scan_summary = {}
         self._last_ranked_candidates = []
+        self._soft_reject_reasons_cache: set[str] | None = None
+
+    def _soft_reject_reasons(self) -> set[str]:
+        if self._soft_reject_reasons_cache is not None:
+            return self._soft_reject_reasons_cache
+        raw = str(getattr(cfg, "TRADE_BUILDER_SOFT_REJECT_REASONS", "") or "")
+        reasons = {item.strip().lower() for item in raw.split(",") if item.strip()}
+        self._soft_reject_reasons_cache = reasons
+        return reasons
+
+    def _soft_reject_enabled(self, execution_mode: str | None) -> bool:
+        try:
+            enabled = bool(getattr(cfg, "TRADE_BUILDER_SOFT_REJECT_ENABLE", True))
+        except Exception:
+            enabled = False
+        if not enabled:
+            return False
+        try:
+            allow_live = bool(getattr(cfg, "TRADE_BUILDER_SOFT_REJECT_ALLOW_LIVE", True))
+        except Exception:
+            allow_live = True
+        mode = str(execution_mode or "").strip().upper()
+        if mode in {"LIVE", "REAL"} and not allow_live:
+            return False
+        return True
+
+    def _select_soft_reject_reason(self, reject_ctx: dict | None) -> str | None:
+        if not isinstance(reject_ctx, dict):
+            return None
+        soft_reasons = self._soft_reject_reasons()
+        primary = str(reject_ctx.get("reason") or "").strip().lower()
+        gate_reasons = [str(code).strip().lower() for code in (reject_ctx.get("gate_reasons") or []) if str(code).strip()]
+        if primary == "no_viable_candidates":
+            for code in gate_reasons:
+                if code in soft_reasons and code != primary:
+                    return code
+        if primary and primary in soft_reasons:
+            return primary
+        for code in gate_reasons:
+            if code in soft_reasons:
+                return code
+        return None
+
+    def _soften_reject_to_candidate(
+        self,
+        *,
+        market_data: dict,
+        reject_ctx: dict,
+        strategy_tag: str | None = None,
+        direction: str | None = None,
+    ) -> dict | None:
+        if not isinstance(market_data, dict):
+            return None
+        execution_mode = str(
+            market_data.get("execution_mode")
+            or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+            or getattr(cfg, "EXECUTION_MODE", "")
+        ).strip().upper()
+        if not self._soft_reject_enabled(execution_mode):
+            return None
+        reason = self._select_soft_reject_reason(reject_ctx)
+        if not reason:
+            return None
+        if is_critical_reject_reason(reason, critical_reject_reasons()):
+            return None
+        symbol = str(reject_ctx.get("symbol") or market_data.get("symbol") or market_data.get("underlying") or "").strip()
+        gate_reasons = list(reject_ctx.get("gate_reasons") or []) or [reason]
+        base_candidate = {
+            "symbol": symbol or None,
+            "strategy": strategy_tag,
+            "strategy_name": strategy_tag,
+            "strategy_family": strategy_tag or "unknown",
+            "candidate_type": "directional",
+            "direction": direction,
+        }
+        candidate = build_soft_reject_candidate(
+            market_data,
+            reject_reason=reason,
+            reject_source="trade_builder_soft_reject",
+            gate_reasons=gate_reasons,
+            base_candidate=base_candidate,
+            execution_mode=execution_mode,
+        )
+        if not candidate:
+            return None
+        candidate["source_flags"] = dict(candidate.get("source_flags") or {})
+        candidate["source_flags"]["candidate_origin"] = "softened_builder_path"
+        candidate["source_flags"]["soft_reject_reason"] = reason
+        candidate["reason"] = reason
+        logger.info(
+            "candidate_softened reason=%s symbol=%s strategy=%s",
+            reason,
+            symbol,
+            strategy_tag,
+        )
+        logger.info(
+            "candidate_rank_inputs symbol=%s reason=%s confidence=%s rank_score=%s",
+            symbol,
+            reason,
+            candidate.get("confidence_final"),
+            candidate.get("rank_score"),
+        )
+        try:
+            self._set_last_ranked_candidates([candidate])
+            logger.info(
+                "candidate_pool_append source=softened_builder_path symbol=%s reason=%s",
+                symbol,
+                reason,
+            )
+        except Exception:
+            pass
+        return candidate
+
+    def _ensure_reject_reason(self, market_data: dict | None, reason: str | None = None) -> str:
+        reject_ctx = dict(self._reject_ctx or {})
+        reject_reason = str(reason or reject_ctx.get("reason") or "").strip()
+        if not reject_reason:
+            reject_reason = "unspecified_trade_builder_reject"
+            reject_ctx = dict(reject_ctx)
+            symbol = (market_data or {}).get("symbol") if isinstance(market_data, dict) else None
+            if symbol:
+                reject_ctx.setdefault("symbol", symbol)
+            reject_ctx["reason"] = reject_reason
+            self._reject_ctx = reject_ctx
+            logger.warning("trade_builder_reject_reason_missing symbol=%s", symbol)
+        return reject_reason
 
     def _set_last_ranked_candidates(self, candidates) -> None:
         self._last_ranked_candidates = list(candidates or [])
@@ -870,24 +998,8 @@ class TradeBuilder:
             stop = meta.get("stop_loss")
         target = meta.get("target")
         derived_levels = False
-        skip_derivation = bool(
-            str(reason_code or "").strip() == "unresolved_contract"
-            or meta.get("unresolved_contract")
-            or meta.get("skip_derived_levels")
-        )
-        if not skip_derivation and (stop is None or target is None):
-            try:
-                entry_f = float(entry)
-                atr_f = float(data.get("atr") or 0.0)
-                if atr_f > 0:
-                    if stop is None:
-                        stop = round(max(0.01, entry_f - atr_f), 4)
-                        derived_levels = True
-                    if target is None:
-                        target = round(entry_f + (atr_f * 1.5), 4)
-                        derived_levels = True
-            except Exception:
-                pass
+        stop = None
+        target = None
         horizons = list(meta.get("horizon_sec") or meta.get("horizons_sec") or [])
         if not horizons:
             raw_horizons = getattr(cfg, "SHADOW_EVAL_HORIZONS_SEC", [300, 900, 1800])
@@ -932,8 +1044,10 @@ class TradeBuilder:
             "reason": str(reason_text),
             "gate_name": gate_name,
             "direction": direction,
+            "row_kind": BLOCKED_DEBUG_ROW_KIND,
             "entry": entry,
             "stop": stop,
+            "stop_loss": stop,
             "target": target,
             "instrument_id": instrument_id,
             "instrument_token": instrument_token,
@@ -951,6 +1065,9 @@ class TradeBuilder:
             "contract": contract,
             "horizon_sec": horizons,
             "derived_levels": bool(derived_levels),
+            "non_canonical_levels": True,
+            "levels_recomputed_from_final_entry": False,
+            "level_recompute_reason": "blocked_debug_row",
             "ltp": data.get("ltp"),
             "vwap": data.get("vwap"),
             "atr": data.get("atr"),
@@ -1335,7 +1452,12 @@ class TradeBuilder:
             or self._coerce_option_type(opt.get("right"))
             or self._coerce_option_type(opt.get("instrument_type"))
         )
-        if opt_side != str(expected_type or "").upper():
+        expected = str(expected_type or "").upper()
+        if opt_side is None and expected in {"CE", "PE"}:
+            opt_side = expected
+            opt["type_inferred"] = True
+            opt["type_inferred_source"] = "expected_type"
+        if opt_side != expected:
             return None, "type_mismatch"
         strike = (
             self._coerce_positive_float(opt.get("strike"))
@@ -1538,7 +1660,29 @@ class TradeBuilder:
         )
         if quote_age_sec is None and quote_ts_epoch is not None:
             quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
+        allow_stale_quotes = bool(getattr(market_ctx, "allow_stale_quotes", False))
         if quote_age_sec is None or quote_age_sec > option_tick_sla_sec:
+            if allow_stale_quotes:
+                return True, {
+                    "reason_code": "STALE_OPTION_TICK",
+                    "reason_text": "Option tick stale but allowed; candidate downgraded to advisory",
+                    "gate_name": "option_tradability_precondition",
+                    "contract": contract_label,
+                    "strike": strike,
+                    "option_type": opt_type,
+                    "direction": direction,
+                    "instrument_token": instrument_token,
+                    "tradingsymbol": tradingsymbol,
+                    "expiry_date": expiry_resolved,
+                    "quote_source": quote_source or None,
+                    "option_ltp_source": option_ltp_source or None,
+                    "quote_age_sec": quote_age_sec,
+                    "tick_age_sec": quote_age_sec,
+                    "sla_threshold_sec": option_tick_sla_sec,
+                    "option_tick_sla_sec": option_tick_sla_sec,
+                    "stale_option_tick": True,
+                    "stale_allowed": True,
+                }
             return False, {
                 "reason_code": "STALE_OPTION_TICK",
                 "reason_text": "Option candidate rejected because option tick is missing/stale by SLA",
@@ -2016,6 +2160,95 @@ class TradeBuilder:
             out[str(expiry)] = (band_min, band_max)
         return out
 
+    def _adjust_premium_band(
+        self,
+        *,
+        symbol: str,
+        opt: dict,
+        market_data: dict,
+        base_band: tuple[float, float],
+        spread_pct: float | None,
+    ) -> tuple[float, float, dict]:
+        min_p, max_p = base_band
+        context: dict = {"base_min": min_p, "base_max": max_p}
+        try:
+            dte_threshold = int(getattr(cfg, "PREMIUM_BAND_DTE1_THRESHOLD", 1))
+        except Exception:
+            dte_threshold = 1
+        dte_raw = opt.get("dte") or opt.get("days_to_expiry") or opt.get("dte_days")
+        dte = None
+        try:
+            if dte_raw not in (None, "", "None"):
+                dte = int(float(dte_raw))
+        except Exception:
+            dte = None
+        if dte is not None and dte <= dte_threshold:
+            min_mult = float(getattr(cfg, "PREMIUM_BAND_DTE1_MIN_MULT", 0.6))
+            max_mult = float(getattr(cfg, "PREMIUM_BAND_DTE1_MAX_MULT", 0.8))
+            min_p *= max(0.0, min_mult)
+            max_p *= max(0.0, max_mult)
+            context["dte"] = dte
+            context["dte_mult"] = {"min": min_mult, "max": max_mult}
+        regime = str(
+            market_data.get("regime")
+            or market_data.get("regime_state")
+            or market_data.get("regime_label")
+            or ""
+        ).lower()
+        if "high" in regime or "vol" in regime:
+            max_mult = float(getattr(cfg, "PREMIUM_BAND_HIGH_VOL_MAX_MULT", 1.35))
+            max_p *= max(0.0, max_mult)
+            context["regime"] = regime
+            context["regime_max_mult"] = max_mult
+        if spread_pct is not None:
+            try:
+                tight_spread_pct = float(getattr(cfg, "PREMIUM_BAND_TIGHT_SPREAD_PCT", 0.8))
+                if 0.0 < spread_pct <= tight_spread_pct:
+                    spread_mult = float(getattr(cfg, "PREMIUM_BAND_TIGHT_SPREAD_MAX_MULT", 1.15))
+                    max_p *= max(0.0, spread_mult)
+                    context["spread_pct"] = spread_pct
+                    context["spread_max_mult"] = spread_mult
+            except Exception:
+                pass
+        min_p = max(0.0, float(min_p))
+        max_p = max(min_p, float(max_p))
+        context["adjusted_min"] = min_p
+        context["adjusted_max"] = max_p
+        context["symbol"] = symbol
+        return min_p, max_p, context
+
+    def _log_premium_band_debug(
+        self,
+        *,
+        symbol: str,
+        opt: dict,
+        min_p: float,
+        max_p: float,
+        band_context: dict,
+        spread_pct: float | None,
+        reason: str,
+        strategy_tag: str | None,
+    ) -> None:
+        logger.info(
+            "PREMIUM_BAND_DEBUG %s",
+            {
+                "symbol": symbol,
+                "tradingsymbol": opt.get("tradingsymbol"),
+                "instrument_type": opt.get("instrument_type") or opt.get("instrument"),
+                "option_type": opt.get("type") or opt.get("option_type") or opt.get("right"),
+                "strike": opt.get("strike"),
+                "premium": opt.get("ltp"),
+                "band_min": min_p,
+                "band_max": max_p,
+                "expiry": opt.get("expiry_date") or opt.get("expiry"),
+                "dte": opt.get("dte") or opt.get("days_to_expiry") or opt.get("dte_days"),
+                "strategy_family": strategy_tag,
+                "spread_pct": spread_pct,
+                "reason": reason,
+                "band_context": band_context,
+            },
+        )
+
     def _zero_to_hero_premium_band(
         self,
         chain_rows: list[dict],
@@ -2045,6 +2278,10 @@ class TradeBuilder:
                 continue
             vals.append(float(ltp))
         if len(vals) < min_rows:
+            fallback_low = float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_FALLBACK_LOW", 10.0))
+            fallback_high = float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_FALLBACK_HIGH", 120.0))
+            if fallback_low > 0 and fallback_high > fallback_low:
+                return fallback_low, fallback_high, "fallback_band"
             return None, None, "insufficient_rows"
         p_low = self._percentile(vals, pct_low)
         p_high = self._percentile(vals, pct_high)
@@ -4002,7 +4239,10 @@ class TradeBuilder:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "stale_option_quote", atr=atr))
                     continue
             elif quote_ts_epoch is None or (quote_age is not None and quote_age > getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8)):
-                _record_issue("stale_option_quote", role=ISSUE_CATEGORY_HARD)
+                stale_role = ISSUE_CATEGORY_SOFT if (market_ctx.allow_stale_quotes or exec_mode in {"SIM", "PAPER", "PLANNING", "ADVISORY"}) else ISSUE_CATEGORY_HARD
+                _record_issue("stale_option_quote", role=stale_role)
+                if stale_role != ISSUE_CATEGORY_HARD and "stale_option_quote" not in execution_blockers:
+                    execution_blockers.append("stale_option_quote")
             # Hard reject missing bid/ask
             if opt.get("quote_ok") is False:
                 if strict_quotes:
@@ -4010,12 +4250,16 @@ class TradeBuilder:
                     if debug_reasons:
                         rejected.append(self._reject_record(symbol, opt, opt_type, "no_quote", atr=atr))
                     continue
-                _record_issue("option_quote_missing", role=ISSUE_CATEGORY_HARD)
+                missing_role = ISSUE_CATEGORY_SOFT if (market_ctx.allow_stale_quotes or exec_mode in {"SIM", "PAPER", "PLANNING", "ADVISORY"}) else ISSUE_CATEGORY_HARD
+                _record_issue("option_quote_missing", role=missing_role)
+                if missing_role != ISSUE_CATEGORY_HARD and "option_quote_missing" not in execution_blockers:
+                    execution_blockers.append("option_quote_missing")
             # Skip synthetic quotes (no live price)
             require_live_option_quotes = bool(
                 runtime_profile.suggestion_require_live_quotes
                 and getattr(cfg, "REQUIRE_LIVE_OPTION_QUOTES", False)
                 and (not market_ctx.allow_stale_quotes)
+                and exec_mode == "LIVE"
             )
             if not opt.get("quote_ok", True) or (require_live_option_quotes and ("synthetic" not in quote_source.lower()) and not opt.get("quote_live", True)):
                 if require_live_option_quotes:
@@ -4043,7 +4287,9 @@ class TradeBuilder:
                     synth_spread = max(synth_abs, opt_ltp * synth_pct)
                     opt["bid"] = round(max(0.01, opt_ltp - (synth_spread / 2.0)), 4)
                     opt["ask"] = round(max(0.01, opt_ltp + (synth_spread / 2.0)), 4)
-                    opt["quote_ok"] = True
+                    opt["quote_ok"] = False
+                    opt["quote_live"] = False
+                    opt["synthetic_bidask"] = True
                 _record_issue("option_bidask_missing", role=ISSUE_CATEGORY_HARD)
             if getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False) and not opt.get("volume", 0):
                 if runtime_profile.suggestion_require_volume:
@@ -4060,6 +4306,28 @@ class TradeBuilder:
                 market_ctx=market_ctx,
                 direction=direction,
             )
+            if bool(tradability_ctx.get("stale_option_tick")):
+                _log_freshness_debug(
+                    "TRADE_BUILDER_STALE_OPTION_TICK_SOFTENED symbol=%s mode=%s quote_age_sec=%s sla_sec=%s quote_source=%s",
+                    symbol,
+                    str(getattr(market_ctx, "mode", "") or "").strip().upper(),
+                    tradability_ctx.get("quote_age_sec"),
+                    tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
+                    tradability_ctx.get("option_ltp_source") or tradability_ctx.get("quote_source"),
+                )
+                role = ISSUE_CATEGORY_SOFT if bool(getattr(market_ctx, "allow_stale_quotes", False)) else ISSUE_CATEGORY_HARD
+                _record_issue("stale_option_quote", role=role)
+                if "stale_option_tick" not in execution_blockers:
+                    execution_blockers.append("stale_option_tick")
+                opt["stale_option_tick_downgraded"] = True
+                opt["expiry"] = tradability_ctx.get("expiry_date") or opt.get("expiry")
+                opt["expiry_date"] = tradability_ctx.get("expiry_date") or opt.get("expiry_date")
+                opt["tradingsymbol"] = tradability_ctx.get("tradingsymbol") or opt.get("tradingsymbol")
+                opt["instrument_token"] = tradability_ctx.get("instrument_token") or opt.get("instrument_token")
+                opt["quote_source"] = tradability_ctx.get("quote_source") or opt.get("quote_source")
+                opt["option_ltp_source"] = tradability_ctx.get("option_ltp_source") or opt.get("option_ltp_source")
+                opt["quote_age_sec"] = tradability_ctx.get("quote_age_sec")
+                opt["option_tick_sla_sec"] = tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec")
             if not tradability_ok:
                 reason_code = str(tradability_ctx.get("reason_code") or "option_tradability_precondition_failed")
                 stale_advisory_ok = bool(
@@ -4273,6 +4541,13 @@ class TradeBuilder:
 
             # Premium gate: hard only for poor liquidity, otherwise soft-veto.
             min_p, max_p = premium_band_used
+            min_p, max_p, band_context = self._adjust_premium_band(
+                symbol=symbol,
+                opt=opt,
+                market_data=market_data,
+                base_band=(float(min_p), float(max_p)),
+                spread_pct=spread_pct,
+            )
             premium_relax_pct = float(max(0.0, current_filter_profile.premium_relax_pct))
             if premium_relax_pct > 0:
                 min_p = max(0.0, float(min_p) * max(0.0, 1.0 - premium_relax_pct))
@@ -4287,8 +4562,24 @@ class TradeBuilder:
                 spread_bad = bool(spread_pct > toxic_spread)
                 volume_bad = bool((opt.get("volume") or 0) < int(getattr(cfg, "MIN_VOLUME_FILTER", 500)) * 0.25)
                 quote_missing = bool(opt.get("quote_ok") is False or opt.get("bid") is None or opt.get("ask") is None)
-                hard_liquidity_reject = bool(execution_mode == "LIVE" and (spread_bad or volume_bad or quote_missing))
-                if hard_liquidity_reject:
+                market_open = bool(getattr(market_ctx, "market_open", True))
+                hard_liquidity_reject = bool(
+                    execution_mode == "LIVE"
+                    and market_open
+                    and (spread_bad or volume_bad or quote_missing)
+                )
+                hard_reject_enabled = bool(getattr(cfg, "PREMIUM_BAND_HARD_REJECT_ENABLE", True)) and execution_mode == "LIVE"
+                if hard_liquidity_reject and hard_reject_enabled:
+                    self._log_premium_band_debug(
+                        symbol=symbol,
+                        opt=opt,
+                        min_p=min_p,
+                        max_p=max_p,
+                        band_context=band_context,
+                        spread_pct=spread_pct,
+                        reason="premium_band_fail_hard",
+                        strategy_tag=candidate_strategy_tag,
+                    )
                     _count_option_reject("premium")
                     self._log_blocked_candidate(
                         symbol,
@@ -4323,7 +4614,19 @@ class TradeBuilder:
                         debug_candidates.append(rec)
                         rejected.append(rec)
                     continue
+                if "premium_band_fail" not in execution_blockers:
+                    execution_blockers.append("premium_band_fail")
                 premium_soft_veto = True
+                self._log_premium_band_debug(
+                    symbol=symbol,
+                    opt=opt,
+                    min_p=min_p,
+                    max_p=max_p,
+                    band_context=band_context,
+                    spread_pct=spread_pct,
+                    reason="premium_band_fail_soft",
+                    strategy_tag=candidate_strategy_tag,
+                )
                 _record_issue("premium_out_of_band", role=ISSUE_CATEGORY_SOFT)
                 if soft_premium_advisory:
                     self._log_blocked_candidate(
@@ -5088,17 +5391,25 @@ class TradeBuilder:
                     rec.get("ltp"),
                 )
 
-        if not candidates:
-            if not allow_fallbacks:
-                summary = _option_reject_summary()
-                self._log_blocked_candidate(
-                    symbol,
-                    "no_viable_candidates",
-                    "No viable trade candidates and fallback path disabled",
-                    market_data=market_data,
-                    extra=summary,
-                )
-                return None
+            if not candidates:
+                if not allow_fallbacks:
+                    summary = _option_reject_summary()
+                    self._log_blocked_candidate(
+                        symbol,
+                        "no_viable_candidates",
+                        "No viable trade candidates and fallback path disabled",
+                        market_data=market_data,
+                        extra=summary,
+                    )
+                    softened = self._soften_reject_to_candidate(
+                        market_data=market_data,
+                        reject_ctx=dict(self._reject_ctx or {}),
+                        strategy_tag=candidate_strategy_tag,
+                        direction=direction,
+                    )
+                    if softened is not None:
+                        return softened
+                    return None
             # Quick fallback: synthesize ATM option if chain is empty
             if quick_mode:
                 if strict_live_market_open and market_data.get("chain_source") != "live":
@@ -5436,6 +5747,14 @@ class TradeBuilder:
                 market_data=market_data,
                 extra=_option_reject_summary(),
             )
+            softened = self._soften_reject_to_candidate(
+                market_data=market_data,
+                reject_ctx=dict(self._reject_ctx or {}),
+                strategy_tag=candidate_strategy_tag,
+                direction=direction,
+            )
+            if softened is not None:
+                return softened
             return None
 
         best_trade, ranked_candidates = select_best_opportunity(
@@ -5445,6 +5764,14 @@ class TradeBuilder:
         )
         self._set_last_ranked_candidates(ranked_candidates)
         if best_trade is None:
+            softened = self._soften_reject_to_candidate(
+                market_data=market_data,
+                reject_ctx=dict(self._reject_ctx or {"symbol": symbol, "reason": "no_viable_candidates"}),
+                strategy_tag=candidate_strategy_tag,
+                direction=direction,
+            )
+            if softened is not None:
+                return softened
             return None
 
         # Persist decision traces for all retained candidates (selected and non-selected).
@@ -5544,6 +5871,27 @@ class TradeBuilder:
             allow_fallbacks=allow_fallbacks,
             allow_baseline=allow_baseline,
         )
+        if trade is None:
+            self._ensure_reject_reason(market_data)
+            reject_ctx = dict(self._reject_ctx or {})
+            strategy_tag = (
+                str(
+                    reject_ctx.get("strategy")
+                    or reject_ctx.get("strategy_name")
+                    or reject_ctx.get("strategy_id")
+                    or "CORE"
+                )
+                .strip()
+            )
+            direction = str(reject_ctx.get("direction") or "UNKNOWN").strip()
+            softened = self._soften_reject_to_candidate(
+                market_data=market_data or {},
+                reject_ctx=reject_ctx,
+                strategy_tag=strategy_tag,
+                direction=direction,
+            )
+            if softened is not None:
+                trade = softened
         trace = build_trade_decision_trace(
             market_data=market_data or {},
             trade=trade,
@@ -5676,6 +6024,14 @@ class TradeBuilder:
         if weak_momentum and not exploratory_mode:
             self._update_strategy_candidate_debug(stats, rejected=1, reason="weak_momentum")
             self._update_zero_hero_diag(market_data, rejected_reason="weak_momentum")
+            self._reject_ctx = {"symbol": symbol, "reason": "weak_momentum", "gate_reasons": ["weak_momentum"]}
+            softened = self._soften_reject_to_candidate(
+                market_data=market_data,
+                reject_ctx=dict(self._reject_ctx),
+                strategy_tag="ZERO_TO_HERO",
+            )
+            if softened is not None:
+                return softened
             return None
 
         opt_type = "CE" if ltp_change_window >= 0 else "PE"
@@ -5772,17 +6128,15 @@ class TradeBuilder:
                 continue
             premium_out_of_band = bool(premium is None or premium < band_low or premium > band_high)
             if premium_out_of_band and not exploratory_mode:
-                self._update_strategy_candidate_debug(stats, rejected=1, reason="premium_band")
-                self._update_zero_hero_diag(market_data, rejected_reason="premium_band")
+                self._update_zero_hero_diag(market_data, rejected_reason="premium_band_soft")
                 if debug_reasons:
                     self._log_blocked_candidate(
                         symbol,
-                        "premium_band_fail",
-                        "Zero-to-hero blocked: premium outside allowed band",
+                        "premium_band_soft",
+                        "Zero-to-hero softened: premium outside allowed band",
                         market_data=market_data,
                         extra={"premium": premium, "band_low": band_low, "band_high": band_high},
                     )
-                continue
             spread_ok = self.execution.spread_ok(
                 opt.get("bid", 0),
                 opt.get("ask", 0),
@@ -5793,17 +6147,15 @@ class TradeBuilder:
                 market_open=bool(market_ctx.is_market_open),
             )
             if (not spread_ok) and not exploratory_mode:
-                self._update_strategy_candidate_debug(stats, rejected=1, reason="spread")
-                self._update_zero_hero_diag(market_data, rejected_reason="spread")
+                self._update_zero_hero_diag(market_data, rejected_reason="spread_soft")
                 if debug_reasons:
                     self._log_blocked_candidate(
                         symbol,
-                        "spread",
-                        "Zero-to-hero blocked: spread too wide",
+                        "spread_soft",
+                        "Zero-to-hero softened: spread too wide",
                         market_data=market_data,
                         extra={"strike": opt.get("strike"), "option_type": opt.get("type")},
                     )
-                continue
 
             momentum_score = min(1.0, abs(ltp_change_window) / max(atr * momentum_mult, 1.0))
             cheapness = 1.0 - ((premium - band_low) / max((band_high - band_low), 1e-6))
@@ -5847,6 +6199,12 @@ class TradeBuilder:
                     market_data=market_data,
                     extra={"band_low": band_low, "band_high": band_high, "exploratory_mode": exploratory_mode},
                 )
+            self._reject_ctx = {
+                "symbol": symbol,
+                "reason": "no_viable_candidates",
+                "gate_reasons": ["no_viable_candidates"],
+                "strategy": "ZERO_TO_HERO",
+            }
             return None
         chosen = sorted(candidates, key=lambda c: c["confidence"], reverse=True)[0]
         opt = chosen["opt"]

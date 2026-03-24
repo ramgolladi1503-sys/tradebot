@@ -7,6 +7,7 @@ from pathlib import Path
 import dashboard.streamlit_app_runtime as runtime
 import pandas as pd
 from core import advisory_schema
+from core.advisory_row_integrity import CANONICAL_ROW_KIND
 from dashboard.readers.advisory_reader import read_advisory_snapshot_rows
 from dashboard.ui.table_model import select_display_df
 
@@ -30,6 +31,11 @@ def _snapshot_row(
     is_executable: bool = False,
     status: str = "ADVISORY_ONLY",
 ) -> dict:
+    stop_loss = None
+    target = None
+    if entry is not None:
+        stop_loss = round(float(entry) - 10.0, 2)
+        target = round(float(entry) + 10.0, 2)
     return advisory_schema.serialize_advisory_row(
         {
             "trade_id": trade_id,
@@ -57,6 +63,11 @@ def _snapshot_row(
             "display_entry": entry,
             "display_entry_source": display_entry_source,
             "display_entry_status": display_entry_status,
+            "row_kind": CANONICAL_ROW_KIND if entry is not None else "advisory_only",
+            "stop": stop_loss,
+            "stop_loss": stop_loss,
+            "target": target,
+            "non_canonical_levels": entry is None,
             "execution_entry": execution_entry,
             "execution_entry_source": execution_entry_source,
             "execution_entry_status": execution_entry_status,
@@ -194,7 +205,7 @@ def test_load_live_suggestions_df_identity_includes_option_side(tmp_path, monkey
     assert display.iloc[0]["identity"] == "NIFTY\n2026-03-17\n23850 PE"
 
 
-def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_path, monkeypatch):
+def test_load_live_suggestions_df_filters_out_non_canonical_row_without_entry(tmp_path, monkeypatch):
     advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
     row = _snapshot_row(
         "T-SNAPSHOT-MISSING-ENTRY",
@@ -218,16 +229,10 @@ def test_load_live_suggestions_df_downgrades_executable_row_without_entry(tmp_pa
 
     df_live = runtime._load_live_suggestions_df(limit=5)
 
-    assert list(df_live["trade_id"]) == ["T-SNAPSHOT-MISSING-ENTRY"]
-    loaded = df_live.iloc[0]
-    assert pd.isna(loaded["entry"])
-    assert str(loaded["entry_status"]) == "missing"
-    assert str(loaded["execution_status"]) == "blocked"
-    assert str(loaded["readiness"]) == "BLOCKED"
-    assert bool(loaded["is_executable"]) is False
+    assert df_live.empty
 
 
-def test_load_live_suggestions_df_downgrades_display_only_executable_row(tmp_path, monkeypatch):
+def test_load_live_suggestions_df_filters_display_only_executable_row_from_canonical_table(tmp_path, monkeypatch):
     advisory_snapshot_path = tmp_path / "runtime" / "advisory_latest.json"
     row = _snapshot_row(
         "T-SNAPSHOT-DISPLAY-ONLY",
@@ -251,15 +256,7 @@ def test_load_live_suggestions_df_downgrades_display_only_executable_row(tmp_pat
 
     df_live = runtime._load_live_suggestions_df(limit=5)
 
-    assert list(df_live["trade_id"]) == ["T-SNAPSHOT-DISPLAY-ONLY"]
-    loaded = df_live.iloc[0]
-    assert float(loaded["entry"]) == 72.5
-    assert str(loaded["execution_status"]) == "advisory_only"
-    assert str(loaded["readiness"]) == "ADVISORY_ONLY"
-    assert str(loaded["execution_entry_status"]) == "non_executable"
-    assert str(loaded["display_entry_status"]) == "displayable"
-    assert str(loaded["entry_status"]) == "displayable"
-    assert bool(loaded["is_executable"]) is False
+    assert df_live.empty
 
 
 def test_load_top_opportunities_frames_preserves_executable_and_advisory_lists(tmp_path, monkeypatch):
@@ -589,7 +586,17 @@ def test_load_live_suggestions_df_logs_invalid_schema_rows(tmp_path, monkeypatch
             "symbol": "NIFTY",
             "entry_status": "OK",
         },
-        _snapshot_row("T-GOOD", entry=72.5),
+        _snapshot_row(
+            "T-GOOD",
+            entry=72.5,
+            execution_entry=72.5,
+            execution_entry_source="ask",
+            execution_entry_status="executable",
+            readiness="READY",
+            execution_status="executable",
+            is_executable=True,
+            status="READY",
+        ),
     ]
     advisory_snapshot_path = _write_advisory_snapshot(tmp_path, rows)
 
@@ -615,16 +622,21 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
         "symbol": "NIFTY",
         "instrument_type": "OPT",
         "strategy_name": "CORE",
-        "execution_entry": None,
-        "execution_entry_source": "none",
-        "execution_entry_status": "non_executable",
+        "execution_entry": 72.5,
+        "execution_entry_source": "ask",
+        "execution_entry_status": "executable",
         "display_entry": 72.5,
-        "display_entry_source": "mark",
+        "display_entry_source": "ask",
         "display_entry_status": "displayable",
-        "entry_reason": "display_from_mark",
+        "entry_reason": "display_from_ask",
         "entry_clear_reason": None,
         "entry": 72.5,
         "entry_status": "displayable",
+        "stop": 62.5,
+        "stop_loss": 62.5,
+        "target": 82.5,
+        "row_kind": CANONICAL_ROW_KIND,
+        "non_canonical_levels": False,
         "confidence": 0.71,
         "confidence_base": 0.82,
         "confidence_raw": 0.82,
@@ -632,7 +644,7 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
         "confidence_penalty_total": 0.11,
         "confidence_penalty_reasons": ["STALE_OPTION_LTP"],
         "confidence_final": 0.71,
-        "readiness": "ADVISORY_ONLY",
+        "readiness": "READY",
         "hard_blockers": [],
         "soft_penalties": ["STALE_OPTION_LTP"],
         "warnings": ["NO_LIVE_OPTION_FEED"],
@@ -640,9 +652,10 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
         "quote_source": "tick_store",
         "quote_age_sec": 4.2,
         "advisory_visible": True,
-        "is_executable": False,
-        "execution_status": "advisory_only",
-        "entry_source": "mark",
+        "is_executable": True,
+        "execution_status": "executable",
+        "entry_source": "ask",
+        "permission": "EXECUTE",
         "current_ltp": 72.5,
         "decision_explain": [{"code": "TRACE", "message": "kept"}],
         "market_open": True,
@@ -664,14 +677,14 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
     assert list(loaded["hard_blockers"]) == []
     assert list(loaded["soft_penalties"]) == ["STALE_OPTION_LTP"]
     assert list(loaded["warnings"]) == ["NO_LIVE_OPTION_FEED"]
-    assert str(loaded["execution_status"]) == "advisory_only"
-    assert str(loaded["entry_source"]) == "mark"
+    assert str(loaded["execution_status"]) == "executable"
+    assert str(loaded["entry_source"]) == "ask"
     assert str(loaded["display_entry_status"]) == "displayable"
     assert loaded["decision_explain"] == [{"code": "TRACE", "message": "kept"}]
     assert bool(loaded["market_open"]) is True
 
 
-def test_load_live_suggestions_df_keeps_queue_only_row_honest_when_entry_missing(tmp_path, monkeypatch):
+def test_load_live_suggestions_df_filters_queue_only_row_when_entry_missing(tmp_path, monkeypatch):
     row = {
         "trade_id": "T-QUEUE-MISSING",
         "strategy_id": "CORE",
@@ -716,13 +729,7 @@ def test_load_live_suggestions_df_keeps_queue_only_row_honest_when_entry_missing
 
     df_live = runtime._load_live_suggestions_df(limit=10)
 
-    assert len(df_live) == 1
-    loaded = df_live.iloc[0]
-    assert pd.isna(loaded["entry"])
-    assert str(loaded["entry_status"]) == "missing"
-    assert str(loaded["execution_status"]) == "queue_only"
-    assert str(loaded["readiness"]) == "QUEUE_ONLY"
-    assert bool(loaded["is_executable"]) is False
+    assert df_live.empty
 
 
 def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch):
@@ -784,11 +791,16 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "entry_clear_reason": None,
         "entry": 73.0,
         "entry_status": "displayable",
+        "stop": 63.0,
+        "stop_loss": 63.0,
+        "target": 83.0,
+        "row_kind": CANONICAL_ROW_KIND,
+        "non_canonical_levels": False,
         "confidence": 0.62,
         "confidence_raw": 0.62,
         "confidence_penalty": 0.0,
         "confidence_final": 0.62,
-        "readiness": "ADVISORY_ONLY",
+        "readiness": "READY",
         "hard_blockers": [],
         "soft_penalties": [],
         "warnings": [],
@@ -796,9 +808,10 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "quote_source": "tick_store",
         "quote_age_sec": 1.2,
         "advisory_visible": True,
-        "is_executable": False,
-        "execution_status": "advisory_only",
+        "is_executable": True,
+        "execution_status": "executable",
         "entry_source": "ask",
+        "permission": "EXECUTE",
         "freshness_reason": "quote_within_threshold",
         "freshness_market_open": True,
         "decision_explain": [],
@@ -815,7 +828,8 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
     loaded = df_live.iloc[0]
     assert loaded["trade_id"] == "T-RECOVER"
     assert float(loaded["entry"]) == 73.0
-    assert loaded["readiness"] == "ADVISORY_ONLY"
+    assert loaded["readiness"] == "READY"
+    assert loaded["execution_status"] == "executable"
     assert list(loaded["hard_blockers"]) == []
     assert list(loaded["blockers"]) == []
     assert float(loaded["quote_age_sec"]) == 1.2

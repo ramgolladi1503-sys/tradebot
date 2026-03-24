@@ -1,13 +1,44 @@
-import os
+from __future__ import annotations
 
-EXPECTED = os.path.expanduser("~/tradebot")
-cwd = os.path.abspath(os.getcwd())
+from pathlib import Path
 
-# allow running from subdirs inside ~/tradebot
-if not cwd.startswith(EXPECTED):
-    raise RuntimeError(
-        f"WRONG REPO ROOT\\n"
-        f"Running from: {cwd}\\n"
-        f"Expected under: {EXPECTED}\\n"
-        f"Fix your terminal working directory / IDE workspace."
-    )
+
+_REQUIRED_REPO_MARKERS = (
+    "main.py",
+    "core",
+    "strategies",
+    "config",
+)
+
+
+def detect_repo_root() -> Path:
+    """Resolve the project root from this module location, not from cwd."""
+    return Path(__file__).resolve().parents[1]
+
+
+def validate_repo_root(repo_root: Path | str | None = None) -> Path:
+    """
+    Fail closed on malformed project structure without hardcoding a machine path.
+
+    This guard is intentionally structure-based:
+    - portable across clone locations
+    - safe to import from any cwd
+    - still catches running against a broken/incomplete checkout
+    """
+    root = Path(repo_root).resolve() if repo_root is not None else detect_repo_root()
+    missing = [marker for marker in _REQUIRED_REPO_MARKERS if not (root / marker).exists()]
+    if missing:
+        raise RuntimeError(
+            "INVALID REPO ROOT\n"
+            f"Detected root: {root}\n"
+            f"Missing required markers: {', '.join(missing)}\n"
+            "Fix your checkout or launch path."
+        )
+    return root
+
+
+def ensure_runtime_repo_guard() -> Path:
+    return validate_repo_root()
+
+
+ensure_runtime_repo_guard()

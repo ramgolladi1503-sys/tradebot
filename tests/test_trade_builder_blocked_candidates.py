@@ -61,6 +61,9 @@ def test_blocked_candidate_logged_for_missing_quote(monkeypatch, tmp_path):
     assert rows[-1]["reason_code"] == "no_signal"
     assert rows[-1]["stage"] == "trade_builder"
     assert rows[-1]["symbol"] == "NIFTY"
+    assert rows[-1]["row_kind"] == "blocked_debug"
+    assert rows[-1]["stop"] is None
+    assert rows[-1]["target"] is None
 
 
 def test_blocked_candidate_logged_for_no_signal(monkeypatch, tmp_path):
