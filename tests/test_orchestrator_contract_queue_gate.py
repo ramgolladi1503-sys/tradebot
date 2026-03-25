@@ -115,13 +115,18 @@ def test_queue_review_candidate_allows_unresolved_contract_for_analytics(monkeyp
 
 
 def test_queue_rejected_candidate_for_analytics_queues_top_ranked_candidate(monkeypatch):
-    queued = []
+    captured = []
 
-    def _queue(trade, **kwargs):
-        queued.append((trade, kwargs))
-        return True, trade
+    def _append(paths, payload):
+        captured.append((paths, payload))
 
-    monkeypatch.setattr(orchestrator_mod, "_queue_review_candidate", _queue)
+    monkeypatch.setattr(orchestrator_mod, "_append_review_jsonl", _append)
+    monkeypatch.setattr(orchestrator_mod, "rejected_candidates_paths", lambda: ["rejected.jsonl"])
+    monkeypatch.setattr(
+        orchestrator_mod,
+        "project_advisory_row",
+        lambda trade, extra=None: {"trade_id": trade.trade_id, "symbol": trade.symbol, **(extra or {})},
+    )
     monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_REJECTED_CANDIDATES_ENABLE", True, raising=False)
     monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_REJECTED_CANDIDATES_FORCE_ADVISORY", True, raising=False)
 
@@ -137,15 +142,45 @@ def test_queue_rejected_candidate_for_analytics_queues_top_ranked_candidate(monk
     )
 
     assert ok is True
-    assert prepared.trade_id == "T-RANKED-1"
-    assert len(queued) == 1
-    assert queued[0][1]["allow_unresolved_for_analytics"] is True
-    assert queued[0][1]["reject_source"] == "unit_test_ranked_reject"
-    assert queued[0][1]["extra"]["decision_stage"] == "trade_builder_gate"
-    assert queued[0][1]["extra"]["execution_blocked"] is True
-    assert queued[0][1]["extra"]["execution_block_reason"] == "no_trade_generated"
-    assert queued[0][1]["extra"]["permission"] == "ADVISORY_ONLY"
-    assert queued[0][1]["extra"]["final_action"] == "ADVISORY_ONLY"
+    assert prepared["trade_id"] == "T-RANKED-1"
+    assert len(captured) == 1
+    assert captured[0][1]["decision_stage"] == "trade_builder_gate"
+    assert captured[0][1]["execution_blocked"] is True
+    assert captured[0][1]["execution_block_reason"] == "no_trade_generated"
+    assert captured[0][1]["permission"] == "ADVISORY_ONLY"
+    assert captured[0][1]["final_action"] == "ADVISORY_ONLY"
+    assert captured[0][1]["analytics_only"] is True
+
+
+def test_queue_rejected_candidate_for_analytics_skips_excluded_trade_ids(monkeypatch):
+    captured = []
+
+    def _append(paths, payload):
+        captured.append((paths, payload))
+
+    monkeypatch.setattr(orchestrator_mod, "_append_review_jsonl", _append)
+    monkeypatch.setattr(orchestrator_mod, "rejected_candidates_paths", lambda: ["rejected.jsonl"])
+    monkeypatch.setattr(
+        orchestrator_mod,
+        "project_advisory_row",
+        lambda trade, extra=None: {"trade_id": trade.trade_id, "symbol": trade.symbol, **(extra or {})},
+    )
+    monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_REJECTED_CANDIDATES_ENABLE", True, raising=False)
+
+    ok, prepared = orchestrator_mod._queue_rejected_candidate_for_analytics(
+        [
+            _trade(trade_id="T-RANKED-1"),
+            _trade(trade_id="T-RANKED-2"),
+        ],
+        gate_reasons=["HIST_EMPTY"],
+        reject_reason="no_trade_generated",
+        reject_source="unit_test_ranked_reject",
+        exclude_trade_ids={"T-RANKED-1"},
+    )
+
+    assert ok is True
+    assert prepared["trade_id"] == "T-RANKED-2"
+    assert len(captured) == 1
 
 
 def test_queue_prebuilder_gate_candidate_for_analytics_builds_fallback_candidate(monkeypatch):

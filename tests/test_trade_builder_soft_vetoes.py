@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import logging
 import json
 
 from config import config as cfg
@@ -156,6 +157,132 @@ def _assert_staged_confidence_fields_present(row: dict):
 
 def build_id(symbol: str, expiry: str, strike: int, opt_type: str) -> str:
     return f"{symbol}|OPT|{expiry}|{strike}|{opt_type}"
+
+
+def test_premium_band_summary_logging_and_spam_suppressed(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "PREMIUM_BANDS", {"NIFTY": (10.0, 20.0)}, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    opt2 = dict(market_data["option_chain"][0])
+    opt2["strike"] = 25050
+    opt2["tradingsymbol"] = "NIFTY26FEB25050CE"
+    opt2["instrument_token"] = 123457
+    market_data["option_chain"].append(opt2)
+
+    calls: list[str] = []
+    orig = builder._log_blocked_candidate
+
+    def _spy(*args, **kwargs):
+        if len(args) > 2:
+            calls.append(str(args[2]))
+        elif "reason_code" in kwargs:
+            calls.append(str(kwargs["reason_code"]))
+        return orig(*args, **kwargs)
+
+    monkeypatch.setattr(builder, "_log_blocked_candidate", _spy, raising=True)
+
+    caplog.set_level(logging.INFO)
+    builder.build(market_data, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert caplog.text.count("PREMIUM_BAND_FAIL_SUMMARY") == 1
+    assert "premium_band_fail_count=2" in caplog.text
+    assert "premium_band_fail" not in calls
+
+
+def test_premium_band_out_of_band_does_not_kill_candidate(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "PREMIUM_BANDS", {"NIFTY": (10.0, 20.0)}, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.9))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    trade = builder.build(_base_market_data(option_ltp=100.0), quick_mode=False, allow_fallbacks=True, allow_baseline=False)
+
+    assert trade is not None
+    assert "premium_band_fail" in (trade.source_flags.get("gates_failed") or [])
+
+
+def test_fallback_top_ranked_candidate_when_selection_none(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "PAPER_STRICT_MODE", False, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    def _select_best_stub(_candidates, **_kwargs):
+        return None, [
+            {
+                "trade_id": "cand_1",
+                "rank_score": 0.91,
+                "confidence": 0.42,
+                "size_mult": 1.0,
+                "tradable_reasons_blocking": [],
+                "source_flags": {},
+            }
+        ]
+
+    monkeypatch.setattr(trade_builder_module, "select_best_opportunity", _select_best_stub, raising=True)
+    trade = builder.build(_base_market_data(option_ltp=100.0), quick_mode=False, allow_fallbacks=True, allow_baseline=False)
+
+    assert trade is not None
+    if isinstance(trade, dict):
+        assert trade.get("fallback_candidate") is True
+        assert trade.get("fallback_reason") == "no_viable_candidates_top_ranked"
+        assert trade.get("execution_allowed") is False
+    else:
+        assert trade.source_flags.get("fallback_candidate") is True
+        assert trade.reason == "no_viable_candidates_top_ranked"
+        assert trade.execution_allowed is False
+
+
+def test_build_sets_concrete_reject_reason_when_no_trade_and_no_fallback(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    def _select_best_stub(_candidates, **_kwargs):
+        return None, []
+
+    monkeypatch.setattr(trade_builder_module, "select_best_opportunity", _select_best_stub, raising=True)
+
+    trade = builder.build(_base_market_data(option_ltp=100.0), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is None
+    assert str(builder._reject_ctx.get("reason") or "").strip() in {"no_viable_candidates", "no_candidates_survived"}
+
+
+def test_invalid_snapshot_still_blocks_trade(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    builder = TradeBuilder()
+
+    trade = builder.build(
+        {"symbol": "NIFTY", "valid": False, "invalid_reason": "invalid_snapshot"},
+        quick_mode=False,
+    )
+
+    assert trade is None
+    assert builder._reject_ctx.get("reason") == "invalid_snapshot"
 
 
 def _make_quick_synth_trade(builder: TradeBuilder, market_data: dict):
@@ -434,6 +561,9 @@ def test_stale_quote_survives_as_advisory_gate_without_soft_penalty(monkeypatch)
     assert "stale_option_quote" in (trade.source_flags.get("gates_failed") or [])
     assert "stale_option_quote" not in (trade.source_flags.get("soft_veto_codes") or [])
     assert "stale_option_quote" not in (trade.source_flags.get("warning_codes") or [])
+    assert trade.source_flags.get("execution_block_type") == "advisory"
+    assert trade.order_policy == "advisory"
+    assert trade.order_policy_reason == "data_not_live"
 
 
 def test_paper_stale_option_tick_survives_as_advisory_gate_without_soft_penalty(monkeypatch):

@@ -65,6 +65,19 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
             reason="execution_quality_disabled",
         )
 
+    source_flags = _candidate_get(candidate, "source_flags") or {}
+    execution_block_type = str(source_flags.get("execution_block_type") or "").strip().lower()
+    if execution_block_type == "advisory":
+        return ExecutionQualityDecision(
+            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+            spread_penalty=0.0,
+            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+            execution_ok=False,
+            order_policy="advisory",
+            reason_code="data_not_live",
+            reason="data_not_live",
+        )
+
     bid = _safe_float(_candidate_get(candidate, "best_bid"))
     if bid is None:
         bid = _safe_float(_candidate_get(candidate, "opt_bid"))

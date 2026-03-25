@@ -50,11 +50,13 @@ from core.review_queue import (
     _enrich_contract_identity,
     _has_valid_broker_contract,
     _missing_broker_contract_fields,
+    _append_jsonl as _append_review_jsonl,
     add_to_queue,
     approval_status,
     order_payload_hash,
     project_advisory_row,
 )
+from core.learning_paths import rejected_candidates_paths
 from core.candidate_soft_reject import (
     apply_latency_penalty,
     build_min_breadth_candidates,
@@ -581,10 +583,19 @@ def _queue_rejected_candidate_for_analytics(
     queue_path=None,
     reject_source: str = "orchestrator_gate_rejected_candidate",
     extra: dict | None = None,
+    exclude_trade_ids: set[str] | None = None,
 ):
     if not bool(getattr(cfg, "QUEUE_REJECTED_CANDIDATES_ENABLE", True)):
         return False, None
-    candidates = [candidate for candidate in list(ranked_candidates or []) if candidate is not None]
+    excluded = {str(tid) for tid in (exclude_trade_ids or set()) if str(tid)}
+    candidates = []
+    for candidate in list(ranked_candidates or []):
+        if candidate is None:
+            continue
+        trade_id = _trade_attr(candidate, "trade_id")
+        if trade_id and str(trade_id) in excluded:
+            continue
+        candidates.append(candidate)
     if not candidates:
         return False, None
     selected = candidates[0]
@@ -612,13 +623,13 @@ def _queue_rejected_candidate_for_analytics(
         payload_extra.setdefault("readiness", "ADVISORY_ONLY")
         payload_extra.setdefault("final_action", "ADVISORY_ONLY")
         payload_extra.setdefault("execution_status", "advisory_only")
-    return _queue_review_candidate(
-        selected,
-        queue_path=queue_path,
-        extra=payload_extra,
-        reject_source=reject_source,
-        allow_unresolved_for_analytics=True,
-    )
+    payload_extra.setdefault("analytics_only", True)
+    advisory_row = project_advisory_row(selected, extra=payload_extra)
+    if advisory_row is None:
+        return False, None
+    paths = rejected_candidates_paths()
+    _append_review_jsonl(paths, advisory_row)
+    return True, advisory_row
 
 
 def _queue_market_data_fallback_candidate_for_analytics(
@@ -3484,10 +3495,16 @@ class Orchestrator:
                             debug_flag=debug_flag,
                             gate_reasons=reject_gate_reasons,
                         )
+                        enqueued_trade_ids: set[str] = set()
                         if soft_reject_candidates:
                             for soft_candidate in soft_reject_candidates:
                                 try:
+                                    trade_id = str(soft_candidate.get("trade_id") or "")
+                                    if trade_id and trade_id in enqueued_trade_ids:
+                                        continue
                                     add_to_queue(soft_candidate)
+                                    if trade_id:
+                                        enqueued_trade_ids.add(trade_id)
                                     cycle_candidates_enqueued += 1
                                     logger.info(
                                         "soft_reject_candidate_enqueued symbol=%s trade_id=%s reason=%s gate_reasons=%s",
@@ -3501,7 +3518,12 @@ class Orchestrator:
                         if breadth_candidates:
                             for breadth_candidate in breadth_candidates:
                                 try:
+                                    trade_id = str(breadth_candidate.get("trade_id") or "")
+                                    if trade_id and trade_id in enqueued_trade_ids:
+                                        continue
                                     add_to_queue(breadth_candidate)
+                                    if trade_id:
+                                        enqueued_trade_ids.add(trade_id)
                                     cycle_candidates_enqueued += 1
                                     logger.info(
                                         "candidate_breadth_backfill_enqueued symbol=%s trade_id=%s",
@@ -3520,6 +3542,7 @@ class Orchestrator:
                                     "symbol": sym,
                                     "decision_stage": "trade_builder_gate",
                                 },
+                                exclude_trade_ids=enqueued_trade_ids,
                             )
                             if queued_rejected:
                                 cycle_candidates_enqueued += 1
