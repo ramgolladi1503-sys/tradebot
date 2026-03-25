@@ -205,7 +205,7 @@ def derive_market_context(
 
     require_live_quotes = bool(mode == "LIVE" and is_market_open)
     allow_stale_quotes = bool(mode in {"OFFHOURS", "SIM", "PAPER"})
-    planning_only = bool(mode in {"OFFHOURS", "SIM", "PAPER"})
+    planning_only = bool(mode == "OFFHOURS")
     if bool(getattr(cfg, "MARKET_CONTEXT_LOG_MODE", False)):
         logger.info(
             "MARKET_CONTEXT_DERIVED now_ist=%s segment=%s mode=%s market_open=%s exec_mode=%s",

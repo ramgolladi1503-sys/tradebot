@@ -845,6 +845,13 @@ QUICK_NEUTRAL_RSI_MOM_WEIGHT = float(os.getenv("QUICK_NEUTRAL_RSI_MOM_WEIGHT", "
 QUICK_NEUTRAL_SCORE_BASE = float(os.getenv("QUICK_NEUTRAL_SCORE_BASE", "0.53"))
 QUICK_NEUTRAL_SCORE_EDGE_MULT = float(os.getenv("QUICK_NEUTRAL_SCORE_EDGE_MULT", "0.22"))
 QUICK_NEUTRAL_SCORE_CAP = float(os.getenv("QUICK_NEUTRAL_SCORE_CAP", "0.68"))
+# No-signal fallback (SIM/PAPER only).
+NO_SIGNAL_FALLBACK_ENABLE = os.getenv("NO_SIGNAL_FALLBACK_ENABLE", "true").lower() == "true"
+NO_SIGNAL_FALLBACK_SCORE = float(os.getenv("NO_SIGNAL_FALLBACK_SCORE", "0.45"))
+# Allow softening option type mismatches in non-live runs.
+ALLOW_OPTION_TYPE_MISMATCH_SOFTEN = os.getenv("ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", "true").lower() == "true"
+# Relax volume requirements in non-live runs.
+RELAX_VOLUME_REQUIREMENTS_NONLIVE = os.getenv("RELAX_VOLUME_REQUIREMENTS_NONLIVE", "true").lower() == "true"
 # Planning-only signal controls (PAPER/SIM/OFFHOURS).
 PLANNING_QUICK_FALLBACK_ENABLE = os.getenv("PLANNING_QUICK_FALLBACK_ENABLE", "true").lower() == "true"
 PLANNING_SIGNAL_FALLBACK_ENABLE = os.getenv("PLANNING_SIGNAL_FALLBACK_ENABLE", "true").lower() == "true"

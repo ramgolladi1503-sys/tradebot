@@ -182,6 +182,20 @@ def _emit_scan_summary_and_status(self, market_data: dict | None, trade) -> None
     summary["market_open"] = bool(market_open)
     summary["market_mode"] = "OFFHOURS" if not market_open else market_mode
     self._last_scan_summary = dict(summary)
+    try:
+        option_summary = dict(getattr(self, "_last_option_scan_summary", {}) or {})
+        if option_summary and not bool(getattr(self, "_option_scan_summary_emitted", False)):
+            logger.info(
+                "OPTION_SCAN_REJECT_SUMMARY symbol=%s considered=%s survivors=%s option_reject_total=%s top_rejects=%s",
+                option_summary.get("symbol", symbol),
+                option_summary.get("considered"),
+                option_summary.get("survivors"),
+                option_summary.get("option_reject_total"),
+                option_summary.get("top_rejects"),
+            )
+            self._option_scan_summary_emitted = True
+    except Exception as exc:
+        logger.warning("option_scan_summary_emit_failed err=%s:%s", type(exc).__name__, exc)
     emit_scan_summary(summary)
     self._write_scan_status_files(summary)
 
@@ -397,11 +411,49 @@ class TradeBuilder:
             reject_ctx["symbol"] = symbol
         if extra_payload:
             reject_ctx.update(extra_payload)
+        if reject_reason in {"no_candidates_survived", "no_viable_candidates"}:
+            option_summary = dict(getattr(self, "_last_option_scan_summary", {}) or {})
+            considered = int(option_summary.get("considered") or extra_payload.get("option_rows_considered") or 0)
+            survivors = int(option_summary.get("survivors") or extra_payload.get("survivor_count") or 0)
+            top_rejects = dict(option_summary.get("top_rejects") or {})
+            if not top_rejects:
+                ordered = sorted(
+                    (self._scan_reject_counts or {}).items(),
+                    key=lambda item: (-int(item[1]), str(item[0])),
+                )
+                top_rejects = {str(code): int(count) for code, count in ordered[:8]}
+            option_reject_total = int(option_summary.get("option_reject_total") or sum(top_rejects.values()))
+            logger.info(
+                "OPTION_SCAN_REJECT_SUMMARY symbol=%s considered=%s survivors=%s option_reject_total=%s top_rejects=%s",
+                symbol,
+                considered,
+                survivors,
+                option_reject_total,
+                top_rejects,
+            )
+            logger.info(
+                "NO_CANDIDATE_PATH symbol=%s considered=%s survivors=%s top_rejects=%s",
+                symbol,
+                considered,
+                survivors,
+                top_rejects,
+            )
+            reject_ctx.setdefault("top_reject_counts", top_rejects)
+            reject_ctx.setdefault("option_rows_considered", considered)
+            reject_ctx.setdefault("survivor_count", survivors)
         reject_ctx["reason"] = reject_reason
         self._reject_ctx = reject_ctx
         return None
 
-    def _apply_fallback_candidate_flags(self, candidate, *, reason: str) -> Trade | dict:
+    def _apply_fallback_candidate_flags(
+        self,
+        candidate,
+        *,
+        reason: str,
+        execution_allowed_override: bool | None = None,
+        planning_only_override: bool | None = None,
+        tradable_override: bool | None = None,
+    ) -> Trade | dict:
         fallback_reason = str(reason or "no_viable_candidates_top_ranked").strip() or "no_viable_candidates_top_ranked"
         fallback_conf_cap = float(getattr(cfg, "MIN_BREADTH_FALLBACK_CONFIDENCE", 0.12))
         fallback_size_mult = 0.5
@@ -413,9 +465,9 @@ class TradeBuilder:
             out["source_flags"] = source_flags
             out["fallback_candidate"] = True
             out["fallback_reason"] = fallback_reason
-            out["tradable"] = False
-            out["execution_allowed"] = False
-            out["planning_only"] = True
+            out["tradable"] = bool(tradable_override) if tradable_override is not None else False
+            out["execution_allowed"] = bool(execution_allowed_override) if execution_allowed_override is not None else False
+            out["planning_only"] = bool(planning_only_override) if planning_only_override is not None else True
             out["reason"] = fallback_reason
             conf = float(out.get("confidence") or 0.0)
             out["confidence"] = min(conf, fallback_conf_cap)
@@ -439,9 +491,9 @@ class TradeBuilder:
             source_flags=source_flags,
             confidence=min(conf, fallback_conf_cap),
             size_mult=min(size_mult, fallback_size_mult),
-            tradable=False,
-            execution_allowed=False,
-            planning_only=True,
+            tradable=bool(tradable_override) if tradable_override is not None else False,
+            execution_allowed=bool(execution_allowed_override) if execution_allowed_override is not None else False,
+            planning_only=bool(planning_only_override) if planning_only_override is not None else True,
             reason=fallback_reason,
             tradable_reasons_blocking=blockers,
         )
@@ -1524,7 +1576,15 @@ class TradeBuilder:
             opt["type_inferred"] = True
             opt["type_inferred_source"] = "expected_type"
         if opt_side != expected:
-            return None, "type_mismatch"
+            exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
+            allow_soften = bool(getattr(cfg, "ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", True)) and exec_mode in {"SIM", "PAPER"}
+            if allow_soften and expected in {"CE", "PE"}:
+                opt_side = expected
+                opt["type_inferred"] = True
+                opt["type_inferred_source"] = "type_mismatch_soft"
+                opt["type_mismatch_soft"] = True
+            else:
+                return None, "type_mismatch"
         strike = (
             self._coerce_positive_float(opt.get("strike"))
             or self._coerce_positive_float(opt.get("strike_price"))
@@ -2818,7 +2878,29 @@ class TradeBuilder:
                 reasons.append(str(blocker))
 
         planning_only = bool(planning_only_mode)
-        execution_allowed = bool((market_ctx.mode == "LIVE") and market_open and (len(reasons) == 0) and (not planning_only))
+        execution_like_modes = {"LIVE", "PAPER", "SIM"}
+        hard_blocker_set = {
+            "invalid_ltp",
+            "risk_guard_failed",
+            "invalid_snapshot",
+            "instrument_missing",
+            "missing_instrument_id",
+            "missing_contract_fields",
+            "unresolved_contract",
+            "missing_live_bidask",
+            "no_option_quote_source",
+            "option_quote_missing",
+        }
+        hard_blockers = [r for r in reasons if str(r).lower() in hard_blocker_set]
+        if market_ctx.mode == "LIVE":
+            execution_allowed = bool(market_open and (len(reasons) == 0) and (not planning_only))
+        else:
+            execution_allowed = bool(
+                (market_ctx.mode in execution_like_modes)
+                and market_open
+                and (len(hard_blockers) == 0)
+                and (not planning_only)
+            )
         if planning_only:
             if market_ctx.mode == "OFFHOURS":
                 execution_reason = "OFFHOURS_PLANNING"
@@ -3120,12 +3202,16 @@ class TradeBuilder:
             "exec_mode": exec_mode,
         }
         _log_signal_event("signal_fallback_trend_vwap", symbol, payload)
-        self._log_blocked_candidate(
+        logger.info(
+            "TREND_VWAP_FALLBACK_SIGNAL symbol=%s direction=%s score=%s regime=%s vwap_slope=%s orb_bias=%s orb_locked=%s exec_mode=%s",
             symbol,
-            "trend_vwap_fallback",
-            "Fallback signal emitted from trend/event regime with VWAP/ORB guardrails",
-            market_data=market_data,
-            extra=payload,
+            direction,
+            score,
+            primary_regime,
+            vwap_slope,
+            orb_bias,
+            orb_locked,
+            exec_mode,
         )
         return {
             "direction": direction,
@@ -3136,6 +3222,7 @@ class TradeBuilder:
 
     def _signal_for_symbol(self, market_data, force_family: str | None = None):
         instrument = market_data.get("instrument", "OPT")
+        symbol = str(market_data.get("symbol") or "UNKNOWN")
         regime_day = self._resolve_regime(market_data)
         day_type = market_data.get("day_type") or "UNKNOWN"
         minutes_since_open = market_data.get("minutes_since_open", 0) or 0
@@ -3322,6 +3409,8 @@ class TradeBuilder:
         if not sig:
             sig = self._trend_vwap_fallback_signal(market_data, regime_day)
             if not sig:
+                if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+                    logger.info("SIGNAL_RESULT symbol=%s signal=None", symbol)
                 return None
         if isinstance(sig, dict):
             direction = sig.get("direction")
@@ -3333,6 +3422,14 @@ class TradeBuilder:
             reason = sig.reason
             score = sig.score
             sig_regime = normalize_regime(regime_day)
+        if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+            logger.info(
+                "SIGNAL_RESULT symbol=%s direction=%s score=%s reason=%s",
+                symbol,
+                direction,
+                score,
+                reason,
+            )
         return {"direction": direction, "reason": reason, "score": score, "regime_day": sig_regime}
 
     def _opt_risk_levels(self, entry_price, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5):
@@ -3604,6 +3701,8 @@ class TradeBuilder:
         self._scan_total_candidates = 0
         self._scan_accepted = 0
         self._scan_profile_name = str(filter_profile_quick.name if quick_mode else filter_profile_main.name)
+        self._last_option_scan_summary = {}
+        self._option_scan_summary_emitted = True
         planning_mode = bool(market_ctx.planning_only)
         paper_strict_mode = exec_mode == "PAPER" and bool(getattr(cfg, "PAPER_STRICT_MODE", False))
         planning_relaxed = planning_mode and not paper_strict_mode
@@ -3862,6 +3961,8 @@ class TradeBuilder:
         if exec_mode == "PAPER" and getattr(cfg, "PAPER_STRICT_MODE", False):
             relax_reason = ""
         def _relax(reason: str) -> bool:
+            if exec_mode in {"SIM", "PAPER"} and reason in {"spread_pct", "low_volume", "low_oi", "delta"}:
+                return True
             return bool(relax_reason) and reason == relax_reason
         planning_quick_fallback = planning_relaxed and bool(getattr(cfg, "PLANNING_QUICK_FALLBACK_ENABLE", True))
         if not signal and (quick_mode or planning_quick_fallback) and allow_fallbacks:
@@ -3905,8 +4006,42 @@ class TradeBuilder:
                     }
             except Exception:
                 pass
+        if (
+            not signal
+            and exec_mode in {"SIM", "PAPER"}
+            and allow_fallbacks
+            and bool(getattr(cfg, "NO_SIGNAL_FALLBACK_ENABLE", True))
+        ):
+            try:
+                signal = self._quick_neutral_fallback_signal(market_data, float(ltp or 0.0), float(vwap or 0.0))
+            except Exception:
+                signal = None
+            if not signal:
+                bias = str(market_data.get("bias") or "").strip().upper()
+                ltp_change = float(market_data.get("ltp_change") or 0.0)
+                direction = None
+                if bias in {"BULLISH", "UP"} or ltp_change > 0:
+                    direction = "BUY_CALL"
+                elif bias in {"BEARISH", "DOWN"} or ltp_change < 0:
+                    direction = "BUY_PUT"
+                if direction:
+                    signal = {
+                        "direction": direction,
+                        "reason": "No-signal bias fallback",
+                        "score": float(getattr(cfg, "NO_SIGNAL_FALLBACK_SCORE", 0.45)),
+                    }
+            if signal and bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+                logger.info(
+                    "NO_SIGNAL_FALLBACK_SIGNAL symbol=%s direction=%s score=%s reason=%s",
+                    symbol,
+                    signal.get("direction"),
+                    signal.get("score"),
+                    signal.get("reason"),
+                )
         if not signal:
             fallback_allowed = bool(market_data.get("allow_planning_no_signal_fallback"))
+            if exec_mode in {"SIM", "PAPER", "LIVE"}:
+                fallback_allowed = False
             reject_reason = "no_signal"
             if planning_relaxed and bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
                 logger.info(
@@ -4175,6 +4310,7 @@ class TradeBuilder:
         rejected = []
         candidate_strategy_tag = strategy_tag
         option_reject_counts: dict[str, int] = {}
+        option_rows_considered = 0
         premium_band_fail_count = 0
         premium_band_fail_samples: list[dict] = []
         premium_band_sample_limit = 3
@@ -4261,6 +4397,7 @@ class TradeBuilder:
         chain_rows = self._annotate_candidate_chain_rows(symbol, market_data, underlying_spot)
         premium_band_cache = self._dynamic_premium_bands(symbol, chain_rows)
         for raw_opt in chain_rows:
+            option_rows_considered += 1
             opt, opt_row_error = self._normalize_option_row(raw_opt, opt_type)
             if opt is None:
                 _count_option_reject(opt_row_error)
@@ -4296,6 +4433,8 @@ class TradeBuilder:
             )
             require_depth_quotes = bool(getattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", False))
             require_volume = bool(getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False))
+            if exec_mode in {"SIM", "PAPER"} and bool(getattr(cfg, "RELAX_VOLUME_REQUIREMENTS_NONLIVE", True)):
+                require_volume = False
             premium_soft_veto = False
             premium_soft_penalty_conf = float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_MULT", 0.92))
             premium_soft_penalty_size = float(getattr(cfg, "PREMIUM_SOFT_VETO_SIZE_MULT", 0.90))
@@ -4752,7 +4891,7 @@ class TradeBuilder:
                         max_p=max_p,
                         spread_pct=spread_pct,
                         hard_veto=True,
-                        count_scan=not emit_premium_candidate_logs,
+                        count_scan=False,
                     )
                     if emit_premium_candidate_logs:
                         self._log_premium_band_debug(
@@ -4762,49 +4901,11 @@ class TradeBuilder:
                             max_p=max_p,
                             band_context=band_context,
                             spread_pct=spread_pct,
-                            reason="premium_band_fail_hard",
+                            reason="premium_band_softened_hard_liquidity",
                             strategy_tag=candidate_strategy_tag,
                         )
-                    _count_option_reject("premium")
-                    if "premium_band_fail" not in execution_blockers:
-                        execution_blockers.append("premium_band_fail")
                     premium_soft_veto = True
                     _record_issue("premium_out_of_band", role=ISSUE_CATEGORY_SOFT)
-                    if soft_premium_advisory and emit_premium_candidate_logs:
-                        self._log_blocked_candidate(
-                            symbol,
-                            "premium_band_fail",
-                            "Option premium outside configured premium band (hard liquidity veto)",
-                            market_data=market_data,
-                            extra={
-                                "direction": direction,
-                                "strike": opt.get("strike"),
-                                "option_type": opt.get("type"),
-                                "option_ltp": opt.get("ltp"),
-                                "premium_min": min_p,
-                                "premium_max": max_p,
-                                "spread_pct": spread_pct,
-                                "volume": opt.get("volume"),
-                                "hard_veto": True,
-                                "reason_codes": ["premium_band_fail", "liquidity_hard_veto"],
-                                "gate_name": "premium_band_gate",
-                                "instrument_token": opt.get("instrument_token"),
-                                "tradingsymbol": opt.get("tradingsymbol"),
-                                "expiry_date": opt.get("expiry_date") or opt.get("expiry"),
-                                "quote_source": opt.get("quote_source"),
-                                "option_ltp_source": opt.get("option_ltp_source"),
-                            },
-                        )
-                    if debug_reasons:
-                        _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=premium_hard_liquidity", symbol, opt.get("strike"), opt_type)
-                        rec = self._reject_record(symbol, opt, opt_type, "premium", atr=atr)
-                        rec["hard_veto"] = True
-                        rec["spread_pct"] = spread_pct
-                        rec["volume"] = opt.get("volume")
-                        debug_candidates.append(rec)
-                        rejected.append(rec)
-                if not premium_hard_veto and "premium_band_fail" not in execution_blockers:
-                    execution_blockers.append("premium_band_fail")
                 if not premium_hard_veto:
                     premium_soft_veto = True
                     _record_premium_band_failure(
@@ -4813,7 +4914,7 @@ class TradeBuilder:
                         max_p=max_p,
                         spread_pct=spread_pct,
                         hard_veto=False,
-                        count_scan=bool(soft_premium_advisory and not emit_premium_candidate_logs),
+                        count_scan=False,
                     )
                     if emit_premium_candidate_logs:
                         self._log_premium_band_debug(
@@ -4823,35 +4924,10 @@ class TradeBuilder:
                             max_p=max_p,
                             band_context=band_context,
                             spread_pct=spread_pct,
-                            reason="premium_band_fail_soft",
+                            reason="premium_band_softened",
                             strategy_tag=candidate_strategy_tag,
                         )
                     _record_issue("premium_out_of_band", role=ISSUE_CATEGORY_SOFT)
-                    if soft_premium_advisory and emit_premium_candidate_logs:
-                        self._log_blocked_candidate(
-                            symbol,
-                            "premium_band_fail",
-                            "Option premium outside configured premium band (soft advisory penalty)",
-                            market_data=market_data,
-                            extra={
-                                "direction": direction,
-                                "strike": opt.get("strike"),
-                                "option_type": opt.get("type"),
-                                "option_ltp": opt.get("ltp"),
-                                "premium_min": min_p,
-                                "premium_max": max_p,
-                                "spread_pct": spread_pct,
-                                "volume": opt.get("volume"),
-                                "hard_veto": False,
-                                "reason_codes": ["premium_band_fail"],
-                                "gate_name": "premium_band_gate",
-                                "instrument_token": opt.get("instrument_token"),
-                                "tradingsymbol": opt.get("tradingsymbol"),
-                                "expiry_date": opt.get("expiry_date") or opt.get("expiry"),
-                                "quote_source": opt.get("quote_source"),
-                                "option_ltp_source": opt.get("option_ltp_source"),
-                            },
-                        )
                 if opt_ltp < float(min_p):
                     premium_outside_ratio = (float(min_p) - float(opt_ltp)) / max(float(min_p), 1e-6)
                 elif opt_ltp > float(max_p):
@@ -5598,6 +5674,22 @@ class TradeBuilder:
             pool = rejected if rejected else debug_candidates
             if pool:
                 self._write_debug_candidates(pool, top_n=top_n)
+        option_reject_total = int(sum(option_reject_counts.values()))
+        top_rejects: dict[str, int] = {}
+        if option_reject_counts:
+            ordered = sorted(
+                option_reject_counts.items(),
+                key=lambda item: (-int(item[1]), str(item[0])),
+            )
+            top_rejects = {str(code): int(count) for code, count in ordered[:8]}
+        self._last_option_scan_summary = {
+            "symbol": symbol,
+            "considered": option_rows_considered,
+            "survivors": len(candidates),
+            "option_reject_total": option_reject_total,
+            "top_rejects": top_rejects,
+        }
+        self._option_scan_summary_emitted = False
         if premium_band_fail_count:
             logger.info(
                 "PREMIUM_BAND_FAIL_SUMMARY symbol=%s premium_band_fail_count=%s samples=%s",
@@ -5628,14 +5720,19 @@ class TradeBuilder:
                         market_data=market_data,
                         extra=summary,
                     )
-                    softened = self._soften_reject_to_candidate(
-                        market_data=market_data,
-                        reject_ctx=dict(self._reject_ctx or {}),
-                        strategy_tag=candidate_strategy_tag,
-                        direction=direction,
-                    )
-                    if softened is not None:
-                        return softened
+                    reject_reason_ctx = str((self._reject_ctx or {}).get("reason") or "").lower()
+                    if not (
+                        exec_mode in {"SIM", "PAPER"}
+                        and reject_reason_ctx in {"trend_vwap_fallback", "no_candidates_survived"}
+                    ):
+                        softened = self._soften_reject_to_candidate(
+                            market_data=market_data,
+                            reject_ctx=dict(self._reject_ctx or {}),
+                            strategy_tag=candidate_strategy_tag,
+                            direction=direction,
+                        )
+                        if softened is not None:
+                            return softened
                     return None
             # Quick fallback: synthesize ATM option if chain is empty
             if quick_mode:
@@ -5976,14 +6073,19 @@ class TradeBuilder:
             )
             if not (self._reject_ctx or {}).get("reason"):
                 self._reject_exit(market_data, "no_viable_candidates")
-            softened = self._soften_reject_to_candidate(
-                market_data=market_data,
-                reject_ctx=dict(self._reject_ctx or {}),
-                strategy_tag=candidate_strategy_tag,
-                direction=direction,
-            )
-            if softened is not None:
-                return softened
+            reject_reason_ctx = str((self._reject_ctx or {}).get("reason") or "").lower()
+            if not (
+                exec_mode in {"SIM", "PAPER"}
+                and reject_reason_ctx in {"trend_vwap_fallback", "no_candidates_survived"}
+            ):
+                softened = self._soften_reject_to_candidate(
+                    market_data=market_data,
+                    reject_ctx=dict(self._reject_ctx or {}),
+                    strategy_tag=candidate_strategy_tag,
+                    direction=direction,
+                )
+                if softened is not None:
+                    return softened
             return None
 
         best_trade, ranked_candidates = select_best_opportunity(
@@ -6015,10 +6117,32 @@ class TradeBuilder:
                     except Exception:
                         top_ranked = None
                     if top_ranked is not None:
+                        fallback_reason = (
+                            "no_signal_top_ranked_fallback"
+                            if reject_reason == "no_signal"
+                            else "no_viable_candidates_top_ranked"
+                        )
                         best_trade = self._apply_fallback_candidate_flags(
                             top_ranked,
-                            reason="no_viable_candidates_top_ranked",
+                            reason=fallback_reason,
+                            execution_allowed_override=True,
+                            planning_only_override=False,
+                            tradable_override=True,
                         )
+                        if isinstance(best_trade, dict):
+                            best_trade["selected_for_execution"] = True
+                            best_trade["selection_reason"] = "fallback_top_ranked"
+                            best_trade["execution_allowed"] = True
+                            best_trade["planning_only"] = False
+                        else:
+                            best_trade = replace(
+                                best_trade,
+                                selected_for_execution=True,
+                                selection_reason="fallback_top_ranked",
+                                execution_allowed=True,
+                                planning_only=False,
+                                tradable=True,
+                            )
                         logger.info(
                             "FALLBACK_TOP_RANKED_SELECTED symbol=%s trade_id=%s rank_score=%s",
                             symbol,
@@ -6033,12 +6157,42 @@ class TradeBuilder:
                         self._reject_ctx = {}
 
             if best_trade is None:
+                option_reject_total = int(sum(option_reject_counts.values()))
+                top_rejects: dict[str, int] = {}
+                if option_reject_counts:
+                    ordered = sorted(
+                        option_reject_counts.items(),
+                        key=lambda item: (-int(item[1]), str(item[0])),
+                    )
+                    top_rejects = {str(code): int(count) for code, count in ordered[:8]}
+                logger.info(
+                    "OPTION_SCAN_REJECT_SUMMARY symbol=%s considered=%s survivors=%s option_reject_total=%s top_rejects=%s",
+                    symbol,
+                    option_rows_considered,
+                    len(candidates),
+                    option_reject_total,
+                    top_rejects,
+                )
+                self._last_option_scan_summary = {
+                    "symbol": symbol,
+                    "considered": option_rows_considered,
+                    "survivors": len(candidates),
+                    "option_reject_total": option_reject_total,
+                    "top_rejects": top_rejects,
+                }
+                self._option_scan_summary_emitted = True
+                reject_summary = {
+                    "option_rows_considered": option_rows_considered,
+                    "option_reject_total": option_reject_total,
+                    "option_reject_top": top_rejects,
+                }
                 self._reject_exit(
                     market_data,
                     "no_viable_candidates" if ranked_candidates else "no_candidates_survived",
                     extra={
                         "symbol": symbol,
                         "gate_reasons": list(self._scan_reject_counts.keys()),
+                        **reject_summary,
                     },
                 )
 
@@ -6157,14 +6311,20 @@ class TradeBuilder:
             )
             direction = str(reject_ctx.get("direction") or "UNKNOWN").strip()
             if not ranked_candidates:
-                softened = self._soften_reject_to_candidate(
-                    market_data=market_data or {},
-                    reject_ctx=reject_ctx,
-                    strategy_tag=strategy_tag,
-                    direction=direction,
-                )
-                if softened is not None:
-                    trade = softened
+                exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
+                reject_reason_ctx = str(reject_ctx.get("reason") or "").lower()
+                if not (
+                    exec_mode in {"SIM", "PAPER"}
+                    and reject_reason_ctx in {"trend_vwap_fallback", "no_candidates_survived"}
+                ):
+                    softened = self._soften_reject_to_candidate(
+                        market_data=market_data or {},
+                        reject_ctx=reject_ctx,
+                        strategy_tag=strategy_tag,
+                        direction=direction,
+                    )
+                    if softened is not None:
+                        trade = softened
         trace = build_trade_decision_trace(
             market_data=market_data or {},
             trade=trade,

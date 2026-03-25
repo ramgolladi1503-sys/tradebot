@@ -68,6 +68,23 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
     source_flags = _candidate_get(candidate, "source_flags") or {}
     execution_block_type = str(source_flags.get("execution_block_type") or "").strip().lower()
     if execution_block_type == "advisory":
+        runtime_mode = str(
+            source_flags.get("runtime_mode")
+            or _candidate_get(candidate, "execution_mode")
+            or _candidate_get(candidate, "mode")
+            or ""
+        ).strip().upper()
+        if runtime_mode in {"PAPER", "SIM"}:
+            return ExecutionQualityDecision(
+                expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+                spread_penalty=0.02,
+                executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry"))
+                or _safe_float(_candidate_get(candidate, "entry_price")),
+                execution_ok=True,
+                order_policy="limit",
+                reason_code="degraded_data",
+                reason="degraded_data",
+            )
         return ExecutionQualityDecision(
             expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
             spread_penalty=0.0,

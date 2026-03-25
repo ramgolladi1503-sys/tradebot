@@ -211,7 +211,9 @@ def test_premium_band_out_of_band_does_not_kill_candidate(monkeypatch):
     trade = builder.build(_base_market_data(option_ltp=100.0), quick_mode=False, allow_fallbacks=True, allow_baseline=False)
 
     assert trade is not None
-    assert "premium_band_fail" in (trade.source_flags.get("gates_failed") or [])
+    source_flags = dict(trade.source_flags or {})
+    assert source_flags.get("premium_soft_veto") is True
+    assert "premium_out_of_band" in (source_flags.get("soft_veto_codes") or [])
 
 
 def test_fallback_top_ranked_candidate_when_selection_none(monkeypatch):
@@ -997,3 +999,191 @@ def test_main_path_trade_serializes_staged_confidence_fields(tmp_path, monkeypat
     assert row["confidence_after_soft_veto"] == trade.confidence_after_soft_veto
     assert row["confidence_raw_gate_threshold"] == 0.44
     assert abs(float(row["confidence_final_gate_threshold"]) - 0.31) < 0.011
+
+
+def test_no_signal_sim_uses_fallback_signal(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "NO_SIGNAL_FALLBACK_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder, "_signal_for_symbol", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(
+        builder,
+        "_quick_neutral_fallback_signal",
+        lambda *_args, **_kwargs: {
+            "direction": "BUY_CALL",
+            "reason": "unit_test_no_signal_fallback",
+            "score": 0.4,
+        },
+        raising=True,
+    )
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    trade = builder.build(_base_market_data(option_ltp=100.0), quick_mode=False, allow_fallbacks=True, allow_baseline=False)
+
+    assert trade is not None
+    assert str((builder._reject_ctx or {}).get("reason") or "") != "no_signal"
+
+
+def test_live_offhours_no_signal_does_not_use_planning_fallback(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+
+    builder = TradeBuilder()
+    monkeypatch.setattr(builder, "_signal_for_symbol", lambda *_args, **_kwargs: None, raising=True)
+    called = {"hit": False}
+
+    def _boom(*_args, **_kwargs):
+        called["hit"] = True
+        raise AssertionError("planning fallback should not run in LIVE")
+
+    monkeypatch.setattr(builder, "_build_planning_no_signal_trade", _boom, raising=True)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    market_data["market_open"] = False
+    market_data["market_context"] = {"execution_mode": "LIVE", "market_open": False}
+    market_data["allow_planning_no_signal_fallback"] = True
+
+    trade = builder.build(market_data, quick_mode=False, allow_fallbacks=True, allow_baseline=False)
+
+    assert trade is None
+    assert called["hit"] is False
+
+
+def test_sim_relaxes_basic_filters(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "MAX_SPREAD_PCT", 0.03, raising=False)
+    monkeypatch.setattr(cfg, "MIN_VOLUME_FILTER", 500, raising=False)
+    monkeypatch.setattr(cfg, "MIN_OI", 1000, raising=False)
+    monkeypatch.setattr(cfg, "DELTA_MIN", 0.25, raising=False)
+    monkeypatch.setattr(cfg, "DELTA_MAX", 0.7, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    opt = market_data["option_chain"][0]
+    opt["volume"] = 1
+    opt["oi"] = 1
+    opt["delta"] = 0.1
+    opt["bid"] = 90.0
+    opt["ask"] = 110.0
+    opt["spread_pct"] = 0.2
+
+    trade = builder.build(market_data, quick_mode=False, allow_fallbacks=True, allow_baseline=False)
+
+    assert trade is not None
+
+
+def test_live_does_not_relax_basic_filters(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "MAX_SPREAD_PCT", 0.03, raising=False)
+    monkeypatch.setattr(cfg, "MIN_VOLUME_FILTER", 500, raising=False)
+    monkeypatch.setattr(cfg, "MIN_OI", 1000, raising=False)
+    monkeypatch.setattr(cfg, "DELTA_MIN", 0.25, raising=False)
+    monkeypatch.setattr(cfg, "DELTA_MAX", 0.7, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    opt = market_data["option_chain"][0]
+    opt["volume"] = 1
+    opt["oi"] = 1
+    opt["delta"] = 0.1
+    opt["bid"] = 90.0
+    opt["ask"] = 110.0
+    opt["spread_pct"] = 0.2
+
+    trade = builder.build(market_data, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is None
+
+
+def test_option_scan_reject_summary_log(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    market_data["option_chain"] = [
+        {"type": "CE", "strike": 25000, "bid": 99, "ask": 101}
+    ]
+
+    caplog.set_level(logging.INFO)
+    trade = builder.build(market_data, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is None
+    assert "OPTION_SCAN_REJECT_SUMMARY" in caplog.text
+
+
+def test_no_candidates_survived_emits_reject_wall_logs(monkeypatch, caplog):
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    def _fake_signal(*_args, **_kwargs):
+        return {
+            "direction": "BUY_CALL",
+            "confidence": 0.55,
+            "score": 0.9,
+            "regime_day": "TREND",
+            "reason": "test_signal",
+        }
+
+    def _fake_chain_rows(*_args, **_kwargs):
+        return [{"type": "CE", "strike": 25000}]
+
+    def _fake_normalize(_raw, _opt_type):
+        return None, "type_mismatch"
+
+    def _fake_select(*_args, **_kwargs):
+        return None, []
+
+    monkeypatch.setattr(builder, "_signal_for_symbol", _fake_signal, raising=True)
+    monkeypatch.setattr(builder, "_annotate_candidate_chain_rows", _fake_chain_rows, raising=True)
+    monkeypatch.setattr(builder, "_normalize_option_row", _fake_normalize, raising=True)
+    monkeypatch.setattr(trade_builder_module, "select_best_opportunity", _fake_select, raising=True)
+
+    caplog.set_level(logging.INFO)
+    trade = builder.build(
+        {
+            "symbol": "NIFTY",
+            "market_open": True,
+            "valid": True,
+            "ltp": 25000.0,
+            "vwap": 24990.0,
+            "instrument": "OPT",
+            "chain_source": "live",
+            "quote_ok": True,
+            "bid": 24999.0,
+            "ask": 25001.0,
+            "regime": "TREND",
+        },
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is None
+    assert "OPTION_SCAN_REJECT_SUMMARY symbol=NIFTY" in caplog.text
+    assert "NO_CANDIDATE_PATH symbol=NIFTY" in caplog.text

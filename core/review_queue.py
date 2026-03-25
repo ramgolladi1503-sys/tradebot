@@ -227,10 +227,52 @@ def _should_force_missing_queue_only_lifecycle(entry: dict) -> bool:
     return _should_block_queue_only_entry_promotion(entry)
 
 
+def _candidate_origin_value(entry: dict) -> str:
+    if not isinstance(entry, dict):
+        return ""
+    origin_value = entry.get("candidate_origin")
+    if not origin_value and isinstance(entry.get("source_flags"), dict):
+        origin_value = entry["source_flags"].get("candidate_origin")
+    if isinstance(origin_value, dict):
+        origin_value = (
+            origin_value.get("candidate_origin")
+            or origin_value.get("origin")
+            or origin_value.get("source")
+        )
+    return str(origin_value or "").strip().lower()
+
+
+def _is_synthetic_advisory_entry(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    candidate_type = str(entry.get("candidate_type") or "").strip().lower()
+    if candidate_type == "fallback_market_candidate":
+        return True
+    trade_id = str(entry.get("trade_id") or "")
+    if trade_id.startswith("softrej_"):
+        return True
+    origin = _candidate_origin_value(entry)
+    if origin in {"pre_builder_gate", "invalid_snapshot", "fallback", "fallback_min_breadth"}:
+        return True
+    permission = str(entry.get("permission") or "").strip().upper()
+    final_action = str(entry.get("final_action") or "").strip().upper()
+    execution_status = str(entry.get("execution_status") or "").strip().lower()
+    advisory_lifecycle = permission == "ADVISORY_ONLY" or final_action == "ADVISORY_ONLY" or execution_status == "advisory_only"
+    if advisory_lifecycle and (candidate_type.startswith("fallback") or origin or trade_id.startswith("softrej_")):
+        return True
+    return False
+
+
 def _apply_candidate_identity(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    if _is_synthetic_advisory_entry(out):
+        out["strategy_family"] = "synthetic_advisory"
+        out["setup_variant"] = "synthetic_advisory"
+        if out.get("direction") in (None, "", "None"):
+            out["direction"] = "UNKNOWN"
+        return out
     identity = infer_candidate_identity(out)
     for field in ("candidate_type", "strategy_family", "setup_variant", "direction"):
         value = out.get(field)
@@ -869,10 +911,14 @@ def _apply_candidate_scoring(
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
-    if not out.get("strategy_family"):
-        out["strategy_family"] = "fallback_breakout"
-    if not out.get("candidate_type"):
-        out["candidate_type"] = "fallback_directional"
+    if _is_synthetic_advisory_entry(out):
+        out["strategy_family"] = "synthetic_advisory"
+        out["setup_variant"] = "synthetic_advisory"
+    else:
+        if not out.get("strategy_family"):
+            out["strategy_family"] = "fallback_breakout"
+        if not out.get("candidate_type"):
+            out["candidate_type"] = "fallback_directional"
     market_data, context = _candidate_scoring_inputs(
         out,
         mode_for_entry=mode_for_entry,
@@ -989,10 +1035,14 @@ def _apply_terminal_candidate_scoring(
         allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
         market_open_for_entry=market_open_for_entry,
     )
-    if not out.get("strategy_family"):
-        out["strategy_family"] = "fallback_breakout"
-    if not out.get("candidate_type"):
-        out["candidate_type"] = "fallback_directional"
+    if _is_synthetic_advisory_entry(out):
+        out["strategy_family"] = "synthetic_advisory"
+        out["setup_variant"] = "synthetic_advisory"
+    else:
+        if not out.get("strategy_family"):
+            out["strategy_family"] = "fallback_breakout"
+        if not out.get("candidate_type"):
+            out["candidate_type"] = "fallback_directional"
     scored = score_candidate(out, market_data, context)
     out["rank_score"] = _safe_float(scored.get("rank_score"))
     assert out.get("rank_score") is not None, "SCORING NOT APPLIED IN REVIEW_QUEUE"
@@ -1037,12 +1087,16 @@ def _finalize_append_payload_for_runtime_write(payload: dict) -> dict:
         formatted = format_ts_ist(out.get("display_ts_epoch"))
         if formatted:
             out["display_ts_ist"] = formatted
-    strategy_family = str(out.get("strategy_family") or "").strip().lower()
-    candidate_type = str(out.get("candidate_type") or "").strip().lower()
-    if not strategy_family or strategy_family == "unknown":
-        out["strategy_family"] = "forced"
-    if not candidate_type or candidate_type == "unknown":
-        out["candidate_type"] = "forced"
+    if _is_synthetic_advisory_entry(out):
+        out["strategy_family"] = "synthetic_advisory"
+        out["setup_variant"] = "synthetic_advisory"
+    else:
+        strategy_family = str(out.get("strategy_family") or "").strip().lower()
+        candidate_type = str(out.get("candidate_type") or "").strip().lower()
+        if not strategy_family or strategy_family == "unknown":
+            out["strategy_family"] = "forced"
+        if not candidate_type or candidate_type == "unknown":
+            out["candidate_type"] = "forced"
     score = score_candidate(out, market_data={}, context={})
     out["rank_score"] = score.get("rank_score", score.get("confidence_final"))
     out["opportunity_score"] = score.get("opportunity_score", out.get("rank_score"))
