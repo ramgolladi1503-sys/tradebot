@@ -1541,6 +1541,23 @@ def _select_executable_suggestion_rows(df: pd.DataFrame) -> pd.DataFrame:
     return out[executable_mask].copy()
 
 
+def _select_advisory_table_source(
+    *,
+    show_exec_only: bool,
+    top_frames: dict[str, pd.DataFrame],
+    suggested_live_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, str]:
+    if show_exec_only:
+        primary = top_frames.get("top_executable", pd.DataFrame())
+        if primary is not None and not primary.empty:
+            return primary, "top_executable_snapshot"
+        return _select_executable_suggestion_rows(suggested_live_df), "advisory_fallback_executable"
+    primary = top_frames.get("top_advisory", pd.DataFrame())
+    if primary is not None and not primary.empty:
+        return primary, "top_advisory_snapshot"
+    return _select_visible_advisory_rows(suggested_live_df), "advisory_fallback_visible"
+
+
 def _simulation_display_cols(df: pd.DataFrame) -> list[str]:
     if df is None or df.empty:
         return []
@@ -7310,12 +7327,24 @@ if nav == "Home":
                 key="suggested_trades_exec_only",
             )
             st.caption(
-                "Showing emitted rows as-is. Use 'Executable only' to filter to live executable suggestions."
+                "Main table shows engine-ranked opportunities from persisted top-opportunity snapshots. "
+                "If snapshots are missing or empty, the table falls back to raw advisory rows."
             )
-            suggested_df = (
-                _select_executable_suggestion_rows(suggested_live_df)
-                if show_exec_only
-                else _select_visible_advisory_rows(suggested_live_df)
+            top_frames = _load_top_opportunities_frames(
+                limit=max(
+                    int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
+                    int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
+                )
+            )
+            suggested_df, source_label = _select_advisory_table_source(
+                show_exec_only=show_exec_only,
+                top_frames=top_frames,
+                suggested_live_df=suggested_live_df,
+            )
+            logger.info(
+                "advisory_table_source=%s rows=%s",
+                source_label,
+                0 if suggested_df is None else len(suggested_df),
             )
             suggested_display = select_display_df(suggested_df, "advisory").head(25)
             show_cols = [c for c in suggested_display.columns if c not in {"trade_key", "tradingsymbol"}]
@@ -7324,17 +7353,11 @@ if nav == "Home":
             else:
                 primary_blocker = str(status_payload.get("primary_blocker") or status_payload.get("reason") or "NO_CANDIDATES")
                 empty_state(f"No visible advisory rows right now. Primary blocker: {primary_blocker}.")
-            top_frames = _load_top_opportunities_frames(
-                limit=max(
-                    int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
-                    int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
-                )
-            )
             top_exec = top_frames.get("top_executable", pd.DataFrame())
             top_adv = top_frames.get("top_advisory", pd.DataFrame())
             if not top_exec.empty or not top_adv.empty:
                 with st.expander("Top Opportunities (Cycle)", expanded=False):
-                    st.caption("Engine-ranked opportunities from the latest cycle. Displayed read-only from persisted snapshot truth.")
+                    st.caption("Diagnostic view of persisted ranked opportunity snapshots (read-only).")
                     if not top_exec.empty:
                         st.caption("Top Executable Opportunities")
                         exec_display = select_display_df(top_exec, "advisory").head(
