@@ -1,0 +1,91 @@
+[BOOT] repo_root=/Users/madhuram/tradebot
+[BOOT] exec_mode=SIM
+[Config Warning] Missing env vars: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID
+[TradePredictor] Loaded model from models/xgb_live_model.pkl
+KITE_REST api_key_tail4=oi2n access_token_tail4=kNMQ kite_id=5542717456
+KITE_REST api_key_tail4=oi2n access_token_tail4=kNMQ kite_id=5542952736
+[HIST_EMPTY] caller=market_data_warm_seed symbol=NIFTY exchange=NSE token=256265 interval=5minute from=2026-03-28 01:31:40.727165 to=2026-03-28 18:11:40.727185 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=NIFTY exchange=NSE token=256265 interval=5minute from=2026-03-28 01:31:41.417497 to=2026-03-28 18:11:41.417595 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=NIFTY exchange=NSE token=256265 interval=5minute from=2026-03-28 01:31:42.381939 to=2026-03-28 18:11:42.382016 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=BANKNIFTY exchange=NSE token=260105 interval=5minute from=2026-03-28 01:31:42.825022 to=2026-03-28 18:11:42.825030 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=BANKNIFTY exchange=NSE token=260105 interval=5minute from=2026-03-28 01:31:43.425035 to=2026-03-28 18:11:43.425130 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=BANKNIFTY exchange=NSE token=260105 interval=5minute from=2026-03-28 01:31:44.378158 to=2026-03-28 18:11:44.378242 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=SENSEX exchange=NSE token=265 interval=5minute from=2026-03-28 01:31:47.079952 to=2026-03-28 18:11:47.079964 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=SENSEX exchange=NSE token=265 interval=5minute from=2026-03-28 01:31:47.616722 to=2026-03-28 18:11:47.616829 continuous=False oi=False
+[HIST_EMPTY] caller=market_data_warm_seed symbol=SENSEX exchange=NSE token=265 interval=5minute from=2026-03-28 01:31:48.712337 to=2026-03-28 18:11:48.712431 continuous=False oi=False
+[RECON] reconciliation daemon started interval_sec=5.0
+TB_RESULT {'symbol': 'NIFTY', 'trade_is_none': True, 'decision_stage': None, 'final_action': None, 'reject_reason': 'no_candidates_survived'}
+TB_RANKED_COUNT_REAL {'symbol': 'NIFTY', 'count': 0}
+TB_RANKED_COUNT_SYNTH {'symbol': 'NIFTY', 'count': 1}
+TB_RANKED_COUNT_TOTAL {'symbol': 'NIFTY', 'count': 1}
+TB_TOP_SYNTH_CANDIDATE {'symbol': 'NIFTY', 'trade_id': 'softrej_NIFTY_1774701723310', 'strategy_family': 'fallback_breadth', 'candidate_type': 'fallback_market_candidate', 'rank_score': 0.12}
+GATE_REJECT_EMIT {'symbol': 'NIFTY', 'reason': 'iv_skew_curvature', 'stage': 'decision:event', 'blockers': ['iv_skew_curvature', 'iv_bounds'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=1
+GATE_REJECT_EMIT {'symbol': 'NIFTY', 'reason': 'iv_bounds', 'stage': 'decision:event', 'blockers': ['iv_skew_curvature', 'iv_bounds'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=2
+SCORING_DEBUG {'symbol': 'NIFTY', 'rank_score': 0.389988, 'confidence': 0.383311, 'strategy_family': 'synthetic_advisory'}
+SCORING_DEBUG {'symbol': 'NIFTY', 'rank_score': 0.41917, 'confidence': 0.41019, 'strategy_family': 'synthetic_advisory'}
+REVIEW_QUEUE_SCORING {'trade_id': 'softrej_NIFTY_1774701723310', 'rank_score': 0.41917, 'confidence': 0.41019}
+SCORING_DEBUG {'symbol': 'NIFTY', 'rank_score': 0.422238, 'confidence': 0.413015, 'strategy_family': 'synthetic_advisory'}
+TRACE_PRE_FINAL_EMIT softrej_NIFTY_1774701723310 None None None None None missing ADVISORY_ONLY
+FINAL EMIT: None non_executable ADVISORY_ONLY
+FINAL_APPEND_PATCH 0.420935 synthetic_advisory fallback_market_candidate
+{"candidate_tradingsymbols":["NIFTY26MAR22800CE","NIFTY26MAR22800PE","NIFTY26MAR22850CE","NIFTY26MAR22850PE","NIFTY26MAR22750CE"],"event":"KITE_NEXT_AVAILABLE_EXPIRY","exchange":"NFO","matched_candidates_count":1378,"matched_tradingsymbols":["BANKNIFTY26MAR52300CE","BANKNIFTY26MAR52300PE","BANKNIFTY26MAR52200CE","BANKNIFTY26MAR52200PE","BANKNIFTY26MAR52400CE"],"resolved_expiry":"2026-03-30","sample_instrument_types":["FUT","CE","PE"],"sample_segments":["NFO-FUT","NFO-OPT"],"symbol":"BANKNIFTY","total_option_candidates_scanned":53022}
+TB_RESULT {'symbol': 'BANKNIFTY', 'trade_is_none': True, 'decision_stage': None, 'final_action': None, 'reject_reason': 'no_candidates_survived'}
+TB_RANKED_COUNT_REAL {'symbol': 'BANKNIFTY', 'count': 0}
+TB_RANKED_COUNT_SYNTH {'symbol': 'BANKNIFTY', 'count': 1}
+TB_RANKED_COUNT_TOTAL {'symbol': 'BANKNIFTY', 'count': 1}
+TB_TOP_SYNTH_CANDIDATE {'symbol': 'BANKNIFTY', 'trade_id': 'softrej_BANKNIFTY_1774701723554', 'strategy_family': 'fallback_breadth', 'candidate_type': 'fallback_market_candidate', 'rank_score': 0.12}
+GATE_REJECT_EMIT {'symbol': 'BANKNIFTY', 'reason': 'no_candidates_survived', 'stage': 'decision:event', 'blockers': ['no_candidates_survived'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=3
+{"candidate_tradingsymbols":["NIFTY26MAR22800CE","NIFTY26MAR22800PE","NIFTY26MAR22850CE","NIFTY26MAR22850PE","NIFTY26MAR22750CE"],"event":"KITE_NEXT_AVAILABLE_EXPIRY","exchange":"NFO","matched_candidates_count":1378,"matched_tradingsymbols":["BANKNIFTY26MAR52300CE","BANKNIFTY26MAR52300PE","BANKNIFTY26MAR52200CE","BANKNIFTY26MAR52200PE","BANKNIFTY26MAR52400CE"],"resolved_expiry":"2026-03-30","sample_instrument_types":["FUT","CE","PE"],"sample_segments":["NFO-FUT","NFO-OPT"],"symbol":"BANKNIFTY","total_option_candidates_scanned":53022}
+SCORING_DEBUG {'symbol': 'BANKNIFTY', 'rank_score': 0.366248, 'confidence': 0.343683, 'strategy_family': 'synthetic_advisory'}
+SCORING_DEBUG {'symbol': 'BANKNIFTY', 'rank_score': 0.391963, 'confidence': 0.367367, 'strategy_family': 'synthetic_advisory'}
+REVIEW_QUEUE_SCORING {'trade_id': 'softrej_BANKNIFTY_1774701723554', 'rank_score': 0.391963, 'confidence': 0.367367}
+SCORING_DEBUG {'symbol': 'BANKNIFTY', 'rank_score': 0.394666, 'confidence': 0.369857, 'strategy_family': 'synthetic_advisory'}
+TRACE_PRE_FINAL_EMIT softrej_BANKNIFTY_1774701723554 None None None None None missing ADVISORY_ONLY
+FINAL EMIT: None non_executable ADVISORY_ONLY
+FINAL_APPEND_PATCH 0.393518 synthetic_advisory fallback_market_candidate
+TB_RESULT {'symbol': 'SENSEX', 'trade_is_none': True, 'decision_stage': None, 'final_action': None, 'reject_reason': 'no_candidates_survived'}
+TB_RANKED_COUNT_REAL {'symbol': 'SENSEX', 'count': 0}
+TB_RANKED_COUNT_SYNTH {'symbol': 'SENSEX', 'count': 1}
+TB_RANKED_COUNT_TOTAL {'symbol': 'SENSEX', 'count': 1}
+TB_TOP_SYNTH_CANDIDATE {'symbol': 'SENSEX', 'trade_id': 'softrej_SENSEX_1774701723744', 'strategy_family': 'fallback_breadth', 'candidate_type': 'fallback_market_candidate', 'rank_score': 0.12}
+GATE_REJECT_EMIT {'symbol': 'SENSEX', 'reason': 'iv_skew_curvature', 'stage': 'decision:event', 'blockers': ['iv_skew_curvature', 'iv_bounds'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=4
+GATE_REJECT_EMIT {'symbol': 'SENSEX', 'reason': 'iv_bounds', 'stage': 'decision:event', 'blockers': ['iv_skew_curvature', 'iv_bounds'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=5
+SCORING_DEBUG {'symbol': 'SENSEX', 'rank_score': 0.389988, 'confidence': 0.383311, 'strategy_family': 'synthetic_advisory'}
+SCORING_DEBUG {'symbol': 'SENSEX', 'rank_score': 0.41917, 'confidence': 0.41019, 'strategy_family': 'synthetic_advisory'}
+REVIEW_QUEUE_SCORING {'trade_id': 'softrej_SENSEX_1774701723744', 'rank_score': 0.41917, 'confidence': 0.41019}
+SCORING_DEBUG {'symbol': 'SENSEX', 'rank_score': 0.422238, 'confidence': 0.413015, 'strategy_family': 'synthetic_advisory'}
+TRACE_PRE_FINAL_EMIT softrej_SENSEX_1774701723744 None None None None None missing ADVISORY_ONLY
+FINAL EMIT: None non_executable ADVISORY_ONLY
+FINAL_APPEND_PATCH 0.420935 synthetic_advisory fallback_market_candidate
+[AutoRetrain] Trade log not found/unreadable/empty: /Users/madhuram/tradebot/.runtime/logs/trade_log.jsonl
+TB_RESULT {'symbol': 'NIFTY', 'trade_is_none': True, 'decision_stage': None, 'final_action': None, 'reject_reason': 'no_candidates_survived'}
+TB_RANKED_COUNT_REAL {'symbol': 'NIFTY', 'count': 0}
+TB_RANKED_COUNT_SYNTH {'symbol': 'NIFTY', 'count': 1}
+TB_RANKED_COUNT_TOTAL {'symbol': 'NIFTY', 'count': 1}
+TB_TOP_SYNTH_CANDIDATE {'symbol': 'NIFTY', 'trade_id': 'softrej_NIFTY_1774701758133', 'strategy_family': 'fallback_breadth', 'candidate_type': 'fallback_market_candidate', 'rank_score': 0.12}
+GATE_REJECT_EMIT {'symbol': 'NIFTY', 'reason': 'iv_skew_curvature', 'stage': 'decision:event', 'blockers': ['iv_skew_curvature', 'iv_bounds'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=6
+GATE_REJECT_EMIT {'symbol': 'NIFTY', 'reason': 'iv_bounds', 'stage': 'decision:event', 'blockers': ['iv_skew_curvature', 'iv_bounds'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=7
+SCORING_DEBUG {'symbol': 'NIFTY', 'rank_score': 0.389988, 'confidence': 0.383311, 'strategy_family': 'synthetic_advisory'}
+SCORING_DEBUG {'symbol': 'NIFTY', 'rank_score': 0.41917, 'confidence': 0.41019, 'strategy_family': 'synthetic_advisory'}
+REVIEW_QUEUE_SCORING {'trade_id': 'softrej_NIFTY_1774701758133', 'rank_score': 0.41917, 'confidence': 0.41019}
+SCORING_DEBUG {'symbol': 'NIFTY', 'rank_score': 0.422238, 'confidence': 0.413015, 'strategy_family': 'synthetic_advisory'}
+TRACE_PRE_FINAL_EMIT softrej_NIFTY_1774701758133 None None None None None missing ADVISORY_ONLY
+FINAL EMIT: None non_executable ADVISORY_ONLY
+FINAL_APPEND_PATCH 0.420935 synthetic_advisory fallback_market_candidate
+{"candidate_tradingsymbols":["NIFTY26MAR22800CE","NIFTY26MAR22800PE","NIFTY26MAR22850CE","NIFTY26MAR22850PE","NIFTY26MAR22750CE"],"event":"KITE_NEXT_AVAILABLE_EXPIRY","exchange":"NFO","matched_candidates_count":1378,"matched_tradingsymbols":["BANKNIFTY26MAR52300CE","BANKNIFTY26MAR52300PE","BANKNIFTY26MAR52200CE","BANKNIFTY26MAR52200PE","BANKNIFTY26MAR52400CE"],"resolved_expiry":"2026-03-30","sample_instrument_types":["FUT","CE","PE"],"sample_segments":["NFO-FUT","NFO-OPT"],"symbol":"BANKNIFTY","total_option_candidates_scanned":53022}
+TB_RESULT {'symbol': 'BANKNIFTY', 'trade_is_none': True, 'decision_stage': None, 'final_action': None, 'reject_reason': 'no_candidates_survived'}
+TB_RANKED_COUNT_REAL {'symbol': 'BANKNIFTY', 'count': 0}
+TB_RANKED_COUNT_SYNTH {'symbol': 'BANKNIFTY', 'count': 1}
+TB_RANKED_COUNT_TOTAL {'symbol': 'BANKNIFTY', 'count': 1}
+TB_TOP_SYNTH_CANDIDATE {'symbol': 'BANKNIFTY', 'trade_id': 'softrej_BANKNIFTY_1774701758371', 'strategy_family': 'fallback_breadth', 'candidate_type': 'fallback_market_candidate', 'rank_score': 0.12}
+GATE_REJECT_EMIT {'symbol': 'BANKNIFTY', 'reason': 'no_candidates_survived', 'stage': 'decision:event', 'blockers': ['no_candidates_survived'], 'category': None, 'trade_id': None}
+[Storage] stored event_type=gate_rejected count_today=8
+{"candidate_tradingsymbols":["NIFTY26MAR22800CE","NIFTY26MAR22800PE","NIFTY26MAR22850CE","NIFTY26MAR22850PE","NIFTY26MAR22750CE"],"event":"KITE_NEXT_AVAILABLE_EXPIRY","exchange":"NFO","matched_candidates_count":1378,"matched_tradingsymbols":["BANKNIFTY26MAR52300CE","BANKNIFTY26MAR52300PE","BANKNIFTY26MAR52200CE","BANKNIFTY26MAR52200PE","BANKNIFTY26MAR52400CE"],"resolved_expiry":"2026-03-30","sample_instrument_types":["FUT","CE","PE"],"sample_segments":["NFO-FUT","NFO-OPT"],"symbol":"BANKNIFTY","total_option_candidates_scanned":53022}
+decision_breaker action=TRIPPED breaker=STALE_FEED reason=STALE_FEED_RATIO_0.67

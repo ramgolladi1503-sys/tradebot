@@ -9,10 +9,6 @@ from typing import Any
 from config import config as cfg
 from core.paths import logs_dir, repo_root
 
-try:
-    from kiteconnect import KiteConnect
-except Exception:  # pragma: no cover - optional dependency in tests
-    KiteConnect = None
 
 
 _CACHE: dict[str, Any] = {}
@@ -51,31 +47,13 @@ def resolve_access_token(
 
         enforce_no_repo_token_artifacts(repo_root_path or repo_root())
     repo_token = _read_repo_token(repo_root_path).strip()
-    env_allowed = _allow_env_token_for_ci()
-    env_token = os.getenv("KITE_ACCESS_TOKEN", "").strip() if env_allowed else ""
-    if repo_token and env_token and repo_token != env_token:
-        raise RuntimeError(
-            "[AUTH] kite_token_source_conflict\n"
-            f"Repo token path: {access_token_path(repo_root_path)}\n"
-            "KITE_ACCESS_TOKEN is also set for CI but values differ.\n"
-            "Use one token value only."
-        )
-
-    token = repo_token or env_token
-    if token:
-        _CACHE["token"] = token
-        _CACHE["token_source"] = "repo_file" if repo_token else "env_ci"
+    if repo_token:
+        _CACHE["token"] = repo_token
+        _CACHE["token_source"] = "repo_file"
         _CACHE["ts_epoch"] = time.time()
-        return token
+        return repo_token
 
-    env_present = bool(os.getenv("KITE_ACCESS_TOKEN", "").strip())
     if require_token:
-        if env_present and not env_allowed:
-            raise RuntimeError(
-                "[AUTH] env_token_not_allowed\n"
-                "KITE_ACCESS_TOKEN is set but env tokens are disabled by default.\n"
-                "Use repo-local token file or set KITE_ALLOW_ENV_TOKEN_FOR_CI=true."
-            )
         raise RuntimeError(
             "[AUTH] missing_kite_access_token\n"
             f"Missing token at {access_token_path(repo_root_path)}\n"
@@ -138,7 +116,7 @@ def validate_token(
             "ts_epoch": now_epoch,
         }
     try:
-        token = resolve_access_token(repo_root_path=repo_root_path, require_token=True)
+        _ = resolve_access_token(repo_root_path=repo_root_path, require_token=True)
     except Exception as exc:
         return {
             "ok": False,
@@ -146,17 +124,18 @@ def validate_token(
             "error": str(exc),
             "ts_epoch": now_epoch,
         }
-    if KiteConnect is None:
-        return {
-            "ok": False,
-            "auth_state": "FAILED",
-            "error": "kiteconnect_missing",
-            "ts_epoch": now_epoch,
-        }
     try:
-        kite = KiteConnect(api_key=api_key)
-        kite.set_access_token(token)
-        profile = kite.profile() or {}
+        from core.kite_client import kite_client
+
+        kite_client.ensure()
+        if not kite_client.kite:
+            return {
+                "ok": False,
+                "auth_state": "FAILED",
+                "error": "kite_client_unavailable",
+                "ts_epoch": now_epoch,
+            }
+        profile = kite_client.kite.profile() or {}
         user_id = str(profile.get("user_id") or "")
         user_name = str(profile.get("user_name") or "")
         if not user_id:

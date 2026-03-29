@@ -9,6 +9,7 @@ import atexit
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
+from core.auth import get_kite_ticker
 from core.kite_client import kite_client
 from core.depth_store import depth_store
 from core.tick_store import get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
@@ -17,7 +18,6 @@ from core.auth_manager import (
     clear_auth_required_state,
     invalidate_cache,
     is_auth_error,
-    resolve_access_token,
     set_auth_required_state,
 )
 from core.auth_health import get_kite_auth_health
@@ -2231,8 +2231,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             _mark_auth_required(str(err), source="kite_depth_ws_start")
         logger.error("depth_ws_invalid_access_token reason=%s", err)
         return
+    rest_client = None
     try:
-        access_token = str(resolve_access_token(repo_root_path=repo_root(), require_token=True) or "").strip()
+        rest_client = kite_client.ensure()
+        api_key = str(getattr(kite_client, "_active_api_key", "") or "").strip()
+        access_token = str(getattr(kite_client, "_active_access_token", "") or "").strip()
     except Exception as exc:
         _log_ws("FEED_AUTH_BLOCKED", {"error": f"token_resolve_failed:{type(exc).__name__}:{exc}"})
         _RUNTIME_STATE = "AUTH_BLOCKED"
@@ -2260,6 +2263,20 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         _mark_auth_required("missing_access_token:empty", source="kite_depth_ws_start")
         logger.error("depth_ws_access_token_empty")
+        return
+    if not api_key:
+        _log_ws("FEED_AUTH_BLOCKED", {"error": "missing_api_key:empty"})
+        _RUNTIME_STATE = "AUTH_BLOCKED"
+        _LAST_RUNTIME_ERROR = "missing_api_key:empty"
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:auth_blocked",
+            runtime_state="AUTH_BLOCKED",
+            last_error=_LAST_RUNTIME_ERROR,
+            intended_tokens_count=_INTENDED_TOKEN_COUNT,
+        )
+        _mark_auth_required("missing_api_key:empty", source="kite_depth_ws_start")
+        logger.error("depth_ws_api_key_empty")
         return
 
     tokens = list(dict.fromkeys(instrument_tokens or []))
@@ -2303,15 +2320,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     computed_profile_verified = False
     profile_error = ""
     try:
-        ensure_fn = getattr(kite_client, "_ensure", None) or getattr(kite_client, "ensure", None)
-        if callable(ensure_fn):
-            ensure_fn()
-        rest_client = getattr(kite_client, "kite", None)
         if rest_client is not None:
-            try:
-                rest_client.set_access_token(access_token)
-            except Exception:
-                pass
             profile = rest_client.profile() or {}
             user_id = str(profile.get("user_id") or "").strip()
             if user_id:
@@ -2326,7 +2335,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     if not computed_profile_verified:
         _log_ws("FEED_AUTH_PROFILE_FAIL", {"error": profile_error or "unknown"})
 
-    stats_api = _masked_secret_stats("api_key", cfg.KITE_API_KEY)
+    stats_api = _masked_secret_stats("api_key", api_key)
     stats_token = _masked_secret_stats("access_token", access_token)
     logger.info(
         "kite_ws_credential_stats api_key_len=%s api_key_tail4=%s api_key_has_whitespace=%s access_token_len=%s access_token_tail4=%s access_token_has_whitespace=%s",
@@ -2348,7 +2357,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if _WATCHDOG_STOP is not None:
             _WATCHDOG_STOP.set()
         _WATCHDOG_STOP = threading.Event()
-        kws = KiteTicker(cfg.KITE_API_KEY, access_token, debug=True)
+        kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=True)
         if hasattr(kws, "auto_reconnect"):
             try:
                 kws.auto_reconnect = _use_internal_reconnect()
@@ -2356,7 +2365,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 pass
         logger.info(
             "kite_ws_created api_key_tail4=%s access_token_tail4=%s kite_id=%s",
-            cfg.KITE_API_KEY[-4:] if len(str(cfg.KITE_API_KEY or "")) >= 4 else cfg.KITE_API_KEY,
+            api_key[-4:] if len(str(api_key or "")) >= 4 else api_key,
             access_token[-4:] if len(str(access_token or "")) >= 4 else access_token,
             id(kws),
         )

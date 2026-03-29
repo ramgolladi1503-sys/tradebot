@@ -16,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from config import config as cfg
-from core.kite_client import KiteConnect
+from core.auth import validate_kite_startup_credentials
+from core.kite_client import kite_client
 from core.auth_health import get_kite_auth_health
 from core.security_guard import local_token_path, write_local_kite_access_token
 
@@ -147,6 +148,16 @@ def main():
     STATE.request_token = None
     STATE.error = None
 
+    try:
+        validate_kite_startup_credentials(
+            repo_root_path=ROOT,
+            require_access_token=False,
+            require_api_secret=True,
+            caller_module=__name__,
+        )
+    except RuntimeError as exc:
+        raise SystemExit(str(exc))
+
     api_key = _resolve_api_key()
     api_secret = _resolve_api_secret()
     api_key_has_whitespace = bool(re.search(r"\s", api_key))
@@ -161,8 +172,7 @@ def main():
     server_thread = threading.Thread(target=_run_server, args=(HOST, PORT), daemon=True)
     server_thread.start()
 
-    kite = KiteConnect(api_key=api_key)
-    login_url = kite.login_url()
+    login_url = kite_client.login_url(api_key=api_key)
 
     print("\nOpen this URL in your browser and login/approve:\n")
     print(login_url)
@@ -184,7 +194,7 @@ def main():
     if not STATE.request_token:
         raise SystemExit("Timed out waiting for request_token. Retry login flow.")
 
-    data = kite.generate_session(STATE.request_token, api_secret=api_secret)
+    data = kite_client.generate_session(STATE.request_token, api_secret=api_secret, api_key=api_key)
     access_token = str(data.get("access_token", "")).strip()
     if not access_token:
         raise SystemExit("No access_token returned by Kite generate_session.")
@@ -196,8 +206,9 @@ def main():
         f"access_token_has_whitespace={bool(re.search(r'\\s', access_token))}"
     )
 
-    kite.set_access_token(access_token)
-    margins = kite.margins()
+    kite_client.set_access_token(access_token)
+    kite_client.ensure()
+    margins = kite_client.kite.margins()
     if margins is None:
         raise SystemExit("Kite session validation failed (margins_missing).")
 

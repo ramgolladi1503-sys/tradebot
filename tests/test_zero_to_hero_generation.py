@@ -165,6 +165,30 @@ def test_zero_to_hero_not_executable(monkeypatch):
     assert trade.planning_only is True
 
 
+def test_zero_to_hero_applies_trigger_entry_price(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ZERO_TO_HERO_ALLOWED_MODES", ["PAPER"], raising=False)
+    monkeypatch.setattr(cfg, "ZERO_TO_HERO_ALLOWED_REGIMES", ["TREND", "EVENT"], raising=False)
+    monkeypatch.setattr(cfg, "ZERO_TO_HERO_OTM_PCT_MIN", 0.01, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_TO_HERO_OTM_PCT_MAX", 0.02, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_TO_HERO_PREMIUM_PCT_LOW", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_TO_HERO_PREMIUM_PCT_HIGH", 1.0, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_TO_HERO_PREMIUM_MIN_ROWS", 1, raising=False)
+
+    tb = TradeBuilder()
+    monkeypatch.setattr(tb.execution, "spread_ok", lambda *args, **kwargs: True, raising=False)
+    monkeypatch.setattr(tb, "_option_executable_price", lambda opt, side="BUY": (51.0, "ask"))
+    monkeypatch.setattr(tb, "_apply_entry_trigger", lambda price, side="BUY", quick_mode=True: (price + 2.0, "BUY_ABOVE", price))
+
+    trade = tb.build_zero_hero(_market_data())
+
+    assert trade is not None
+    assert round(float(trade.entry_ref_price), 2) == 51.00
+    assert round(float(trade.entry_price), 2) == 53.00
+    assert trade.entry_condition == "BUY_ABOVE"
+    assert float(trade.target) > float(trade.entry_price) > float(trade.stop_loss)
+
+
 def test_zero_to_hero_serializes_staged_confidence_fields(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
     monkeypatch.setattr(cfg, "ZERO_TO_HERO_ALLOWED_MODES", ["PAPER"], raising=False)
@@ -427,6 +451,99 @@ def test_zero_hero_expiry_serializes_staged_confidence_fields(tmp_path, monkeypa
     assert row["confidence_model_raw"] == trade.confidence_model_raw
     assert row["confidence_before_soft_veto"] == trade.confidence_before_soft_veto
     assert row["confidence_after_soft_veto"] == trade.confidence_after_soft_veto
+
+
+def test_zero_hero_expiry_applies_trigger_entry_price(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_EXPIRY_TIME_CUTOFF_MIN", 90, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_EXPIRY_TIME_HARD_CUTOFF_MIN", 150, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_EXPIRY_SOFT_MOMENTUM_RATIO", 0.65, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_EXPIRY_SPREAD_HARD_PCT", 0.45, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_IVCRUSH_MIN", 0.20, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_TIME_TO_EXPIRY_MAX_HRS", 6.0, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_EXPIRY_SOFT_TTE_MARGIN_HRS", 1.5, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_EXPIRY_SOFT_DELTA_MARGIN", 0.08, raising=False)
+    monkeypatch.setattr(cfg, "ZERO_HERO_EXPIRY_PREMIUM_SOFT_MARGIN_RATIO", 0.20, raising=False)
+
+    tb = TradeBuilder()
+    monkeypatch.setattr(tb, "_apply_lifecycle_gate", lambda *_args, **_kwargs: (True, "ok"))
+    monkeypatch.setattr(tb, "_apply_alpha_ensemble", lambda confidence, *_args, **_kwargs: (confidence, None, None, 1.0))
+    monkeypatch.setattr(tb, "_resolve_underlying_spot", lambda data, _ctx: (data["ltp"], "ltp", True, None))
+    monkeypatch.setattr(tb, "_resolve_expiry_for_symbol", lambda *_args, **_kwargs: "2026-03-06")
+    monkeypatch.setattr(
+        tb,
+        "_resolve_option_contract",
+        lambda symbol, strike, opt_type, expiry, market_data: {
+            "expiry": expiry or "2026-03-06",
+            "tradingsymbol": f"{symbol}TEST{int(strike)}{opt_type}",
+            "instrument_token": 555001,
+        },
+    )
+    monkeypatch.setattr(
+        tb,
+        "_identity_fields",
+        lambda symbol, instrument, expiry, strike, right, qty_lots: (
+            "OPT",
+            build_instrument_id(symbol, instrument, expiry, strike, right),
+            15,
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        tb,
+        "trade_intent_flags",
+        lambda *_args, **_kwargs: {
+            "tradable": False,
+            "tradable_reasons_blocking": [],
+            "planning_only": True,
+            "execution_allowed": False,
+            "execution_reason": "PAPER_ONLY",
+            "source_flags": {},
+        },
+    )
+    monkeypatch.setattr(tb, "_option_executable_price", lambda opt, side="BUY": (5.2, "ask"))
+    monkeypatch.setattr(tb, "_apply_entry_trigger", lambda price, side="BUY", quick_mode=True: (price + 1.5, "BUY_ABOVE", price))
+    monkeypatch.setattr(tb, "_decorate_trade_context", lambda trade, _data, _confidence: trade)
+    monkeypatch.setattr(tb.execution, "spread_ok", lambda *_args, **_kwargs: False, raising=False)
+
+    market_data = {
+        "symbol": "BANKNIFTY",
+        "ltp": 60000.0,
+        "atr": 100.0,
+        "vwap": 59990.0,
+        "ltp_change_window": 6.0,
+        "minutes_since_open": 100,
+        "orb_bias": "PENDING",
+        "day_type": "EXPIRY_DAY",
+        "regime": "TREND",
+        "market_open": True,
+        "quote_age_sec": 1.0,
+        "market_context": {"execution_mode": "PAPER", "market_open": True},
+        "option_chain": [
+            {
+                "type": "CE",
+                "strike": 60200,
+                "ltp": 4.5,
+                "bid": 4.1,
+                "ask": 5.2,
+                "delta": 0.18,
+                "iv": 0.19,
+                "time_to_expiry_hrs": 6.5,
+                "volume": 180,
+                "expiry": "2026-03-06",
+                "tradingsymbol": "BANKNIFTYTEST60200CE",
+                "instrument_token": 555001,
+            }
+        ],
+    }
+
+    trade = tb._build_zero_hero_expiry(market_data)
+
+    assert trade is not None
+    assert round(float(trade.entry_ref_price), 2) == 5.20
+    assert round(float(trade.entry_price), 2) == 6.70
+    assert trade.entry_condition == "BUY_ABOVE"
+    assert float(trade.target) > float(trade.entry_price) > float(trade.stop_loss)
 
 
 def test_zero_hero_expiry_rejects_structurally_invalid_option(monkeypatch):

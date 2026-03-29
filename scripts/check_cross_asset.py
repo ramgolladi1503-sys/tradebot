@@ -7,12 +7,23 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from config import config as cfg
+from core.auth import validate_kite_startup_credentials
 from core.kite_client import kite_client
 from core.cross_asset import CrossAsset
 from core.market_data import get_ltp
 
 
 def main():
+    try:
+        validate_kite_startup_credentials(
+            repo_root_path=ROOT,
+            require_access_token=True,
+            caller_module=__name__,
+        )
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+
     print("Cross-asset configured symbols:")
     symbols = getattr(cfg, "CROSS_ASSET_SYMBOLS", {}) or {}
     for k, v in symbols.items():

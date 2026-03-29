@@ -215,13 +215,76 @@ def _is_synthetic_candidate(candidate) -> bool:
         ).strip().lower()
     else:
         origin = str(origin_value or "").strip().lower()
+    candidate_type = str(_trade_attr(candidate, "candidate_type", "") or "").strip().lower()
+    trade_id = str(_trade_attr(candidate, "trade_id", "") or "").strip()
     permission = str(_trade_attr(candidate, "permission", "") or "").strip().upper()
     final_action = str(_trade_attr(candidate, "final_action", "") or "").strip().upper()
-    if origin in {"pre_builder_gate", "invalid_snapshot", "fallback", "fallback_min_breadth"}:
+    execution_status = str(_trade_attr(candidate, "execution_status", "") or "").strip().lower()
+    advisory_lifecycle = (
+        permission == "ADVISORY_ONLY"
+        or final_action == "ADVISORY_ONLY"
+        or execution_status == "advisory_only"
+    )
+    if candidate_type == "fallback_market_candidate":
         return True
-    if permission == "ADVISORY_ONLY" and final_action == "ADVISORY_ONLY":
+    if trade_id.startswith("softrej_"):
+        return True
+    synthetic_origins = {"pre_builder_gate", "invalid_snapshot", "fallback", "fallback_min_breadth"}
+    if origin in synthetic_origins:
+        return True
+    if advisory_lifecycle and (candidate_type.startswith("fallback") or origin in synthetic_origins or trade_id.startswith("softrej_")):
         return True
     return False
+
+
+def _candidate_visibility_bucket(candidate) -> str:
+    candidate_status = str(_trade_attr(candidate, "candidate_status", "") or "").strip().lower()
+    execution_status = str(_trade_attr(candidate, "execution_status", "") or "").strip().lower()
+    permission = str(_trade_attr(candidate, "permission", "") or "").strip().upper()
+    final_action = str(_trade_attr(candidate, "final_action", "") or "").strip().upper()
+    readiness = str(_trade_attr(candidate, "readiness", "") or "").strip().upper()
+    if (
+        candidate_status == "executable"
+        or execution_status == "executable"
+        or permission == "EXECUTE"
+        or final_action == "EXECUTE"
+        or readiness == "READY"
+    ):
+        return "executable"
+    if (
+        candidate_status in {"advisory_only", "near_executable", "ranked", "scored"}
+        or execution_status in {"advisory_only", "queue_only"}
+        or permission in {"ADVISORY_ONLY", "QUEUE_ONLY"}
+        or final_action in {"ADVISORY_ONLY", "QUEUE_ONLY"}
+        or readiness in {"ADVISORY_ONLY", "QUEUE_ONLY"}
+        or bool(_trade_attr(candidate, "planning_only", False))
+    ):
+        return "advisory"
+    if (
+        candidate_status == "blocked"
+        or execution_status == "blocked"
+        or permission == "BLOCK"
+        or final_action == "BLOCK"
+        or readiness == "BLOCKED"
+        or bool(_trade_attr(candidate, "execution_blocked", False))
+        or bool(_trade_attr(candidate, "hard_blockers", None))
+        or bool(_trade_attr(candidate, "blockers", None))
+    ):
+        return "blocked"
+    return "blocked"
+
+
+def _candidate_trace_payload(candidate) -> dict:
+    return {
+        "symbol": _trade_attr(candidate, "symbol"),
+        "trade_id": _trade_attr(candidate, "trade_id"),
+        "strategy_family": _trade_attr(candidate, "strategy_family"),
+        "candidate_type": _trade_attr(candidate, "candidate_type"),
+        "rank_score": _trade_attr(candidate, "rank_score"),
+        "candidate_status": _trade_attr(candidate, "candidate_status"),
+        "execution_status": _trade_attr(candidate, "execution_status"),
+        "reason": _trade_attr(candidate, "reason"),
+    }
 
 
 def _replace_trade_fields(trade, updates: dict):
@@ -812,7 +875,10 @@ def _augment_ranked_candidates_with_soft_reject(
     reject_gate_reasons = [str(x) for x in (reject_ctx.get("gate_reasons") or []) if str(x).strip()]
     if not reject_gate_reasons:
         reject_gate_reasons = [reject_reason]
-    if reject_reason in {"trend_vwap_fallback", "no_candidates_survived"}:
+    mode = str(execution_mode or "").strip().upper()
+    if reject_reason == "trend_vwap_fallback":
+        return ranked, [], reject_reason, reject_gate_reasons
+    if reject_reason == "no_candidates_survived" and mode == "LIVE":
         return ranked, [], reject_reason, reject_gate_reasons
     soft_reject_candidates: list[dict] = []
     soft_enabled = soft_reject_enabled(execution_mode)
@@ -848,6 +914,20 @@ def _augment_ranked_candidates_with_soft_reject(
                 execution_mode=execution_mode,
             )
             if soft_candidate:
+                source_flags = dict(soft_candidate.get("source_flags") or {})
+                source_flags["candidate_origin"] = "softened_builder_path"
+                source_flags["soft_reject_reason"] = reject_reason or "trade_builder_reject"
+                soft_candidate["source_flags"] = source_flags
+                soft_candidate["candidate_origin"] = "softened_builder_path"
+                trade_id = str(soft_candidate.get("trade_id") or "").strip()
+                if trade_id.startswith("softrej_"):
+                    soft_candidate["trade_id"] = f"tbsoft_{symbol}_{trade_id.rsplit('_', 1)[-1]}"
+                if str(soft_candidate.get("candidate_type") or "").strip().lower() in {"", "unknown"}:
+                    soft_candidate["candidate_type"] = "directional"
+                if str(soft_candidate.get("strategy_family") or "").strip().lower() in {"", "unknown"}:
+                    soft_candidate["strategy_family"] = "builder_soft_reject"
+                if str(soft_candidate.get("setup_variant") or "").strip().lower() in {"", "unknown"}:
+                    soft_candidate["setup_variant"] = "softened_builder_path"
                 soft_reject_candidates.append(soft_candidate)
         if soft_reject_candidates:
             for soft_candidate in soft_reject_candidates:
@@ -2032,6 +2112,18 @@ class Orchestrator:
         market_ctx = derive_market_context(ctx_payload)
         return bool(market_ctx.allow_stale_quotes)
 
+    def _should_soften_nonlive_no_strategy_gate(self, market_data: dict, gate) -> bool:
+        if gate is None or bool(getattr(gate, "allowed", False)):
+            return False
+        if self._is_live_mode():
+            return False
+        reasons = [str(reason) for reason in (getattr(gate, "reasons", None) or []) if str(reason)]
+        if not reasons:
+            return False
+        if any(reason != "NO_STRATEGY_QUALIFIED" for reason in reasons):
+            return False
+        return bool(self._allow_planning_no_signal_fallback(market_data))
+
     def _latest_decision_rows(self, max_age_sec: float | None = None) -> dict:
         """
         Return latest Decision DAG row per symbol from gate_status.jsonl.
@@ -3167,7 +3259,17 @@ class Orchestrator:
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     trade = None
                     gate = self._strategy_gate_for_symbol(market_snapshot)
-                    if not gate.allowed:
+                    gate_softened_no_strategy = self._should_soften_nonlive_no_strategy_gate(market_data, gate)
+                    if gate_softened_no_strategy:
+                        cycle_candidates_softened += 1
+                        market_data["allow_planning_no_signal_fallback"] = True
+                        market_data["gate_softened_no_strategy"] = True
+                        logger.info(
+                            "gatekeeper_softened_nonlive_no_strategy symbol=%s reasons=%s",
+                            sym,
+                            ",".join(list(gate.reasons or [])),
+                        )
+                    if not gate.allowed and not gate_softened_no_strategy:
                         cycle_candidates_blocked += 1
                         for reason_code in list(gate.reasons or []) or ["gatekeeper_blocked"]:
                             cycle_blockers[str(reason_code)] += 1
@@ -3508,6 +3610,18 @@ class Orchestrator:
                             softened,
                             fallback,
                         )
+                    ranked_executable_candidates = [
+                        cand for cand in real_candidates
+                        if _candidate_visibility_bucket(cand) == "executable"
+                    ]
+                    ranked_advisory_candidates = [
+                        cand for cand in real_candidates
+                        if _candidate_visibility_bucket(cand) == "advisory"
+                    ]
+                    ranked_blocked_candidates = [
+                        cand for cand in real_candidates
+                        if _candidate_visibility_bucket(cand) == "blocked"
+                    ]
                     eligible_real_candidates = []
                     if trade is not None and not _is_synthetic_candidate(trade):
                         cycle_real_trade_symbols.add(sym)
@@ -3519,39 +3633,54 @@ class Orchestrator:
                     if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
                         print(
                             "TB_RANKED_COUNT_REAL",
-                            {"symbol": sym, "count": len(eligible_real_candidates)},
+                            {"symbol": sym, "count": len(real_candidates)},
                         )
                         print(
                             "TB_RANKED_COUNT_SYNTH",
-                            {"symbol": sym, "count": len(eligible_synthetic_candidates)},
+                            {"symbol": sym, "count": len(synthetic_candidates)},
                         )
                         print(
                             "TB_RANKED_COUNT_TOTAL",
-                            {"symbol": sym, "count": len(eligible_real_candidates) + len(eligible_synthetic_candidates)},
+                            {"symbol": sym, "count": len(real_candidates) + len(synthetic_candidates)},
                         )
-                        if eligible_real_candidates:
-                            top = eligible_real_candidates[0]
+                        print(
+                            "TB_RANKED_COUNT_EXECUTABLE",
+                            {"symbol": sym, "count": len(ranked_executable_candidates)},
+                        )
+                        print(
+                            "TB_RANKED_COUNT_ADVISORY",
+                            {"symbol": sym, "count": len(ranked_advisory_candidates)},
+                        )
+                        print(
+                            "TB_RANKED_COUNT_BLOCKED",
+                            {"symbol": sym, "count": len(ranked_blocked_candidates)},
+                        )
+                        if real_candidates:
+                            top = real_candidates[0]
                             print(
                                 "TB_TOP_REAL_CANDIDATE",
-                                {
-                                    "symbol": sym,
-                                    "trade_id": _trade_attr(top, "trade_id"),
-                                    "strategy_family": _trade_attr(top, "strategy_family"),
-                                    "candidate_type": _trade_attr(top, "candidate_type"),
-                                    "rank_score": _trade_attr(top, "rank_score"),
-                                },
+                                _candidate_trace_payload(top),
                             )
-                        if eligible_synthetic_candidates:
-                            top_synth = eligible_synthetic_candidates[0]
+                        if ranked_executable_candidates:
+                            print(
+                                "TB_TOP_EXECUTABLE_CANDIDATE",
+                                _candidate_trace_payload(ranked_executable_candidates[0]),
+                            )
+                        if ranked_advisory_candidates:
+                            print(
+                                "TB_TOP_ADVISORY_CANDIDATE",
+                                _candidate_trace_payload(ranked_advisory_candidates[0]),
+                            )
+                        if ranked_blocked_candidates:
+                            print(
+                                "TB_TOP_BLOCKED_CANDIDATE",
+                                _candidate_trace_payload(ranked_blocked_candidates[0]),
+                            )
+                        if synthetic_candidates:
+                            top_synth = synthetic_candidates[0]
                             print(
                                 "TB_TOP_SYNTH_CANDIDATE",
-                                {
-                                    "symbol": sym,
-                                    "trade_id": _trade_attr(top_synth, "trade_id"),
-                                    "strategy_family": _trade_attr(top_synth, "strategy_family"),
-                                    "candidate_type": _trade_attr(top_synth, "candidate_type"),
-                                    "rank_score": _trade_attr(top_synth, "rank_score"),
-                                },
+                                _candidate_trace_payload(top_synth),
                             )
                     if ranked_candidates:
                         cycle_ranked_candidates.extend(ranked_candidates)

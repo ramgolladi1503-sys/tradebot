@@ -1,11 +1,13 @@
+# WARNING: Standalone prototype script. Not connected to the live tradebot
+# orchestrator, review queue, or execution pipeline. Experimental use only.
 # live_nifty_gpt_bot_v4.py
 import os
 import time
 import pandas as pd
-from kiteconnect import KiteConnect
 import openai
 from dotenv import load_dotenv
 import re
+from core.kite_client import kite_client
 
 # ------------------- LOAD ENV VARIABLES -------------------
 load_dotenv()
@@ -25,24 +27,23 @@ openai.api_key = OPENAI_API_KEY
 
 # ------------------- KITE SESSION MANAGEMENT -------------------
 def generate_access_token():
-    kite = KiteConnect(api_key=KITE_API_KEY)
     print("Generating new access token...")
     
     # Note: You need to open the login URL manually and get request_token
     # For full automation, you need 2FA bypass flow (Zerodha doesn't allow fully headless login)
-    login_url = kite.login_url()
+    login_url = kite_client.login_url(api_key=KITE_API_KEY)
     print("Login URL (open in browser and get request_token):", login_url)
     request_token = input("Enter the request_token from login URL: ").strip()
-    
-    data = kite.generate_session(request_token, api_secret=KITE_API_SECRET)
+
+    data = kite_client.generate_session(request_token, api_secret=KITE_API_SECRET, api_key=KITE_API_KEY)
     access_token = data["access_token"]
     print("New access_token generated.")
     return access_token
 
 def get_kite_client(access_token):
-    kite = KiteConnect(api_key=KITE_API_KEY)
-    kite.set_access_token(access_token)
-    return kite
+    kite_client.set_access_token(access_token)
+    kite_client.ensure()
+    return kite_client.kite
 
 # ------------------- FETCH & PROCESS DATA -------------------
 def fetch_option_chain(kite, symbol=SYMBOL):
@@ -156,4 +157,3 @@ def main():
 # ------------------- RUN -------------------
 if __name__ == "__main__":
     main()
-

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict
 import logging
 import json
+from types import SimpleNamespace
+import pytest
 
 from config import config as cfg
 from core import review_queue
@@ -113,6 +115,37 @@ def _base_market_data(option_ltp: float) -> dict:
             }
         ],
     }
+
+
+def _opportunity_market_data(symbol: str = "NIFTY", option_ltp: float = 100.0) -> dict:
+    market_data = _base_market_data(option_ltp=option_ltp)
+    market_data["symbol"] = symbol
+    market_data["execution_mode"] = "SIM"
+    market_data["market_context"] = {"execution_mode": "SIM", "market_open": True}
+    market_data["atr"] = 50.0
+    market_data["ltp_change"] = 0.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.0
+    market_data["vol_z"] = 0.0
+    put_opt = dict(market_data["option_chain"][0])
+    put_opt["type"] = "PE"
+    put_opt["tradingsymbol"] = f"{symbol}26FEB25000PE"
+    put_opt["instrument_token"] = 223456
+    market_data["option_chain"] = [dict(market_data["option_chain"][0]), put_opt]
+    return market_data
+
+
+def _signal(direction: str) -> SimpleNamespace:
+    return SimpleNamespace(direction=direction, reason="unit_test_signal", score=0.72)
+
+
+def _disable_opportunity_signals(monkeypatch) -> None:
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
 
 
 _STAGED_CONFIDENCE_FIELDS = (
@@ -1056,6 +1089,161 @@ def test_live_offhours_no_signal_does_not_use_planning_fallback(monkeypatch):
     assert called["hit"] is False
 
 
+@pytest.mark.parametrize(
+    ("symbol", "expected_strategy", "signal_setup"),
+    [
+        ("NIFTY", "OPP_DIRECTIONAL", lambda monkeypatch: monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)),
+        ("BANKNIFTY", "OPP_MEAN_REVERT", lambda monkeypatch: monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)),
+        ("SENSEX", "OPP_VOL_EXPANSION", lambda monkeypatch: monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)),
+    ],
+)
+def test_nonlive_opportunity_candidates_vary_by_signal_family(monkeypatch, symbol, expected_strategy, signal_setup):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+    signal_setup(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol=symbol)
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="unit_test",
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.symbol == symbol
+    assert candidate.strategy == expected_strategy
+    assert bool(candidate.planning_only) is True
+    assert bool(candidate.execution_allowed) is False
+    score_breakdown = dict(candidate.score_breakdown or {})
+    assert float(score_breakdown.get("candidate_quality_score") or 0.0) > 0.0
+    assert float(score_breakdown.get("execution_feasibility_score") or 0.0) > 0.0
+    assert float(score_breakdown.get("ranking_score") or 0.0) > 0.0
+    assert float(candidate.rank_score or 0.0) <= float(score_breakdown["candidate_quality_score"])
+
+
+def test_directional_signal_strength_increases_candidate_quality(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+
+    weak_market = _opportunity_market_data(symbol="NIFTY")
+    weak_market["vwap"] = 24978.0
+
+    strong_market = _opportunity_market_data(symbol="NIFTY")
+    strong_market["vwap"] = 24955.0
+
+    weak_candidates = builder._build_nonlive_opportunity_candidates(
+        weak_market,
+        ltp=float(weak_market["ltp"]),
+        vwap=float(weak_market["vwap"]),
+        trigger_reason="unit_test",
+    )
+    strong_candidates = builder._build_nonlive_opportunity_candidates(
+        strong_market,
+        ltp=float(strong_market["ltp"]),
+        vwap=float(strong_market["vwap"]),
+        trigger_reason="unit_test",
+    )
+
+    weak_directional = next(candidate for candidate in weak_candidates if candidate.strategy == "OPP_DIRECTIONAL")
+    strong_directional = next(candidate for candidate in strong_candidates if candidate.strategy == "OPP_DIRECTIONAL")
+
+    weak_breakout_strength = float((weak_directional.score_breakdown or {}).get("breakout_strength") or 0.0)
+    strong_breakout_strength = float((strong_directional.score_breakdown or {}).get("breakout_strength") or 0.0)
+    weak_quality = float((weak_directional.score_breakdown or {}).get("candidate_quality_score") or 0.0)
+    strong_quality = float((strong_directional.score_breakdown or {}).get("candidate_quality_score") or 0.0)
+
+    assert weak_breakout_strength >= 1.0
+    assert strong_breakout_strength > weak_breakout_strength
+    assert strong_quality > weak_quality
+    assert float(strong_directional.rank_score or 0.0) <= strong_quality
+
+
+def test_nonlive_fallback_context_allows_bounded_signal_activation(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN", 0.75, raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["vwap"] = market_data["ltp"]
+    market_data["atr"] = 25.0
+    market_data["ltp_change_window"] = 0.10
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.0
+    market_data["vol_z"] = 0.0
+    market_data["nonlive_feature_fallback"] = True
+    market_data["nonlive_feature_fallback_fields"] = ["atr", "ltp_change_window"]
+
+    caplog.set_level(logging.INFO)
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="fallback_unit_test",
+    )
+
+    assert len(candidates) >= 1
+    assert any(candidate.strategy == "OPP_DIRECTIONAL" for candidate in candidates)
+    assert "SIGNAL_EVAL_SUMMARY" in caplog.text
+    assert "OPPORTUNITY_SET_BUILT" in caplog.text
+
+
+def test_nonlive_fallback_context_without_basis_does_not_create_candidate(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN", 0.75, raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["vwap"] = market_data["ltp"]
+    market_data["atr"] = 25.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.0
+    market_data["vol_z"] = 0.0
+    market_data["nonlive_feature_fallback"] = True
+    market_data["nonlive_feature_fallback_fields"] = ["atr"]
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="fallback_unit_test",
+    )
+
+    assert candidates == []
+
+
+def test_build_with_trace_does_not_invent_opportunity_without_signal_basis(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "NO_SIGNAL_FALLBACK_ENABLE", False, raising=False)
+
+    builder = TradeBuilder()
+    monkeypatch.setattr(builder, "_signal_for_symbol", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(builder, "_quick_neutral_fallback_signal", lambda *_args, **_kwargs: None, raising=True)
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["allow_planning_no_signal_fallback"] = True
+
+    trade, _trace = builder.build_with_trace(
+        market_data,
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is None
+    assert list(getattr(builder, "_last_ranked_candidates", []) or []) == []
+
+
 def test_sim_relaxes_basic_filters(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
     monkeypatch.setattr(cfg, "MAX_SPREAD_PCT", 0.03, raising=False)
@@ -1187,3 +1375,69 @@ def test_no_candidates_survived_emits_reject_wall_logs(monkeypatch, caplog):
     assert trade is None
     assert "OPTION_SCAN_REJECT_SUMMARY symbol=NIFTY" in caplog.text
     assert "NO_CANDIDATE_PATH symbol=NIFTY" in caplog.text
+
+
+def test_build_with_trace_softens_no_candidates_survived_in_sim(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    def _fake_signal(*_args, **_kwargs):
+        return {
+            "direction": "BUY_CALL",
+            "confidence": 0.55,
+            "score": 0.9,
+            "regime_day": "TREND",
+            "reason": "test_signal",
+        }
+
+    def _fake_chain_rows(*_args, **_kwargs):
+        return [{"type": "CE", "strike": 25000}]
+
+    def _fake_normalize(_raw, _opt_type):
+        return None, "type_mismatch"
+
+    def _fake_select(*_args, **_kwargs):
+        return None, []
+
+    monkeypatch.setattr(builder, "_signal_for_symbol", _fake_signal, raising=True)
+    monkeypatch.setattr(builder, "_annotate_candidate_chain_rows", _fake_chain_rows, raising=True)
+    monkeypatch.setattr(builder, "_normalize_option_row", _fake_normalize, raising=True)
+    monkeypatch.setattr(trade_builder_module, "select_best_opportunity", _fake_select, raising=True)
+    _disable_opportunity_signals(monkeypatch)
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+
+    trade, _trace = builder.build_with_trace(
+        {
+            "symbol": "NIFTY",
+            "market_open": True,
+            "valid": True,
+            "ltp": 25000.0,
+            "vwap": 24990.0,
+            "instrument": "OPT",
+            "chain_source": "live",
+            "quote_ok": True,
+            "bid": 24999.0,
+            "ask": 25001.0,
+            "regime": "TREND",
+            "atr": 50.0,
+            "option_chain": _opportunity_market_data(symbol="NIFTY")["option_chain"],
+        },
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is not None
+    assert trade.symbol == "NIFTY"
+    assert trade.strategy == "OPP_DIRECTIONAL"
+    assert bool(trade.planning_only) is True
+    assert bool(trade.execution_allowed) is False
+    ranked = list(getattr(builder, "_last_ranked_candidates", []) or [])
+    assert len(ranked) >= 1
+    ranked_strategies = {str(row.get("strategy") or "") for row in ranked if isinstance(row, dict)}
+    assert "OPP_DIRECTIONAL" in ranked_strategies
+    assert float((trade.score_breakdown or {}).get("candidate_quality_score") or 0.0) > 0.0
+    assert float((trade.score_breakdown or {}).get("execution_feasibility_score") or 0.0) > 0.0

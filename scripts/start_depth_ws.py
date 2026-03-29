@@ -8,6 +8,7 @@ import atexit
 import time
 
 from config import config as cfg
+from core.auth import validate_kite_startup_credentials
 from core.kite_depth_ws import start_depth_ws, build_depth_subscription_tokens
 from core.instance_lock import InstanceLock
 from core.run_lock import RunLock
@@ -17,6 +18,16 @@ logger = logging.getLogger(__name__)
 
 
 if __name__ == "__main__":
+    try:
+        validate_kite_startup_credentials(
+            repo_root_path=Path(__file__).resolve().parents[1],
+            require_access_token=True,
+            caller_module=__name__,
+        )
+    except RuntimeError as exc:
+        logger.error("depth_ws_startup_auth_fail error=%s", exc)
+        raise SystemExit(2)
+
     kite_lock = InstanceLock(repo_root_path=Path(__file__).resolve().parents[1])
     try:
         kite_ok, kite_holder = kite_lock.acquire()

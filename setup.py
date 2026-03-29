@@ -153,19 +153,16 @@ def send_telegram(message):
         return False
 """,
     "modules/kite_ws.py": """# kite_ws.py
-from kiteconnect import KiteTicker
+from core.auth import get_kite_ticker
 from modules.intraday_live_tick import live_tick_handler
 from modules.premarket import analyze_premarket
-
-API_KEY = "YOUR_KITE_API_KEY"
-ACCESS_TOKEN = "YOUR_FRESH_ACCESS_TOKEN"
 
 SUBSCRIBE_SYMBOLS = ["NSE:NIFTY 50","NSE:BANKNIFTY","BSE:SENSEX"]
 
 premarket = analyze_premarket()
 bias = premarket["bias"]
 
-kws = KiteTicker(API_KEY, ACCESS_TOKEN)
+kws = get_kite_ticker(debug=True)
 
 def on_ticks(ws, ticks):
     for tick in ticks:
@@ -233,4 +230,3 @@ if __name__=="__main__":
 # ------------------------
 # Create folders
 # ------
-

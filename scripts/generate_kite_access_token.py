@@ -8,7 +8,7 @@ import sys
 import re
 
 from config import config as cfg
-from core.kite_client import KiteConnect
+from core.auth import validate_kite_startup_credentials
 from core.kite_client import kite_client
 from core.auth_health import get_kite_auth_health
 from core.security_guard import write_local_kite_access_token
@@ -64,39 +64,37 @@ def _persist_local_token(access_token):
     return token_path
 
 
-def generate_validated_token(api_key, api_secret, request_token, kite_connect_cls):
-    kite = kite_connect_cls(api_key=api_key)
-    data = kite.generate_session(request_token, api_secret=api_secret)
+def generate_validated_token(api_key, api_secret, request_token):
+    data = kite_client.generate_session(request_token, api_secret, api_key=api_key)
     access_token = data.get("access_token")
     if not access_token:
         raise RuntimeError("no_access_token_returned")
-    kite.set_access_token(access_token)
+    kite_client.set_access_token(access_token)
+    kite_client.ensure()
     try:
-        profile = kite.profile()
+        profile = kite_client.kite.profile()
     except Exception as exc:
         raise RuntimeError(f"Access token verification failed: {exc}")
     user_id = str((profile or {}).get("user_id") or "").strip()
     if not user_id:
         raise RuntimeError("Access token verification failed: missing user_id")
-    margins = kite.margins()
+    margins = kite_client.kite.margins()
     if margins is None:
         raise RuntimeError("margins_missing")
-    return kite, access_token, margins, profile
+    return access_token, margins, profile
 
 
-def generate_token_flow(api_key, api_secret, request_token, update_store, kite_connect_cls, persist_fn):
-    kite, access_token, margins, profile = generate_validated_token(
+def generate_token_flow(api_key, api_secret, request_token, update_store, persist_fn):
+    access_token, margins, profile = generate_validated_token(
         api_key,
         api_secret,
         request_token,
-        kite_connect_cls,
     )
     token_path = None
     if update_store:
         token_path = persist_fn(access_token)
     auth_payload = {"user_id": (profile or {}).get("user_id", ""), "user_name": (profile or {}).get("user_name", "")}
     return {
-        "kite": kite,
         "access_token": access_token,
         "profile": auth_payload,
         "margins": margins,
@@ -104,10 +102,15 @@ def generate_token_flow(api_key, api_secret, request_token, update_store, kite_c
     }
 
 if __name__ == "__main__":
-    if not KiteConnect:
-        raise SystemExit("kiteconnect not installed.")
-    if not cfg.KITE_API_KEY or not cfg.KITE_API_SECRET:
-        raise SystemExit("Missing KITE_API_KEY or KITE_API_SECRET in .env")
+    try:
+        validate_kite_startup_credentials(
+            repo_root_path=ROOT,
+            require_access_token=False,
+            require_api_secret=True,
+            caller_module=__name__,
+        )
+    except RuntimeError as exc:
+        raise SystemExit(str(exc))
     if _looks_placeholder_api_key(cfg.KITE_API_KEY):
         raise SystemExit(
             "Invalid KITE_API_KEY placeholder detected. Set real Kite app key in env/.env before generating token."
@@ -141,12 +144,10 @@ if __name__ == "__main__":
             cfg.KITE_API_SECRET,
             request_token,
             persist_to_store,
-            KiteConnect,
             _persist_local_token,
         )
     except Exception as e:
         raise SystemExit(str(e))
-    kite = flow["kite"]
     access_token = flow["access_token"]
     profile = flow["profile"]
     margins = flow["margins"]
@@ -175,7 +176,7 @@ if __name__ == "__main__":
             if kite_client.kite:
                 kite_client.kite.set_access_token(access_token)
             else:
-                kite_client._ensure()
+                kite_client.ensure()
             print("Refreshed in-memory Kite session.")
             auth_payload = get_kite_auth_health(force=True)
             if auth_payload.get("ok"):

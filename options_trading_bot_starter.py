@@ -1,3 +1,5 @@
+# WARNING: Standalone prototype script. Not connected to the live tradebot
+# orchestrator, review queue, or execution pipeline. Experimental use only.
 # ===============================
 # OPTIONS TRADING BOT STARTER SKELETON
 # ===============================
@@ -140,4 +142,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

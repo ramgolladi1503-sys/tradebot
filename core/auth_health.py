@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 from config import config as cfg
-from core.auth_manager import invalidate_cache, resolve_access_token
+from core.auth import get_kite_credentials
+from core.auth_manager import invalidate_cache
 from core.kite_client import kite_client
 from core.market_context import derive_market_context
 from core import risk_halt
@@ -58,8 +59,17 @@ def _tail4(value: str) -> str:
 
 
 def _kite_profile_payload() -> Dict[str, Any]:
-    kite_client.ensure()
-    if not kite_client.kite:
+    try:
+        rest_client = kite_client.ensure()
+    except Exception as exc:
+        return {
+            "ok": False,
+            "auth_state": "FAILED",
+            "error": f"kite_client_unavailable:{type(exc).__name__}:{exc}",
+            "user_id": "",
+            "user_name": "",
+        }
+    if not rest_client:
         return {
             "ok": False,
             "auth_state": "FAILED",
@@ -68,7 +78,7 @@ def _kite_profile_payload() -> Dict[str, Any]:
             "user_name": "",
         }
     try:
-        profile = kite_client.kite.profile()
+        profile = rest_client.profile()
         user_id = (profile or {}).get("user_id") or ""
         user_name = (profile or {}).get("user_name") or ""
         if not user_id:
@@ -172,12 +182,11 @@ def get_kite_auth_health(force: bool = False) -> Dict[str, Any]:
 
     api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
     api_key_tail4 = _tail4(api_key)
-
     raw_token = ""
     token_has_ws = False
     try:
         repo_root = Path(__file__).resolve().parents[1]
-        raw_token = resolve_access_token(repo_root_path=repo_root, require_token=True)
+        api_key, raw_token = get_kite_credentials(repo_root_path=repo_root)
     except Exception as exc:
         payload = {
             "ok": False,
@@ -197,6 +206,7 @@ def get_kite_auth_health(force: bool = False) -> Dict[str, Any]:
         _CACHE["payload"] = payload
         _log_event(payload)
         return payload
+    api_key_tail4 = _tail4(api_key)
 
     token_has_ws = any(ch.isspace() for ch in (raw_token or ""))
     token = (raw_token or "").strip()

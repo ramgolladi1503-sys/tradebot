@@ -7,6 +7,7 @@ import sys
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 from config import config as cfg
+from core.auth import validate_kite_startup_credentials
 from core.auth_manager import validate_token
 from core.instance_lock import InstanceLock
 
@@ -22,6 +23,15 @@ def main() -> int:
     args = parser.parse_args()
 
     mode = _execution_mode(args.mode)
+    try:
+        validate_kite_startup_credentials(
+            repo_root_path=Path(__file__).resolve().parents[1],
+            require_access_token=True,
+            caller_module=__name__,
+        )
+    except RuntimeError as exc:
+        print(f"AUTH_CONFIG_ERROR {exc}")
+        return 2
     lock = None
     if mode in {"LIVE", "PAPER"}:
         lock = InstanceLock(repo_root_path=Path(__file__).resolve().parents[1])

@@ -175,6 +175,38 @@ def test_strategy_gate_logs_no_conflicting_indicator_values_within_cycle(monkeyp
     assert float(rows[0]["indicators_age_sec"]) == 10.0
 
 
+def test_nonlive_no_strategy_gate_is_softened_for_candidate_fallback(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True, raising=False)
+
+    orch = Orchestrator.__new__(Orchestrator)
+
+    market_data = {
+        "symbol": "NIFTY",
+        "market_context": {"execution_mode": "SIM", "market_open": True},
+        "market_open": True,
+    }
+    gate = GateResult(False, None, ["NO_STRATEGY_QUALIFIED"])
+
+    assert orch._should_soften_nonlive_no_strategy_gate(market_data, gate) is True
+
+
+def test_live_no_strategy_gate_is_not_softened(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True, raising=False)
+
+    orch = Orchestrator.__new__(Orchestrator)
+
+    market_data = {
+        "symbol": "NIFTY",
+        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "market_open": True,
+    }
+    gate = GateResult(False, None, ["NO_STRATEGY_QUALIFIED"])
+
+    assert orch._should_soften_nonlive_no_strategy_gate(market_data, gate) is False
+
+
 def test_warmup_state_blocks_strategy_evaluation(monkeypatch):
     emitted = []
     evaluate_called = {"count": 0}

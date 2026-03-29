@@ -4,7 +4,7 @@ from core.paths import logs_dir, data_root
 # Zero-to-hero (lotto) ideas are PAPER-only with explicit OTM + premium-band filters.
 
 from datetime import datetime, date, timezone
-from dataclasses import replace
+from dataclasses import asdict, replace
 from functools import wraps
 from pathlib import Path
 import hashlib
@@ -317,7 +317,7 @@ class TradeBuilder:
         reject_ctx: dict,
         strategy_tag: str | None = None,
         direction: str | None = None,
-    ) -> dict | None:
+    ):
         if not isinstance(market_data, dict):
             return None
         execution_mode = str(
@@ -328,7 +328,24 @@ class TradeBuilder:
         if not self._soft_reject_enabled(execution_mode):
             return None
         reason = self._select_soft_reject_reason(reject_ctx)
+        if not reason and execution_mode in {"SIM", "PAPER", "OFFHOURS"}:
+            primary_reason = str(reject_ctx.get("reason") or "").strip().lower()
+            if primary_reason in {"no_candidates_survived", "no_signal"}:
+                reason = primary_reason
         if not reason:
+            return None
+        if execution_mode in {"SIM", "PAPER", "OFFHOURS"} and reason in {"no_candidates_survived", "no_viable_candidates", "no_signal"}:
+            ltp = self._coerce_positive_float(market_data.get("ltp")) or 0.0
+            vwap = self._coerce_positive_float(market_data.get("vwap")) or ltp
+            best_trade = self._rank_nonlive_opportunity_candidates(
+                market_data,
+                ltp=float(ltp),
+                vwap=float(vwap),
+                trigger_reason=str(reason),
+                scope_suffix=f"opportunity:{reason}",
+            )
+            if best_trade is not None:
+                return best_trade
             return None
         if is_critical_reject_reason(reason, critical_reject_reasons()):
             return None
@@ -352,9 +369,19 @@ class TradeBuilder:
         )
         if not candidate:
             return None
+        trade_id = str(candidate.get("trade_id") or "").strip()
+        if trade_id.startswith("softrej_"):
+            candidate["trade_id"] = f"tbsoft_{symbol}_{trade_id.rsplit('_', 1)[-1]}"
+        candidate["candidate_origin"] = "softened_builder_path"
         candidate["source_flags"] = dict(candidate.get("source_flags") or {})
         candidate["source_flags"]["candidate_origin"] = "softened_builder_path"
         candidate["source_flags"]["soft_reject_reason"] = reason
+        if str(candidate.get("candidate_type") or "").strip().lower() in {"", "unknown"}:
+            candidate["candidate_type"] = "directional"
+        if str(candidate.get("strategy_family") or "").strip().lower() in {"", "unknown"}:
+            candidate["strategy_family"] = str(strategy_tag or "builder_soft_reject").strip().lower() or "builder_soft_reject"
+        if str(candidate.get("setup_variant") or "").strip().lower() in {"", "unknown"}:
+            candidate["setup_variant"] = "softened_builder_path"
         candidate["reason"] = reason
         logger.info(
             "candidate_softened reason=%s symbol=%s strategy=%s",
@@ -371,6 +398,7 @@ class TradeBuilder:
         )
         try:
             self._set_last_ranked_candidates([candidate])
+            self._scan_accepted = 1
             logger.info(
                 "candidate_pool_append source=softened_builder_path symbol=%s reason=%s",
                 symbol,
@@ -415,15 +443,30 @@ class TradeBuilder:
             option_summary = dict(getattr(self, "_last_option_scan_summary", {}) or {})
             considered = int(option_summary.get("considered") or extra_payload.get("option_rows_considered") or 0)
             survivors = int(option_summary.get("survivors") or extra_payload.get("survivor_count") or 0)
-            top_rejects = dict(option_summary.get("top_rejects") or {})
-            if not top_rejects:
-                ordered = sorted(
+            reject_counts = {
+                str(code): int(count)
+                for code, count in sorted(
                     (self._scan_reject_counts or {}).items(),
                     key=lambda item: (-int(item[1]), str(item[0])),
                 )
+                if str(code)
+            }
+            top_rejects = dict(option_summary.get("top_rejects") or {})
+            if not top_rejects:
+                ordered = list(reject_counts.items())
                 top_rejects = {str(code): int(count) for code, count in ordered[:8]}
             option_reject_total = int(option_summary.get("option_reject_total") or sum(top_rejects.values()))
-            logger.info(
+            logger.warning(
+                "TB_REJECT_SUMMARY %s",
+                {
+                    "symbol": symbol,
+                    "total_candidates": considered or int(self._scan_total_candidates or 0),
+                    "survived": survivors,
+                    "survived_candidates": survivors,
+                    "reject_counts": reject_counts,
+                },
+            )
+            logger.warning(
                 "OPTION_SCAN_REJECT_SUMMARY symbol=%s considered=%s survivors=%s option_reject_total=%s top_rejects=%s",
                 symbol,
                 considered,
@@ -431,13 +474,14 @@ class TradeBuilder:
                 option_reject_total,
                 top_rejects,
             )
-            logger.info(
+            logger.warning(
                 "NO_CANDIDATE_PATH symbol=%s considered=%s survivors=%s top_rejects=%s",
                 symbol,
                 considered,
                 survivors,
                 top_rejects,
             )
+            reject_ctx.setdefault("reject_counts", reject_counts)
             reject_ctx.setdefault("top_reject_counts", top_rejects)
             reject_ctx.setdefault("option_rows_considered", considered)
             reject_ctx.setdefault("survivor_count", survivors)
@@ -722,6 +766,9 @@ class TradeBuilder:
                 entry_reason = lifecycle.get("entry_reason")
                 entry_clear_reason = lifecycle.get("entry_clear_reason")
                 executable_ready = executable_entry is not None and executable_status == "executable"
+                trigger_entry_condition = getattr(trade, "entry_condition", None)
+                trigger_entry_price = getattr(trade, "entry_price", None)
+                use_trigger_entry = bool(trigger_entry_condition) and trigger_entry_price is not None
                 updates.update(
                     {
                         "builder_confidence": getattr(trade, "builder_confidence", None) or conf,
@@ -744,10 +791,12 @@ class TradeBuilder:
                     }
                 )
                 if executable_ready:
-                    updates["entry_price"] = round(float(executable_entry), 2)
+                    applied_entry_price = trigger_entry_price if use_trigger_entry else executable_entry
+                    updates["entry_price"] = round(float(applied_entry_price), 2)
                     updates["entry_price_source"] = execution_source
                     if display_entry is not None:
-                        updates["expected_entry"] = round(float(display_entry), 2)
+                        expected_entry_value = trigger_entry_price if use_trigger_entry else display_entry
+                        updates["expected_entry"] = round(float(expected_entry_value), 2)
                         updates["expected_entry_source"] = display_source
                 elif display_entry is not None:
                     updates["expected_entry"] = round(float(display_entry), 2)
@@ -1991,7 +2040,24 @@ class TradeBuilder:
     ) -> list[dict]:
         data = market_data or {}
         raw_chain = data.get("option_chain")
+        raw_len = len(raw_chain) if isinstance(raw_chain, (list, tuple)) else 0
+        logger.info("CHAIN_DEBUG_START symbol=%s raw_len=%d", symbol, raw_len)
         if not isinstance(raw_chain, (list, tuple)):
+            logger.info(
+                "CHAIN_DEBUG_EXPIRY symbol=%s len=%d same_expiry=%s next_expiry=%s",
+                symbol,
+                0,
+                "",
+                "",
+            )
+            logger.info(
+                "CHAIN_DEBUG_STRIKE symbol=%s len=%d atm=%s step=%s",
+                symbol,
+                0,
+                None,
+                None,
+            )
+            logger.error("CHAIN_EMPTY symbol=%s reason=post_filters", symbol)
             return []
         unique_expiries: list[str] = []
         expiry_seen: set[str] = set()
@@ -2035,6 +2101,8 @@ class TradeBuilder:
         expiry_bucket_mode = str(getattr(cfg, "TRADE_BUILDER_EXPIRY_BUCKET_MODE", "ALL") or "ALL").strip().upper()
         bucket_rank = {"same_expiry": 0, "next_expiry": 1, "other_expiry": 2}
         rows: list[dict] = []
+        expiry_filtered_len = 0
+        strike_filtered_len = 0
         seen_contracts: set[tuple] = set()
         for raw in raw_chain:
             if not isinstance(raw, dict):
@@ -2051,6 +2119,7 @@ class TradeBuilder:
                 continue
             if expiry_bucket_mode in {"SAME_AND_NEXT", "NEXT"} and expiry_bucket == "other_expiry":
                 continue
+            expiry_filtered_len += 1
             strike_offset = None
             try:
                 strike_val = float(row.get("strike") or row.get("strike_price") or row.get("strikePrice"))
@@ -2060,6 +2129,7 @@ class TradeBuilder:
                 strike_offset = int(round((float(strike_val) - float(atm_strike)) / float(step)))
             if enforce_strike_ladder and strike_offset is not None and abs(int(strike_offset)) > strike_ladder_width:
                 continue
+            strike_filtered_len += 1
             row["candidate_origin"] = {
                 "strike_offset": strike_offset,
                 "expiry_bucket": expiry_bucket,
@@ -2090,6 +2160,22 @@ class TradeBuilder:
                 str(row.get("tradingsymbol") or row.get("instrument_token") or ""),
             )
         )
+        logger.info(
+            "CHAIN_DEBUG_EXPIRY symbol=%s len=%d same_expiry=%s next_expiry=%s",
+            symbol,
+            expiry_filtered_len,
+            same_expiry,
+            next_expiry,
+        )
+        logger.info(
+            "CHAIN_DEBUG_STRIKE symbol=%s len=%d atm=%s step=%s",
+            symbol,
+            strike_filtered_len,
+            atm_strike,
+            step,
+        )
+        if not rows:
+            logger.error("CHAIN_EMPTY symbol=%s reason=post_filters", symbol)
         return rows
 
     def _resolve_underlying_spot(self, market_data: dict, market_ctx) -> tuple[float | None, str | None, bool, str | None]:
@@ -2495,26 +2581,100 @@ class TradeBuilder:
             "edge": round(float(momentum_edge), 6),
         }
 
-    def _build_planning_no_signal_trade(
+    def _default_opportunity_direction(self, market_data: dict, ltp: float, vwap: float) -> str:
+        bias = str(market_data.get("bias") or "").strip().upper()
+        ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)
+        ltp_change = float(market_data.get("ltp_change") or 0.0)
+        if ltp > 0 and vwap > 0:
+            edge = (float(ltp) - float(vwap)) / max(float(vwap), 1e-6)
+            if edge > 0.0002:
+                return "BUY_CALL"
+            if edge < -0.0002:
+                return "BUY_PUT"
+        move = ltp_change_window if abs(ltp_change_window) > 0 else ltp_change
+        if move > 0:
+            return "BUY_CALL"
+        if move < 0:
+            return "BUY_PUT"
+        if bias in {"BEARISH", "DOWN"}:
+            return "BUY_PUT"
+        return "BUY_CALL"
+
+    def _store_ranked_candidate_snapshots(self, ranked_candidates) -> None:
+        snapshots = []
+        for candidate in list(ranked_candidates or []):
+            if isinstance(candidate, dict):
+                snapshots.append(dict(candidate))
+            else:
+                snapshots.append(asdict(candidate))
+        self._set_last_ranked_candidates(snapshots)
+
+    def _execution_feasibility_score(self, trade: Trade | None) -> tuple[float, float, float]:
+        if trade is None:
+            return 0.0, 0.0, 0.0
+        volume = max(float(getattr(trade, "volume", 0.0) or 0.0), float(getattr(trade, "current_volume", 0.0) or 0.0))
+        min_volume = max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)
+        liquidity_score = max(0.0, min(1.0, volume / min_volume)) if volume > 0 else 0.35
+        bid = self._coerce_positive_float(getattr(trade, "opt_bid", None))
+        ask = self._coerce_positive_float(getattr(trade, "opt_ask", None))
+        opt_ltp = self._coerce_positive_float(getattr(trade, "opt_ltp", None)) or self._coerce_positive_float(getattr(trade, "entry_price", None))
+        if bid is not None and ask is not None and opt_ltp not in (None, 0.0):
+            spread_pct = max(0.0, float(ask) - float(bid)) / max(float(opt_ltp), 1e-6)
+            max_spread = max(float(getattr(cfg, "MAX_SPREAD_PCT", 0.03) or 0.03), 1e-6)
+            spread_score = max(0.0, min(1.0, 1.0 - min(spread_pct / max_spread, 1.0)))
+        else:
+            spread_score = 0.5
+        quote_score = 1.0 if bool(getattr(trade, "quote_ok", True)) else 0.4
+        execution_feasibility_score = round(
+            (liquidity_score * 0.4) + (spread_score * 0.4) + (quote_score * 0.2),
+            6,
+        )
+        return execution_feasibility_score, liquidity_score, spread_score
+
+    def _build_advisory_opportunity_trade(
         self,
         market_data: dict,
         *,
         ltp: float,
         vwap: float,
+        direction: str | None,
+        strategy: str,
+        reason: str,
+        confidence: float,
+        strategy_family: str,
+        candidate_type: str,
+        setup_variant: str,
+        trigger_reason: str,
+        soft_veto_codes: list[str] | None = None,
+        penalty_reasons: list[str] | None = None,
+        quality_score: float | None = None,
+        quality_detail: dict | None = None,
     ):
-        if not bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
-            return None
         symbol = str(market_data.get("symbol") or "UNKNOWN")
         underlying_ltp = float(ltp or 0.0)
         underlying_vwap = float(vwap or underlying_ltp or 0.0)
         if underlying_ltp <= 0:
             return None
-        direction = "BUY_CALL" if underlying_ltp >= underlying_vwap else "BUY_PUT"
-        side = "BUY" if direction == "BUY_CALL" else "SELL"
+        normalized_direction = str(direction or "").strip().upper()
+        if normalized_direction not in {"BUY_CALL", "BUY_PUT"}:
+            normalized_direction = self._default_opportunity_direction(
+                market_data,
+                underlying_ltp,
+                underlying_vwap,
+            )
+        side = "BUY" if normalized_direction == "BUY_CALL" else "SELL"
         underlying_atr = float(market_data.get("atr") or max(1.0, underlying_ltp * 0.002))
         entry_price = underlying_ltp
-        stop_loss = max(0.01, entry_price - underlying_atr) if side == "BUY" else max(0.01, entry_price + underlying_atr)
-        target = entry_price + (underlying_atr * 1.5) if side == "BUY" else max(0.01, entry_price - (underlying_atr * 1.5))
+        stop_loss = (
+            max(0.01, entry_price - underlying_atr)
+            if side == "BUY"
+            else max(0.01, entry_price + underlying_atr)
+        )
+        target = (
+            entry_price + (underlying_atr * 1.5)
+            if side == "BUY"
+            else max(0.01, entry_price - (underlying_atr * 1.5))
+        )
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
 
         instrument = "EQ"
@@ -2525,7 +2685,7 @@ class TradeBuilder:
         chosen_opt = None
         tradingsymbol = None
         instrument_token = None
-        opt_type = "CE" if direction == "BUY_CALL" else "PE"
+        opt_type = "CE" if normalized_direction == "BUY_CALL" else "PE"
         chain = market_data.get("option_chain") or []
         try:
             valid_opts = []
@@ -2562,13 +2722,25 @@ class TradeBuilder:
                     target_mult=1.4,
                 )
                 if side == "BUY" and target <= entry_price:
-                    target = round(entry_price + max(option_risk_proxy * 1.4, option_width, 0.01), 2)
+                    target = round(
+                        entry_price + max(option_risk_proxy * 1.4, option_width, 0.01),
+                        2,
+                    )
                 if side == "BUY" and stop_loss >= entry_price:
-                    stop_loss = round(max(0.01, entry_price - max(option_risk_proxy, option_width, 0.01)), 2)
+                    stop_loss = round(
+                        max(0.01, entry_price - max(option_risk_proxy, option_width, 0.01)),
+                        2,
+                    )
                 if side == "SELL" and target >= entry_price:
-                    target = round(max(0.01, entry_price - max(option_risk_proxy * 1.4, option_width, 0.01)), 2)
+                    target = round(
+                        max(0.01, entry_price - max(option_risk_proxy * 1.4, option_width, 0.01)),
+                        2,
+                    )
                 if side == "SELL" and stop_loss <= entry_price:
-                    stop_loss = round(entry_price + max(option_risk_proxy, option_width, 0.01), 2)
+                    stop_loss = round(
+                        entry_price + max(option_risk_proxy, option_width, 0.01),
+                        2,
+                    )
         except Exception:
             chosen_opt = None
 
@@ -2590,7 +2762,6 @@ class TradeBuilder:
             instrument_id=instrument_id,
         )
         if instrument == "OPT" and (ident_err or not option_identity_ok):
-            # Final fallback: directional planning-only index candidate.
             chosen_opt = None
             instrument = "EQ"
             tradingsymbol = None
@@ -2612,38 +2783,39 @@ class TradeBuilder:
 
         if instrument == "OPT":
             if side == "BUY" and not (target > entry_price > stop_loss):
-                logger.error(
-                    "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
-                    symbol,
-                    side,
-                    entry_price,
-                    stop_loss,
-                    target,
-                    strike,
-                    right,
-                )
                 return None
             if side == "SELL" and not (stop_loss > entry_price > target):
-                logger.error(
-                    "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
-                    symbol,
-                    side,
-                    entry_price,
-                    stop_loss,
-                    target,
-                    strike,
-                    right,
-                )
                 return None
 
+        soft_codes = [str(code) for code in (soft_veto_codes or []) if str(code).strip()]
+        penalty_codes = [str(code) for code in (penalty_reasons or []) if str(code).strip()]
         intent = self.trade_intent_flags(market_data, opt=chosen_opt)
         intent["planning_only"] = True
         intent["execution_allowed"] = False
-        intent["execution_reason"] = "NO_SIGNAL_PLANNING_FALLBACK"
+        intent["execution_reason"] = trigger_reason
+        source_flags = dict(intent.get("source_flags") or {})
+        source_flags["candidate_origin"] = "opportunity_builder_nonlive"
+        source_flags["opportunity_builder"] = strategy
+        source_flags["opportunity_trigger_reason"] = trigger_reason
+        source_flags["opportunity_variant"] = setup_variant
+        existing_soft = [str(code) for code in (source_flags.get("soft_veto_codes") or []) if str(code).strip()]
+        for code in soft_codes:
+            if code not in existing_soft:
+                existing_soft.append(code)
+        source_flags["soft_veto_codes"] = existing_soft
         liquidity_fields = self._option_liquidity_fields(chosen_opt) if instrument == "OPT" else {}
-        planning_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))
+        opportunity_confidence = self._clamp_confidence(confidence)
+        if opportunity_confidence is None:
+            opportunity_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))
+        opportunity_confidence = round(float(opportunity_confidence), 3)
+        reason_codes = list(dict.fromkeys([str(trigger_reason)] + existing_soft + penalty_codes))
+        candidate_quality_score = self._clamp_confidence(quality_score)
+        if candidate_quality_score is None:
+            candidate_quality_score = opportunity_confidence
+        candidate_quality_score = round(float(candidate_quality_score), 6)
+        trade_score = round(float(candidate_quality_score) * 100.0, 2)
         trade = Trade(
-            trade_id=f"{symbol}-PLAN-{ts}",
+            trade_id=f"{symbol}-{setup_variant.upper()}-{ts}",
             timestamp=datetime.now(),
             symbol=symbol,
             instrument=instrument,
@@ -2665,8 +2837,8 @@ class TradeBuilder:
             validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),
             capital_at_risk=round(abs(float(entry_price) - float(stop_loss)), 2),
             expected_slippage=0.0,
-            confidence=round(planning_confidence, 3),
-            strategy="NO_SIGNAL_PLANNING",
+            confidence=opportunity_confidence,
+            strategy=strategy,
             regime=str(market_data.get("regime") or "NEUTRAL"),
             tier="EXPLORATION",
             day_type=str(market_data.get("day_type") or "UNKNOWN"),
@@ -2676,23 +2848,407 @@ class TradeBuilder:
             tradable_reasons_blocking=list(intent.get("tradable_reasons_blocking") or []),
             planning_only=True,
             execution_allowed=False,
-            reason="NO_SIGNAL_PLANNING_FALLBACK",
-            source_flags=dict(intent.get("source_flags") or {}),
+            reason=reason,
+            source_flags=source_flags,
+            trade_score=trade_score,
+            rank_score=candidate_quality_score,
+            setup_strength=candidate_quality_score,
+            trade_score_detail={
+                "score": trade_score,
+                "builder_variant": setup_variant,
+                "trigger_reason": trigger_reason,
+                "penalty_reasons": penalty_codes,
+                "signal_score": opportunity_confidence,
+                "candidate_quality_score": candidate_quality_score,
+            },
+            direction=normalized_direction,
+            candidate_type=candidate_type,
+            strategy_family=strategy_family,
+            setup_variant=setup_variant,
+            candidate_status="advisory_only",
+            permission="ADVISORY_ONLY",
+            permission_reason=trigger_reason,
+            reason_codes=reason_codes,
+            penalty_reasons=penalty_codes,
             **self._staged_confidence_payload(
-                confidence=planning_confidence,
-                model_raw=planning_confidence,
-                model_component=planning_confidence,
+                confidence=opportunity_confidence,
+                model_raw=opportunity_confidence,
+                model_component=opportunity_confidence,
                 micro_blend_method="model_only",
-                before_soft_veto=planning_confidence,
-                after_soft_veto=planning_confidence,
+                before_soft_veto=opportunity_confidence,
+                after_soft_veto=opportunity_confidence,
                 penalty_soft_veto_total=0.0,
-                penalty_soft_veto_reasons=[],
-                base=planning_confidence,
+                penalty_soft_veto_reasons=existing_soft,
+                base=opportunity_confidence,
                 penalty_total=0.0,
-                penalty_reasons=[],
+                penalty_reasons=penalty_codes,
             ),
         )
-        return self._decorate_trade_context(trade, market_data, planning_confidence)
+        built_trade = self._decorate_trade_context(trade, market_data, opportunity_confidence)
+        if built_trade is not None:
+            execution_feasibility_score, liquidity_score, spread_score = self._execution_feasibility_score(built_trade)
+            ranking_score = round(
+                max(
+                    0.0,
+                    float(candidate_quality_score)
+                    - (max(0.0, 1.0 - float(execution_feasibility_score)) * 0.15),
+                ),
+                6,
+            )
+            score_breakdown = dict(getattr(built_trade, "score_breakdown", {}) or {})
+            score_breakdown.update(
+                {
+                    "candidate_quality_score": candidate_quality_score,
+                    "execution_feasibility_score": execution_feasibility_score,
+                    "ranking_score": ranking_score,
+                    "trigger_reason": trigger_reason,
+                    **dict(quality_detail or {}),
+                }
+            )
+            trade_source_flags = dict(getattr(built_trade, "source_flags", {}) or {})
+            trade_source_flags["candidate_quality_score"] = candidate_quality_score
+            trade_source_flags["execution_feasibility_score"] = execution_feasibility_score
+            trade_source_flags["ranking_score"] = ranking_score
+            if quality_detail:
+                trade_source_flags["quality_detail"] = dict(quality_detail)
+            built_trade = replace(
+                built_trade,
+                source_flags=trade_source_flags,
+                score_breakdown=score_breakdown,
+                opportunity_score=round(float(candidate_quality_score), 6),
+                rank_score=ranking_score,
+                liquidity_score=round(float(liquidity_score), 6),
+                spread_score=round(float(spread_score), 6),
+            )
+            logger.info(
+                "OPPORTUNITY_CANDIDATE_BUILT symbol=%s strategy=%s direction=%s quality=%s execution_feasibility=%s trigger=%s",
+                symbol,
+                strategy,
+                normalized_direction,
+                candidate_quality_score,
+                execution_feasibility_score,
+                trigger_reason,
+            )
+        return built_trade
+
+    def _build_nonlive_opportunity_candidates(
+        self,
+        market_data: dict,
+        *,
+        ltp: float,
+        vwap: float,
+        trigger_reason: str,
+    ) -> list[Trade]:
+        execution_mode = str(
+            market_data.get("execution_mode")
+            or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+            or getattr(cfg, "EXECUTION_MODE", "")
+        ).strip().upper()
+        if execution_mode not in {"SIM", "PAPER", "OFFHOURS"}:
+            return []
+        underlying_ltp = float(ltp or 0.0)
+        underlying_vwap = float(vwap or underlying_ltp or 0.0)
+        if underlying_ltp <= 0:
+            return []
+        nonlive_feature_fallback = bool(market_data.get("nonlive_feature_fallback"))
+        fallback_fields = [
+            str(field)
+            for field in (market_data.get("nonlive_feature_fallback_fields") or [])
+            if str(field).strip()
+        ]
+        atr = max(float(market_data.get("atr") or 0.0), max(float(underlying_ltp) * 0.0005, 1.0))
+        vwap_edge = (
+            (float(underlying_ltp) - float(underlying_vwap)) / max(float(underlying_vwap), 1e-6)
+            if underlying_vwap > 0
+            else 0.0
+        )
+        ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)
+        ltp_change_5m = float(market_data.get("ltp_change_5m") or 0.0)
+        ltp_change_10m = float(market_data.get("ltp_change_10m") or 0.0)
+        rsi_mom = float(market_data.get("rsi_mom") or 0.0)
+        vol_z = float(market_data.get("vol_z") or 0.0)
+        directional_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008), 1e-6)
+        expansion_move_min = max(float(getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.02) or 0.02) * atr, 1e-6)
+        mean_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008) * 1.5, 1e-6)
+        mean_rsi_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12) or 0.12)
+        micro_move_min = max(abs(float(getattr(cfg, "MICRO_5M_UP_PTS", 15) or 15)), abs(float(getattr(cfg, "MICRO_5M_DOWN_PTS", -15) or -15)))
+        strength_activation_min = (
+            max(0.5, min(1.0, float(getattr(cfg, "NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN", 0.75) or 0.75)))
+            if nonlive_feature_fallback
+            else 1.0
+        )
+        directional_signal = None
+        try:
+            directional_signal = ensemble_signal(market_data)
+        except Exception:
+            directional_signal = None
+        if directional_signal is None:
+            try:
+                directional_signal = self._trend_vwap_fallback_signal(
+                    market_data,
+                    str(market_data.get("regime_day") or market_data.get("regime") or "NEUTRAL"),
+                )
+            except Exception:
+                directional_signal = None
+        directional_direction = (
+            str(getattr(directional_signal, "direction", None) or "").strip().upper()
+            if directional_signal is not None
+            else ""
+        )
+        if directional_direction not in {"BUY_CALL", "BUY_PUT"}:
+            directional_direction = self._default_opportunity_direction(
+                market_data,
+                underlying_ltp,
+                underlying_vwap,
+            )
+        breakout_strength = max(
+            abs(vwap_edge) / directional_edge_min,
+            abs(ltp_change_window) / expansion_move_min,
+        )
+        has_directional_signal = bool(directional_signal is not None or breakout_strength >= strength_activation_min)
+
+        mean_signal = mean_reversion_signal(
+            underlying_ltp,
+            underlying_vwap,
+            rsi_mom,
+        )
+        mean_direction = (
+            str(getattr(mean_signal, "direction", None) or "").strip().upper()
+            if mean_signal is not None
+            else ""
+        )
+        if mean_direction not in {"BUY_CALL", "BUY_PUT"}:
+            if underlying_ltp > underlying_vwap:
+                mean_direction = "BUY_PUT"
+            elif underlying_ltp < underlying_vwap:
+                mean_direction = "BUY_CALL"
+            else:
+                mean_direction = "BUY_PUT" if directional_direction == "BUY_CALL" else "BUY_CALL"
+        mean_reversion_strength = max(
+            abs(vwap_edge) / mean_edge_min,
+            abs(rsi_mom) / max(mean_rsi_min, 1e-6),
+        )
+        has_mean_signal = bool(mean_signal is not None or mean_reversion_strength >= strength_activation_min)
+
+        expansion_signal = event_breakout_signal(
+            underlying_ltp,
+            market_data.get("atr", 0),
+            ltp_change_window,
+        )
+        if expansion_signal is None:
+            expansion_signal = micro_pattern_signal(
+                ltp_change_5m,
+                ltp_change_10m,
+            )
+        expansion_direction = (
+            str(getattr(expansion_signal, "direction", None) or "").strip().upper()
+            if expansion_signal is not None
+            else ""
+        )
+        if expansion_direction not in {"BUY_CALL", "BUY_PUT"}:
+            move = float(ltp_change_window or market_data.get("ltp_change") or 0.0)
+            if move > 0:
+                expansion_direction = "BUY_CALL"
+            elif move < 0:
+                expansion_direction = "BUY_PUT"
+            else:
+                expansion_direction = directional_direction
+        volatility_expansion_strength = max(
+            abs(ltp_change_window) / expansion_move_min,
+            abs(vol_z) / 0.5,
+            abs(ltp_change_5m) / max(micro_move_min, 1.0),
+        )
+        has_expansion_signal = bool(expansion_signal is not None or volatility_expansion_strength >= strength_activation_min)
+
+        logger.info(
+            "SIGNAL_EVAL_SUMMARY %s",
+            {
+                "symbol": str(market_data.get("symbol") or "UNKNOWN"),
+                "trigger_reason": trigger_reason,
+                "nonlive_feature_fallback": bool(nonlive_feature_fallback),
+                "fallback_fields": list(fallback_fields),
+                "strength_activation_min": float(strength_activation_min),
+                "breakout_strength": round(float(min(breakout_strength, 5.0)), 6),
+                "mean_reversion_strength": round(float(min(mean_reversion_strength, 5.0)), 6),
+                "volatility_expansion_strength": round(float(min(volatility_expansion_strength, 5.0)), 6),
+                "directional_signal": bool(directional_signal is not None),
+                "mean_signal": bool(mean_signal is not None),
+                "expansion_signal": bool(expansion_signal is not None),
+            },
+        )
+
+        opportunity_specs = []
+        if has_directional_signal:
+            directional_quality = self._clamp_confidence(
+                0.35
+                + min(0.45, breakout_strength * 0.18)
+                + (0.08 if directional_signal is not None else 0.0),
+            ) or 0.45
+            opportunity_specs.append(
+                {
+                    "strategy": "OPP_DIRECTIONAL",
+                    "reason": "NONLIVE_OPPORTUNITY_DIRECTIONAL",
+                    "direction": directional_direction,
+                    "confidence": max(float(directional_quality), 0.35),
+                    "quality_score": max(float(directional_quality), 0.35),
+                    "quality_detail": {"breakout_strength": round(min(breakout_strength, 2.0), 6)},
+                    "strategy_family": "continuation",
+                    "candidate_type": "directional",
+                    "setup_variant": "opportunity_directional",
+                    "soft_veto_codes": [] if directional_signal is not None else ["weak_directional_signal"],
+                    "penalty_reasons": [] if directional_signal is not None else ["weak_directional_signal"],
+                }
+            )
+        if has_mean_signal:
+            mean_quality = self._clamp_confidence(
+                0.32
+                + min(0.44, mean_reversion_strength * 0.16)
+                + (0.08 if mean_signal is not None else 0.0),
+            ) or 0.4
+            opportunity_specs.append(
+                {
+                    "strategy": "OPP_MEAN_REVERT",
+                    "reason": "NONLIVE_OPPORTUNITY_MEAN_REVERSION",
+                    "direction": mean_direction,
+                    "confidence": max(float(mean_quality), 0.32),
+                    "quality_score": max(float(mean_quality), 0.32),
+                    "quality_detail": {"mean_reversion_strength": round(min(mean_reversion_strength, 2.0), 6)},
+                    "strategy_family": "mean-reversion",
+                    "candidate_type": "mean_reversion",
+                    "setup_variant": "opportunity_mean_reversion",
+                    "soft_veto_codes": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
+                    "penalty_reasons": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
+                }
+            )
+        if has_expansion_signal:
+            expansion_quality = self._clamp_confidence(
+                0.34
+                + min(0.46, volatility_expansion_strength * 0.16)
+                + (0.08 if expansion_signal is not None else 0.0),
+            ) or 0.4
+            opportunity_specs.append(
+                {
+                    "strategy": "OPP_VOL_EXPANSION",
+                    "reason": "NONLIVE_OPPORTUNITY_VOLATILITY_EXPANSION",
+                    "direction": expansion_direction,
+                    "confidence": max(float(expansion_quality), 0.34),
+                    "quality_score": max(float(expansion_quality), 0.34),
+                    "quality_detail": {"volatility_expansion_strength": round(min(volatility_expansion_strength, 2.0), 6)},
+                    "strategy_family": "breakout",
+                    "candidate_type": "volatility_expansion",
+                    "setup_variant": "opportunity_volatility_expansion",
+                    "soft_veto_codes": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
+                    "penalty_reasons": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
+                }
+            )
+        candidates: list[Trade] = []
+        for spec in opportunity_specs:
+            trade = self._build_advisory_opportunity_trade(
+                market_data,
+                ltp=underlying_ltp,
+                vwap=underlying_vwap,
+                direction=spec["direction"],
+                strategy=spec["strategy"],
+                reason=spec["reason"],
+                confidence=float(spec["confidence"]),
+                strategy_family=spec["strategy_family"],
+                candidate_type=spec["candidate_type"],
+                setup_variant=spec["setup_variant"],
+                trigger_reason=trigger_reason,
+                soft_veto_codes=list(spec["soft_veto_codes"]),
+                penalty_reasons=list(spec["penalty_reasons"]),
+                quality_score=float(spec["quality_score"]),
+                quality_detail=dict(spec["quality_detail"]),
+            )
+            if trade is not None:
+                candidates.append(trade)
+        logger.info(
+            "OPPORTUNITY_SET_BUILT %s",
+            {
+                "symbol": str(market_data.get("symbol") or "UNKNOWN"),
+                "trigger_reason": trigger_reason,
+                "nonlive_feature_fallback": bool(nonlive_feature_fallback),
+                "fallback_fields": list(fallback_fields),
+                "breakout_strength": round(float(min(breakout_strength, 5.0)), 6),
+                "mean_reversion_strength": round(float(min(mean_reversion_strength, 5.0)), 6),
+                "volatility_expansion_strength": round(float(min(volatility_expansion_strength, 5.0)), 6),
+                "count": len(candidates),
+                "families": [getattr(candidate, "strategy", None) for candidate in candidates],
+            },
+        )
+        return candidates
+
+    def _rank_nonlive_opportunity_candidates(
+        self,
+        market_data: dict,
+        *,
+        ltp: float,
+        vwap: float,
+        trigger_reason: str,
+        scope_suffix: str,
+    ):
+        candidates = self._build_nonlive_opportunity_candidates(
+            market_data,
+            ltp=ltp,
+            vwap=vwap,
+            trigger_reason=trigger_reason,
+        )
+        if not candidates:
+            return None
+        symbol = str(market_data.get("symbol") or "UNKNOWN")
+        ranked_candidates = annotate_ranked_opportunities(
+            candidates,
+            scope=f"build:{symbol}:{scope_suffix}",
+            top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
+        )
+        if not ranked_candidates:
+            return None
+        self._store_ranked_candidate_snapshots(ranked_candidates)
+        self._scan_total_candidates = max(int(self._scan_total_candidates or 0), len(candidates))
+        self._scan_accepted = int(len(ranked_candidates))
+        logger.info(
+            "OPPORTUNITY_SET_RANKED %s",
+            {
+                "symbol": symbol,
+                "trigger_reason": trigger_reason,
+                "ranked_count": len(ranked_candidates),
+                "top_strategy": getattr(ranked_candidates[0], "strategy", None),
+                "nonlive_feature_fallback": bool(market_data.get("nonlive_feature_fallback")),
+                "fallback_fields": [
+                    str(field)
+                    for field in (market_data.get("nonlive_feature_fallback_fields") or [])
+                    if str(field).strip()
+                ],
+            },
+        )
+        return ranked_candidates[0]
+
+    def _build_planning_no_signal_trade(
+        self,
+        market_data: dict,
+        *,
+        ltp: float,
+        vwap: float,
+    ):
+        if not bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
+            return None
+        underlying_ltp = float(ltp or 0.0)
+        underlying_vwap = float(vwap or underlying_ltp or 0.0)
+        direction = "BUY_CALL" if underlying_ltp >= underlying_vwap else "BUY_PUT"
+        planning_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))
+        return self._build_advisory_opportunity_trade(
+            market_data,
+            ltp=underlying_ltp,
+            vwap=underlying_vwap,
+            direction=direction,
+            strategy="NO_SIGNAL_PLANNING",
+            reason="NO_SIGNAL_PLANNING_FALLBACK",
+            confidence=planning_confidence,
+            strategy_family="continuation",
+            candidate_type="directional",
+            setup_variant="no_signal_planning",
+            trigger_reason="NO_SIGNAL_PLANNING_FALLBACK",
+        )
 
     def _resolve_index_bid_ask(self, market_data: dict, exec_mode: str) -> dict:
         """
@@ -3223,6 +3779,12 @@ class TradeBuilder:
     def _signal_for_symbol(self, market_data, force_family: str | None = None):
         instrument = market_data.get("instrument", "OPT")
         symbol = str(market_data.get("symbol") or "UNKNOWN")
+        exec_mode = str(
+            market_data.get("execution_mode")
+            or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+            or getattr(cfg, "EXECUTION_MODE", "")
+        ).strip().upper()
+        nonlive_feature_fallback = bool(market_data.get("nonlive_feature_fallback"))
         regime_day = self._resolve_regime(market_data)
         day_type = market_data.get("day_type") or "UNKNOWN"
         minutes_since_open = market_data.get("minutes_since_open", 0) or 0
@@ -3253,12 +3815,13 @@ class TradeBuilder:
         if force_family is None and getattr(cfg, "REGIME_ROUTER_ENABLE", True):
             route_family = self._regime_route_family(regime_day)
             if route_family is None:
-                self._reject_ctx = {
-                    "symbol": market_data.get("symbol"),
-                    "reason": "unsupported_regime_route",
-                    "regime": regime_day,
-                }
-                return None
+                if not (nonlive_feature_fallback and exec_mode in {"SIM", "PAPER", "OFFHOURS"}):
+                    self._reject_ctx = {
+                        "symbol": market_data.get("symbol"),
+                        "reason": "unsupported_regime_route",
+                        "regime": regime_day,
+                    }
+                    return None
             force_family = route_family
         if instrument in ("EQ", "FUT"):
             return None
@@ -3704,6 +4267,7 @@ class TradeBuilder:
         self._last_option_scan_summary = {}
         self._option_scan_summary_emitted = True
         planning_mode = bool(market_ctx.planning_only)
+        is_live_mode = bool(market_ctx.mode == "LIVE")
         paper_strict_mode = exec_mode == "PAPER" and bool(getattr(cfg, "PAPER_STRICT_MODE", False))
         planning_relaxed = planning_mode and not paper_strict_mode
         market_data["market_context"] = market_ctx.to_dict()
@@ -4040,10 +4604,10 @@ class TradeBuilder:
                 )
         if not signal:
             fallback_allowed = bool(market_data.get("allow_planning_no_signal_fallback"))
-            if exec_mode in {"SIM", "PAPER", "LIVE"}:
+            if exec_mode == "LIVE":
                 fallback_allowed = False
             reject_reason = "no_signal"
-            if planning_relaxed and bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
+            if fallback_allowed and bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
                 logger.info(
                     "planning_no_signal_fallback_check symbol=%s planning_relaxed=%s allow_planning_no_signal_fallback=%s planning_no_signal_fallback_enable=%s",
                     symbol,
@@ -4051,8 +4615,8 @@ class TradeBuilder:
                     fallback_allowed,
                     bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)),
                 )
-                if not fallback_allowed:
-                    reject_reason = "no_signal_planning_fallback_disabled"
+            elif planning_relaxed and bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)):
+                reject_reason = "no_signal_planning_fallback_disabled"
             self._reject_ctx = {"symbol": symbol, "reason": reject_reason}
             self._log_blocked_candidate(
                 symbol,
@@ -4065,21 +4629,25 @@ class TradeBuilder:
                     "planning_no_signal_fallback_enable": bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)),
                 },
             )
-            if planning_relaxed and fallback_allowed:
-                fallback_trade = self._build_planning_no_signal_trade(
+            if fallback_allowed and exec_mode in {"SIM", "PAPER", "OFFHOURS"}:
+                opportunity_trade = self._rank_nonlive_opportunity_candidates(
                     market_data,
                     ltp=float(ltp or 0.0),
                     vwap=float(vwap or ltp or 0.0),
+                    trigger_reason="no_signal",
+                    scope_suffix="opportunity:no_signal",
                 )
                 logger.info(
-                    "planning_no_signal_fallback_result symbol=%s planning_relaxed=%s allow_planning_no_signal_fallback=%s returned_trade=%s",
+                    "planning_no_signal_opportunity_result symbol=%s planning_relaxed=%s allow_planning_no_signal_fallback=%s returned_trade=%s candidate_count=%s",
                     symbol,
                     bool(planning_relaxed),
                     fallback_allowed,
-                    bool(fallback_trade is not None),
+                    bool(opportunity_trade is not None),
+                    len(list(getattr(self, "_last_ranked_candidates", []) or [])),
                 )
-                if fallback_trade is not None:
-                    return fallback_trade
+                if opportunity_trade is not None:
+                    self._reject_ctx = {}
+                    return opportunity_trade
             if debug_reasons:
                 _log_advisory_debug(
                     "trade_builder_no_signal symbol=%s ltp=%s vwap=%s atr=%s ltp_change=%s ltp_change_window=%s",
@@ -4431,6 +4999,7 @@ class TradeBuilder:
                 execution_blockers,
                 warning_codes,
             )
+            non_live_relaxed_gate_codes: list[str] = []
             require_depth_quotes = bool(getattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", False))
             require_volume = bool(getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False))
             if exec_mode in {"SIM", "PAPER"} and bool(getattr(cfg, "RELAX_VOLUME_REQUIREMENTS_NONLIVE", True)):
@@ -4740,7 +5309,22 @@ class TradeBuilder:
 
             # OI / Greeks filters
             if not quick_mode:
+                iv_debug_val = float(opt.get("iv")) if opt.get("iv") is not None else float("nan")
+                iv_skew_curve_debug_val = (
+                    float(opt.get("iv_skew_curvature"))
+                    if opt.get("iv_skew_curvature") is not None
+                    else float("nan")
+                )
+                logger.debug(
+                    "IV_DEBUG symbol=%s iv=%.3f skew=%.3f bounds=(%.2f,%.2f)",
+                    symbol,
+                    iv_debug_val,
+                    iv_skew_curve_debug_val,
+                    float(getattr(cfg, "MIN_IV", 0.1)),
+                    float(getattr(cfg, "MAX_IV", 0.6)),
+                )
                 if opt.get("oi", 0) and opt.get("oi", 0) < getattr(cfg, "MIN_OI", 1000) and not _relax("low_oi"):
+                    _count_option_reject("low_oi")
                     if debug_reasons:
                         _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=low_oi", symbol, opt.get("strike"), opt_type)
                         rejected.append(self._reject_record(symbol, opt, opt_type, "low_oi", atr=atr))
@@ -4757,97 +5341,120 @@ class TradeBuilder:
                     scale = 1 + iv * getattr(cfg, "OI_DYNAMIC_IV_ALPHA", 2.0) + (atr / ltp) * getattr(cfg, "OI_DYNAMIC_ATR_ALPHA", 1.0)
                     min_oi = int(min_oi * scale)
                     if abs(opt.get("oi_change", 0)) < min_oi and not _relax("oi_change_min"):
+                        _count_option_reject("oi_change_min")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_change_min", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "oi_change_min", atr=atr))
                         continue
                 if opt.get("iv") is not None:
                     if (opt["iv"] < getattr(cfg, "MIN_IV", 0.1) or opt["iv"] > getattr(cfg, "MAX_IV", 0.6)) and not _relax("iv_bounds"):
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_bounds", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "iv_bounds", atr=atr))
-                        continue
+                        if is_live_mode:
+                            _count_option_reject("iv_bounds")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_bounds", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "iv_bounds", atr=atr))
+                            continue
+                        _record_issue("iv_bounds", role=ISSUE_CATEGORY_SOFT)
+                        _append_unique(non_live_relaxed_gate_codes, "iv_bounds")
                 if opt.get("iv_z") is not None:
                     if (opt["iv_z"] < getattr(cfg, "IV_Z_MIN", -1.5) or opt["iv_z"] > getattr(cfg, "IV_Z_MAX", 1.5)) and not _relax("iv_z_bounds"):
+                        _count_option_reject("iv_z_bounds")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_z_bounds", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_z_bounds", atr=atr))
                         continue
                 if opt.get("iv_skew") is not None:
                     if abs(opt["iv_skew"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_max"):
+                        _count_option_reject("iv_skew_max")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_max", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_max", atr=atr))
                         continue
                     if direction == "BUY_CALL" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_BULL_MAX", 0.02) and not _relax("iv_skew_bull"):
+                        _count_option_reject("iv_skew_bull")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_bull", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_bull", atr=atr))
                         continue
                     if direction == "BUY_PUT" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_BEAR_MIN", -0.02) and not _relax("iv_skew_bear"):
+                        _count_option_reject("iv_skew_bear")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_bear", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_bear", atr=atr))
                         continue
                     if opt_type == "CE" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_CALL_MAX", 0.03) and not _relax("iv_skew_call"):
+                        _count_option_reject("iv_skew_call")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_call", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_call", atr=atr))
                         continue
                     if opt_type == "PE" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_PUT_MIN", -0.03) and not _relax("iv_skew_put"):
+                        _count_option_reject("iv_skew_put")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_put", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_put", atr=atr))
                         continue
                 if opt.get("iv_skew_norm") is not None:
                     if abs(opt["iv_skew_norm"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_norm"):
+                        _count_option_reject("iv_skew_norm")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_norm", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_norm", atr=atr))
                         continue
                 if opt.get("iv_skew_curvature") is not None:
                     if abs(opt["iv_skew_curvature"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curvature"):
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curvature", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curvature", atr=atr))
-                        continue
+                        if is_live_mode:
+                            _count_option_reject("iv_skew_curvature")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curvature", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curvature", atr=atr))
+                            continue
+                        _record_issue("iv_skew_curvature", role=ISSUE_CATEGORY_SOFT)
+                        _append_unique(non_live_relaxed_gate_codes, "iv_skew_curvature")
                 if opt_type == "CE" and opt.get("iv_skew_curvature_call") is not None:
                     if abs(opt["iv_skew_curvature_call"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curve_call"):
+                        _count_option_reject("iv_skew_curve_call")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_call", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_call", atr=atr))
                         continue
                 if opt_type == "PE" and opt.get("iv_skew_curvature_put") is not None:
                     if abs(opt["iv_skew_curvature_put"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curve_put"):
+                        _count_option_reject("iv_skew_curve_put")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_put", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_put", atr=atr))
                         continue
                 if opt.get("iv_term") is not None:
                     if (opt["iv_term"] < getattr(cfg, "IV_TERM_MIN", -0.05) or opt["iv_term"] > getattr(cfg, "IV_TERM_MAX", 0.05)) and not _relax("iv_term"):
+                        _count_option_reject("iv_term")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_term", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_term", atr=atr))
                         continue
                 if opt.get("iv_surface_slope") is not None:
                     if abs(opt["iv_surface_slope"]) > getattr(cfg, "IV_SURFACE_SLOPE_MAX", 0.15) and not _relax("iv_surface_slope"):
+                        _count_option_reject("iv_surface_slope")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_surface_slope", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_surface_slope", atr=atr))
                         continue
                 if opt.get("oi_build"):
                     if direction == "BUY_CALL" and opt["oi_build"] not in ("LONG", "SHORT_COVER") and not _relax("oi_build"):
+                        _count_option_reject("oi_build")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
                         continue
                     if direction == "BUY_PUT" and opt["oi_build"] not in ("SHORT", "LONG_LIQ") and not _relax("oi_build"):
+                        _count_option_reject("oi_build")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
                         continue
                 if opt.get("delta") is not None:
                     if (abs(opt["delta"]) < getattr(cfg, "DELTA_MIN", 0.25) or abs(opt["delta"]) > getattr(cfg, "DELTA_MAX", 0.7)) and not _relax("delta"):
+                        _count_option_reject("delta")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=delta", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "delta", atr=atr))
@@ -5221,6 +5828,8 @@ class TradeBuilder:
             )
             if entry_ref_price is None:
                 entry_ref_price = entry_price
+            if entry_condition and _trigger_entry_price is not None:
+                entry_price = float(_trigger_entry_price)
 
             stop_mult = getattr(cfg, "OPT_STOP_ATR_MAIN", 1.0)
             target_mult = getattr(cfg, "OPT_TARGET_ATR_MAIN", 1.8)
@@ -5248,6 +5857,7 @@ class TradeBuilder:
                 entry_price, calc_bid or 0, calc_ask or 0, option_risk, stop_mult=stop_mult, target_mult=target_mult
             )
             if not (target > entry_price > stop_loss):
+                _count_option_reject("invalid_opt_levels")
                 logger.error(
                     "invalid_opt_levels symbol=%s side=%s entry=%s stop=%s target=%s strike=%s right=%s",
                     symbol,
@@ -5316,14 +5926,19 @@ class TradeBuilder:
                     min_score = float(tune.get("trade_score_min", min_score))
             if planning_relaxed:
                 min_score = min(min_score, float(getattr(cfg, "PLANNING_TRADE_SCORE_MIN", 58)))
+            relaxed_trade_score_gate = False
             if score < min_score:
-                _count_option_reject("trade_score")
-                if debug_reasons:
-                    rec = self._reject_record(symbol, opt, opt_type, "trade_score", atr=atr)
-                    rec["trade_score"] = score
-                    rec["min_score"] = min_score
-                    rejected.append(rec)
-                continue
+                if is_live_mode:
+                    _count_option_reject("trade_score")
+                    if debug_reasons:
+                        rec = self._reject_record(symbol, opt, opt_type, "trade_score", atr=atr)
+                        rec["trade_score"] = score
+                        rec["min_score"] = min_score
+                        rejected.append(rec)
+                    continue
+                _record_issue("trade_score", role=ISSUE_CATEGORY_SOFT)
+                _append_unique(non_live_relaxed_gate_codes, "trade_score")
+                relaxed_trade_score_gate = True
 
             confidence_base = float(confidence)
             confidence_penalty_reasons = list(dict.fromkeys(str(code) for code in soft_veto_codes if str(code)))
@@ -5472,6 +6087,10 @@ class TradeBuilder:
                 source_flags["orb_bias"] = market_data.get("orb_bias")
                 source_flags["orb_window_min"] = market_data.get("orb_window_min") or market_data.get("orb_lock_min")
                 source_flags["orb_state"] = market_data.get("orb_state")
+            if non_live_relaxed_gate_codes:
+                source_flags["non_live_relaxed_gate_codes"] = list(
+                    dict.fromkeys(str(code) for code in non_live_relaxed_gate_codes if str(code))
+                )
             if warning_codes:
                 source_flags["warning_codes"] = sorted(set(str(code) for code in warning_codes if str(code)))
             if advisory_flags:
@@ -5527,6 +6146,16 @@ class TradeBuilder:
                 "gates_failed": list(dict.fromkeys(execution_blockers)),
                 "exec_allowed": bool(intent["execution_allowed"]),
             }
+            if non_live_relaxed_gate_codes:
+                decision_trace["non_live_relaxed_gate_codes"] = list(
+                    dict.fromkeys(str(code) for code in non_live_relaxed_gate_codes if str(code))
+                )
+            if relaxed_trade_score_gate:
+                decision_trace["trade_score_gate_relaxed"] = {
+                    "score": float(score),
+                    "min_score": float(min_score),
+                    "mode": str(getattr(market_ctx, "mode", "") or exec_mode).upper(),
+                }
             if "stale_option_quote" in advisory_flags:
                 decision_trace["score_penalties"] = [
                     p
@@ -5690,6 +6319,24 @@ class TradeBuilder:
             "top_rejects": top_rejects,
         }
         self._option_scan_summary_emitted = False
+        if debug_mode and len(candidates) <= 1:
+            logger.info(
+                "TB_REJECT_SUMMARY %s",
+                {
+                    "symbol": symbol,
+                    "total_candidates": int(option_rows_considered),
+                    "survived": int(len(candidates)),
+                    "survived_candidates": int(len(candidates)),
+                    "reject_counts": {
+                        str(code): int(count)
+                        for code, count in sorted(
+                            (self._scan_reject_counts or {}).items(),
+                            key=lambda item: (-int(item[1]), str(item[0])),
+                        )
+                        if str(code)
+                    },
+                },
+            )
         if premium_band_fail_count:
             logger.info(
                 "PREMIUM_BAND_FAIL_SUMMARY symbol=%s premium_band_fail_count=%s samples=%s",
@@ -5720,6 +6367,7 @@ class TradeBuilder:
                         market_data=market_data,
                         extra=summary,
                     )
+                    self._reject_exit(market_data, "no_viable_candidates")
                     reject_reason_ctx = str((self._reject_ctx or {}).get("reason") or "").lower()
                     if not (
                         exec_mode in {"SIM", "PAPER"}
@@ -6071,12 +6719,11 @@ class TradeBuilder:
                 market_data=market_data,
                 extra=_option_reject_summary(),
             )
-            if not (self._reject_ctx or {}).get("reason"):
-                self._reject_exit(market_data, "no_viable_candidates")
+            self._reject_exit(market_data, "no_viable_candidates")
             reject_reason_ctx = str((self._reject_ctx or {}).get("reason") or "").lower()
             if not (
-                exec_mode in {"SIM", "PAPER"}
-                and reject_reason_ctx in {"trend_vwap_fallback", "no_candidates_survived"}
+                exec_mode in {"SIM", "PAPER", "OFFHOURS"}
+                and reject_reason_ctx == "trend_vwap_fallback"
             ):
                 softened = self._soften_reject_to_candidate(
                     market_data=market_data,
@@ -6314,8 +6961,8 @@ class TradeBuilder:
                 exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
                 reject_reason_ctx = str(reject_ctx.get("reason") or "").lower()
                 if not (
-                    exec_mode in {"SIM", "PAPER"}
-                    and reject_reason_ctx in {"trend_vwap_fallback", "no_candidates_survived"}
+                    exec_mode in {"SIM", "PAPER", "OFFHOURS"}
+                    and reject_reason_ctx == "trend_vwap_fallback"
                 ):
                     softened = self._soften_reject_to_candidate(
                         market_data=market_data or {},
@@ -6656,6 +7303,8 @@ class TradeBuilder:
         )
         if entry_ref_price is None:
             entry_ref_price = entry_price
+        if entry_condition and _trigger_entry_price is not None:
+            entry_price = float(_trigger_entry_price)
         option_risk = self._option_risk_proxy(entry_price, bid, ask)
         stop_loss, target = self._opt_risk_levels(
             entry_price,
@@ -7551,6 +8200,8 @@ class TradeBuilder:
             )
             if entry_ref_price is None:
                 entry_ref_price = entry_price
+            if entry_condition and _trigger_entry_price is not None:
+                entry_price = float(_trigger_entry_price)
 
             delta_proxy = d if d else 0.3
             target = entry_price + max(5, tgt_points * delta_proxy)
@@ -8083,6 +8734,8 @@ class TradeBuilder:
             )
             if entry_ref_price is None:
                 entry_ref_price = entry_price
+            if entry_condition and _trigger_entry_price is not None:
+                entry_price = float(_trigger_entry_price)
             option_risk = self._option_risk_proxy(entry_price, opt.get("bid", 0), opt.get("ask", 0))
             stop_loss, target = self._opt_risk_levels(
                 entry_price, opt.get("bid", 0), opt.get("ask", 0), option_risk,

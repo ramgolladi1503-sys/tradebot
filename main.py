@@ -19,13 +19,7 @@ from core.trade_log_paths import ensure_trade_log_exists
 from core.broker_truth_reconciler import BrokerTruthReconciler
 from core.kite_client import kite_client
 from core.observability.pipeline import observability_dir
-
-
-tok = os.getenv("KITE_ACCESS_TOKEN") or ""
-print(
-    f"[ENV] KITE_ACCESS_TOKEN present={bool(tok)} len={len(tok)} "
-    f"tail4={tok[-4:] if len(tok) >= 4 else '----'}"
-)
+from core.auth import validate_kite_startup_credentials
 
 
 def _check_env():
@@ -129,6 +123,25 @@ def _repair_events_log_if_needed() -> None:
         print(f"[EVENTS] integrity check failed: {exc}")
 
 
+def _audit_startup_state(event_name: str, *, message: str, extra: dict | None = None) -> None:
+    payload = {
+        "event": str(event_name),
+        "message": str(message),
+        "exec_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
+        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+    }
+    if extra:
+        payload.update(dict(extra))
+    try:
+        audit_append(dict(payload))
+    except Exception as exc:
+        print(f"[AUDIT_ERROR] {event_name.lower()} err={exc}")
+    try:
+        append_runtime_event(str(event_name).lower(), dict(payload))
+    except Exception as exc:
+        print(f"[EVENTS_ERROR] {event_name.lower()} err={exc}")
+
+
 def main():
     repo_root = Path(__file__).resolve().parent
     print(f"[BOOT] repo_root={repo_root}")
@@ -137,6 +150,21 @@ def main():
 
     _ensure_runtime_dirs(repo_root)
     _repair_events_log_if_needed()
+
+    try:
+        validate_kite_startup_credentials(
+            repo_root_path=repo_root,
+            require_access_token=True,
+            caller_module=__name__,
+        )
+    except RuntimeError as exc:
+        _audit_startup_state(
+            "STARTUP_AUTH_CONFIG_FAIL",
+            message=str(exc),
+            extra={"stage": "startup_auth"},
+        )
+        print(f"[AUTH_CONFIG_ERROR] {exc}")
+        raise SystemExit(2)
 
     lock = None
     if exec_mode in {"LIVE", "PAPER"}:
@@ -163,6 +191,11 @@ def main():
     try:
         ensure_db_ready()
     except RuntimeError as exc:
+        _audit_startup_state(
+            "STARTUP_DB_INIT_FAIL",
+            message=str(exc),
+            extra={"stage": "db_init"},
+        )
         print(f"[DB_INIT_ERROR] {exc}")
         return
 
@@ -170,6 +203,11 @@ def main():
     try:
         enforce_startup_security(repo_root=repo_root, require_token=True)
     except RuntimeError as exc:
+        _audit_startup_state(
+            "STARTUP_SECURITY_FAIL",
+            message=str(exc),
+            extra={"stage": "startup_security"},
+        )
         print(str(exc))
         return
 
@@ -233,6 +271,18 @@ def main():
 
         if not can_trade:
             warnings = readiness.get("warnings") or []
+            blockers = readiness.get("blockers") or readiness.get("reasons") or []
+            _audit_startup_state(
+                "READINESS_CAN_TRADE_FALSE",
+                message="readiness returned can_trade=false",
+                extra={
+                    "stage": "readiness_gate",
+                    "state": state,
+                    "warnings": warnings,
+                    "blockers": blockers,
+                    "market_open": readiness.get("market_open"),
+                },
+            )
             print(f"[Readiness] state={state}; can_trade={can_trade}; warnings={','.join(warnings)}")
 
     orchestrator = Orchestrator(total_capital=getattr(cfg, "CAPITAL", 100000), poll_interval=30)

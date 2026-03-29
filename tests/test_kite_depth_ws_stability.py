@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 import sqlite3
 
 from config import config as cfg
+import core.auth as auth_module
+from core.auth import reset_kite_runtime_credentials_guard
 import core.kite_depth_ws as ws
 import core.tick_store as tick_store
 
@@ -59,6 +61,7 @@ class _DummyRestClient:
 
 
 def _patch_common(monkeypatch):
+    reset_kite_runtime_credentials_guard()
     monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
@@ -79,18 +82,19 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "repo_root", lambda: Path("/tmp"))
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: False)
     monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True})
-    monkeypatch.setattr(ws, "resolve_access_token", lambda **kwargs: "TOKEN123")
     monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: {"status": "AUTH_REQUIRED"})
     monkeypatch.setattr(ws, "clear_auth_required_state", lambda **kwargs: {"status": "OK"})
     monkeypatch.setattr(ws, "invalidate_cache", lambda **kwargs: None)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+    monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: "TOKEN123")
     monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
     rest = _DummyRestClient()
-    monkeypatch.setattr(ws.kite_client, "ensure", lambda: None, raising=False)
-    monkeypatch.setattr(ws.kite_client, "_ensure", lambda: None, raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: rest, raising=False)
     monkeypatch.setattr(ws.kite_client, "kite", rest, raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "api_key_1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "TOKEN123", raising=False)
 
 
 def test_start_depth_ws_uses_resolved_token(monkeypatch):

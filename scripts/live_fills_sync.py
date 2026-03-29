@@ -8,10 +8,16 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
+from core.auth import validate_kite_startup_credentials
 from core.kite_client import kite_client
 from core.trade_store import insert_broker_fill
 
 def sync_once():
+    validate_kite_startup_credentials(
+        repo_root_path=Path(__file__).resolve().parents[1],
+        require_access_token=True,
+        caller_module=__name__,
+    )
     kite_client.ensure()
     if not kite_client.kite:
         print("Kite not initialized.")

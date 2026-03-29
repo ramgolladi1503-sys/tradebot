@@ -36,6 +36,7 @@ from core.time_utils import (
 from core.session_calendar import get_session, minutes_since_open as session_minutes_since_open, is_open
 from core.time_sanity import check_market_data_time_sanity
 from core.day_type_history import append_day_type_event
+from core.auth_manager import is_auth_error
 
 from core.kite_client import kite_client
 
@@ -77,6 +78,7 @@ _CROSS_ASSET = None
 _STARTUP_WARMUP_DONE = False
 _STARTUP_WARMUP_ROWS = []
 _WARMUP_SEED_ATTEMPTS = {}
+_WARMUP_SEED_DETAILS = {}
 logger = logging.getLogger(__name__)
 
 # -------------------------------
@@ -1163,6 +1165,148 @@ def _startup_seed_windows_minutes(interval: str, target_bars: int) -> list[int]:
     return windows
 
 
+def _is_non_live_market_mode(mode: str | None) -> bool:
+    return str(mode or "").strip().upper() in {"SIM", "PAPER", "OFFHOURS"}
+
+
+def _startup_hist_empty_degraded_row(symbol: str) -> dict | None:
+    sym = str(symbol or "").strip().upper()
+    for row in list(_STARTUP_WARMUP_ROWS or []):
+        if str((row or {}).get("symbol") or "").strip().upper() != sym:
+            continue
+        if str((row or {}).get("warmup_degraded_detail") or "").strip().lower() != "hist_empty_nonlive":
+            continue
+        return dict(row or {})
+    return None
+
+
+def _coerce_finite_float(value) -> float | None:
+    try:
+        resolved = float(value)
+    except Exception:
+        return None
+    if not math.isfinite(resolved):
+        return None
+    return float(resolved)
+
+
+def _feature_value_missing(value, *, zero_is_missing: bool = True) -> bool:
+    resolved = _coerce_finite_float(value)
+    if resolved is None:
+        return True
+    if zero_is_missing and abs(float(resolved)) <= 1e-12:
+        return True
+    return False
+
+
+def _clamp_feature_hint(value: float, low: float = -1.0, high: float = 1.0) -> float:
+    return max(float(low), min(float(high), float(value)))
+
+
+def _apply_nonlive_feature_fallback(
+    symbol: str,
+    snapshot: dict,
+    *,
+    market_mode: str,
+    allow_stale_quotes: bool,
+    degraded_reason: str | None = None,
+) -> tuple[dict, list[str]]:
+    row = dict(snapshot or {})
+    if not bool(getattr(cfg, "NONLIVE_FEATURE_FALLBACK_ENABLE", True)):
+        return row, []
+    if not _is_non_live_market_mode(market_mode):
+        return row, []
+    if not bool(allow_stale_quotes):
+        return row, []
+
+    degraded_text = str(degraded_reason or row.get("warmup_reason") or row.get("ohlc_seed_reason") or "").strip().upper()
+    degraded_detail = str(row.get("warmup_degraded_detail") or "").strip().lower()
+    if degraded_text != "HIST_FETCH_FAILED" and degraded_detail != "hist_empty_nonlive":
+        return row, []
+
+    ltp = _coerce_finite_float(row.get("ltp"))
+    if ltp is None or ltp <= 0.0:
+        return row, []
+
+    prev_ltp = _coerce_finite_float(row.get("prev_ltp"))
+    ltp_change = _coerce_finite_float(row.get("ltp_change"))
+    if ltp_change is None and prev_ltp is not None:
+        ltp_change = float(ltp) - float(prev_ltp)
+    ltp_change = float(ltp_change or 0.0)
+
+    atr = _coerce_finite_float(row.get("atr"))
+    base_atr = atr if atr is not None and atr > 0.0 else max(abs(ltp_change), abs(float(ltp)) * float(getattr(cfg, "NONLIVE_FEATURE_FALLBACK_ATR_PCT", 0.001)), 1.0)
+    macro_direction_bias = _coerce_finite_float(row.get("macro_direction_bias")) or 0.0
+    depth_imbalance = _coerce_finite_float(row.get("depth_imbalance")) or 0.0
+    option_chain_skew = _coerce_finite_float(row.get("option_chain_skew")) or 0.0
+    oi_delta = _coerce_finite_float(row.get("oi_delta")) or 0.0
+
+    directional_hint = 0.0
+    if base_atr > 0.0:
+        directional_hint += _clamp_feature_hint(ltp_change / max(base_atr, 1e-6)) * 0.45
+    directional_hint += _clamp_feature_hint(macro_direction_bias) * 0.20
+    directional_hint += _clamp_feature_hint(depth_imbalance) * 0.20
+    directional_hint += _clamp_feature_hint(option_chain_skew / 0.05 if option_chain_skew else 0.0) * 0.10
+    if oi_delta > 0:
+        directional_hint += 0.10
+    elif oi_delta < 0:
+        directional_hint -= 0.10
+    directional_hint = _clamp_feature_hint(directional_hint)
+    hint_abs = abs(float(directional_hint))
+    hint_min = max(0.0, float(getattr(cfg, "NONLIVE_FEATURE_FALLBACK_SIGNAL_HINT_MIN", 0.15) or 0.15))
+    magnitude = max(
+        hint_abs,
+        abs(float(depth_imbalance)),
+        min(1.0, abs(float(option_chain_skew)) / 0.05) if option_chain_skew else 0.0,
+    )
+
+    fallback_fields: list[str] = []
+    if _feature_value_missing(row.get("atr")):
+        row["atr"] = round(float(base_atr), 6)
+        fallback_fields.append("atr")
+
+    current_vwap = _coerce_finite_float(row.get("vwap"))
+    if current_vwap is None or current_vwap <= 0.0 or abs(float(current_vwap) - float(ltp)) <= 1e-9:
+        vwap_value = float(ltp)
+        if hint_abs >= hint_min:
+            vwap_value = float(ltp) - (float(directional_hint) * float(base_atr) * 0.08)
+        row["vwap"] = round(float(vwap_value), 6)
+        fallback_fields.append("vwap")
+
+    if _feature_value_missing(row.get("ltp_change_window")) and hint_abs >= hint_min:
+        row["ltp_change_window"] = round(float(directional_hint) * float(base_atr) * 0.02, 6)
+        fallback_fields.append("ltp_change_window")
+    if _feature_value_missing(row.get("ltp_change_5m")) and hint_abs >= hint_min:
+        row["ltp_change_5m"] = round(float(directional_hint) * float(base_atr) * 0.03, 6)
+        fallback_fields.append("ltp_change_5m")
+    if _feature_value_missing(row.get("ltp_change_10m")) and hint_abs >= hint_min:
+        row["ltp_change_10m"] = round(float(directional_hint) * float(base_atr) * 0.04, 6)
+        fallback_fields.append("ltp_change_10m")
+    if _feature_value_missing(row.get("rsi_mom")) and hint_abs >= hint_min:
+        row["rsi_mom"] = round(float(directional_hint) * 0.20, 6)
+        fallback_fields.append("rsi_mom")
+    if _feature_value_missing(row.get("vol_z")) and magnitude >= hint_min:
+        resolved_window = abs(_coerce_finite_float(row.get("ltp_change_window")) or 0.0)
+        vol_basis = max(
+            float(magnitude) * 0.70,
+            resolved_window / max(float(base_atr) * 0.25, 1e-6),
+        )
+        row["vol_z"] = round(min(float(vol_basis), 2.0), 6)
+        fallback_fields.append("vol_z")
+
+    if fallback_fields:
+        row["nonlive_feature_fallback"] = True
+        row["nonlive_feature_fallback_fields"] = list(dict.fromkeys(str(field) for field in fallback_fields if str(field)))
+        row["nonlive_feature_fallback_reason"] = (
+            "hist_empty_nonlive"
+            if degraded_detail == "hist_empty_nonlive"
+            else str(degraded_text or "hist_fetch_failed").lower()
+        )
+        row["nonlive_feature_fallback_signal_hint"] = round(float(directional_hint), 6)
+        row["nonlive_feature_fallback_strength_basis"] = round(float(magnitude), 6)
+    return row, fallback_fields
+
+
 def _warm_seed_ohlc_from_history(
     symbol: str,
     bars: list,
@@ -1171,6 +1315,8 @@ def _warm_seed_ohlc_from_history(
     interval: str | None = None,
     windows_minutes: list[int] | None = None,
     required_seed_bars: int | None = None,
+    startup_phase: bool = False,
+    market_mode: str | None = None,
 ):
     """
     Warm-seed minute OHLC bars when current buffer is insufficient.
@@ -1179,8 +1325,15 @@ def _warm_seed_ohlc_from_history(
     seed_interval = str(interval or getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute")).strip() or "minute"
     required_bars = int(required_seed_bars if required_seed_bars is not None else min_bars)
     attempts_used = 0
+    hist_empty_attempts = 0
+    normalized_market_mode = str(market_mode or getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
+    max_nonlive_hist_empty_attempts = max(
+        1,
+        int(getattr(cfg, "NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS", 1)),
+    )
     if len(bars) >= required_bars:
         _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+        _WARMUP_SEED_DETAILS.pop(symbol, None)
         return bars, True, None
     reason_code = "HIST_FETCH_FAILED"
     try:
@@ -1190,6 +1343,7 @@ def _warm_seed_ohlc_from_history(
     kite_available = bool(getattr(kite_client, "kite", None))
     if not kite_available:
         _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+        _WARMUP_SEED_DETAILS.pop(symbol, None)
         _log_insufficient_ohlc_warning(
             symbol=symbol,
             bars_count=len(bars),
@@ -1204,6 +1358,7 @@ def _warm_seed_ohlc_from_history(
         token = kite_client.resolve_index_token(symbol)
         if not token:
             _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+            _WARMUP_SEED_DETAILS.pop(symbol, None)
             _log_insufficient_ohlc_warning(
                 symbol=symbol,
                 bars_count=len(bars),
@@ -1236,12 +1391,53 @@ def _warm_seed_ohlc_from_history(
                         _caller="market_data_warm_seed",
                     )
                 except Exception as exc:
+                    if kite_client._is_historical_auth_error(exc) or is_auth_error(exc=exc):
+                        logger.error("FATAL: Kite authentication failed — stopping system")
+                        raise RuntimeError("Kite auth failed") from exc
                     hist = []
                     last_reason = f"historical_error:{type(exc).__name__}"
                 else:
                     if hist:
                         break
                     last_reason = "historical_empty"
+                    hist_empty_attempts += 1
+                    if (
+                        startup_phase
+                        and _is_non_live_market_mode(normalized_market_mode)
+                        and hist_empty_attempts >= max_nonlive_hist_empty_attempts
+                    ):
+                        _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+                        _WARMUP_SEED_DETAILS[symbol] = {
+                            "warmup_degraded_detail": "hist_empty_nonlive",
+                            "warmup_degraded_attempts": int(attempts_used),
+                            "market_mode": normalized_market_mode,
+                            "startup_phase": True,
+                        }
+                        logger.warning(
+                            "warm_bootstrap_degraded reason=hist_empty_nonlive attempts=%s symbol=%s",
+                            attempts_used,
+                            symbol,
+                        )
+                        _log_market_data_event(
+                            "warm_bootstrap_degraded",
+                            {
+                                "reason": "hist_empty_nonlive",
+                                "attempts": int(attempts_used),
+                                "symbol": str(symbol or "").upper(),
+                                "market_mode": normalized_market_mode,
+                                "startup_phase": True,
+                            },
+                        )
+                        _log_insufficient_ohlc_warning(
+                            symbol=symbol,
+                            bars_count=len(bars),
+                            min_bars=min_bars,
+                            reason=reason_code,
+                            detail="hist_empty_nonlive",
+                            interval=seed_interval,
+                            target_bars=required_bars,
+                        )
+                        return bars, False, reason_code
                 if attempt < retry_attempts - 1 and retry_backoff > 0:
                     sleep_sec = min(max_backoff, retry_backoff * (2 ** attempt))
                     time.sleep(sleep_sec)
@@ -1251,10 +1447,12 @@ def _warm_seed_ohlc_from_history(
             bars = ohlc_buffer.get_bars(symbol)
             if len(bars) >= required_bars:
                 _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+                _WARMUP_SEED_DETAILS.pop(symbol, None)
                 return bars, True, None
             last_reason = "seeded_but_still_insufficient"
         if len(bars) < required_bars:
             _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+            _WARMUP_SEED_DETAILS.pop(symbol, None)
             _log_insufficient_ohlc_warning(
                 symbol=symbol,
                 bars_count=len(bars),
@@ -1266,9 +1464,14 @@ def _warm_seed_ohlc_from_history(
             )
             return bars, False, reason_code
         _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+        _WARMUP_SEED_DETAILS.pop(symbol, None)
         return bars, True, None
-    except Exception:
+    except Exception as exc:
+        if str(exc) == "Kite auth failed" or kite_client._is_historical_auth_error(exc) or is_auth_error(exc=exc):
+            logger.error("FATAL: Kite authentication failed — stopping system")
+            raise
         _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
+        _WARMUP_SEED_DETAILS.pop(symbol, None)
         _log_insufficient_ohlc_warning(
             symbol=symbol,
             bars_count=len(bars),
@@ -1316,7 +1519,10 @@ def seed_ohlc_buffers_on_startup(
             interval=seed_interval,
             windows_minutes=startup_windows,
             required_seed_bars=target_bars,
+            startup_phase=True,
+            market_mode=warmup_ctx.mode,
         )
+        warmup_seed_detail = dict(_WARMUP_SEED_DETAILS.get(symbol) or {})
         seeded_count = int(len(bars))
         indicators_ok = False
         last_candle_epoch = None
@@ -1362,6 +1568,8 @@ def seed_ohlc_buffers_on_startup(
             "seed_attempts": int(_WARMUP_SEED_ATTEMPTS.get(symbol, 0)),
             "seeded_ok": bool(seeded_ok),
             "seed_reason": seed_reason,
+            "warmup_degraded_detail": warmup_seed_detail.get("warmup_degraded_detail"),
+            "warmup_degraded_attempts": warmup_seed_detail.get("warmup_degraded_attempts"),
             "last_candle_ts": last_candle_ts,
             "last_candle_ts_epoch": last_candle_epoch,
             "indicators_ok_after_seed": indicators_ok,
@@ -2302,13 +2510,28 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         try:
             bars = ohlc_buffer.get_bars(symbol)
             if len(bars) < min_bars and bool(allow_history_seed):
-                bars, _seeded_ok, ohlc_seed_reason = _warm_seed_ohlc_from_history(
-                    symbol=symbol,
-                    bars=bars,
-                    min_bars=min_bars,
-                    interval=str(getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute") or "minute"),
-                )
-                ohlc_seeded = bool(_seeded_ok)
+                startup_degraded_row = _startup_hist_empty_degraded_row(symbol)
+                if (
+                    startup_degraded_row
+                    and bool(market_ctx.allow_stale_quotes)
+                    and bool(getattr(cfg, "NONLIVE_SKIP_HISTORY_SEED_AFTER_STARTUP_DEGRADE", True))
+                ):
+                    ohlc_seed_reason = "HIST_FETCH_FAILED"
+                    ohlc_seeded = False
+                    logger.warning(
+                        "warm_seed_skip_after_startup_degrade symbol=%s reason=hist_empty_nonlive attempts=%s",
+                        symbol,
+                        startup_degraded_row.get("warmup_degraded_attempts"),
+                    )
+                else:
+                    bars, _seeded_ok, ohlc_seed_reason = _warm_seed_ohlc_from_history(
+                        symbol=symbol,
+                        bars=bars,
+                        min_bars=min_bars,
+                        interval=str(getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute") or "minute"),
+                        market_mode=market_ctx.mode,
+                    )
+                    ohlc_seeded = bool(_seeded_ok)
             elif len(bars) < min_bars:
                 logger.info(
                     "fetch_live_market_data warm_seed_skipped symbol=%s bars=%d min_bars=%d allow_history_seed=%s",
@@ -2761,7 +2984,6 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             depth_age_sec = None
 
         # Regime model (probabilistic)
-        atr_pct = (atr / ltp) if ltp else 0
         try:
             iv_vals = [c.get("iv") for c in option_chain if c.get("iv") is not None]
             iv_mean = sum(iv_vals) / len(iv_vals) if iv_vals else 0
@@ -2791,6 +3013,70 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             depth_imbalance = (bid_qty_sum - ask_qty_sum) / denom
         except Exception:
             depth_imbalance = 0.0
+
+        nonlive_feature_fallback = False
+        nonlive_feature_fallback_fields: list[str] = []
+        nonlive_feature_fallback_reason = None
+        nonlive_feature_fallback_signal_hint = 0.0
+        nonlive_feature_fallback_strength_basis = 0.0
+        fallback_snapshot, fallback_fields = _apply_nonlive_feature_fallback(
+            symbol,
+            {
+                "symbol": symbol,
+                "ltp": ltp,
+                "prev_ltp": prev,
+                "vwap": vwap,
+                "atr": atr,
+                "ltp_change": ltp_change,
+                "ltp_change_window": ltp_change_window,
+                "ltp_change_5m": ltp_change_5m,
+                "ltp_change_10m": ltp_change_10m,
+                "rsi_mom": rsi_mom,
+                "vol_z": vol_z,
+                "macro_direction_bias": shock.get("macro_direction_bias"),
+                "depth_imbalance": depth_imbalance,
+                "option_chain_skew": option_chain_skew,
+                "oi_delta": oi_delta,
+                "warmup_reason": "HIST_FETCH_FAILED" if str(ohlc_seed_reason or "").upper() == "HIST_FETCH_FAILED" else None,
+                "ohlc_seed_reason": ohlc_seed_reason,
+                "warmup_degraded_detail": str((_startup_hist_empty_degraded_row(symbol) or {}).get("warmup_degraded_detail") or ""),
+            },
+            market_mode=market_ctx.mode,
+            allow_stale_quotes=bool(market_ctx.allow_stale_quotes),
+            degraded_reason=("HIST_FETCH_FAILED" if str(ohlc_seed_reason or "").upper() == "HIST_FETCH_FAILED" else None),
+        )
+        if fallback_fields:
+            atr = float(fallback_snapshot.get("atr") or atr or 0.0)
+            vwap = float(fallback_snapshot.get("vwap") or vwap or ltp or 0.0)
+            ltp_change_window = float(fallback_snapshot.get("ltp_change_window") or ltp_change_window or 0.0)
+            ltp_change_5m = float(fallback_snapshot.get("ltp_change_5m") or ltp_change_5m or 0.0)
+            ltp_change_10m = float(fallback_snapshot.get("ltp_change_10m") or ltp_change_10m or 0.0)
+            rsi_mom = float(fallback_snapshot.get("rsi_mom") or rsi_mom or 0.0)
+            vol_z = float(fallback_snapshot.get("vol_z") or vol_z or 0.0)
+            nonlive_feature_fallback = True
+            nonlive_feature_fallback_fields = list(dict.fromkeys(str(field) for field in fallback_fields if str(field)))
+            nonlive_feature_fallback_reason = str(fallback_snapshot.get("nonlive_feature_fallback_reason") or "hist_fetch_failed")
+            nonlive_feature_fallback_signal_hint = float(fallback_snapshot.get("nonlive_feature_fallback_signal_hint") or 0.0)
+            nonlive_feature_fallback_strength_basis = float(fallback_snapshot.get("nonlive_feature_fallback_strength_basis") or 0.0)
+            logger.warning(
+                "nonlive_feature_fallback_applied symbol=%s fields=%s signal_hint=%s",
+                symbol,
+                nonlive_feature_fallback_fields,
+                nonlive_feature_fallback_signal_hint,
+            )
+            _log_market_data_event(
+                "nonlive_feature_fallback_applied",
+                {
+                    "symbol": symbol,
+                    "fields": list(nonlive_feature_fallback_fields),
+                    "market_mode": str(market_ctx.mode),
+                    "reason": nonlive_feature_fallback_reason,
+                    "signal_hint": round(nonlive_feature_fallback_signal_hint, 6),
+                    "strength_basis": round(nonlive_feature_fallback_strength_basis, 6),
+                },
+            )
+
+        atr_pct = (atr / ltp) if ltp else 0
 
         # regime transition rate (per hour)
         try:
@@ -3213,6 +3499,11 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "warmup_min_bars": warmup_min_bars,
             "warmup_bars_by_timeframe": warmup_bars_by_timeframe,
             "warmup_min_bars_by_timeframe": warmup_min_bars_by_timeframe,
+            "nonlive_feature_fallback": bool(nonlive_feature_fallback),
+            "nonlive_feature_fallback_fields": list(nonlive_feature_fallback_fields),
+            "nonlive_feature_fallback_reason": nonlive_feature_fallback_reason,
+            "nonlive_feature_fallback_signal_hint": nonlive_feature_fallback_signal_hint,
+            "nonlive_feature_fallback_strength_basis": nonlive_feature_fallback_strength_basis,
             "time_to_expiry_hrs": time_to_expiry_hrs,
             "orb_bias": orb_bias,
             "orb_lock_min": orb_lock_min,
@@ -3310,6 +3601,11 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "warmup_min_bars": warmup_min_bars,
                 "warmup_bars_by_timeframe": warmup_bars_by_timeframe,
                 "warmup_min_bars_by_timeframe": warmup_min_bars_by_timeframe,
+                "nonlive_feature_fallback": bool(nonlive_feature_fallback),
+                "nonlive_feature_fallback_fields": list(nonlive_feature_fallback_fields),
+                "nonlive_feature_fallback_reason": nonlive_feature_fallback_reason,
+                "nonlive_feature_fallback_signal_hint": nonlive_feature_fallback_signal_hint,
+                "nonlive_feature_fallback_strength_basis": nonlive_feature_fallback_strength_basis,
                 "atr": atr,
                 "vwap_slope": vwap_slope,
                 "rsi_mom": rsi_mom,

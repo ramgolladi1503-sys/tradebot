@@ -17,14 +17,14 @@ class _FakeKite:
 
 def _setup_fake_kite(monkeypatch, counter):
     fake = _FakeKite(counter)
-    monkeypatch.setattr(auth_health.kite_client, "kite", fake)
-    monkeypatch.setattr(auth_health.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(auth_health.kite_client, "kite", None, raising=False)
+    monkeypatch.setattr(auth_health.kite_client, "ensure", lambda: fake)
 
 
 def test_auth_health_cache_and_force(monkeypatch):
     auth_health._reset_cache_for_tests()
     monkeypatch.setattr(cfg, "KITE_API_KEY", "abc123KEY")
-    monkeypatch.setattr(auth_health, "resolve_access_token", lambda **kwargs: "token1234")
+    monkeypatch.setattr(auth_health, "get_kite_credentials", lambda **kwargs: ("abc123KEY", "token1234"))
 
     counter = {"calls": 0}
     _setup_fake_kite(monkeypatch, counter)
@@ -42,7 +42,7 @@ def test_auth_health_cache_and_force(monkeypatch):
 def test_auth_health_whitespace_token(monkeypatch):
     auth_health._reset_cache_for_tests()
     monkeypatch.setattr(cfg, "KITE_API_KEY", "abc123KEY")
-    monkeypatch.setattr(auth_health, "resolve_access_token", lambda **kwargs: "  tok_xx91pk  ")
+    monkeypatch.setattr(auth_health, "get_kite_credentials", lambda **kwargs: ("abc123KEY", "  tok_xx91pk  "))
 
     counter = {"calls": 0}
     _setup_fake_kite(monkeypatch, counter)
@@ -52,10 +52,27 @@ def test_auth_health_whitespace_token(monkeypatch):
     assert payload["access_token_tail4"] == "91pk"
 
 
+def test_auth_health_profile_probe_uses_fresh_client_from_ensure(monkeypatch):
+    auth_health._reset_cache_for_tests()
+
+    class _StaleClient:
+        def profile(self):
+            raise AssertionError("stale cached client should not be used")
+
+    counter = {"calls": 0}
+    fresh = _FakeKite(counter)
+    monkeypatch.setattr(auth_health.kite_client, "kite", _StaleClient(), raising=False)
+    monkeypatch.setattr(auth_health.kite_client, "ensure", lambda: fresh)
+
+    payload = auth_health._kite_profile_payload()
+    assert payload["ok"] is True
+    assert counter["calls"] == 1
+
+
 def test_auth_health_clears_db_write_halt(tmp_path, monkeypatch):
     auth_health._reset_cache_for_tests()
     monkeypatch.setattr(cfg, "KITE_API_KEY", "abc123KEY")
-    monkeypatch.setattr(auth_health, "resolve_access_token", lambda **kwargs: "token1234")
+    monkeypatch.setattr(auth_health, "get_kite_credentials", lambda **kwargs: ("abc123KEY", "token1234"))
 
     halt_path = tmp_path / "risk_halt.json"
     halt_path.write_text('{"halted": true, "reason": "db_write_fail"}')

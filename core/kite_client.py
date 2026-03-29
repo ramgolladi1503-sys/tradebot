@@ -3,18 +3,48 @@ import sys
 import json
 import time
 import logging
+import inspect
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import config as cfg
-from core.auth_manager import access_token_path, resolve_access_token
-from core.paths import data_root
+from core.auth_manager import access_token_path
+from core.auth import build_kite_auth_client, get_kite_client, get_kite_credentials, reset_kite_runtime_credentials_guard
 
 try:
-    from kiteconnect import KiteConnect
+    import kiteconnect as _kiteconnect_module
+    from kiteconnect import KiteConnect as _RAW_KITECONNECT
 except Exception:
-    KiteConnect = None
+    _kiteconnect_module = None
+    _RAW_KITECONNECT = None
+
+
+def _called_via_kite_client() -> bool:
+    frame = inspect.currentframe()
+    if frame is None:
+        return False
+    frame = frame.f_back
+    while frame is not None:
+        mod = frame.f_globals.get("__name__", "")
+        if mod == __name__ and frame.f_code.co_name != "_guarded_kiteconnect":
+            return True
+        frame = frame.f_back
+    return False
+
+
+def _guarded_kiteconnect(*args, **kwargs):
+    if _RAW_KITECONNECT is None:
+        raise RuntimeError("kiteconnect_not_installed")
+    if not _called_via_kite_client():
+        raise RuntimeError("KiteConnect instantiation is forbidden outside core.kite_client")
+    return _RAW_KITECONNECT(*args, **kwargs)
+
+
+if _kiteconnect_module is not None:
+    _kiteconnect_module.KiteConnect = _guarded_kiteconnect
+
+KiteConnect = _guarded_kiteconnect if _RAW_KITECONNECT is not None else None
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +52,9 @@ logger = logging.getLogger(__name__)
 class KiteClient:
     def __init__(self):
         self.kite = None
+        self.last_init_error = ""
+        self._active_api_key = ""
+        self._active_access_token = ""
         self._instruments_cache: Dict[str, Dict[str, Any]] = {}
         self._last_instruments_fetch: Optional[str] = None
         self._historical_auth_cooldown_until = 0.0
@@ -41,29 +74,41 @@ class KiteClient:
     # Kite session
     # ---------------------------
     def _create_kite(self, api_key: str, access_token: str):
-        if KiteConnect is None:
-            raise RuntimeError("kiteconnect_not_installed")
-        kite = KiteConnect(api_key=api_key)
-        kite.set_access_token(access_token)
-        return kite
+        return get_kite_client(api_key=api_key, access_token=access_token)
+
+    def runtime_access_token(self, *, repo_root_path: Path | str | None = None) -> str:
+        _, access_token = get_kite_credentials(repo_root_path=repo_root_path)
+        return access_token
+
+    def _create_kite_for_auth(self, api_key: str):
+        return build_kite_auth_client(api_key=api_key)
 
     def ensure(self):
-        if self.kite is not None:
-            return self.kite
-
-        api_key = (getattr(cfg, "KITE_API_KEY", "") or "").strip()
         api_secret = (getattr(cfg, "KITE_API_SECRET", "") or "").strip()  # may be used elsewhere
 
-        access_token = (os.getenv("KITE_ACCESS_TOKEN") or "").strip()
+        _ = api_secret  # kept for backwards compatibility with local callers
+        try:
+            api_key, access_token = get_kite_credentials()
+        except Exception as exc:
+            self.kite = None
+            self._active_api_key = ""
+            self._active_access_token = ""
+            self.last_init_error = f"{type(exc).__name__}:{exc}"
+            raise
         if not access_token:
-            access_token = resolve_access_token()
-
-        if not api_key:
-            raise RuntimeError("kite_api_key_missing")
-        if not access_token:
+            self.last_init_error = "kite_access_token_missing"
             raise RuntimeError("kite_access_token_missing")
-
-        kite = self._create_kite(api_key=api_key, access_token=access_token)
+        try:
+            # Runtime auth is file-based and ensure() always rebuilds the client so
+            # auth probes, REST reads, and websocket startup cannot drift onto a
+            # stale in-memory token.
+            kite = self._create_kite(api_key=api_key, access_token=access_token)
+        except Exception as exc:
+            self.kite = None
+            self._active_api_key = ""
+            self._active_access_token = ""
+            self.last_init_error = f"{type(exc).__name__}:{exc}"
+            raise
 
         # Single atomic line to avoid glued logs
         self._log_atomic(
@@ -74,6 +119,9 @@ class KiteClient:
         )
 
         self.kite = kite
+        self._active_api_key = api_key
+        self._active_access_token = access_token
+        self.last_init_error = ""
         return self.kite
 
     # ---------------------------
@@ -161,16 +209,6 @@ class KiteClient:
         _exchange: Optional[str] = None,
         _caller: Optional[str] = None,
     ):
-        cooldown_remaining = self._historical_auth_cooldown_remaining()
-        if cooldown_remaining > 0.0:
-            self._log_atomic(
-                "[HIST_SUPPRESSED] "
-                f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
-                f"interval={interval} from={from_date} to={to_date} "
-                f"continuous={continuous} oi={oi} cooldown_remaining_sec={cooldown_remaining:.2f} "
-                f"reason={self._historical_auth_cooldown_reason or 'auth_cooldown'}"
-            )
-            return []
         kite = self.ensure()
         try:
             bars = kite.historical_data(
@@ -191,14 +229,12 @@ class KiteClient:
             return bars
         except Exception as e:
             if self._is_historical_auth_error(e):
-                cooldown_sec = max(1.0, float(getattr(cfg, "KITE_HIST_AUTH_ERROR_COOLDOWN_SEC", 45.0)))
-                self._historical_auth_cooldown_until = float(time.time()) + cooldown_sec
-                self._historical_auth_cooldown_reason = repr(e)
                 self._log_atomic(
-                    "[HIST_AUTH_COOLDOWN] "
+                    "FATAL: Kite authentication failed — stopping system. "
                     f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
-                    f"interval={interval} cooldown_sec={cooldown_sec:.2f} reason={repr(e)}"
+                    f"interval={interval} reason={repr(e)}"
                 )
+                raise RuntimeError("Kite auth failed") from e
             self._log_atomic(
                 "[HIST_ERROR] "
                 f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
@@ -317,13 +353,24 @@ class KiteClient:
     # ---------------------------
     # Auth helpers
     # ---------------------------
-    def generate_session(self, request_token, api_secret):
-        if KiteConnect is None:
+    def login_url(self, api_key: str | None = None) -> str:
+        api_key = (api_key or getattr(cfg, "KITE_API_KEY", "") or "").strip()
+        if not api_key:
+            raise RuntimeError("kite_api_key_missing")
+        kite = self._create_kite_for_auth(api_key=api_key)
+        return kite.login_url()
+
+    def generate_session(self, request_token, api_secret, api_key: str | None = None):
+        if _RAW_KITECONNECT is None:
             raise RuntimeError("kiteconnect_not_installed")
-        api_key = (getattr(cfg, "KITE_API_KEY", "") or "").strip()
-        kite = KiteConnect(api_key=api_key)
+        api_key = (api_key or getattr(cfg, "KITE_API_KEY", "") or "").strip()
+        if not api_key:
+            raise RuntimeError("kite_api_key_missing")
+        kite = self._create_kite_for_auth(api_key=api_key)
         data = kite.generate_session(request_token, api_secret=api_secret)
-        kite.set_access_token(data.get("access_token"))
+        access_token = data.get("access_token")
+        if access_token:
+            kite.set_access_token(access_token)
         return data
 
     def set_access_token(self, token: str):
@@ -337,6 +384,7 @@ class KiteClient:
             p.write_text(token)
         except Exception:
             pass
+        reset_kite_runtime_credentials_guard()
         self.kite = None  # force re-create
 
     # ---------------------------

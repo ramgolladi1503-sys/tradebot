@@ -16,6 +16,7 @@ from sklearn.dummy import DummyClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from config import config as cfg
+from core.events import append_event as append_runtime_event
 from core.feature_contract import FeatureContract
 from core.model_registry import get_active_entry, get_shadow_entry
 from core.runtime_lifecycle import lifecycle
@@ -52,12 +53,35 @@ class TradePredictor:
         self.xgb_available = _XGBClassifier is not None
         self.model_runtime = "xgboost" if self.xgb_available else "dummy"
         self._xgb_warned = False
+        self.execution_mode = str(
+            getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))
+        ).upper()
         shadow = get_shadow_entry("xgb")
         if shadow and shadow.get("path"):
             self.shadow_path = shadow.get("path")
             self.shadow_version = shadow.get("hash")
             self.shadow_governance = shadow.get("governance") or {}
-            if load_existing and os.path.exists(self.shadow_path):
+        non_live_skip_persisted_load = bool(
+            load_existing
+            and self.execution_mode != "LIVE"
+            and bool(getattr(cfg, "NONLIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD", True))
+        )
+        if non_live_skip_persisted_load:
+            self.xgb_available = False
+            self.model_runtime = "dummy"
+            self.models = {"GLOBAL": DummyClassifier(strategy="prior")}
+            self.feature_list = None
+            self.meta = {
+                "degraded_reason": "nonlive_startup_skip_persisted_model_load",
+                "execution_mode": self.execution_mode,
+                "model_path": self.model_path,
+            }
+            self._emit_predictor_degraded_startup(
+                reason="nonlive_startup_skip_persisted_model_load",
+                load_existing=load_existing,
+            )
+        else:
+            if self.shadow_path and load_existing and os.path.exists(self.shadow_path):
                 try:
                     self._load_shadow(self.shadow_path)
                 except Exception as exc:
@@ -65,29 +89,29 @@ class TradePredictor:
                     self.shadow_models = {}
                     self.shadow_feature_list = None
                     self.shadow_meta = {}
-        if load_existing and os.path.exists(self.model_path):
-            try:
-                self.load(self.model_path)
-                print(f"[TradePredictor] Loaded model from {self.model_path}")
-            except Exception as exc:
+            if load_existing and os.path.exists(self.model_path):
+                try:
+                    self.load(self.model_path)
+                    print(f"[TradePredictor] Loaded model from {self.model_path}")
+                except Exception as exc:
+                    self.models = {"GLOBAL": self._new_model()}
+                    self.feature_list = None
+                    self.meta = {"degraded_reason": f"model_load_failed:{type(exc).__name__}:{exc}"}
+                    print(
+                        f"[TradePredictor][DEGRADED] model_load_failed path={self.model_path} "
+                        f"err={type(exc).__name__}:{exc}"
+                    )
+            else:
                 self.models = {"GLOBAL": self._new_model()}
                 self.feature_list = None
-                self.meta = {"degraded_reason": f"model_load_failed:{type(exc).__name__}:{exc}"}
-                print(
-                    f"[TradePredictor][DEGRADED] model_load_failed path={self.model_path} "
-                    f"err={type(exc).__name__}:{exc}"
-                )
-        else:
-            self.models = {"GLOBAL": self._new_model()}
-            self.feature_list = None
-            self.meta = {}
-            if self.xgb_available:
-                print("[TradePredictor] No model found. Initialized new XGBClassifier.")
-            else:
-                print(
-                    "[TradePredictor][DEGRADED] No model found and xgboost runtime unavailable. "
-                    "Initialized DummyClassifier."
-                )
+                self.meta = {}
+                if self.xgb_available:
+                    print("[TradePredictor] No model found. Initialized new XGBClassifier.")
+                else:
+                    print(
+                        "[TradePredictor][DEGRADED] No model found and xgboost runtime unavailable. "
+                        "Initialized DummyClassifier."
+                    )
         self._model_lock = threading.RLock()
         self._online_update_lock = threading.Lock()
         self._online_update_thread = None
@@ -101,6 +125,34 @@ class TradePredictor:
             "last_completed_epoch_ms": None,
         }
         self.feature_contract = self._build_feature_contract()
+
+    def _emit_predictor_degraded_startup(self, *, reason: str, load_existing: bool) -> None:
+        payload = {
+            "event": "predictor_degraded_startup",
+            "reason": str(reason),
+            "execution_mode": str(self.execution_mode or ""),
+            "model_path": str(self.model_path or ""),
+            "model_runtime": str(self.model_runtime or ""),
+            "load_existing": bool(load_existing),
+            "live_mode": bool(str(self.execution_mode or "").upper() == "LIVE"),
+        }
+        logger.warning(
+            "predictor_degraded_startup execution_mode=%s reason=%s model_path=%s model_runtime=%s load_existing=%s",
+            payload["execution_mode"],
+            payload["reason"],
+            payload["model_path"],
+            payload["model_runtime"],
+            payload["load_existing"],
+        )
+        try:
+            append_runtime_event("predictor_degraded_startup", payload)
+        except Exception:
+            pass
+        print(
+            "[TradePredictor][DEGRADED_STARTUP] "
+            f"mode={payload['execution_mode']} reason={payload['reason']} "
+            f"model_path={payload['model_path']} runtime={payload['model_runtime']}"
+        )
 
     def _ensure_runtime_state(self):
         if not hasattr(self, "_model_lock"):

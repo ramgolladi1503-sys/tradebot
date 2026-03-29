@@ -10,7 +10,7 @@ import re
 import sys
 
 from config import config as cfg
-from core.auth_manager import resolve_access_token
+from core.auth import get_kite_credentials, validate_kite_startup_credentials
 from core import risk_halt
 from core.kite_client import kite_client
 from core.auth_health import get_kite_auth_health
@@ -44,7 +44,13 @@ def main() -> int:
     }
 
     try:
-        token = resolve_access_token(repo_root_path=Path(__file__).resolve().parents[1], require_token=True).strip()
+        validate_kite_startup_credentials(
+            repo_root_path=Path(__file__).resolve().parents[1],
+            require_access_token=True,
+            caller_module=__name__,
+        )
+        _, token = get_kite_credentials(repo_root_path=Path(__file__).resolve().parents[1])
+        token = str(token or "").strip()
         payload["details"].update(_masked_stats("access_token", token))
         payload["details"].update(_masked_stats("api_key", str(getattr(cfg, "KITE_API_KEY", ""))))
 

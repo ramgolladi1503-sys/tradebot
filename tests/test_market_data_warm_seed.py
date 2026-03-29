@@ -601,6 +601,226 @@ def test_fetch_market_data_hist_fetch_failed_marks_degraded_state_in_planning(tm
     assert snap["warmup_reasons"] == ["HIST_FETCH_FAILED"]
 
 
+def test_startup_warmup_nonlive_hist_empty_degrades_early(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "NIFTY_STARTUP_HIST_EMPTY"
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 30, raising=False)
+    monkeypatch.setattr(cfg, "SYSTEM_WARMUP_MIN_BARS", 30, raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_INTERVAL", "5minute", raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_TARGET_BARS", 200, raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_FETCH_RETRIES", 3, raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_RETRY_BACKOFF_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_MAX_BACKOFF_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_SYMBOLS", [symbol], raising=False)
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
+    monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
+    monkeypatch.setattr(market_data, "_STARTUP_WARMUP_DONE", False, raising=False)
+    monkeypatch.setattr(market_data, "_STARTUP_WARMUP_ROWS", [], raising=False)
+    market_data._WARMUP_SEED_DETAILS.pop(symbol, None)
+    market_data.ohlc_buffer._bars.pop(symbol, None)
+    calls = {"n": 0}
+
+    def _hist(_token, _from_dt, _to_dt, interval="minute", **kwargs):
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
+
+    rows = market_data.seed_ohlc_buffers_on_startup([symbol])
+    row = rows[0]
+    assert calls["n"] == 1
+    assert row["seed_reason"] == "HIST_FETCH_FAILED"
+    assert row["warmup_reason"] == "HIST_FETCH_FAILED"
+    assert row["warmup_degraded_detail"] == "hist_empty_nonlive"
+    assert row["warmup_degraded_attempts"] == 1
+
+    warning_log = market_data.logs_dir() / "market_data_warnings.jsonl"
+    payloads = [
+        json.loads(line)
+        for line in warning_log.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert any(
+        row.get("event") == "warm_bootstrap_degraded"
+        and row.get("reason") == "hist_empty_nonlive"
+        and row.get("symbol") == symbol
+        for row in payloads
+    )
+
+
+def test_startup_warmup_live_hist_empty_keeps_full_retry_budget(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "NIFTY_STARTUP_HIST_EMPTY_LIVE"
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_FETCH_RETRIES", 2, raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_RETRY_BACKOFF_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "STARTUP_WARMUP_MAX_BACKOFF_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
+    monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
+    market_data._WARMUP_SEED_DETAILS.pop(symbol, None)
+    calls = {"n": 0}
+
+    def _hist(_token, _from_dt, _to_dt, interval="minute", **kwargs):
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
+
+    bars, seeded_ok, reason = market_data._warm_seed_ohlc_from_history(
+        symbol=symbol,
+        bars=[],
+        min_bars=30,
+        windows_minutes=[60, 120],
+        startup_phase=True,
+        market_mode="LIVE",
+    )
+    assert bars == []
+    assert seeded_ok is False
+    assert reason == "HIST_FETCH_FAILED"
+    assert calls["n"] == 4
+    assert market_data._WARMUP_SEED_DETAILS.get(symbol) in (None, {})
+
+
+def test_nonlive_feature_fallback_populates_missing_signal_fields(monkeypatch):
+    monkeypatch.setattr(cfg, "NONLIVE_FEATURE_FALLBACK_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_FEATURE_FALLBACK_ATR_PCT", 0.001, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_FEATURE_FALLBACK_SIGNAL_HINT_MIN", 0.15, raising=False)
+
+    snapshot = {
+        "ltp": 25000.0,
+        "prev_ltp": 24985.0,
+        "vwap": 25000.0,
+        "atr": 0.0,
+        "ltp_change": 15.0,
+        "ltp_change_window": 0.0,
+        "ltp_change_5m": 0.0,
+        "ltp_change_10m": 0.0,
+        "rsi_mom": 0.0,
+        "vol_z": 0.0,
+        "macro_direction_bias": 0.4,
+        "depth_imbalance": 0.35,
+        "option_chain_skew": 0.02,
+        "oi_delta": 1200.0,
+        "warmup_reason": "HIST_FETCH_FAILED",
+        "warmup_degraded_detail": "hist_empty_nonlive",
+    }
+
+    row, fields = market_data._apply_nonlive_feature_fallback(
+        "NIFTY",
+        snapshot,
+        market_mode="SIM",
+        allow_stale_quotes=True,
+        degraded_reason="HIST_FETCH_FAILED",
+    )
+
+    assert row["nonlive_feature_fallback"] is True
+    assert {"atr", "vwap", "ltp_change_window", "rsi_mom", "vol_z"} <= set(fields)
+    assert float(row["atr"]) > 0.0
+    assert float(row["vwap"]) != 25000.0
+    assert float(row["ltp_change_window"]) != 0.0
+    assert float(row["rsi_mom"]) != 0.0
+    assert float(row["vol_z"]) > 0.0
+
+
+def test_nonlive_feature_fallback_live_mode_is_noop(monkeypatch):
+    monkeypatch.setattr(cfg, "NONLIVE_FEATURE_FALLBACK_ENABLE", True, raising=False)
+
+    snapshot = {
+        "ltp": 25000.0,
+        "vwap": 25000.0,
+        "atr": 0.0,
+        "ltp_change": 10.0,
+        "ltp_change_window": 0.0,
+        "rsi_mom": 0.0,
+        "vol_z": 0.0,
+        "warmup_reason": "HIST_FETCH_FAILED",
+        "warmup_degraded_detail": "hist_empty_nonlive",
+    }
+
+    row, fields = market_data._apply_nonlive_feature_fallback(
+        "NIFTY",
+        snapshot,
+        market_mode="LIVE",
+        allow_stale_quotes=False,
+        degraded_reason="HIST_FETCH_FAILED",
+    )
+
+    assert fields == []
+    assert row == snapshot
+
+
+def test_fetch_live_market_data_skips_history_seed_after_nonlive_startup_degrade(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "NIFTY_SKIP_RESEED_AFTER_STARTUP_DEGRADE"
+    fixed_now = market_data.now_ist().replace(second=0, microsecond=0)
+
+    monkeypatch.setattr(cfg, "SYMBOLS", [symbol], raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 30, raising=False)
+    monkeypatch.setattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False, raising=False)
+    monkeypatch.setattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO", raising=False)
+    monkeypatch.setattr(cfg, "FORCE_REGIME", "", raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_SKIP_HISTORY_SEED_AFTER_STARTUP_DEGRADE", True, raising=False)
+
+    market_data._DATA_CACHE.clear()
+    market_data._OPEN_RANGE.clear()
+    market_data._INSUFFICIENT_OHLC_WARNED.clear()
+    market_data.ohlc_buffer._bars.pop(symbol, None)
+    monkeypatch.setattr(market_data, "_STARTUP_WARMUP_DONE", True, raising=False)
+    monkeypatch.setattr(
+        market_data,
+        "_STARTUP_WARMUP_ROWS",
+        [
+            {
+                "symbol": symbol,
+                "warmup_reason": "HIST_FETCH_FAILED",
+                "warmup_degraded_detail": "hist_empty_nonlive",
+                "warmup_degraded_attempts": 1,
+            }
+        ],
+        raising=False,
+    )
+
+    monkeypatch.setattr(market_data, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(market_data, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(market_data, "now_utc_epoch", lambda: fixed_now.timestamp())
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
+    monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
+    hist_calls = {"n": 0}
+
+    def _hist(_token, _from_dt, _to_dt, interval="minute", **kwargs):
+        hist_calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
+
+    def _fake_get_ltp(sym: str):
+        market_data._DATA_CACHE.setdefault(sym, {})
+        market_data._DATA_CACHE[sym]["ltp_source"] = "live"
+        market_data._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_now.timestamp()
+        return 25000.0
+
+    monkeypatch.setattr(market_data, "get_ltp", _fake_get_ltp)
+
+    rows = market_data.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
+    assert hist_calls["n"] == 0
+    assert snap["system_state"] == "DEGRADED"
+    assert snap["warmup_reasons"] == ["HIST_FETCH_FAILED"]
+    assert snap["nonlive_feature_fallback"] is True
+    assert "vwap" in (snap.get("nonlive_feature_fallback_fields") or [])
+
+
 def test_regime_unknown_when_indicator_values_are_nan(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     symbol = "NIFTY_REGIME_NAN"

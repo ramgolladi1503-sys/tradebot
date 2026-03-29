@@ -88,17 +88,10 @@ def _check_token_file_perms() -> CheckResult:
 
 
 def _check_token_conflict() -> CheckResult:
-    env_token = os.getenv("KITE_ACCESS_TOKEN", "").strip()
     file_token = read_local_kite_access_token().strip()
-    if env_token and file_token and env_token != file_token:
-        return CheckResult("kite_token_conflict", False, "env_and_file_tokens_differ")
-    if env_token and file_token and env_token == file_token:
-        return CheckResult("kite_token_conflict", True, "env_and_file_tokens_match")
-    if env_token:
-        return CheckResult("kite_token_conflict", True, "env_token_only")
     if file_token:
         return CheckResult("kite_token_conflict", True, "file_token_only")
-    return CheckResult("kite_token_conflict", False, "no_token_in_env_or_file")
+    return CheckResult("kite_token_conflict", False, "no_token_in_file")
 
 
 def main() -> int:

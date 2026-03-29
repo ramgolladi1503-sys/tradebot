@@ -132,6 +132,44 @@ def test_trade_builder_uses_depth_proxy_and_sets_price_source(monkeypatch):
     assert trade.selection_reason is not None
 
 
+def test_main_option_trade_applies_trigger_entry_when_enabled(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_TRIGGER_MODE", "BREAKOUT", raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_PREMIUM_BUFFER", 2.0, raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_PREMIUM_BUFFER_PCT", 0.0, raising=False)
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+
+    trade = builder.build(_market_data(), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert round(float(trade.entry_ref_price), 2) == 102.00
+    assert round(float(trade.entry_price), 2) == 104.00
+    assert round(float(trade.expected_entry), 2) == 104.00
+    assert trade.entry_condition == "BUY_ABOVE"
+
+
+def test_main_option_trade_keeps_base_entry_when_trigger_disabled(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_TRIGGER_MODE", "ASK", raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_PREMIUM_BUFFER", 2.0, raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_PREMIUM_BUFFER_PCT", 0.0, raising=False)
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+
+    trade = builder.build(_market_data(), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert round(float(trade.entry_ref_price), 2) == 102.00
+    assert round(float(trade.entry_price), 2) == 102.00
+    assert round(float(trade.expected_entry), 2) == 102.00
+    assert trade.entry_condition is None
+
+
 def test_trade_builder_hydrates_option_liquidity_from_cache(monkeypatch):
     clear_option_liquidity_cache()
     try:
@@ -210,6 +248,76 @@ def test_quick_option_entry_price_prefers_ask_over_mark_and_ltp(monkeypatch):
     assert trade.entry_price_source == "ask"
     assert trade.expected_entry_source == "ask"
     assert round(float(trade.signal_price), 2) == 100.99
+
+
+def test_scalp_trade_applies_trigger_entry_when_enabled(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_TRIGGER_MODE", "BREAKOUT", raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_PREMIUM_BUFFER", 2.0, raising=False)
+    monkeypatch.setattr(cfg, "ENTRY_PREMIUM_BUFFER_PCT", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "ML_USE_ONLY_WITH_HISTORY", False, raising=False)
+    monkeypatch.setattr(cfg, "ML_AB_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "SCALP_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "SCALP_MIN_PROBA", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    monkeypatch.setattr(builder, "_apply_lifecycle_gate", lambda *_args, **_kwargs: (True, "ok"), raising=True)
+    monkeypatch.setattr(builder, "_apply_decay_gate", lambda *_args, **_kwargs: (True, None, 1.0, None), raising=True)
+    monkeypatch.setattr(builder, "_validate_ml_features", lambda _feats: (True, "ok"), raising=True)
+    monkeypatch.setattr(
+        builder,
+        "_identity_fields",
+        lambda symbol, instrument, expiry, strike, right, qty_lots: (
+            "OPT",
+            f"{symbol}|{expiry}|{strike}|{right}",
+            10,
+            None,
+        ),
+        raising=True,
+    )
+    monkeypatch.setattr(builder, "_decorate_trade_context", lambda trade, _data, _confidence: trade, raising=True)
+    monkeypatch.setattr(builder.execution, "spread_ok", lambda *_args, **_kwargs: True, raising=False)
+    monkeypatch.setattr(builder.execution, "estimate_slippage", lambda *_args, **_kwargs: 0.0, raising=True)
+
+    market_data = {
+        "symbol": "SENSEX",
+        "market_open": True,
+        "ltp": 82000.0,
+        "atr": 100.0,
+        "vwap": 81990.0,
+        "ltp_change_window": 1.0,
+        "ltp_change_5m": 0.5,
+        "regime": "RANGE",
+        "day_type": "RANGE_DAY",
+        "market_context": {"execution_mode": "PAPER", "market_open": True},
+        "option_chain": [
+            {
+                "type": "CE",
+                "strike": 82000.0,
+                "expiry": "2026-03-05",
+                "tradingsymbol": "SENSEX2630582000CE",
+                "instrument_token": 556677,
+                "ltp": 101.0,
+                "last_price": 101.0,
+                "bid": 100.0,
+                "ask": 102.0,
+                "quote_ok": True,
+                "quote_live": True,
+                "volume": 5000,
+                "oi": 20000,
+                "oi_change": 1000,
+            }
+        ],
+    }
+
+    trade = builder.build_scalp(market_data)
+
+    assert trade is not None
+    assert round(float(trade.entry_ref_price), 2) == 102.00
+    assert round(float(trade.entry_price), 2) == 104.00
+    assert trade.entry_condition == "BUY_ABOVE"
+    assert float(trade.target) > float(trade.entry_price) > float(trade.stop_loss)
 
 
 def test_trade_builder_live_option_sets_canonical_executable_entry(monkeypatch):

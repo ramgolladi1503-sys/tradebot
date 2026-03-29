@@ -8,6 +8,7 @@
 import os
 import json
 import csv
+import logging
 from pathlib import Path
 from core.paths import db_dir as canonical_db_dir, desk_logs_dir as canonical_desk_logs_dir, desks_dir as canonical_desks_dir, ensure_dir as canonical_ensure_dir, trade_db_path as canonical_trade_db_path
 from core.runtime_paths import (
@@ -23,6 +24,9 @@ try:
     load_dotenv()
 except Exception:
     pass
+
+
+logger = logging.getLogger(__name__)
 
 
 def _float_env(name: str, default):
@@ -59,7 +63,7 @@ DASHBOARD_RUNTIME_METRICS_CYCLE_LIMIT = int(os.getenv("DASHBOARD_RUNTIME_METRICS
 # -------------------------------
 KITE_API_KEY = os.getenv("KITE_API_KEY", "")
 KITE_API_SECRET = os.getenv("KITE_API_SECRET", "")
-KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "")
+KITE_ACCESS_TOKEN = ""
 
 # -------------------------------
 # Telegram bot credentials
@@ -862,6 +866,10 @@ PLANNING_SIGNAL_SCORE_CAP = float(os.getenv("PLANNING_SIGNAL_SCORE_CAP", "0.66")
 PLANNING_SIGNAL_SCORE_MIN = float(os.getenv("PLANNING_SIGNAL_SCORE_MIN", "0.5"))
 PLANNING_TRADE_SCORE_MIN = float(os.getenv("PLANNING_TRADE_SCORE_MIN", "58"))
 PLANNING_NO_SIGNAL_FALLBACK_ENABLE = os.getenv("PLANNING_NO_SIGNAL_FALLBACK_ENABLE", "true").lower() == "true"
+NONLIVE_FEATURE_FALLBACK_ENABLE = os.getenv("NONLIVE_FEATURE_FALLBACK_ENABLE", "true").lower() == "true"
+NONLIVE_FEATURE_FALLBACK_ATR_PCT = float(os.getenv("NONLIVE_FEATURE_FALLBACK_ATR_PCT", "0.001"))
+NONLIVE_FEATURE_FALLBACK_SIGNAL_HINT_MIN = float(os.getenv("NONLIVE_FEATURE_FALLBACK_SIGNAL_HINT_MIN", "0.15"))
+NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN = float(os.getenv("NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN", "0.75"))
 ALLOW_AUX_TRADES_LIVE = os.getenv("ALLOW_AUX_TRADES_LIVE", "false").lower() == "true"
 ALLOW_BASELINE_SIGNAL = os.getenv("ALLOW_BASELINE_SIGNAL", "true").lower() == "true"
 RELAX_BLOCK_REASON = os.getenv("RELAX_BLOCK_REASON", "")
@@ -1295,6 +1303,9 @@ SCALP_TARGET_ATR = 0.6
 SCALP_STOP_ATR = 0.3
 SCALP_MAX_HOLD_MINUTES = 3
 ML_MODEL_PATH = "models/xgb_live_model.pkl"
+NONLIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD = (
+    os.getenv("NONLIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD", "true").lower() == "true"
+)
 ML_CHALLENGER_MODEL_PATH = os.getenv("ML_CHALLENGER_MODEL_PATH", "models/xgb_live_model_challenger.pkl")
 ML_ONLINE_UPDATE_ASYNC = os.getenv("ML_ONLINE_UPDATE_ASYNC", "true").lower() == "true"
 ML_ONLINE_UPDATE_MAX_BLOCK_SEC = float(os.getenv("ML_ONLINE_UPDATE_MAX_BLOCK_SEC", "0.2"))
@@ -1744,7 +1755,16 @@ REQUIRE_VOLUME_FOR_TRADE = os.getenv("REQUIRE_VOLUME_FOR_TRADE", "true").lower()
 LIVE_QUOTE_ERROR_TTL_SEC = int(os.getenv("LIVE_QUOTE_ERROR_TTL_SEC", "300"))
 ALLOW_STALE_LTP = os.getenv("ALLOW_STALE_LTP", "true").lower() == "true"
 LTP_CACHE_TTL_SEC = int(os.getenv("LTP_CACHE_TTL_SEC", "300"))
-FORCE_SYNTH_CHAIN_ON_FAIL = os.getenv("FORCE_SYNTH_CHAIN_ON_FAIL", "true").lower() == "true"
+_FORCE_SYNTH_CHAIN_ON_FAIL_RAW = os.getenv("FORCE_SYNTH_CHAIN_ON_FAIL")
+FORCE_SYNTH_CHAIN_ON_FAIL = (
+    (_FORCE_SYNTH_CHAIN_ON_FAIL_RAW if _FORCE_SYNTH_CHAIN_ON_FAIL_RAW is not None else "true").lower() == "true"
+)
+if _FORCE_SYNTH_CHAIN_ON_FAIL_RAW is not None:
+    logger.warning(
+        "CONFIG_DEPRECATED key=FORCE_SYNTH_CHAIN_ON_FAIL value=%s effective_runtime_control=ALLOW_SYNTHETIC_CHAIN allow_synthetic_chain=%s",
+        _FORCE_SYNTH_CHAIN_ON_FAIL_RAW,
+        ALLOW_SYNTHETIC_CHAIN,
+    )
 ALLOW_CLOSE_FALLBACK = os.getenv("ALLOW_CLOSE_FALLBACK", "true").lower() == "true"
 QUEUE_ROW_MAX_AGE_MIN = int(os.getenv("QUEUE_ROW_MAX_AGE_MIN", "120"))
 ENTRY_MISMATCH_PCT = float(os.getenv("ENTRY_MISMATCH_PCT", "0.25"))
@@ -1759,6 +1779,12 @@ STARTUP_WARMUP_TARGET_BARS = int(os.getenv("STARTUP_WARMUP_TARGET_BARS", "200"))
 STARTUP_WARMUP_FETCH_RETRIES = int(os.getenv("STARTUP_WARMUP_FETCH_RETRIES", "3"))
 STARTUP_WARMUP_RETRY_BACKOFF_SEC = float(os.getenv("STARTUP_WARMUP_RETRY_BACKOFF_SEC", "0.4"))
 STARTUP_WARMUP_MAX_BACKOFF_SEC = float(os.getenv("STARTUP_WARMUP_MAX_BACKOFF_SEC", "2.5"))
+NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS = int(
+    os.getenv("NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS", "1")
+)
+NONLIVE_SKIP_HISTORY_SEED_AFTER_STARTUP_DEGRADE = (
+    os.getenv("NONLIVE_SKIP_HISTORY_SEED_AFTER_STARTUP_DEGRADE", "true").lower() == "true"
+)
 STARTUP_WARMUP_LOOKBACK_DAYS = int(os.getenv("STARTUP_WARMUP_LOOKBACK_DAYS", "7"))
 STARTUP_WARMUP_LOOKBACK_MINUTES = int(
     os.getenv("STARTUP_WARMUP_LOOKBACK_MINUTES", str(max(STARTUP_WARMUP_LOOKBACK_DAYS, 1) * 24 * 60))
