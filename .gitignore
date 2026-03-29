@@ -59,3 +59,4 @@ reports/walk_forward/**
 # FORCE ignore from repo root
 /.trading_bot_locks/
 /reports/walk_forward/
+debug.log
