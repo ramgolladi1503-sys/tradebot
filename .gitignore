@@ -60,3 +60,30 @@ reports/walk_forward/**
 /.trading_bot_locks/
 /reports/walk_forward/
 debug.log
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Environments / secrets
+.env
+.venv/
+venv/
+
+# OS junk
+.DS_Store
+
+# Coverage / build
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
