@@ -4,6 +4,7 @@ from core.paths import logs_dir, data_root
 import json
 import logging
 import math
+import os
 import time
 from collections import deque
 from pathlib import Path
@@ -14,6 +15,18 @@ from core.kite_client import kite_client
 
 
 logger = logging.getLogger(__name__)
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _skip_broker_auth_resolution() -> bool:
+    mode = str(
+        getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM"
+    ).strip().upper()
+    dry_run_enabled = bool(getattr(cfg, "DRY_RUN", False) or _env_flag_enabled("DRY_RUN"))
+    return mode in {"SIM", "DRY_RUN"} or dry_run_enabled
 
 
 def _log_error(payload: dict) -> None:
@@ -162,6 +175,25 @@ class CrossAsset:
         if now - self.last_fetch_ts < refresh:
             return self.cache
         self.last_fetch_ts = now
+        if _skip_broker_auth_resolution():
+            self.cache = {
+                "features": self._neutral_features(),
+                "data_quality": {
+                    "any_stale": False,
+                    "stale_feeds": [],
+                    "required_stale": [],
+                    "optional_stale": [],
+                    "age_sec": {},
+                    "last_ts": {},
+                    "disabled": True,
+                    "disabled_reason": "sim_skip_auth",
+                    "missing": {},
+                    "errors": {"error": "sim_skip_auth"},
+                    "disabled_feeds": getattr(cfg, "CROSS_DISABLED_FEEDS", {}) or {},
+                    "feed_status": getattr(cfg, "CROSS_FEED_STATUS", {}) or {},
+                },
+            }
+            return self.cache
 
         symbols_cfg_all = getattr(cfg, "CROSS_ASSET_SYMBOLS", {}) or {}
         disabled_feeds = getattr(cfg, "CROSS_DISABLED_FEEDS", {}) or {}

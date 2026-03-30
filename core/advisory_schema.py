@@ -873,6 +873,10 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
         out["confidence"] = _safe_float(payload.get("global_confidence"))
     out.setdefault("builder_confidence", _safe_float(payload.get("builder_confidence")))
     if out.get("builder_confidence") in (None, "", "None"):
+        out["builder_confidence"] = _safe_float(payload.get("confidence_after_soft_veto"))
+    if out.get("builder_confidence") in (None, "", "None"):
+        out["builder_confidence"] = _safe_float(payload.get("gating_final_confidence"))
+    if out.get("builder_confidence") in (None, "", "None"):
         out["builder_confidence"] = _safe_float(payload.get("confidence_base"))
     if out.get("builder_confidence") in (None, "", "None"):
         out["builder_confidence"] = _safe_float(out.get("confidence"))
@@ -932,7 +936,10 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("selection_reason", _normalize_text(payload.get("selection_reason")))
     out.setdefault("size_multiplier_reason", _normalize_text(payload.get("size_multiplier_reason")))
     out.setdefault("opportunity_size_multiplier", _safe_float(payload.get("opportunity_size_multiplier")))
+    out.setdefault("confidence_raw_canonical", _safe_float(payload.get("confidence_raw_canonical")))
     out.setdefault("confidence_raw", _safe_float(payload.get("confidence_raw")))
+    if out.get("confidence_raw") in (None, "", "None"):
+        out["confidence_raw"] = _safe_float(out.get("confidence_raw_canonical"))
     if out.get("confidence_raw") in (None, "", "None"):
         out["confidence_raw"] = _safe_float(out.get("confidence"))
     out.setdefault("confidence_model_raw", _safe_float(payload.get("confidence_model_raw")))
@@ -944,6 +951,11 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("confidence_after_latency", _safe_float(payload.get("confidence_after_latency")))
     out.setdefault("confidence_before_soft_veto", _safe_float(payload.get("confidence_before_soft_veto")))
     out.setdefault("confidence_after_soft_veto", _safe_float(payload.get("confidence_after_soft_veto")))
+    out.setdefault("confidence_after_time_decay", _safe_float(payload.get("confidence_after_time_decay")))
+    out.setdefault("confidence_time_decay_factor", _safe_float(payload.get("confidence_time_decay_factor")))
+    out.setdefault("confidence_age_seconds", _safe_float(payload.get("confidence_age_seconds")))
+    out.setdefault("confidence_market_velocity", _safe_float(payload.get("confidence_market_velocity")))
+    out.setdefault("confidence_age_factor", _safe_float(payload.get("confidence_age_factor")))
     out.setdefault("confidence_penalty_soft_veto_total", _safe_float(payload.get("confidence_penalty_soft_veto_total")))
     out.setdefault(
         "confidence_penalty_soft_veto_reasons",
@@ -953,6 +965,7 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("confidence_raw_gate_threshold", _safe_float(payload.get("confidence_raw_gate_threshold")))
     out.setdefault("confidence_final_gate_threshold", _safe_float(payload.get("confidence_final_gate_threshold")))
     out.setdefault("confidence_rejection_stage", _normalize_text(payload.get("confidence_rejection_stage")))
+    out.setdefault("confidence_stage_trace", _normalize_mapping(payload.get("confidence_stage_trace")))
     out.setdefault("confidence_penalty", _safe_float(payload.get("confidence_penalty")) or 0.0)
     out.setdefault("confidence_final", _safe_float(payload.get("confidence_final")))
     if out.get("confidence_final") in (None, "", "None"):
@@ -960,6 +973,66 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
     if out.get("gating_final_confidence") not in (None, "", "None"):
         out["confidence_final"] = _safe_float(out.get("gating_final_confidence"))
         out["confidence"] = _safe_float(out.get("gating_final_confidence"))
+    if not out.get("confidence_stage_trace"):
+        out["confidence_stage_trace"] = {
+            "model_raw": _safe_float(out.get("confidence_model_raw")),
+            "after_micro": _safe_float(out.get("confidence_after_micro")),
+            "after_alpha": _safe_float(out.get("confidence_after_alpha")),
+            "after_latency": _safe_float(out.get("confidence_after_latency")),
+            "before_soft_veto": _safe_float(out.get("confidence_before_soft_veto")),
+            "after_soft_veto": _safe_float(out.get("confidence_after_soft_veto")),
+            "after_time_decay": _safe_float(out.get("confidence_after_time_decay")),
+            "time_decay_factor": _safe_float(out.get("confidence_time_decay_factor")),
+            "age_seconds": _safe_float(out.get("confidence_age_seconds")),
+            "market_velocity": _safe_float(out.get("confidence_market_velocity")),
+            "age_factor": _safe_float(out.get("confidence_age_factor")),
+            "raw_gate_threshold": _safe_float(out.get("confidence_raw_gate_threshold")),
+            "final_gate_threshold": _safe_float(out.get("confidence_final_gate_threshold")),
+            "rejected_at": _normalize_text(out.get("confidence_rejection_stage")),
+        }
+    if out.get("confidence_after_time_decay") in (None, "", "None"):
+        out["confidence_after_time_decay"] = (
+            _safe_float(out["confidence_stage_trace"].get("after_time_decay"))
+            if isinstance(out.get("confidence_stage_trace"), dict)
+            else None
+        )
+    if out.get("confidence_after_time_decay") in (None, "", "None"):
+        out["confidence_after_time_decay"] = _safe_float(out.get("confidence_after_soft_veto"))
+    if out.get("confidence_after_time_decay") in (None, "", "None"):
+        out["confidence_after_time_decay"] = _safe_float(out.get("gating_final_confidence"))
+    if out.get("confidence_after_time_decay") in (None, "", "None"):
+        out["confidence_after_time_decay"] = _safe_float(out.get("confidence_final"))
+    if out.get("confidence_time_decay_factor") in (None, "", "None"):
+        out["confidence_time_decay_factor"] = (
+            _safe_float(out["confidence_stage_trace"].get("time_decay_factor"))
+            if isinstance(out.get("confidence_stage_trace"), dict)
+            else None
+        )
+    if out.get("confidence_time_decay_factor") in (None, "", "None"):
+        out["confidence_time_decay_factor"] = 1.0
+    if out.get("confidence_age_seconds") in (None, "", "None"):
+        out["confidence_age_seconds"] = (
+            _safe_float(out["confidence_stage_trace"].get("age_seconds"))
+            if isinstance(out.get("confidence_stage_trace"), dict)
+            else None
+        )
+    if out.get("confidence_market_velocity") in (None, "", "None"):
+        out["confidence_market_velocity"] = (
+            _safe_float(out["confidence_stage_trace"].get("market_velocity"))
+            if isinstance(out.get("confidence_stage_trace"), dict)
+            else None
+        )
+    if out.get("confidence_age_factor") in (None, "", "None"):
+        out["confidence_age_factor"] = (
+            _safe_float(out["confidence_stage_trace"].get("age_factor"))
+            if isinstance(out.get("confidence_stage_trace"), dict)
+            else None
+        )
+    if out.get("confidence_age_factor") in (None, "", "None") and out.get("confidence_age_seconds") not in (None, "", "None"):
+        out["confidence_age_factor"] = float(out.get("confidence_age_seconds") or 0.0) / max(
+            float(out.get("confidence_market_velocity") or 1.0),
+            1e-6,
+        )
     out.setdefault("advisory_visible", bool(payload.get("advisory_visible", True)))
     out.setdefault("is_executable", bool(payload.get("is_executable", False)))
     out.setdefault("entry_source", payload.get("entry_source") or payload.get("entry_price_source") or payload.get("quote_source"))
@@ -1256,7 +1329,9 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     soft_penalties = _normalize_blockers(out.get("soft_penalties"))
     warnings = _normalize_blockers(out.get("warnings"))
     confidence = _safe_float(out.get("confidence"))
+    confidence_raw_canonical = _safe_float(out.get("confidence_raw_canonical"))
     confidence_raw = _safe_float(out.get("confidence_raw"))
+    confidence_stage_trace = _normalize_mapping(out.get("confidence_stage_trace"))
     confidence_model_raw = _safe_float(out.get("confidence_model_raw"))
     confidence_model_component = _safe_float(out.get("confidence_model_component"))
     confidence_micro_component = _safe_float(out.get("confidence_micro_component"))
@@ -1329,6 +1404,8 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         raise AdvisorySchemaError(f"invalid quote_source: {quote_source}")
     if confidence is not None and not (0.0 <= confidence <= 1.0):
         raise AdvisorySchemaError("confidence must be within [0.0, 1.0]")
+    if confidence_raw_canonical is not None and not (0.0 <= confidence_raw_canonical <= 1.0):
+        raise AdvisorySchemaError("confidence_raw_canonical must be within [0.0, 1.0]")
     if confidence_raw is not None and not (0.0 <= confidence_raw <= 1.0):
         raise AdvisorySchemaError("confidence_raw must be within [0.0, 1.0]")
     for field_name, value in (
@@ -1357,6 +1434,27 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     ):
         if value is not None and not (0.0 <= value <= 1.0):
             raise AdvisorySchemaError(f"{field_name} must be within [0.0, 1.0]")
+    if not isinstance(confidence_stage_trace, dict):
+        raise AdvisorySchemaError("confidence_stage_trace must be a mapping")
+    for field_name in (
+        "model_raw",
+        "after_micro",
+        "after_alpha",
+        "after_latency",
+        "before_soft_veto",
+        "after_soft_veto",
+        "after_time_decay",
+        "time_decay_factor",
+        "raw_gate_threshold",
+        "final_gate_threshold",
+    ):
+        value = _safe_float(confidence_stage_trace.get(field_name))
+        if value is not None and not (0.0 <= value <= 1.0):
+            raise AdvisorySchemaError(f"confidence_stage_trace.{field_name} must be within [0.0, 1.0]")
+    for field_name in ("age_seconds", "market_velocity", "age_factor"):
+        value = _safe_float(confidence_stage_trace.get(field_name))
+        if value is not None and value < 0.0:
+            raise AdvisorySchemaError(f"confidence_stage_trace.{field_name} must be non-negative")
     if confidence_penalty is not None and confidence_penalty < 0.0:
         raise AdvisorySchemaError("confidence_penalty must be non-negative")
     if confidence_final is not None and not (0.0 <= confidence_final <= 1.0):
@@ -1518,7 +1616,24 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["selection_reason"] = _normalize_text(out.get("selection_reason"))
     out["size_multiplier_reason"] = _normalize_text(out.get("size_multiplier_reason"))
     out["opportunity_size_multiplier"] = _safe_float(out.get("opportunity_size_multiplier"))
+    out["confidence_raw_canonical"] = confidence_raw_canonical
     out["confidence_raw"] = confidence_raw
+    out["confidence_stage_trace"] = {
+        "model_raw": _safe_float(confidence_stage_trace.get("model_raw")),
+        "after_micro": _safe_float(confidence_stage_trace.get("after_micro")),
+        "after_alpha": _safe_float(confidence_stage_trace.get("after_alpha")),
+        "after_latency": _safe_float(confidence_stage_trace.get("after_latency")),
+        "before_soft_veto": _safe_float(confidence_stage_trace.get("before_soft_veto")),
+        "after_soft_veto": _safe_float(confidence_stage_trace.get("after_soft_veto")),
+        "after_time_decay": _safe_float(confidence_stage_trace.get("after_time_decay")),
+        "time_decay_factor": _safe_float(confidence_stage_trace.get("time_decay_factor")),
+        "age_seconds": _safe_float(confidence_stage_trace.get("age_seconds")),
+        "market_velocity": _safe_float(confidence_stage_trace.get("market_velocity")),
+        "age_factor": _safe_float(confidence_stage_trace.get("age_factor")),
+        "raw_gate_threshold": _safe_float(confidence_stage_trace.get("raw_gate_threshold")),
+        "final_gate_threshold": _safe_float(confidence_stage_trace.get("final_gate_threshold")),
+        "rejected_at": _normalize_text(confidence_stage_trace.get("rejected_at")),
+    }
     out["confidence_model_raw"] = confidence_model_raw
     out["confidence_model_component"] = confidence_model_component
     out["confidence_micro_component"] = confidence_micro_component
@@ -1528,6 +1643,44 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
     out["confidence_after_latency"] = confidence_after_latency
     out["confidence_before_soft_veto"] = confidence_before_soft_veto
     out["confidence_after_soft_veto"] = confidence_after_soft_veto
+    out["confidence_after_time_decay"] = (
+        _safe_float(out.get("confidence_after_time_decay"))
+        if out.get("confidence_after_time_decay") not in (None, "", "None")
+        else _safe_float(confidence_stage_trace.get("after_time_decay"))
+    )
+    if out["confidence_after_time_decay"] is None:
+        out["confidence_after_time_decay"] = confidence_after_soft_veto
+    if out["confidence_after_time_decay"] is None:
+        out["confidence_after_time_decay"] = _safe_float(out.get("gating_final_confidence"))
+    if out["confidence_after_time_decay"] is None:
+        out["confidence_after_time_decay"] = confidence_final
+    out["confidence_time_decay_factor"] = (
+        _safe_float(out.get("confidence_time_decay_factor"))
+        if out.get("confidence_time_decay_factor") not in (None, "", "None")
+        else _safe_float(confidence_stage_trace.get("time_decay_factor"))
+    )
+    if out["confidence_time_decay_factor"] is None:
+        out["confidence_time_decay_factor"] = 1.0
+    out["confidence_age_seconds"] = (
+        _safe_float(out.get("confidence_age_seconds"))
+        if out.get("confidence_age_seconds") not in (None, "", "None")
+        else _safe_float(confidence_stage_trace.get("age_seconds"))
+    )
+    out["confidence_market_velocity"] = (
+        _safe_float(out.get("confidence_market_velocity"))
+        if out.get("confidence_market_velocity") not in (None, "", "None")
+        else _safe_float(confidence_stage_trace.get("market_velocity"))
+    )
+    out["confidence_age_factor"] = (
+        _safe_float(out.get("confidence_age_factor"))
+        if out.get("confidence_age_factor") not in (None, "", "None")
+        else _safe_float(confidence_stage_trace.get("age_factor"))
+    )
+    if out["confidence_age_factor"] is None and out["confidence_age_seconds"] is not None:
+        out["confidence_age_factor"] = float(out["confidence_age_seconds"]) / max(
+            float(out["confidence_market_velocity"] or 1.0),
+            1e-6,
+        )
     out["confidence_penalty_soft_veto_total"] = confidence_penalty_soft_veto_total
     out["confidence_penalty_soft_veto_reasons"] = confidence_penalty_soft_veto_reasons
     out["confidence_gate_threshold"] = confidence_gate_threshold

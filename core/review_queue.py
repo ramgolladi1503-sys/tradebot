@@ -950,8 +950,12 @@ def _apply_candidate_scoring(
 
     confidence_raw = _safe_float(scored.get("confidence_raw"))
     confidence_final = _safe_float(scored.get("confidence_final"))
-    if _should_backfill_candidate_score(out.get("builder_confidence")) and confidence_raw is not None:
-        out["builder_confidence"] = confidence_raw
+    if _should_backfill_candidate_score(out.get("builder_confidence")):
+        out["builder_confidence"] = (
+            _safe_float(scored.get("confidence_after_soft_veto"))
+            or confidence_final
+            or confidence_raw
+        )
     if _should_backfill_candidate_score(out.get("confidence_base")) and confidence_raw is not None:
         out["confidence_base"] = confidence_raw
     if _should_backfill_candidate_score(out.get("gating_base_confidence")) and confidence_raw is not None:
@@ -3854,18 +3858,21 @@ def _apply_issue_classification(
         confidence_raw = _safe_float(entry.get("confidence"))
     if confidence_raw is None:
         confidence_raw = _safe_float(entry.get("raw_signal_confidence"))
+    confidence_raw_canonical = _safe_float(entry.get("confidence_raw_canonical"))
+    if confidence_raw_canonical is None:
+        confidence_raw_canonical = confidence_raw
     existing_confidence_penalty = _safe_float(entry.get("confidence_penalty_total"))
     if existing_confidence_penalty is None:
         existing_confidence_penalty = _safe_float(entry.get("confidence_penalty"))
-    if existing_confidence_penalty is None and confidence_raw is not None:
+    if existing_confidence_penalty is None and confidence_raw_canonical is not None:
         softened_confidence = _safe_float(entry.get("confidence_final"))
         if softened_confidence is not None:
-            existing_confidence_penalty = max(0.0, float(confidence_raw) - float(softened_confidence))
+            existing_confidence_penalty = max(0.0, float(confidence_raw_canonical) - float(softened_confidence))
     if existing_confidence_penalty is None:
         existing_confidence_penalty = 0.0
     confidence_before_soft_veto = _safe_float(entry.get("confidence_before_soft_veto"))
     if confidence_before_soft_veto is None:
-        confidence_before_soft_veto = confidence_raw
+        confidence_before_soft_veto = confidence_raw_canonical
     confidence_after_soft_veto = _safe_float(entry.get("confidence_after_soft_veto"))
     if confidence_after_soft_veto is None and confidence_before_soft_veto is not None:
         confidence_after_soft_veto = max(
@@ -4023,9 +4030,9 @@ def _apply_issue_classification(
         0.0,
         float(existing_confidence_penalty) + float(issue_penalty) + float(relaxed_gate_penalty_total),
     )
-    confidence_final = confidence_raw
+    confidence_final = confidence_raw_canonical
     if confidence_final is not None:
-        confidence_final = max(0.0, min(1.0, float(confidence_raw) - float(confidence_penalty_total)))
+        confidence_final = max(0.0, min(1.0, float(confidence_raw_canonical) - float(confidence_penalty_total)))
     blockers = _dedupe_issue_codes(hard_blockers + soft_penalties + warnings)
     entry["hard_blockers"] = hard_blockers
     entry["soft_penalties"] = soft_penalties
@@ -4033,10 +4040,17 @@ def _apply_issue_classification(
     entry["blockers"] = blockers
     entry["builder_confidence"] = _safe_float(entry.get("builder_confidence"))
     if entry["builder_confidence"] is None:
-        entry["builder_confidence"] = confidence_raw
-    entry["confidence_base"] = confidence_raw
-    entry["gating_base_confidence"] = confidence_raw
-    entry["confidence_raw"] = confidence_raw
+        entry["builder_confidence"] = (
+            confidence_after_soft_veto
+            if confidence_after_soft_veto is not None
+            else _safe_float(entry.get("gating_final_confidence"))
+        )
+    if entry["builder_confidence"] is None:
+        entry["builder_confidence"] = confidence_raw_canonical
+    entry["confidence_base"] = confidence_raw_canonical
+    entry["gating_base_confidence"] = confidence_raw_canonical
+    entry["confidence_raw"] = confidence_raw_canonical
+    entry["confidence_raw_canonical"] = confidence_raw_canonical
     entry["confidence_penalty"] = round(float(confidence_penalty_total), 6)
     entry["confidence_penalty_total"] = round(float(confidence_penalty_total), 6)
     entry["confidence_penalty_reasons"] = confidence_penalty_reasons
@@ -4055,6 +4069,79 @@ def _apply_issue_classification(
     entry["issue_classifications"] = issue_classifications
     entry["confidence_before_soft_veto"] = confidence_before_soft_veto
     entry["confidence_after_soft_veto"] = confidence_after_soft_veto
+    existing_stage_trace = entry.get("confidence_stage_trace") if isinstance(entry.get("confidence_stage_trace"), dict) else {}
+    confidence_after_time_decay = _safe_float(entry.get("confidence_after_time_decay"))
+    if confidence_after_time_decay is None:
+        confidence_after_time_decay = _safe_float(existing_stage_trace.get("after_time_decay"))
+    if confidence_after_time_decay is None:
+        confidence_after_time_decay = (
+            confidence_after_soft_veto
+            if confidence_after_soft_veto is not None
+            else _safe_float(entry.get("gating_final_confidence"))
+        )
+    if confidence_after_time_decay is None:
+        confidence_after_time_decay = confidence_final
+    confidence_time_decay_factor = _safe_float(entry.get("confidence_time_decay_factor"))
+    if confidence_time_decay_factor is None:
+        confidence_time_decay_factor = _safe_float(existing_stage_trace.get("time_decay_factor"))
+    if confidence_time_decay_factor is None:
+        confidence_time_decay_factor = 1.0
+    confidence_age_seconds = _safe_float(entry.get("confidence_age_seconds"))
+    if confidence_age_seconds is None:
+        confidence_age_seconds = _safe_float(existing_stage_trace.get("age_seconds"))
+    if confidence_age_seconds is None:
+        confidence_age_seconds = _canonical_quote_age_sec(entry)
+    confidence_market_velocity = _safe_float(entry.get("confidence_market_velocity"))
+    if confidence_market_velocity is None:
+        confidence_market_velocity = _safe_float(existing_stage_trace.get("market_velocity"))
+    confidence_age_factor = _safe_float(entry.get("confidence_age_factor"))
+    if confidence_age_factor is None:
+        confidence_age_factor = _safe_float(existing_stage_trace.get("age_factor"))
+    if confidence_age_factor is None and confidence_age_seconds is not None:
+        confidence_age_factor = float(confidence_age_seconds) / max(float(confidence_market_velocity or 1.0), 1e-6)
+    entry["confidence_after_time_decay"] = confidence_after_time_decay
+    entry["confidence_time_decay_factor"] = confidence_time_decay_factor
+    entry["confidence_age_seconds"] = confidence_age_seconds
+    entry["confidence_market_velocity"] = confidence_market_velocity
+    entry["confidence_age_factor"] = confidence_age_factor
+    entry["confidence_stage_trace"] = {
+        "model_raw": _safe_float(existing_stage_trace.get("model_raw"))
+        if existing_stage_trace
+        else _safe_float(entry.get("confidence_model_raw")),
+        "after_micro": _safe_float(existing_stage_trace.get("after_micro"))
+        if existing_stage_trace
+        else _safe_float(entry.get("confidence_after_micro")),
+        "after_alpha": _safe_float(existing_stage_trace.get("after_alpha"))
+        if existing_stage_trace
+        else _safe_float(entry.get("confidence_after_alpha")),
+        "after_latency": _safe_float(existing_stage_trace.get("after_latency"))
+        if existing_stage_trace
+        else _safe_float(entry.get("confidence_after_latency")),
+        "before_soft_veto": _safe_float(existing_stage_trace.get("before_soft_veto"))
+        if existing_stage_trace
+        else confidence_before_soft_veto,
+        "after_soft_veto": _safe_float(existing_stage_trace.get("after_soft_veto"))
+        if existing_stage_trace
+        else confidence_after_soft_veto,
+        "after_time_decay": confidence_after_time_decay,
+        "time_decay_factor": confidence_time_decay_factor,
+        "age_seconds": confidence_age_seconds,
+        "market_velocity": confidence_market_velocity,
+        "age_factor": confidence_age_factor,
+        "raw_gate_threshold": _safe_float(existing_stage_trace.get("raw_gate_threshold"))
+        if existing_stage_trace
+        else _safe_float(entry.get("confidence_raw_gate_threshold")),
+        "final_gate_threshold": _safe_float(existing_stage_trace.get("final_gate_threshold"))
+        if existing_stage_trace
+        else _safe_float(entry.get("confidence_final_gate_threshold")),
+        "rejected_at": (
+            str(existing_stage_trace.get("rejected_at")).strip() or None
+            if existing_stage_trace.get("rejected_at") is not None
+            else _normalize_text(entry.get("confidence_rejection_stage"))
+        )
+        if existing_stage_trace
+        else _normalize_text(entry.get("confidence_rejection_stage")),
+    }
     entry["confidence_penalty_soft_veto_total"] = round(float(confidence_penalty_soft_veto_total), 6)
     entry["confidence_penalty_soft_veto_reasons"] = confidence_penalty_soft_veto_reasons
     entry = _synchronize_final_confidence(entry)
@@ -5237,7 +5324,11 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "ltp_at_activation": _trade_attr(trade, "ltp_at_activation"),
         "qty": _trade_attr(trade, "qty"),
         "confidence": _trade_attr(trade, "confidence"),
-        "builder_confidence": _trade_attr(trade, "builder_confidence", _trade_attr(trade, "confidence")),
+        "builder_confidence": _trade_attr(
+            trade,
+            "builder_confidence",
+            _trade_attr(trade, "confidence_after_soft_veto", _trade_attr(trade, "confidence")),
+        ),
         "permission_confidence": _trade_attr(trade, "permission_confidence", None),
         "gating_base_confidence": _trade_attr(trade, "gating_base_confidence", None),
         "gating_final_confidence": _trade_attr(trade, "gating_final_confidence", None),
@@ -5366,7 +5457,10 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "final_action": _trade_attr(trade, "final_action", None),
         "execution_status": _trade_attr(trade, "execution_status", None),
         "countertrend": _trade_attr(trade, "countertrend", None),
+        "source_flags": _trade_attr(trade, "source_flags", None),
         "raw_signal_confidence": _trade_attr(trade, "raw_signal_confidence", None),
+        "confidence_raw_canonical": _trade_attr(trade, "confidence_raw_canonical", None),
+        "confidence_stage_trace": _trade_attr(trade, "confidence_stage_trace", None),
         "confidence_model_raw": _trade_attr(trade, "confidence_model_raw", None),
         "confidence_model_component": _trade_attr(trade, "confidence_model_component", None),
         "confidence_micro_component": _trade_attr(trade, "confidence_micro_component", None),
@@ -5376,6 +5470,11 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "confidence_after_latency": _trade_attr(trade, "confidence_after_latency", None),
         "confidence_before_soft_veto": _trade_attr(trade, "confidence_before_soft_veto", None),
         "confidence_after_soft_veto": _trade_attr(trade, "confidence_after_soft_veto", None),
+        "confidence_after_time_decay": _trade_attr(trade, "confidence_after_time_decay", None),
+        "confidence_time_decay_factor": _trade_attr(trade, "confidence_time_decay_factor", None),
+        "confidence_age_seconds": _trade_attr(trade, "confidence_age_seconds", None),
+        "confidence_market_velocity": _trade_attr(trade, "confidence_market_velocity", None),
+        "confidence_age_factor": _trade_attr(trade, "confidence_age_factor", None),
         "confidence_penalty_soft_veto_total": _trade_attr(trade, "confidence_penalty_soft_veto_total", None),
         "confidence_penalty_soft_veto_reasons": _trade_attr(trade, "confidence_penalty_soft_veto_reasons", None),
         "confidence_gate_threshold": _trade_attr(trade, "confidence_gate_threshold", None),

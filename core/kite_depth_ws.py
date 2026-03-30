@@ -76,6 +76,7 @@ _INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "SENSEX"}
 _AUTH_REQUIRED_LATCH = False
 _AUTH_REQUIRED_LOGGED = False
 _LAST_FEED_TICK_LOG_MINUTE: int | None = None
+_LAST_FEED_HEALTH_STATE: str | None = None
 _RUNTIME_STATE: str = "STOPPED"
 _LAST_RUNTIME_ERROR: str = ""
 _INTENDED_TOKEN_COUNT: int = 0
@@ -248,6 +249,76 @@ def _freshness_epoch_for_tick(token: int | None, payload_epoch: float | None, re
     return float(payload_epoch if payload_epoch is not None else receipt_epoch)
 
 
+def _normalized_tick_epoch(
+    token: int | None,
+    *,
+    payload_epoch: float | None,
+    receipt_epoch: float,
+) -> float:
+    epoch = _freshness_epoch_for_tick(token, payload_epoch, receipt_epoch)
+    previous_epoch = None
+    if token is not None:
+        previous_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
+    if previous_epoch is None and _LAST_WS_TICK_EPOCH > 0:
+        previous_epoch = float(_LAST_WS_TICK_EPOCH)
+    try:
+        max_payload_lag_sec = float(getattr(cfg, "FEED_TICK_MAX_PAYLOAD_LAG_SEC", 2.0))
+    except Exception:
+        max_payload_lag_sec = 2.0
+    try:
+        market_open_now = bool(is_market_open_ist())
+    except Exception:
+        market_open_now = False
+    try:
+        if payload_epoch is None:
+            epoch = float(receipt_epoch)
+        elif (
+            market_open_now
+            and previous_epoch is not None
+            and (float(receipt_epoch) - float(epoch)) > max_payload_lag_sec
+        ):
+            epoch = float(receipt_epoch)
+    except Exception:
+        epoch = float(receipt_epoch)
+    if previous_epoch is not None:
+        epoch = max(float(epoch), float(previous_epoch))
+    return float(epoch)
+
+
+def _emit_feed_health(event: str, payload: dict | None = None) -> None:
+    global _LAST_FEED_HEALTH_STATE
+    state = str(event or "").strip().upper()
+    if not state:
+        return
+    if _LAST_FEED_HEALTH_STATE == state:
+        return
+    _LAST_FEED_HEALTH_STATE = state
+    _log_ws(state, dict(payload or {}))
+
+
+def _reset_stale_on_fresh_ws_tick(*, now_epoch: float, tick_epoch: float, reason: str) -> None:
+    global _STALE_STRIKES
+    try:
+        recover_sec = float(getattr(cfg, "FEED_TICK_RECOVER_SEC", 2.0))
+    except Exception:
+        recover_sec = 2.0
+    tick_age_sec = max(0.0, float(now_epoch) - float(tick_epoch))
+    if tick_age_sec > recover_sec:
+        return
+    strikes_before = int(_STALE_STRIKES)
+    _STALE_STRIKES = 0
+    _emit_feed_health(
+        "FEED_HEALTH_OK",
+        {
+            "reason": str(reason or "fresh_tick"),
+            "tick_age_sec": tick_age_sec,
+            "last_ws_tick_epoch": float(tick_epoch),
+            "stale_strikes_before": strikes_before,
+            "stale_strikes_after": 0,
+        },
+    )
+
+
 def _best_price(levels):
     try:
         if not levels:
@@ -288,7 +359,16 @@ def _update_symbol_freshness(
         _SYMBOL_LAST_OPTION_TICK_TS[opt_sym] = float(tick_epoch)
 
 
-def _update_index_quote_cache(symbol: str, bid, ask, mid, ts_epoch: float, last_price):
+def _update_index_quote_cache(
+    symbol: str,
+    bid,
+    ask,
+    mid,
+    ts_epoch: float,
+    last_price,
+    *,
+    volume=None,
+):
     try:
         from core.market_data import update_index_quote_snapshot
 
@@ -299,7 +379,10 @@ def _update_index_quote_cache(symbol: str, bid, ask, mid, ts_epoch: float, last_
             mid=mid,
             ts_epoch=ts_epoch,
             source="ws",
+            book_source="depth",
             ltp=last_price,
+            volume=volume,
+            last_price_source="ws_tick",
         )
     except Exception as exc:
         _log_ws("FEED_INDEX_CACHE_ERROR", {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"})
@@ -844,12 +927,49 @@ def _run_db_tick_watchdog_cycle(
     db_tick_age_sec = None
     if db_tick_epoch is not None:
         db_tick_age_sec = max(0.0, float(now_epoch) - float(db_tick_epoch))
+    ws_tick_epoch = _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None
+    ws_tick_age_sec = None
+    if ws_tick_epoch is not None:
+        ws_tick_age_sec = max(0.0, float(now_epoch) - float(ws_tick_epoch))
     restarted = False
     if not market_open:
         _STALE_STRIKES = 0
+    elif ws_tick_age_sec is not None and ws_tick_age_sec <= float(reset_sec):
+        if _STALE_STRIKES:
+            _log_ws(
+                "FEED_TICK_RECOVERED",
+                {
+                    "age_sec": ws_tick_age_sec,
+                    "source": "ws",
+                    "strikes": _STALE_STRIKES,
+                },
+            )
+        _STALE_STRIKES = 0
+        _emit_feed_health(
+            "FEED_HEALTH_OK",
+            {
+                "reason": "ws_ticks_flowing",
+                "last_ws_tick_epoch": ws_tick_epoch,
+                "last_ws_tick_age_sec": ws_tick_age_sec,
+                "last_db_tick_epoch": db_tick_epoch,
+                "last_db_tick_age_sec": db_tick_age_sec,
+                "stale_strikes": 0,
+            },
+        )
     elif db_tick_age_sec is not None and db_tick_age_sec > float(stale_restart_sec):
         _STALE_STRIKES += 1
-        _log_ws("FEED_TICK_STALE", {"age_sec": db_tick_age_sec, "strikes": _STALE_STRIKES})
+        _log_ws("FEED_TICK_STALE", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
+        _emit_feed_health(
+            "FEED_STALE",
+            {
+                "reason": "db_tick_stale",
+                "last_ws_tick_epoch": ws_tick_epoch,
+                "last_ws_tick_age_sec": ws_tick_age_sec,
+                "last_db_tick_epoch": db_tick_epoch,
+                "last_db_tick_age_sec": db_tick_age_sec,
+                "stale_strikes": int(_STALE_STRIKES),
+            },
+        )
         if _STALE_STRIKES >= max(1, int(strikes_to_restart)):
             cb = restart_cb or restart_depth_ws
             try:
@@ -858,12 +978,25 @@ def _run_db_tick_watchdog_cycle(
                 restarted = bool(cb("tick_stalled"))
     elif db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec):
         if _STALE_STRIKES:
-            _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "strikes": _STALE_STRIKES})
+            _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
         _STALE_STRIKES = 0
+        _emit_feed_health(
+            "FEED_HEALTH_OK",
+            {
+                "reason": "db_ticks_recovered",
+                "last_ws_tick_epoch": ws_tick_epoch,
+                "last_ws_tick_age_sec": ws_tick_age_sec,
+                "last_db_tick_epoch": db_tick_epoch,
+                "last_db_tick_age_sec": db_tick_age_sec,
+                "stale_strikes": 0,
+            },
+        )
 
     return {
         "last_db_tick_epoch": db_tick_epoch,
         "last_db_tick_age_sec": db_tick_age_sec,
+        "last_ws_tick_epoch": ws_tick_epoch,
+        "last_ws_tick_age_sec": ws_tick_age_sec,
         "stale_strikes": int(_STALE_STRIKES),
         "restarted": bool(restarted),
     }
@@ -1870,13 +2003,17 @@ def on_ticks(ws, ticks):
     for t in ticks:
         if not isinstance(t, dict):
             continue
-        tick_epoch = _extract_tick_epoch(t)
+        payload_tick_epoch = _extract_tick_epoch(t)
         token_int = None
         try:
             token_int = int(t.get("instrument_token"))
         except Exception:
             token_int = None
-        freshness_tick_epoch = _freshness_epoch_for_tick(token_int, tick_epoch, now_epoch)
+        freshness_tick_epoch = _normalized_tick_epoch(
+            token_int,
+            payload_epoch=payload_tick_epoch,
+            receipt_epoch=now_epoch,
+        )
         if max_tick_epoch is None or float(freshness_tick_epoch) > float(max_tick_epoch):
             max_tick_epoch = float(freshness_tick_epoch)
         depth = t.get("depth")
@@ -1906,8 +2043,9 @@ def on_ticks(ws, ticks):
                     bid=bid,
                     ask=ask,
                     mid=mid,
-                    ts_epoch=tick_epoch,
+                    ts_epoch=freshness_tick_epoch,
                     last_price=last_price,
+                    volume=t.get("volume") if t.get("volume") is not None else t.get("volume_traded"),
                 )
             elif last_price is not None:
                 _update_index_quote_cache(
@@ -1915,8 +2053,9 @@ def on_ticks(ws, ticks):
                     bid=None,
                     ask=None,
                     mid=None,
-                    ts_epoch=tick_epoch,
+                    ts_epoch=freshness_tick_epoch,
                     last_price=last_price,
+                    volume=t.get("volume") if t.get("volume") is not None else t.get("volume_traded"),
                 )
         freshness_symbol = symbol
         option_freshness_symbol = None
@@ -1992,6 +2131,11 @@ def on_ticks(ws, ticks):
                 tick_ts_present=ts_value is not None,
             )
     _LAST_WS_TICK_EPOCH = float(max_tick_epoch if max_tick_epoch is not None else now_epoch)
+    _reset_stale_on_fresh_ws_tick(
+        now_epoch=now_epoch,
+        tick_epoch=_LAST_WS_TICK_EPOCH,
+        reason="ws_ticks_flowing",
+    )
     _RUNTIME_STATE = "RUNNING"
     _LAST_RUNTIME_ERROR = ""
     minute_bucket = int(_LAST_WS_TICK_EPOCH // 60.0)
@@ -2011,7 +2155,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
     watchdog_thread = None
     ticker_instance = None
     stop_timeout_sec = float(getattr(cfg, "DEPTH_WATCHDOG_STOP_TIMEOUT_SEC", 3.0))
@@ -2020,6 +2164,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
         has_active_watchdog = _WATCHDOG_THREAD is not None or _WATCHDOG_STOP is not None
         if not has_active_ticker and not has_active_watchdog:
             _STOP_REQUESTED = True
+            _LAST_FEED_HEALTH_STATE = None
             _RUNTIME_STATE = "STOPPED"
             return
         _STOP_REQUESTED = True
@@ -2029,6 +2174,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
         watchdog_thread = _WATCHDOG_THREAD
         _WATCHDOG_THREAD = None
         _STALE_STRIKES = 0
+        _LAST_FEED_HEALTH_STATE = None
         _LAST_WS_TICK_EPOCH = 0.0
         _LAST_MSG_TS_BY_TOKEN = {}
         _SYMBOL_LAST_OPTION_TICK_TS = {}
@@ -2139,7 +2285,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False):
-    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
     _RUNTIME_STATE = "STARTING"
     _LAST_RUNTIME_ERROR = ""
     _INTENDED_TOKEN_COUNT = len(list(dict.fromkeys(instrument_tokens or [])))
@@ -2283,6 +2429,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _LAST_MSG_TS_BY_TOKEN = {}
     _SYMBOL_LAST_OPTION_TICK_TS = {}
     _LAST_FEED_TICK_LOG_MINUTE = None
+    _LAST_FEED_HEALTH_STATE = None
     _RUNTIME_STATE = "STARTING"
     try:
         get_feed_health_monitor().set_reconnect_handler(
@@ -2808,6 +2955,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if tick_age is not None and tick_age > no_ticks_sec:
                 no_tick_strikes += 1
                 backoff = no_ticks_base_backoff * (2 ** min(no_tick_strikes - 1, 3))
+                _emit_feed_health(
+                    "FEED_STALE",
+                    {
+                        "reason": "no_ws_ticks",
+                        "tick_age_sec": tick_age,
+                        "threshold_sec": no_ticks_sec,
+                        "strikes": no_tick_strikes,
+                        "last_ws_tick_epoch": _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None,
+                        "last_db_tick_epoch": last_db_tick_epoch,
+                        "last_db_tick_age_sec": last_db_tick_age,
+                    },
+                )
                 _log_ws(
                     "FEED_NO_TICKS_DETECTED",
                     {

@@ -67,6 +67,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_WARMUP_PENDING", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_FEED_HEALTH_STATE", None, raising=False)
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LOGGED", False, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_LTP_TS", {}, raising=False)
@@ -155,7 +156,7 @@ def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
     monkeypatch.setattr(
         ws,
         "_update_index_quote_cache",
-        lambda symbol, bid, ask, mid, ts_epoch, last_price: cache_updates.append(
+        lambda symbol, bid, ask, mid, ts_epoch, last_price, *, volume=None: cache_updates.append(
             {
                 "symbol": symbol,
                 "bid": bid,
@@ -163,6 +164,7 @@ def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
                 "mid": mid,
                 "ts_epoch": ts_epoch,
                 "last_price": last_price,
+                "volume": volume,
             }
         ),
     )
@@ -190,6 +192,8 @@ def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
     assert row["bid"] == 100.0
     assert row["ask"] == 102.0
     assert row["mid"] == 101.0
+    assert row["last_price"] == 101.0
+    assert row["volume"] is None
 
 
 def test_on_ticks_updates_symbol_ltp_and_depth_timestamps(monkeypatch):
@@ -263,7 +267,7 @@ def test_on_ticks_does_not_update_index_quote_cache_from_non_underlying_tick(mon
     monkeypatch.setattr(
         ws,
         "_update_index_quote_cache",
-        lambda symbol, bid, ask, mid, ts_epoch, last_price: cache_updates.append(
+        lambda symbol, bid, ask, mid, ts_epoch, last_price, *, volume=None: cache_updates.append(
             {
                 "symbol": symbol,
                 "bid": bid,
@@ -271,6 +275,7 @@ def test_on_ticks_does_not_update_index_quote_cache_from_non_underlying_tick(mon
                 "mid": mid,
                 "ts_epoch": ts_epoch,
                 "last_price": last_price,
+                "volume": volume,
             }
         ),
     )
@@ -350,6 +355,49 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
         row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()
     assert row is not None
     assert row[0] == receipt_epoch
+
+
+def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    events = []
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_TICK_MAX_PAYLOAD_LAG_SEC", 2.0, raising=False)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 205.0)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 2, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 200.0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 200.0}, raising=False)
+
+    ticker = captured["ticker"]
+    ticker.on_ticks(
+        ticker,
+        [
+            {
+                "instrument_token": 101,
+                "last_price": 25010.0,
+                "exchange_timestamp": 190.0,
+            }
+        ],
+    )
+
+    assert ws._LAST_MSG_TS_BY_TOKEN[101] == 205.0
+    assert ws._LAST_WS_TICK_EPOCH == 205.0
+    assert ws._STALE_STRIKES == 0
+    assert any(event == "FEED_HEALTH_OK" for event, _payload in events)
 
 
 def test_on_ticks_newer_same_symbol_option_tick_refreshes_symbol_age(monkeypatch):

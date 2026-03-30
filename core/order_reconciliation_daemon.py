@@ -9,6 +9,7 @@ from core.paths import logs_dir
 import asyncio
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import threading
 import time
@@ -77,6 +78,18 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _status_text(value: Any) -> str:
     return str(value or "").strip().upper()
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _skip_broker_auth_resolution() -> bool:
+    mode = str(
+        getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM"
+    ).strip().upper()
+    dry_run_enabled = bool(getattr(cfg, "DRY_RUN", False) or _env_flag_enabled("DRY_RUN"))
+    return mode in {"SIM", "DRY_RUN"} or dry_run_enabled
 
 
 def _broker_order_id(order_row: dict[str, Any]) -> str:
@@ -284,6 +297,8 @@ class OrderReconciliationDaemon:
     def _resolve_broker_api(self) -> Any:
         if self._broker_api is not None:
             return self._broker_api
+        if _skip_broker_auth_resolution():
+            raise RuntimeError("broker_api_unavailable")
         try:
             kite_client.ensure()
         except Exception:

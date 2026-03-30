@@ -56,3 +56,24 @@ def test_cross_asset_fetch_error_marks_disabled(monkeypatch):
     assert dq["disabled"] is True
     assert dq["disabled_reason"] == "fetch_error"
     assert dq["missing"].get("USDINR_SPOT") is not None
+
+
+def test_cross_asset_skips_broker_fetch_in_sim(monkeypatch):
+    class _FailKite:
+        def ltp(self, _):
+            raise AssertionError("cross asset must not fetch broker prices in SIM")
+
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "CROSS_ASSET_SYMBOLS", {"USDINR_SPOT": "CDS:USDINR"})
+    monkeypatch.setattr(cfg, "CROSS_DISABLED_FEEDS", {})
+    monkeypatch.setattr(cfg, "CROSS_FEED_STATUS", {})
+    monkeypatch.setattr(ca_mod, "kite_client", type("KC", (), {"kite": _FailKite(), "ltp": _FailKite().ltp})())
+    ca = CrossAsset()
+
+    out = ca.update("NIFTY", 25000)
+
+    dq = out["data_quality"]
+    assert dq["disabled"] is True
+    assert dq["disabled_reason"] == "sim_skip_auth"
+    assert out["features"]["x_regime_align"] == 0.0

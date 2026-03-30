@@ -27,6 +27,18 @@ from core.time_utils import compute_age_sec, now_utc_epoch
 logger = logging.getLogger(__name__)
 
 
+def _env_flag_enabled(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _skip_broker_auth_resolution() -> bool:
+    mode = str(
+        getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM"
+    ).strip().upper()
+    dry_run_enabled = bool(getattr(cfg, "DRY_RUN", False) or _env_flag_enabled("DRY_RUN"))
+    return mode in {"SIM", "DRY_RUN"} or dry_run_enabled
+
+
 def _debug_option_chain_enabled() -> bool:
     return str(os.getenv("TRADEBOT_DEBUG_OPTION_CHAIN", "")).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -585,7 +597,13 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             return []
         chain = []
         synthetic_quote_epoch = now_utc_epoch()
-        synthetic_expiry = str(coerce_expiry_date(kite_client.next_available_expiry(symbol, exchange=exchange)) or date.today())
+        synthetic_expiry_date = date.today()
+        if not _skip_broker_auth_resolution():
+            synthetic_expiry_date = (
+                coerce_expiry_date(kite_client.next_available_expiry(symbol, exchange=exchange))
+                or synthetic_expiry_date
+            )
+        synthetic_expiry = str(synthetic_expiry_date)
         strikes = [atm + i * step for i in range(-strikes_around, strikes_around + 1)]
         for strike in strikes:
             for opt_type in ("CE", "PE"):

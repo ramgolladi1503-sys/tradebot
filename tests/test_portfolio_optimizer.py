@@ -16,12 +16,20 @@ def _trade(
     setup_family: str,
     opportunity_score: float,
     capital_assigned: float,
+    side: str = "BUY",
+    direction: str | None = None,
     selected_for_execution: bool = True,
     slot_id: str | None = None,
     allocation_reason: str = "allocated",
 ) -> Trade:
     normalized_symbol = str(symbol).strip().upper()
     normalized_right = str(right).strip().upper()
+    normalized_side = str(side).strip().upper() or "BUY"
+    normalized_direction = (
+        str(direction).strip().upper()
+        if direction is not None
+        else ("BUY_CALL" if normalized_side == "BUY" else "SELL_CALL")
+    )
     source_flags = {
         "candidate_origin": {
             "setup_family": setup_family,
@@ -36,7 +44,7 @@ def _trade(
         instrument_token=12345,
         strike=23850,
         expiry="2026-03-26",
-        side="BUY",
+        side=normalized_side,
         entry_price=120.0,
         stop_loss=110.0,
         target=145.0,
@@ -65,6 +73,7 @@ def _trade(
         tradingsymbol=f"{normalized_symbol}26MAR23850{normalized_right}",
         instrument_id=f"{normalized_symbol}|2026-03-26|23850|{normalized_right}",
         selected_for_execution=selected_for_execution,
+        direction=normalized_direction,
         slot_id=slot_id,
         allocation_reason=allocation_reason,
         capital_assigned=capital_assigned,
@@ -211,3 +220,140 @@ def test_higher_score_still_matters_but_not_blindly():
     assert lower_same_group.portfolio_optimization_selected is False
     assert lower_same_group.portfolio_optimization_reason == "rejected_correlated_concentration"
     assert diversified.portfolio_optimization_selected is True
+
+
+def test_symbol_cap_blocks_second_trade_in_same_symbol(monkeypatch):
+    monkeypatch.setattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_PER_SYMBOL", 1, raising=False)
+
+    optimized = optimize_portfolio_selection(
+        [
+            _trade(
+                trade_id="T-NIFTY-HIGH",
+                symbol="NIFTY",
+                right="CE",
+                setup_family="breakout",
+                opportunity_score=0.93,
+                capital_assigned=12.0,
+                slot_id="slot-1",
+            ),
+            _trade(
+                trade_id="T-NIFTY-LOW",
+                symbol="NIFTY",
+                right="PE",
+                setup_family="mean_revert",
+                opportunity_score=0.88,
+                capital_assigned=11.0,
+                slot_id="slot-2",
+            ),
+            _trade(
+                trade_id="T-BANK-DIV",
+                symbol="BANKNIFTY",
+                right="CE",
+                setup_family="breakout",
+                opportunity_score=0.84,
+                capital_assigned=13.0,
+                slot_id="slot-3",
+            ),
+        ],
+        max_per_symbol=1,
+        max_correlated_exposure=10,
+    )
+
+    high = next(trade for trade in optimized if trade.trade_id == "T-NIFTY-HIGH")
+    low = next(trade for trade in optimized if trade.trade_id == "T-NIFTY-LOW")
+    diversified = next(trade for trade in optimized if trade.trade_id == "T-BANK-DIV")
+
+    assert high.portfolio_optimization_selected is True
+    assert low.portfolio_optimization_selected is False
+    assert low.portfolio_optimization_reason == "rejected_symbol_concentration"
+    assert "same_symbol_stacking" in str(low.portfolio_optimization_penalty_reason)
+    assert diversified.portfolio_optimization_selected is True
+
+
+def test_direction_cap_blocks_second_long_trade(monkeypatch):
+    monkeypatch.setattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_PER_DIRECTION", 1, raising=False)
+
+    optimized = optimize_portfolio_selection(
+        [
+            _trade(
+                trade_id="T-LONG-HIGH",
+                symbol="NIFTY",
+                right="CE",
+                setup_family="breakout",
+                opportunity_score=0.92,
+                capital_assigned=12.0,
+                side="BUY",
+                direction="BUY_CALL",
+                slot_id="slot-1",
+            ),
+            _trade(
+                trade_id="T-LONG-LOW",
+                symbol="BANKNIFTY",
+                right="CE",
+                setup_family="momentum",
+                opportunity_score=0.86,
+                capital_assigned=11.0,
+                side="BUY",
+                direction="BUY_CALL",
+                slot_id="slot-2",
+            ),
+            _trade(
+                trade_id="T-SHORT-ALT",
+                symbol="SENSEX",
+                right="PE",
+                setup_family="hedge",
+                opportunity_score=0.80,
+                capital_assigned=10.0,
+                side="SELL",
+                direction="SELL_PUT",
+                slot_id="slot-3",
+            ),
+        ],
+        max_per_direction=1,
+        max_correlated_exposure=10,
+    )
+
+    long_high = next(trade for trade in optimized if trade.trade_id == "T-LONG-HIGH")
+    long_low = next(trade for trade in optimized if trade.trade_id == "T-LONG-LOW")
+    short_alt = next(trade for trade in optimized if trade.trade_id == "T-SHORT-ALT")
+
+    assert long_high.portfolio_optimization_selected is True
+    assert long_low.portfolio_optimization_selected is False
+    assert long_low.portfolio_optimization_reason == "rejected_direction_concentration"
+    assert "same_direction_stacking" in str(long_low.portfolio_optimization_penalty_reason)
+    assert short_alt.portfolio_optimization_selected is True
+
+
+def test_correlated_exposure_limit_uses_new_config_key(monkeypatch):
+    monkeypatch.setattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_GROUP_EXPOSURE", 5, raising=False)
+    monkeypatch.setattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_CORRELATED_EXPOSURE", 1, raising=False)
+
+    optimized = optimize_portfolio_selection(
+        [
+            _trade(
+                trade_id="T-CORR-HIGH",
+                symbol="NIFTY",
+                right="CE",
+                setup_family="breakout",
+                opportunity_score=0.91,
+                capital_assigned=12.0,
+                slot_id="slot-1",
+            ),
+            _trade(
+                trade_id="T-CORR-LOW",
+                symbol="BANKNIFTY",
+                right="CE",
+                setup_family="breakout",
+                opportunity_score=0.89,
+                capital_assigned=11.0,
+                slot_id="slot-2",
+            ),
+        ]
+    )
+
+    high = next(trade for trade in optimized if trade.trade_id == "T-CORR-HIGH")
+    low = next(trade for trade in optimized if trade.trade_id == "T-CORR-LOW")
+
+    assert high.portfolio_optimization_selected is True
+    assert low.portfolio_optimization_selected is False
+    assert low.portfolio_optimization_reason == "rejected_correlated_concentration"

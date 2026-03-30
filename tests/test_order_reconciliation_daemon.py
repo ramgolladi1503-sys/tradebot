@@ -3,6 +3,7 @@ import time
 
 from config import config as cfg
 from core.execution_engine import ExecutionEngine
+from core.kite_client import kite_client
 from core.order_reconciliation_daemon import OrderReconciliationDaemon
 from core.orders.state_machine import OrderState, OrderStateMachine
 
@@ -187,3 +188,26 @@ def test_execution_engine_starts_reconciliation_daemon(monkeypatch, tmp_path):
     assert daemon.is_running is True
     clean = engine.stop_reconciliation_daemon(timeout_sec=2.0)
     assert clean is True
+
+
+def test_reconcile_daemon_skips_broker_resolution_in_sim(monkeypatch, tmp_path):
+    sm = _machine(monkeypatch, tmp_path)
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(
+        kite_client,
+        "ensure",
+        lambda: (_ for _ in ()).throw(AssertionError("reconciliation daemon must not initialize Kite in SIM")),
+    )
+    log_path = tmp_path / "reconcile_sim.jsonl"
+    daemon = OrderReconciliationDaemon(
+        order_state_machine=sm,
+        log_path=log_path,
+        network_retries=1,
+    )
+
+    result = daemon.run_cycle_once()
+
+    assert result.errors == 1
+    events = _read_events(log_path)
+    assert any(evt.get("event") == "reconcile_snapshot_failed" for evt in events)

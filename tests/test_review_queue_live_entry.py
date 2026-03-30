@@ -1278,9 +1278,10 @@ def test_issue_classification_missing_enrichment_lowers_confidence_without_suppr
     assert out["soft_penalties"] == ["MISSING_CROSS_ASSET_FEATURE"]
     assert out["warnings"] == []
     assert float(out["confidence_base"]) == 0.72
-    assert float(out["builder_confidence"]) == 0.72
+    assert float(out["builder_confidence"]) == 0.64
     assert float(out["gating_base_confidence"]) == 0.72
     assert float(out["confidence_raw"]) == 0.72
+    assert float(out["confidence_raw_canonical"]) == 0.72
     assert float(out["confidence_penalty_total"]) > 0.08
     assert "premium_out_of_band" in list(out["confidence_penalty_reasons"])
     assert "MISSING_CROSS_ASSET_FEATURE" in list(out["confidence_penalty_reasons"])
@@ -1322,6 +1323,51 @@ def test_issue_classification_does_not_overwrite_builder_confidence_with_final_c
     assert float(out["gating_final_confidence"]) == float(out["confidence_final"])
     assert float(out["gating_final_confidence"]) < 0.62
     assert float(out["confidence"]) == float(out["confidence_final"])
+
+
+def test_issue_classification_prefers_after_soft_veto_for_builder_confidence_and_preserves_canonical_raw():
+    entry = {
+        "trade_id": "T-CONF-STAGED",
+        "symbol": "NIFTY",
+        "permission": "ADVISORY_ONLY",
+        "entry": 230.15,
+        "entry_status": "OK",
+        "quote_source": "tick_store",
+        "option_ltp_source": "tick_store",
+        "current_ltp": 230.15,
+        "validation_reference_price": 230.15,
+        "confidence_base": 0.82,
+        "confidence_raw_canonical": 0.82,
+        "confidence_model_raw": 0.88,
+        "confidence_after_micro": 0.84,
+        "confidence_after_alpha": 0.81,
+        "confidence_after_latency": 0.79,
+        "confidence_before_soft_veto": 0.79,
+        "confidence_after_soft_veto": 0.74,
+        "confidence_raw_gate_threshold": 0.55,
+        "confidence_final_gate_threshold": 0.30,
+        "confidence_rejection_stage": None,
+        "tradable_reasons_blocking": ["MISSING_CROSS_ASSET_FEATURE"],
+    }
+
+    out = review_queue._apply_issue_classification(
+        dict(entry),
+        mode_for_entry="PAPER",
+        allow_stale_quotes_for_entry=True,
+    )
+
+    assert float(out["builder_confidence"]) == 0.74
+    assert float(out["confidence_raw_canonical"]) == 0.82
+    assert float(out["confidence_raw"]) == 0.82
+    assert out["confidence_stage_trace"]["model_raw"] == 0.88
+    assert out["confidence_stage_trace"]["after_soft_veto"] == 0.74
+    assert out["confidence_stage_trace"]["raw_gate_threshold"] == 0.55
+    assert out["confidence_stage_trace"]["final_gate_threshold"] == 0.30
+    assert out["confidence_stage_trace"]["after_time_decay"] == 0.74
+    assert out["confidence_stage_trace"]["time_decay_factor"] == 1.0
+    assert out["confidence_stage_trace"]["age_seconds"] is None
+    assert out["confidence_stage_trace"]["market_velocity"] is None
+    assert out["confidence_stage_trace"]["age_factor"] is None
 
 
 def test_issue_classification_display_entry_fallback_is_warning_only():
@@ -1691,7 +1737,24 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
         "entry_status": "non_executable",
         "confidence": 0.7,
         "confidence_base": 0.82,
+        "confidence_raw_canonical": 0.88,
         "confidence_raw": 0.82,
+        "confidence_stage_trace": {
+            "model_raw": 0.88,
+            "after_micro": 0.84,
+            "after_alpha": 0.81,
+            "after_latency": 0.79,
+            "before_soft_veto": 0.79,
+            "after_soft_veto": 0.74,
+            "after_time_decay": None,
+            "time_decay_factor": None,
+            "age_seconds": None,
+            "market_velocity": None,
+            "age_factor": None,
+            "raw_gate_threshold": 0.55,
+            "final_gate_threshold": 0.30,
+            "rejected_at": "confidence_final_gate",
+        },
         "confidence_model_raw": 0.88,
         "confidence_model_component": 0.88,
         "confidence_micro_component": 0.70,
@@ -1733,7 +1796,24 @@ def test_advisory_schema_round_trip_preserves_severity_fields():
     assert deserialized["soft_penalties"] == ["STALE_OPTION_LTP", "MISSING_CROSS_ASSET_FEATURE"]
     assert deserialized["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
     assert float(deserialized["confidence_base"]) == 0.82
+    assert float(deserialized["confidence_raw_canonical"]) == 0.88
     assert float(deserialized["confidence_raw"]) == 0.82
+    assert deserialized["confidence_stage_trace"] == {
+        "model_raw": 0.88,
+        "after_micro": 0.84,
+        "after_alpha": 0.81,
+        "after_latency": 0.79,
+        "before_soft_veto": 0.79,
+        "after_soft_veto": 0.74,
+        "after_time_decay": None,
+        "time_decay_factor": None,
+        "age_seconds": None,
+        "market_velocity": None,
+        "age_factor": None,
+        "raw_gate_threshold": 0.55,
+        "final_gate_threshold": 0.30,
+        "rejected_at": "confidence_final_gate",
+    }
     assert float(deserialized["confidence_model_raw"]) == 0.88
     assert float(deserialized["confidence_model_component"]) == 0.88
     assert float(deserialized["confidence_micro_component"]) == 0.70
