@@ -1,6 +1,9 @@
 from core.opportunity_engine import (
     _is_advisory_opportunity,
     _is_executable_opportunity,
+    _candidate_class,
+    _execution_truth,
+    build_opportunity_score,
     annotate_ranked_opportunities,
     select_top_opportunities,
 )
@@ -67,3 +70,33 @@ def test_softened_candidate_stays_advisory_only():
     )
     assert _is_executable_opportunity(candidate) is False
     assert _is_advisory_opportunity(candidate) is True
+
+
+def test_candidate_class_inference_detects_fallback_and_planning():
+    assert _candidate_class(_candidate(row_kind="recovered_fallback", source_flags={"candidate_origin": "fallback"})) == "fallback"
+    assert _candidate_class(_candidate(planning_only=True, source_flags={"candidate_origin": "planning_only"})) == "planning_only"
+
+
+def test_execution_truth_blocks_non_real_candidate_classes():
+    fallback = _execution_truth(_candidate(row_kind="recovered_fallback", source_flags={"candidate_origin": "fallback"}))
+    planning = _execution_truth(_candidate(planning_only=True, source_flags={"candidate_origin": "planning_only"}))
+    assert fallback["truth_allows_execution"] is False
+    assert planning["truth_allows_execution"] is False
+
+
+def test_non_executable_classes_are_score_capped_for_ranking_separation():
+    fallback = _candidate(trade_id="fallback-score", row_kind="recovered_fallback", source_flags={"candidate_origin": "fallback"})
+    planning = _candidate(trade_id="planning-score", planning_only=True, source_flags={"candidate_origin": "planning_only"})
+    softened = _candidate(trade_id="soft-score", row_kind="soft_reject", source_flags={"candidate_tags": ["softened"]})
+    fallback_score = build_opportunity_score(fallback)["opportunity_score"]
+    planning_score = build_opportunity_score(planning)["opportunity_score"]
+    softened_score = build_opportunity_score(softened)["opportunity_score"]
+    assert fallback_score <= 0.39
+    assert planning_score <= 0.34
+    assert softened_score <= 0.44
+
+
+def test_real_executable_scores_above_class_capped_rows():
+    real = _candidate(trade_id="real-score")
+    fallback = _candidate(trade_id="fallback-score", row_kind="recovered_fallback", source_flags={"candidate_origin": "fallback"})
+    assert build_opportunity_score(real)["opportunity_score"] > build_opportunity_score(fallback)["opportunity_score"]
