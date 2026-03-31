@@ -24,6 +24,11 @@ from .store import (
     load_trade_outcomes,
     load_trade_table_events,
 )
+from .confidence_calibration import (
+    build_confidence_calibration_report,
+    calibrate_confidence,
+    load_latest_confidence_calibration_report,
+)
 
 __all__ = [
     "GATE_DECISION_JSON_SCHEMA",
@@ -48,4 +53,7 @@ __all__ = [
     "load_trade_intent_events",
     "load_trade_outcomes",
     "load_trade_table_events",
+    "build_confidence_calibration_report",
+    "calibrate_confidence",
+    "load_latest_confidence_calibration_report",
 ]

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from config import config as cfg
+import core.opportunity_engine as opportunity_engine_module
 from core.opportunity_engine import (
     annotate_ranked_opportunities,
     annotate_relative_opportunity_ranks,
@@ -34,6 +35,8 @@ def _trade(
     symbol: str = "NIFTY",
     size_mult: float = 1.0,
     rank_score: float | None = None,
+    confidence_raw_canonical: float | None = None,
+    timing_score: float | None = None,
 ) -> Trade:
     normalized_symbol = str(symbol).strip().upper() or "NIFTY"
     return Trade(
@@ -57,7 +60,11 @@ def _trade(
         builder_confidence=builder_confidence,
         permission_confidence=permission_confidence,
         gating_final_confidence=gating_final_confidence,
+        confidence_raw_canonical=(
+            confidence if confidence_raw_canonical is None else confidence_raw_canonical
+        ),
         rank_score=rank_score,
+        timing_score=timing_score,
         sizing_confluence_score=confluence,
         volume=volume,
         quote_age_sec=quote_age_sec,
@@ -86,6 +93,57 @@ def _trade(
         tradingsymbol=f"{normalized_symbol}2631723850CE",
         instrument_id=f"{normalized_symbol}|2026-03-17|23850|CE",
     )
+
+
+def test_timing_score_contributes_to_opportunity_score(monkeypatch):
+    monkeypatch.setattr(cfg, "OPPORTUNITY_WEIGHT_TIMING", 0.20, raising=False)
+    base_trade = _trade(
+        trade_id="T-TIMING-BASE",
+        confidence=0.62,
+        builder_confidence=0.62,
+        permission_confidence=0.58,
+        gating_final_confidence=0.60,
+        confluence=0.55,
+        bid=120.0,
+        ask=120.5,
+        ltp=120.2,
+        volume=9000,
+        quote_age_sec=0.4,
+        execution_allowed=True,
+        tradable=True,
+        execution_entry=120.5,
+        execution_entry_status="executable",
+        execution_entry_source="ask",
+        display_entry=120.5,
+        timing_score=None,
+    )
+    timed_trade = _trade(
+        trade_id="T-TIMING-BOOST",
+        confidence=0.62,
+        builder_confidence=0.62,
+        permission_confidence=0.58,
+        gating_final_confidence=0.60,
+        confluence=0.55,
+        bid=120.0,
+        ask=120.5,
+        ltp=120.2,
+        volume=9000,
+        quote_age_sec=0.4,
+        execution_allowed=True,
+        tradable=True,
+        execution_entry=120.5,
+        execution_entry_status="executable",
+        execution_entry_source="ask",
+        display_entry=120.5,
+        timing_score=0.90,
+    )
+
+    base_metrics = opportunity_engine_module.build_opportunity_score(base_trade)
+    timed_metrics = opportunity_engine_module.build_opportunity_score(timed_trade)
+
+    assert base_metrics["timing_score"] is None
+    assert timed_metrics["timing_score"] == 0.90
+    assert float(timed_metrics["opportunity_score"]) > float(base_metrics["opportunity_score"])
 
 
 def test_opportunity_engine_ranks_executable_candidate_first_and_scales_size():
@@ -867,3 +925,302 @@ def test_threshold_observability_explains_adjustments(monkeypatch):
     assert "hostile_regime" in str(trade["threshold_adjustment_reason"])
     assert "opening_window" in str(trade["threshold_adjustment_reason"])
     assert trade["source_flags"].get("threshold_effective") == trade["threshold_effective"]
+
+
+def test_ranked_candidate_exposes_execution_quality_breakdown(monkeypatch):
+    monkeypatch.setattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", False, raising=False)
+    ranked = annotate_ranked_opportunities(
+        [
+            _trade(
+                trade_id="T-EXEC-BREAKDOWN",
+                confidence=0.70,
+                builder_confidence=0.70,
+                permission_confidence=0.68,
+                gating_final_confidence=0.66,
+                confluence=0.74,
+                bid=120.0,
+                ask=120.4,
+                ltp=120.2,
+                volume=12000,
+                quote_age_sec=0.3,
+                execution_allowed=True,
+                tradable=True,
+                execution_entry=120.4,
+                execution_entry_status="executable",
+                execution_entry_source="ask",
+                display_entry=120.4,
+            )
+        ],
+        scope="unit:execution_breakdown",
+        top_n=1,
+    )
+
+    trade = ranked[0]
+    assert trade.spread_penalty is not None
+    assert trade.expected_slippage_bps is not None
+    assert trade.slippage_risk is not None
+    assert trade.depth_score is not None
+    assert trade.fill_probability is not None
+    assert trade.execution_quality_score is not None
+    assert 0.0 <= float(trade.execution_quality_score) <= 1.0
+    assert trade.source_flags.get("execution_quality_score") == trade.execution_quality_score
+
+
+def test_confidence_calibration_shadow_logs_rank_and_decision_drift(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "PORTFOLIO_OPTIMIZER_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "CONFIDENCE_CALIBRATION_SHADOW_ENABLE", True, raising=False)
+    monkeypatch.setattr(
+        opportunity_engine_module,
+        "_confidence_calibration_shadow_payload",
+        lambda: {
+            "date": "2026-03-29",
+            "calibration": {
+                "eligible": True,
+                "min_bin_count": 1,
+                "reliability_curve": [
+                    {"bin_low": 0.0, "bin_high": 0.5, "count": 10, "avg_conf": 0.2, "win_rate": 1.0},
+                    {"bin_low": 0.5, "bin_high": 1.0, "count": 10, "avg_conf": 0.8, "win_rate": 0.0},
+                ],
+            },
+        },
+        raising=True,
+    )
+
+    with caplog.at_level("INFO", logger="core.opportunity_engine"):
+        ranked = annotate_ranked_opportunities(
+            [
+                _trade(
+                    trade_id="T-SHADOW-HIGH",
+                    confidence=0.80,
+                    builder_confidence=0.80,
+                    permission_confidence=0.75,
+                    gating_final_confidence=0.80,
+                    confidence_raw_canonical=0.80,
+                    confluence=0.82,
+                    bid=120.0,
+                    ask=121.0,
+                    ltp=120.5,
+                    volume=9000,
+                    quote_age_sec=0.2,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=121.0,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=121.0,
+                ),
+                _trade(
+                    trade_id="T-SHADOW-LOW",
+                    confidence=0.20,
+                    builder_confidence=0.20,
+                    permission_confidence=0.18,
+                    gating_final_confidence=0.20,
+                    confidence_raw_canonical=0.20,
+                    confluence=0.82,
+                    bid=119.0,
+                    ask=120.0,
+                    ltp=119.5,
+                    volume=9000,
+                    quote_age_sec=0.2,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=120.0,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=120.0,
+                ),
+            ],
+            scope="unit:shadow_drift",
+            top_n=1,
+        )
+
+    assert [trade.trade_id for trade in ranked] == ["T-SHADOW-HIGH", "T-SHADOW-LOW"]
+    assert ranked[0].selected_for_execution is True
+    assert ranked[0].confidence_shadow == 0.0
+    assert ranked[0].opportunity_rank_shadow == 2
+    assert ranked[0].selected_for_execution_shadow is False
+    assert ranked[1].confidence_shadow == 1.0
+    assert ranked[1].opportunity_rank_shadow == 1
+    assert ranked[1].selected_for_execution_shadow is True
+    assert "CONFIDENCE_CALIBRATION_DRIFT" in caplog.text
+
+
+def test_global_opportunity_filter_caps_ranked_batch(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "PORTFOLIO_OPTIMIZER_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "MAX_ACTIVE_OPPORTUNITIES", 2, raising=False)
+    monkeypatch.setattr(cfg, "MIN_CONFIDENCE_PERCENTILE", 0.0, raising=False)
+
+    with caplog.at_level("INFO", logger="core.opportunity_engine"):
+        ranked = annotate_ranked_opportunities(
+            [
+                _trade(
+                    trade_id="T-CAP-1",
+                    confidence=0.82,
+                    builder_confidence=0.82,
+                    permission_confidence=0.79,
+                    gating_final_confidence=0.77,
+                    confluence=0.86,
+                    bid=120.0,
+                    ask=121.0,
+                    ltp=120.5,
+                    volume=9000,
+                    quote_age_sec=0.2,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=121.0,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=121.0,
+                    rank_score=0.95,
+                ),
+                _trade(
+                    trade_id="T-CAP-2",
+                    confidence=0.74,
+                    builder_confidence=0.74,
+                    permission_confidence=0.70,
+                    gating_final_confidence=0.68,
+                    confluence=0.78,
+                    bid=119.0,
+                    ask=120.0,
+                    ltp=119.5,
+                    volume=8000,
+                    quote_age_sec=0.3,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=120.0,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=120.0,
+                    rank_score=0.85,
+                ),
+                _trade(
+                    trade_id="T-CAP-3",
+                    confidence=0.61,
+                    builder_confidence=0.61,
+                    permission_confidence=0.58,
+                    gating_final_confidence=0.56,
+                    confluence=0.66,
+                    bid=118.0,
+                    ask=119.0,
+                    ltp=118.5,
+                    volume=7000,
+                    quote_age_sec=0.4,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=119.0,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=119.0,
+                    rank_score=0.75,
+                ),
+            ],
+            scope="unit:global_cap",
+            top_n=2,
+        )
+
+    assert [trade.trade_id for trade in ranked] == ["T-CAP-1", "T-CAP-2"]
+    assert ranked[0].source_flags["global_opportunity_filter_applied"] is True
+    assert ranked[0].source_flags["global_opportunity_max_active"] == 2
+    assert "OPPORTUNITY_GLOBAL_FILTER" in caplog.text
+
+
+def test_global_opportunity_filter_applies_confidence_percentile(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "PORTFOLIO_OPTIMIZER_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "MAX_ACTIVE_OPPORTUNITIES", 0, raising=False)
+    monkeypatch.setattr(cfg, "MIN_CONFIDENCE_PERCENTILE", 0.5, raising=False)
+
+    with caplog.at_level("INFO", logger="core.opportunity_engine"):
+        ranked = annotate_ranked_opportunities(
+            [
+                _trade(
+                    trade_id="T-PCT-1",
+                    confidence=0.90,
+                    builder_confidence=0.90,
+                    permission_confidence=0.87,
+                    gating_final_confidence=0.90,
+                    confluence=0.88,
+                    bid=120.0,
+                    ask=121.0,
+                    ltp=120.5,
+                    volume=9000,
+                    quote_age_sec=0.2,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=121.0,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=121.0,
+                    rank_score=0.98,
+                ),
+                _trade(
+                    trade_id="T-PCT-2",
+                    confidence=0.80,
+                    builder_confidence=0.80,
+                    permission_confidence=0.77,
+                    gating_final_confidence=0.80,
+                    confluence=0.84,
+                    bid=119.5,
+                    ask=120.5,
+                    ltp=120.0,
+                    volume=8600,
+                    quote_age_sec=0.3,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=120.5,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=120.5,
+                    rank_score=0.90,
+                ),
+                _trade(
+                    trade_id="T-PCT-3",
+                    confidence=0.40,
+                    builder_confidence=0.40,
+                    permission_confidence=0.38,
+                    gating_final_confidence=0.40,
+                    confluence=0.60,
+                    bid=118.5,
+                    ask=119.5,
+                    ltp=119.0,
+                    volume=6200,
+                    quote_age_sec=0.5,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=119.5,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=119.5,
+                    rank_score=0.70,
+                ),
+                _trade(
+                    trade_id="T-PCT-4",
+                    confidence=0.20,
+                    builder_confidence=0.20,
+                    permission_confidence=0.18,
+                    gating_final_confidence=0.20,
+                    confluence=0.48,
+                    bid=117.5,
+                    ask=118.5,
+                    ltp=118.0,
+                    volume=5000,
+                    quote_age_sec=0.7,
+                    execution_allowed=True,
+                    tradable=True,
+                    execution_entry=118.5,
+                    execution_entry_status="executable",
+                    execution_entry_source="ask",
+                    display_entry=118.5,
+                    rank_score=0.55,
+                ),
+            ],
+            scope="unit:confidence_percentile",
+            top_n=2,
+        )
+
+    assert [trade.trade_id for trade in ranked] == ["T-PCT-1", "T-PCT-2"]
+    assert ranked[0].source_flags["global_opportunity_confidence_threshold"] == 0.6
+    assert ranked[0].source_flags["global_opportunity_min_confidence_percentile"] == 0.5
+    assert "OPPORTUNITY_GLOBAL_FILTER" in caplog.text

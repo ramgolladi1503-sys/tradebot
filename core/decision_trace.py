@@ -55,6 +55,7 @@ class DecisionTrace:
     gate_results: dict[str, Any] = field(default_factory=dict)
     final_decision: str = "BLOCKED"
     reasons: list[str] = field(default_factory=list)
+    reject_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.final_decision not in {"ALLOWED", "BLOCKED"}:
@@ -78,10 +79,17 @@ def build_trade_decision_trace(
     gate_results: dict[str, Any] = {}
     score_breakdown: dict[str, Any] = {}
     features_snapshot: dict[str, Any] = {}
+    reject_reason: str | None = None
     if trade is None:
         if isinstance(reject_ctx, dict):
-            if reject_ctx.get("reason"):
-                reasons.append(reject_ctx.get("reason"))
+            reject_reason = str(
+                reject_ctx.get("signal_reject_reason")
+                or reject_ctx.get("reason")
+                or ""
+            ).strip() or None
+            if reject_reason:
+                reasons.append(reject_reason)
+                gate_results["reject_reason"] = reject_reason
             for key in ("detail", "feature_contract_failed"):
                 if reject_ctx.get(key):
                     gate_results[key] = reject_ctx.get(key)
@@ -132,4 +140,5 @@ def build_trade_decision_trace(
         gate_results=gate_results,
         final_decision=final_decision,
         reasons=normalize_reason_codes(reasons),
+        reject_reason=reject_reason,
     )

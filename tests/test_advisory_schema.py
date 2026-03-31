@@ -66,7 +66,24 @@ def _valid_row(**overrides):
         "size_multiplier_reason": "score=0.760;rank=1",
         "opportunity_size_multiplier": 0.84,
         "confidence_base": 0.72,
+        "confidence_raw_canonical": 0.78,
         "confidence_raw": 0.72,
+        "confidence_stage_trace": {
+            "model_raw": 0.78,
+            "after_micro": 0.74,
+            "after_alpha": 0.73,
+            "after_latency": 0.71,
+            "before_soft_veto": 0.71,
+            "after_soft_veto": 0.72,
+            "after_time_decay": None,
+            "time_decay_factor": None,
+            "age_seconds": None,
+            "market_velocity": None,
+            "age_factor": None,
+            "raw_gate_threshold": 0.55,
+            "final_gate_threshold": 0.30,
+            "rejected_at": None,
+        },
         "confidence_model_raw": 0.78,
         "confidence_model_component": 0.78,
         "confidence_micro_component": 0.62,
@@ -160,6 +177,23 @@ def test_advisory_schema_round_trip_survives_unchanged():
     assert deserialized["size_multiplier_reason"] == "score=0.760;rank=1"
     assert deserialized["opportunity_size_multiplier"] == 0.84
     assert deserialized["confidence_base"] == 0.72
+    assert deserialized["confidence_raw_canonical"] == 0.78
+    assert deserialized["confidence_stage_trace"] == {
+        "model_raw": 0.78,
+        "after_micro": 0.74,
+        "after_alpha": 0.73,
+        "after_latency": 0.71,
+        "before_soft_veto": 0.71,
+        "after_soft_veto": 0.72,
+        "after_time_decay": None,
+        "time_decay_factor": None,
+        "age_seconds": None,
+        "market_velocity": None,
+        "age_factor": None,
+        "raw_gate_threshold": 0.55,
+        "final_gate_threshold": 0.30,
+        "rejected_at": None,
+    }
     assert deserialized["confidence_model_raw"] == 0.78
     assert deserialized["confidence_model_component"] == 0.78
     assert deserialized["quote_age_sec"] == 1.5
@@ -198,6 +232,8 @@ def test_advisory_schema_round_trip_survives_unchanged():
 def test_advisory_schema_normalizes_missing_confidence_stage_fields_to_null():
     row = _valid_row()
     stage_keys = (
+        "confidence_raw_canonical",
+        "confidence_stage_trace",
         "confidence_model_raw",
         "builder_confidence",
         "permission_confidence",
@@ -235,6 +271,23 @@ def test_advisory_schema_normalizes_missing_confidence_stage_fields_to_null():
 
     for key in stage_keys:
         assert key in out
+    assert out["confidence_raw_canonical"] is None
+    assert out["confidence_stage_trace"] == {
+        "model_raw": None,
+        "after_micro": None,
+        "after_alpha": None,
+        "after_latency": None,
+        "before_soft_veto": None,
+        "after_soft_veto": None,
+        "after_time_decay": None,
+        "time_decay_factor": None,
+        "age_seconds": None,
+        "market_velocity": None,
+        "age_factor": None,
+        "raw_gate_threshold": None,
+        "final_gate_threshold": None,
+        "rejected_at": None,
+    }
     assert out["confidence_model_raw"] is None
     assert out["confidence_model_component"] is None
     assert out["confidence_micro_component"] is None

@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 import sqlite3
 from typing import Any, Iterable
+from collections.abc import Mapping
 
 from config import config as cfg
 from core.learning_paths import blocked_outcomes_path, rejected_candidates_paths
@@ -165,6 +166,72 @@ def _build_trade_key_from_row(row: dict) -> str:
     )
 
 
+def _confidence_metrics_snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    existing = row.get("metrics_snapshot")
+    if isinstance(existing, Mapping):
+        metrics.update(dict(existing))
+
+    raw_canonical = _safe_float(row.get("confidence_raw_canonical"))
+    builder_confidence = _safe_float(row.get("builder_confidence"))
+    after_soft_veto = _safe_float(row.get("confidence_after_soft_veto"))
+    gating_final = _safe_float(row.get("gating_final_confidence"))
+    confidence_final = _safe_float(row.get("confidence_final"))
+    confidence_calibrated = _safe_float(row.get("confidence_calibrated"))
+
+    if raw_canonical is not None:
+        metrics["confidence_raw_canonical"] = raw_canonical
+    if builder_confidence is not None:
+        metrics["builder_confidence"] = builder_confidence
+    if after_soft_veto is not None:
+        metrics["confidence_after_soft_veto"] = after_soft_veto
+    if gating_final is not None:
+        metrics["gating_final_confidence"] = gating_final
+    if confidence_final is not None:
+        metrics["confidence_final"] = confidence_final
+    if confidence_calibrated is not None:
+        metrics["confidence_calibrated"] = confidence_calibrated
+
+    stage_trace = row.get("confidence_stage_trace")
+    if isinstance(stage_trace, Mapping):
+        metrics["confidence_stage_trace"] = dict(stage_trace)
+
+    predicted_confidence = None
+    predicted_confidence_source = None
+    for source_name, value in (
+        ("confidence_raw_canonical", raw_canonical),
+        ("builder_confidence", builder_confidence),
+        ("gating_final_confidence", gating_final),
+        ("confidence_after_soft_veto", after_soft_veto),
+        ("confidence_final", confidence_final),
+    ):
+        if value is None:
+            continue
+        predicted_confidence = float(value)
+        predicted_confidence_source = source_name
+        break
+    if predicted_confidence is not None:
+        metrics["predicted_confidence"] = float(predicted_confidence)
+        metrics["predicted_confidence_source"] = str(predicted_confidence_source)
+    final_confidence = None
+    final_source = None
+    for source_name, value in (
+        ("confidence_after_soft_veto", after_soft_veto),
+        ("gating_final_confidence", gating_final),
+        ("builder_confidence", builder_confidence),
+        ("confidence_final", confidence_final),
+    ):
+        if value is None:
+            continue
+        final_confidence = float(value)
+        final_source = source_name
+        break
+    if final_confidence is not None:
+        metrics["predicted_confidence_final"] = float(final_confidence)
+        metrics["predicted_confidence_final_source"] = str(final_source)
+    return metrics
+
+
 def _event_ts_ms(row: dict) -> int | None:
     return (
         _coerce_epoch_ms(row.get("ts_epoch_ms"))
@@ -254,7 +321,7 @@ def _int_event_from_review_row(row: dict, *, source: str) -> TradeIntentEvent | 
         "source": source,
         "reject_reason": reject_reason or None,
         "gate_decisions": [g.to_dict() for g in gate_decisions],
-        "metrics_snapshot": {},
+        "metrics_snapshot": _confidence_metrics_snapshot(row),
     }
     try:
         return TradeIntentEvent.from_dict(payload)
@@ -323,7 +390,7 @@ def _int_event_from_decision_row(row: dict, *, source: str) -> TradeIntentEvent 
         "source": source,
         "reject_reason": (reject_reason or veto_reasons or None),
         "gate_decisions": [g.to_dict() for g in gate_decisions],
-        "metrics_snapshot": {},
+        "metrics_snapshot": _confidence_metrics_snapshot(row),
     }
     try:
         payload.update(
@@ -385,7 +452,7 @@ def _int_event_from_trade_row(row: dict, *, source: str) -> TradeIntentEvent | N
         "source": source,
         "reject_reason": (blockers_text or None),
         "gate_decisions": [],
-        "metrics_snapshot": {},
+        "metrics_snapshot": _confidence_metrics_snapshot(row),
     }
     try:
         return TradeIntentEvent.from_dict(payload)

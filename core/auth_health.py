@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict
@@ -16,6 +17,18 @@ LOG_PATH = logs_dir() / "auth_health.jsonl"
 _CACHE: Dict[str, Any] = {}
 _PREOPEN_WARM_CACHE: Dict[str, Any] = {}
 _PROACTIVE_REFRESH_INFLIGHT = False
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _skip_auth_probe_in_sim() -> bool:
+    mode = str(
+        getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM"
+    ).strip().upper()
+    dry_run_enabled = bool(getattr(cfg, "DRY_RUN", False) or _env_flag_enabled("DRY_RUN"))
+    return mode in {"SIM", "DRY_RUN"} or dry_run_enabled
 
 
 def _log_event(payload: Dict[str, Any]) -> None:
@@ -174,6 +187,25 @@ def get_kite_auth_health(force: bool = False) -> Dict[str, Any]:
     """
     now_epoch = time.time()
     ttl_sec = float(getattr(cfg, "AUTH_HEALTH_TTL_SEC", 60))
+    if _skip_auth_probe_in_sim():
+        payload = {
+            "ok": True,
+            "auth_state": "SKIPPED_SIM_MODE",
+            "ts_epoch": now_epoch,
+            "source": "sim_skip",
+            "ttl_sec": ttl_sec,
+            "latency_sec": 0.0,
+            "api_key_tail4": "",
+            "access_token_tail4": "",
+            "access_token_has_whitespace": False,
+            "user_id": "",
+            "user_name": "",
+            "error": "",
+        }
+        _CACHE["ts_epoch"] = now_epoch
+        _CACHE["payload"] = payload
+        _log_event(payload)
+        return payload
     if not force and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
         cached = dict(_CACHE.get("payload") or {})
         cached["source"] = "cache"

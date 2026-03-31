@@ -22,6 +22,10 @@ class ExecutionQualityDecision:
     spread_pct: float | None = None
     liquidity_quality: float | None = None
     depth_ratio: float | None = None
+    slippage_risk: float | None = None
+    depth_score: float | None = None
+    fill_probability: float | None = None
+    execution_quality_score: float | None = None
     context: dict[str, Any] = field(default_factory=dict)
 
 
@@ -40,6 +44,28 @@ def _candidate_get(candidate: Any, field: str, default: Any = None) -> Any:
     return getattr(candidate, field, default)
 
 
+def _clamp01(value: Any, *, default: float | None = None) -> float | None:
+    try:
+        if value in (None, "", "None"):
+            return default
+        return max(0.0, min(1.0, float(value)))
+    except Exception:
+        return default
+
+
+def _weighted_average(parts: list[tuple[float | None, float]]) -> float:
+    total_weight = 0.0
+    total_score = 0.0
+    for value, weight in parts:
+        if value is None or weight <= 0:
+            continue
+        total_score += float(value) * float(weight)
+        total_weight += float(weight)
+    if total_weight <= 0:
+        return 0.0
+    return _clamp01(total_score / total_weight, default=0.0) or 0.0
+
+
 def _liquidity_quality(candidate: Any) -> float:
     volume = max(
         _safe_float(_candidate_get(candidate, "volume")) or 0.0,
@@ -53,6 +79,90 @@ def _liquidity_quality(candidate: Any) -> float:
     return max(0.0, min(1.0, float(volume_score)))
 
 
+def _spread_quality_from_penalty(spread_penalty: float | None) -> float:
+    penalty_cap = max(float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22), 1e-6)
+    normalized_penalty = min(max(float(spread_penalty or 0.0), 0.0) / penalty_cap, 1.0)
+    return _clamp01(1.0 - normalized_penalty, default=0.0) or 0.0
+
+
+def _slippage_risk(expected_slippage_bps: float | None) -> float:
+    max_slippage_bps = max(float(getattr(cfg, "EXECUTION_QUALITY_MAX_SLIPPAGE_BPS", 75.0) or 75.0), 1e-6)
+    if expected_slippage_bps is None:
+        return 1.0
+    return _clamp01(float(expected_slippage_bps) / max_slippage_bps, default=1.0) or 1.0
+
+
+def _depth_score(depth_ratio: float | None, liquidity_quality: float | None) -> float:
+    if depth_ratio is None:
+        return _clamp01(liquidity_quality, default=0.35) or 0.35
+    max_depth_ratio = max(float(getattr(cfg, "EXECUTION_QUALITY_MAX_DEPTH_RATIO", 1.25) or 1.25), 1.0)
+    if float(depth_ratio) <= 1.0:
+        return 1.0
+    depth_excess = max(float(depth_ratio) - 1.0, 0.0)
+    depth_capacity = max(max_depth_ratio - 1.0, 1e-6)
+    return _clamp01(1.0 - min(depth_excess / depth_capacity, 1.0), default=0.0) or 0.0
+
+
+def _fill_probability(
+    *,
+    execution_ok: bool,
+    order_policy: str,
+    liquidity_quality: float,
+    depth_score: float,
+    slippage_risk: float,
+    quote_ok: bool,
+) -> float:
+    policy_hint = {
+        "market": 0.92,
+        "limit": 0.72,
+        "advisory": 0.18,
+        "reject": 0.0,
+    }.get(str(order_policy or "").strip().lower(), 0.45)
+    fill_probability = _weighted_average(
+        [
+            (1.0 if execution_ok else 0.0, 0.35),
+            (policy_hint, 0.25),
+            (_clamp01(liquidity_quality, default=0.35), 0.20),
+            (_clamp01(depth_score, default=0.35), 0.15),
+            (1.0 - (_clamp01(slippage_risk, default=1.0) or 1.0), 0.05),
+        ]
+    )
+    if not quote_ok:
+        fill_probability *= 0.65
+    if not execution_ok:
+        fill_probability = min(fill_probability, 0.25)
+    return _clamp01(fill_probability, default=0.0) or 0.0
+
+
+def _execution_quality_score(
+    *,
+    spread_penalty: float,
+    slippage_risk: float,
+    depth_score: float,
+    fill_probability: float,
+) -> float:
+    return _weighted_average(
+        [
+            (
+                _spread_quality_from_penalty(spread_penalty),
+                float(getattr(cfg, "EXECUTION_QUALITY_COMPONENT_SPREAD_WEIGHT", 0.35) or 0.35),
+            ),
+            (
+                1.0 - (_clamp01(slippage_risk, default=1.0) or 1.0),
+                float(getattr(cfg, "EXECUTION_QUALITY_COMPONENT_SLIPPAGE_WEIGHT", 0.25) or 0.25),
+            ),
+            (
+                _clamp01(depth_score, default=0.0),
+                float(getattr(cfg, "EXECUTION_QUALITY_COMPONENT_DEPTH_WEIGHT", 0.20) or 0.20),
+            ),
+            (
+                _clamp01(fill_probability, default=0.0),
+                float(getattr(cfg, "EXECUTION_QUALITY_COMPONENT_FILL_PROBABILITY_WEIGHT", 0.20) or 0.20),
+            ),
+        ]
+    )
+
+
 def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecision:
     if not bool(getattr(cfg, "EXECUTION_QUALITY_ENABLE", True)):
         return ExecutionQualityDecision(
@@ -63,6 +173,10 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
             order_policy="limit",
             reason_code="execution_quality_disabled",
             reason="execution_quality_disabled",
+            slippage_risk=0.0,
+            depth_score=1.0,
+            fill_probability=1.0,
+            execution_quality_score=1.0,
         )
 
     source_flags = _candidate_get(candidate, "source_flags") or {}
@@ -84,6 +198,10 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
                 order_policy="limit",
                 reason_code="degraded_data",
                 reason="degraded_data",
+                slippage_risk=0.25,
+                depth_score=0.45,
+                fill_probability=0.55,
+                execution_quality_score=0.58,
             )
         return ExecutionQualityDecision(
             expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
@@ -93,6 +211,10 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
             order_policy="advisory",
             reason_code="data_not_live",
             reason="data_not_live",
+            slippage_risk=1.0,
+            depth_score=0.0,
+            fill_probability=0.0,
+            execution_quality_score=0.0,
         )
 
     bid = _safe_float(_candidate_get(candidate, "best_bid"))
@@ -140,11 +262,31 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
             float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
             spread_penalty + float(getattr(cfg, "EXECUTION_QUALITY_LIMIT_SCORE_PENALTY", 0.05) or 0.05),
         )
+    slippage_risk = _slippage_risk(slippage.expected_slippage_bps)
+    depth_score = _depth_score(slippage.depth_ratio, liquidity_quality)
+    fill_probability = _fill_probability(
+        execution_ok=bool(policy.allowed),
+        order_policy=policy.order_policy,
+        liquidity_quality=liquidity_quality,
+        depth_score=depth_score,
+        slippage_risk=slippage_risk,
+        quote_ok=bool(_candidate_get(candidate, "quote_ok", True)),
+    )
+    execution_quality_score_value = _execution_quality_score(
+        spread_penalty=spread_penalty,
+        slippage_risk=slippage_risk,
+        depth_score=depth_score,
+        fill_probability=fill_probability,
+    )
     context = {
         "policy_reason_code": policy.reason_code,
         "liquidity_quality": round(liquidity_quality, 6),
         "spread_pct": slippage.spread_pct if slippage.spread_pct is not None else spread_pct,
         "depth_ratio": slippage.depth_ratio,
+        "slippage_risk": round(float(slippage_risk), 6),
+        "depth_score": round(float(depth_score), 6),
+        "fill_probability": round(float(fill_probability), 6),
+        "execution_quality_score": round(float(execution_quality_score_value), 6),
     }
     return ExecutionQualityDecision(
         expected_slippage=slippage.expected_slippage,
@@ -158,6 +300,10 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
         spread_pct=slippage.spread_pct if slippage.spread_pct is not None else spread_pct,
         liquidity_quality=round(liquidity_quality, 6),
         depth_ratio=slippage.depth_ratio,
+        slippage_risk=round(float(slippage_risk), 6),
+        depth_score=round(float(depth_score), 6),
+        fill_probability=round(float(fill_probability), 6),
+        execution_quality_score=round(float(execution_quality_score_value), 6),
         context=context,
     )
 

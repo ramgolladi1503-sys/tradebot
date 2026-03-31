@@ -30,6 +30,18 @@ _DEFAULT_ANALYTICS_BASE = Path(
 )
 
 
+def _env_flag_enabled(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _skip_broker_auth_resolution() -> bool:
+    mode = str(
+        getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM"
+    ).strip().upper()
+    dry_run_enabled = bool(getattr(cfg, "DRY_RUN", False) or _env_flag_enabled("DRY_RUN"))
+    return mode in {"SIM", "DRY_RUN"} or dry_run_enabled
+
+
 def _safe_float(value: Any, default: float | None = None) -> float | None:
     try:
         if value is None:
@@ -146,6 +158,8 @@ def _log_runtime_reconciliation(
 def _resolve_broker_api(broker_api: Any | None = None) -> Any:
     if broker_api is not None:
         return broker_api
+    if _skip_broker_auth_resolution():
+        raise RuntimeError("broker_api_unavailable")
     from core.kite_client import kite_client
 
     try:

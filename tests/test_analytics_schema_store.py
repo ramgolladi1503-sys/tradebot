@@ -112,3 +112,33 @@ def test_load_review_queue_skips_malformed_json_file(tmp_path):
     assert len(rows2) == 1
     assert rows2[0].intent == "rejected"
     assert rows2[0].reject_reason == "stale_quote"
+
+
+def test_load_review_queue_preserves_predicted_confidence_metrics(tmp_path):
+    queue_path = tmp_path / "review_queue_confidence.json"
+    payload = [
+        {
+            "symbol": "NIFTY",
+            "timestamp_epoch_ms": 1_700_000_000_000,
+            "side": "BUY",
+            "strike": 25000,
+            "option_type": "CE",
+            "status": "PLANNING",
+            "permission": "ADVISORY_ONLY",
+            "expiry_date": "2026-03-05",
+            "trade_key": "tk_review_conf_1",
+            "confidence_raw_canonical": 0.63,
+            "confidence_after_soft_veto": 0.58,
+            "gating_final_confidence": 0.56,
+        }
+    ]
+    queue_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    rows = load_review_queue_events(paths=[queue_path])
+
+    assert len(rows) == 1
+    metrics = rows[0].metrics_snapshot
+    assert metrics["predicted_confidence"] == 0.63
+    assert metrics["predicted_confidence_source"] == "confidence_raw_canonical"
+    assert metrics["predicted_confidence_final"] == 0.58
+    assert metrics["predicted_confidence_final_source"] == "confidence_after_soft_veto"

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from config import config as cfg
 from core import trade_store
+from core.kite_client import kite_client
 from core.orders.state_machine import OrderState, OrderStateMachine
 from core.reconciliation import restore_runtime_state
 
@@ -184,3 +185,20 @@ def test_partial_fill_reconciliation_updates_state_safely(monkeypatch, tmp_path)
     assert "broker_partial_position_restored" in result["reason_codes"]
     events = _read_jsonl(log_path)
     assert any(evt.get("reason_code") == "broker_partial_position_restored" for evt in events)
+
+
+def test_restore_runtime_state_skips_broker_resolution_in_sim(monkeypatch, tmp_path):
+    _configure_runtime(monkeypatch, tmp_path)
+    _insert_open_trade("TR-SIM-SKIP")
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(
+        kite_client,
+        "ensure",
+        lambda: (_ for _ in ()).throw(AssertionError("restore_runtime_state must not initialize Kite in SIM")),
+    )
+
+    result = restore_runtime_state(broker_api=None, reconcile_order_state=False)
+
+    assert result["status"] == "partial_error"
+    assert "runtime_restore_partial_error" in result["reason_codes"]

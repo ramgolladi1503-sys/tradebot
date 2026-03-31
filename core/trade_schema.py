@@ -5,6 +5,31 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Tuple
 
+
+def _safe_float(value) -> float | None:
+    try:
+        if value in (None, "", "None"):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _normalize_code_list(value) -> list[str]:
+    if isinstance(value, (list, tuple, set)):
+        raw_items = value
+    elif value in (None, "", "None"):
+        raw_items = []
+    else:
+        raw_items = [value]
+    out: list[str] = []
+    for item in raw_items:
+        text = str(item or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
 @dataclass(frozen=True)
 class Trade:
     trade_id: str
@@ -124,6 +149,7 @@ class Trade:
     permission_confidence: float | None = None
     gating_base_confidence: float | None = None
     gating_final_confidence: float | None = None
+    confidence_shadow: float | None = None
     sizing_confluence_score: float | None = None
     rank_score: float | None = None
     setup_strength: float | None = None
@@ -137,18 +163,26 @@ class Trade:
     penalty_reasons: list[str] = field(default_factory=list)
     score_inputs_used: dict = field(default_factory=dict)
     opportunity_score: float | None = None
+    opportunity_score_shadow: float | None = None
     opportunity_rank: int | None = None
+    opportunity_rank_shadow: int | None = None
     rank_global: int | None = None
     rank_within_symbol: int | None = None
     opportunity_bucket: str | None = None
     selected_for_execution: bool | None = None
+    selected_for_execution_shadow: bool | None = None
     selection_reason: str | None = None
     size_multiplier_reason: str | None = None
     opportunity_size_multiplier: float | None = None
     threshold_base: float | None = None
     threshold_effective: float | None = None
     threshold_adjustment_reason: str | None = None
+    expected_slippage_bps: float | None = None
     spread_penalty: float | None = None
+    slippage_risk: float | None = None
+    depth_score: float | None = None
+    fill_probability: float | None = None
+    execution_quality_score: float | None = None
     executable_price_estimate: float | None = None
     execution_ok: bool | None = None
     order_policy: str | None = None
@@ -174,6 +208,8 @@ class Trade:
     permission_reason: str | None = None
     countertrend: bool | None = None
     raw_signal_confidence: float | None = None
+    confidence_raw_canonical: float | None = None
+    confidence_stage_trace: dict = field(default_factory=dict)
     confidence_model_raw: float | None = None
     confidence_model_component: float | None = None
     confidence_micro_component: float | None = None
@@ -183,6 +219,11 @@ class Trade:
     confidence_after_latency: float | None = None
     confidence_before_soft_veto: float | None = None
     confidence_after_soft_veto: float | None = None
+    confidence_after_time_decay: float | None = None
+    confidence_time_decay_factor: float | None = None
+    confidence_age_seconds: float | None = None
+    confidence_market_velocity: float | None = None
+    confidence_age_factor: float | None = None
     confidence_penalty_soft_veto_total: float | None = None
     confidence_penalty_soft_veto_reasons: list[str] = field(default_factory=list)
     confidence_gate_threshold: float | None = None
@@ -204,6 +245,87 @@ class Trade:
     trade_lifecycle_history: list[dict] = field(default_factory=list)
 
     def __post_init__(self):
+        source_flags = dict(self.source_flags or {})
+        for list_key in ("warning_codes", "soft_veto_codes", "gates_failed", "advisory_flags"):
+            if list_key in source_flags:
+                source_flags[list_key] = _normalize_code_list(source_flags.get(list_key))
+        if source_flags != dict(self.source_flags or {}):
+            object.__setattr__(self, "source_flags", source_flags)
+        if self.confidence_raw_canonical is None:
+            canonical_raw = None
+            for candidate in (
+                self.confidence_model_raw,
+                self.confidence_before_soft_veto,
+                self.confidence_after_latency,
+                self.confidence_after_alpha,
+                self.confidence_after_micro,
+                self.confidence_base,
+                self.builder_confidence,
+                self.confidence,
+            ):
+                if candidate is not None:
+                    canonical_raw = candidate
+                    break
+            object.__setattr__(self, "confidence_raw_canonical", canonical_raw)
+        existing_stage_trace = dict(self.confidence_stage_trace or {})
+        final_confidence_stage = None
+        for candidate in (
+            self.confidence_after_time_decay,
+            _safe_float(existing_stage_trace.get("after_time_decay")),
+            self.gating_final_confidence,
+            self.confidence_after_soft_veto,
+            _safe_float(existing_stage_trace.get("after_soft_veto")),
+            self.confidence,
+        ):
+            if candidate is not None:
+                final_confidence_stage = candidate
+                break
+        if self.confidence_after_time_decay is None:
+            object.__setattr__(self, "confidence_after_time_decay", final_confidence_stage)
+        if self.confidence_time_decay_factor is None:
+            decay_factor = _safe_float(existing_stage_trace.get("time_decay_factor"))
+            if decay_factor is None:
+                decay_factor = 1.0
+            object.__setattr__(self, "confidence_time_decay_factor", decay_factor)
+        if self.confidence_age_seconds is None:
+            age_seconds = _safe_float(existing_stage_trace.get("age_seconds"))
+            if age_seconds is None:
+                age_seconds = _safe_float(self.quote_age_sec)
+            if age_seconds is None:
+                age_seconds = _safe_float(self.price_age_sec)
+            object.__setattr__(self, "confidence_age_seconds", age_seconds)
+        if self.confidence_market_velocity is None:
+            object.__setattr__(self, "confidence_market_velocity", _safe_float(existing_stage_trace.get("market_velocity")))
+        if self.confidence_age_factor is None:
+            age_factor = _safe_float(existing_stage_trace.get("age_factor"))
+            if age_factor is None and self.confidence_age_seconds is not None:
+                velocity = _safe_float(self.confidence_market_velocity)
+                age_factor = float(self.confidence_age_seconds) / max(float(velocity or 1.0), 1e-6)
+            object.__setattr__(self, "confidence_age_factor", age_factor)
+        if self.builder_confidence is None:
+            object.__setattr__(self, "builder_confidence", final_confidence_stage)
+        if self.gating_final_confidence is None:
+            object.__setattr__(self, "gating_final_confidence", final_confidence_stage)
+        object.__setattr__(
+            self,
+            "confidence_stage_trace",
+            {
+                "model_raw": self.confidence_model_raw if self.confidence_model_raw is not None else _safe_float(existing_stage_trace.get("model_raw")),
+                "after_micro": self.confidence_after_micro if self.confidence_after_micro is not None else _safe_float(existing_stage_trace.get("after_micro")),
+                "after_alpha": self.confidence_after_alpha if self.confidence_after_alpha is not None else _safe_float(existing_stage_trace.get("after_alpha")),
+                "after_latency": self.confidence_after_latency if self.confidence_after_latency is not None else _safe_float(existing_stage_trace.get("after_latency")),
+                "before_soft_veto": self.confidence_before_soft_veto if self.confidence_before_soft_veto is not None else _safe_float(existing_stage_trace.get("before_soft_veto")),
+                "after_soft_veto": self.confidence_after_soft_veto if self.confidence_after_soft_veto is not None else _safe_float(existing_stage_trace.get("after_soft_veto")),
+                "after_time_decay": self.confidence_after_time_decay,
+                "time_decay_factor": self.confidence_time_decay_factor,
+                "age_seconds": self.confidence_age_seconds,
+                "market_velocity": self.confidence_market_velocity,
+                "age_factor": self.confidence_age_factor,
+                "raw_gate_threshold": self.confidence_raw_gate_threshold if self.confidence_raw_gate_threshold is not None else _safe_float(existing_stage_trace.get("raw_gate_threshold")),
+                "final_gate_threshold": self.confidence_final_gate_threshold if self.confidence_final_gate_threshold is not None else _safe_float(existing_stage_trace.get("final_gate_threshold")),
+                "rejected_at": self.confidence_rejection_stage if self.confidence_rejection_stage is not None else existing_stage_trace.get("rejected_at"),
+            },
+        )
         if self.entry_display_status is None:
             object.__setattr__(self, "entry_display_status", self.display_entry_status)
         if self.entry_block_code is None:
@@ -211,20 +333,22 @@ class Trade:
             if self.entry_clear_reason:
                 block_code = str(self.entry_clear_reason).strip().lower() or None
             object.__setattr__(self, "entry_block_code", block_code)
-        if self.builder_confidence is None:
-            object.__setattr__(self, "builder_confidence", self.confidence)
         if self.gating_base_confidence is None:
             base_confidence = self.confidence_base
             if base_confidence is None:
                 base_confidence = self.builder_confidence
             object.__setattr__(self, "gating_base_confidence", base_confidence)
-        if self.gating_final_confidence is None:
-            final_confidence = self.confidence_after_soft_veto
-            if final_confidence is None:
-                final_confidence = self.confidence
-            object.__setattr__(self, "gating_final_confidence", final_confidence)
         if self.permission_confidence is None:
             object.__setattr__(self, "permission_confidence", self.global_confidence)
+        if bool((self.source_flags or {}).get("fallback_candidate")):
+            object.__setattr__(self, "execution_allowed", False)
+            object.__setattr__(self, "planning_only", True)
+            object.__setattr__(self, "tradable", False)
+            object.__setattr__(self, "selected_for_execution", False)
+            object.__setattr__(self, "permission", "ADVISORY_ONLY")
+            object.__setattr__(self, "final_action", "ADVISORY_ONLY")
+            object.__setattr__(self, "execution_status", "advisory_only")
+            object.__setattr__(self, "readiness", "ADVISORY_ONLY")
         if self.sizing_confluence_score is None and isinstance(self.trade_score_detail, dict):
             object.__setattr__(self, "sizing_confluence_score", self.trade_score_detail.get("confluence_score"))
         try:

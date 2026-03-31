@@ -84,6 +84,20 @@ def _direction_bucket(candidate: Any) -> str:
     return "unknown"
 
 
+def _position_direction_bucket(candidate: Any) -> str:
+    direction = str(_get_value(candidate, "direction") or "").strip().upper()
+    side = str(_get_value(candidate, "side") or "").strip().upper()
+    if direction in {"BUY", "LONG", "BUY_CALL", "BUY_PUT"}:
+        return "long"
+    if direction in {"SELL", "SHORT", "SELL_CALL", "SELL_PUT"}:
+        return "short"
+    if side == "BUY":
+        return "long"
+    if side == "SELL":
+        return "short"
+    return "unknown"
+
+
 def _correlation_group(candidate: Any) -> str:
     return "|".join((_asset_family(candidate), _direction_bucket(candidate), _setup_family(candidate)))
 
@@ -144,6 +158,48 @@ def _existing_group_counts(current_portfolio_exposure: Any) -> dict[str, int]:
     return counts
 
 
+def _existing_symbol_counts(current_portfolio_exposure: Any) -> dict[str, int]:
+    if not current_portfolio_exposure:
+        return {}
+    if isinstance(current_portfolio_exposure, dict):
+        explicit = current_portfolio_exposure.get("symbol_counts") or current_portfolio_exposure.get("exposure_by_symbol")
+        if isinstance(explicit, dict):
+            return {
+                str(key).strip().upper(): max(0, int(_safe_float(value) or 0))
+                for key, value in explicit.items()
+                if str(key).strip()
+            }
+        trades = current_portfolio_exposure.get("trades") or current_portfolio_exposure.get("open_trades") or []
+        return _existing_symbol_counts(trades)
+    counts: dict[str, int] = {}
+    if isinstance(current_portfolio_exposure, list):
+        for row in current_portfolio_exposure:
+            symbol = _symbol(row)
+            counts[symbol] = counts.get(symbol, 0) + 1
+    return counts
+
+
+def _existing_direction_counts(current_portfolio_exposure: Any) -> dict[str, int]:
+    if not current_portfolio_exposure:
+        return {}
+    if isinstance(current_portfolio_exposure, dict):
+        explicit = current_portfolio_exposure.get("direction_counts") or current_portfolio_exposure.get("exposure_by_direction")
+        if isinstance(explicit, dict):
+            return {
+                str(key).strip().lower(): max(0, int(_safe_float(value) or 0))
+                for key, value in explicit.items()
+                if str(key).strip()
+            }
+        trades = current_portfolio_exposure.get("trades") or current_portfolio_exposure.get("open_trades") or []
+        return _existing_direction_counts(trades)
+    counts: dict[str, int] = {}
+    if isinstance(current_portfolio_exposure, list):
+        for row in current_portfolio_exposure:
+            direction = _position_direction_bucket(row)
+            counts[direction] = counts.get(direction, 0) + 1
+    return counts
+
+
 def _annotate_candidate(
     candidate: Any,
     *,
@@ -161,6 +217,8 @@ def _annotate_candidate(
         "effective_score": round(float(effective_score), 6),
         "penalty": round(float(penalty_total), 6),
         "penalty_reason": penalty_reason,
+        "symbol": _symbol(candidate),
+        "direction_bucket": _position_direction_bucket(candidate),
         "correlation_group": group,
     }
     return _update_candidate(
@@ -181,6 +239,9 @@ def optimize_portfolio_selection(
     *,
     current_portfolio_exposure: Any = None,
     max_group_exposure: int | None = None,
+    max_per_symbol: int | None = None,
+    max_per_direction: int | None = None,
+    max_correlated_exposure: int | None = None,
     correlation_penalty: float | None = None,
     existing_exposure_penalty: float | None = None,
     diversification_bonus: float | None = None,
@@ -190,12 +251,36 @@ def optimize_portfolio_selection(
     if not candidate_list:
         return []
 
-    max_group = max(
+    max_correlated = max(
         1,
         int(
-            max_group_exposure
-            if max_group_exposure is not None
-            else getattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_GROUP_EXPOSURE", 1)
+            max_correlated_exposure
+            if max_correlated_exposure is not None
+            else (
+                max_group_exposure
+                if max_group_exposure is not None
+                else getattr(
+                    cfg,
+                    "PORTFOLIO_OPTIMIZER_MAX_CORRELATED_EXPOSURE",
+                    getattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_GROUP_EXPOSURE", 1),
+                )
+            )
+        ),
+    )
+    max_symbol = max(
+        0,
+        int(
+            max_per_symbol
+            if max_per_symbol is not None
+            else getattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_PER_SYMBOL", 0)
+        ),
+    )
+    max_direction = max(
+        0,
+        int(
+            max_per_direction
+            if max_per_direction is not None
+            else getattr(cfg, "PORTFOLIO_OPTIMIZER_MAX_PER_DIRECTION", 0)
         ),
     )
     correlation_penalty_value = max(
@@ -232,6 +317,8 @@ def optimize_portfolio_selection(
     )
 
     existing_counts = _existing_group_counts(current_portfolio_exposure)
+    existing_symbol_counts = _existing_symbol_counts(current_portfolio_exposure)
+    existing_direction_counts = _existing_direction_counts(current_portfolio_exposure)
     candidate_states: list[dict[str, Any]] = []
     max_capital = max(
         (_capital_required(candidate) for candidate in candidate_list if _allocation_selected(candidate)),
@@ -240,6 +327,8 @@ def optimize_portfolio_selection(
 
     for index, candidate in enumerate(candidate_list):
         group = _correlation_group(candidate)
+        symbol = _symbol(candidate)
+        direction_bucket = _position_direction_bucket(candidate)
         base_score = _base_score(candidate)
         capital = _capital_required(candidate)
         allocated = _allocation_selected(candidate)
@@ -259,6 +348,8 @@ def optimize_portfolio_selection(
                 "index": int(index),
                 "candidate": candidate,
                 "group": group,
+                "symbol": symbol,
+                "direction_bucket": direction_bucket,
                 "trade_id": _trade_id(candidate),
                 "base_score": float(base_score),
                 "effective_score": float(effective_score),
@@ -282,6 +373,8 @@ def optimize_portfolio_selection(
     )
 
     active_counts = dict(existing_counts)
+    active_symbol_counts = dict(existing_symbol_counts)
+    active_direction_counts = dict(existing_direction_counts)
     selected_indexes: set[int] = set()
     decision_reasons: dict[int, str] = {}
     penalty_reasons_by_index: dict[int, list[str]] = {
@@ -293,13 +386,28 @@ def optimize_portfolio_selection(
 
     for state in ranked_allocated:
         group = str(state["group"])
-        if int(active_counts.get(group, 0)) >= max_group:
+        symbol = str(state["symbol"])
+        direction_bucket = str(state["direction_bucket"])
+        if max_symbol > 0 and int(active_symbol_counts.get(symbol, 0)) >= max_symbol:
+            penalty_totals_by_index[state["index"]] = penalty_totals_by_index.get(state["index"], 0.0) + correlation_penalty_value
+            penalty_reasons_by_index[state["index"]].append("same_symbol_stacking")
+            decision_reasons[state["index"]] = "rejected_symbol_concentration"
+            continue
+        if max_direction > 0 and direction_bucket != "unknown" and int(active_direction_counts.get(direction_bucket, 0)) >= max_direction:
+            penalty_totals_by_index[state["index"]] = penalty_totals_by_index.get(state["index"], 0.0) + correlation_penalty_value
+            penalty_reasons_by_index[state["index"]].append("same_direction_stacking")
+            decision_reasons[state["index"]] = "rejected_direction_concentration"
+            continue
+        if int(active_counts.get(group, 0)) >= max_correlated:
             penalty_totals_by_index[state["index"]] = penalty_totals_by_index.get(state["index"], 0.0) + correlation_penalty_value
             penalty_reasons_by_index[state["index"]].append("same_theme_stacking")
             decision_reasons[state["index"]] = "rejected_correlated_concentration"
             continue
         selected_indexes.add(int(state["index"]))
         active_counts[group] = int(active_counts.get(group, 0)) + 1
+        active_symbol_counts[symbol] = int(active_symbol_counts.get(symbol, 0)) + 1
+        if direction_bucket != "unknown":
+            active_direction_counts[direction_bucket] = int(active_direction_counts.get(direction_bucket, 0)) + 1
         if int(existing_counts.get(group, 0)) == 0:
             decision_reasons[state["index"]] = "selected_diversified"
         else:

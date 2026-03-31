@@ -4943,6 +4943,13 @@ class Orchestrator:
                 time.sleep(self.poll_interval)
 
     def _sync_trades(self):
+        mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM").upper()
+        dry_run_enabled = bool(
+            getattr(cfg, "DRY_RUN", False)
+            or str(os.getenv("DRY_RUN", "")).strip().lower() in {"1", "true", "yes", "on"}
+        )
+        if mode in {"SIM", "DRY_RUN"} or dry_run_enabled:
+            return
         if not cfg.KITE_TRADES_SYNC or not kite_client.kite:
             return
         if time.time() - self.last_trade_sync < 10:

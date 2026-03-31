@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import logging
+import math
 from dataclasses import replace
 from typing import Any, Iterable
 
 from config import config as cfg
+from core.analytics.confidence_calibration import calibrate_confidence, load_latest_confidence_calibration_report
 from core.capital_allocator import allocate_capital_slots
 from core.execution_quality import evaluate_pretrade_execution_quality
 from core.portfolio_optimizer import optimize_portfolio_selection
 
 
 _HOSTILE_REGIMES = {"EVENT", "PANIC"}
+logger = logging.getLogger(__name__)
 
 
 def _safe_float(value: Any) -> float | None:
@@ -25,6 +29,16 @@ def _get_value(candidate: Any, field: str, default: Any = None) -> Any:
     if isinstance(candidate, dict):
         return candidate.get(field, default)
     return getattr(candidate, field, default)
+
+
+def _candidate_key(candidate: Any) -> str:
+    return str(
+        _get_value(candidate, "trade_id")
+        or _get_value(candidate, "trade_key")
+        or _get_value(candidate, "instrument_id")
+        or _get_value(candidate, "symbol")
+        or ""
+    ).strip()
 
 
 def _candidate_detail(candidate: Any) -> dict[str, Any]:
@@ -197,30 +211,162 @@ def _ranking_score(candidate: Any, metrics: dict[str, Any] | None = None) -> flo
     return float(metrics.get("opportunity_score") or 0.0)
 
 
-def build_opportunity_score(candidate: Any) -> dict[str, Any]:
-    detail = _candidate_detail(candidate)
-    builder_confidence = _clamp01(
-        _safe_float(_get_value(candidate, "builder_confidence"))
-        or _safe_float(_get_value(candidate, "confidence_model_raw"))
+def _confidence_filter_value(candidate: Any, metrics: dict[str, Any] | None = None) -> float:
+    if metrics is None:
+        metrics = build_opportunity_score(candidate)
+    value = _clamp01(
+        _safe_float(_get_value(candidate, "confidence_after_soft_veto"))
+        or _safe_float(_get_value(candidate, "gating_final_confidence"))
+        or _safe_float(metrics.get("gating_final_confidence"))
+        or _safe_float(_get_value(candidate, "confidence_final"))
+        or _safe_float(_get_value(candidate, "builder_confidence"))
+        or _safe_float(metrics.get("builder_confidence"))
         or _safe_float(_get_value(candidate, "confidence")),
         default=0.0,
-    ) or 0.0
+    )
+    return float(value or 0.0)
+
+
+def _percentile_value(values: Iterable[float], percentile: float) -> float | None:
+    series = sorted(float(value) for value in values)
+    if not series:
+        return None
+    clamped = max(0.0, min(1.0, float(percentile)))
+    if len(series) == 1:
+        return float(series[0])
+    position = clamped * float(len(series) - 1)
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return float(series[lower])
+    fraction = float(position - lower)
+    return float(series[lower] + ((series[upper] - series[lower]) * fraction))
+
+
+def _apply_global_opportunity_filter(
+    scored: list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]],
+    *,
+    scope: str,
+) -> tuple[
+    list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]],
+    dict[str, Any],
+]:
+    if not scored:
+        return [], {
+            "applied": False,
+            "max_active_opportunities": 0,
+            "min_confidence_percentile": 0.0,
+            "confidence_threshold": None,
+            "candidates_before": 0,
+            "candidates_after": 0,
+        }
+
+    max_active = max(0, int(getattr(cfg, "MAX_ACTIVE_OPPORTUNITIES", 0) or 0))
+    percentile = max(0.0, min(1.0, float(getattr(cfg, "MIN_CONFIDENCE_PERCENTILE", 0.0) or 0.0)))
+    if max_active <= 0 and percentile <= 0.0:
+        count = len(scored)
+        return scored, {
+            "applied": False,
+            "max_active_opportunities": max_active,
+            "min_confidence_percentile": percentile,
+            "confidence_threshold": None,
+            "candidates_before": count,
+            "candidates_after": count,
+        }
+
+    filtered = list(scored)
+    confidence_threshold = None
+    if percentile > 0.0 and filtered:
+        confidence_values = [_confidence_filter_value(candidate, metrics) for _sort_key, candidate, metrics in filtered]
+        confidence_threshold = _percentile_value(confidence_values, percentile)
+        if confidence_threshold is not None:
+            filtered = [
+                entry
+                for entry in filtered
+                if _confidence_filter_value(entry[1], entry[2]) >= float(confidence_threshold)
+            ]
+
+    if max_active > 0 and len(filtered) > max_active:
+        filtered = filtered[:max_active]
+
+    metadata = {
+        "applied": True,
+        "max_active_opportunities": max_active,
+        "min_confidence_percentile": percentile,
+        "confidence_threshold": None if confidence_threshold is None else round(float(confidence_threshold), 6),
+        "candidates_before": len(scored),
+        "candidates_after": len(filtered),
+    }
+    if len(filtered) != len(scored):
+        kept_keys = {
+            str(_get_value(candidate, "trade_id") or _get_value(candidate, "trade_key") or _get_value(candidate, "instrument_id") or "")
+            for _sort_key, candidate, _metrics in filtered
+        }
+        trimmed_ids = [
+            str(_get_value(candidate, "trade_id") or _get_value(candidate, "trade_key") or "")
+            for _sort_key, candidate, _metrics in scored
+            if str(_get_value(candidate, "trade_id") or _get_value(candidate, "trade_key") or _get_value(candidate, "instrument_id") or "") not in kept_keys
+        ]
+        logger.info(
+            "OPPORTUNITY_GLOBAL_FILTER scope=%s candidates_before=%s candidates_after=%s max_active_opportunities=%s min_confidence_percentile=%.3f confidence_threshold=%s filtered_ids=%s",
+            scope,
+            metadata["candidates_before"],
+            metadata["candidates_after"],
+            max_active,
+            percentile,
+            metadata["confidence_threshold"],
+            trimmed_ids[:10],
+        )
+    return filtered, metadata
+
+
+def build_opportunity_score(
+    candidate: Any,
+    *,
+    builder_confidence_override: float | None = None,
+    gating_confidence_override: float | None = None,
+) -> dict[str, Any]:
+    detail = _candidate_detail(candidate)
+    builder_confidence = (
+        _clamp01(builder_confidence_override, default=None)
+        if builder_confidence_override is not None
+        else None
+    )
+    if builder_confidence is None:
+        builder_confidence = _clamp01(
+            _safe_float(_get_value(candidate, "builder_confidence"))
+            or _safe_float(_get_value(candidate, "confidence_model_raw"))
+            or _safe_float(_get_value(candidate, "confidence")),
+            default=0.0,
+        ) or 0.0
     permission_confidence = _clamp01(
         _safe_float(_get_value(candidate, "permission_confidence"))
         or _safe_float(_get_value(candidate, "global_confidence")),
         default=builder_confidence,
     )
-    gating_confidence = _clamp01(
-        _safe_float(_get_value(candidate, "gating_final_confidence"))
-        or _safe_float(_get_value(candidate, "confidence_final"))
-        or _safe_float(_get_value(candidate, "confidence_after_soft_veto")),
-        default=builder_confidence,
+    gating_confidence = (
+        _clamp01(gating_confidence_override, default=None)
+        if gating_confidence_override is not None
+        else None
     )
+    if gating_confidence is None:
+        gating_confidence = _clamp01(
+            _safe_float(_get_value(candidate, "gating_final_confidence"))
+            or _safe_float(_get_value(candidate, "confidence_final"))
+            or _safe_float(_get_value(candidate, "confidence_after_soft_veto")),
+            default=builder_confidence,
+        )
     confluence_score = _clamp01(
         _safe_float(_get_value(candidate, "sizing_confluence_score"))
         or _safe_float(detail.get("confluence_score"))
         or _safe_float(_get_value(candidate, "trade_alignment")),
         default=0.5,
+    )
+    timing_score = _clamp01(
+        _safe_float(_get_value(candidate, "timing_score"))
+        or _safe_float(detail.get("entry_score"))
+        or _safe_float(_get_value(candidate, "entry_score")),
+        default=None,
     )
     spread_quality = _spread_quality(candidate)
     liquidity_quality = _liquidity_quality(candidate)
@@ -234,6 +380,7 @@ def build_opportunity_score(candidate: Any) -> dict[str, Any]:
             (permission_confidence, float(getattr(cfg, "OPPORTUNITY_WEIGHT_PERMISSION_CONFIDENCE", 0.12))),
             (gating_confidence, float(getattr(cfg, "OPPORTUNITY_WEIGHT_GATING_CONFIDENCE", 0.18))),
             (confluence_score, float(getattr(cfg, "OPPORTUNITY_WEIGHT_CONFLUENCE", 0.16))),
+            (timing_score, float(getattr(cfg, "OPPORTUNITY_WEIGHT_TIMING", 0.10))),
             (regime_alignment, float(getattr(cfg, "OPPORTUNITY_WEIGHT_REGIME_ALIGNMENT", 0.08))),
             (liquidity_quality, float(getattr(cfg, "OPPORTUNITY_WEIGHT_LIQUIDITY", 0.07))),
             (spread_quality, float(getattr(cfg, "OPPORTUNITY_WEIGHT_SPREAD", 0.04))),
@@ -248,6 +395,7 @@ def build_opportunity_score(candidate: Any) -> dict[str, Any]:
         "permission_confidence": permission_confidence,
         "gating_final_confidence": gating_confidence,
         "confluence_score": confluence_score,
+        "timing_score": timing_score,
         "regime_alignment": regime_alignment,
         "liquidity_quality": liquidity_quality,
         "spread_quality": spread_quality,
@@ -258,6 +406,10 @@ def build_opportunity_score(candidate: Any) -> dict[str, Any]:
         "expected_slippage": execution_quality.expected_slippage,
         "expected_slippage_bps": execution_quality.expected_slippage_bps,
         "spread_penalty": float(execution_quality.spread_penalty or 0.0),
+        "slippage_risk": float(execution_quality.slippage_risk or 0.0),
+        "depth_score": float(execution_quality.depth_score or 0.0),
+        "fill_probability": float(execution_quality.fill_probability or 0.0),
+        "execution_quality_score": float(execution_quality.execution_quality_score or 0.0),
         "executable_price_estimate": execution_quality.executable_price_estimate,
         "execution_ok": bool(execution_quality.execution_ok),
         "order_policy": str(execution_quality.order_policy),
@@ -268,6 +420,126 @@ def build_opportunity_score(candidate: Any) -> dict[str, Any]:
         "threshold_adjustment_reason": str(threshold_context["threshold_adjustment_reason"]),
         "survival_floor": float(getattr(cfg, "OPPORTUNITY_SURVIVAL_SCORE_FLOOR", 0.35)),
     }
+
+
+def _confidence_calibration_shadow_payload() -> dict[str, Any] | None:
+    if not bool(getattr(cfg, "CONFIDENCE_CALIBRATION_SHADOW_ENABLE", False)):
+        return None
+    payload = load_latest_confidence_calibration_report(require_eligible=True)
+    if not isinstance(payload, dict):
+        return None
+    reliability_curve = list(((payload.get("calibration") or {}).get("reliability_curve") or []))
+    if not reliability_curve:
+        return None
+    return payload
+
+
+def _shadow_confidence(candidate: Any, calibration_payload: dict[str, Any]) -> float | None:
+    raw_confidence = _clamp01(
+        _safe_float(_get_value(candidate, "confidence_raw_canonical"))
+        or _safe_float(_get_value(candidate, "confidence_model_raw"))
+        or _safe_float(_get_value(candidate, "builder_confidence"))
+        or _safe_float(_get_value(candidate, "confidence")),
+        default=None,
+    )
+    if raw_confidence is None:
+        return None
+    calibration = dict(calibration_payload.get("calibration") or {})
+    return calibrate_confidence(
+        raw_confidence,
+        calibration.get("reliability_curve") or [],
+        min_bin_count=int(calibration.get("min_bin_count") or getattr(cfg, "CONFIDENCE_CALIBRATION_MIN_BIN_COUNT", 3)),
+    )
+
+
+def _build_confidence_shadow_map(
+    scored: list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]],
+    *,
+    scope: str,
+    executable_top_n: int,
+) -> dict[str, dict[str, Any]]:
+    payload = _confidence_calibration_shadow_payload()
+    if not payload or not scored:
+        return {}
+    shadow_scored: list[tuple[tuple[int, float, float, float], str, dict[str, Any]]] = []
+    for _sort_key, candidate, metrics in scored:
+        key = _candidate_key(candidate)
+        shadow_conf = _shadow_confidence(candidate, payload)
+        if shadow_conf is None:
+            continue
+        shadow_metrics = build_opportunity_score(
+            candidate,
+            builder_confidence_override=shadow_conf,
+            gating_confidence_override=shadow_conf,
+        )
+        execution_eligible = bool(metrics.get("execution_eligible"))
+        shadow_scored.append(
+            (
+                (
+                    1 if execution_eligible else 0,
+                    float(shadow_metrics["opportunity_score"]),
+                    float(shadow_metrics["gating_final_confidence"] or 0.0),
+                    float(shadow_metrics["builder_confidence"]),
+                ),
+                key,
+                {
+                    "confidence_shadow": float(shadow_conf),
+                    "opportunity_score_shadow": float(shadow_metrics["opportunity_score"]),
+                    "adaptive_execution_threshold_shadow": float(shadow_metrics["adaptive_execution_threshold"]),
+                    "execution_eligible": execution_eligible,
+                },
+            )
+        )
+    if not shadow_scored:
+        return {}
+    shadow_scored.sort(key=lambda item: item[0], reverse=True)
+    shadow_by_key: dict[str, dict[str, Any]] = {}
+    for index, (_sort_key, key, shadow_meta) in enumerate(shadow_scored, start=1):
+        shadow_selected = bool(
+            shadow_meta["execution_eligible"]
+            and index <= executable_top_n
+            and float(shadow_meta["opportunity_score_shadow"]) >= float(shadow_meta["adaptive_execution_threshold_shadow"])
+        )
+        shadow_by_key[key] = {
+            **shadow_meta,
+            "opportunity_rank_shadow": int(index),
+            "selected_for_execution_shadow": shadow_selected,
+        }
+
+    drift_rows: list[dict[str, Any]] = []
+    for raw_index, (_sort_key, candidate, metrics) in enumerate(scored, start=1):
+        key = _candidate_key(candidate)
+        shadow_meta = shadow_by_key.get(key)
+        if shadow_meta is None:
+            continue
+        raw_selected = bool(
+            metrics["execution_eligible"]
+            and raw_index <= executable_top_n
+            and float(metrics["opportunity_score"]) >= float(metrics["adaptive_execution_threshold"])
+        )
+        if int(shadow_meta["opportunity_rank_shadow"]) != int(raw_index) or bool(shadow_meta["selected_for_execution_shadow"]) != raw_selected:
+            drift_rows.append(
+                {
+                    "candidate_key": key,
+                    "rank_raw": int(raw_index),
+                    "rank_calibrated": int(shadow_meta["opportunity_rank_shadow"]),
+                    "decision_raw": "selected" if raw_selected else "not_selected",
+                    "decision_calibrated": "selected" if bool(shadow_meta["selected_for_execution_shadow"]) else "not_selected",
+                    "confidence_raw": _confidence_filter_value(candidate, metrics),
+                    "confidence_calibrated": float(shadow_meta["confidence_shadow"]),
+                }
+            )
+    if drift_rows:
+        logger.info(
+            "CONFIDENCE_CALIBRATION_DRIFT scope=%s calibration_date=%s rank_raw=%s rank_calibrated=%s decisions_raw=%s decisions_calibrated=%s",
+            scope,
+            payload.get("date"),
+            [row["rank_raw"] for row in drift_rows[:10]],
+            [row["rank_calibrated"] for row in drift_rows[:10]],
+            [row["decision_raw"] for row in drift_rows[:10]],
+            [row["decision_calibrated"] for row in drift_rows[:10]],
+        )
+    return shadow_by_key
 
 
 def derive_opportunity_size_multiplier(candidate: Any, rank_context: dict[str, Any]) -> tuple[float, str]:
@@ -540,6 +812,8 @@ def annotate_ranked_opportunities(
             )
         )
     scored.sort(key=lambda item: item[0], reverse=True)
+    scored, global_filter_meta = _apply_global_opportunity_filter(scored, scope=scope)
+    shadow_by_key = _build_confidence_shadow_map(scored, scope=scope, executable_top_n=executable_top_n)
     annotated: list[Any] = []
     for index, (_sort_key, candidate, metrics) in enumerate(scored, start=1):
         rank_context = dict(metrics)
@@ -565,6 +839,7 @@ def annotate_ranked_opportunities(
             selection_reason = "below_adaptive_threshold"
         else:
             selection_reason = "rank_outside_top_n"
+        shadow_meta = shadow_by_key.get(_candidate_key(candidate), {})
         source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
         source_flags.update(
             {
@@ -580,11 +855,25 @@ def annotate_ranked_opportunities(
                 "threshold_effective": round(float(metrics["threshold_effective"]), 6),
                 "threshold_adjustment_reason": str(metrics["threshold_adjustment_reason"]),
                 "expected_slippage": metrics["expected_slippage"],
+                "expected_slippage_bps": metrics["expected_slippage_bps"],
                 "spread_penalty": round(float(metrics["spread_penalty"]), 6),
+                "slippage_risk": round(float(metrics["slippage_risk"]), 6),
+                "depth_score": round(float(metrics["depth_score"]), 6),
+                "fill_probability": round(float(metrics["fill_probability"]), 6),
+                "execution_quality_score": round(float(metrics["execution_quality_score"]), 6),
                 "executable_price_estimate": metrics["executable_price_estimate"],
                 "execution_ok": bool(metrics["execution_ok"]),
                 "order_policy": str(metrics["order_policy"]),
                 "order_policy_reason": str(metrics["order_policy_reason"]),
+                "global_opportunity_filter_applied": bool(global_filter_meta["applied"]),
+                "global_opportunity_filter_scope": scope,
+                "global_opportunity_confidence_threshold": global_filter_meta["confidence_threshold"],
+                "global_opportunity_max_active": int(global_filter_meta["max_active_opportunities"]),
+                "global_opportunity_min_confidence_percentile": float(global_filter_meta["min_confidence_percentile"]),
+                "confidence_shadow": shadow_meta.get("confidence_shadow"),
+                "opportunity_score_shadow": shadow_meta.get("opportunity_score_shadow"),
+                "opportunity_rank_shadow": shadow_meta.get("opportunity_rank_shadow"),
+                "selected_for_execution_shadow": shadow_meta.get("selected_for_execution_shadow"),
             }
         )
         if isinstance(candidate, dict):
@@ -601,11 +890,20 @@ def annotate_ranked_opportunities(
                     "threshold_effective": round(float(metrics["threshold_effective"]), 6),
                     "threshold_adjustment_reason": str(metrics["threshold_adjustment_reason"]),
                     "expected_slippage": metrics["expected_slippage"],
+                    "expected_slippage_bps": metrics["expected_slippage_bps"],
                     "spread_penalty": round(float(metrics["spread_penalty"]), 6),
+                    "slippage_risk": round(float(metrics["slippage_risk"]), 6),
+                    "depth_score": round(float(metrics["depth_score"]), 6),
+                    "fill_probability": round(float(metrics["fill_probability"]), 6),
+                    "execution_quality_score": round(float(metrics["execution_quality_score"]), 6),
                     "executable_price_estimate": metrics["executable_price_estimate"],
                     "execution_ok": bool(metrics["execution_ok"]),
                     "order_policy": str(metrics["order_policy"]),
                     "order_policy_reason": str(metrics["order_policy_reason"]),
+                    "confidence_shadow": shadow_meta.get("confidence_shadow"),
+                    "opportunity_score_shadow": shadow_meta.get("opportunity_score_shadow"),
+                    "opportunity_rank_shadow": shadow_meta.get("opportunity_rank_shadow"),
+                    "selected_for_execution_shadow": shadow_meta.get("selected_for_execution_shadow"),
                     "size_mult": (
                         (_safe_float(updated.get("size_mult")) or 1.0) * size_multiplier
                         if selected
@@ -628,11 +926,20 @@ def annotate_ranked_opportunities(
                 threshold_effective=round(float(metrics["threshold_effective"]), 6),
                 threshold_adjustment_reason=str(metrics["threshold_adjustment_reason"]),
                 expected_slippage=metrics["expected_slippage"],
+                expected_slippage_bps=metrics["expected_slippage_bps"],
                 spread_penalty=round(float(metrics["spread_penalty"]), 6),
+                slippage_risk=round(float(metrics["slippage_risk"]), 6),
+                depth_score=round(float(metrics["depth_score"]), 6),
+                fill_probability=round(float(metrics["fill_probability"]), 6),
+                execution_quality_score=round(float(metrics["execution_quality_score"]), 6),
                 executable_price_estimate=metrics["executable_price_estimate"],
                 execution_ok=bool(metrics["execution_ok"]),
                 order_policy=str(metrics["order_policy"]),
                 order_policy_reason=str(metrics["order_policy_reason"]),
+                confidence_shadow=shadow_meta.get("confidence_shadow"),
+                opportunity_score_shadow=shadow_meta.get("opportunity_score_shadow"),
+                opportunity_rank_shadow=shadow_meta.get("opportunity_rank_shadow"),
+                selected_for_execution_shadow=shadow_meta.get("selected_for_execution_shadow"),
                 size_mult=(current_size_mult * size_multiplier) if selected else current_size_mult,
                 source_flags=source_flags,
             )

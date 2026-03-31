@@ -107,6 +107,43 @@ def test_tight_spread_liquid_candidate_remains_executable():
 
     assert quality.execution_ok is True
     assert quality.order_policy in {"market", "limit"}
+    assert 0.0 <= float(quality.slippage_risk or 0.0) <= 1.0
+    assert 0.0 <= float(quality.depth_score or 0.0) <= 1.0
+    assert 0.0 <= float(quality.fill_probability or 0.0) <= 1.0
+    assert 0.0 <= float(quality.execution_quality_score or 0.0) <= 1.0
     assert ranked[0]["execution_ok"] is True
     assert ranked[0]["selected_for_execution"] is True
     assert ranked[0]["executable_price_estimate"] is not None
+    assert ranked[0]["execution_quality_score"] == quality.execution_quality_score
+
+
+def test_execution_quality_components_favor_liquid_over_illiquid():
+    liquid = _candidate(
+        trade_id="T-LIQ-GOOD",
+        bid=100.0,
+        ask=100.05,
+        execution_entry=100.05,
+        execution_entry_status="executable",
+        volume=25000,
+        qty=5,
+        confidence=0.80,
+    )
+    illiquid = _candidate(
+        trade_id="T-LIQ-BAD",
+        bid=100.0,
+        ask=103.5,
+        execution_entry=103.5,
+        execution_entry_status="executable",
+        volume=50,
+        qty=150,
+        confidence=0.80,
+    )
+
+    liquid_quality = evaluate_pretrade_execution_quality(liquid)
+    illiquid_quality = evaluate_pretrade_execution_quality(illiquid)
+
+    assert float(liquid_quality.spread_penalty) < float(illiquid_quality.spread_penalty)
+    assert float(liquid_quality.slippage_risk or 0.0) < float(illiquid_quality.slippage_risk or 1.0)
+    assert float(liquid_quality.depth_score or 0.0) > float(illiquid_quality.depth_score or 0.0)
+    assert float(liquid_quality.fill_probability or 0.0) > float(illiquid_quality.fill_probability or 0.0)
+    assert float(liquid_quality.execution_quality_score or 0.0) > float(illiquid_quality.execution_quality_score or 0.0)
