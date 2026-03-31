@@ -156,6 +156,12 @@ from core.learning_paths import (
 logger = logging.getLogger(__name__)
 
 
+
+def _execution_mode_is_nonlive() -> bool:
+    mode = str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM').strip().upper()
+    return mode in {'SIM', 'PAPER', 'OFFLINE', 'BACKTEST'}
+
+
 def _env_debug_enabled(name: str) -> bool:
     return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -179,17 +185,24 @@ def resolve_global_halt_reason(circuit_breaker) -> str | None:
     """
     Authoritative runtime halt resolution.
     Priority: manual kill switch -> persisted risk halt -> circuit breaker.
+    In nonlive modes we do not allow stale persisted halts to block the pipeline.
     """
     if bool(getattr(cfg, "KILL_SWITCH", False)):
         return "KILL_SWITCH"
     try:
         if risk_halt.is_halted():
-            return "RISK_HALT"
+            if _execution_mode_is_nonlive():
+                logger.warning('nonlive_risk_halt_ignored')
+            else:
+                return "RISK_HALT"
     except Exception:
         return "RISK_HALT_STATE_ERROR"
     try:
         if circuit_breaker and circuit_breaker.is_halted():
-            return str(circuit_breaker.halt_reason or "CB_ACTIVE")
+            if _execution_mode_is_nonlive():
+                logger.warning('nonlive_circuit_breaker_halt_ignored reason=%s', str(circuit_breaker.halt_reason or 'CB_ACTIVE'))
+            else:
+                return str(circuit_breaker.halt_reason or "CB_ACTIVE")
     except Exception:
         return "CB_STATE_ERROR"
     return None
@@ -1560,6 +1573,18 @@ class Orchestrator:
         return self._latency_guard_action() == ACTION_HALT_ALL
 
     def _evaluate_latency_guard(self, *, market_open: bool, monitor_stats: dict) -> dict:
+        if _execution_mode_is_nonlive():
+            state = {
+                "action": ACTION_OK,
+                "reason": "nonlive_latency_guard_bypassed",
+                "cooldown_until_ts": 0.0,
+                "ts_epoch": now_utc_epoch(),
+                "blocks_new_entries": False,
+                "blocks_non_emergency_exits": False,
+            }
+            self._latency_guard_state = state
+            self._latency_last_reported_action = ACTION_OK
+            return state
         result = self.latency_guard.evaluate(
             monitor_stats=monitor_stats or {},
             market_open=bool(market_open),
@@ -2851,6 +2876,8 @@ class Orchestrator:
             logger.warning("decision_breaker_update_error err=%s:%s", type(exc).__name__, exc)
 
     def _decision_breakers_block_entries(self) -> tuple[bool, list[str]]:
+        if _execution_mode_is_nonlive():
+            return False, []
         try:
             blocked, reasons = self.decision_breakers.should_block_decisions(now_ts=now_utc_epoch())
             if blocked:

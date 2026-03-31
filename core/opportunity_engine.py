@@ -522,6 +522,32 @@ def _execution_truth(candidate: Any) -> dict[str, Any]:
     }
 
 
+def _symbol_key(candidate: Any) -> str:
+    return str(_get_value(candidate, "symbol") or "").strip().upper()
+
+
+def _cluster_candidates_by_symbol(
+    scored: list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]],
+    *,
+    max_per_symbol: int,
+) -> list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]]:
+    if max_per_symbol <= 0:
+        return list(scored)
+
+    grouped: dict[str, list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]]] = {}
+    for item in scored:
+        symbol = _symbol_key(item[1])
+        grouped.setdefault(symbol, []).append(item)
+
+    clustered: list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]] = []
+    for _symbol, rows in grouped.items():
+        rows_sorted = sorted(rows, key=lambda item: item[0], reverse=True)
+        clustered.extend(rows_sorted[:max_per_symbol])
+
+    clustered.sort(key=lambda item: item[0], reverse=True)
+    return clustered
+
+
 def _dedupe_opportunity_candidates(candidates: Iterable[Any]) -> list[Any]:
     out: list[Any] = []
     seen: set[str] = set()
@@ -659,6 +685,8 @@ def annotate_ranked_opportunities(
             )
         )
     scored.sort(key=lambda item: item[0], reverse=True)
+    max_per_symbol = max(0, int(getattr(cfg, "OPPORTUNITY_MAX_PER_SYMBOL", 2) or 0))
+    scored = _cluster_candidates_by_symbol(scored, max_per_symbol=max_per_symbol)
     annotated: list[Any] = []
     for index, (_sort_key, candidate, metrics) in enumerate(scored, start=1):
         rank_context = dict(metrics)
@@ -694,6 +722,7 @@ def annotate_ranked_opportunities(
                 "opportunity_rank": int(index),
                 "selected_for_execution": bool(selected),
                 "selection_reason": selection_reason,
+                "cluster_symbol": _symbol_key(candidate),
                 "candidate_class": str(metrics["candidate_class"]),
                 "truth_allows_execution": bool(metrics["truth_allows_execution"]),
                 "class_blocks_execution": bool(metrics["class_blocks_execution"]),
@@ -720,6 +749,7 @@ def annotate_ranked_opportunities(
                     "opportunity_rank": int(index),
                     "selected_for_execution": bool(selected),
                     "selection_reason": selection_reason,
+                    "cluster_symbol": _symbol_key(candidate),
                     "candidate_class": str(metrics["candidate_class"]),
                     "truth_allows_execution": bool(metrics["truth_allows_execution"]),
                     "class_blocks_execution": bool(metrics["class_blocks_execution"]),
@@ -751,6 +781,7 @@ def annotate_ranked_opportunities(
                 opportunity_rank=int(index),
                 selected_for_execution=bool(selected),
                 selection_reason=selection_reason,
+                cluster_symbol=_symbol_key(candidate),
                 candidate_class=str(metrics["candidate_class"]),
                 truth_allows_execution=bool(metrics["truth_allows_execution"]),
                 class_blocks_execution=bool(metrics["class_blocks_execution"]),

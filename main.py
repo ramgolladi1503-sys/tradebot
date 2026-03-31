@@ -224,6 +224,12 @@ def main():
             pass
 
     guard_result = auto_clear_risk_halt_if_safe()
+    if exec_mode in {'SIM', 'PAPER', 'OFFLINE', 'BACKTEST'}:
+        try:
+            risk_halt.clear_halt()
+            print('[NONLIVE] cleared persisted risk halt for nonlive startup')
+        except Exception as exc:
+            print(f'[NONLIVE_WARN] failed_to_clear_risk_halt err={exc}')
     if guard_result.get("cleared"):
         print("[SessionGuard] auto-cleared stale risk halt (market closed, no open positions).")
     elif guard_result.get("reason_code") not in {"HALT_NOT_ACTIVE", "AUTO_CLEAR_DISABLED"}:

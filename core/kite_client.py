@@ -49,6 +49,16 @@ KiteConnect = _guarded_kiteconnect if _RAW_KITECONNECT is not None else None
 logger = logging.getLogger(__name__)
 
 
+def _execution_mode_is_nonlive() -> bool:
+    mode = str(getattr(cfg, 'EXECUTION_MODE', 'SIM') or 'SIM').strip().upper()
+    return mode in {'SIM', 'PAPER', 'OFFLINE', 'BACKTEST'}
+
+
+def _soften_kite_auth_failure(caller: str | None = None) -> bool:
+    _ = caller
+    return _execution_mode_is_nonlive()
+
+
 class KiteClient:
     def __init__(self):
         self.kite = None
@@ -229,8 +239,15 @@ class KiteClient:
             return bars
         except Exception as e:
             if self._is_historical_auth_error(e):
+                if _soften_kite_auth_failure(_caller):
+                    self._log_atomic(
+                        '[HIST_AUTH_SOFTFAIL] '
+                        f"mode={str(getattr(cfg, 'EXECUTION_MODE', 'SIM')).upper()} caller={_caller} "
+                        f"symbol={_symbol} exchange={_exchange} token={instrument_token} interval={interval} reason={repr(e)}"
+                    )
+                    return []
                 self._log_atomic(
-                    "FATAL: Kite authentication failed — stopping system. "
+                    "FATAL: Kite authentication failed - stopping system. "
                     f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
                     f"interval={interval} reason={repr(e)}"
                 )
