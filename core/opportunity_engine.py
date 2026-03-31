@@ -384,11 +384,14 @@ def _visibility_sort_key(candidate: Any) -> tuple[float, float, float, float, fl
 
 
 def _is_executable_opportunity(candidate: Any) -> bool:
-    execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
-    execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
+    truth = _execution_truth(candidate)
+    if not truth["truth_allows_execution"]:
+        return False
     execution_ok = _get_value(candidate, "execution_ok", None)
     if execution_ok is False:
         return False
+    execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
+    execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
     return bool(execution_entry is not None and execution_entry_status == "executable")
 
 
@@ -405,6 +408,118 @@ def _is_advisory_opportunity(candidate: Any) -> bool:
     display_entry = _safe_float(_get_value(candidate, "display_entry"))
     display_entry_status = str(_get_value(candidate, "display_entry_status") or "").strip().lower()
     return bool(display_entry is not None and display_entry_status in {"displayable", "non_executable"})
+
+
+def _string_set(values: Any) -> set[str]:
+    if values is None:
+        return set()
+    if isinstance(values, str):
+        return {values.strip().lower()} if values.strip() else set()
+    out: set[str] = set()
+    try:
+        for value in values:
+            text = str(value or "").strip().lower()
+            if text:
+                out.add(text)
+    except Exception:
+        text = str(values or "").strip().lower()
+        if text:
+            out.add(text)
+    return out
+
+
+def _candidate_class(candidate: Any) -> str:
+    source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
+    explicit_class = str(
+        _get_value(candidate, "candidate_class")
+        or source_flags.get("candidate_class")
+        or source_flags.get("opportunity_candidate_class")
+        or ""
+    ).strip().lower()
+    if explicit_class:
+        return explicit_class
+
+    row_kind = str(
+        _get_value(candidate, "row_kind")
+        or _get_value(candidate, "candidate_row_kind")
+        or source_flags.get("row_kind")
+        or source_flags.get("candidate_row_kind")
+        or ""
+    ).strip().lower()
+    origin = str(
+        _get_value(candidate, "candidate_origin")
+        or source_flags.get("candidate_origin")
+        or source_flags.get("origin")
+        or ""
+    ).strip().lower()
+    status = str(
+        _get_value(candidate, "trade_status")
+        or source_flags.get("trade_status")
+        or ""
+    ).strip().lower()
+    reasons = _string_set(
+        _get_value(candidate, "recoveries")
+        or _get_value(candidate, "recovery_reasons")
+        or source_flags.get("recoveries")
+        or source_flags.get("recovery_reasons")
+        or []
+    )
+    tags = _string_set(
+        _get_value(candidate, "candidate_tags")
+        or source_flags.get("candidate_tags")
+        or []
+    )
+
+    if row_kind in {"fallback", "recovered_fallback"}:
+        return "fallback"
+    if "recovered_fallback" in reasons or "fallback" in tags or "fallback" in reasons:
+        return "fallback"
+    if "planning" in origin or "planning" in row_kind or status == "planning_only":
+        return "planning_only"
+    if "synthetic" in origin or "synthetic" in row_kind or "synthetic" in tags:
+        return "synthetic"
+    if "soft" in origin or "soft" in row_kind or "soft_reject" in tags or "softened" in tags:
+        return "softened"
+    if "advisory" in origin or "advisory" in row_kind or status == "advisory_only":
+        return "advisory"
+    return "executable"
+
+
+def _execution_truth(candidate: Any) -> dict[str, Any]:
+    source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
+    candidate_class = _candidate_class(candidate)
+    execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
+    execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
+    execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
+    tradable = bool(_get_value(candidate, "tradable", False))
+    execution_truth = bool(
+        execution_entry is not None
+        and execution_entry_status == "executable"
+        and execution_allowed
+        and tradable
+    )
+    class_blocks = candidate_class in {
+        "fallback",
+        "planning_only",
+        "synthetic",
+        "softened",
+        "advisory",
+    }
+    debug_block = bool(
+        _get_value(candidate, "planning_only", False)
+        or _get_value(candidate, "advisory_only", False)
+        or source_flags.get("planning_only")
+        or source_flags.get("advisory_only")
+        or source_flags.get("debug_candidate")
+    )
+    truth_allows_execution = bool(execution_truth and not class_blocks and not debug_block)
+    return {
+        "candidate_class": candidate_class,
+        "execution_truth": execution_truth,
+        "truth_allows_execution": truth_allows_execution,
+        "class_blocks_execution": class_blocks,
+        "debug_blocks_execution": debug_block,
+    }
 
 
 def _dedupe_opportunity_candidates(candidates: Iterable[Any]) -> list[Any]:
@@ -516,10 +631,10 @@ def annotate_ranked_opportunities(
         ranking_score = _ranking_score(candidate, metrics)
         execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
         tradable = bool(_get_value(candidate, "tradable", False))
-        execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
-        execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
-        executable_truth = execution_entry is not None and execution_entry_status == "executable"
-        execution_eligible = bool(tradable and execution_allowed and executable_truth and bool(metrics["execution_ok"]))
+        truth = _execution_truth(candidate)
+        execution_eligible = bool(
+            truth["truth_allows_execution"] and bool(metrics["execution_ok"])
+        )
         scored.append(
             (
                 (
@@ -534,7 +649,11 @@ def annotate_ranked_opportunities(
                     "ranking_score": float(ranking_score),
                     "execution_allowed": execution_allowed,
                     "tradable": tradable,
-                    "executable_truth": executable_truth,
+                    "candidate_class": truth["candidate_class"],
+                    "executable_truth": truth["execution_truth"],
+                    "truth_allows_execution": truth["truth_allows_execution"],
+                    "class_blocks_execution": truth["class_blocks_execution"],
+                    "debug_blocks_execution": truth["debug_blocks_execution"],
                     "execution_eligible": execution_eligible,
                 },
             )
@@ -557,6 +676,8 @@ def annotate_ranked_opportunities(
             selection_reason = "selected_top_rank"
         elif not bool(metrics["executable_truth"]) or not bool(metrics["tradable"]) or not bool(metrics["execution_allowed"]):
             selection_reason = "not_execution_eligible"
+        elif not bool(metrics["truth_allows_execution"]):
+            selection_reason = "execution_truth_blocked"
         elif not bool(metrics["execution_ok"]):
             selection_reason = "execution_quality_reject"
         elif score < floor:
@@ -573,6 +694,10 @@ def annotate_ranked_opportunities(
                 "opportunity_rank": int(index),
                 "selected_for_execution": bool(selected),
                 "selection_reason": selection_reason,
+                "candidate_class": str(metrics["candidate_class"]),
+                "truth_allows_execution": bool(metrics["truth_allows_execution"]),
+                "class_blocks_execution": bool(metrics["class_blocks_execution"]),
+                "debug_blocks_execution": bool(metrics["debug_blocks_execution"]),
                 "size_multiplier_reason": size_reason,
                 "opportunity_size_multiplier": round(size_multiplier, 6),
                 "adaptive_execution_threshold": round(adaptive_threshold, 6),
@@ -595,6 +720,10 @@ def annotate_ranked_opportunities(
                     "opportunity_rank": int(index),
                     "selected_for_execution": bool(selected),
                     "selection_reason": selection_reason,
+                    "candidate_class": str(metrics["candidate_class"]),
+                    "truth_allows_execution": bool(metrics["truth_allows_execution"]),
+                    "class_blocks_execution": bool(metrics["class_blocks_execution"]),
+                    "debug_blocks_execution": bool(metrics["debug_blocks_execution"]),
                     "size_multiplier_reason": size_reason,
                     "opportunity_size_multiplier": round(size_multiplier, 6),
                     "threshold_base": round(float(metrics["threshold_base"]), 6),
@@ -622,6 +751,10 @@ def annotate_ranked_opportunities(
                 opportunity_rank=int(index),
                 selected_for_execution=bool(selected),
                 selection_reason=selection_reason,
+                candidate_class=str(metrics["candidate_class"]),
+                truth_allows_execution=bool(metrics["truth_allows_execution"]),
+                class_blocks_execution=bool(metrics["class_blocks_execution"]),
+                debug_blocks_execution=bool(metrics["debug_blocks_execution"]),
                 size_multiplier_reason=size_reason,
                 opportunity_size_multiplier=round(size_multiplier, 6),
                 threshold_base=round(float(metrics["threshold_base"]), 6),
