@@ -49,3 +49,15 @@ def test_delayed_but_within_threshold_does_not_reconnect(monkeypatch):
 
     assert triggered is False
     assert restart_calls == []
+
+
+def test_watchdog_log_throttle_suppresses_identical_repeats(monkeypatch):
+    monkeypatch.setattr(ws, "_WS_LOG_LAST_EMIT", {}, raising=False)
+
+    first = ws._should_throttle_ws_event("FEED_WARMUP_WAIT", now_epoch=100.0, cooldown_sec=5.0)
+    second = ws._should_throttle_ws_event("FEED_WARMUP_WAIT", now_epoch=102.0, cooldown_sec=5.0)
+    third = ws._should_throttle_ws_event("FEED_WARMUP_WAIT", now_epoch=106.0, cooldown_sec=5.0)
+
+    assert first is False
+    assert second is True
+    assert third is False

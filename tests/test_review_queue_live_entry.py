@@ -252,6 +252,38 @@ def test_finalize_entry_lifecycle_sets_clear_reason_when_display_missing():
     assert out["entry_clear_reason"] == "price_mismatch"
 
 
+def test_review_queue_preserves_new_diagnostic_flags_if_present():
+    payload, *_ = review_queue._build_review_queue_entry(
+        _make_trade(
+            rejection_impact_warning="top_damaging_gate_rank_1",
+            starvation_warning=True,
+            edge_improved_flag=True,
+            filtering_without_edge_flag=False,
+            top_damaging_gate_rank=1,
+        ),
+        extra=None,
+    )
+
+    assert payload["rejection_impact_warning"] == "top_damaging_gate_rank_1"
+    assert payload["starvation_warning"] is True
+    assert payload["edge_improved_flag"] is True
+    assert payload["filtering_without_edge_flag"] is False
+    assert payload["top_damaging_gate_rank"] == 1
+
+
+def test_review_queue_preserves_tuning_recommendation_fields_if_present():
+    payload, *_ = review_queue._build_review_queue_entry(
+        _make_trade(
+            recommended_threshold_delta=-0.02,
+            gate_protected_flag=True,
+        ),
+        extra=None,
+    )
+
+    assert payload["recommended_threshold_delta"] == -0.02
+    assert payload["gate_protected_flag"] is True
+
+
 def test_finalize_entry_lifecycle_restores_snapshot_after_mutation(caplog):
     finalized = review_queue.finalize_entry_lifecycle(
         {

@@ -8,6 +8,8 @@ import pytest
 
 from config import config as cfg
 from core import review_queue
+import core.offline_family_learning as family_learning
+from core.threshold_audit import load_candidate_decisions
 import strategies.trade_builder as trade_builder_module
 from strategies.trade_builder import TradeBuilder
 
@@ -284,6 +286,7 @@ def test_fallback_top_ranked_candidate_when_selection_none(monkeypatch):
         assert trade.source_flags.get("fallback_candidate") is True
         assert trade.reason == "no_viable_candidates_top_ranked"
         assert trade.execution_allowed is False
+        assert trade.candidate_class == "ADVISORY_ONLY"
 
 
 def test_build_sets_concrete_reject_reason_when_no_trade_and_no_fallback(monkeypatch):
@@ -305,6 +308,8 @@ def test_build_sets_concrete_reject_reason_when_no_trade_and_no_fallback(monkeyp
 
     assert trade is None
     assert str(builder._reject_ctx.get("reason") or "").strip() in {"no_viable_candidates", "no_candidates_survived"}
+    assert isinstance(builder._last_option_scan_summary, dict)
+    assert builder._last_option_scan_summary.get("symbol") == "NIFTY"
 
 
 def test_invalid_snapshot_still_blocks_trade(monkeypatch):
@@ -318,6 +323,728 @@ def test_invalid_snapshot_still_blocks_trade(monkeypatch):
 
     assert trade is None
     assert builder._reject_ctx.get("reason") == "invalid_snapshot"
+
+
+def test_offhours_ranks_candidates_without_executable_rows(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "PAPER_STRICT_MODE", False, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.88))
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(builder.execution, "latency_penalty", lambda *_args, **_kwargs: 1.0, raising=False)
+
+    market_data = _base_market_data(option_ltp=100.0)
+    market_data["market_open"] = False
+    market_data["market_context"] = {"execution_mode": "LIVE", "market_open": False}
+
+    trade = builder.build(market_data, quick_mode=False, allow_fallbacks=True, allow_baseline=False)
+
+    assert trade is not None
+    assert trade.market_mode == "OFFHOURS"
+    assert trade.execution_allowed is False
+    assert trade.candidate_class == "ADVISORY_ONLY"
+    ranked = list(builder._last_ranked_candidates or [])
+    assert ranked
+    ranked_classes = {
+        str((row.get("candidate_class") if isinstance(row, dict) else getattr(row, "candidate_class", None)) or "").strip().upper()
+        for row in ranked
+    }
+    assert "EXECUTABLE" not in ranked_classes
+
+
+def test_bearish_snapshot_produces_non_bullish_candidates(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.82))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["ltp"] = 24920.0
+    market_data["vwap"] = 25010.0
+    market_data["ltp_change_window"] = -35.0
+    market_data["ltp_change_5m"] = -24.0
+    market_data["ltp_change_10m"] = -42.0
+    market_data["rsi_mom"] = -0.45
+    market_data["vol_z"] = 1.2
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_bearish",
+    )
+
+    assert candidates
+    assert any(str(getattr(candidate, "direction", "")).strip().upper() == "BUY_PUT" for candidate in candidates)
+
+
+def test_bearish_regime_generates_real_bearish_candidates(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.82))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 24880.0
+    market_data["vwap"] = 25020.0
+    market_data["ltp_change_window"] = -40.0
+    market_data["ltp_change_5m"] = -22.0
+    market_data["ltp_change_10m"] = -45.0
+    market_data["rsi_mom"] = -0.55
+    market_data["vol_z"] = 1.3
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_bearish_regime",
+    )
+
+    assert candidates
+    assert any(str(getattr(candidate, "direction", "")).strip().upper() == "BUY_PUT" for candidate in candidates)
+    bearish_candidates = [
+        candidate
+        for candidate in candidates
+        if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
+    ]
+    assert bearish_candidates
+    assert all(float(getattr(candidate, "family_strength", 0.0) or 0.0) > 0.0 for candidate in bearish_candidates)
+    assert all(getattr(candidate, "family_blocker", None) in (None, "") for candidate in bearish_candidates)
+
+
+def test_sideways_snapshot_does_not_only_emit_buys(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.76))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["ltp"] = 25005.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.32
+    market_data["vol_z"] = 0.15
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_sideways",
+    )
+
+    assert candidates
+    assert any(getattr(candidate, "strategy_family", None) == "mean-reversion" for candidate in candidates)
+    directions = {str(getattr(candidate, "direction", "")).strip().upper() for candidate in candidates}
+    assert directions != {"BUY_CALL"}
+
+
+def test_sideways_regime_caps_directional_candidates(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "RANGE_WATCHLIST_ENABLE", True, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.76))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["regime"] = "RANGE"
+    market_data["regime_day"] = "RANGE"
+    market_data["ltp"] = 25024.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.10
+    market_data["vol_z"] = 0.10
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_sideways_cap",
+    )
+
+    assert candidates
+    assert all(getattr(candidate, "strategy", None) != "OPP_DIRECTIONAL" for candidate in candidates)
+    assert all(str(getattr(candidate, "direction_family", "")).strip().lower() != "bullish" for candidate in candidates)
+
+
+def test_sideways_snapshot_can_emit_watchlist_candidates(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "RANGE_WATCHLIST_ENABLE", True, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.76))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["regime"] = "RANGE"
+    market_data["regime_day"] = "RANGE"
+    market_data["ltp"] = 25024.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.10
+    market_data["vol_z"] = 0.10
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_sideways_watchlist",
+    )
+
+    assert candidates
+    watchlist = next(candidate for candidate in candidates if getattr(candidate, "strategy", None) == "OPP_RANGE_WATCHLIST")
+    assert watchlist.direction_family == "sideways"
+    assert watchlist.family_blocker == "sideways_watchlist_only"
+    assert float(watchlist.family_strength or 0.0) > 0.0
+
+
+def test_mirrored_bearish_candidate_is_penalized_or_rejected(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "BEARISH_DIRECTIONAL_STRUCTURE_MIN", 0.95, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.82))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 25080.0
+    market_data["vwap"] = 24980.0
+    market_data["ltp_change_window"] = 28.0
+    market_data["ltp_change_5m"] = 18.0
+    market_data["ltp_change_10m"] = 32.0
+    market_data["rsi_mom"] = 0.35
+    market_data["vol_z"] = 0.9
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_mirrored_bearish",
+    )
+
+    assert all(
+        not (
+            str(getattr(candidate, "strategy", "")).strip().upper() == "OPP_DIRECTIONAL"
+            and str(getattr(candidate, "direction", "")).strip().upper() == "BUY_PUT"
+        )
+        for candidate in candidates
+    )
+
+
+def test_family_scarcity_prevents_directional_flooding(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_DIRECTION_FAMILY_MAX_CANDIDATES", 1, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.84))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 24860.0
+    market_data["vwap"] = 25030.0
+    market_data["ltp_change_window"] = -45.0
+    market_data["ltp_change_5m"] = -25.0
+    market_data["ltp_change_10m"] = -50.0
+    market_data["rsi_mom"] = -0.62
+    market_data["vol_z"] = 1.4
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_family_scarcity",
+    )
+
+    bearish_candidates = [
+        candidate
+        for candidate in candidates
+        if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
+    ]
+    assert bearish_candidates
+    assert len(bearish_candidates) == 1
+    assert int(getattr(bearish_candidates[0], "family_rank", 0) or 0) == 1
+
+
+def test_strong_family_can_gain_small_extra_slot(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "DATA_ROOT", str(tmp_path / ".runtime"), raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "OFFLINE_FAMILY_LEARNING_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_DIRECTION_FAMILY_MAX_CANDIDATES", 1, raising=False)
+    state = {
+        "version": 1,
+        "generated_at": "2026-04-04T00:00:00+00:00",
+        "min_samples": 25,
+        "families": {
+            "continuation|bearish": {
+                "family_score_adjustment": 0.04,
+                "family_scarcity_adjustment": 1,
+                "family_confidence": 0.8,
+                "family_feedback_applied": True,
+                "expectancy_score": 0.5,
+            }
+        },
+    }
+    family_learning.save_family_learning_state(state)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.84))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 24860.0
+    market_data["vwap"] = 25030.0
+    market_data["ltp_change_window"] = -45.0
+    market_data["ltp_change_5m"] = -25.0
+    market_data["ltp_change_10m"] = -50.0
+    market_data["rsi_mom"] = -0.62
+    market_data["vol_z"] = 1.4
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_family_learning_strong",
+    )
+
+    bearish_candidates = [
+        candidate
+        for candidate in candidates
+        if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
+    ]
+    assert len(bearish_candidates) == 2
+    assert all(int(getattr(candidate, "family_cap_effective", 0) or 0) == 2 for candidate in bearish_candidates)
+    assert any(float(getattr(candidate, "family_learning_adjustment", 0.0) or 0.0) > 0.0 for candidate in bearish_candidates)
+
+
+def test_weak_family_can_lose_small_slot(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "DATA_ROOT", str(tmp_path / ".runtime"), raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "OFFLINE_FAMILY_LEARNING_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_DIRECTION_FAMILY_MAX_CANDIDATES", 2, raising=False)
+    state = {
+        "version": 1,
+        "generated_at": "2026-04-04T00:00:00+00:00",
+        "min_samples": 25,
+        "families": {
+            "continuation|bearish": {
+                "family_score_adjustment": -0.05,
+                "family_scarcity_adjustment": -1,
+                "family_confidence": 0.8,
+                "family_feedback_applied": True,
+                "expectancy_score": -0.4,
+            },
+            "breakout|bearish": {
+                "family_score_adjustment": -0.04,
+                "family_scarcity_adjustment": -1,
+                "family_confidence": 0.8,
+                "family_feedback_applied": True,
+                "expectancy_score": -0.3,
+            },
+            "mean-reversion|bearish": {
+                "family_score_adjustment": -0.03,
+                "family_scarcity_adjustment": -1,
+                "family_confidence": 0.8,
+                "family_feedback_applied": True,
+                "expectancy_score": -0.2,
+            },
+        },
+    }
+    family_learning.save_family_learning_state(state)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.84))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 24860.0
+    market_data["vwap"] = 25030.0
+    market_data["ltp_change_window"] = -45.0
+    market_data["ltp_change_5m"] = -25.0
+    market_data["ltp_change_10m"] = -50.0
+    market_data["rsi_mom"] = -0.62
+    market_data["vol_z"] = 1.4
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_family_learning_weak",
+    )
+
+    bearish_candidates = [
+        candidate
+        for candidate in candidates
+        if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
+    ]
+    assert len(bearish_candidates) == 1
+    assert int(getattr(bearish_candidates[0], "family_cap_effective", 0) or 0) == 1
+    assert float(getattr(bearish_candidates[0], "family_learning_adjustment", 0.0) or 0.0) < 0.0
+
+
+def test_family_scarcity_adjustment_is_bounded(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "DATA_ROOT", str(tmp_path / ".runtime"), raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "OFFLINE_FAMILY_LEARNING_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "OFFLINE_FAMILY_LEARNING_MAX_SCARCITY_DELTA", 1, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_DIRECTION_FAMILY_MAX_CANDIDATES", 1, raising=False)
+    state = {
+        "version": 1,
+        "generated_at": "2026-04-04T00:00:00+00:00",
+        "min_samples": 25,
+        "families": {
+            "continuation|bearish": {
+                "family_score_adjustment": 0.05,
+                "family_scarcity_adjustment": 5,
+                "family_confidence": 0.9,
+                "family_feedback_applied": True,
+                "expectancy_score": 0.7,
+            }
+        },
+    }
+    family_learning.save_family_learning_state(state)
+
+    builder = TradeBuilder(predictor=_PredictorFixed(0.84))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 24860.0
+    market_data["vwap"] = 25030.0
+    market_data["ltp_change_window"] = -45.0
+    market_data["ltp_change_5m"] = -25.0
+    market_data["ltp_change_10m"] = -50.0
+    market_data["rsi_mom"] = -0.62
+    market_data["vol_z"] = 1.4
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=market_data["ltp"],
+        vwap=market_data["vwap"],
+        trigger_reason="unit_test_family_learning_bounded",
+    )
+
+    bearish_candidates = [
+        candidate
+        for candidate in candidates
+        if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
+    ]
+    assert len(bearish_candidates) == 2
+    assert all(int(getattr(candidate, "family_cap_effective", 0) or 0) == 2 for candidate in bearish_candidates)
+
+
+def test_sideways_regime_disables_weak_trend_families(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.76))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["regime"] = "RANGE"
+    market_data["regime_day"] = "RANGE"
+    market_data["ltp"] = 25008.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 2.0
+    market_data["ltp_change_5m"] = 1.0
+    market_data["ltp_change_10m"] = 2.0
+    market_data["rsi_mom"] = 0.05
+    market_data["vol_z"] = 0.10
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_sideways_disable_trend")
+
+    assert all(getattr(candidate, "strategy", None) not in {"OPP_DIRECTIONAL", "OPP_VOL_EXPANSION"} for candidate in candidates)
+
+
+def test_low_vol_regime_defaults_to_sparse_or_no_trade_behavior(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.70))
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "NEUTRAL"
+    market_data["regime_day"] = "NEUTRAL"
+    market_data["atr"] = 60.0
+    market_data["ltp"] = 25001.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 1.0
+    market_data["ltp_change_5m"] = 0.5
+    market_data["ltp_change_10m"] = 0.8
+    market_data["rsi_mom"] = 0.01
+    market_data["vol_z"] = 0.05
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_low_vol_sparse")
+
+    assert candidates == [] or all(getattr(candidate, "direction_family", None) == "sideways" for candidate in candidates)
+
+
+def test_trending_regime_suppresses_weak_range_family(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.78))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 25040.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 30.0
+    market_data["ltp_change_5m"] = 20.0
+    market_data["ltp_change_10m"] = 35.0
+    market_data["rsi_mom"] = 0.08
+    market_data["vol_z"] = 0.4
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_trending_suppress_range")
+
+    assert all(getattr(candidate, "strategy_family", None) != "mean-reversion" for candidate in candidates)
+
+
+def test_sideways_snapshot_can_emit_real_sideways_watchlist_candidates(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "RANGE_WATCHLIST_ENABLE", True, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.76))
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["regime"] = "RANGE"
+    market_data["regime_day"] = "RANGE"
+    market_data["ltp"] = 24970.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = -1.0
+    market_data["ltp_change_10m"] = 1.0
+    market_data["rsi_mom"] = -0.14
+    market_data["vol_z"] = 0.10
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_sideways_real_watchlist")
+
+    assert any(getattr(candidate, "strategy", None) == "OPP_RANGE_WATCHLIST" for candidate in candidates)
+
+
+def test_sideways_range_candidate_carries_sideways_direction_family(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "RANGE_WATCHLIST_ENABLE", True, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.76))
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["regime"] = "RANGE"
+    market_data["regime_day"] = "RANGE"
+    market_data["ltp"] = 25030.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 1.0
+    market_data["ltp_change_10m"] = -1.0
+    market_data["rsi_mom"] = 0.14
+    market_data["vol_z"] = 0.10
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_sideways_direction_family")
+    watchlist = next(candidate for candidate in candidates if getattr(candidate, "strategy", None) == "OPP_RANGE_WATCHLIST")
+
+    assert watchlist.direction_family == "sideways"
+
+
+def test_sideways_without_clean_range_edge_emits_none(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "RANGE_WATCHLIST_ENABLE", True, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.76))
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["regime"] = "RANGE"
+    market_data["regime_day"] = "RANGE"
+    market_data["ltp"] = 25000.5
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.01
+    market_data["vol_z"] = 0.05
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_sideways_no_edge")
+
+    assert candidates == []
+
+
+def test_bearish_candidate_requires_positive_bearish_structure(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.82))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 25080.0
+    market_data["vwap"] = 24980.0
+    market_data["ltp_change_window"] = 28.0
+    market_data["ltp_change_5m"] = 18.0
+    market_data["ltp_change_10m"] = 32.0
+    market_data["rsi_mom"] = 0.35
+    market_data["vol_z"] = 0.9
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_bearish_requires_positive")
+
+    assert all(str(getattr(candidate, "direction_family", "")).strip().lower() != "bearish" for candidate in candidates)
+
+
+def test_strong_aligned_family_can_gain_bounded_extra_slot(monkeypatch, tmp_path):
+    test_strong_family_can_gain_small_extra_slot(monkeypatch, tmp_path)
+
+
+def test_weak_or_uncertain_regime_reduces_effective_family_cap(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_DIRECTION_FAMILY_MAX_CANDIDATES", 2, raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.82))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: None, raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: None, raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "NEUTRAL"
+    market_data["regime_day"] = "NEUTRAL"
+    market_data["ltp"] = 25020.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 12.0
+    market_data["ltp_change_5m"] = 8.0
+    market_data["ltp_change_10m"] = 10.0
+    market_data["rsi_mom"] = 0.10
+    market_data["vol_z"] = 0.15
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_uncertain_cap")
+
+    bullish_candidates = [candidate for candidate in candidates if getattr(candidate, "direction_family", None) == "bullish"]
+    assert bullish_candidates
+    assert all(int(getattr(candidate, "family_cap_effective", 0) or 0) == 1 for candidate in bullish_candidates)
+
+
+def test_no_family_can_exceed_hard_cap(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "DATA_ROOT", str(tmp_path / ".runtime"), raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "OFFLINE_FAMILY_LEARNING_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "OFFLINE_STRATEGY_WEIGHT_LEARNING_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_DIRECTION_FAMILY_MAX_CANDIDATES", 1, raising=False)
+    family_learning.save_family_learning_state(
+        {
+            "version": 1,
+            "generated_at": "2026-04-04T00:00:00+00:00",
+            "min_samples": 25,
+            "families": {
+                "continuation|bearish": {
+                    "family_score_adjustment": 0.06,
+                    "family_scarcity_adjustment": 1,
+                    "family_confidence": 1.0,
+                    "family_feedback_applied": True,
+                    "expectancy_score": 0.7,
+                }
+            },
+        }
+    )
+    builder = TradeBuilder(predictor=_PredictorFixed(0.84))
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "mean_reversion_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "micro_pattern_signal", lambda *_args, **_kwargs: _signal("BUY_PUT"), raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 24860.0
+    market_data["vwap"] = 25030.0
+    market_data["ltp_change_window"] = -45.0
+    market_data["ltp_change_5m"] = -25.0
+    market_data["ltp_change_10m"] = -50.0
+    market_data["rsi_mom"] = -0.62
+    market_data["vol_z"] = 1.4
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_hard_cap")
+    bearish_candidates = [candidate for candidate in candidates if getattr(candidate, "direction_family", None) == "bearish"]
+    assert len(bearish_candidates) == 1
+
+
+def test_family_can_emit_zero_candidates_without_filler(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.70))
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "TREND"
+    market_data["regime_day"] = "TREND"
+    market_data["ltp"] = 25000.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.0
+    market_data["vol_z"] = 0.0
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_zero_family")
+
+    assert candidates == []
+
+
+def test_all_families_can_fail_and_preserve_no_trade_behavior(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.70))
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="BANKNIFTY")
+    market_data["regime"] = "NEUTRAL"
+    market_data["regime_day"] = "NEUTRAL"
+    market_data["ltp"] = 25000.0
+    market_data["vwap"] = 25000.0
+    market_data["ltp_change_window"] = 0.0
+    market_data["ltp_change_5m"] = 0.0
+    market_data["ltp_change_10m"] = 0.0
+    market_data["rsi_mom"] = 0.0
+    market_data["vol_z"] = 0.0
+
+    candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_all_families_fail")
+
+    assert candidates == []
 
 
 def _make_quick_synth_trade(builder: TradeBuilder, market_data: dict):
@@ -1241,6 +1968,150 @@ def test_build_with_trace_does_not_invent_opportunity_without_signal_basis(monke
     )
 
     assert trade is None
+
+
+def test_candidate_separates_setup_trigger_and_entry_quality(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["minutes_since_open"] = 10
+    market_data["minutes_to_close"] = 300
+    market_data["vwap"] = 24970.0
+    market_data["ltp_change_window"] = 35.0
+    market_data["ltp_change_5m"] = 18.0
+    market_data["ltp_change_10m"] = 28.0
+    market_data["rsi_mom"] = 0.25
+    market_data["vol_z"] = 0.8
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="unit_test_setup_trigger_entry",
+    )
+
+    directional = next(candidate for candidate in candidates if candidate.strategy == "OPP_DIRECTIONAL")
+    assert directional.setup_score is not None
+    assert directional.trigger_score is not None
+    assert directional.entry_quality_score is not None
+    assert directional.entry_quality_reason is not None
+    assert len({round(float(directional.setup_score), 4), round(float(directional.trigger_score), 4), round(float(directional.entry_quality_score), 4)}) >= 2
+
+
+def test_overextended_entry_is_penalized_or_rejected(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["minutes_since_open"] = 25
+    market_data["minutes_to_close"] = 280
+    market_data["atr"] = 40.0
+    market_data["vwap"] = 24750.0
+    market_data["ltp_change_window"] = 180.0
+    market_data["ltp_change_5m"] = 90.0
+    market_data["ltp_change_10m"] = 130.0
+    market_data["vol_z"] = 1.4
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="unit_test_overextended",
+    )
+
+    directional = next((candidate for candidate in candidates if candidate.strategy == "OPP_DIRECTIONAL"), None)
+    assert directional is None or (
+        float(directional.overextension_penalty or 0.0) > 0.5
+        and (
+            directional.entry_quality_reason == "overextended_entry"
+            or directional.execution_allowed is False
+        )
+    )
+
+
+def test_midday_breakout_requires_stronger_trigger(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "SESSION_MIDDAY_DIRECTIONAL_TRIGGER_MIN", 0.80, raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+
+    opening = _opportunity_market_data(symbol="NIFTY")
+    opening["minutes_since_open"] = 10
+    opening["minutes_to_close"] = 320
+    opening["vwap"] = 24998.0
+    opening["ltp_change_window"] = 0.25
+    opening["ltp_change_5m"] = 0.05
+    opening["ltp_change_10m"] = 0.1
+
+    midday = _opportunity_market_data(symbol="NIFTY")
+    midday["minutes_since_open"] = 150
+    midday["minutes_to_close"] = 180
+    midday["vwap"] = 24998.0
+    midday["ltp_change_window"] = 0.25
+    midday["ltp_change_5m"] = 0.05
+    midday["ltp_change_10m"] = 0.1
+
+    opening_candidates = builder._build_nonlive_opportunity_candidates(
+        opening,
+        ltp=float(opening["ltp"]),
+        vwap=float(opening["vwap"]),
+        trigger_reason="unit_test_opening_breakout",
+    )
+    midday_candidates = builder._build_nonlive_opportunity_candidates(
+        midday,
+        ltp=float(midday["ltp"]),
+        vwap=float(midday["vwap"]),
+        trigger_reason="unit_test_midday_breakout",
+    )
+
+    opening_directional = next(candidate for candidate in opening_candidates if candidate.strategy == "OPP_DIRECTIONAL")
+    midday_directional = next(candidate for candidate in midday_candidates if candidate.strategy == "OPP_DIRECTIONAL")
+
+    assert float(midday_directional.trigger_score or 0.0) < float(opening_directional.trigger_score or 0.0)
+    assert (
+        midday_directional.entry_quality_reason == "midday_trigger_too_weak"
+        or float(midday_directional.trigger_score or 0.0) < float(getattr(cfg, "SESSION_MIDDAY_DIRECTIONAL_TRIGGER_MIN", 0.80))
+    )
+    assert midday_directional.execution_allowed is False or midday_directional.candidate_status != "executable"
+
+
+def test_flashy_signal_cannot_survive_without_consensus(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "NONLIVE_EXECUTABLE_MIN_FAMILY_SURVIVAL", 0.70, raising=False)
+    builder = TradeBuilder()
+    _disable_opportunity_signals(monkeypatch)
+
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["regime"] = "RANGE"
+    market_data["regime_day"] = "RANGE"
+    market_data["day_type"] = "RANGE_DAY"
+    market_data["minutes_since_open"] = 140
+    market_data["minutes_to_close"] = 170
+    market_data["atr"] = 25.0
+    market_data["vwap"] = 24860.0
+    market_data["ltp_change_window"] = 85.0
+    market_data["ltp_change_5m"] = 45.0
+    market_data["ltp_change_10m"] = 55.0
+    market_data["vol_z"] = 1.2
+    market_data["data_confidence"] = 0.25
+    market_data["quote_ok"] = False
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="unit_test_flashy_without_consensus",
+    )
+
+    directional = next(candidate for candidate in candidates if candidate.strategy == "OPP_DIRECTIONAL")
+    assert float(directional.trigger_score or 0.0) > float(directional.setup_score or 0.0)
+    assert float(directional.family_survival_score or 0.0) < float(getattr(cfg, "NONLIVE_EXECUTABLE_MIN_FAMILY_SURVIVAL", 0.55))
+    assert directional.execution_allowed is False
     assert list(getattr(builder, "_last_ranked_candidates", []) or []) == []
 
 
@@ -1441,3 +2312,47 @@ def test_build_with_trace_softens_no_candidates_survived_in_sim(monkeypatch):
     assert "OPP_DIRECTIONAL" in ranked_strategies
     assert float((trade.score_breakdown or {}).get("candidate_quality_score") or 0.0) > 0.0
     assert float((trade.score_breakdown or {}).get("execution_feasibility_score") or 0.0) > 0.0
+
+
+def test_candidate_rejection_records_stage_and_reason(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "DATA_ROOT", str(tmp_path / ".runtime"), raising=False)
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path / ".runtime"))
+    monkeypatch.setattr(cfg, "OFFLINE_THRESHOLD_AUDIT_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _disable_opportunity_signals(monkeypatch)
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["minutes_since_open"] = 150
+    market_data["minutes_to_close"] = 180
+    market_data["vwap"] = 24998.0
+    market_data["ltp_change_window"] = 0.25
+    market_data["ltp_change_5m"] = 0.05
+    market_data["ltp_change_10m"] = 0.1
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+
+    candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="unit_test_rejection_record",
+    )
+
+    directional = next(candidate for candidate in candidates if candidate.strategy == "OPP_DIRECTIONAL")
+    assert directional.execution_allowed is False
+    records = load_candidate_decisions(path=tmp_path / ".runtime" / "analytics" / "candidate_decisions.jsonl")
+    builder_record = next(
+        row for row in records
+        if row["decision_phase"] == "builder" and row["trade_id"] == directional.trade_id
+    )
+
+    assert builder_record["rejected_at_stage"] in {"trigger", "entry_quality", "risk_budget"}
+    assert builder_record["rejection_reason_code"] is not None
+    assert builder_record["strategy_family"] == "continuation"
+    assert builder_record["direction_family"] == "bullish"
+    assert builder_record["session_mode"] == directional.session_mode
+    assert builder_record["strategy_regime_mode"] in {"TRENDING", "UNCERTAIN"}
+    assert float(builder_record["setup_score"] or 0.0) >= 0.0
+    assert float(builder_record["trigger_score"] or 0.0) >= 0.0
+    assert float(builder_record["entry_quality_score"] or 0.0) >= 0.0
+    assert float(builder_record["family_survival_score"] or 0.0) >= 0.0

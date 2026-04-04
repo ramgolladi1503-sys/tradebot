@@ -128,6 +128,53 @@ def _merge_payload(existing: dict[str, Any] | None, incoming: dict[str, Any]) ->
         merged["strike"] = incoming.get("strike")
     if incoming.get("instrument_token") is not None:
         merged["instrument_token"] = incoming.get("instrument_token")
+    for field_name in (
+        "bid",
+        "ask",
+        "bid_qty",
+        "ask_qty",
+        "spread_pct",
+        "spread_change_ratio",
+        "spread_stability_score",
+        "quote_ts_epoch",
+        "quote_age_sec",
+        "bid_age_sec",
+        "ask_age_sec",
+    ):
+        incoming_value = _safe_float(incoming.get(field_name))
+        if incoming_value is not None:
+            merged[field_name] = incoming_value
+        elif field_name not in merged:
+            merged[field_name] = None
+    for field_name in ("spread_source", "quote_source", "liquidity_validation_mode"):
+        incoming_value = incoming.get(field_name)
+        if incoming_value not in (None, "", "None"):
+            merged[field_name] = incoming_value
+        elif field_name not in merged:
+            merged[field_name] = None
+    existing_spread = _safe_float(existing.get("spread_pct"))
+    incoming_spread = _safe_float(incoming.get("spread_pct"))
+    if incoming_spread is not None:
+        merged["spread_pct"] = incoming_spread
+        if existing_spread is not None and existing_spread > 0:
+            spread_change_ratio = abs(float(incoming_spread) - float(existing_spread)) / max(abs(float(existing_spread)), 1e-6)
+            merged["spread_change_ratio"] = spread_change_ratio
+            full_scale = 1.0
+            try:
+                from config import config as cfg
+
+                full_scale = max(
+                    float(getattr(cfg, "DATA_CONFIDENCE_SPREAD_CHANGE_FULL_SCALE", 1.0) or 1.0),
+                    1e-6,
+                )
+            except Exception:
+                full_scale = 1.0
+            merged["spread_stability_score"] = max(
+                0.0,
+                min(1.0, 1.0 - min(float(spread_change_ratio) / full_scale, 1.0)),
+            )
+        elif merged.get("spread_stability_score") is None:
+            merged["spread_stability_score"] = 1.0
     return merged
 
 
@@ -178,6 +225,20 @@ def update_option_liquidity_cache(
             "current_volume": _safe_float(raw_row.get("current_volume")),
             "oi": _safe_float(raw_row.get("oi")),
             "oi_change": _safe_float(raw_row.get("oi_change")),
+            "bid": _safe_float(raw_row.get("best_bid") if raw_row.get("best_bid") is not None else raw_row.get("bid")),
+            "ask": _safe_float(raw_row.get("best_ask") if raw_row.get("best_ask") is not None else raw_row.get("ask")),
+            "bid_qty": _safe_float(raw_row.get("bid_qty")),
+            "ask_qty": _safe_float(raw_row.get("ask_qty")),
+            "spread_pct": _safe_float(raw_row.get("spread_pct")),
+            "spread_change_ratio": _safe_float(raw_row.get("spread_change_ratio")),
+            "spread_stability_score": _safe_float(raw_row.get("spread_stability_score")),
+            "quote_ts_epoch": _safe_float(raw_row.get("quote_ts_epoch")),
+            "quote_age_sec": _safe_float(raw_row.get("quote_age_sec")),
+            "bid_age_sec": _safe_float(raw_row.get("bid_age_sec")),
+            "ask_age_sec": _safe_float(raw_row.get("ask_age_sec")),
+            "spread_source": raw_row.get("spread_source") or raw_row.get("price_source") or source,
+            "quote_source": raw_row.get("quote_source") or raw_row.get("price_source"),
+            "liquidity_validation_mode": raw_row.get("liquidity_validation_mode"),
             "snapshot_ts_epoch": _snapshot_epoch(raw_row, snapshot_ts_epoch),
             "source": source,
         }
@@ -195,6 +256,10 @@ def update_option_liquidity_cache(
             and payload.get("current_volume") is None
             and payload.get("oi") is None
             and payload.get("oi_change") is None
+            and payload.get("bid") is None
+            and payload.get("ask") is None
+            and payload.get("spread_pct") is None
+            and payload.get("quote_ts_epoch") is None
         ):
             continue
         if payload.get("current_volume") is None and payload.get("volume") is not None:
@@ -250,6 +315,17 @@ def hydrate_option_liquidity_fields(
         ("current_volume", ("current_volume", "volume")),
         ("oi", ("oi",)),
         ("oi_change", ("oi_change",)),
+        ("bid", ("bid",)),
+        ("ask", ("ask",)),
+        ("bid_qty", ("bid_qty",)),
+        ("ask_qty", ("ask_qty",)),
+        ("spread_pct", ("spread_pct",)),
+        ("spread_change_ratio", ("spread_change_ratio",)),
+        ("spread_stability_score", ("spread_stability_score",)),
+        ("quote_ts_epoch", ("quote_ts_epoch",)),
+        ("quote_age_sec", ("quote_age_sec",)),
+        ("bid_age_sec", ("bid_age_sec", "quote_age_sec")),
+        ("ask_age_sec", ("ask_age_sec", "quote_age_sec")),
     ):
         if _safe_float(out.get(field_name)) is not None:
             continue
@@ -258,12 +334,28 @@ def hydrate_option_liquidity_fields(
             if value is not None:
                 out[field_name] = value
                 break
+    for field_name, source_fields in (
+        ("spread_source", ("spread_source", "source")),
+        ("quote_source", ("quote_source", "source")),
+        ("liquidity_validation_mode", ("liquidity_validation_mode",)),
+    ):
+        if out.get(field_name) not in (None, "", "None"):
+            continue
+        for source_field in source_fields:
+            value = payload.get(source_field)
+            if value not in (None, "", "None"):
+                out[field_name] = value
+                break
     if cache_hit:
         snapshot_ts_epoch = _safe_float(payload.get("snapshot_ts_epoch"))
         if snapshot_ts_epoch is not None:
             liquidity_age_sec = max(0.0, float((now_epoch if now_epoch is not None else now_utc_epoch())) - snapshot_ts_epoch)
             if out.get("liquidity_age_sec") is None:
                 out["liquidity_age_sec"] = liquidity_age_sec
+            if out.get("chain_snapshot_age_sec") is None:
+                out["chain_snapshot_age_sec"] = liquidity_age_sec
+            if out.get("cache_age_sec") is None:
+                out["cache_age_sec"] = liquidity_age_sec
         if not out.get("liquidity_source"):
             out["liquidity_source"] = str(payload.get("source") or "option_liquidity_cache")
     if out.get("liquidity_cache_hit") is None:

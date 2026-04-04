@@ -26,6 +26,7 @@ class ExecutionQualityDecision:
     depth_score: float | None = None
     fill_probability: float | None = None
     execution_quality_score: float | None = None
+    data_confidence: float | None = None
     context: dict[str, Any] = field(default_factory=dict)
 
 
@@ -180,6 +181,24 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
         )
 
     source_flags = _candidate_get(candidate, "source_flags") or {}
+    data_state = str(
+        _candidate_get(candidate, "data_state")
+        or source_flags.get("data_state")
+        or ""
+    ).strip().upper()
+    fresh_quote_ok = _candidate_get(candidate, "fresh_quote_ok", source_flags.get("fresh_quote_ok"))
+    liquidity_ok = _candidate_get(candidate, "liquidity_ok", source_flags.get("liquidity_ok"))
+    spread_ok = _candidate_get(candidate, "spread_ok", source_flags.get("spread_ok"))
+    data_confidence = _safe_float(
+        _candidate_get(candidate, "data_confidence", source_flags.get("data_confidence"))
+    )
+    fallback_driven = bool(
+        source_flags.get("fallback_candidate")
+        or source_flags.get("recovered_fallback")
+        or _candidate_get(candidate, "planning_only", False)
+        or str(_candidate_get(candidate, "chain_source") or source_flags.get("chain_source") or "").strip().lower()
+        in {"synthetic_chain", "close_fallback", "quote_fallback", "recovered_fallback"}
+    )
     execution_block_type = str(source_flags.get("execution_block_type") or "").strip().lower()
     if execution_block_type == "advisory":
         runtime_mode = str(
@@ -216,6 +235,84 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
             fill_probability=0.0,
             execution_quality_score=0.0,
         )
+    if fallback_driven:
+        return ExecutionQualityDecision(
+            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+            execution_ok=False,
+            order_policy="advisory",
+            reason_code="fallback_driven_data",
+            reason="fallback_driven_data",
+            data_confidence=data_confidence,
+            context={"data_state": data_state or None},
+        )
+    if data_state in {"DATA_STALE", "DATA_INCONSISTENT", "DATA_MISSING"}:
+        reason_code = {
+            "DATA_STALE": "stale_quote",
+            "DATA_INCONSISTENT": "inconsistent_quote",
+            "DATA_MISSING": "missing_quote",
+        }.get(data_state, "data_invalid")
+        return ExecutionQualityDecision(
+            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+            execution_ok=False,
+            order_policy="reject",
+            reason_code=reason_code,
+            reason=reason_code,
+            data_confidence=data_confidence,
+            context={"data_state": data_state},
+        )
+    min_data_confidence = float(getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20) or 0.20)
+    if data_confidence is not None and float(data_confidence) < min_data_confidence:
+        return ExecutionQualityDecision(
+            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+            execution_ok=False,
+            order_policy="reject",
+            reason_code="low_data_confidence",
+            reason="low_data_confidence",
+            data_confidence=data_confidence,
+            context={"data_state": data_state or None},
+        )
+    if fresh_quote_ok is False:
+        return ExecutionQualityDecision(
+            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+            execution_ok=False,
+            order_policy="reject",
+            reason_code="stale_quote",
+            reason="stale_quote",
+            data_confidence=data_confidence,
+            context={"data_state": data_state or None},
+        )
+    if spread_ok is False:
+        return ExecutionQualityDecision(
+            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+            execution_ok=False,
+            order_policy="reject",
+            reason_code="unverified_spread",
+            reason="unverified_spread",
+            data_confidence=data_confidence,
+            context={"data_state": data_state or None},
+        )
+    if liquidity_ok is False:
+        return ExecutionQualityDecision(
+            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+            execution_ok=False,
+            order_policy="reject",
+            reason_code="missing_liquidity_validation",
+            reason="missing_liquidity_validation",
+            data_confidence=data_confidence,
+            context={"data_state": data_state or None},
+        )
 
     bid = _safe_float(_candidate_get(candidate, "best_bid"))
     if bid is None:
@@ -247,6 +344,8 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
         vol_z=_candidate_get(candidate, "vol_z"),
     )
     liquidity_quality = _liquidity_quality(candidate)
+    if data_confidence is not None:
+        liquidity_quality = min(liquidity_quality, max(0.0, min(1.0, float(data_confidence))))
     policy = choose_order_policy(
         execution_entry_present=execution_entry is not None,
         execution_entry_status=execution_entry_status,
@@ -257,6 +356,17 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
         quote_ok=bool(_candidate_get(candidate, "quote_ok", True)),
     )
     spread_penalty = float(slippage.spread_penalty)
+    if data_confidence is not None:
+        soft_floor = float(getattr(cfg, "DATA_CONFIDENCE_EXECUTION_SOFT_FLOOR", 0.45) or 0.45)
+        if float(data_confidence) < soft_floor:
+            penalty_delta = (
+                max(0.0, soft_floor - float(data_confidence))
+                / max(soft_floor, 1e-6)
+            ) * float(getattr(cfg, "EXECUTION_QUALITY_LIMIT_SCORE_PENALTY", 0.015) or 0.015)
+            spread_penalty = min(
+                float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+                spread_penalty + penalty_delta,
+            )
     if policy.allowed and policy.order_policy == "limit":
         spread_penalty = min(
             float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
@@ -287,6 +397,7 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
         "depth_score": round(float(depth_score), 6),
         "fill_probability": round(float(fill_probability), 6),
         "execution_quality_score": round(float(execution_quality_score_value), 6),
+        "data_confidence": data_confidence,
     }
     return ExecutionQualityDecision(
         expected_slippage=slippage.expected_slippage,
@@ -304,6 +415,7 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
         depth_score=round(float(depth_score), 6),
         fill_probability=round(float(fill_probability), 6),
         execution_quality_score=round(float(execution_quality_score_value), 6),
+        data_confidence=(round(float(data_confidence), 6) if data_confidence is not None else None),
         context=context,
     )
 

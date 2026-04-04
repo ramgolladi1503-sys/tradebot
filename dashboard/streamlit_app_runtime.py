@@ -1426,7 +1426,7 @@ def _safe_sort_by_last_seen(df: pd.DataFrame) -> pd.DataFrame:
             display_epoch = display_epoch.where(display_epoch.notna(), snapshot_epoch)
 
     if display_epoch is None:
-        display_epoch = pd.Series(pd.NA, index=work.index, dtype="float64")
+        display_epoch = pd.Series(float("nan"), index=work.index, dtype="float64")
     work["display_ts_epoch"] = display_epoch
     if "last_seen_ts" in work.columns:
         work["last_seen_ts"] = pd.to_datetime(work["last_seen_ts"], errors="coerce", utc=True)
@@ -1492,6 +1492,20 @@ def _select_visible_advisory_rows(df: pd.DataFrame) -> pd.DataFrame:
     if out.empty:
         return out
     return _prepare_trade_display_df(out)
+
+
+def _build_reject_reason_summary(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty or "primary_blocker" not in df.columns:
+        return pd.DataFrame(columns=["primary_blocker", "count"])
+    return (
+        df["primary_blocker"]
+        .astype(str)
+        .str.strip()
+        .replace({"": "UNSPECIFIED", "None": "UNSPECIFIED"})
+        .value_counts()
+        .rename_axis("primary_blocker")
+        .reset_index(name="count")
+    )
 
 
 def _select_executable_suggestion_rows(df: pd.DataFrame) -> pd.DataFrame:
@@ -7349,7 +7363,48 @@ if nav == "Home":
             suggested_display = select_display_df(suggested_df, "advisory").head(25)
             show_cols = [c for c in suggested_display.columns if c not in {"trade_key", "tradingsymbol"}]
             if show_cols and not suggested_display.empty:
-                _render_upstox_table(suggested_display, show_cols, "suggested_trades")
+                class_series = suggested_display.get("candidate_class")
+                if class_series is None:
+                    class_series = suggested_display.get("candidate_status")
+                if class_series is None:
+                    class_series = pd.Series(["ADVISORY_ONLY"] * len(suggested_display), index=suggested_display.index)
+                class_series = class_series.astype(str).str.strip().str.upper()
+                class_series = class_series.replace(
+                    {
+                        "EXECUTABLE": "EXECUTABLE",
+                        "NEAR_EXECUTABLE": "NEAR_EXECUTABLE",
+                        "ADVISORY_ONLY": "ADVISORY_ONLY",
+                        "EXE": "EXECUTABLE",
+                        "ADVISORY": "ADVISORY_ONLY",
+                    }
+                )
+
+                def _render_candidate_section(title: str, mask, key: str):
+                    bucket = suggested_display.loc[mask].copy()
+                    if bucket.empty:
+                        return
+                    st.caption(title)
+                    _render_upstox_table(bucket, show_cols, key)
+
+                _render_candidate_section(
+                    "Top Executable Opportunities",
+                    class_series.eq("EXECUTABLE"),
+                    "suggested_trades_executable",
+                )
+                _render_candidate_section(
+                    "Near-Executable Watchlist",
+                    class_series.eq("NEAR_EXECUTABLE"),
+                    "suggested_trades_near",
+                )
+                _render_candidate_section(
+                    "Advisory / Fallback",
+                    ~class_series.isin(["EXECUTABLE", "NEAR_EXECUTABLE"]),
+                    "suggested_trades_advisory",
+                )
+                blocker_counts = _build_reject_reason_summary(suggested_display)
+                if not blocker_counts.empty:
+                    st.caption("Reject Reason Summary")
+                    st.dataframe(blocker_counts.head(10), use_container_width=True, hide_index=True)
             else:
                 primary_blocker = str(status_payload.get("primary_blocker") or status_payload.get("reason") or "NO_CANDIDATES")
                 empty_state(f"No visible advisory rows right now. Primary blocker: {primary_blocker}.")

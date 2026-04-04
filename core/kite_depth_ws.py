@@ -27,7 +27,7 @@ from core.market_data_monitor import get_feed_health_monitor, record_depth, reco
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core import risk_halt
 from core.paths import repo_root, logs_dir
-from core.log_writer import get_jsonl_writer
+from core.log_writer import get_jsonl_writer, get_rotating_logger
 from core.run_lock import RunLock
 from core.runtime_lifecycle import lifecycle
 from core.blocker_lifecycle import (
@@ -63,7 +63,6 @@ _FULL_RESTARTS = []
 _STALE_STRIKES = 0
 _WARMUP_PENDING = False
 _LOG_PATH = logs_dir() / "depth_ws_watchdog.log"
-_LOG_WRITER = get_jsonl_writer(_LOG_PATH)
 _TICK_INGEST_ERROR_PATH = logs_dir() / "tick_ingest_errors.jsonl"
 _TICK_INGEST_ERROR_WRITER = get_jsonl_writer(_TICK_INGEST_ERROR_PATH)
 _TICK_INGEST_ERROR_LOCK = threading.Lock()
@@ -85,6 +84,10 @@ _LAST_ATM_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_COUNTS_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL: dict[str, int] = {}
 logger = logging.getLogger(__name__)
+_WS_LOGGER = get_rotating_logger("depth_ws_watchdog", _LOG_PATH)
+_WS_LOG_THROTTLE_SEC = 5.0
+_WS_LOG_THROTTLE_LOCK = threading.Lock()
+_WS_LOG_LAST_EMIT: dict[str, float] = {}
 
 
 def _use_internal_reconnect() -> bool:
@@ -408,17 +411,34 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):
     return []
 
 
-def _log_ws(event: str, extra: dict | None = None):
+def _should_throttle_ws_event(key: str, *, now_epoch: float, cooldown_sec: float = _WS_LOG_THROTTLE_SEC) -> bool:
+    with _WS_LOG_THROTTLE_LOCK:
+        last_emit = _WS_LOG_LAST_EMIT.get(key)
+        if last_emit is not None and (float(now_epoch) - float(last_emit)) < float(cooldown_sec):
+            return True
+        _WS_LOG_LAST_EMIT[key] = float(now_epoch)
+        if len(_WS_LOG_LAST_EMIT) > 2048:
+            cutoff = float(now_epoch) - (float(cooldown_sec) * 2.0)
+            for stale_key, stale_ts in list(_WS_LOG_LAST_EMIT.items()):
+                if float(stale_ts) < cutoff:
+                    _WS_LOG_LAST_EMIT.pop(stale_key, None)
+        return False
+
+
+def _log_ws(event: str, extra: dict | None = None, *, throttle_key: str | None = None):
     try:
+        now_epoch = now_utc_epoch()
         payload = {
-            "ts_epoch": now_utc_epoch(),
+            "ts_epoch": now_epoch,
             "ts_ist": now_ist().isoformat(),
             "event": event,
         }
         if extra:
             payload.update(extra)
-        if not _LOG_WRITER.write(payload):
-            logger.error("depth_ws_log_write_failed path=%s", _LOG_PATH)
+        if throttle_key:
+            if _should_throttle_ws_event(str(throttle_key), now_epoch=float(now_epoch)):
+                return
+        _WS_LOGGER.info(json.dumps(payload, sort_keys=True, default=str))
     except Exception as exc:
         logger.error("depth_ws_log_error path=%s err=%s:%s", _LOG_PATH, type(exc).__name__, exc)
 
@@ -958,7 +978,11 @@ def _run_db_tick_watchdog_cycle(
         )
     elif db_tick_age_sec is not None and db_tick_age_sec > float(stale_restart_sec):
         _STALE_STRIKES += 1
-        _log_ws("FEED_TICK_STALE", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
+        _log_ws(
+            "FEED_TICK_STALE",
+            {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES},
+            throttle_key="FEED_TICK_STALE",
+        )
         _emit_feed_health(
             "FEED_STALE",
             {
@@ -2932,6 +2956,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             "subscribed_tokens_count_by_symbol": _subscribed_tokens_count_by_symbol(_LAST_TOKENS),
                             "reason": "market_open_option_subscriptions_missing",
                         },
+                        throttle_key="FEED_OPTION_SUBSCRIPTIONS_MISSING",
                     )
                     _soft_resubscribe_current(reason="market_open_option_subscriptions_missing")
             try:
@@ -2984,6 +3009,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         "strikes": no_tick_strikes,
                         "backoff_sec": backoff,
                     },
+                    throttle_key="FEED_NO_TICKS_DETECTED",
                 )
                 if (now_loop - last_no_tick_restart) >= backoff:
                     last_no_tick_restart = now_loop
@@ -3004,7 +3030,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 now = time.time()
                 # Warm-up wait until first fresh tick arrives after connect/reconnect.
                 if now - last_warmup_log >= 30.0:
-                    _log_ws("FEED_WARMUP_WAIT", {})
+                    _log_ws("FEED_WARMUP_WAIT", {}, throttle_key="FEED_WARMUP_WAIT")
                     last_warmup_log = now
                 _emit_snapshot(now_loop)
                 continue
@@ -3021,6 +3047,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 _log_ws(
                     "FEED_STALE_DETECTED",
                     {"age_sec": age, "strikes": depth_stale_strikes, "max_age": max_age},
+                    throttle_key="FEED_STALE_DETECTED",
                 )
 
                 if depth_stale_strikes >= 2:

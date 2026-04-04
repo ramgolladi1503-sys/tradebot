@@ -76,6 +76,16 @@ def validate_live_entry(
     require_token: bool = False,
     require_strict_match: bool = False,
     allow_candle_fallback: bool = False,
+    bid: float | None = None,
+    ask: float | None = None,
+    bid_age_sec: float | None = None,
+    ask_age_sec: float | None = None,
+    chain_snapshot_age_sec: float | None = None,
+    fresh_quote_ok: bool | None = None,
+    spread_ok: bool | None = None,
+    liquidity_ok: bool | None = None,
+    data_state: str | None = None,
+    data_confidence: float | None = None,
 ) -> dict[str, Any]:
     now_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     mismatch_pct = float(mismatch_pct if mismatch_pct is not None else getattr(cfg, "OPTION_ENTRY_MISMATCH_PCT", 0.03))
@@ -126,6 +136,28 @@ def validate_live_entry(
     record_freshness_decision(decision)
     out.update(freshness_public_fields(decision))
     out["freshness_decision"] = decision.to_dict()
+    component_truth_requested = any(
+        value is not None
+        for value in (
+            bid,
+            ask,
+            bid_age_sec,
+            ask_age_sec,
+            chain_snapshot_age_sec,
+            fresh_quote_ok,
+            spread_ok,
+            liquidity_ok,
+            data_state,
+        )
+    )
+    if component_truth_requested:
+        out["bid"] = bid
+        out["ask"] = ask
+        out["bid_age_sec"] = _to_float(bid_age_sec)
+        out["ask_age_sec"] = _to_float(ask_age_sec)
+        out["chain_snapshot_age_sec"] = _to_float(chain_snapshot_age_sec)
+        out["data_state"] = str(data_state or "").strip().upper() or None
+        out["data_confidence"] = _to_float(data_confidence)
     if current_ltp is None:
         out["entry_status"] = "NO_LIVE_OPTION_FEED"
         return out
@@ -135,6 +167,41 @@ def validate_live_entry(
         else:
             out["entry_status"] = "STALE_OPTION_LTP"
         return out
+    if component_truth_requested:
+        normalized_state = str(data_state or "").strip().upper()
+        component_ages = [
+            age
+            for age in (
+                _to_float(out.get("price_age_sec")),
+                _to_float(bid_age_sec),
+                _to_float(ask_age_sec),
+                _to_float(chain_snapshot_age_sec),
+            )
+            if age is not None
+        ]
+        oldest_component_age = max(component_ages) if component_ages else None
+        book_age_breached = bool(
+            oldest_component_age is not None and float(oldest_component_age) > float(max_age_sec)
+        )
+        if normalized_state == "DATA_MISSING":
+            out["entry_status"] = "NO_LIVE_OPTION_FEED"
+            return out
+        if normalized_state == "DATA_INCONSISTENT":
+            out["entry_status"] = "INCONSISTENT_OPTION_QUOTE"
+            return out
+        if normalized_state == "DATA_STALE" or fresh_quote_ok is False or book_age_breached:
+            out["entry_status"] = "STALE_OPTION_BOOK"
+            return out
+        if spread_ok is False:
+            out["entry_status"] = "UNVERIFIED_OPTION_SPREAD"
+            return out
+        if liquidity_ok is False:
+            out["entry_status"] = "INSUFFICIENT_OPTION_LIQUIDITY"
+            return out
+        normalized_confidence = _to_float(data_confidence)
+        if normalized_confidence is not None and normalized_confidence < float(getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20) or 0.20):
+            out["entry_status"] = "LOW_DATA_CONFIDENCE"
+            return out
     sig_val = _to_float(signal_price)
     ltp_val = _to_float(current_ltp)
     if ltp_val is None or ltp_val <= 0:

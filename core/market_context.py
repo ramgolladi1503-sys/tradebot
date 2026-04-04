@@ -226,3 +226,222 @@ def derive_market_context(
 
 def is_offhours(snapshot_or_config: Mapping[str, Any] | Any = None) -> bool:
     return derive_market_context(snapshot_or_config).mode == "OFFHOURS"
+
+
+def derive_regime_context(snapshot_or_config: Mapping[str, Any] | Any = None) -> dict[str, Any]:
+    normalized = _normalized_context_mapping(snapshot_or_config) or {}
+    regime = str(
+        normalized.get("primary_regime")
+        or normalized.get("regime")
+        or normalized.get("regime_day")
+        or "NEUTRAL"
+    ).strip().upper() or "NEUTRAL"
+    regime_probs = normalized.get("regime_probs")
+    regime_confidence = None
+    if isinstance(regime_probs, Mapping):
+        try:
+            regime_confidence = max(float(value) for value in regime_probs.values() if value is not None)
+        except Exception:
+            regime_confidence = None
+    if regime_confidence is None:
+        regime_confidence = _to_bool_or_none(normalized.get("regime_confidence"))
+        if regime_confidence is None:
+            try:
+                regime_confidence = float(normalized.get("regime_confidence"))
+            except Exception:
+                regime_confidence = 0.5 if regime != "NEUTRAL" else 0.35
+    try:
+        ltp = float(normalized.get("ltp") or 0.0)
+    except Exception:
+        ltp = 0.0
+    try:
+        vwap = float(normalized.get("vwap") or ltp or 0.0)
+    except Exception:
+        vwap = ltp
+    try:
+        atr = float(normalized.get("atr") or 0.0)
+    except Exception:
+        atr = 0.0
+    try:
+        vwap_slope = float(normalized.get("vwap_slope") or 0.0)
+    except Exception:
+        vwap_slope = 0.0
+    try:
+        ltp_change_window = float(normalized.get("ltp_change_window") or normalized.get("ltp_change") or 0.0)
+    except Exception:
+        ltp_change_window = 0.0
+    try:
+        vol_z = float(normalized.get("vol_z") or 0.0)
+    except Exception:
+        vol_z = 0.0
+
+    trend_mode = "SIDEWAYS"
+    edge = (ltp - vwap) / max(abs(vwap), 1e-6) if vwap else 0.0
+    directional_move = abs(ltp_change_window)
+    if regime == "TREND":
+        sideways_hint = not bool(edge or ltp_change_window or vwap_slope)
+    else:
+        sideways_hint = bool(
+            regime in {"RANGE", "RANGE_VOLATILE", "NEUTRAL"}
+            or (
+                abs(vwap_slope) < float(getattr(cfg, "TREND_VWAP_FALLBACK_SLOPE_ABS_MIN", 0.0008))
+                and directional_move <= max(atr * 0.25, 1e-6)
+            )
+        )
+    if not sideways_hint:
+        direction_hint = edge
+        if abs(direction_hint) <= 1e-9:
+            direction_hint = vwap_slope if abs(vwap_slope) > 1e-9 else ltp_change_window
+        if direction_hint > 0:
+            trend_mode = "BULLISH"
+        elif direction_hint < 0:
+            trend_mode = "BEARISH"
+    range_mode = bool(sideways_hint or trend_mode == "SIDEWAYS")
+    volatility_mode = "NORMAL"
+    if regime in {"EVENT", "PANIC"} or vol_z >= float(getattr(cfg, "EVENT_VOL_Z", 1.0)):
+        volatility_mode = "HIGH"
+    elif vol_z <= -0.5:
+        volatility_mode = "LOW"
+
+    return {
+        "regime": regime,
+        "regime_confidence": float(regime_confidence or 0.0),
+        "trend_mode": trend_mode,
+        "range_mode": bool(range_mode),
+        "volatility_mode": volatility_mode,
+    }
+
+
+def classify_strategy_regime_mode(snapshot_or_config: Mapping[str, Any] | Any = None) -> dict[str, Any]:
+    regime_ctx = derive_regime_context(snapshot_or_config)
+    normalized = _normalized_context_mapping(snapshot_or_config) or {}
+    try:
+        ltp = float(normalized.get("ltp") or 0.0)
+    except Exception:
+        ltp = 0.0
+    try:
+        vwap = float(normalized.get("vwap") or ltp or 0.0)
+    except Exception:
+        vwap = ltp
+    try:
+        atr = float(normalized.get("atr") or 0.0)
+    except Exception:
+        atr = 0.0
+    try:
+        ltp_change_window = float(normalized.get("ltp_change_window") or normalized.get("ltp_change") or 0.0)
+    except Exception:
+        ltp_change_window = 0.0
+    try:
+        vol_z = float(normalized.get("vol_z") or 0.0)
+    except Exception:
+        vol_z = 0.0
+
+    directional_move_atr = abs(float(ltp_change_window)) / max(float(atr), 1e-6) if atr > 0 else 0.0
+    regime_confidence = float(regime_ctx.get("regime_confidence") or 0.0)
+    trend_mode = str(regime_ctx.get("trend_mode") or "SIDEWAYS").strip().upper()
+    range_mode = bool(regime_ctx.get("range_mode"))
+    volatility_mode = str(regime_ctx.get("volatility_mode") or "NORMAL").strip().upper()
+    regime = str(regime_ctx.get("regime") or "NEUTRAL").strip().upper() or "NEUTRAL"
+    vwap_edge = abs(float(ltp - vwap)) / max(abs(vwap), 1e-6) if vwap else 0.0
+    trend_edge_min = max(
+        float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008),
+        1e-6,
+    )
+
+    regime_mode = "UNCERTAIN"
+    reasons: list[str] = []
+    if regime_confidence < float(getattr(cfg, "STRATEGY_REGIME_UNCERTAIN_CONFIDENCE_MAX", 0.30) or 0.30):
+        regime_mode = "UNCERTAIN"
+        reasons.append("low_regime_confidence")
+    elif range_mode or trend_mode == "SIDEWAYS":
+        regime_mode = "SIDEWAYS"
+        reasons.append("range_or_sideways")
+    elif (
+        trend_mode in {"BULLISH", "BEARISH"}
+        and regime_confidence >= float(getattr(cfg, "STRATEGY_REGIME_CONFIDENCE_MIN", 0.45) or 0.45)
+        and (
+            directional_move_atr >= float(getattr(cfg, "STRATEGY_REGIME_TREND_ATR_MIN", 0.35) or 0.35)
+            or vwap_edge >= trend_edge_min
+        )
+    ):
+        regime_mode = "TRENDING"
+        reasons.append("directional_persistence")
+    elif (
+        volatility_mode == "LOW"
+        and directional_move_atr <= float(getattr(cfg, "STRATEGY_REGIME_LOW_VOL_ATR_MAX", 0.18) or 0.18)
+        and abs(vol_z) <= float(getattr(cfg, "STRATEGY_REGIME_COMPRESSION_VOL_Z_MAX", 0.35) or 0.35)
+    ):
+        regime_mode = "LOW_VOL"
+        reasons.append("compressed_low_vol")
+    elif volatility_mode == "LOW":
+        regime_mode = "LOW_VOL"
+        reasons.append("low_volatility_mode")
+    else:
+        regime_mode = "UNCERTAIN"
+        reasons.append("mixed_regime_signals")
+
+    return {
+        **dict(regime_ctx),
+        "regime_mode": regime_mode,
+        "directional_move_atr": round(float(directional_move_atr), 6),
+        "regime_gate_reasons": reasons,
+    }
+
+
+def classify_session_mode(snapshot_or_config: Mapping[str, Any] | Any = None) -> dict[str, Any]:
+    normalized = _normalized_context_mapping(snapshot_or_config) or {}
+    market_ctx = derive_market_context(normalized or snapshot_or_config)
+    try:
+        minutes_since_open = float(normalized.get("minutes_since_open"))
+    except Exception:
+        minutes_since_open = None
+    try:
+        minutes_to_close = float(normalized.get("minutes_to_close"))
+    except Exception:
+        minutes_to_close = None
+
+    opening_policy = cfg.get_session_policy("OPENING")
+    midday_policy = cfg.get_session_policy("MIDDAY")
+    closing_policy = cfg.get_session_policy("CLOSING")
+    offhours_policy = cfg.get_session_policy("OFFHOURS")
+    opening_window = max(0.0, float(opening_policy.get("opening_window_min") or 20.0))
+    midday_start = max(opening_window, float(midday_policy.get("midday_start_min") or 60.0))
+    closing_window = max(0.0, float(closing_policy.get("closing_window_min") or 35.0))
+
+    session_mode = "OFFHOURS"
+    reasons: list[str] = []
+    if not bool(market_ctx.is_market_open) or str(market_ctx.mode).strip().upper() == "OFFHOURS":
+        session_mode = "OFFHOURS"
+        reasons.append("market_closed")
+    elif minutes_since_open is not None and float(minutes_since_open) <= opening_window:
+        session_mode = "OPENING"
+        reasons.append("opening_window")
+    elif minutes_to_close is not None and float(minutes_to_close) <= closing_window:
+        session_mode = "CLOSING"
+        reasons.append("closing_window")
+    elif minutes_since_open is not None and float(minutes_since_open) >= midday_start:
+        session_mode = "MIDDAY"
+        reasons.append("midday_session")
+    else:
+        session_mode = "MIDDAY"
+        reasons.append("default_live_session")
+
+    penalty_map = {
+        "OPENING": float(opening_policy.get("entry_penalty") or 0.02),
+        "MIDDAY": float(midday_policy.get("entry_penalty") or 0.12),
+        "CLOSING": float(closing_policy.get("entry_penalty") or 0.10),
+        "OFFHOURS": float(offhours_policy.get("entry_penalty") or 0.20),
+    }
+    session_confidence = 1.0
+    if minutes_since_open is None and minutes_to_close is None and session_mode != "OFFHOURS":
+        session_confidence = 0.55
+        reasons.append("missing_session_minutes")
+    return {
+        "session_mode": session_mode,
+        "session_confidence": round(float(session_confidence), 6),
+        "session_entry_penalty": round(float(penalty_map.get(session_mode, 0.0)), 6),
+        "session_gate_reasons": reasons,
+        "minutes_since_open": minutes_since_open,
+        "minutes_to_close": minutes_to_close,
+        "market_mode": market_ctx.mode,
+    }

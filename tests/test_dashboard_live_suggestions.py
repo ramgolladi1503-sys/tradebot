@@ -9,7 +9,7 @@ import pandas as pd
 from core import advisory_schema
 from core.advisory_row_integrity import CANONICAL_ROW_KIND
 from dashboard.readers.advisory_reader import read_advisory_snapshot_rows
-from dashboard.ui.table_model import select_display_df
+from dashboard.ui.table_model import CANONICAL_COLUMNS, select_display_df
 
 
 def _iso_now() -> str:
@@ -140,6 +140,22 @@ def test_load_live_suggestions_df_returns_empty_when_snapshot_missing_even_if_ta
     df_live = runtime._load_live_suggestions_df(limit=2)
 
     assert df_live.empty
+
+
+def test_reject_reason_summary_populates():
+    df = pd.DataFrame(
+        [
+            {"trade_id": "T-1", "primary_blocker": "stale_quote"},
+            {"trade_id": "T-2", "primary_blocker": "stale_quote"},
+            {"trade_id": "T-3", "primary_blocker": "missing_liquidity"},
+            {"trade_id": "T-4", "primary_blocker": ""},
+        ]
+    )
+
+    summary = runtime._build_reject_reason_summary(df)
+
+    assert list(summary["primary_blocker"]) == ["stale_quote", "missing_liquidity", "UNSPECIFIED"]
+    assert list(summary["count"]) == [2, 1, 1]
 
 
 def test_load_live_suggestions_df_prefers_advisory_latest_snapshot(tmp_path, monkeypatch):
@@ -682,6 +698,25 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
     assert str(loaded["display_entry_status"]) == "displayable"
     assert loaded["decision_explain"] == [{"code": "TRACE", "message": "kept"}]
     assert bool(loaded["market_open"]) is True
+
+
+def test_dashboard_table_model_includes_new_diagnostic_fields():
+    for field in (
+        "rejection_impact_warning",
+        "starvation_warning",
+        "edge_improved_flag",
+        "filtering_without_edge_flag",
+        "top_damaging_gate_rank",
+    ):
+        assert field in CANONICAL_COLUMNS
+
+
+def test_dashboard_table_model_includes_tuning_recommendation_fields():
+    for field in (
+        "recommended_threshold_delta",
+        "gate_protected_flag",
+    ):
+        assert field in CANONICAL_COLUMNS
 
 
 def test_load_live_suggestions_df_filters_queue_only_row_when_entry_missing(tmp_path, monkeypatch):

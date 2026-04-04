@@ -3,13 +3,31 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import replace
+import hashlib
 from typing import Any, Iterable
 
 from config import config as cfg
 from core.analytics.confidence_calibration import calibrate_confidence, load_latest_confidence_calibration_report
 from core.capital_allocator import allocate_capital_slots
 from core.execution_quality import evaluate_pretrade_execution_quality
+from core.feature_builder import assess_trade_feature_quality
+from core.learning_state import load_learning_state, save_learning_state
 from core.portfolio_optimizer import optimize_portfolio_selection
+from core.risk_engine import adjust_system_aggressiveness, evaluate_candidate_risk
+from core.threshold_audit import (
+    build_candidate_decision_record,
+    compute_starvation_diagnostics,
+    load_candidate_decisions,
+    record_candidate_decision,
+    write_threshold_audit_summaries,
+)
+from core.threshold_tuning import (
+    build_threshold_tuning_recommendations,
+    get_contextual_threshold_adjustment as _threshold_tuning_contextual_adjustment,
+    load_threshold_tuning_recommendations,
+    save_threshold_tuning_recommendations,
+)
+from core.trade_scoring import compute_final_score
 
 
 _HOSTILE_REGIMES = {"EVENT", "PANIC"}
@@ -41,6 +59,14 @@ def _candidate_key(candidate: Any) -> str:
     ).strip()
 
 
+def _update_candidate(candidate: Any, **updates: Any) -> Any:
+    if isinstance(candidate, dict):
+        out = dict(candidate)
+        out.update(updates)
+        return out
+    return replace(candidate, **updates)
+
+
 def _candidate_detail(candidate: Any) -> dict[str, Any]:
     detail = _get_value(candidate, "trade_score_detail", {}) or {}
     return detail if isinstance(detail, dict) else {}
@@ -63,6 +89,45 @@ def _weighted_average(parts: list[tuple[float | None, float]]) -> float:
     if total_weight <= 0:
         return 0.0
     return _clamp01(total_score / total_weight, default=0.0) or 0.0
+
+
+def _aggressiveness_threshold_shift(mode: str | None) -> float:
+    max_shift = max(
+        0.0,
+        float(getattr(cfg, "OFFLINE_AGGRESSIVENESS_MAX_THRESHOLD_SHIFT", 0.01) or 0.01),
+    )
+    normalized = str(mode or "NORMAL").strip().upper() or "NORMAL"
+    if normalized in {"TOO_TIMID", "STARVING"}:
+        return -max_shift
+    if normalized == "OVERTRADING":
+        return max_shift
+    return 0.0
+
+
+def _get_contextual_threshold_adjustment(
+    stage: str | None,
+    family: str | None,
+    session: str | None,
+    regime: str | None,
+    recommendations: dict[str, Any] | None,
+) -> float:
+    return float(
+        _threshold_tuning_contextual_adjustment(
+            stage,
+            family,
+            session,
+            regime,
+            recommendations,
+        )
+        or 0.0
+    )
+
+
+def _bool_from_candidate(candidate: Any, field: str, fallback: Any = False) -> bool:
+    value = _get_value(candidate, field, None)
+    if value is None:
+        value = fallback
+    return bool(value)
 
 
 def _liquidity_quality(candidate: Any) -> float:
@@ -95,6 +160,78 @@ def _freshness_quality(candidate: Any) -> float:
     if quote_age is None:
         return 0.5
     return _clamp01(1.0 - min(float(quote_age) / max_age, 1.0), default=0.0) or 0.0
+
+
+def _candidate_feature_quality(candidate: Any) -> dict[str, Any]:
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
+    market_mode = _candidate_market_mode(candidate)
+    market_data = {
+        "execution_mode": market_mode,
+        "market_context": {
+            "execution_mode": market_mode,
+            "market_open": market_mode == "LIVE",
+        },
+        "market_open": market_mode == "LIVE",
+        "quote_ok": _get_value(candidate, "quote_ok", source_flags.get("quote_ok", True)),
+        "chain_snapshot_age_sec": _get_value(candidate, "chain_snapshot_age_sec", source_flags.get("chain_snapshot_age_sec")),
+        "liquidity_age_sec": _get_value(candidate, "liquidity_age_sec", source_flags.get("liquidity_age_sec")),
+    }
+    opt_like = {
+        "ltp": _get_value(candidate, "opt_ltp")
+        or _get_value(candidate, "current_ltp")
+        or _get_value(candidate, "last_price"),
+        "last_price": _get_value(candidate, "opt_ltp")
+        or _get_value(candidate, "current_ltp")
+        or _get_value(candidate, "last_price"),
+        "bid": _get_value(candidate, "best_bid", _get_value(candidate, "opt_bid")),
+        "ask": _get_value(candidate, "best_ask", _get_value(candidate, "opt_ask")),
+        "quote_age_sec": _get_value(candidate, "quote_age_sec", source_flags.get("quote_age_sec")),
+        "ltp_age_sec": _get_value(candidate, "ltp_age_sec", source_flags.get("ltp_age_sec")),
+        "bid_age_sec": _get_value(candidate, "bid_age_sec", source_flags.get("bid_age_sec")),
+        "ask_age_sec": _get_value(candidate, "ask_age_sec", source_flags.get("ask_age_sec")),
+        "chain_snapshot_age_sec": _get_value(
+            candidate,
+            "chain_snapshot_age_sec",
+            source_flags.get("chain_snapshot_age_sec", _get_value(candidate, "liquidity_age_sec")),
+        ),
+        "liquidity_age_sec": _get_value(candidate, "liquidity_age_sec", source_flags.get("liquidity_age_sec")),
+        "quote_ok": _get_value(candidate, "quote_ok", source_flags.get("quote_ok", True)),
+        "volume": _get_value(candidate, "volume"),
+        "current_volume": _get_value(candidate, "current_volume", _get_value(candidate, "volume")),
+        "spread_source": _get_value(candidate, "spread_source", source_flags.get("spread_source")),
+        "price_source": _get_value(candidate, "price_source", source_flags.get("quote_source")),
+        "liquidity_source": _get_value(candidate, "liquidity_source", source_flags.get("liquidity_source")),
+        "liquidity_cache_hit": _get_value(candidate, "liquidity_cache_hit", source_flags.get("liquidity_cache_hit")),
+        "spread_change_ratio": _get_value(candidate, "spread_change_ratio", source_flags.get("spread_change_ratio")),
+        "spread_stability_score": _get_value(candidate, "spread_stability_score", source_flags.get("spread_stability_score")),
+    }
+    quality = assess_trade_feature_quality(market_data, opt_like)
+    for field_name in (
+        "fresh_quote_ok",
+        "liquidity_ok",
+        "spread_ok",
+        "data_state",
+        "quote_completeness",
+        "quote_consistency_ok",
+        "spread_source",
+        "liquidity_validation_mode",
+        "ltp_age_sec",
+        "bid_age_sec",
+        "ask_age_sec",
+        "chain_snapshot_age_sec",
+        "data_confidence",
+        "spread_stability_score",
+        "book_freshness_score",
+        "quote_completeness_score",
+        "quote_consistency_score",
+        "spread_change_ratio",
+    ):
+        explicit_value = _get_value(candidate, field_name, None)
+        if explicit_value is None and isinstance(source_flags, dict):
+            explicit_value = source_flags.get(field_name)
+        if explicit_value is not None:
+            quality[field_name] = explicit_value
+    return quality
 
 
 def _regime_alignment(candidate: Any) -> float:
@@ -143,13 +280,112 @@ def _opportunity_bucket(score: float | None) -> str:
     return "LOW"
 
 
-def _adaptive_execution_threshold_context(candidate: Any) -> dict[str, Any]:
+def _candidate_market_mode(candidate: Any) -> str:
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
+    market_context = _get_value(candidate, "market_context", {}) or {}
+    return str(
+        _get_value(candidate, "market_mode")
+        or source_flags.get("market_mode")
+        or source_flags.get("runtime_mode")
+        or market_context.get("mode")
+        or market_context.get("execution_mode")
+        or "LIVE"
+    ).strip().upper()
+
+
+def _candidate_class_priority(candidate_class: str | None) -> int:
+    normalized = str(candidate_class or "").strip().upper()
+    return {
+        "EXECUTABLE": 2,
+        "NEAR_EXECUTABLE": 1,
+        "ADVISORY_ONLY": 0,
+    }.get(normalized, 0)
+
+
+def _candidate_primary_blocker(candidate: Any, *, metrics: dict[str, Any] | None = None) -> str | None:
+    primary = _get_value(candidate, "primary_blocker")
+    if primary:
+        return str(primary)
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
+    primary = source_flags.get("primary_blocker")
+    if primary:
+        return str(primary)
+    blockers = list(_get_value(candidate, "tradable_reasons_blocking", []) or [])
+    if blockers:
+        return str(blockers[0])
+    if metrics:
+        if _safe_float(metrics.get("data_confidence")) is not None and float(metrics.get("data_confidence") or 0.0) < float(getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20) or 0.20):
+            return "low_data_confidence"
+        if not bool(metrics.get("fresh_quote_ok")):
+            return "stale_quote"
+        if not bool(metrics.get("liquidity_ok")):
+            return "missing_liquidity_validation"
+        if not bool(metrics.get("spread_ok")):
+            return "missing_spread"
+        if not bool(metrics.get("executable_truth")):
+            return "missing_execution_entry"
+    return None
+
+
+def _soft_threshold_probability(value: float, threshold: float, band: float) -> float:
+    width = max(float(band), 1e-6)
+    return _clamp01(0.5 + (((float(value) - float(threshold)) / width) * 0.5), default=0.0) or 0.0
+
+
+def _derive_candidate_class(candidate: Any, *, metrics: dict[str, Any] | None = None) -> str:
+    existing = str(_get_value(candidate, "candidate_class") or "").strip().upper()
+    if existing in {"EXECUTABLE", "NEAR_EXECUTABLE", "ADVISORY_ONLY"}:
+        return existing
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
+    blockers = set(str(code) for code in (_get_value(candidate, "tradable_reasons_blocking", []) or []) if str(code).strip())
+    market_mode = _candidate_market_mode(candidate)
+    planning_only = bool(_get_value(candidate, "planning_only", False)) or market_mode == "OFFHOURS"
+    is_fallback = bool(
+        source_flags.get("fallback_candidate")
+        or source_flags.get("recovered_fallback")
+        or "fallback_no_viable_candidates" in blockers
+    )
+    if metrics is None:
+        metrics = {}
+    fresh_quote_ok = _bool_from_candidate(
+        candidate,
+        "fresh_quote_ok",
+        source_flags.get("fresh_quote_ok", metrics.get("freshness_quality", 0.0) >= 0.5),
+    )
+    liquidity_ok = _bool_from_candidate(
+        candidate,
+        "liquidity_ok",
+        source_flags.get("liquidity_ok", metrics.get("liquidity_quality", 0.0) >= 0.5),
+    )
+    spread_ok = _bool_from_candidate(
+        candidate,
+        "spread_ok",
+        source_flags.get("spread_ok", metrics.get("spread_quality", 0.0) >= 0.5),
+    )
+    execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
+    tradable = bool(_get_value(candidate, "tradable", False))
+    executable_truth = bool(metrics.get("executable_truth")) if "executable_truth" in metrics else _is_executable_opportunity(candidate)
+    execution_ok = True if metrics.get("execution_ok") is None else bool(metrics.get("execution_ok"))
+    if is_fallback or planning_only:
+        return "ADVISORY_ONLY"
+    if execution_allowed and tradable and executable_truth and execution_ok and fresh_quote_ok and liquidity_ok and spread_ok:
+        return "EXECUTABLE"
+    return "NEAR_EXECUTABLE"
+
+
+def _adaptive_execution_threshold_context(
+    candidate: Any,
+    *,
+    freshness_quality: float | None = None,
+    liquidity_quality: float | None = None,
+    spread_quality: float | None = None,
+) -> dict[str, Any]:
     base = float(getattr(cfg, "OPPORTUNITY_EXECUTION_SCORE_BASE", 0.52))
     adjustments: list[tuple[str, float]] = []
     regime = str(_get_value(candidate, "regime") or "").strip().upper()
-    liquidity_quality = _liquidity_quality(candidate)
-    freshness_quality = _freshness_quality(candidate)
-    spread_quality = _spread_quality(candidate)
+    liquidity_quality = _liquidity_quality(candidate) if liquidity_quality is None else float(liquidity_quality)
+    freshness_quality = _freshness_quality(candidate) if freshness_quality is None else float(freshness_quality)
+    spread_quality = _spread_quality(candidate) if spread_quality is None else float(spread_quality)
     minutes_since_open = _safe_float(_get_value(candidate, "minutes_since_open"))
     minutes_to_close = _safe_float(_get_value(candidate, "minutes_to_close"))
 
@@ -200,9 +436,14 @@ def _adaptive_execution_threshold_context(candidate: Any) -> dict[str, Any]:
 
 
 def _ranking_score(candidate: Any, metrics: dict[str, Any] | None = None) -> float:
+    explicit_final = _safe_float(_get_value(candidate, "final_score"))
+    if explicit_final is not None:
+        return float(explicit_final)
     explicit_rank = _safe_float(_get_value(candidate, "rank_score"))
     if explicit_rank is not None:
         return float(explicit_rank)
+    if metrics is not None and metrics.get("final_score") is not None:
+        return float(metrics.get("final_score") or 0.0)
     explicit_opportunity = _safe_float(_get_value(candidate, "opportunity_score"))
     if explicit_opportunity is not None:
         return float(explicit_opportunity)
@@ -327,6 +568,7 @@ def build_opportunity_score(
     gating_confidence_override: float | None = None,
 ) -> dict[str, Any]:
     detail = _candidate_detail(candidate)
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
     builder_confidence = (
         _clamp01(builder_confidence_override, default=None)
         if builder_confidence_override is not None
@@ -368,9 +610,11 @@ def build_opportunity_score(
         or _safe_float(_get_value(candidate, "entry_score")),
         default=None,
     )
-    spread_quality = _spread_quality(candidate)
-    liquidity_quality = _liquidity_quality(candidate)
-    freshness_quality = _freshness_quality(candidate)
+    feature_quality = _candidate_feature_quality(candidate)
+    spread_quality = float(feature_quality.get("spread_quality") or 0.0)
+    liquidity_quality = float(feature_quality.get("liquidity_quality") or 0.0)
+    freshness_quality = float(feature_quality.get("freshness_quality") or 0.0)
+    data_confidence = float(feature_quality.get("data_confidence") or 0.0)
     regime_alignment = _regime_alignment(candidate)
     strategy_priority = _strategy_priority(candidate)
     risk_adjusted_quality = _risk_adjusted_quality(candidate)
@@ -388,8 +632,99 @@ def build_opportunity_score(
         ]
     )
     execution_quality = evaluate_pretrade_execution_quality(candidate)
+    risk_assessment = evaluate_candidate_risk(candidate)
+    risk_budget_ok = bool(
+        _get_value(candidate, "risk_budget_ok", None)
+        if _get_value(candidate, "risk_budget_ok", None) is not None
+        else risk_assessment.risk_budget_ok
+    )
+    daily_kill_switch_active = bool(
+        _get_value(candidate, "daily_kill_switch_active", None)
+        if _get_value(candidate, "daily_kill_switch_active", None) is not None
+        else risk_assessment.daily_kill_switch_active
+    )
+    exposure_blocker = _get_value(candidate, "exposure_blocker", None)
+    if exposure_blocker in (None, "", "None"):
+        exposure_blocker = risk_assessment.exposure_blocker
+    correlation_penalty = _safe_float(_get_value(candidate, "correlation_penalty"))
+    if correlation_penalty is None:
+        correlation_penalty = float(risk_assessment.correlation_penalty or 0.0)
+    regime_failure_throttle = _safe_float(_get_value(candidate, "regime_failure_throttle"))
+    if regime_failure_throttle is None:
+        regime_failure_throttle = float(risk_assessment.regime_failure_throttle or 0.0)
+    family_failure_throttle = _safe_float(_get_value(candidate, "family_failure_throttle"))
+    if family_failure_throttle is None:
+        family_failure_throttle = float(risk_assessment.family_failure_throttle or 0.0)
+    risk_learning_adjustment = _safe_float(_get_value(candidate, "risk_learning_adjustment"))
+    if risk_learning_adjustment is None:
+        risk_learning_adjustment = float(risk_assessment.risk_learning_adjustment or 0.0)
+    risk_learning_confidence = _safe_float(_get_value(candidate, "risk_learning_confidence"))
+    if risk_learning_confidence is None:
+        risk_learning_confidence = float(risk_assessment.risk_learning_confidence or 0.0)
     score = _clamp01(score - float(execution_quality.spread_penalty or 0.0), default=0.0) or 0.0
-    threshold_context = _adaptive_execution_threshold_context(candidate)
+    threshold_context = _adaptive_execution_threshold_context(
+        candidate,
+        freshness_quality=freshness_quality,
+        liquidity_quality=liquidity_quality,
+        spread_quality=spread_quality,
+    )
+    fresh_quote_ok = bool(feature_quality.get("fresh_quote_ok"))
+    liquidity_ok = bool(feature_quality.get("liquidity_ok"))
+    spread_ok = bool(feature_quality.get("spread_ok"))
+    executable_truth = _is_executable_opportunity(candidate)
+    market_mode = _candidate_market_mode(candidate)
+    candidate_class = _derive_candidate_class(
+        candidate,
+        metrics={
+            "execution_ok": bool(execution_quality.execution_ok),
+            "executable_truth": executable_truth,
+            "freshness_quality": freshness_quality,
+            "liquidity_quality": liquidity_quality,
+            "spread_quality": spread_quality,
+        },
+    )
+    final_score_contract = compute_final_score(
+        candidate,
+        candidate_class=candidate_class,
+        market_mode=market_mode,
+        setup_quality=(
+            _safe_float(_get_value(candidate, "setup_strength"))
+            or builder_confidence
+        ),
+        confluence_score=confluence_score,
+        regime_fit=(
+            _safe_float(_get_value(candidate, "regime_fit"))
+            or regime_alignment
+        ),
+        liquidity_quality=(
+            _safe_float(_get_value(candidate, "liquidity_score"))
+            or liquidity_quality
+        ),
+        freshness_quality=freshness_quality,
+        execution_feasibility=(
+            _safe_float((detail or {}).get("execution_feasibility_score"))
+            or _safe_float(((_get_value(candidate, "score_breakdown", {}) or {})).get("execution_feasibility_score"))
+            or ((liquidity_quality * 0.4) + (spread_quality * 0.2) + (freshness_quality * 0.2) + (data_confidence * 0.2))
+        ),
+        data_confidence=data_confidence,
+        setup_score=_safe_float(_get_value(candidate, "setup_score")),
+        trigger_score=_safe_float(_get_value(candidate, "trigger_score")),
+        entry_quality_score=_safe_float(_get_value(candidate, "entry_quality_score")),
+        family_survival_score=_safe_float(_get_value(candidate, "family_survival_score")),
+        risk_learning_adjustment=risk_learning_adjustment,
+        risk_learning_confidence=risk_learning_confidence,
+        is_fallback=bool(
+            source_flags.get("fallback_candidate")
+            or source_flags.get("recovered_fallback")
+            or "fallback_no_viable_candidates" in set(_get_value(candidate, "tradable_reasons_blocking", []) or [])
+        ),
+        stale_quote=not fresh_quote_ok,
+        missing_liquidity=not liquidity_ok,
+        spread_uncertain=not spread_ok,
+    )
+    signal_score = float(final_score_contract.get("signal_score") or 0.0)
+    execution_score = float(final_score_contract.get("execution_score") or 0.0)
+    priority_score = float(final_score_contract.get("priority_score") or final_score_contract.get("final_score") or 0.0)
     return {
         "builder_confidence": builder_confidence,
         "permission_confidence": permission_confidence,
@@ -400,6 +735,11 @@ def build_opportunity_score(
         "liquidity_quality": liquidity_quality,
         "spread_quality": spread_quality,
         "freshness_quality": freshness_quality,
+        "data_confidence": data_confidence,
+        "spread_stability_score": float(feature_quality.get("spread_stability_score") or 0.0),
+        "book_freshness_score": float(feature_quality.get("book_freshness_score") or 0.0),
+        "quote_completeness_score": float(feature_quality.get("quote_completeness_score") or 0.0),
+        "quote_consistency_score": float(feature_quality.get("quote_consistency_score") or 0.0),
         "strategy_priority": strategy_priority,
         "risk_adjusted_quality": risk_adjusted_quality,
         "opportunity_score": score,
@@ -411,7 +751,12 @@ def build_opportunity_score(
         "fill_probability": float(execution_quality.fill_probability or 0.0),
         "execution_quality_score": float(execution_quality.execution_quality_score or 0.0),
         "executable_price_estimate": execution_quality.executable_price_estimate,
-        "execution_ok": bool(execution_quality.execution_ok),
+        "execution_ok": bool(
+            execution_quality.execution_ok
+            and risk_budget_ok
+            and not daily_kill_switch_active
+            and exposure_blocker in (None, "", "None")
+        ),
         "order_policy": str(execution_quality.order_policy),
         "order_policy_reason": str(execution_quality.reason_code),
         "adaptive_execution_threshold": float(threshold_context["threshold_effective"]),
@@ -419,6 +764,110 @@ def build_opportunity_score(
         "threshold_effective": float(threshold_context["threshold_effective"]),
         "threshold_adjustment_reason": str(threshold_context["threshold_adjustment_reason"]),
         "survival_floor": float(getattr(cfg, "OPPORTUNITY_SURVIVAL_SCORE_FLOOR", 0.35)),
+        "market_mode": market_mode,
+        "candidate_class": candidate_class,
+        "fresh_quote_ok": fresh_quote_ok,
+        "liquidity_ok": liquidity_ok,
+        "spread_ok": spread_ok,
+        "data_state": str(feature_quality.get("data_state") or "DATA_MISSING"),
+        "quote_completeness": feature_quality.get("quote_completeness"),
+        "quote_consistency_ok": bool(feature_quality.get("quote_consistency_ok", False)),
+        "ltp_age_sec": _safe_float(feature_quality.get("ltp_age_sec")),
+        "bid_age_sec": _safe_float(feature_quality.get("bid_age_sec")),
+        "ask_age_sec": _safe_float(feature_quality.get("ask_age_sec")),
+        "chain_snapshot_age_sec": _safe_float(feature_quality.get("chain_snapshot_age_sec")),
+        "spread_source": feature_quality.get("spread_source"),
+        "liquidity_validation_mode": feature_quality.get("liquidity_validation_mode"),
+        "executable_truth": executable_truth,
+        "final_score": float(final_score_contract["final_score"]),
+        "signal_score": signal_score,
+        "execution_score": execution_score,
+        "priority_score": priority_score,
+        "priority_weight_signal": float(final_score_contract.get("priority_weight_signal") or 0.0),
+        "priority_weight_execution": float(final_score_contract.get("priority_weight_execution") or 0.0),
+        "adaptive_weight_reasons": list(final_score_contract.get("adaptive_weight_reasons") or []),
+        "setup_score": float(final_score_contract.get("setup_score") or _safe_float(_get_value(candidate, "setup_score")) or 0.0),
+        "trigger_score": float(final_score_contract.get("trigger_score") or _safe_float(_get_value(candidate, "trigger_score")) or 0.0),
+        "entry_quality_score": float(final_score_contract.get("entry_quality_score") or _safe_float(_get_value(candidate, "entry_quality_score")) or 0.0),
+        "entry_quality_reason": _get_value(candidate, "entry_quality_reason"),
+        "overextension_score": float(_safe_float(_get_value(candidate, "overextension_score")) or 0.0),
+        "overextension_penalty": float(_safe_float(_get_value(candidate, "overextension_penalty")) or 0.0),
+        "entry_distance_to_invalidation": _safe_float(_get_value(candidate, "entry_distance_to_invalidation")),
+        "session_mode": _get_value(candidate, "session_mode"),
+        "session_entry_penalty": float(_safe_float(_get_value(candidate, "session_entry_penalty")) or 0.0),
+        "family_survival_score": float(final_score_contract.get("family_survival_score") or _safe_float(_get_value(candidate, "family_survival_score")) or 0.0),
+        "family_survival_components": dict(_get_value(candidate, "family_survival_components", {}) or {}),
+        "family_feedback_adjustment": float(final_score_contract.get("family_feedback_adjustment") or 0.0),
+        "family_feedback_confidence": float(final_score_contract.get("family_feedback_confidence") or 0.0),
+        "family_feedback_applied": bool(final_score_contract.get("family_feedback_applied", False)),
+        "family_signal_bias_adjustment": float(final_score_contract.get("family_signal_bias_adjustment") or 0.0),
+        "family_execution_bias_adjustment": float(final_score_contract.get("family_execution_bias_adjustment") or 0.0),
+        "expectancy_score": float(final_score_contract.get("expectancy_score") or 0.0),
+        "family_learning_state_generated_at": final_score_contract.get("family_learning_state_generated_at"),
+        "family_learning_state_version": final_score_contract.get("family_learning_state_version"),
+        "strategy_weight_adjustment": float(final_score_contract.get("strategy_weight_adjustment") or 0.0),
+        "strategy_weight_confidence": float(final_score_contract.get("strategy_weight_confidence") or 0.0),
+        "strategy_weight_applied": bool(final_score_contract.get("strategy_weight_applied", False)),
+        "strategy_signal_bias_adjustment": float(final_score_contract.get("strategy_signal_bias_adjustment") or 0.0),
+        "strategy_execution_bias_adjustment": float(final_score_contract.get("strategy_execution_bias_adjustment") or 0.0),
+        "strategy_weight_state_generated_at": final_score_contract.get("strategy_weight_state_generated_at"),
+        "strategy_weight_state_version": final_score_contract.get("strategy_weight_state_version"),
+        "adaptive_threshold_adjustment": float(final_score_contract.get("adaptive_threshold_adjustment") or 0.0),
+        "adaptive_threshold_impact_score": float(final_score_contract.get("adaptive_threshold_impact_score") or 0.0),
+        "adaptive_threshold_applied": bool(final_score_contract.get("adaptive_threshold_applied", False)),
+        "adaptive_threshold_key": final_score_contract.get("adaptive_threshold_key"),
+        "adaptive_threshold_count": int(final_score_contract.get("adaptive_threshold_count") or 0),
+        "risk_budget_ok": bool(risk_budget_ok),
+        "risk_budget_reason": str(
+            _get_value(candidate, "risk_budget_reason")
+            or risk_assessment.risk_budget_reason
+            or "ok"
+        ),
+        "position_size_estimate": int(
+            _get_value(candidate, "position_size_estimate")
+            if _get_value(candidate, "position_size_estimate", None) is not None
+            else risk_assessment.position_size_estimate
+        ),
+        "portfolio_heat_score": float(
+            _safe_float(_get_value(candidate, "portfolio_heat_score"))
+            if _safe_float(_get_value(candidate, "portfolio_heat_score")) is not None
+            else float(risk_assessment.portfolio_heat_score or 0.0)
+        ),
+        "correlation_penalty": float(correlation_penalty or 0.0),
+        "exposure_blocker": exposure_blocker,
+        "daily_kill_switch_active": bool(daily_kill_switch_active),
+        "regime_failure_throttle": float(regime_failure_throttle or 0.0),
+        "family_failure_throttle": float(family_failure_throttle or 0.0),
+        "risk_learning_adjustment": float(final_score_contract.get("risk_learning_adjustment") or risk_learning_adjustment or 0.0),
+        "risk_learning_confidence": float(final_score_contract.get("risk_learning_confidence") or risk_learning_confidence or 0.0),
+        "rejected_at_stage": risk_assessment.rejected_at_stage,
+        "rejection_reason_code": risk_assessment.rejection_reason_code,
+        "rejection_bucket": risk_assessment.rejection_bucket,
+        "rejection_severity": risk_assessment.rejection_severity,
+        "strategy_regime_mode": _get_value(candidate, "strategy_regime_mode") or source_flags.get("strategy_regime_mode"),
+        "final_score_base": float(final_score_contract["base_score"]),
+        "final_score_penalty_total": float(final_score_contract["penalty_total"]),
+        "final_score_penalty_reasons": list(final_score_contract["penalty_reasons"]),
+        "primary_blocker": (
+            "daily_kill_switch_active"
+            if daily_kill_switch_active
+            else (
+                f"risk_budget_{_get_value(candidate, 'risk_budget_reason') or risk_assessment.risk_budget_reason}"
+                if not risk_budget_ok
+                else (
+                    exposure_blocker
+                    or _candidate_primary_blocker(
+                        candidate,
+                        metrics={
+                            "fresh_quote_ok": fresh_quote_ok,
+                            "liquidity_ok": liquidity_ok,
+                            "spread_ok": spread_ok,
+                            "executable_truth": executable_truth,
+                        },
+                    )
+                )
+            )
+        ),
     }
 
 
@@ -578,7 +1027,9 @@ def annotate_relative_opportunity_ranks(
         scored.append(
             (
                 (
+                    int(_candidate_class_priority(metrics.get("candidate_class"))),
                     float(rank_score),
+                    float(metrics["final_score"]),
                     float(metrics["opportunity_score"]),
                     float(metrics["strategy_priority"]),
                     float(metrics["risk_adjusted_quality"]),
@@ -615,6 +1066,21 @@ def annotate_relative_opportunity_ranks(
                 "rank_global": int(index),
                 "rank_within_symbol": int(per_symbol_rank[symbol]),
                 "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
+                "candidate_class": metrics.get("candidate_class"),
+                "final_score": round(float(metrics.get("final_score") or 0.0), 6),
+                "primary_blocker": metrics.get("primary_blocker"),
+                "data_confidence": round(float(metrics.get("data_confidence") or 0.0), 6),
+                "priority_weight_signal": round(float(metrics.get("priority_weight_signal") or 0.0), 6),
+                "priority_weight_execution": round(float(metrics.get("priority_weight_execution") or 0.0), 6),
+                "family_feedback_adjustment": round(float(metrics.get("family_feedback_adjustment") or 0.0), 6),
+                "family_feedback_confidence": round(float(metrics.get("family_feedback_confidence") or 0.0), 6),
+                "family_feedback_applied": bool(metrics.get("family_feedback_applied", False)),
+                "expectancy_score": round(float(metrics.get("expectancy_score") or 0.0), 6),
+                "family_learning_state_generated_at": metrics.get("family_learning_state_generated_at"),
+                "family_learning_state_version": metrics.get("family_learning_state_version"),
+                "strategy_weight_adjustment": round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
+                "strategy_weight_confidence": round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
+                "strategy_weight_applied": bool(metrics.get("strategy_weight_applied", False)),
             }
         )
         if isinstance(candidate, dict):
@@ -622,9 +1088,24 @@ def annotate_relative_opportunity_ranks(
             updated.update(
                 {
                     "opportunity_score": round(float(metrics["opportunity_score"]), 6),
+                    "final_score": round(float(metrics["final_score"]), 6),
                     "rank_global": int(index),
                     "rank_within_symbol": int(per_symbol_rank[symbol]),
                     "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
+                    "candidate_class": metrics.get("candidate_class"),
+                    "primary_blocker": metrics.get("primary_blocker"),
+                    "data_confidence": round(float(metrics.get("data_confidence") or 0.0), 6),
+                    "priority_weight_signal": round(float(metrics.get("priority_weight_signal") or 0.0), 6),
+                    "priority_weight_execution": round(float(metrics.get("priority_weight_execution") or 0.0), 6),
+                    "family_feedback_adjustment": round(float(metrics.get("family_feedback_adjustment") or 0.0), 6),
+                    "family_feedback_confidence": round(float(metrics.get("family_feedback_confidence") or 0.0), 6),
+                    "family_feedback_applied": bool(metrics.get("family_feedback_applied", False)),
+                    "expectancy_score": round(float(metrics.get("expectancy_score") or 0.0), 6),
+                    "family_learning_state_generated_at": metrics.get("family_learning_state_generated_at"),
+                    "family_learning_state_version": metrics.get("family_learning_state_version"),
+                    "strategy_weight_adjustment": round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
+                    "strategy_weight_confidence": round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
+                    "strategy_weight_applied": bool(metrics.get("strategy_weight_applied", False)),
                     "source_flags": source_flags,
                 }
             )
@@ -632,19 +1113,36 @@ def annotate_relative_opportunity_ranks(
             updated = replace(
                 candidate,
                 opportunity_score=round(float(metrics["opportunity_score"]), 6),
+                final_score=round(float(metrics["final_score"]), 6),
                 rank_global=int(index),
                 rank_within_symbol=int(per_symbol_rank[symbol]),
                 opportunity_bucket=_opportunity_bucket(metrics.get("opportunity_score")),
+                candidate_class=metrics.get("candidate_class"),
+                primary_blocker=metrics.get("primary_blocker"),
+                data_confidence=round(float(metrics.get("data_confidence") or 0.0), 6),
+                priority_weight_signal=round(float(metrics.get("priority_weight_signal") or 0.0), 6),
+                priority_weight_execution=round(float(metrics.get("priority_weight_execution") or 0.0), 6),
+                family_feedback_adjustment=round(float(metrics.get("family_feedback_adjustment") or 0.0), 6),
+                family_feedback_confidence=round(float(metrics.get("family_feedback_confidence") or 0.0), 6),
+                family_feedback_applied=bool(metrics.get("family_feedback_applied", False)),
+                expectancy_score=round(float(metrics.get("expectancy_score") or 0.0), 6),
+                family_learning_state_generated_at=metrics.get("family_learning_state_generated_at"),
+                family_learning_state_version=metrics.get("family_learning_state_version"),
+                strategy_weight_adjustment=round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
+                strategy_weight_confidence=round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
+                strategy_weight_applied=bool(metrics.get("strategy_weight_applied", False)),
                 source_flags=source_flags,
             )
         annotated.append(updated)
     return annotated
 
 
-def _visibility_sort_key(candidate: Any) -> tuple[float, float, float, float, float, float, str, str]:
+def _visibility_sort_key(candidate: Any) -> tuple[float, float, float, float, float, float, float, float, str, str]:
     metrics = build_opportunity_score(candidate)
     return (
+        float(_candidate_class_priority(metrics.get("candidate_class"))),
         float(_ranking_score(candidate, metrics)),
+        float(_safe_float(_get_value(candidate, "final_score")) or metrics["final_score"] or 0.0),
         float(_safe_float(_get_value(candidate, "opportunity_score")) or metrics["opportunity_score"] or 0.0),
         float(metrics["strategy_priority"]),
         float(metrics["risk_adjusted_quality"]),
@@ -656,6 +1154,9 @@ def _visibility_sort_key(candidate: Any) -> tuple[float, float, float, float, fl
 
 
 def _is_executable_opportunity(candidate: Any) -> bool:
+    candidate_class = str(_get_value(candidate, "candidate_class") or "").strip().upper()
+    if candidate_class and candidate_class != "EXECUTABLE":
+        return False
     truth = _execution_truth(candidate)
     if not truth["truth_allows_execution"]:
         return False
@@ -675,6 +1176,11 @@ def _is_portfolio_selected(candidate: Any) -> bool:
 
 
 def _is_advisory_opportunity(candidate: Any) -> bool:
+    candidate_class = str(_get_value(candidate, "candidate_class") or "").strip().upper()
+    if candidate_class == "ADVISORY_ONLY":
+        return True
+    if candidate_class == "NEAR_EXECUTABLE":
+        return False
     if _is_executable_opportunity(candidate):
         return False
     display_entry = _safe_float(_get_value(candidate, "display_entry"))
@@ -794,6 +1300,19 @@ def _execution_truth(candidate: Any) -> dict[str, Any]:
     }
 
 
+def _is_near_executable_opportunity(candidate: Any) -> bool:
+    candidate_class = str(_get_value(candidate, "candidate_class") or "").strip().upper()
+    if candidate_class:
+        return candidate_class == "NEAR_EXECUTABLE"
+    if _is_executable_opportunity(candidate):
+        return False
+    return bool(
+        _safe_float(_get_value(candidate, "display_entry")) is not None
+        and str(_get_value(candidate, "display_entry_status") or "").strip().lower() in {"displayable", "non_executable"}
+        and bool(_get_value(candidate, "execution_allowed", False))
+    )
+
+
 def _dedupe_opportunity_candidates(candidates: Iterable[Any]) -> list[Any]:
     out: list[Any] = []
     seen: set[str] = set()
@@ -822,6 +1341,7 @@ def select_top_opportunities(
 ) -> dict[str, Any]:
     executable_limit = max(0, int(executable_top_n if executable_top_n is not None else getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)))
     advisory_limit = max(0, int(advisory_top_n if advisory_top_n is not None else getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)))
+    near_limit = max(0, int(getattr(cfg, "TOP_NEAR_EXECUTABLE_OPPORTUNITIES_N", advisory_limit or 0) or 0))
     candidate_list = _dedupe_opportunity_candidates(candidates)
     scored = [(_visibility_sort_key(candidate), candidate) for candidate in candidate_list]
     scored.sort(
@@ -837,15 +1357,28 @@ def select_top_opportunities(
         )
     )
     top_executable: list[Any] = []
+    top_near_executable: list[Any] = []
     top_advisory: list[Any] = []
+    executable_candidates_seen = 0
     for _sort_key, candidate in scored:
         if _is_executable_opportunity(candidate):
+            executable_candidates_seen += 1
+            if not bool(_get_value(candidate, "selected_for_execution", False)):
+                continue
             if len(top_executable) < executable_limit:
                 top_executable.append(candidate)
             continue
+        if _is_near_executable_opportunity(candidate):
+            if len(top_near_executable) < near_limit:
+                top_near_executable.append(candidate)
+            continue
         if _is_advisory_opportunity(candidate) and len(top_advisory) < advisory_limit:
             top_advisory.append(candidate)
-        if len(top_executable) >= executable_limit and len(top_advisory) >= advisory_limit:
+        if (
+            len(top_executable) >= executable_limit
+            and len(top_near_executable) >= near_limit
+            and len(top_advisory) >= advisory_limit
+        ):
             break
     if top_executable and bool(getattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", True)):
         executable_seed: list[Any] = []
@@ -877,10 +1410,22 @@ def select_top_opportunities(
             current_portfolio_exposure=current_portfolio_exposure,
         )
         top_executable = [candidate for candidate in optimized if _is_portfolio_selected(candidate)]
+    if top_executable:
+        selector_outcome = "EXECUTE_TOP"
+    elif executable_candidates_seen > 0:
+        selector_outcome = "NO_EXECUTABLE_OPPORTUNITY"
+    elif top_near_executable:
+        selector_outcome = "WATCHLIST_ONLY"
+    elif top_advisory:
+        selector_outcome = "ADVISORY_ONLY"
+    else:
+        selector_outcome = "NO_EXECUTABLE_OPPORTUNITY"
     return {
         "top_executable_opportunities": top_executable,
+        "top_near_executable_opportunities": top_near_executable,
         "top_advisory_opportunities": top_advisory,
         "candidates_considered": len(candidate_list),
+        "selector_outcome": selector_outcome,
     }
 
 
@@ -896,6 +1441,19 @@ def annotate_ranked_opportunities(
         return []
     if not bool(getattr(cfg, "OPPORTUNITY_ENGINE_ENABLE", True)):
         return candidate_list
+    learning_state = load_learning_state()
+    threshold_summary_prior = dict((learning_state or {}).get("threshold_summary") or {})
+    offline_scope = any(_candidate_market_mode(candidate) in {"SIM", "PAPER", "OFFHOURS"} for candidate in candidate_list)
+    aggressiveness_mode = "NORMAL"
+    aggressiveness_adjustment = 0.0
+    if bool(getattr(cfg, "OFFLINE_AGGRESSIVENESS_GUARD_ENABLE", False)) and offline_scope and threshold_summary_prior:
+        aggressiveness_mode = adjust_system_aggressiveness(
+            {
+                "survival_rate": threshold_summary_prior.get("avg_survival_rate"),
+                "no_trade_rate": threshold_summary_prior.get("no_executable_opportunity_rate"),
+            }
+        )
+        aggressiveness_adjustment = _aggressiveness_threshold_shift(aggressiveness_mode)
     executable_top_n = max(1, int(top_n or getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)))
     scored: list[tuple[tuple[int, float, float, float], Any, dict[str, Any]]] = []
     for candidate in candidate_list:
@@ -904,14 +1462,22 @@ def annotate_ranked_opportunities(
         execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
         tradable = bool(_get_value(candidate, "tradable", False))
         truth = _execution_truth(candidate)
+        candidate_class = str(
+            metrics.get("candidate_class")
+            or _derive_candidate_class(candidate, metrics=metrics)
+            or truth["candidate_class"]
+        ).strip().upper()
         execution_eligible = bool(
-            truth["truth_allows_execution"] and bool(metrics["execution_ok"])
+            candidate_class == "EXECUTABLE"
+            and truth["truth_allows_execution"]
+            and bool(metrics["execution_ok"])
         )
         scored.append(
             (
                 (
-                    1 if execution_eligible else 0,
+                    int(_candidate_class_priority(candidate_class)),
                     float(ranking_score),
+                    float(metrics["final_score"]),
                     float(metrics["opportunity_score"]),
                     float(metrics["builder_confidence"]),
                 ),
@@ -921,30 +1487,158 @@ def annotate_ranked_opportunities(
                     "ranking_score": float(ranking_score),
                     "execution_allowed": execution_allowed,
                     "tradable": tradable,
-                    "candidate_class": truth["candidate_class"],
                     "executable_truth": truth["execution_truth"],
                     "truth_allows_execution": truth["truth_allows_execution"],
                     "class_blocks_execution": truth["class_blocks_execution"],
                     "debug_blocks_execution": truth["debug_blocks_execution"],
                     "execution_eligible": execution_eligible,
+                    "candidate_class": candidate_class,
                 },
             )
         )
     scored.sort(key=lambda item: item[0], reverse=True)
     scored, global_filter_meta = _apply_global_opportunity_filter(scored, scope=scope)
     shadow_by_key = _build_confidence_shadow_map(scored, scope=scope, executable_top_n=executable_top_n)
+    best_non_executable_score = max(
+        (
+            float(item[2].get("final_score") or 0.0)
+            for item in scored
+            if str(item[2].get("candidate_class") or "").strip().upper() != "EXECUTABLE"
+        ),
+        default=0.0,
+    )
     annotated: list[Any] = []
+    selected_candidates_for_risk: list[Any] = []
     for index, (_sort_key, candidate, metrics) in enumerate(scored, start=1):
         rank_context = dict(metrics)
         rank_context["opportunity_rank"] = index
+        rank_context["opportunity_score"] = float(metrics["final_score"])
         size_multiplier, size_reason = derive_opportunity_size_multiplier(candidate, rank_context)
-        score = float(metrics["opportunity_score"])
+        score = float(metrics["final_score"])
+        raw_opportunity_score = float(metrics["opportunity_score"])
         adaptive_threshold = float(metrics["adaptive_execution_threshold"])
         floor = float(metrics["survival_floor"])
+        min_priority_score = float(getattr(cfg, "MIN_PRIORITY_SCORE_FOR_EXECUTABLE", 0.55))
+        min_execution_score = float(getattr(cfg, "MIN_EXECUTION_SCORE_FOR_EXECUTABLE", 0.45))
+        min_gap = max(0.0, float(getattr(cfg, "MIN_EXECUTABLE_GAP_OVER_NEXT_NON_EXECUTABLE", 0.0) or 0.0))
+        priority_soft_band = float(getattr(cfg, "SELECTION_SOFT_SCORE_BAND", 0.03) or 0.03)
+        execution_soft_band = float(getattr(cfg, "SELECTION_SOFT_EXECUTION_BAND", 0.08) or 0.08)
+        priority_target = max(adaptive_threshold, min_priority_score)
+        effective_priority_target = max(
+            0.0,
+            min(1.0, float(priority_target) + float(aggressiveness_adjustment)),
+        )
+        selection_probability_floor = float(getattr(cfg, "MIN_SELECTION_PROBABILITY", 0.45) or 0.45)
+        effective_selection_probability_floor = max(
+            0.0,
+            min(1.0, float(selection_probability_floor) + (float(aggressiveness_adjustment) * 0.5)),
+        )
+        gap_target = float(best_non_executable_score + min_gap) if min_gap > 0.0 else float(score)
+        priority_prob = _soft_threshold_probability(
+            score,
+            effective_priority_target,
+            priority_soft_band,
+        )
+        execution_prob = _soft_threshold_probability(
+            float(metrics.get("execution_score") or 0.0),
+            min_execution_score,
+            execution_soft_band,
+        )
+        gap_prob = (
+            _soft_threshold_probability(
+                score,
+                gap_target,
+                float(getattr(cfg, "SELECTION_SOFT_GAP_BAND", 0.03) or 0.03),
+            )
+            if min_gap > 0.0 and str(metrics.get("candidate_class") or "").strip().upper() == "EXECUTABLE"
+            else 1.0
+        )
+        family_prob = 0.5
+        if bool(metrics.get("family_feedback_applied", False)):
+            max_family_adjustment = max(
+                float(getattr(cfg, "OFFLINE_FAMILY_LEARNING_MAX_ADJUSTMENT", 0.06) or 0.06),
+                1e-6,
+            )
+            family_feedback_adjustment = float(metrics.get("family_feedback_adjustment") or 0.0)
+            family_feedback_confidence = float(metrics.get("family_feedback_confidence") or 0.0)
+            family_prob = _clamp01(
+                0.5
+                + (
+                    (family_feedback_adjustment / max_family_adjustment)
+                    * 0.5
+                    * max(0.0, min(1.0, family_feedback_confidence))
+                ),
+                default=0.5,
+            ) or 0.5
+        risk_assessment = evaluate_candidate_risk(
+            candidate,
+            portfolio_state=(current_portfolio_exposure if isinstance(current_portfolio_exposure, dict) else {}),
+            selected_candidates=selected_candidates_for_risk,
+        )
+        risk_budget_ok = bool(bool(metrics.get("risk_budget_ok", True)) and bool(risk_assessment.risk_budget_ok))
+        exposure_blocker = metrics.get("exposure_blocker") or risk_assessment.exposure_blocker
+        daily_kill_switch_active = bool(
+            bool(metrics.get("daily_kill_switch_active", False))
+            or bool(risk_assessment.daily_kill_switch_active)
+        )
+        regime_failure_throttle = max(
+            float(metrics.get("regime_failure_throttle") or 0.0),
+            float(risk_assessment.regime_failure_throttle or 0.0),
+        )
+        family_failure_throttle = max(
+            float(metrics.get("family_failure_throttle") or 0.0),
+            float(risk_assessment.family_failure_throttle or 0.0),
+        )
+        correlation_penalty = max(
+            float(metrics.get("correlation_penalty") or 0.0),
+            float(risk_assessment.correlation_penalty or 0.0),
+        )
+        risk_learning_adjustment = float(
+            metrics.get("risk_learning_adjustment", risk_assessment.risk_learning_adjustment) or 0.0
+        )
+        risk_learning_confidence = float(
+            metrics.get("risk_learning_confidence", risk_assessment.risk_learning_confidence) or 0.0
+        )
+        throttle_blocked = bool(regime_failure_throttle > 0.0 or family_failure_throttle > 0.0)
+        if daily_kill_switch_active:
+            risk_prob = 0.0
+        elif not risk_budget_ok or exposure_blocker not in (None, "", "None"):
+            risk_prob = 0.1
+        else:
+            risk_prob = _clamp01(
+                1.0
+                - min(1.0, correlation_penalty)
+                - min(1.0, regime_failure_throttle)
+                - min(1.0, family_failure_throttle)
+                + max(0.0, min(0.10, risk_learning_adjustment)),
+                default=0.0,
+            ) or 0.0
+        selection_probability = _weighted_average(
+            [
+                (priority_prob, 0.38),
+                (execution_prob, 0.25),
+                (gap_prob, 0.12),
+                (family_prob, 0.10),
+                (risk_prob, 0.15),
+            ]
+        )
+        gap_ok = bool(min_gap <= 0.0 or score >= gap_target)
+        clearly_below_priority = bool(score < (priority_target - priority_soft_band))
+        clearly_below_priority = bool(score < (effective_priority_target - priority_soft_band))
+        clearly_below_execution = bool(
+            float(metrics.get("execution_score") or 0.0) < (min_execution_score - execution_soft_band)
+        )
         selected = bool(
             metrics["execution_eligible"]
             and index <= executable_top_n
-            and score >= adaptive_threshold
+            and score >= floor
+            and not clearly_below_priority
+            and not clearly_below_execution
+            and risk_budget_ok
+            and not daily_kill_switch_active
+            and exposure_blocker in (None, "", "None")
+            and not throttle_blocked
+            and float(selection_probability) >= float(effective_selection_probability_floor)
         )
         if selected:
             selection_reason = "selected_top_rank"
@@ -952,20 +1646,43 @@ def annotate_ranked_opportunities(
             selection_reason = "not_execution_eligible"
         elif not bool(metrics["truth_allows_execution"]):
             selection_reason = "execution_truth_blocked"
+        elif daily_kill_switch_active:
+            selection_reason = "daily_kill_switch_active"
+        elif not risk_budget_ok:
+            selection_reason = "risk_budget_reject"
+        elif exposure_blocker not in (None, "", "None"):
+            selection_reason = str(exposure_blocker)
+        elif throttle_blocked:
+            selection_reason = "family_failure_throttle" if family_failure_throttle > 0.0 else "regime_failure_throttle"
         elif not bool(metrics["execution_ok"]):
             selection_reason = "execution_quality_reject"
         elif score < floor:
             selection_reason = "below_survival_floor"
+        elif score < min_priority_score:
+            selection_reason = "below_min_priority_score"
+        elif float(metrics.get("execution_score") or 0.0) < min_execution_score:
+            selection_reason = "below_min_execution_score"
+        elif not gap_ok:
+            selection_reason = "below_executable_gap"
         elif score < adaptive_threshold:
             selection_reason = "below_adaptive_threshold"
+        elif float(selection_probability) < float(effective_selection_probability_floor):
+            selection_reason = "low_selection_probability"
         else:
             selection_reason = "rank_outside_top_n"
+        shadow_meta = shadow_by_key.get(_candidate_key(candidate), {})
+        existing_rejected_at_stage = _get_value(candidate, "rejected_at_stage") or metrics.get("rejected_at_stage")
+        existing_rejection_reason_code = _get_value(candidate, "rejection_reason_code") or metrics.get("rejection_reason_code")
+        existing_rejection_bucket = _get_value(candidate, "rejection_bucket") or metrics.get("rejection_bucket")
+        existing_rejection_severity = _get_value(candidate, "rejection_severity") or metrics.get("rejection_severity")
         shadow_meta = shadow_by_key.get(_candidate_key(candidate), {})
         source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
         source_flags.update(
             {
                 "opportunity_scope": scope,
-                "opportunity_score": round(score, 6),
+                "opportunity_score": round(raw_opportunity_score, 6),
+                "final_score": round(float(metrics["final_score"]), 6),
+                "rank_global": int(index),
                 "opportunity_rank": int(index),
                 "selected_for_execution": bool(selected),
                 "selection_reason": selection_reason,
@@ -999,13 +1716,75 @@ def annotate_ranked_opportunities(
                 "opportunity_score_shadow": shadow_meta.get("opportunity_score_shadow"),
                 "opportunity_rank_shadow": shadow_meta.get("opportunity_rank_shadow"),
                 "selected_for_execution_shadow": shadow_meta.get("selected_for_execution_shadow"),
+                "signal_score": round(float(metrics.get("signal_score") or 0.0), 6),
+                "execution_score": round(float(metrics.get("execution_score") or 0.0), 6),
+                "priority_score": round(float(metrics.get("priority_score") or score), 6),
+                "priority_weight_signal": round(float(metrics.get("priority_weight_signal") or 0.0), 6),
+                "priority_weight_execution": round(float(metrics.get("priority_weight_execution") or 0.0), 6),
+                "setup_score": round(float(metrics.get("setup_score") or 0.0), 6),
+                "trigger_score": round(float(metrics.get("trigger_score") or 0.0), 6),
+                "entry_quality_score": round(float(metrics.get("entry_quality_score") or 0.0), 6),
+                "entry_quality_reason": metrics.get("entry_quality_reason"),
+                "overextension_score": round(float(metrics.get("overextension_score") or 0.0), 6),
+                "overextension_penalty": round(float(metrics.get("overextension_penalty") or 0.0), 6),
+                "entry_distance_to_invalidation": _safe_float(metrics.get("entry_distance_to_invalidation")),
+                "session_mode": metrics.get("session_mode"),
+                "strategy_regime_mode": metrics.get("strategy_regime_mode"),
+                "session_entry_penalty": round(float(metrics.get("session_entry_penalty") or 0.0), 6),
+                "family_survival_score": round(float(metrics.get("family_survival_score") or 0.0), 6),
+                "family_survival_components": dict(metrics.get("family_survival_components") or {}),
+                "data_state": str(metrics.get("data_state") or "DATA_MISSING"),
+                "data_confidence": round(float(metrics.get("data_confidence") or 0.0), 6),
+                "quote_completeness": metrics.get("quote_completeness"),
+                "quote_consistency_ok": bool(metrics.get("quote_consistency_ok", False)),
+                "ltp_age_sec": _safe_float(metrics.get("ltp_age_sec")),
+                "bid_age_sec": _safe_float(metrics.get("bid_age_sec")),
+                "ask_age_sec": _safe_float(metrics.get("ask_age_sec")),
+                "chain_snapshot_age_sec": _safe_float(metrics.get("chain_snapshot_age_sec")),
+                "spread_source": metrics.get("spread_source"),
+                "liquidity_validation_mode": metrics.get("liquidity_validation_mode"),
+                "primary_blocker": metrics.get("primary_blocker"),
+                "selection_probability": round(float(selection_probability), 6),
+                "family_feedback_adjustment": round(float(metrics.get("family_feedback_adjustment") or 0.0), 6),
+                "family_feedback_confidence": round(float(metrics.get("family_feedback_confidence") or 0.0), 6),
+                "family_feedback_applied": bool(metrics.get("family_feedback_applied", False)),
+                "expectancy_score": round(float(metrics.get("expectancy_score") or 0.0), 6),
+                "family_learning_state_generated_at": metrics.get("family_learning_state_generated_at"),
+                "family_learning_state_version": metrics.get("family_learning_state_version"),
+                "strategy_weight_adjustment": round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
+                "strategy_weight_confidence": round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
+                "strategy_weight_applied": bool(metrics.get("strategy_weight_applied", False)),
+                "adaptive_threshold_adjustment": round(float(metrics.get("adaptive_threshold_adjustment") or 0.0), 6),
+                "adaptive_threshold_impact_score": round(float(metrics.get("adaptive_threshold_impact_score") or 0.0), 6),
+                "adaptive_threshold_applied": bool(metrics.get("adaptive_threshold_applied", False)),
+                "adaptive_threshold_key": metrics.get("adaptive_threshold_key"),
+                "aggressiveness_mode": aggressiveness_mode,
+                "aggressiveness_adjustment": round(float(aggressiveness_adjustment), 6),
+                "aggressiveness_adjustment_applied": bool(abs(float(aggressiveness_adjustment)) > 0.0),
+                "risk_budget_ok": bool(risk_budget_ok),
+                "risk_budget_reason": str(metrics.get("risk_budget_reason") or risk_assessment.risk_budget_reason),
+                "position_size_estimate": int(metrics.get("position_size_estimate") or risk_assessment.position_size_estimate),
+                "portfolio_heat_score": round(float(metrics.get("portfolio_heat_score") or risk_assessment.portfolio_heat_score or 0.0), 6),
+                "correlation_penalty": round(float(correlation_penalty), 6),
+                "exposure_blocker": exposure_blocker,
+                "daily_kill_switch_active": bool(daily_kill_switch_active),
+                "regime_failure_throttle": round(float(regime_failure_throttle), 6),
+                "family_failure_throttle": round(float(family_failure_throttle), 6),
+                "risk_learning_adjustment": round(float(risk_learning_adjustment), 6),
+                "risk_learning_confidence": round(float(risk_learning_confidence), 6),
+                "rejected_at_stage": existing_rejected_at_stage,
+                "rejection_reason_code": existing_rejection_reason_code,
+                "rejection_bucket": existing_rejection_bucket,
+                "rejection_severity": existing_rejection_severity,
             }
         )
         if isinstance(candidate, dict):
             updated = dict(candidate)
             updated.update(
                 {
-                    "opportunity_score": round(score, 6),
+                    "opportunity_score": round(raw_opportunity_score, 6),
+                    "final_score": round(float(metrics["final_score"]), 6),
+                    "rank_global": int(index),
                     "opportunity_rank": int(index),
                     "selected_for_execution": bool(selected),
                     "selection_reason": selection_reason,
@@ -1033,6 +1812,66 @@ def annotate_ranked_opportunities(
                     "opportunity_score_shadow": shadow_meta.get("opportunity_score_shadow"),
                     "opportunity_rank_shadow": shadow_meta.get("opportunity_rank_shadow"),
                     "selected_for_execution_shadow": shadow_meta.get("selected_for_execution_shadow"),
+                    "signal_score": round(float(metrics.get("signal_score") or 0.0), 6),
+                    "execution_score": round(float(metrics.get("execution_score") or 0.0), 6),
+                    "priority_score": round(float(metrics.get("priority_score") or score), 6),
+                    "priority_weight_signal": round(float(metrics.get("priority_weight_signal") or 0.0), 6),
+                    "priority_weight_execution": round(float(metrics.get("priority_weight_execution") or 0.0), 6),
+                    "setup_score": round(float(metrics.get("setup_score") or 0.0), 6),
+                    "trigger_score": round(float(metrics.get("trigger_score") or 0.0), 6),
+                    "entry_quality_score": round(float(metrics.get("entry_quality_score") or 0.0), 6),
+                    "entry_quality_reason": metrics.get("entry_quality_reason"),
+                    "overextension_score": round(float(metrics.get("overextension_score") or 0.0), 6),
+                    "overextension_penalty": round(float(metrics.get("overextension_penalty") or 0.0), 6),
+                    "entry_distance_to_invalidation": _safe_float(metrics.get("entry_distance_to_invalidation")),
+                    "session_mode": metrics.get("session_mode"),
+                    "strategy_regime_mode": metrics.get("strategy_regime_mode"),
+                    "session_entry_penalty": round(float(metrics.get("session_entry_penalty") or 0.0), 6),
+                    "family_survival_score": round(float(metrics.get("family_survival_score") or 0.0), 6),
+                    "family_survival_components": dict(metrics.get("family_survival_components") or {}),
+                    "data_state": str(metrics.get("data_state") or "DATA_MISSING"),
+                    "data_confidence": round(float(metrics.get("data_confidence") or 0.0), 6),
+                    "quote_completeness": metrics.get("quote_completeness"),
+                    "quote_consistency_ok": bool(metrics.get("quote_consistency_ok", False)),
+                    "ltp_age_sec": _safe_float(metrics.get("ltp_age_sec")),
+                    "bid_age_sec": _safe_float(metrics.get("bid_age_sec")),
+                    "ask_age_sec": _safe_float(metrics.get("ask_age_sec")),
+                    "chain_snapshot_age_sec": _safe_float(metrics.get("chain_snapshot_age_sec")),
+                    "spread_source": metrics.get("spread_source"),
+                    "liquidity_validation_mode": metrics.get("liquidity_validation_mode"),
+                    "primary_blocker": metrics.get("primary_blocker"),
+                    "selection_probability": round(float(selection_probability), 6),
+                    "family_feedback_adjustment": round(float(metrics.get("family_feedback_adjustment") or 0.0), 6),
+                    "family_feedback_confidence": round(float(metrics.get("family_feedback_confidence") or 0.0), 6),
+                    "family_feedback_applied": bool(metrics.get("family_feedback_applied", False)),
+                    "expectancy_score": round(float(metrics.get("expectancy_score") or 0.0), 6),
+                    "family_learning_state_generated_at": metrics.get("family_learning_state_generated_at"),
+                    "family_learning_state_version": metrics.get("family_learning_state_version"),
+                    "strategy_weight_adjustment": round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
+                    "strategy_weight_confidence": round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
+                    "strategy_weight_applied": bool(metrics.get("strategy_weight_applied", False)),
+                    "adaptive_threshold_adjustment": round(float(metrics.get("adaptive_threshold_adjustment") or 0.0), 6),
+                    "adaptive_threshold_impact_score": round(float(metrics.get("adaptive_threshold_impact_score") or 0.0), 6),
+                    "adaptive_threshold_applied": bool(metrics.get("adaptive_threshold_applied", False)),
+                    "adaptive_threshold_key": metrics.get("adaptive_threshold_key"),
+                    "aggressiveness_mode": aggressiveness_mode,
+                    "aggressiveness_adjustment": round(float(aggressiveness_adjustment), 6),
+                    "aggressiveness_adjustment_applied": bool(abs(float(aggressiveness_adjustment)) > 0.0),
+                    "risk_budget_ok": bool(risk_budget_ok),
+                    "risk_budget_reason": str(metrics.get("risk_budget_reason") or risk_assessment.risk_budget_reason),
+                    "position_size_estimate": int(metrics.get("position_size_estimate") or risk_assessment.position_size_estimate),
+                    "portfolio_heat_score": round(float(metrics.get("portfolio_heat_score") or risk_assessment.portfolio_heat_score or 0.0), 6),
+                    "correlation_penalty": round(float(correlation_penalty), 6),
+                    "exposure_blocker": exposure_blocker,
+                    "daily_kill_switch_active": bool(daily_kill_switch_active),
+                    "regime_failure_throttle": round(float(regime_failure_throttle), 6),
+                    "family_failure_throttle": round(float(family_failure_throttle), 6),
+                    "risk_learning_adjustment": round(float(risk_learning_adjustment), 6),
+                    "risk_learning_confidence": round(float(risk_learning_confidence), 6),
+                    "rejected_at_stage": existing_rejected_at_stage,
+                    "rejection_reason_code": existing_rejection_reason_code,
+                    "rejection_bucket": existing_rejection_bucket,
+                    "rejection_severity": existing_rejection_severity,
                     "size_mult": (
                         (_safe_float(updated.get("size_mult")) or 1.0) * size_multiplier
                         if selected
@@ -1045,7 +1884,9 @@ def annotate_ranked_opportunities(
             current_size_mult = _safe_float(_get_value(candidate, "size_mult")) or 1.0
             updated = replace(
                 candidate,
-                opportunity_score=round(score, 6),
+                opportunity_score=round(raw_opportunity_score, 6),
+                final_score=round(float(metrics["final_score"]), 6),
+                rank_global=int(index),
                 opportunity_rank=int(index),
                 selected_for_execution=bool(selected),
                 selection_reason=selection_reason,
@@ -1073,10 +1914,72 @@ def annotate_ranked_opportunities(
                 opportunity_score_shadow=shadow_meta.get("opportunity_score_shadow"),
                 opportunity_rank_shadow=shadow_meta.get("opportunity_rank_shadow"),
                 selected_for_execution_shadow=shadow_meta.get("selected_for_execution_shadow"),
+                signal_score=round(float(metrics.get("signal_score") or 0.0), 6),
+                execution_score=round(float(metrics.get("execution_score") or 0.0), 6),
+                priority_score=round(float(metrics.get("priority_score") or score), 6),
+                priority_weight_signal=round(float(metrics.get("priority_weight_signal") or 0.0), 6),
+                priority_weight_execution=round(float(metrics.get("priority_weight_execution") or 0.0), 6),
+                setup_score=round(float(metrics.get("setup_score") or 0.0), 6),
+                trigger_score=round(float(metrics.get("trigger_score") or 0.0), 6),
+                entry_quality_score=round(float(metrics.get("entry_quality_score") or 0.0), 6),
+                entry_quality_reason=metrics.get("entry_quality_reason"),
+                overextension_score=round(float(metrics.get("overextension_score") or 0.0), 6),
+                overextension_penalty=round(float(metrics.get("overextension_penalty") or 0.0), 6),
+                entry_distance_to_invalidation=_safe_float(metrics.get("entry_distance_to_invalidation")),
+                session_mode=metrics.get("session_mode"),
+                strategy_regime_mode=metrics.get("strategy_regime_mode"),
+                session_entry_penalty=round(float(metrics.get("session_entry_penalty") or 0.0), 6),
+                family_survival_score=round(float(metrics.get("family_survival_score") or 0.0), 6),
+                family_survival_components=dict(metrics.get("family_survival_components") or {}),
+                data_state=str(metrics.get("data_state") or "DATA_MISSING"),
+                data_confidence=round(float(metrics.get("data_confidence") or 0.0), 6),
+                quote_completeness=metrics.get("quote_completeness"),
+                quote_consistency_ok=bool(metrics.get("quote_consistency_ok", False)),
+                ltp_age_sec=_safe_float(metrics.get("ltp_age_sec")),
+                bid_age_sec=_safe_float(metrics.get("bid_age_sec")),
+                ask_age_sec=_safe_float(metrics.get("ask_age_sec")),
+                chain_snapshot_age_sec=_safe_float(metrics.get("chain_snapshot_age_sec")),
+                spread_source=metrics.get("spread_source"),
+                liquidity_validation_mode=metrics.get("liquidity_validation_mode"),
+                primary_blocker=metrics.get("primary_blocker"),
+                selection_probability=round(float(selection_probability), 6),
+                family_feedback_adjustment=round(float(metrics.get("family_feedback_adjustment") or 0.0), 6),
+                family_feedback_confidence=round(float(metrics.get("family_feedback_confidence") or 0.0), 6),
+                family_feedback_applied=bool(metrics.get("family_feedback_applied", False)),
+                expectancy_score=round(float(metrics.get("expectancy_score") or 0.0), 6),
+                family_learning_state_generated_at=metrics.get("family_learning_state_generated_at"),
+                family_learning_state_version=metrics.get("family_learning_state_version"),
+                strategy_weight_adjustment=round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
+                strategy_weight_confidence=round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
+                strategy_weight_applied=bool(metrics.get("strategy_weight_applied", False)),
+                adaptive_threshold_adjustment=round(float(metrics.get("adaptive_threshold_adjustment") or 0.0), 6),
+                adaptive_threshold_impact_score=round(float(metrics.get("adaptive_threshold_impact_score") or 0.0), 6),
+                adaptive_threshold_applied=bool(metrics.get("adaptive_threshold_applied", False)),
+                adaptive_threshold_key=metrics.get("adaptive_threshold_key"),
+                aggressiveness_mode=aggressiveness_mode,
+                aggressiveness_adjustment=round(float(aggressiveness_adjustment), 6),
+                aggressiveness_adjustment_applied=bool(abs(float(aggressiveness_adjustment)) > 0.0),
+                risk_budget_ok=bool(risk_budget_ok),
+                risk_budget_reason=str(metrics.get("risk_budget_reason") or risk_assessment.risk_budget_reason),
+                position_size_estimate=int(metrics.get("position_size_estimate") or risk_assessment.position_size_estimate),
+                portfolio_heat_score=round(float(metrics.get("portfolio_heat_score") or risk_assessment.portfolio_heat_score or 0.0), 6),
+                correlation_penalty=round(float(correlation_penalty), 6),
+                exposure_blocker=exposure_blocker,
+                daily_kill_switch_active=bool(daily_kill_switch_active),
+                regime_failure_throttle=round(float(regime_failure_throttle), 6),
+                family_failure_throttle=round(float(family_failure_throttle), 6),
+                risk_learning_adjustment=round(float(risk_learning_adjustment), 6),
+                risk_learning_confidence=round(float(risk_learning_confidence), 6),
+                rejected_at_stage=existing_rejected_at_stage,
+                rejection_reason_code=existing_rejection_reason_code,
+                rejection_bucket=existing_rejection_bucket,
+                rejection_severity=existing_rejection_severity,
                 size_mult=(current_size_mult * size_multiplier) if selected else current_size_mult,
                 source_flags=source_flags,
             )
         annotated.append(updated)
+        if selected:
+            selected_candidates_for_risk.append(updated)
     if annotated and bool(getattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", True)):
         annotated = allocate_capital_slots(
             annotated,
@@ -1097,7 +2000,287 @@ def annotate_ranked_opportunities(
             annotated,
             current_portfolio_exposure=current_portfolio_exposure,
         )
-    return annotated
+    executable_candidates_seen = sum(1 for candidate in annotated if _is_executable_opportunity(candidate))
+    selected_executable = [
+        candidate
+        for candidate in annotated
+        if _is_executable_opportunity(candidate) and bool(_get_value(candidate, "selected_for_execution", False))
+    ]
+    near_candidates = [candidate for candidate in annotated if _is_near_executable_opportunity(candidate)]
+    advisory_candidates = [candidate for candidate in annotated if _is_advisory_opportunity(candidate)]
+    if selected_executable:
+        selector_outcome = "EXECUTE_TOP"
+    elif executable_candidates_seen > 0:
+        selector_outcome = "NO_EXECUTABLE_OPPORTUNITY"
+    elif near_candidates:
+        selector_outcome = "WATCHLIST_ONLY"
+    elif advisory_candidates:
+        selector_outcome = "ADVISORY_ONLY"
+    else:
+        selector_outcome = "NO_EXECUTABLE_OPPORTUNITY"
+
+    audit_enabled = bool(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_ENABLE", True))
+    decision_scope = f"{scope}:selector"
+    decision_batch_id = hashlib.sha256(
+        (
+            f"{decision_scope}|{selector_outcome}|{len(annotated)}|"
+            + "|".join(
+                sorted(
+                    str(_get_value(candidate, "trade_id") or _get_value(candidate, "trade_key") or _get_value(candidate, "strategy") or "")
+                    for candidate in annotated
+                )
+            )
+        ).encode("utf-8")
+    ).hexdigest()[:24]
+    provisional_records: list[dict[str, Any]] = []
+    for candidate in annotated:
+        selected_for_execution = bool(_get_value(candidate, "selected_for_execution", False))
+        selection_reason = str(
+            _get_value(candidate, "selection_reason")
+            or _get_value(candidate, "family_reject_reason")
+            or ""
+        ).strip().lower() or None
+        if selected_for_execution:
+            rejection_reason_code = _get_value(candidate, "rejection_reason_code")
+            rejected_at_stage = _get_value(candidate, "rejected_at_stage")
+        else:
+            rejection_reason_code = selection_reason or _get_value(candidate, "rejection_reason_code")
+            rejected_at_stage = None
+        provisional_records.append(
+            build_candidate_decision_record(
+                candidate,
+                decision_phase="selector",
+                decision_scope=decision_scope,
+                decision_batch_id=decision_batch_id,
+                rejected_at_stage=rejected_at_stage,
+                rejection_reason_code=rejection_reason_code,
+                selector_outcome=selector_outcome,
+                selected_for_execution=selected_for_execution,
+            )
+        )
+    batch_summary = compute_starvation_diagnostics(provisional_records)
+    final_records = [
+        build_candidate_decision_record(
+            candidate,
+            decision_phase="selector",
+            decision_scope=decision_scope,
+            decision_batch_id=decision_batch_id,
+            rejected_at_stage=record.get("rejected_at_stage"),
+            rejection_reason_code=record.get("rejection_reason_code"),
+            selector_outcome=selector_outcome,
+            selected_for_execution=bool(_get_value(candidate, "selected_for_execution", False)),
+            raw_candidate_count=int(batch_summary.get("raw_candidate_count") or len(annotated)),
+            surviving_candidate_count=int(batch_summary.get("surviving_candidate_count") or 0),
+            survival_rate=float(batch_summary.get("survival_rate") or 0.0),
+            executable_rate=float(batch_summary.get("executable_rate") or 0.0),
+            advisory_rate=float(batch_summary.get("advisory_rate") or 0.0),
+            no_trade_rate=float(batch_summary.get("no_trade_rate") or 0.0),
+            top_family_share=float(batch_summary.get("top_family_share") or 0.0),
+            starvation_flag=bool(batch_summary.get("starvation_flag", False)),
+            starvation_reason=batch_summary.get("starvation_reason"),
+            warning_engine_too_timid=bool(batch_summary.get("starvation_flag", False)),
+            warning_family_starvation=bool(batch_summary.get("starvation_reason") == "family_dominance"),
+            warning_threshold_cluster=bool(batch_summary.get("starvation_reason") == "threshold_cluster"),
+        )
+        for candidate, record in zip(annotated, provisional_records)
+    ]
+    threshold_summary: dict[str, Any] = {}
+    survival_summary: dict[str, Any] = {"groups": {}, "warning_filtering_without_edge_improvement": False}
+    top_damaging_gates_summary: dict[str, Any] = {"gates": []}
+    tuning_recommendations: dict[str, Any] = {}
+    if audit_enabled:
+        existing_records = load_candidate_decisions()
+        summary_payload = write_threshold_audit_summaries(
+            candidate_decisions=[*existing_records, *final_records],
+        )
+        threshold_summary = dict(summary_payload.get("threshold_summary") or {})
+        survival_summary = dict(summary_payload.get("survival_expectancy_summary") or survival_summary)
+        top_damaging_gates_summary = dict(summary_payload.get("top_damaging_gates") or top_damaging_gates_summary)
+        if offline_scope and bool(getattr(cfg, "OFFLINE_THRESHOLD_TUNING_ENABLE", True)):
+            tuning_recommendations = build_threshold_tuning_recommendations(
+                rejection_impact_summary=dict(summary_payload.get("rejection_impact_summary") or {}),
+                starvation_by_group_summary=dict(summary_payload.get("starvation_by_group_summary") or {}),
+                survival_expectancy_summary=survival_summary,
+                top_damaging_gates=top_damaging_gates_summary,
+            )
+            save_threshold_tuning_recommendations(tuning_recommendations)
+        if offline_scope:
+            save_learning_state(
+                {
+                    **learning_state,
+                    "threshold_summary": threshold_summary,
+                    "threshold_impact": dict(summary_payload.get("threshold_impact") or {}),
+                    "aggressiveness_mode": aggressiveness_mode,
+                    "aggressiveness_adjustment": round(float(aggressiveness_adjustment), 6),
+                    "aggressiveness_adjustment_applied": bool(abs(float(aggressiveness_adjustment)) > 0.0),
+                }
+            )
+    if not tuning_recommendations and offline_scope:
+        tuning_recommendations = load_threshold_tuning_recommendations()
+    warning_engine_too_timid = bool(
+        batch_summary.get("starvation_flag", False)
+        or threshold_summary.get("warning_engine_too_timid", False)
+    )
+    warning_family_starvation = bool(
+        batch_summary.get("starvation_reason") == "family_dominance"
+        or threshold_summary.get("warning_family_starvation", False)
+    )
+    warning_threshold_cluster = bool(
+        batch_summary.get("starvation_reason") == "threshold_cluster"
+        or threshold_summary.get("warning_threshold_cluster", False)
+    )
+    post_annotated: list[Any] = []
+    survival_groups = dict(survival_summary.get("groups") or {})
+    top_gate_rank_map = {
+        str(item.get("gate_key") or ""): int(item.get("rank") or 0)
+        for item in (top_damaging_gates_summary.get("gates") or [])
+        if str(item.get("gate_key") or "").strip()
+    }
+    protected_gate_map = dict(tuning_recommendations.get("protected_gate_map") or {})
+    for candidate, record in zip(annotated, final_records):
+        group_key = "|".join(
+            [
+                str(record.get("strategy_family") or "unknown"),
+                str(record.get("direction_family") or "unknown"),
+                str(record.get("strategy_regime_mode") or "UNKNOWN"),
+                str(record.get("session_mode") or "UNKNOWN"),
+            ]
+        )
+        group_summary = dict(survival_groups.get(group_key) or {})
+        gate_key = None
+        if record.get("rejected_at_stage"):
+            gate_key = "|".join(
+                [
+                    str(record.get("rejected_at_stage") or "unknown"),
+                    str(record.get("strategy_family") or "unknown"),
+                ]
+        )
+        top_damaging_gate_rank = top_gate_rank_map.get(str(gate_key or ""), None)
+        starvation_warning = bool(
+            batch_summary.get("starvation_flag", False)
+            or warning_engine_too_timid
+            or warning_family_starvation
+        )
+        edge_improved_flag = bool(group_summary.get("edge_improved_flag", False))
+        filtering_without_edge_flag = bool(group_summary.get("filtering_without_edge_flag", False))
+        recommended_threshold_delta = _get_contextual_threshold_adjustment(
+            record.get("rejected_at_stage"),
+            record.get("strategy_family"),
+            record.get("session_mode"),
+            record.get("strategy_regime_mode"),
+            tuning_recommendations,
+        )
+        if recommended_threshold_delta == 0.0:
+            recommended_threshold_delta = _get_contextual_threshold_adjustment(
+                "family_survival",
+                record.get("strategy_family"),
+                record.get("session_mode"),
+                record.get("strategy_regime_mode"),
+                tuning_recommendations,
+            )
+        gate_protected_flag = bool(
+            protected_gate_map.get(
+                "|".join(
+                    [
+                        str(record.get("rejected_at_stage") or "unknown").strip().lower() or "unknown",
+                        str(record.get("strategy_family") or "unknown").strip().lower() or "unknown",
+                    ]
+                ),
+                {},
+            ).get("gate_protected_flag", False)
+        )
+        record["warning_engine_too_timid"] = warning_engine_too_timid
+        record["warning_family_starvation"] = warning_family_starvation
+        record["warning_threshold_cluster"] = warning_threshold_cluster
+        record["warning_filtering_without_edge_improvement"] = bool(
+            filtering_without_edge_flag
+            or survival_summary.get("warning_filtering_without_edge_improvement", False)
+        )
+        record["rejection_impact_warning"] = (
+            f"top_damaging_gate_rank_{top_damaging_gate_rank}"
+            if top_damaging_gate_rank is not None
+            else None
+        )
+        record["starvation_warning"] = starvation_warning
+        record["edge_improved_flag"] = edge_improved_flag
+        record["filtering_without_edge_flag"] = filtering_without_edge_flag
+        record["top_damaging_gate_rank"] = top_damaging_gate_rank
+        record["recommended_threshold_delta"] = (
+            round(float(recommended_threshold_delta), 6)
+            if abs(float(recommended_threshold_delta or 0.0)) > 0.0
+            else None
+        )
+        record["gate_protected_flag"] = gate_protected_flag
+        if audit_enabled:
+            record_candidate_decision(record)
+        source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
+        source_flags.update(
+            {
+                "selector_outcome": selector_outcome,
+                "rejected_at_stage": record.get("rejected_at_stage"),
+                "rejection_reason_code": record.get("rejection_reason_code"),
+                "rejection_bucket": record.get("rejection_bucket"),
+                "rejection_severity": record.get("rejection_severity"),
+                "raw_candidate_count": int(record.get("raw_candidate_count") or 0),
+                "surviving_candidate_count": int(record.get("surviving_candidate_count") or 0),
+                "survival_rate": round(float(record.get("survival_rate") or 0.0), 6),
+                "executable_rate": round(float(record.get("executable_rate") or 0.0), 6),
+                "advisory_rate": round(float(record.get("advisory_rate") or 0.0), 6),
+                "no_trade_rate": round(float(record.get("no_trade_rate") or 0.0), 6),
+                "top_family_share": round(float(record.get("top_family_share") or 0.0), 6),
+                "starvation_flag": bool(record.get("starvation_flag", False)),
+                "starvation_reason": record.get("starvation_reason"),
+                "warning_engine_too_timid": bool(record.get("warning_engine_too_timid", False)),
+                "warning_filtering_without_edge_improvement": bool(record.get("warning_filtering_without_edge_improvement", False)),
+                "warning_family_starvation": bool(record.get("warning_family_starvation", False)),
+                "warning_threshold_cluster": bool(record.get("warning_threshold_cluster", False)),
+                "rejection_impact_warning": record.get("rejection_impact_warning"),
+                "starvation_warning": bool(record.get("starvation_warning", False)),
+                "edge_improved_flag": bool(record.get("edge_improved_flag", False)),
+                "filtering_without_edge_flag": bool(record.get("filtering_without_edge_flag", False)),
+                "top_damaging_gate_rank": record.get("top_damaging_gate_rank"),
+                "recommended_threshold_delta": record.get("recommended_threshold_delta"),
+                "gate_protected_flag": bool(record.get("gate_protected_flag", False)),
+                "aggressiveness_mode": aggressiveness_mode,
+                "aggressiveness_adjustment": round(float(aggressiveness_adjustment), 6),
+                "aggressiveness_adjustment_applied": bool(abs(float(aggressiveness_adjustment)) > 0.0),
+            }
+        )
+        post_annotated.append(
+            _update_candidate(
+                candidate,
+                selector_outcome=selector_outcome,
+                rejected_at_stage=record.get("rejected_at_stage"),
+                rejection_reason_code=record.get("rejection_reason_code"),
+                rejection_bucket=record.get("rejection_bucket"),
+                rejection_severity=record.get("rejection_severity"),
+                raw_candidate_count=int(record.get("raw_candidate_count") or 0),
+                surviving_candidate_count=int(record.get("surviving_candidate_count") or 0),
+                survival_rate=round(float(record.get("survival_rate") or 0.0), 6),
+                executable_rate=round(float(record.get("executable_rate") or 0.0), 6),
+                advisory_rate=round(float(record.get("advisory_rate") or 0.0), 6),
+                no_trade_rate=round(float(record.get("no_trade_rate") or 0.0), 6),
+                top_family_share=round(float(record.get("top_family_share") or 0.0), 6),
+                starvation_flag=bool(record.get("starvation_flag", False)),
+                starvation_reason=record.get("starvation_reason"),
+                warning_engine_too_timid=bool(record.get("warning_engine_too_timid", False)),
+                warning_filtering_without_edge_improvement=bool(record.get("warning_filtering_without_edge_improvement", False)),
+                warning_family_starvation=bool(record.get("warning_family_starvation", False)),
+                warning_threshold_cluster=bool(record.get("warning_threshold_cluster", False)),
+                rejection_impact_warning=record.get("rejection_impact_warning"),
+                starvation_warning=bool(record.get("starvation_warning", False)),
+                edge_improved_flag=bool(record.get("edge_improved_flag", False)),
+                filtering_without_edge_flag=bool(record.get("filtering_without_edge_flag", False)),
+                top_damaging_gate_rank=record.get("top_damaging_gate_rank"),
+                recommended_threshold_delta=record.get("recommended_threshold_delta"),
+                gate_protected_flag=bool(record.get("gate_protected_flag", False)),
+                aggressiveness_mode=aggressiveness_mode,
+                aggressiveness_adjustment=round(float(aggressiveness_adjustment), 6),
+                aggressiveness_adjustment_applied=bool(abs(float(aggressiveness_adjustment)) > 0.0),
+                source_flags=source_flags,
+            )
+        )
+    return post_annotated
 
 
 def select_best_opportunity(

@@ -5,9 +5,117 @@ from typing import Any
 from config import config as cfg
 from core.exposure_ledger import estimate_trade_exposure, estimate_trade_greeks
 from core.position_sizer import PositionSizer
+from core.threshold_audit import classify_rejection_metadata
 from core.risk_utils import to_pct
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(value: Any, default: float | None = None) -> float | None:
+    try:
+        if value in (None, "", "None"):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        if value in (None, "", "None"):
+            return int(default)
+        return int(value)
+    except Exception:
+        return int(default)
+
+
+def _candidate_get(candidate: Any, field: str, default: Any = None) -> Any:
+    if isinstance(candidate, dict):
+        return candidate.get(field, default)
+    return getattr(candidate, field, default)
+
+
+def _clamp01(value: float | None, *, default: float = 0.0) -> float:
+    if value is None:
+        return float(default)
+    return max(0.0, min(1.0, float(value)))
+
+
+def adjust_system_aggressiveness(metrics: dict[str, Any] | None) -> str:
+    payload = dict(metrics or {})
+    survival_rate = max(0.0, min(1.0, float(_safe_float(payload.get("survival_rate"), 0.0) or 0.0)))
+    no_trade_rate = max(0.0, min(1.0, float(_safe_float(payload.get("no_trade_rate"), 0.0) or 0.0)))
+    if survival_rate < float(getattr(cfg, "OFFLINE_AGGRESSIVENESS_TOO_TIMID_SURVIVAL_RATE", 0.10) or 0.10):
+        return "TOO_TIMID"
+    if no_trade_rate > float(getattr(cfg, "OFFLINE_AGGRESSIVENESS_STARVING_NO_TRADE_RATE", 0.70) or 0.70):
+        return "STARVING"
+    if survival_rate > float(getattr(cfg, "OFFLINE_AGGRESSIVENESS_OVERTRADING_SURVIVAL_RATE", 0.50) or 0.50):
+        return "OVERTRADING"
+    return "NORMAL"
+
+
+def _family_key(strategy_family: Any, direction_family: Any) -> str:
+    strategy = str(strategy_family or "unknown").strip().lower() or "unknown"
+    direction = str(direction_family or "unknown").strip().lower() or "unknown"
+    return f"{strategy}|{direction}"
+
+
+def _lookup_offline_risk_learning(
+    strategy_family: Any,
+    direction_family: Any,
+    *,
+    family_learning_state: dict[str, Any] | None = None,
+) -> tuple[float, float]:
+    if not bool(getattr(cfg, "OFFLINE_RISK_LEARNING_ENABLE", True)):
+        return 0.0, 0.0
+    state = family_learning_state
+    if state is None:
+        try:
+            from core.offline_family_learning import load_family_learning_state
+
+            state = load_family_learning_state()
+        except Exception:
+            state = None
+    row = (((state or {}).get("families") or {}) or {}).get(_family_key(strategy_family, direction_family))
+    if not isinstance(row, dict):
+        return 0.0, 0.0
+    sample_count = int(row.get("sample_count") or 0)
+    min_samples = max(1, int(getattr(cfg, "OFFLINE_FAMILY_LEARNING_MIN_SAMPLES", 25) or 25))
+    if sample_count < min_samples:
+        return 0.0, 0.0
+    family_confidence = _clamp01(_safe_float(row.get("family_confidence"), 0.0), default=0.0)
+    shrinkage = float(sample_count) / float(sample_count + min_samples)
+    expectancy_component = max(-1.0, min(1.0, float(_safe_float(row.get("expectancy_score"), 0.0) or 0.0)))
+    realized_r_component = max(
+        -1.0,
+        min(1.0, float(_safe_float(row.get("median_realized_r_multiple"), 0.0) or 0.0) / 2.0),
+    )
+    mae_component = -max(
+        0.0,
+        min(1.0, abs(min(float(_safe_float(row.get("median_mae"), 0.0) or 0.0), 0.0))),
+    )
+    saved_loss_component = max(
+        -1.0,
+        min(
+            1.0,
+            float(_safe_float(row.get("rejection_saved_loss_rate"), 0.0) or 0.0)
+            - float(_safe_float(row.get("rejection_missed_win_rate"), 0.0) or 0.0),
+        ),
+    )
+    weighted = (
+        expectancy_component * float(getattr(cfg, "OFFLINE_FAMILY_LEARNING_EXPECTANCY_WEIGHT", 0.36))
+        + realized_r_component * float(getattr(cfg, "OFFLINE_RISK_LEARNING_R_MULTIPLE_WEIGHT", 0.35))
+        + mae_component * float(getattr(cfg, "OFFLINE_RISK_LEARNING_MAE_WEIGHT", 0.40))
+        + saved_loss_component * float(getattr(cfg, "OFFLINE_RISK_LEARNING_SAVED_LOSS_WEIGHT", 0.25))
+    )
+    adjustment = max(
+        -float(getattr(cfg, "OFFLINE_RISK_LEARNING_MAX_ADJUSTMENT", 0.03) or 0.03),
+        min(
+            float(getattr(cfg, "OFFLINE_RISK_LEARNING_MAX_ADJUSTMENT", 0.03) or 0.03),
+            float(weighted) * float(family_confidence) * float(shrinkage),
+        ),
+    )
+    return round(float(adjustment), 6), round(float(family_confidence * shrinkage), 6)
 
 
 @dataclass(frozen=True)
@@ -19,6 +127,261 @@ class RiskDecision:
 
     def as_tuple(self):
         return bool(self.allowed), str(self.reason)
+
+
+@dataclass(frozen=True)
+class OfflineCandidateRiskAssessment:
+    risk_budget_ok: bool
+    risk_budget_reason: str
+    max_risk_amount: float
+    risk_per_trade_pct: float
+    stop_distance: float | None
+    risk_reward_ratio: float | None
+    position_size_estimate: int
+    portfolio_heat_score: float
+    directional_heat: float
+    family_exposure: int
+    correlation_cluster: str | None
+    correlation_penalty: float
+    exposure_blocker: str | None
+    daily_kill_switch_active: bool
+    regime_failure_throttle: float
+    family_failure_throttle: float
+    risk_learning_adjustment: float
+    risk_learning_confidence: float
+    rejected_at_stage: str | None = None
+    rejection_reason_code: str | None = None
+    rejection_bucket: str | None = None
+    rejection_severity: str | None = None
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "risk_budget_ok": bool(self.risk_budget_ok),
+            "risk_budget_reason": str(self.risk_budget_reason),
+            "max_risk_amount": float(self.max_risk_amount),
+            "risk_per_trade_pct": float(self.risk_per_trade_pct),
+            "stop_distance": self.stop_distance,
+            "risk_reward_ratio": self.risk_reward_ratio,
+            "position_size_estimate": int(self.position_size_estimate),
+            "portfolio_heat_score": float(self.portfolio_heat_score),
+            "directional_heat": float(self.directional_heat),
+            "family_exposure": int(self.family_exposure),
+            "correlation_cluster": self.correlation_cluster,
+            "correlation_penalty": float(self.correlation_penalty),
+            "exposure_blocker": self.exposure_blocker,
+            "daily_kill_switch_active": bool(self.daily_kill_switch_active),
+            "regime_failure_throttle": float(self.regime_failure_throttle),
+            "family_failure_throttle": float(self.family_failure_throttle),
+            "risk_learning_adjustment": float(self.risk_learning_adjustment),
+            "risk_learning_confidence": float(self.risk_learning_confidence),
+            "rejected_at_stage": self.rejected_at_stage,
+            "rejection_reason_code": self.rejection_reason_code,
+            "rejection_bucket": self.rejection_bucket,
+            "rejection_severity": self.rejection_severity,
+            "context": dict(self.context or {}),
+        }
+
+
+def evaluate_candidate_risk(
+    candidate: Any,
+    *,
+    portfolio_state: dict[str, Any] | None = None,
+    selected_candidates: list[Any] | None = None,
+    family_learning_state: dict[str, Any] | None = None,
+) -> OfflineCandidateRiskAssessment:
+    portfolio = dict(portfolio_state or {})
+    selected = list(selected_candidates or [])
+    entry_price = _safe_float(
+        _candidate_get(candidate, "execution_entry", _candidate_get(candidate, "entry_price")),
+        0.0,
+    ) or 0.0
+    stop_loss = _safe_float(_candidate_get(candidate, "stop_loss"))
+    target = _safe_float(_candidate_get(candidate, "target"))
+    stop_distance = abs(float(entry_price) - float(stop_loss)) if entry_price > 0 and stop_loss is not None else None
+    reward_distance = abs(float(target) - float(entry_price)) if entry_price > 0 and target is not None else None
+    risk_reward_ratio = None
+    if stop_distance not in (None, 0.0) and reward_distance is not None:
+        risk_reward_ratio = float(reward_distance) / max(float(stop_distance), 1e-6)
+
+    atr = _safe_float(
+        _candidate_get(candidate, "atr")
+        or ((_candidate_get(candidate, "source_flags", {}) or {}).get("atr"))
+        or (((_candidate_get(candidate, "score_breakdown", {}) or {}).get("quality_detail") or {}).get("atr")),
+        None,
+    )
+    if atr is None:
+        underlying_ltp = _safe_float(_candidate_get(candidate, "underlying_spot")) or _safe_float(_candidate_get(candidate, "current_ltp"))
+        instrument = str(_candidate_get(candidate, "instrument") or _candidate_get(candidate, "instrument_type") or "").strip().upper()
+        if instrument == "OPT":
+            option_ref = max(
+                _safe_float(_candidate_get(candidate, "execution_entry"), 0.0) or 0.0,
+                _safe_float(_candidate_get(candidate, "entry_price"), 0.0) or 0.0,
+                _safe_float(_candidate_get(candidate, "opt_ltp"), 0.0) or 0.0,
+            )
+            atr = max(float(option_ref or 0.0) * 0.10, float(stop_distance or 0.0) * 0.75, 1.0)
+        else:
+            atr = max(float(underlying_ltp or 0.0) * 0.002, 1.0)
+    regime = str(_candidate_get(candidate, "regime") or portfolio.get("regime") or "NEUTRAL").strip().upper()
+    direction_family = str(_candidate_get(candidate, "direction_family") or "unknown").strip().lower() or "unknown"
+    strategy_family = str(_candidate_get(candidate, "strategy_family") or "unknown").strip().lower() or "unknown"
+    symbol = str(_candidate_get(candidate, "symbol") or "").strip().upper()
+    cluster_key = f"{symbol}|{direction_family}|{strategy_family}" if symbol else None
+
+    account_capital = max(
+        1.0,
+        float(_safe_float(portfolio.get("capital"), getattr(cfg, "OFFLINE_RISK_ACCOUNT_CAPITAL", getattr(cfg, "CAPITAL", 100000.0))) or 1.0),
+    )
+    risk_per_trade_pct = max(
+        0.0,
+        float(_safe_float(portfolio.get("risk_per_trade_pct"), getattr(cfg, "OFFLINE_RISK_PER_TRADE_PCT", 0.004)) or 0.0),
+    )
+    max_risk_amount = float(account_capital) * float(risk_per_trade_pct)
+    size_result = PositionSizer().size_from_budget(max_risk_amount, stop_distance)
+    position_size_estimate = int(size_result.qty)
+
+    risk_budget_ok = True
+    risk_budget_reason = "ok"
+    stop_distance_pct = (float(stop_distance) / max(float(entry_price), 1e-6)) if stop_distance not in (None, 0.0) else None
+    if stop_distance in (None, 0.0):
+        risk_budget_ok = False
+        risk_budget_reason = "missing_stop_distance"
+    elif stop_distance_pct is not None and stop_distance_pct > float(getattr(cfg, "OFFLINE_RISK_MAX_STOP_DISTANCE_PCT", 0.35) or 0.35):
+        risk_budget_ok = False
+        risk_budget_reason = "stop_distance_too_wide_pct"
+    elif atr and float(stop_distance) > (float(atr) * float(getattr(cfg, "OFFLINE_RISK_MAX_STOP_ATR_MULT", 1.80) or 1.80)):
+        risk_budget_ok = False
+        risk_budget_reason = "stop_distance_too_wide_atr"
+    elif risk_reward_ratio is not None and float(risk_reward_ratio) < float(getattr(cfg, "OFFLINE_RISK_MIN_RR", 1.20) or 1.20):
+        risk_budget_ok = False
+        risk_budget_reason = "risk_reward_too_low"
+    elif size_result.qty <= 0:
+        risk_budget_ok = False
+        risk_budget_reason = str(size_result.reason or "position_size_zero").strip().lower() or "position_size_zero"
+
+    portfolio_heat_score = float(
+        _safe_float(portfolio.get("open_risk_pct"), _safe_float(portfolio.get("total_open_exposure_pct"), 0.0)) or 0.0
+    )
+    directional_heat_map = dict(portfolio.get("directional_heat") or {})
+    selected_directional_count = sum(
+        1
+        for row in selected
+        if str(_candidate_get(row, "direction_family") or "").strip().lower() == direction_family
+    )
+    directional_heat = float(_safe_float(directional_heat_map.get(direction_family), 0.0) or 0.0) + (
+        float(selected_directional_count) * float(risk_per_trade_pct)
+    )
+    family_exposure_map = dict(portfolio.get("family_exposure") or {})
+    family_key = _family_key(strategy_family, direction_family)
+    selected_family_count = sum(
+        1
+        for row in selected
+        if _family_key(_candidate_get(row, "strategy_family"), _candidate_get(row, "direction_family")) == family_key
+    )
+    family_exposure = int(_safe_int(family_exposure_map.get(family_key), 0))
+
+    correlation_penalty = 0.0
+    if symbol:
+        same_symbol_related = sum(
+            1
+            for row in selected
+            if str(_candidate_get(row, "symbol") or "").strip().upper() == symbol
+            and (
+                str(_candidate_get(row, "direction_family") or "").strip().lower() == direction_family
+                or str(_candidate_get(row, "strategy_family") or "").strip().lower() == strategy_family
+            )
+        )
+        if same_symbol_related > 0:
+            correlation_penalty = min(
+                1.0,
+                float(same_symbol_related) * float(getattr(cfg, "OFFLINE_RISK_CORRELATION_PENALTY", 0.08) or 0.08),
+            )
+
+    exposure_blocker = None
+    if portfolio_heat_score >= float(getattr(cfg, "OFFLINE_RISK_MAX_PORTFOLIO_HEAT", 0.025) or 0.025):
+        exposure_blocker = "portfolio_heat_limit"
+    elif directional_heat >= float(getattr(cfg, "OFFLINE_RISK_MAX_DIRECTIONAL_HEAT", 0.015) or 0.015):
+        exposure_blocker = "directional_heat_limit"
+    elif family_exposure >= int(getattr(cfg, "OFFLINE_RISK_MAX_FAMILY_EXPOSURE", 1) or 1):
+        exposure_blocker = "family_exposure_limit"
+
+    daily_kill_switch_active = bool(portfolio.get("daily_kill_switch_active", False))
+    daily_pnl_pct = _safe_float(portfolio.get("daily_pnl_pct"))
+    if daily_pnl_pct is not None and float(daily_pnl_pct) <= -abs(float(getattr(cfg, "OFFLINE_RISK_DAILY_KILL_SWITCH_PCT", getattr(cfg, "MAX_DAILY_LOSS_PCT", 0.02)) or 0.02)):
+        daily_kill_switch_active = True
+
+    regime_failure_count = int(
+        (dict(portfolio.get("regime_failure_counts") or {})).get(regime, portfolio.get("regime_failure_count", 0)) or 0
+    )
+    family_failure_count = int(
+        (dict(portfolio.get("family_failure_counts") or {})).get(family_key, portfolio.get("family_failure_count", 0)) or 0
+    )
+    session_mode = str(_candidate_get(candidate, "session_mode") or portfolio.get("session_mode") or "MIDDAY").strip().upper()
+    session_failure_count = int(
+        (dict(portfolio.get("session_failure_counts") or {})).get(session_mode, portfolio.get("session_failure_count", 0)) or 0
+    )
+    regime_failure_throttle = 0.0
+    family_failure_throttle = 0.0
+    if regime_failure_count >= int(getattr(cfg, "OFFLINE_RISK_REGIME_FAILURE_LIMIT", 3) or 3):
+        regime_failure_throttle = float(getattr(cfg, "OFFLINE_RISK_FAILURE_THROTTLE_PENALTY", 0.12) or 0.12)
+    if family_failure_count >= int(getattr(cfg, "OFFLINE_RISK_FAMILY_FAILURE_LIMIT", 3) or 3):
+        family_failure_throttle = float(getattr(cfg, "OFFLINE_RISK_FAILURE_THROTTLE_PENALTY", 0.12) or 0.12)
+    if session_failure_count >= int(getattr(cfg, "OFFLINE_RISK_SESSION_FAILURE_LIMIT", 2) or 2):
+        family_failure_throttle = max(
+            family_failure_throttle,
+            float(getattr(cfg, "OFFLINE_RISK_FAILURE_THROTTLE_PENALTY", 0.12) or 0.12) * 0.5,
+        )
+
+    risk_learning_adjustment, risk_learning_confidence = _lookup_offline_risk_learning(
+        strategy_family,
+        direction_family,
+        family_learning_state=family_learning_state,
+    )
+    rejection_reason_code = None
+    if daily_kill_switch_active:
+        rejection_reason_code = "daily_kill_switch_active"
+    elif exposure_blocker not in (None, "", "None"):
+        rejection_reason_code = str(exposure_blocker)
+    elif not risk_budget_ok:
+        rejection_reason_code = str(risk_budget_reason)
+    elif regime_failure_throttle > 0.0:
+        rejection_reason_code = "regime_failure_throttle"
+    elif family_failure_throttle > 0.0:
+        rejection_reason_code = "family_failure_throttle"
+    rejection_meta = classify_rejection_metadata(rejection_reason_code)
+    return OfflineCandidateRiskAssessment(
+        risk_budget_ok=bool(risk_budget_ok),
+        risk_budget_reason=str(risk_budget_reason),
+        max_risk_amount=round(float(max_risk_amount), 6),
+        risk_per_trade_pct=round(float(risk_per_trade_pct), 6),
+        stop_distance=round(float(stop_distance), 6) if stop_distance not in (None, 0.0) else None,
+        risk_reward_ratio=round(float(risk_reward_ratio), 6) if risk_reward_ratio is not None else None,
+        position_size_estimate=int(position_size_estimate),
+        portfolio_heat_score=round(float(portfolio_heat_score), 6),
+        directional_heat=round(float(directional_heat), 6),
+        family_exposure=int(family_exposure),
+        correlation_cluster=cluster_key,
+        correlation_penalty=round(float(correlation_penalty), 6),
+        exposure_blocker=exposure_blocker,
+        daily_kill_switch_active=bool(daily_kill_switch_active),
+        regime_failure_throttle=round(float(regime_failure_throttle), 6),
+        family_failure_throttle=round(float(family_failure_throttle), 6),
+        risk_learning_adjustment=round(float(risk_learning_adjustment), 6),
+        risk_learning_confidence=round(float(risk_learning_confidence), 6),
+        rejected_at_stage=rejection_meta.get("rejected_at_stage"),
+        rejection_reason_code=rejection_meta.get("rejection_reason_code"),
+        rejection_bucket=rejection_meta.get("rejection_bucket"),
+        rejection_severity=rejection_meta.get("rejection_severity"),
+        context={
+            "sizing_reason": str(size_result.reason),
+            "stop_distance_pct": round(float(stop_distance_pct), 6) if stop_distance_pct is not None else None,
+            "session_mode": session_mode,
+            "regime_failure_count": regime_failure_count,
+            "family_failure_count": family_failure_count,
+            "session_failure_count": session_failure_count,
+            "selected_family_count": selected_family_count,
+        },
+    )
 
 
 class RiskEngine:

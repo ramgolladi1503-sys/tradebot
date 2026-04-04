@@ -30,14 +30,18 @@ from strategies.ensemble import (
     event_breakout_signal,
     micro_pattern_signal,
 )
-from core.feature_builder import build_trade_features, validate_trade_features
+from core.feature_builder import (
+    assess_trade_feature_quality,
+    build_trade_features,
+    validate_trade_features,
+)
 from core.advisory_row_integrity import BLOCKED_DEBUG_ROW_KIND
-from core.trade_scoring import compute_trade_score
+from core.trade_scoring import compute_final_score, compute_trade_score
 from core.trade_identity import infer_candidate_identity
 from core.strategy_tracker import StrategyTracker
 from core.strategy_lifecycle import StrategyLifecycle
 from core.instruments import select_expiry as select_registry_expiry
-from core.market_context import derive_market_context
+from core.market_context import classify_session_mode, classify_strategy_regime_mode, derive_market_context, derive_regime_context
 from core.candidate_soft_reject import build_soft_reject_candidate, critical_reject_reasons, is_critical_reject_reason
 from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
@@ -46,9 +50,15 @@ from core.entry_semantics import EntryContractViolation, build_entry_state, shou
 from core.execution_entry_trace import append_execution_entry_trace
 from core.issue_policy import ISSUE_CATEGORY_HARD, ISSUE_CATEGORY_SOFT, ISSUE_CATEGORY_WARNING
 from core.opportunity_engine import annotate_ranked_opportunities, select_best_opportunity
+from core.risk_engine import evaluate_candidate_risk
 from core.observability.pipeline import append_trade_lifecycle_event
 from core.option_entry import get_option_ltp_sla_sec
 from core.option_liquidity_cache import hydrate_option_liquidity_fields
+from core.threshold_audit import (
+    build_candidate_decision_record as build_audit_candidate_decision_record,
+    classify_rejection_metadata,
+    record_candidate_decision as record_threshold_candidate_decision,
+)
 from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
 from core.time_utils import compute_age_sec, is_market_open_ist, now_ist, now_utc_epoch
 from core.regime import RegimeClassifier, normalize_regime
@@ -509,9 +519,9 @@ class TradeBuilder:
             out["source_flags"] = source_flags
             out["fallback_candidate"] = True
             out["fallback_reason"] = fallback_reason
-            out["tradable"] = bool(tradable_override) if tradable_override is not None else False
-            out["execution_allowed"] = bool(execution_allowed_override) if execution_allowed_override is not None else False
-            out["planning_only"] = bool(planning_only_override) if planning_only_override is not None else True
+            out["tradable"] = False if tradable_override is None else bool(tradable_override)
+            out["execution_allowed"] = False
+            out["planning_only"] = True if planning_only_override is None else bool(planning_only_override)
             out["reason"] = fallback_reason
             conf = float(out.get("confidence") or 0.0)
             out["confidence"] = min(conf, fallback_conf_cap)
@@ -535,15 +545,279 @@ class TradeBuilder:
             source_flags=source_flags,
             confidence=min(conf, fallback_conf_cap),
             size_mult=min(size_mult, fallback_size_mult),
-            tradable=bool(tradable_override) if tradable_override is not None else False,
-            execution_allowed=bool(execution_allowed_override) if execution_allowed_override is not None else False,
-            planning_only=bool(planning_only_override) if planning_only_override is not None else True,
+            tradable=False if tradable_override is None else bool(tradable_override),
+            execution_allowed=False,
+            planning_only=True if planning_only_override is None else bool(planning_only_override),
             reason=fallback_reason,
             tradable_reasons_blocking=blockers,
         )
 
     def _set_last_ranked_candidates(self, candidates) -> None:
         self._last_ranked_candidates = list(candidates or [])
+
+    @staticmethod
+    def _candidate_field(candidate, field: str, default=None):
+        if isinstance(candidate, dict):
+            return candidate.get(field, default)
+        return getattr(candidate, field, default)
+
+    def _candidate_feature_quality(self, candidate, market_data: dict | None) -> dict:
+        data = market_data if isinstance(market_data, dict) else {}
+        opt_like = {
+            "ltp": self._candidate_field(candidate, "opt_ltp")
+            or self._candidate_field(candidate, "current_ltp")
+            or data.get("ltp")
+            or data.get("opt_ltp"),
+            "last_price": self._candidate_field(candidate, "opt_ltp")
+            or self._candidate_field(candidate, "current_ltp")
+            or data.get("ltp")
+            or data.get("opt_ltp"),
+            "bid": self._candidate_field(candidate, "opt_bid")
+            or self._candidate_field(candidate, "best_bid")
+            or data.get("bid"),
+            "ask": self._candidate_field(candidate, "opt_ask")
+            or self._candidate_field(candidate, "best_ask")
+            or data.get("ask"),
+            "quote_age_sec": self._candidate_field(candidate, "quote_age_sec", data.get("quote_age_sec")),
+            "quote_ok": self._candidate_field(candidate, "quote_ok", data.get("quote_ok", True)),
+            "volume": self._candidate_field(candidate, "volume", data.get("volume")),
+            "current_volume": self._candidate_field(
+                candidate,
+                "current_volume",
+                data.get("current_volume", data.get("volume")),
+            ),
+        }
+        return assess_trade_feature_quality(data, opt_like)
+
+    def classify_candidate(self, candidate, market_data: dict | None = None) -> tuple[str, str | None, dict]:
+        source_flags = dict(self._candidate_field(candidate, "source_flags", {}) or {})
+        blockers = [str(code) for code in (self._candidate_field(candidate, "tradable_reasons_blocking", []) or []) if str(code).strip()]
+        feature_quality = self._candidate_feature_quality(candidate, market_data)
+        fresh_quote_ok = bool(feature_quality.get("fresh_quote_ok"))
+        liquidity_ok = bool(feature_quality.get("liquidity_ok"))
+        spread_ok = bool(feature_quality.get("spread_ok"))
+        market_mode = str(
+            self._candidate_field(candidate, "market_mode")
+            or source_flags.get("runtime_mode")
+            or source_flags.get("market_mode")
+            or ((market_data or {}).get("market_context") or {}).get("mode")
+            or ((market_data or {}).get("market_context") or {}).get("execution_mode")
+            or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).strip().upper()
+        if market_data:
+            try:
+                market_mode = derive_market_context(market_data).mode
+            except Exception:
+                pass
+        execution_allowed = bool(self._candidate_field(candidate, "execution_allowed", False))
+        tradable = bool(self._candidate_field(candidate, "tradable", False))
+        planning_only = bool(self._candidate_field(candidate, "planning_only", False)) or market_mode == "OFFHOURS"
+        execution_entry = self._candidate_field(candidate, "execution_entry")
+        execution_entry_status = str(self._candidate_field(candidate, "execution_entry_status") or "").strip().lower()
+        executable_truth = bool(execution_entry is not None and execution_entry_status == "executable")
+        data_sources = {
+            str(value).strip().lower()
+            for value in (
+                self._candidate_field(candidate, "chain_source"),
+                self._candidate_field(candidate, "option_ltp_source"),
+                self._candidate_field(candidate, "price_source"),
+                source_flags.get("chain_source"),
+                source_flags.get("quote_source"),
+            )
+            if str(value or "").strip()
+        }
+        is_fallback = bool(
+            source_flags.get("fallback_candidate")
+            or source_flags.get("recovered_fallback")
+            or "fallback_no_viable_candidates" in blockers
+            or bool(data_sources & {"synthetic_chain", "close_fallback", "quote_fallback", "recovered_fallback"})
+        )
+
+        if is_fallback:
+            primary_blocker = str(source_flags.get("fallback_reason") or self._candidate_field(candidate, "reason") or "fallback_candidate")
+            return "ADVISORY_ONLY", primary_blocker, feature_quality
+        if planning_only:
+            primary_blocker = "offhours_mode" if market_mode == "OFFHOURS" else "planning_only"
+            return "ADVISORY_ONLY", primary_blocker, feature_quality
+        if execution_allowed and tradable and executable_truth and fresh_quote_ok and liquidity_ok and spread_ok:
+            return "EXECUTABLE", None, feature_quality
+
+        primary_blocker = None
+        reason_priority = list(feature_quality.get("issues") or []) + blockers
+        if not fresh_quote_ok and "stale_quote" not in reason_priority:
+            reason_priority.append("stale_quote")
+        if not liquidity_ok and "missing_liquidity_validation" not in reason_priority:
+            reason_priority.append("missing_liquidity_validation")
+        if not spread_ok and "missing_spread" not in reason_priority:
+            reason_priority.append("missing_spread")
+        if not executable_truth and "missing_execution_entry" not in reason_priority:
+            reason_priority.append("missing_execution_entry")
+        if reason_priority:
+            primary_blocker = str(reason_priority[0])
+        return "NEAR_EXECUTABLE", primary_blocker, feature_quality
+
+    def _apply_candidate_contract(self, candidate, *, market_data: dict | None = None):
+        candidate_class, primary_blocker, feature_quality = self.classify_candidate(candidate, market_data=market_data)
+        source_flags = dict(self._candidate_field(candidate, "source_flags", {}) or {})
+        blockers = [str(code) for code in (self._candidate_field(candidate, "tradable_reasons_blocking", []) or []) if str(code).strip()]
+        market_mode = str(
+            feature_quality.get("market_mode")
+            or self._candidate_field(candidate, "market_mode")
+            or source_flags.get("runtime_mode")
+            or source_flags.get("market_mode")
+            or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).strip().upper()
+        setup_quality = (
+            self._coerce_positive_float(self._candidate_field(candidate, "setup_strength"))
+            or self._coerce_positive_float(self._candidate_field(candidate, "rank_score"))
+            or self._clamp_confidence(self._candidate_field(candidate, "builder_confidence"))
+            or self._clamp_confidence(self._candidate_field(candidate, "confidence"))
+            or 0.0
+        )
+        confluence_score = (
+            self._clamp_confidence(self._candidate_field(candidate, "sizing_confluence_score"))
+            or self._clamp_confidence(((self._candidate_field(candidate, "trade_score_detail") or {}).get("confluence_score")))
+            or 0.0
+        )
+        regime_fit = (
+            self._clamp_confidence(self._candidate_field(candidate, "regime_fit"))
+            or (0.8 if str(self._candidate_field(candidate, "regime") or "").strip().upper() in {"TREND", "RANGE", "RANGE_VOLATILE"} else 0.55)
+        )
+        liquidity_quality = (
+            self._clamp_confidence(self._candidate_field(candidate, "liquidity_score"))
+            or float(feature_quality.get("liquidity_quality") or 0.0)
+        )
+        freshness_quality = float(feature_quality.get("freshness_quality") or 0.0)
+        spread_quality = (
+            self._clamp_confidence(self._candidate_field(candidate, "spread_score"))
+            or float(feature_quality.get("spread_quality") or 0.0)
+        )
+        execution_feasibility = (
+            self._clamp_confidence(
+                (self._candidate_field(candidate, "score_breakdown") or {}).get("execution_feasibility_score")
+            )
+            or ((liquidity_quality * 0.5) + (spread_quality * 0.3) + (freshness_quality * 0.2))
+        )
+        score_contract = compute_final_score(
+            candidate,
+            candidate_class=candidate_class,
+            market_mode=market_mode,
+            setup_quality=setup_quality,
+            confluence_score=confluence_score,
+            regime_fit=regime_fit,
+            liquidity_quality=liquidity_quality,
+            freshness_quality=freshness_quality,
+            execution_feasibility=execution_feasibility,
+            is_fallback=bool(
+                source_flags.get("fallback_candidate")
+                or source_flags.get("recovered_fallback")
+                or "fallback_no_viable_candidates" in blockers
+            ),
+            stale_quote="stale_quote" in set(feature_quality.get("issues") or []),
+            missing_liquidity=not bool(feature_quality.get("liquidity_ok")),
+            spread_uncertain=not bool(feature_quality.get("spread_ok")),
+        )
+        candidate_status_map = {
+            "EXECUTABLE": "executable",
+            "NEAR_EXECUTABLE": "near_executable",
+            "ADVISORY_ONLY": "advisory_only",
+        }
+        source_flags.update(
+            {
+                "market_mode": market_mode,
+                "fresh_quote_ok": bool(feature_quality.get("fresh_quote_ok")),
+                "liquidity_ok": bool(feature_quality.get("liquidity_ok")),
+                "spread_ok": bool(feature_quality.get("spread_ok")),
+                "data_state": feature_quality.get("data_state"),
+                "quote_completeness": feature_quality.get("quote_completeness"),
+                "quote_consistency_ok": bool(feature_quality.get("quote_consistency_ok", False)),
+                "ltp_age_sec": feature_quality.get("ltp_age_sec"),
+                "bid_age_sec": feature_quality.get("bid_age_sec"),
+                "ask_age_sec": feature_quality.get("ask_age_sec"),
+                "chain_snapshot_age_sec": feature_quality.get("chain_snapshot_age_sec"),
+                "spread_source": feature_quality.get("spread_source"),
+                "liquidity_validation_mode": feature_quality.get("liquidity_validation_mode"),
+                "feature_validation_issues": list(feature_quality.get("issues") or []),
+                "candidate_class": candidate_class,
+                "primary_blocker": primary_blocker,
+                "final_score": float(score_contract["final_score"]),
+                "signal_score": float(score_contract.get("signal_score") or 0.0),
+                "execution_score": float(score_contract.get("execution_score") or 0.0),
+                "priority_score": float(score_contract.get("priority_score") or score_contract["final_score"]),
+                "final_score_base": float(score_contract["base_score"]),
+                "final_score_penalty_total": float(score_contract["penalty_total"]),
+                "final_score_penalty_reasons": list(score_contract["penalty_reasons"]),
+                "final_score_class_cap": float(score_contract["class_cap"]),
+            }
+        )
+        execution_allowed = bool(self._candidate_field(candidate, "execution_allowed", False))
+        tradable = bool(self._candidate_field(candidate, "tradable", False))
+        planning_only = bool(self._candidate_field(candidate, "planning_only", False))
+        selected_for_execution = bool(self._candidate_field(candidate, "selected_for_execution", False))
+        if candidate_class != "EXECUTABLE":
+            execution_allowed = False
+            selected_for_execution = False
+            if market_mode == "OFFHOURS":
+                planning_only = True
+        if isinstance(candidate, dict):
+            out = dict(candidate)
+            out.update(
+                {
+                    "source_flags": source_flags,
+                    "candidate_class": candidate_class,
+                    "candidate_status": candidate_status_map[candidate_class],
+                    "final_score": float(score_contract["final_score"]),
+                    "signal_score": float(score_contract.get("signal_score") or 0.0),
+                    "execution_score": float(score_contract.get("execution_score") or 0.0),
+                    "priority_score": float(score_contract.get("priority_score") or score_contract["final_score"]),
+                    "market_mode": market_mode,
+                    "fresh_quote_ok": bool(feature_quality.get("fresh_quote_ok")),
+                    "liquidity_ok": bool(feature_quality.get("liquidity_ok")),
+                    "spread_ok": bool(feature_quality.get("spread_ok")),
+                    "data_state": feature_quality.get("data_state"),
+                    "quote_completeness": feature_quality.get("quote_completeness"),
+                    "quote_consistency_ok": bool(feature_quality.get("quote_consistency_ok", False)),
+                    "ltp_age_sec": feature_quality.get("ltp_age_sec"),
+                    "bid_age_sec": feature_quality.get("bid_age_sec"),
+                    "ask_age_sec": feature_quality.get("ask_age_sec"),
+                    "chain_snapshot_age_sec": feature_quality.get("chain_snapshot_age_sec"),
+                    "spread_source": feature_quality.get("spread_source"),
+                    "liquidity_validation_mode": feature_quality.get("liquidity_validation_mode"),
+                    "primary_blocker": primary_blocker,
+                    "execution_allowed": execution_allowed,
+                    "planning_only": planning_only,
+                    "selected_for_execution": selected_for_execution,
+                    "tradable": tradable if candidate_class == "EXECUTABLE" else bool(tradable),
+                }
+            )
+            return out
+        return replace(
+            candidate,
+            source_flags=source_flags,
+            candidate_class=candidate_class,
+            candidate_status=candidate_status_map[candidate_class],
+            final_score=float(score_contract["final_score"]),
+            signal_score=float(score_contract.get("signal_score") or 0.0),
+            execution_score=float(score_contract.get("execution_score") or 0.0),
+            priority_score=float(score_contract.get("priority_score") or score_contract["final_score"]),
+            market_mode=market_mode,
+            fresh_quote_ok=bool(feature_quality.get("fresh_quote_ok")),
+            liquidity_ok=bool(feature_quality.get("liquidity_ok")),
+            spread_ok=bool(feature_quality.get("spread_ok")),
+            data_state=feature_quality.get("data_state"),
+            quote_completeness=feature_quality.get("quote_completeness"),
+            quote_consistency_ok=bool(feature_quality.get("quote_consistency_ok", False)),
+            ltp_age_sec=feature_quality.get("ltp_age_sec"),
+            bid_age_sec=feature_quality.get("bid_age_sec"),
+            ask_age_sec=feature_quality.get("ask_age_sec"),
+            chain_snapshot_age_sec=feature_quality.get("chain_snapshot_age_sec"),
+            spread_source=feature_quality.get("spread_source"),
+            liquidity_validation_mode=feature_quality.get("liquidity_validation_mode"),
+            primary_blocker=primary_blocker,
+            execution_allowed=execution_allowed,
+            planning_only=planning_only,
+            selected_for_execution=selected_for_execution,
+        )
 
     def _ensure_candidate_identity(self, trade: Trade | None) -> Trade | None:
         if trade is None:
@@ -839,6 +1113,7 @@ class TradeBuilder:
                 trade,
                 **updates,
             )
+            updated_trade = self._apply_candidate_contract(updated_trade, market_data=data)
             try:
                 append_trade_lifecycle_event(
                     trade_id=str(getattr(updated_trade, "trade_id", None)),
@@ -2649,6 +2924,11 @@ class TradeBuilder:
         penalty_reasons: list[str] | None = None,
         quality_score: float | None = None,
         quality_detail: dict | None = None,
+        direction_family: str | None = None,
+        family_rank: int | None = None,
+        family_blocker: str | None = None,
+        family_strength: float | None = None,
+        family_feedback_detail: dict | None = None,
     ):
         symbol = str(market_data.get("symbol") or "UNKNOWN")
         underlying_ltp = float(ltp or 0.0)
@@ -2790,29 +3070,96 @@ class TradeBuilder:
         soft_codes = [str(code) for code in (soft_veto_codes or []) if str(code).strip()]
         penalty_codes = [str(code) for code in (penalty_reasons or []) if str(code).strip()]
         intent = self.trade_intent_flags(market_data, opt=chosen_opt)
-        intent["planning_only"] = True
-        intent["execution_allowed"] = False
-        intent["execution_reason"] = trigger_reason
+        current_mode = str(
+            market_data.get("execution_mode")
+            or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+            or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).strip().upper()
+        opportunity_confidence = self._clamp_confidence(confidence)
+        if opportunity_confidence is None:
+            opportunity_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))
+        opportunity_confidence = round(float(opportunity_confidence), 3)
+        candidate_quality_score = self._clamp_confidence(quality_score)
+        if candidate_quality_score is None:
+            candidate_quality_score = opportunity_confidence
+        candidate_quality_score = round(float(candidate_quality_score), 6)
+        quality_detail_map = dict(quality_detail or {})
+        session_ctx = classify_session_mode(market_data)
+        session_mode = str(
+            quality_detail_map.get("session_mode") or session_ctx.get("session_mode") or "OFFHOURS"
+        ).strip().upper() or "OFFHOURS"
+        session_policy = cfg.get_session_policy(session_mode)
+        session_entry_penalty = round(
+            float(
+                quality_detail_map.get("session_entry_penalty")
+                if quality_detail_map.get("session_entry_penalty") is not None
+                else (session_ctx.get("session_entry_penalty") or 0.0)
+            ),
+            6,
+        )
+        strategy_regime_mode = str(
+            quality_detail_map.get("strategy_regime_mode")
+            or (classify_strategy_regime_mode(market_data).get("regime_mode"))
+            or "UNCERTAIN"
+        ).strip().upper() or "UNCERTAIN"
+        allow_nonlive_executable = bool(getattr(cfg, "NONLIVE_OPPORTUNITY_EXECUTION_ENABLE", True))
+        min_exec_quality = float(getattr(cfg, "NONLIVE_OPPORTUNITY_EXECUTION_MIN_SCORE", 0.34))
+        executable_nonlive = bool(
+            allow_nonlive_executable
+            and current_mode in {"SIM", "PAPER", "OFFHOURS"}
+            and float(candidate_quality_score) >= float(min_exec_quality)
+        )
+        intent["planning_only"] = False if executable_nonlive else True
+        intent["execution_allowed"] = bool(executable_nonlive)
+        intent["execution_reason"] = ("nonlive_opportunity_executable" if executable_nonlive else trigger_reason)
         source_flags = dict(intent.get("source_flags") or {})
+        source_flags["nonlive_opportunity_executable"] = bool(executable_nonlive)
+        source_flags["nonlive_opportunity_min_exec_quality"] = round(float(min_exec_quality), 6)
         source_flags["candidate_origin"] = "opportunity_builder_nonlive"
         source_flags["opportunity_builder"] = strategy
         source_flags["opportunity_trigger_reason"] = trigger_reason
         source_flags["opportunity_variant"] = setup_variant
+        source_flags["strategy_regime_mode"] = strategy_regime_mode
+        source_flags["session_mode"] = session_mode
+        source_flags["session_entry_penalty"] = session_entry_penalty
+        source_flags["direction_family"] = str(direction_family or "sideways").strip().lower() or "sideways"
+        source_flags["family_rank"] = int(family_rank) if family_rank is not None else None
+        source_flags["family_blocker"] = (
+            str(family_blocker).strip().lower() if family_blocker not in (None, "", "None") else None
+        )
+        source_flags["family_strength"] = (
+            round(float(family_strength), 6) if family_strength is not None else None
+        )
+        if isinstance(family_feedback_detail, dict):
+            for key in (
+                "family_feedback_adjustment",
+                "family_feedback_confidence",
+                "family_feedback_applied",
+                "family_learning_adjustment",
+                "family_cap_effective",
+                "family_cap_reason",
+                "family_consensus_score",
+                "family_consensus_components",
+                "family_survived",
+                "family_reject_reason",
+                "expectancy_score",
+                "family_learning_state_generated_at",
+                "family_learning_state_version",
+                "strategy_weight_adjustment",
+                "strategy_weight_confidence",
+                "strategy_weight_applied",
+                "strategy_weight_state_generated_at",
+                "strategy_weight_state_version",
+            ):
+                if key in family_feedback_detail:
+                    source_flags[key] = family_feedback_detail.get(key)
         existing_soft = [str(code) for code in (source_flags.get("soft_veto_codes") or []) if str(code).strip()]
         for code in soft_codes:
             if code not in existing_soft:
                 existing_soft.append(code)
         source_flags["soft_veto_codes"] = existing_soft
         liquidity_fields = self._option_liquidity_fields(chosen_opt) if instrument == "OPT" else {}
-        opportunity_confidence = self._clamp_confidence(confidence)
-        if opportunity_confidence is None:
-            opportunity_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))
-        opportunity_confidence = round(float(opportunity_confidence), 3)
         reason_codes = list(dict.fromkeys([str(trigger_reason)] + existing_soft + penalty_codes))
-        candidate_quality_score = self._clamp_confidence(quality_score)
-        if candidate_quality_score is None:
-            candidate_quality_score = opportunity_confidence
-        candidate_quality_score = round(float(candidate_quality_score), 6)
         trade_score = round(float(candidate_quality_score) * 100.0, 2)
         trade = Trade(
             trade_id=f"{symbol}-{setup_variant.upper()}-{ts}",
@@ -2864,10 +3211,32 @@ class TradeBuilder:
             direction=normalized_direction,
             candidate_type=candidate_type,
             strategy_family=strategy_family,
+            direction_family=str(source_flags.get("direction_family") or "sideways"),
+            family_rank=source_flags.get("family_rank"),
+            family_blocker=source_flags.get("family_blocker"),
+            family_strength=source_flags.get("family_strength"),
+            family_feedback_adjustment=source_flags.get("family_feedback_adjustment"),
+            family_feedback_confidence=source_flags.get("family_feedback_confidence"),
+            family_feedback_applied=source_flags.get("family_feedback_applied"),
+            family_learning_adjustment=source_flags.get("family_learning_adjustment"),
+            family_cap_effective=source_flags.get("family_cap_effective"),
+            family_cap_reason=source_flags.get("family_cap_reason"),
+            family_consensus_score=source_flags.get("family_consensus_score"),
+            family_consensus_components=source_flags.get("family_consensus_components") or {},
+            family_survived=source_flags.get("family_survived"),
+            family_reject_reason=source_flags.get("family_reject_reason"),
+            expectancy_score=source_flags.get("expectancy_score"),
+            family_learning_state_generated_at=source_flags.get("family_learning_state_generated_at"),
+            family_learning_state_version=source_flags.get("family_learning_state_version"),
+            strategy_weight_adjustment=source_flags.get("strategy_weight_adjustment"),
+            strategy_weight_confidence=source_flags.get("strategy_weight_confidence"),
+            strategy_weight_applied=source_flags.get("strategy_weight_applied"),
+            strategy_weight_state_generated_at=source_flags.get("strategy_weight_state_generated_at"),
+            strategy_weight_state_version=source_flags.get("strategy_weight_state_version"),
             setup_variant=setup_variant,
-            candidate_status="advisory_only",
-            permission="ADVISORY_ONLY",
-            permission_reason=trigger_reason,
+            candidate_status=("executable" if executable_nonlive else "advisory_only"),
+            permission=("EXECUTE" if executable_nonlive else "ADVISORY_ONLY"),
+            permission_reason=("nonlive_opportunity_executable" if executable_nonlive else trigger_reason),
             reason_codes=reason_codes,
             penalty_reasons=penalty_codes,
             **self._staged_confidence_payload(
@@ -2887,14 +3256,329 @@ class TradeBuilder:
         built_trade = self._decorate_trade_context(trade, market_data, opportunity_confidence)
         if built_trade is not None:
             execution_feasibility_score, liquidity_score, spread_score = self._execution_feasibility_score(built_trade)
-            ranking_score = round(
-                max(
+            trade_source_flags = dict(getattr(built_trade, "source_flags", {}) or {})
+            family_consensus_components = dict(trade_source_flags.get("family_consensus_components") or {})
+            direction_family_norm = (
+                str(trade_source_flags.get("direction_family") or direction_family or "sideways").strip().lower()
+                or "sideways"
+            )
+            atr_value = max(float(quality_detail_map.get("atr") or underlying_atr or 1.0), 1e-6)
+            breakout_strength = float(quality_detail_map.get("breakout_strength") or 0.0)
+            mean_reversion_strength = float(quality_detail_map.get("mean_reversion_strength") or 0.0)
+            volatility_expansion_strength = float(quality_detail_map.get("volatility_expansion_strength") or 0.0)
+            range_edge_strength = float(quality_detail_map.get("range_edge_strength") or 0.0)
+            directional_signal_present = bool(quality_detail_map.get("directional_signal_present"))
+            mean_signal_present = bool(quality_detail_map.get("mean_signal_present"))
+            expansion_signal_present = bool(quality_detail_map.get("expansion_signal_present"))
+            support_touch = bool(quality_detail_map.get("support_touch"))
+            resistance_touch = bool(quality_detail_map.get("resistance_touch"))
+            clean_range_edge = bool(quality_detail_map.get("clean_range_edge"))
+            range_compression = bool(quality_detail_map.get("range_compression"))
+            market_quality_score = self._clamp_confidence(quality_detail_map.get("market_quality_score")) or 0.0
+            regime_alignment_component = self._clamp_confidence(
+                family_consensus_components.get("regime_alignment"),
+            )
+            if regime_alignment_component is None:
+                if direction_family_norm == "bullish":
+                    regime_alignment_component = 1.0 if strategy_regime_mode == "TRENDING" else 0.35
+                elif direction_family_norm == "bearish":
+                    regime_alignment_component = 1.0 if strategy_regime_mode == "TRENDING" else 0.35
+                else:
+                    regime_alignment_component = 1.0 if strategy_regime_mode == "SIDEWAYS" else 0.45
+            if direction_family_norm == "bullish":
+                structure_component = max(
                     0.0,
-                    float(candidate_quality_score)
-                    - (max(0.0, 1.0 - float(execution_feasibility_score)) * 0.15),
+                    min(1.0, float(quality_detail_map.get("bullish_structure_strength") or 0.0) / 5.0),
+                )
+            elif direction_family_norm == "bearish":
+                structure_component = max(
+                    0.0,
+                    min(1.0, float(quality_detail_map.get("bearish_structure_strength") or 0.0) / 5.0),
+                )
+            else:
+                structure_component = max(
+                    0.0,
+                    min(1.0, max(range_edge_strength, float(source_flags.get("family_strength") or 0.0) / 5.0)),
+                )
+            setup_score = round(
+                float(
+                    self._clamp_confidence(
+                        (
+                            float(regime_alignment_component) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_REGIME", 0.40))
+                            + float(structure_component) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_STRUCTURE", 0.35))
+                            + float(candidate_quality_score) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_THESIS", 0.25))
+                        )
+                    )
+                    or 0.0
                 ),
                 6,
             )
+            if strategy == "OPP_DIRECTIONAL":
+                trigger_base = (
+                    min(1.0, breakout_strength / 1.60)
+                    + (0.10 if directional_signal_present else 0.0)
+                    + (0.05 if abs(float(quality_detail_map.get("ltp_change_window") or 0.0)) >= (atr_value * 0.15) else 0.0)
+                )
+            elif strategy == "OPP_MEAN_REVERT":
+                trigger_base = (
+                    min(1.0, mean_reversion_strength / 1.50)
+                    + (0.08 if mean_signal_present else 0.0)
+                    + (0.08 if (support_touch or resistance_touch) else 0.0)
+                )
+            elif strategy == "OPP_VOL_EXPANSION":
+                trigger_base = (
+                    min(1.0, volatility_expansion_strength / 1.65)
+                    + (0.10 if expansion_signal_present else 0.0)
+                )
+            else:
+                trigger_base = (
+                    0.35
+                    + (0.18 if clean_range_edge else 0.0)
+                    + (0.12 if range_compression else 0.0)
+                    + (0.14 if (support_touch or resistance_touch) else 0.0)
+                    + min(0.21, range_edge_strength * 0.08)
+                )
+            trigger_score_raw = float(self._clamp_confidence(trigger_base) or 0.0)
+            trigger_gate_reason = None
+            if session_mode == "MIDDAY" and candidate_type in {"directional", "volatility_expansion"}:
+                midday_trigger_min = float(session_policy.get("directional_trigger_min") or 0.66)
+                if trigger_score_raw < midday_trigger_min:
+                    trigger_gate_reason = "midday_trigger_too_weak"
+                trigger_score = float(
+                    self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.75))
+                    or 0.0
+                )
+            elif session_mode == "CLOSING":
+                trigger_score = float(
+                    self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.60))
+                    or 0.0
+                )
+            elif session_mode == "OPENING" and candidate_type in {"directional", "volatility_expansion"}:
+                trigger_score = float(
+                    self._clamp_confidence(trigger_score_raw + 0.04 - (session_entry_penalty * 0.25))
+                    or 0.0
+                )
+            else:
+                trigger_score = float(
+                    self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.35))
+                    or 0.0
+                )
+            stop_distance = abs(float(getattr(built_trade, "entry_price", 0.0) or 0.0) - float(getattr(built_trade, "stop_loss", 0.0) or 0.0))
+            entry_distance_to_invalidation = (
+                round(float(stop_distance) / atr_value, 6) if atr_value > 0 and stop_distance > 0 else None
+            )
+            stop_distance_pct = (
+                float(stop_distance) / max(float(getattr(built_trade, "entry_price", 0.0) or 0.0), 1e-6)
+                if stop_distance > 0
+                else None
+            )
+            invalidation_stretch = 0.0
+            if stop_distance_pct is not None:
+                invalidation_stretch = max(
+                    float(stop_distance_pct) / max(float(getattr(cfg, "ENTRY_INVALIDATION_DISTANCE_MAX_PCT", 0.35) or 0.35), 1e-6),
+                    float(entry_distance_to_invalidation or 0.0) / max(float(getattr(cfg, "ENTRY_INVALIDATION_DISTANCE_MAX_ATR", 1.80) or 1.80), 1e-6),
+                )
+            invalidation_score = round(
+                float(self._clamp_confidence(1.0 - min(1.0, invalidation_stretch * 0.75)) or 0.0),
+                6,
+            )
+            vwap_extension_atr = abs(float(underlying_ltp) - float(underlying_vwap)) / atr_value
+            move_extension_atr = abs(float(quality_detail_map.get("ltp_change_window") or 0.0)) / atr_value
+            overextension_reason = None
+            if candidate_type in {"mean_reversion", "watchlist"}:
+                stretch_atr = max(vwap_extension_atr, range_edge_strength)
+                min_stretch = max(float(getattr(cfg, "MEAN_REVERSION_MIN_STRETCH_ATR", 0.45) or 0.45), 1e-6)
+                overextension_score = round(
+                    float(self._clamp_confidence(stretch_atr / min_stretch) or 0.0),
+                    6,
+                )
+                overextension_penalty = round(max(0.0, 1.0 - float(overextension_score)), 6)
+                if float(overextension_score) < 0.50:
+                    overextension_reason = "insufficient_stretch"
+            else:
+                vwap_soft = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_VWAP_ATR_SOFT", 1.0) or 1.0), 1e-6)
+                vwap_hard = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_VWAP_ATR_HARD", 2.0) or 2.0), vwap_soft + 1e-6)
+                move_soft = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_MOVE_ATR_SOFT", 1.2) or 1.2), 1e-6)
+                move_hard = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_MOVE_ATR_HARD", 2.4) or 2.4), move_soft + 1e-6)
+                overextension_penalty = round(
+                    float(
+                        self._clamp_confidence(
+                            max(
+                                max(0.0, (vwap_extension_atr - vwap_soft) / (vwap_hard - vwap_soft)),
+                                max(0.0, (move_extension_atr - move_soft) / (move_hard - move_soft)),
+                            )
+                        )
+                        or 0.0
+                    ),
+                    6,
+                )
+                overextension_score = round(max(0.0, 1.0 - float(overextension_penalty)), 6)
+                if float(overextension_penalty) >= 0.50:
+                    overextension_reason = "overextended_entry"
+            timing_quality = round(float(self._clamp_confidence(1.0 - session_entry_penalty) or 0.0), 6)
+            entry_quality_score = round(
+                float(
+                    self._clamp_confidence(
+                        (
+                            float(invalidation_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_INVALIDATION", 0.35))
+                            + float(overextension_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_OVEREXTENSION", 0.35))
+                            + float(execution_feasibility_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_EXECUTION_FIT", 0.20))
+                            + float(timing_quality) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_SESSION", 0.10))
+                        )
+                    )
+                    or 0.0
+                ),
+                6,
+            )
+            entry_quality_reason = "ok"
+            if trigger_gate_reason is not None:
+                entry_quality_reason = trigger_gate_reason
+            elif overextension_reason is not None:
+                entry_quality_reason = overextension_reason
+            elif invalidation_score < 0.30:
+                entry_quality_reason = "far_from_invalidation"
+            family_consensus_score = round(
+                float(trade_source_flags.get("family_consensus_score") or 0.0),
+                6,
+            )
+            family_survival_score = round(
+                float(
+                    self._clamp_confidence(
+                        (
+                            float(setup_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_SETUP", 0.30))
+                            + float(trigger_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_TRIGGER", 0.25))
+                            + float(entry_quality_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_ENTRY_QUALITY", 0.25))
+                            + float(execution_feasibility_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_EXECUTION", 0.10))
+                            + float(family_consensus_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_CONSENSUS", 0.10))
+                        )
+                    )
+                    or 0.0
+                ),
+                6,
+            )
+            family_survival_components = {
+                "setup_score": round(float(setup_score), 6),
+                "trigger_score": round(float(trigger_score), 6),
+                "entry_quality_score": round(float(entry_quality_score), 6),
+                "execution_feasibility_score": round(float(execution_feasibility_score), 6),
+                "family_consensus_score": round(float(family_consensus_score), 6),
+                "regime_alignment": round(float(regime_alignment_component), 6),
+            }
+            component_floor = float(getattr(cfg, "FAMILY_SURVIVAL_COMPONENT_MIN", 0.26) or 0.26)
+            survival_floor = float(getattr(cfg, "FAMILY_SURVIVAL_MIN_SCORE", 0.42) or 0.42)
+            executable_survival_floor = float(getattr(cfg, "NONLIVE_EXECUTABLE_MIN_FAMILY_SURVIVAL", 0.55) or 0.55)
+            weakest_survival_component = min(float(setup_score), float(trigger_score), float(entry_quality_score))
+            risk_assessment = evaluate_candidate_risk(
+                built_trade,
+                portfolio_state=dict(market_data.get("portfolio_state") or {}),
+            )
+            hard_execution_blockers: list[str] = []
+            if trigger_gate_reason is not None:
+                hard_execution_blockers.append(trigger_gate_reason)
+            if candidate_type in {"directional", "volatility_expansion"} and overextension_penalty >= 0.65:
+                hard_execution_blockers.append("overextended_entry")
+            if candidate_type in {"mean_reversion", "watchlist"} and overextension_score < 0.45:
+                hard_execution_blockers.append("insufficient_stretch")
+            if invalidation_score < 0.20:
+                hard_execution_blockers.append("far_from_invalidation")
+            if family_survival_score < executable_survival_floor or weakest_survival_component < component_floor:
+                hard_execution_blockers.append("family_survival_below_threshold")
+            if not bool(risk_assessment.risk_budget_ok):
+                hard_execution_blockers.append(f"risk_budget_{risk_assessment.risk_budget_reason}")
+            if risk_assessment.exposure_blocker:
+                hard_execution_blockers.append(str(risk_assessment.exposure_blocker))
+            if bool(risk_assessment.daily_kill_switch_active):
+                hard_execution_blockers.append("daily_kill_switch_active")
+            if float(risk_assessment.regime_failure_throttle or 0.0) > 0.0:
+                hard_execution_blockers.append("regime_failure_throttle")
+            if float(risk_assessment.family_failure_throttle or 0.0) > 0.0:
+                hard_execution_blockers.append("family_failure_throttle")
+            hard_execution_blockers = list(dict.fromkeys(hard_execution_blockers))
+            primary_rejection_reason = hard_execution_blockers[0] if hard_execution_blockers else None
+            rejection_meta = classify_rejection_metadata(primary_rejection_reason)
+            soft_candidate_viable = bool(
+                family_survival_score >= survival_floor
+                and weakest_survival_component >= max(component_floor * 0.85, 0.10)
+            )
+            execution_ready = bool(
+                getattr(built_trade, "execution_entry", None) is not None
+                and str(getattr(built_trade, "execution_entry_status", "")).strip().lower() == "executable"
+            )
+            execution_allowed_final = bool(
+                executable_nonlive
+                and current_mode in {"SIM", "PAPER"}
+                and execution_ready
+                and not hard_execution_blockers
+            )
+            candidate_status_final = (
+                "executable"
+                if execution_allowed_final
+                else ("near_executable" if (execution_ready and soft_candidate_viable) else "advisory_only")
+            )
+            planning_only_final = not execution_allowed_final
+            tradable_reasons = list(getattr(built_trade, "tradable_reasons_blocking", []) or [])
+            for blocker in hard_execution_blockers:
+                if blocker not in tradable_reasons:
+                    tradable_reasons.append(blocker)
+            if quality_detail_map:
+                trade_source_flags["quality_detail"] = dict(quality_detail_map)
+            trade_source_flags.update(
+                {
+                    "candidate_quality_score": candidate_quality_score,
+                    "execution_feasibility_score": round(float(execution_feasibility_score), 6),
+                    "setup_score": round(float(setup_score), 6),
+                    "trigger_score": round(float(trigger_score), 6),
+                    "entry_quality_score": round(float(entry_quality_score), 6),
+                    "entry_quality_reason": entry_quality_reason,
+                    "overextension_score": round(float(overextension_score), 6),
+                    "overextension_penalty": round(float(overextension_penalty), 6),
+                    "entry_distance_to_invalidation": entry_distance_to_invalidation,
+                    "session_mode": session_mode,
+                    "session_entry_penalty": round(float(session_entry_penalty), 6),
+                    "family_survival_score": round(float(family_survival_score), 6),
+                    "family_survival_components": dict(family_survival_components),
+                    "family_survived": bool(soft_candidate_viable),
+                    "family_reject_reason": primary_rejection_reason,
+                    "rejected_at_stage": rejection_meta.get("rejected_at_stage"),
+                    "rejection_reason_code": rejection_meta.get("rejection_reason_code"),
+                    "rejection_bucket": rejection_meta.get("rejection_bucket"),
+                    "rejection_severity": rejection_meta.get("rejection_severity"),
+                    "risk_budget_ok": bool(risk_assessment.risk_budget_ok),
+                    "risk_budget_reason": str(risk_assessment.risk_budget_reason),
+                    "position_size_estimate": int(risk_assessment.position_size_estimate),
+                    "portfolio_heat_score": round(float(risk_assessment.portfolio_heat_score), 6),
+                    "correlation_penalty": round(float(risk_assessment.correlation_penalty), 6),
+                    "exposure_blocker": risk_assessment.exposure_blocker,
+                    "daily_kill_switch_active": bool(risk_assessment.daily_kill_switch_active),
+                    "regime_failure_throttle": round(float(risk_assessment.regime_failure_throttle), 6),
+                    "family_failure_throttle": round(float(risk_assessment.family_failure_throttle), 6),
+                    "risk_learning_adjustment": round(float(risk_assessment.risk_learning_adjustment), 6),
+                    "risk_learning_confidence": round(float(risk_assessment.risk_learning_confidence), 6),
+                    "candidate_status": candidate_status_final,
+                    "execution_allowed": bool(execution_allowed_final),
+                    "planning_only": bool(planning_only_final),
+                    "hard_execution_blockers": list(hard_execution_blockers),
+                }
+            )
+            ranking_score = round(
+                max(
+                    0.0,
+                    min(
+                        1.0,
+                        float(candidate_quality_score)
+                        - (max(0.0, 1.0 - float(execution_feasibility_score)) * 0.12)
+                        - (float(overextension_penalty) * 0.18)
+                        - (float(session_entry_penalty) * 0.10)
+                        - (0.10 if not bool(risk_assessment.risk_budget_ok) else 0.0)
+                        - (float(risk_assessment.correlation_penalty or 0.0) * 0.12)
+                        - (float(risk_assessment.regime_failure_throttle or 0.0) * 0.30)
+                        - (float(risk_assessment.family_failure_throttle or 0.0) * 0.30)
+                        + (float(risk_assessment.risk_learning_adjustment or 0.0) * 0.50),
+                    ),
+                ),
+                6,
+            )
+            trade_source_flags["ranking_score"] = ranking_score
             score_breakdown = dict(getattr(built_trade, "score_breakdown", {}) or {})
             score_breakdown.update(
                 {
@@ -2902,32 +3586,118 @@ class TradeBuilder:
                     "execution_feasibility_score": execution_feasibility_score,
                     "ranking_score": ranking_score,
                     "trigger_reason": trigger_reason,
-                    **dict(quality_detail or {}),
+                    "direction_family": trade_source_flags.get("direction_family"),
+                    "family_rank": trade_source_flags.get("family_rank"),
+                    "family_blocker": trade_source_flags.get("family_blocker"),
+                    "family_strength": trade_source_flags.get("family_strength"),
+                    "family_feedback_adjustment": trade_source_flags.get("family_feedback_adjustment"),
+                    "family_feedback_confidence": trade_source_flags.get("family_feedback_confidence"),
+                    "family_feedback_applied": trade_source_flags.get("family_feedback_applied"),
+                    "family_learning_adjustment": trade_source_flags.get("family_learning_adjustment"),
+                    "family_cap_effective": trade_source_flags.get("family_cap_effective"),
+                    "family_cap_reason": trade_source_flags.get("family_cap_reason"),
+                    "family_consensus_score": trade_source_flags.get("family_consensus_score"),
+                    "family_consensus_components": trade_source_flags.get("family_consensus_components"),
+                    "family_survival_score": trade_source_flags.get("family_survival_score"),
+                    "family_survival_components": trade_source_flags.get("family_survival_components"),
+                    "family_survived": soft_candidate_viable,
+                    "family_reject_reason": (hard_execution_blockers[0] if hard_execution_blockers else None),
+                    "rejected_at_stage": rejection_meta.get("rejected_at_stage"),
+                    "rejection_reason_code": rejection_meta.get("rejection_reason_code"),
+                    "rejection_bucket": rejection_meta.get("rejection_bucket"),
+                    "rejection_severity": rejection_meta.get("rejection_severity"),
+                    "expectancy_score": trade_source_flags.get("expectancy_score"),
+                    "strategy_weight_adjustment": trade_source_flags.get("strategy_weight_adjustment"),
+                    "strategy_weight_confidence": trade_source_flags.get("strategy_weight_confidence"),
+                    "strategy_weight_applied": trade_source_flags.get("strategy_weight_applied"),
+                    "strategy_regime_mode": strategy_regime_mode,
+                    "session_mode": session_mode,
+                    "session_entry_penalty": session_entry_penalty,
+                    "setup_score": setup_score,
+                    "trigger_score": trigger_score,
+                    "entry_quality_score": entry_quality_score,
+                    "entry_quality_reason": entry_quality_reason,
+                    "overextension_score": overextension_score,
+                    "overextension_penalty": overextension_penalty,
+                    "entry_distance_to_invalidation": entry_distance_to_invalidation,
+                    "risk_assessment": risk_assessment.to_dict(),
+                    **dict(quality_detail_map),
                 }
             )
-            trade_source_flags = dict(getattr(built_trade, "source_flags", {}) or {})
-            trade_source_flags["candidate_quality_score"] = candidate_quality_score
-            trade_source_flags["execution_feasibility_score"] = execution_feasibility_score
-            trade_source_flags["ranking_score"] = ranking_score
-            if quality_detail:
-                trade_source_flags["quality_detail"] = dict(quality_detail)
             built_trade = replace(
                 built_trade,
                 source_flags=trade_source_flags,
                 score_breakdown=score_breakdown,
                 opportunity_score=round(float(candidate_quality_score), 6),
                 rank_score=ranking_score,
+                setup_score=round(float(setup_score), 6),
+                trigger_score=round(float(trigger_score), 6),
+                entry_quality_score=round(float(entry_quality_score), 6),
+                entry_quality_reason=entry_quality_reason,
+                overextension_score=round(float(overextension_score), 6),
+                overextension_penalty=round(float(overextension_penalty), 6),
+                entry_distance_to_invalidation=entry_distance_to_invalidation,
+                session_mode=session_mode,
+                session_entry_penalty=round(float(session_entry_penalty), 6),
                 liquidity_score=round(float(liquidity_score), 6),
                 spread_score=round(float(spread_score), 6),
+                setup_strength=round(float(setup_score), 6),
+                timing_score=round(float(trigger_score), 6),
+                candidate_status=candidate_status_final,
+                execution_allowed=bool(execution_allowed_final),
+                planning_only=bool(planning_only_final),
+                permission=("EXECUTE" if execution_allowed_final else "ADVISORY_ONLY"),
+                permission_reason=(primary_rejection_reason if primary_rejection_reason else getattr(built_trade, "permission_reason", None)),
+                tradable_reasons_blocking=tradable_reasons,
+                reason=(primary_rejection_reason if primary_rejection_reason else getattr(built_trade, "reason", None)),
+                family_survival_score=round(float(family_survival_score), 6),
+                family_survival_components=family_survival_components,
+                family_survived=soft_candidate_viable,
+                family_reject_reason=primary_rejection_reason,
+                rejected_at_stage=rejection_meta.get("rejected_at_stage"),
+                rejection_reason_code=rejection_meta.get("rejection_reason_code"),
+                rejection_bucket=rejection_meta.get("rejection_bucket"),
+                rejection_severity=rejection_meta.get("rejection_severity"),
+                family_feedback_adjustment=trade_source_flags.get("family_feedback_adjustment"),
+                family_feedback_confidence=trade_source_flags.get("family_feedback_confidence"),
+                family_feedback_applied=trade_source_flags.get("family_feedback_applied"),
+                family_learning_adjustment=trade_source_flags.get("family_learning_adjustment"),
+                family_cap_effective=trade_source_flags.get("family_cap_effective"),
+                family_cap_reason=trade_source_flags.get("family_cap_reason"),
+                family_consensus_score=trade_source_flags.get("family_consensus_score"),
+                family_consensus_components=trade_source_flags.get("family_consensus_components") or {},
+                expectancy_score=trade_source_flags.get("expectancy_score"),
+                family_learning_state_generated_at=trade_source_flags.get("family_learning_state_generated_at"),
+                family_learning_state_version=trade_source_flags.get("family_learning_state_version"),
+                strategy_weight_adjustment=trade_source_flags.get("strategy_weight_adjustment"),
+                strategy_weight_confidence=trade_source_flags.get("strategy_weight_confidence"),
+                strategy_weight_applied=trade_source_flags.get("strategy_weight_applied"),
+                strategy_weight_state_generated_at=trade_source_flags.get("strategy_weight_state_generated_at"),
+                strategy_weight_state_version=trade_source_flags.get("strategy_weight_state_version"),
+                risk_budget_ok=bool(risk_assessment.risk_budget_ok),
+                risk_budget_reason=str(risk_assessment.risk_budget_reason),
+                position_size_estimate=int(risk_assessment.position_size_estimate),
+                portfolio_heat_score=round(float(risk_assessment.portfolio_heat_score), 6),
+                correlation_penalty=round(float(risk_assessment.correlation_penalty), 6),
+                exposure_blocker=risk_assessment.exposure_blocker,
+                daily_kill_switch_active=bool(risk_assessment.daily_kill_switch_active),
+                regime_failure_throttle=round(float(risk_assessment.regime_failure_throttle), 6),
+                family_failure_throttle=round(float(risk_assessment.family_failure_throttle), 6),
+                risk_learning_adjustment=round(float(risk_assessment.risk_learning_adjustment), 6),
+                risk_learning_confidence=round(float(risk_assessment.risk_learning_confidence), 6),
             )
             logger.info(
-                "OPPORTUNITY_CANDIDATE_BUILT symbol=%s strategy=%s direction=%s quality=%s execution_feasibility=%s trigger=%s",
+                "OPPORTUNITY_CANDIDATE_BUILT symbol=%s strategy=%s direction=%s quality=%s execution_feasibility=%s trigger=%s setup=%s entry_quality=%s survival=%s risk_ok=%s",
                 symbol,
                 strategy,
                 normalized_direction,
                 candidate_quality_score,
                 execution_feasibility_score,
                 trigger_reason,
+                setup_score,
+                entry_quality_score,
+                family_survival_score,
+                bool(risk_assessment.risk_budget_ok),
             )
         return built_trade
 
@@ -2946,6 +3716,24 @@ class TradeBuilder:
         ).strip().upper()
         if execution_mode not in {"SIM", "PAPER", "OFFHOURS"}:
             return []
+        family_learning_enabled = bool(getattr(cfg, "OFFLINE_FAMILY_LEARNING_ENABLE", False))
+        family_learning_state = None
+        if family_learning_enabled:
+            try:
+                from core.offline_family_learning import load_family_learning_state
+
+                family_learning_state = load_family_learning_state()
+            except Exception:
+                family_learning_state = None
+        strategy_weight_learning_enabled = bool(getattr(cfg, "OFFLINE_STRATEGY_WEIGHT_LEARNING_ENABLE", False))
+        strategy_weight_state = None
+        if strategy_weight_learning_enabled:
+            try:
+                from core.strategy_weight_learning import load_strategy_weight_state
+
+                strategy_weight_state = load_strategy_weight_state()
+            except Exception:
+                strategy_weight_state = None
         underlying_ltp = float(ltp or 0.0)
         underlying_vwap = float(vwap or underlying_ltp or 0.0)
         if underlying_ltp <= 0:
@@ -2972,6 +3760,32 @@ class TradeBuilder:
         mean_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008) * 1.5, 1e-6)
         mean_rsi_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12) or 0.12)
         micro_move_min = max(abs(float(getattr(cfg, "MICRO_5M_UP_PTS", 15) or 15)), abs(float(getattr(cfg, "MICRO_5M_DOWN_PTS", -15) or -15)))
+        regime_ctx = derive_regime_context(market_data)
+        strategy_regime_ctx = classify_strategy_regime_mode(market_data)
+        strategy_regime_mode = str(strategy_regime_ctx.get("regime_mode") or "UNCERTAIN").strip().upper()
+        session_ctx = classify_session_mode(market_data)
+        session_mode = str(session_ctx.get("session_mode") or "OFFHOURS").strip().upper()
+        session_entry_penalty = float(session_ctx.get("session_entry_penalty") or 0.0)
+        trend_mode = str(regime_ctx.get("trend_mode") or "SIDEWAYS").strip().upper()
+        range_mode = bool(regime_ctx.get("range_mode"))
+        sideways_regime = bool(range_mode or trend_mode == "SIDEWAYS")
+        bullish_regime = bool(trend_mode == "BULLISH" and not sideways_regime)
+        bearish_regime = bool(trend_mode == "BEARISH" and not sideways_regime)
+        low_vol_regime = bool(strategy_regime_mode == "LOW_VOL")
+        uncertain_regime = bool(strategy_regime_mode == "UNCERTAIN")
+        strategy_regime_sideways = bool(strategy_regime_mode == "SIDEWAYS")
+        regime_policy = cfg.get_regime_policy(strategy_regime_mode)
+        indicators_ok = bool(market_data.get("indicators_ok", False))
+        market_quality_score = max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    market_data.get("data_confidence")
+                    or (0.75 if indicators_ok else (0.55 if nonlive_feature_fallback else 0.35))
+                ),
+            ),
+        )
         strength_activation_min = (
             max(0.5, min(1.0, float(getattr(cfg, "NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN", 0.75) or 0.75)))
             if nonlive_feature_fallback
@@ -3005,7 +3819,76 @@ class TradeBuilder:
             abs(vwap_edge) / directional_edge_min,
             abs(ltp_change_window) / expansion_move_min,
         )
-        has_directional_signal = bool(directional_signal is not None or breakout_strength >= strength_activation_min)
+        bullish_structure_strength = round(
+            min(
+                5.0,
+                (
+                    max(0.0, vwap_edge / directional_edge_min) * 0.25
+                    + max(0.0, ltp_change_window / expansion_move_min) * 0.25
+                    + max(0.0, ltp_change_5m / max(micro_move_min, 1.0)) * 0.15
+                    + max(0.0, ltp_change_10m / max(micro_move_min, 1.0)) * 0.15
+                    + max(0.0, rsi_mom / max(mean_rsi_min, 1e-6)) * 0.10
+                    + (max(0.0, vol_z / 0.5) * 0.10 if ltp_change_window > 0 else 0.0)
+                ),
+            ),
+            6,
+        )
+        bearish_structure_strength = round(
+            min(
+                5.0,
+                (
+                    max(0.0, (-vwap_edge) / directional_edge_min) * 0.25
+                    + max(0.0, (-ltp_change_window) / expansion_move_min) * 0.25
+                    + max(0.0, (-ltp_change_5m) / max(micro_move_min, 1.0)) * 0.15
+                    + max(0.0, (-ltp_change_10m) / max(micro_move_min, 1.0)) * 0.15
+                    + max(0.0, (-rsi_mom) / max(mean_rsi_min, 1e-6)) * 0.10
+                    + (max(0.0, vol_z / 0.5) * 0.10 if ltp_change_window < 0 else 0.0)
+                ),
+            ),
+            6,
+        )
+        low_vol_exceptional_strength = max(
+            float(getattr(cfg, "NONLIVE_LOW_VOL_EXCEPTIONAL_STRENGTH", 1.95) or 1.95),
+            strength_activation_min,
+        )
+        directional_exceptional_strength = max(
+            float(getattr(cfg, "SIDEWAYS_DIRECTIONAL_EXCEPTIONAL_STRENGTH", 1.75) or 1.75),
+            strength_activation_min,
+        )
+        counter_regime_exceptional_strength = max(
+            float(getattr(cfg, "COUNTER_REGIME_DIRECTIONAL_EXCEPTIONAL_STRENGTH", 1.5) or 1.5),
+            strength_activation_min,
+        )
+        directional_activation_threshold = float(strength_activation_min)
+        if strategy_regime_sideways:
+            directional_activation_threshold = max(directional_activation_threshold, directional_exceptional_strength)
+        elif low_vol_regime:
+            directional_activation_threshold = max(directional_activation_threshold, low_vol_exceptional_strength)
+        elif uncertain_regime:
+            directional_activation_threshold = max(directional_activation_threshold, strength_activation_min)
+        has_directional_signal = bool(directional_signal is not None or breakout_strength >= directional_activation_threshold)
+        directional_suppressed_reason = None
+        if has_directional_signal and strategy_regime_sideways and breakout_strength < directional_exceptional_strength:
+            has_directional_signal = False
+            directional_suppressed_reason = "sideways_regime_weak_directional"
+        elif has_directional_signal and low_vol_regime and breakout_strength < low_vol_exceptional_strength:
+            has_directional_signal = False
+            directional_suppressed_reason = "low_vol_regime_weak_directional"
+        elif (
+            has_directional_signal
+            and uncertain_regime
+            and directional_signal is None
+            and (not nonlive_feature_fallback)
+            and breakout_strength < max(strength_activation_min, 0.85)
+        ):
+            has_directional_signal = False
+            directional_suppressed_reason = "uncertain_regime_sparse_directional"
+        elif has_directional_signal and bearish_regime and directional_direction == "BUY_CALL" and breakout_strength < counter_regime_exceptional_strength:
+            has_directional_signal = False
+            directional_suppressed_reason = "bearish_regime_countertrend_directional"
+        elif has_directional_signal and bullish_regime and directional_direction == "BUY_PUT" and breakout_strength < counter_regime_exceptional_strength:
+            has_directional_signal = False
+            directional_suppressed_reason = "bullish_regime_countertrend_directional"
 
         mean_signal = mean_reversion_signal(
             underlying_ltp,
@@ -3028,7 +3911,29 @@ class TradeBuilder:
             abs(vwap_edge) / mean_edge_min,
             abs(rsi_mom) / max(mean_rsi_min, 1e-6),
         )
-        has_mean_signal = bool(mean_signal is not None or mean_reversion_strength >= strength_activation_min)
+        mean_activation_threshold = float(strength_activation_min)
+        if strategy_regime_mode == "TRENDING":
+            mean_activation_threshold = max(mean_activation_threshold, counter_regime_exceptional_strength)
+        elif low_vol_regime:
+            mean_activation_threshold = max(mean_activation_threshold, low_vol_exceptional_strength)
+        elif uncertain_regime:
+            mean_activation_threshold = max(mean_activation_threshold, strength_activation_min * 1.10)
+        has_mean_signal = bool(mean_signal is not None or mean_reversion_strength >= mean_activation_threshold)
+        mean_suppressed_reason = None
+        if has_mean_signal and strategy_regime_mode == "TRENDING" and mean_reversion_strength < counter_regime_exceptional_strength:
+            has_mean_signal = False
+            mean_suppressed_reason = "trending_regime_weak_range_family"
+        elif has_mean_signal and low_vol_regime and mean_reversion_strength < low_vol_exceptional_strength:
+            has_mean_signal = False
+            mean_suppressed_reason = "low_vol_regime_weak_range_family"
+        elif (
+            has_mean_signal
+            and uncertain_regime
+            and mean_signal is None
+            and mean_reversion_strength < max(strength_activation_min * 1.10, 0.95)
+        ):
+            has_mean_signal = False
+            mean_suppressed_reason = "uncertain_regime_sparse_range_family"
 
         expansion_signal = event_breakout_signal(
             underlying_ltp,
@@ -3058,7 +3963,253 @@ class TradeBuilder:
             abs(vol_z) / 0.5,
             abs(ltp_change_5m) / max(micro_move_min, 1.0),
         )
-        has_expansion_signal = bool(expansion_signal is not None or volatility_expansion_strength >= strength_activation_min)
+        expansion_activation_threshold = float(strength_activation_min)
+        if strategy_regime_sideways:
+            expansion_activation_threshold = max(expansion_activation_threshold, directional_exceptional_strength)
+        elif low_vol_regime:
+            expansion_activation_threshold = max(expansion_activation_threshold, low_vol_exceptional_strength)
+        elif uncertain_regime:
+            expansion_activation_threshold = max(expansion_activation_threshold, strength_activation_min)
+        has_expansion_signal = bool(expansion_signal is not None or volatility_expansion_strength >= expansion_activation_threshold)
+        expansion_suppressed_reason = None
+        if has_expansion_signal and strategy_regime_sideways and volatility_expansion_strength < directional_exceptional_strength:
+            has_expansion_signal = False
+            expansion_suppressed_reason = "sideways_regime_weak_expansion_family"
+        elif has_expansion_signal and low_vol_regime and volatility_expansion_strength < low_vol_exceptional_strength:
+            has_expansion_signal = False
+            expansion_suppressed_reason = "low_vol_regime_weak_expansion_family"
+        elif (
+            has_expansion_signal
+            and uncertain_regime
+            and expansion_signal is None
+            and (not nonlive_feature_fallback)
+            and volatility_expansion_strength < max(strength_activation_min, 0.85)
+        ):
+            has_expansion_signal = False
+            expansion_suppressed_reason = "uncertain_regime_sparse_expansion_family"
+        watchlist_strength = max(
+            float(min(breakout_strength, 5.0)),
+            float(min(mean_reversion_strength, 5.0)),
+            float(min(volatility_expansion_strength, 5.0)),
+        )
+        bearish_directional_structure_min = max(
+            float(getattr(cfg, "BEARISH_DIRECTIONAL_STRUCTURE_MIN", 0.95) or 0.95),
+            0.1,
+        )
+        max_family_feedback_adjustment = max(
+            0.0,
+            float(getattr(cfg, "OFFLINE_FAMILY_LEARNING_MAX_ADJUSTMENT", 0.06) or 0.06),
+        )
+        max_family_scarcity_delta = max(
+            0,
+            int(getattr(cfg, "OFFLINE_FAMILY_LEARNING_MAX_SCARCITY_DELTA", 1) or 1),
+        )
+        family_max_candidates = max(
+            1,
+            int(regime_policy.get("direction_family_max_candidates") or 2),
+        )
+        sideways_family_max_candidates = max(
+            1,
+            int(regime_policy.get("sideways_direction_family_max_candidates") or 1),
+        )
+        uncertain_family_max_candidates = max(
+            1,
+            int(regime_policy.get("uncertain_family_max_candidates") or 1),
+        )
+
+        def _family_feedback(strategy_family_name: str, resolved_family: str) -> dict:
+            neutral = {
+                "family_score_adjustment": 0.0,
+                "family_confidence": 0.0,
+                "family_feedback_applied": False,
+                "family_scarcity_adjustment": 0,
+                "expectancy_score": 0.0,
+                "generated_at": (family_learning_state or {}).get("generated_at") if isinstance(family_learning_state, dict) else None,
+                "version": (family_learning_state or {}).get("version") if isinstance(family_learning_state, dict) else None,
+            }
+            if not family_learning_enabled:
+                return neutral
+            try:
+                from core.offline_family_learning import lookup_family_feedback
+
+                return lookup_family_feedback(
+                    strategy_family_name,
+                    resolved_family,
+                    state=family_learning_state,
+                )
+            except Exception:
+                return neutral
+
+        def _strategy_weight(strategy_family_name: str, resolved_family: str) -> dict:
+            neutral = {
+                "strategy_weight_adjustment": 0.0,
+                "strategy_weight_confidence": 0.0,
+                "strategy_weight_applied": False,
+                "strategy_signal_bias_adjustment": 0.0,
+                "strategy_execution_bias_adjustment": 0.0,
+                "strategy_scarcity_adjustment": 0,
+                "generated_at": (strategy_weight_state or {}).get("generated_at") if isinstance(strategy_weight_state, dict) else None,
+                "version": (strategy_weight_state or {}).get("version") if isinstance(strategy_weight_state, dict) else None,
+            }
+            if not strategy_weight_learning_enabled:
+                return neutral
+            try:
+                from core.strategy_weight_learning import lookup_strategy_weight
+
+                return lookup_strategy_weight(
+                    strategy_family_name,
+                    resolved_family,
+                    state=strategy_weight_state,
+                )
+            except Exception:
+                return neutral
+
+        def _direction_family(strategy_name: str, resolved_direction: str) -> str:
+            if str(strategy_name or "").strip().upper() == "OPP_RANGE_WATCHLIST":
+                return "sideways"
+            normalized = str(resolved_direction or "").strip().upper()
+            if normalized == "BUY_CALL":
+                return "bullish"
+            if normalized == "BUY_PUT":
+                return "bearish"
+            return "sideways"
+
+        def _family_strength(strategy_name: str, resolved_direction: str) -> float:
+            family = _direction_family(strategy_name, resolved_direction)
+            if family == "sideways":
+                return round(float(min(watchlist_strength, 5.0)), 6)
+            if str(strategy_name or "").strip().upper() == "OPP_MEAN_REVERT":
+                return round(float(min(mean_reversion_strength, 5.0)), 6)
+            if str(strategy_name or "").strip().upper() == "OPP_VOL_EXPANSION":
+                directional_strength = bullish_structure_strength if family == "bullish" else bearish_structure_strength
+                return round(float(min(max(volatility_expansion_strength, directional_strength), 5.0)), 6)
+            if family == "bullish":
+                return round(float(min(max(breakout_strength, bullish_structure_strength), 5.0)), 6)
+            return round(float(min(max(breakout_strength, bearish_structure_strength), 5.0)), 6)
+
+        def _family_blocker(strategy_name: str, resolved_direction: str) -> str | None:
+            family = _direction_family(strategy_name, resolved_direction)
+            strategy_name_norm = str(strategy_name or "").strip().upper()
+            directional_move_exception_min = max(atr * 0.15, expansion_move_min * 3.0, 1e-6)
+            if family == "bearish" and strategy_name_norm in {"OPP_DIRECTIONAL", "OPP_VOL_EXPANSION"}:
+                if bearish_structure_strength < bearish_directional_structure_min:
+                    return "insufficient_positive_bearish_structure"
+            if family == "bearish" and strategy_name_norm == "OPP_MEAN_REVERT":
+                if bullish_regime and bearish_structure_strength < (bearish_directional_structure_min * 0.5) and bullish_structure_strength >= bearish_directional_structure_min:
+                    return "insufficient_positive_bearish_structure"
+            if family == "bullish" and strategy_name_norm == "OPP_MEAN_REVERT":
+                if bearish_regime and bullish_structure_strength < (bearish_directional_structure_min * 0.5) and bearish_structure_strength >= bearish_directional_structure_min:
+                    return "insufficient_positive_bullish_structure"
+            if family == "bullish" and bearish_regime and strategy_name_norm in {"OPP_DIRECTIONAL", "OPP_VOL_EXPANSION"}:
+                family_strength = _family_strength(strategy_name_norm, resolved_direction)
+                if family_strength < counter_regime_exceptional_strength:
+                    return "bearish_regime_countertrend_family"
+            if family == "bearish" and bullish_regime and strategy_name_norm in {"OPP_DIRECTIONAL", "OPP_VOL_EXPANSION"}:
+                family_strength = _family_strength(strategy_name_norm, resolved_direction)
+                if family_strength < counter_regime_exceptional_strength:
+                    return "bullish_regime_countertrend_family"
+            if sideways_regime and family in {"bullish", "bearish"} and strategy_name_norm in {"OPP_DIRECTIONAL", "OPP_VOL_EXPANSION"}:
+                family_strength = _family_strength(strategy_name_norm, resolved_direction)
+                if family_strength < directional_exceptional_strength or abs(float(ltp_change_window)) < directional_move_exception_min:
+                    return "sideways_regime_weak_directional_family"
+            if low_vol_regime and family in {"bullish", "bearish"} and strategy_name_norm in {"OPP_DIRECTIONAL", "OPP_VOL_EXPANSION"}:
+                family_strength = _family_strength(strategy_name_norm, resolved_direction)
+                if family_strength < low_vol_exceptional_strength or abs(float(ltp_change_window)) < directional_move_exception_min:
+                    return "low_vol_regime_weak_directional_family"
+            return None
+
+        range_edge_strength = abs(vwap_edge) / max(mean_edge_min, 1e-6)
+        range_compression = bool(
+            abs(ltp_change_window) <= max(atr * float(getattr(cfg, "RANGE_WATCHLIST_COMPRESSION_ATR_MAX", 0.45) or 0.45), 1e-6)
+            and abs(vol_z) <= float(getattr(cfg, "STRATEGY_REGIME_COMPRESSION_VOL_Z_MAX", 0.35) or 0.35)
+        )
+        range_edge_eps = 1e-6
+        clean_range_edge = bool(
+            strategy_regime_sideways
+            and range_compression
+            and range_edge_strength >= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MIN", 0.80) or 0.80) - range_edge_eps)
+            and range_edge_strength <= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MAX", 2.80) or 2.80) + range_edge_eps)
+        )
+        support_touch = bool(clean_range_edge and underlying_ltp <= underlying_vwap and rsi_mom <= 0.0)
+        resistance_touch = bool(clean_range_edge and underlying_ltp >= underlying_vwap and rsi_mom >= 0.0)
+
+        def _regime_alignment_component(family: str) -> float:
+            if family == "bullish":
+                if bullish_regime:
+                    return 1.0
+                if strategy_regime_sideways:
+                    return 0.30
+                if low_vol_regime:
+                    return 0.25
+                if uncertain_regime:
+                    return 0.35
+                return 0.20
+            if family == "bearish":
+                if bearish_regime:
+                    return 1.0
+                if strategy_regime_sideways:
+                    return 0.30
+                if low_vol_regime:
+                    return 0.25
+                if uncertain_regime:
+                    return 0.35
+                return 0.20
+            if strategy_regime_sideways:
+                return 1.0
+            if low_vol_regime:
+                return 0.85
+            if uncertain_regime:
+                return 0.55
+            return 0.25
+
+        def _structure_component(family: str) -> float:
+            if family == "bullish":
+                return max(0.0, min(1.0, bullish_structure_strength / 5.0))
+            if family == "bearish":
+                return max(0.0, min(1.0, bearish_structure_strength / 5.0))
+            edge_bonus = 0.15 if (support_touch or resistance_touch) else 0.0
+            return max(0.0, min(1.0, (watchlist_strength / 5.0) + edge_bonus))
+
+        def _family_consensus_detail(spec: dict) -> tuple[float, dict]:
+            family = str(spec.get("direction_family") or "sideways").strip().lower() or "sideways"
+            strategy_family_name = str(spec.get("strategy_family") or "unknown")
+            family_feedback = _family_feedback(strategy_family_name, family)
+            strategy_weight = _strategy_weight(strategy_family_name, family)
+            regime_component = _regime_alignment_component(family)
+            structure_component = _structure_component(family)
+            execution_component = max(
+                0.0,
+                min(
+                    1.0,
+                    (market_quality_score * 0.7) + ((1.0 if indicators_ok else 0.0) * 0.3),
+                ),
+            )
+            quality_component = max(0.0, min(1.0, float(spec.get("quality_score") or 0.0)))
+            prior_component = max(
+                0.0,
+                min(
+                    1.0,
+                    0.5
+                    + float(family_feedback.get("family_score_adjustment") or 0.0)
+                    + float(strategy_weight.get("strategy_weight_adjustment") or 0.0),
+                ),
+            )
+            consensus_score = self._clamp_confidence(
+                (
+                    regime_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_REGIME", 0.28))
+                    + structure_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_STRUCTURE", 0.24))
+                    + execution_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_EXECUTION", 0.22))
+                    + quality_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_QUALITY", 0.18))
+                    + prior_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_PRIOR", 0.08))
+                )
+            ) or 0.0
+            return float(consensus_score), {
+                "regime_alignment": round(float(regime_component), 6),
+                "structure_strength": round(float(structure_component), 6),
+                "execution_truth": round(float(execution_component), 6),
+                "family_quality": round(float(quality_component), 6),
+                "learning_prior": round(float(prior_component), 6),
+            }
 
         logger.info(
             "SIGNAL_EVAL_SUMMARY %s",
@@ -3067,6 +4218,14 @@ class TradeBuilder:
                 "trigger_reason": trigger_reason,
                 "nonlive_feature_fallback": bool(nonlive_feature_fallback),
                 "fallback_fields": list(fallback_fields),
+                "regime": str(regime_ctx.get("regime") or "NEUTRAL"),
+                "strategy_regime_mode": strategy_regime_mode,
+                "trend_mode": trend_mode,
+                "range_mode": bool(range_mode),
+                "volatility_mode": str(regime_ctx.get("volatility_mode") or "NORMAL"),
+                "family_learning_enabled": family_learning_enabled,
+                "strategy_weight_learning_enabled": strategy_weight_learning_enabled,
+                "market_quality_score": round(float(market_quality_score), 6),
                 "strength_activation_min": float(strength_activation_min),
                 "breakout_strength": round(float(min(breakout_strength, 5.0)), 6),
                 "mean_reversion_strength": round(float(min(mean_reversion_strength, 5.0)), 6),
@@ -3074,6 +4233,15 @@ class TradeBuilder:
                 "directional_signal": bool(directional_signal is not None),
                 "mean_signal": bool(mean_signal is not None),
                 "expansion_signal": bool(expansion_signal is not None),
+                "directional_suppressed_reason": directional_suppressed_reason,
+                "mean_suppressed_reason": mean_suppressed_reason,
+                "expansion_suppressed_reason": expansion_suppressed_reason,
+                "bullish_family_strength": bullish_structure_strength,
+                "bearish_family_strength": bearish_structure_strength,
+                "sideways_family_strength": round(float(min(watchlist_strength, 5.0)), 6),
+                "clean_range_edge": bool(clean_range_edge),
+                "support_touch": bool(support_touch),
+                "resistance_touch": bool(resistance_touch),
             },
         )
 
@@ -3097,6 +4265,9 @@ class TradeBuilder:
                     "setup_variant": "opportunity_directional",
                     "soft_veto_codes": [] if directional_signal is not None else ["weak_directional_signal"],
                     "penalty_reasons": [] if directional_signal is not None else ["weak_directional_signal"],
+                    "direction_family": _direction_family("OPP_DIRECTIONAL", directional_direction),
+                    "family_blocker": _family_blocker("OPP_DIRECTIONAL", directional_direction),
+                    "family_strength": _family_strength("OPP_DIRECTIONAL", directional_direction),
                 }
             )
         if has_mean_signal:
@@ -3118,6 +4289,9 @@ class TradeBuilder:
                     "setup_variant": "opportunity_mean_reversion",
                     "soft_veto_codes": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
                     "penalty_reasons": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
+                    "direction_family": _direction_family("OPP_MEAN_REVERT", mean_direction),
+                    "family_blocker": _family_blocker("OPP_MEAN_REVERT", mean_direction),
+                    "family_strength": _family_strength("OPP_MEAN_REVERT", mean_direction),
                 }
             )
         if has_expansion_signal:
@@ -3139,7 +4313,326 @@ class TradeBuilder:
                     "setup_variant": "opportunity_volatility_expansion",
                     "soft_veto_codes": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
                     "penalty_reasons": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
+                    "direction_family": _direction_family("OPP_VOL_EXPANSION", expansion_direction),
+                    "family_blocker": _family_blocker("OPP_VOL_EXPANSION", expansion_direction),
+                    "family_strength": _family_strength("OPP_VOL_EXPANSION", expansion_direction),
                 }
+            )
+        if (
+            strategy_regime_sideways
+            and bool(getattr(cfg, "RANGE_WATCHLIST_ENABLE", True))
+            and clean_range_edge
+            and watchlist_strength >= float(getattr(cfg, "RANGE_WATCHLIST_MIN_STRENGTH", 0.9) or 0.9)
+            and (support_touch or resistance_touch or mean_signal is not None)
+        ):
+            watchlist_direction = mean_direction if mean_direction in {"BUY_CALL", "BUY_PUT"} else directional_direction
+            if watchlist_direction not in {"BUY_CALL", "BUY_PUT"}:
+                if support_touch:
+                    watchlist_direction = "BUY_CALL"
+                elif resistance_touch:
+                    watchlist_direction = "BUY_PUT"
+                else:
+                    watchlist_direction = "BUY_PUT" if underlying_ltp >= underlying_vwap else "BUY_CALL"
+            watchlist_trigger_reason = "range_support_touch_watchlist"
+            if resistance_touch:
+                watchlist_trigger_reason = "range_resistance_touch_watchlist"
+            elif not support_touch:
+                watchlist_trigger_reason = "range_edge_watchlist"
+            watchlist_quality = self._clamp_confidence(
+                0.30 + min(0.18, watchlist_strength * 0.08)
+            ) or 0.34
+            opportunity_specs.append(
+                {
+                    "strategy": "OPP_RANGE_WATCHLIST",
+                    "reason": "NONLIVE_SIDEWAYS_WATCHLIST",
+                    "direction": watchlist_direction,
+                    "confidence": max(float(watchlist_quality), 0.30),
+                    "quality_score": max(float(watchlist_quality), 0.30),
+                    "quality_detail": {
+                        "watchlist_strength": round(min(watchlist_strength, 2.0), 6),
+                        "trend_mode": trend_mode,
+                        "range_edge_strength": round(float(range_edge_strength), 6),
+                        "support_touch": bool(support_touch),
+                        "resistance_touch": bool(resistance_touch),
+                        "range_compression": bool(range_compression),
+                    },
+                    "strategy_family": "range-watchlist",
+                    "candidate_type": "watchlist",
+                    "setup_variant": "opportunity_range_watchlist",
+                    "soft_veto_codes": ["sideways_watchlist_only", watchlist_trigger_reason],
+                    "penalty_reasons": ["sideways_watchlist_only"],
+                    "direction_family": "sideways",
+                    "family_blocker": "sideways_watchlist_only",
+                    "family_strength": round(float(min(watchlist_strength, 5.0)), 6),
+                }
+            )
+        for spec in opportunity_specs:
+            direction_family = str(spec.get("direction_family") or "sideways").strip().lower() or "sideways"
+            spec_quality_detail = dict(spec.get("quality_detail") or {})
+            spec_quality_detail.update(
+                {
+                    "bullish_structure_strength": bullish_structure_strength,
+                    "bearish_structure_strength": bearish_structure_strength,
+                    "strategy_regime_mode": strategy_regime_mode,
+                    "session_mode": session_mode,
+                    "session_entry_penalty": session_entry_penalty,
+                    "market_quality_score": market_quality_score,
+                    "vwap_edge": round(float(vwap_edge), 6),
+                    "ltp_change_window": round(float(ltp_change_window), 6),
+                    "ltp_change_5m": round(float(ltp_change_5m), 6),
+                    "ltp_change_10m": round(float(ltp_change_10m), 6),
+                    "rsi_mom": round(float(rsi_mom), 6),
+                    "vol_z": round(float(vol_z), 6),
+                    "atr": round(float(atr), 6),
+                    "range_edge_strength": round(float(range_edge_strength), 6),
+                    "range_compression": bool(range_compression),
+                    "support_touch": bool(support_touch),
+                    "resistance_touch": bool(resistance_touch),
+                    "clean_range_edge": bool(clean_range_edge),
+                    "directional_signal_present": bool(directional_signal is not None),
+                    "mean_signal_present": bool(mean_signal is not None),
+                    "expansion_signal_present": bool(expansion_signal is not None),
+                }
+            )
+            spec["quality_detail"] = spec_quality_detail
+            feedback = _family_feedback(str(spec.get("strategy_family") or "unknown"), direction_family)
+            strategy_weight = _strategy_weight(str(spec.get("strategy_family") or "unknown"), direction_family)
+            family_learning_adjustment = round(
+                max(
+                    -max_family_feedback_adjustment,
+                    min(max_family_feedback_adjustment, float(feedback.get("family_score_adjustment") or 0.0)),
+                ),
+                6,
+            )
+            spec["family_feedback_adjustment"] = family_learning_adjustment
+            spec["family_feedback_confidence"] = round(float(feedback.get("family_confidence") or 0.0), 6)
+            spec["family_feedback_applied"] = bool(feedback.get("family_feedback_applied", False))
+            spec["family_learning_adjustment"] = family_learning_adjustment
+            raw_scarcity_adjustment = int(feedback.get("family_scarcity_adjustment") or 0)
+            spec["family_scarcity_adjustment"] = max(
+                -max_family_scarcity_delta,
+                min(max_family_scarcity_delta, raw_scarcity_adjustment),
+            )
+            spec["expectancy_score"] = round(float(feedback.get("expectancy_score") or 0.0), 6)
+            spec["family_learning_state_generated_at"] = feedback.get("generated_at")
+            spec["family_learning_state_version"] = feedback.get("version")
+            spec["strategy_weight_adjustment"] = round(float(strategy_weight.get("strategy_weight_adjustment") or 0.0), 6)
+            spec["strategy_weight_confidence"] = round(float(strategy_weight.get("strategy_weight_confidence") or 0.0), 6)
+            spec["strategy_weight_applied"] = bool(strategy_weight.get("strategy_weight_applied", False))
+            spec["strategy_signal_bias_adjustment"] = round(float(strategy_weight.get("strategy_signal_bias_adjustment") or 0.0), 6)
+            spec["strategy_execution_bias_adjustment"] = round(float(strategy_weight.get("strategy_execution_bias_adjustment") or 0.0), 6)
+            strategy_scarcity_adjustment = int(strategy_weight.get("strategy_scarcity_adjustment") or 0)
+            strategy_max_scarcity_delta = max(
+                0,
+                int(getattr(cfg, "OFFLINE_STRATEGY_WEIGHT_MAX_SCARCITY_DELTA", 1) or 1),
+            )
+            spec["strategy_scarcity_adjustment"] = max(
+                -strategy_max_scarcity_delta,
+                min(strategy_max_scarcity_delta, strategy_scarcity_adjustment),
+            )
+            spec["strategy_weight_state_generated_at"] = strategy_weight.get("generated_at")
+            spec["strategy_weight_state_version"] = strategy_weight.get("version")
+            family_consensus_score, family_consensus_components = _family_consensus_detail(spec)
+            spec["family_consensus_score"] = round(float(family_consensus_score), 6)
+            spec["family_consensus_components"] = dict(family_consensus_components)
+            spec["quality_detail"] = {
+                **dict(spec.get("quality_detail") or {}),
+                "family_consensus_score": spec["family_consensus_score"],
+                "family_consensus_components": dict(family_consensus_components),
+            }
+            spec["family_survived"] = True
+            spec["family_reject_reason"] = None
+            spec["family_strength"] = round(
+                min(
+                    5.0,
+                    (
+                        (float(spec.get("family_strength") or 0.0) * 0.70)
+                        + (family_learning_adjustment * 2.0)
+                        + (float(spec.get("strategy_weight_adjustment") or 0.0) * 1.5)
+                        + (float(spec.get("family_consensus_score") or 0.0) * 5.0 * 0.30)
+                    ),
+                ),
+                6,
+            )
+        raw_candidate_count = len(opportunity_specs)
+        family_filtered_specs = []
+        fatal_family_blockers = {
+            "insufficient_positive_bearish_structure",
+            "insufficient_positive_bullish_structure",
+            "bearish_regime_countertrend_family",
+            "bullish_regime_countertrend_family",
+            "sideways_regime_weak_directional_family",
+            "low_vol_regime_weak_directional_family",
+        }
+        for spec in opportunity_specs:
+            blocker = str(spec.get("family_blocker") or "").strip().lower() or None
+            if blocker in fatal_family_blockers:
+                family_filtered_specs.append(
+                    {
+                        "strategy": spec.get("strategy"),
+                        "strategy_family": spec.get("strategy_family"),
+                        "direction_family": spec.get("direction_family"),
+                        "session_mode": session_mode,
+                        "strategy_regime_mode": strategy_regime_mode,
+                        "family_consensus_score": spec.get("family_consensus_score"),
+                        "quality_score": spec.get("quality_score"),
+                        "family_blocker": blocker,
+                    }
+                )
+                continue
+            family = str(spec.get("direction_family") or "sideways").strip().lower() or "sideways"
+            spec["direction_family"] = family
+            spec["family_strength"] = round(float(spec.get("family_strength") or 0.0), 6)
+            spec["family_blocker"] = blocker
+        opportunity_specs = [
+            spec
+            for spec in opportunity_specs
+            if str(spec.get("family_blocker") or "").strip().lower() not in fatal_family_blockers
+        ]
+        if opportunity_specs:
+            grouped_specs: dict[str, list[dict]] = {}
+            for spec in opportunity_specs:
+                grouped_specs.setdefault(str(spec.get("direction_family") or "sideways"), []).append(spec)
+            scarce_specs: list[dict] = []
+            for family, specs in grouped_specs.items():
+                capped_specs = sorted(
+                    specs,
+                    key=lambda row: (
+                        -float(row.get("family_consensus_score") or 0.0),
+                        -float(row.get("family_strength") or 0.0),
+                        -float(row.get("quality_score") or 0.0),
+                        str(row.get("strategy") or ""),
+                    ),
+                )
+                strategy_state_applied = any(bool(row.get("strategy_weight_applied", False)) for row in capped_specs)
+                hard_family_cap = (
+                    family_max_candidates
+                    if (strategy_weight_learning_enabled and not strategy_state_applied)
+                    else max(1, family_max_candidates + max_family_scarcity_delta)
+                )
+                family_cap = family_max_candidates
+                family_cap_reasons: list[str] = []
+                if strategy_regime_sideways and family in {"bullish", "bearish"}:
+                    family_cap = min(family_cap, sideways_family_max_candidates)
+                    family_cap_reasons.append("sideways_directional_cap")
+                if low_vol_regime:
+                    family_cap = min(family_cap, 1)
+                    family_cap_reasons.append("low_vol_sparse_cap")
+                if uncertain_regime:
+                    family_cap = min(family_cap, uncertain_family_max_candidates)
+                    family_cap_reasons.append("uncertain_sparse_cap")
+                if market_quality_score < 0.45 and family in {"bullish", "bearish"}:
+                    family_cap = min(family_cap, 1)
+                    family_cap_reasons.append("weak_market_quality_cap")
+                top_family_consensus = max(
+                    (float(row.get("family_consensus_score") or 0.0) for row in capped_specs),
+                    default=0.0,
+                )
+                family_consensus_threshold = float(regime_policy.get("family_consensus_min_score") or 0.48)
+                if top_family_consensus < family_consensus_threshold:
+                    family_filtered_specs.append(
+                        {
+                            "strategy_family": next(
+                                (str(row.get("strategy_family") or "") for row in capped_specs if row.get("strategy_family")),
+                                "unknown",
+                            ),
+                            "direction_family": family,
+                            "session_mode": session_mode,
+                            "strategy_regime_mode": strategy_regime_mode,
+                            "family_consensus_score": round(float(top_family_consensus), 6),
+                            "family_blocker": "family_consensus_below_threshold",
+                            "family_reject_reason": "family_consensus_below_threshold",
+                            "family_survived": False,
+                        }
+                    )
+                    continue
+                family_scarcity_delta = 0
+                negative_deltas = [
+                    max(
+                        -max_family_scarcity_delta,
+                        min(
+                            max_family_scarcity_delta,
+                            int(row.get("family_scarcity_adjustment") or 0) + int(row.get("strategy_scarcity_adjustment") or 0),
+                        ),
+                    )
+                    for row in capped_specs
+                    if (
+                        max(
+                            -max_family_scarcity_delta,
+                            min(
+                                max_family_scarcity_delta,
+                                int(row.get("family_scarcity_adjustment") or 0) + int(row.get("strategy_scarcity_adjustment") or 0),
+                            ),
+                        )
+                        < 0
+                    )
+                ]
+                positive_deltas = [
+                    max(
+                        -max_family_scarcity_delta,
+                        min(
+                            max_family_scarcity_delta,
+                            int(row.get("family_scarcity_adjustment") or 0) + int(row.get("strategy_scarcity_adjustment") or 0),
+                        ),
+                    )
+                    for row in capped_specs
+                    if (
+                        max(
+                            -max_family_scarcity_delta,
+                            min(
+                                max_family_scarcity_delta,
+                                int(row.get("family_scarcity_adjustment") or 0) + int(row.get("strategy_scarcity_adjustment") or 0),
+                            ),
+                        )
+                        > 0
+                    )
+                ]
+                regime_aligned = bool(
+                    (family == "bullish" and bullish_regime)
+                    or (family == "bearish" and bearish_regime)
+                    or (family == "sideways" and strategy_regime_sideways)
+                )
+                if regime_aligned and positive_deltas:
+                    family_scarcity_delta = max(positive_deltas)
+                    family_cap_reasons.append("learning_positive_delta")
+                elif negative_deltas:
+                    family_scarcity_delta = min(negative_deltas)
+                    family_cap_reasons.append("learning_negative_delta")
+                if regime_aligned and family_scarcity_delta > 0 and top_family_consensus >= max(family_consensus_threshold + 0.10, 0.70):
+                    family_cap = min(hard_family_cap, family_cap + 1)
+                    family_cap_reasons.append("strong_aligned_family")
+                family_cap = min(hard_family_cap, max(1, int(family_cap) + int(family_scarcity_delta)))
+                for rank_idx, spec in enumerate(capped_specs, start=1):
+                    spec["family_rank"] = rank_idx
+                    spec["family_cap_effective"] = int(family_cap)
+                    spec["family_cap_reason"] = "|".join(family_cap_reasons) if family_cap_reasons else "base_cap"
+                    spec["family_survived"] = True
+                    spec["family_reject_reason"] = None
+                    if rank_idx > family_cap:
+                        family_filtered_specs.append(
+                            {
+                                "strategy": spec.get("strategy"),
+                                "strategy_family": spec.get("strategy_family"),
+                                "direction_family": family,
+                                "session_mode": session_mode,
+                                "strategy_regime_mode": strategy_regime_mode,
+                                "family_consensus_score": spec.get("family_consensus_score"),
+                                "quality_score": spec.get("quality_score"),
+                                "family_blocker": "family_scarcity_cap",
+                                "family_reject_reason": "family_scarcity_cap",
+                                "family_survived": False,
+                            }
+                        )
+                        continue
+                    scarce_specs.append(spec)
+            opportunity_specs = sorted(
+                scarce_specs,
+                key=lambda row: (
+                    -float(row.get("family_consensus_score") or 0.0),
+                    -float(row.get("quality_score") or 0.0),
+                    -float(row.get("family_strength") or 0.0),
+                    str(row.get("strategy") or ""),
+                ),
             )
         candidates: list[Trade] = []
         for spec in opportunity_specs:
@@ -3159,9 +4652,200 @@ class TradeBuilder:
                 penalty_reasons=list(spec["penalty_reasons"]),
                 quality_score=float(spec["quality_score"]),
                 quality_detail=dict(spec["quality_detail"]),
+                direction_family=str(spec.get("direction_family") or "sideways"),
+                family_rank=int(spec.get("family_rank") or 1),
+                family_blocker=spec.get("family_blocker"),
+                family_strength=float(spec.get("family_strength") or 0.0),
+                family_feedback_detail={
+                    "family_feedback_adjustment": round(float(spec.get("family_feedback_adjustment") or 0.0), 6),
+                    "family_feedback_confidence": round(float(spec.get("family_feedback_confidence") or 0.0), 6),
+                    "family_feedback_applied": bool(spec.get("family_feedback_applied", False)),
+                    "family_learning_adjustment": round(float(spec.get("family_learning_adjustment") or 0.0), 6),
+                    "family_cap_effective": int(spec.get("family_cap_effective") or family_max_candidates),
+                    "family_cap_reason": spec.get("family_cap_reason"),
+                    "family_consensus_score": round(float(spec.get("family_consensus_score") or 0.0), 6),
+                    "family_consensus_components": dict(spec.get("family_consensus_components") or {}),
+                    "family_survived": bool(spec.get("family_survived", True)),
+                    "family_reject_reason": spec.get("family_reject_reason"),
+                    "expectancy_score": round(float(spec.get("expectancy_score") or 0.0), 6),
+                    "family_learning_state_generated_at": spec.get("family_learning_state_generated_at"),
+                    "family_learning_state_version": spec.get("family_learning_state_version"),
+                    "strategy_weight_adjustment": round(float(spec.get("strategy_weight_adjustment") or 0.0), 6),
+                    "strategy_weight_confidence": round(float(spec.get("strategy_weight_confidence") or 0.0), 6),
+                    "strategy_weight_applied": bool(spec.get("strategy_weight_applied", False)),
+                    "strategy_weight_state_generated_at": spec.get("strategy_weight_state_generated_at"),
+                    "strategy_weight_state_version": spec.get("strategy_weight_state_version"),
+                },
             )
             if trade is not None:
                 candidates.append(trade)
+        surviving_candidate_count = len(candidates)
+        raw_candidate_count = max(raw_candidate_count, surviving_candidate_count + len(family_filtered_specs))
+        survival_rate = (
+            float(surviving_candidate_count) / max(1, int(raw_candidate_count))
+            if raw_candidate_count > 0
+            else 0.0
+        )
+        executable_rate = (
+            float(sum(1 for candidate in candidates if bool(getattr(candidate, "execution_allowed", False))))
+            / max(1, int(raw_candidate_count))
+            if raw_candidate_count > 0
+            else 0.0
+        )
+        advisory_rate = (
+            float(
+                sum(
+                    1
+                    for candidate in candidates
+                    if str(getattr(candidate, "candidate_class", None) or getattr(candidate, "candidate_status", "")).strip().lower() in {"advisory_only", "advisory"}
+                )
+            )
+            / max(1, int(raw_candidate_count))
+            if raw_candidate_count > 0
+            else 0.0
+        )
+        family_counter: dict[str, int] = {}
+        for candidate in candidates:
+            family_key = str(getattr(candidate, "direction_family", None) or "unknown").strip().lower() or "unknown"
+            family_counter[family_key] = family_counter.get(family_key, 0) + 1
+        top_family_share = (
+            float(max(family_counter.values())) / max(1, surviving_candidate_count)
+            if family_counter and surviving_candidate_count > 0
+            else 0.0
+        )
+        starvation_reason = None
+        if raw_candidate_count > 0 and survival_rate < float(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_SURVIVAL_RATE_FLOOR", 0.25) or 0.25):
+            starvation_reason = "survival_rate_below_floor"
+        elif surviving_candidate_count > 0 and executable_rate <= 0.0:
+            starvation_reason = "no_executable_candidates"
+        elif top_family_share >= float(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_TOP_FAMILY_SHARE_WARN", 0.75) or 0.75):
+            starvation_reason = "family_dominance"
+        starvation_flag = starvation_reason is not None
+        decision_scope = f"builder:{str(market_data.get('symbol') or 'UNKNOWN').strip().upper()}:{str(trigger_reason or 'unknown').strip()}"
+        decision_batch_id = hashlib.sha256(
+            (
+                f"{decision_scope}|{raw_candidate_count}|{surviving_candidate_count}|"
+                + "|".join(
+                    sorted(
+                        str(getattr(candidate, "trade_id", None) or getattr(candidate, "strategy", None) or "")
+                        for candidate in candidates
+                    )
+                )
+            ).encode("utf-8")
+        ).hexdigest()[:24]
+        for filtered in family_filtered_specs:
+            filtered_reason = str(
+                filtered.get("family_reject_reason")
+                or filtered.get("family_blocker")
+                or "setup_filtered"
+            ).strip().lower() or "setup_filtered"
+            rejection_meta = classify_rejection_metadata(filtered_reason)
+            filtered_record = {
+                "timestamp": "",
+                "decision_phase": "builder",
+                "decision_scope": decision_scope,
+                "decision_batch_id": decision_batch_id,
+                "trade_id": None,
+                "symbol": str(market_data.get("symbol") or "UNKNOWN").strip().upper() or "UNKNOWN",
+                "strategy": filtered.get("strategy"),
+                "strategy_family": filtered.get("strategy_family"),
+                "direction_family": filtered.get("direction_family"),
+                "candidate_class": "ADVISORY_ONLY",
+                "candidate_status": "advisory_only",
+                "selected_for_execution": False,
+                "market_mode": execution_mode,
+                "session_mode": filtered.get("session_mode") or session_mode,
+                "strategy_regime_mode": filtered.get("strategy_regime_mode") or strategy_regime_mode,
+                "setup_score": None,
+                "trigger_score": None,
+                "entry_quality_score": None,
+                "family_survival_score": filtered.get("family_consensus_score"),
+                "priority_score": filtered.get("quality_score"),
+                "final_score": filtered.get("quality_score"),
+                "rejected_at_stage": rejection_meta.get("rejected_at_stage"),
+                "rejection_reason_code": rejection_meta.get("rejection_reason_code"),
+                "rejection_bucket": rejection_meta.get("rejection_bucket"),
+                "rejection_severity": rejection_meta.get("rejection_severity"),
+                "raw_candidate_count": raw_candidate_count,
+                "surviving_candidate_count": surviving_candidate_count,
+                "survival_rate": survival_rate,
+                "executable_rate": executable_rate,
+                "advisory_rate": advisory_rate,
+                "no_trade_rate": 1.0 if executable_rate <= 0.0 else 0.0,
+                "top_family_share": top_family_share,
+                "starvation_flag": starvation_flag,
+                "starvation_reason": starvation_reason,
+                "warning_engine_too_timid": starvation_flag,
+                "warning_family_starvation": starvation_reason == "family_dominance",
+            }
+            record_threshold_candidate_decision(filtered_record)
+        enriched_candidates: list[Trade] = []
+        for candidate in candidates:
+            source_flags = dict(getattr(candidate, "source_flags", {}) or {})
+            decision_record = build_audit_candidate_decision_record(
+                candidate,
+                decision_phase="builder",
+                decision_scope=decision_scope,
+                decision_batch_id=decision_batch_id,
+                raw_candidate_count=raw_candidate_count,
+                surviving_candidate_count=surviving_candidate_count,
+                survival_rate=survival_rate,
+                executable_rate=executable_rate,
+                advisory_rate=advisory_rate,
+                no_trade_rate=(1.0 if executable_rate <= 0.0 else 0.0),
+                top_family_share=top_family_share,
+                starvation_flag=starvation_flag,
+                starvation_reason=starvation_reason,
+                warning_engine_too_timid=starvation_flag,
+                warning_family_starvation=(starvation_reason == "family_dominance"),
+            )
+            record_threshold_candidate_decision(decision_record)
+            source_flags.update(
+                {
+                    "rejected_at_stage": decision_record.get("rejected_at_stage"),
+                    "rejection_reason_code": decision_record.get("rejection_reason_code"),
+                    "rejection_bucket": decision_record.get("rejection_bucket"),
+                    "rejection_severity": decision_record.get("rejection_severity"),
+                    "raw_candidate_count": raw_candidate_count,
+                    "surviving_candidate_count": surviving_candidate_count,
+                    "survival_rate": round(float(survival_rate), 6),
+                    "executable_rate": round(float(executable_rate), 6),
+                    "advisory_rate": round(float(advisory_rate), 6),
+                    "no_trade_rate": round(float(1.0 if executable_rate <= 0.0 else 0.0), 6),
+                    "top_family_share": round(float(top_family_share), 6),
+                    "starvation_flag": bool(starvation_flag),
+                    "starvation_reason": starvation_reason,
+                    "warning_engine_too_timid": bool(starvation_flag),
+                    "warning_filtering_without_edge_improvement": False,
+                    "warning_family_starvation": bool(starvation_reason == "family_dominance"),
+                    "warning_threshold_cluster": False,
+                }
+            )
+            enriched_candidates.append(
+                replace(
+                    candidate,
+                    source_flags=source_flags,
+                    rejected_at_stage=decision_record.get("rejected_at_stage"),
+                    rejection_reason_code=decision_record.get("rejection_reason_code"),
+                    rejection_bucket=decision_record.get("rejection_bucket"),
+                    rejection_severity=decision_record.get("rejection_severity"),
+                    raw_candidate_count=int(raw_candidate_count),
+                    surviving_candidate_count=int(surviving_candidate_count),
+                    survival_rate=round(float(survival_rate), 6),
+                    executable_rate=round(float(executable_rate), 6),
+                    advisory_rate=round(float(advisory_rate), 6),
+                    no_trade_rate=round(float(1.0 if executable_rate <= 0.0 else 0.0), 6),
+                    top_family_share=round(float(top_family_share), 6),
+                    starvation_flag=bool(starvation_flag),
+                    starvation_reason=starvation_reason,
+                    warning_engine_too_timid=bool(starvation_flag),
+                    warning_filtering_without_edge_improvement=False,
+                    warning_family_starvation=bool(starvation_reason == "family_dominance"),
+                    warning_threshold_cluster=False,
+                    strategy_regime_mode=strategy_regime_mode,
+                )
+            )
+        candidates = enriched_candidates
         logger.info(
             "OPPORTUNITY_SET_BUILT %s",
             {
@@ -3169,11 +4853,26 @@ class TradeBuilder:
                 "trigger_reason": trigger_reason,
                 "nonlive_feature_fallback": bool(nonlive_feature_fallback),
                 "fallback_fields": list(fallback_fields),
+                "strategy_regime_mode": strategy_regime_mode,
                 "breakout_strength": round(float(min(breakout_strength, 5.0)), 6),
                 "mean_reversion_strength": round(float(min(mean_reversion_strength, 5.0)), 6),
                 "volatility_expansion_strength": round(float(min(volatility_expansion_strength, 5.0)), 6),
+                "bullish_family_strength": bullish_structure_strength,
+                "bearish_family_strength": bearish_structure_strength,
+                "family_filtered": family_filtered_specs,
+                "family_learning_enabled": family_learning_enabled,
+                "strategy_weight_learning_enabled": strategy_weight_learning_enabled,
+                "raw_candidate_count": raw_candidate_count,
+                "surviving_candidate_count": surviving_candidate_count,
+                "survival_rate": round(float(survival_rate), 6),
+                "executable_rate": round(float(executable_rate), 6),
+                "advisory_rate": round(float(advisory_rate), 6),
+                "top_family_share": round(float(top_family_share), 6),
+                "starvation_flag": bool(starvation_flag),
+                "starvation_reason": starvation_reason,
                 "count": len(candidates),
                 "families": [getattr(candidate, "strategy", None) for candidate in candidates],
+                "direction_families": [getattr(candidate, "direction_family", None) for candidate in candidates],
             },
         )
         return candidates
@@ -5290,13 +6989,14 @@ class TradeBuilder:
             if not quick_mode:
                 vol = opt.get("volume", 0)
                 min_volume_filter = int(max(0, current_filter_profile.min_volume_filter))
-                if vol and vol < min_volume_filter and not _relax("low_volume"):
-                    if runtime_profile.suggestion_require_volume:
-                        _count_option_reject("low_volume")
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=low_volume", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "low_volume", atr=atr))
-                        continue
+                if vol and vol < min_volume_filter:
+                    if not _relax("low_volume"):
+                        if runtime_profile.suggestion_require_volume:
+                            _count_option_reject("low_volume")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=low_volume", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "low_volume", atr=atr))
+                            continue
                     _record_issue("low_volume", role=ISSUE_CATEGORY_WARNING)
                 if spread_pct > max_spread and not _relax("spread_pct"):
                     if spread_pct > toxic_spread and runtime_profile.suggestion_require_depth:
@@ -6772,23 +8472,19 @@ class TradeBuilder:
                         best_trade = self._apply_fallback_candidate_flags(
                             top_ranked,
                             reason=fallback_reason,
-                            execution_allowed_override=True,
-                            planning_only_override=False,
-                            tradable_override=True,
+                            execution_allowed_override=False,
+                            planning_only_override=True,
+                            tradable_override=False,
                         )
+                        best_trade = self._apply_candidate_contract(best_trade, market_data=market_data)
                         if isinstance(best_trade, dict):
-                            best_trade["selected_for_execution"] = True
+                            best_trade["selected_for_execution"] = False
                             best_trade["selection_reason"] = "fallback_top_ranked"
-                            best_trade["execution_allowed"] = True
-                            best_trade["planning_only"] = False
                         else:
                             best_trade = replace(
                                 best_trade,
-                                selected_for_execution=True,
+                                selected_for_execution=False,
                                 selection_reason="fallback_top_ranked",
-                                execution_allowed=True,
-                                planning_only=False,
-                                tradable=True,
                             )
                         logger.info(
                             "FALLBACK_TOP_RANKED_SELECTED symbol=%s trade_id=%s rank_score=%s",

@@ -51,6 +51,7 @@ from core.time_utils import is_market_open_ist
 from core.observability.pipeline import append_trade_lifecycle_event
 from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lifecycle
 from core.time_utils import format_ts_ist
+from core.log_writer import get_jsonl_writer
 
 try:
     from config import config as cfg
@@ -844,13 +845,13 @@ def _classify_candidate_status(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    if _is_blocked_contract_row(out):
+        out["candidate_status"] = "blocked_contract"
+        return out
     existing = str(out.get("candidate_status") or "").strip().lower()
     if existing not in _CANDIDATE_STATUS_VALUES:
         out = _apply_candidate_scoring_status(out)
         existing = str(out.get("candidate_status") or "").strip().lower()
-    if _is_blocked_contract_row(out):
-        out["candidate_status"] = "blocked_contract"
-        return out
     execution_status = str(out.get("execution_status") or "").strip().lower()
     permission = str(out.get("permission") or "").strip().upper()
     final_action = str(out.get("final_action") or "").strip().upper()
@@ -891,6 +892,16 @@ def _classify_candidate_status(entry: dict) -> dict:
             out["candidate_status"] = "advisory_only"
             return out
     if existing in _CANDIDATE_STATUS_VALUES:
+        return out
+    candidate_class = str(out.get("candidate_class") or "").strip().upper()
+    if candidate_class == "EXECUTABLE":
+        out["candidate_status"] = "executable"
+        return out
+    if candidate_class == "NEAR_EXECUTABLE":
+        out["candidate_status"] = "near_executable"
+        return out
+    if candidate_class == "ADVISORY_ONLY":
+        out["candidate_status"] = "advisory_only"
         return out
     if _has_candidate_ranking_context(out):
         out["candidate_status"] = "ranked"
@@ -2848,9 +2859,8 @@ def _dedupe_queue_entries(entries: list[dict], new_entry: dict, window_min: int)
 def _append_jsonl(paths, payload):
     for path in paths:
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a") as f:
-                f.write(json.dumps(payload) + "\n")
+            writer = get_jsonl_writer(path)
+            writer.write(payload)
         except Exception:
             continue
 
@@ -3861,6 +3871,7 @@ def _apply_issue_classification(
     confidence_raw_canonical = _safe_float(entry.get("confidence_raw_canonical"))
     if confidence_raw_canonical is None:
         confidence_raw_canonical = confidence_raw
+    explicit_confidence_penalty_present = entry.get("confidence_penalty_total") is not None or entry.get("confidence_penalty") is not None
     existing_confidence_penalty = _safe_float(entry.get("confidence_penalty_total"))
     if existing_confidence_penalty is None:
         existing_confidence_penalty = _safe_float(entry.get("confidence_penalty"))
@@ -4026,11 +4037,17 @@ def _apply_issue_classification(
     confidence_penalty_reasons = _dedupe_issue_codes(
         list(entry.get("confidence_penalty_reasons") or []) + soft_penalties
     )
-    confidence_penalty_total = max(
-        0.0,
-        float(existing_confidence_penalty) + float(issue_penalty) + float(relaxed_gate_penalty_total),
-    )
-    confidence_final = confidence_raw_canonical
+    if explicit_confidence_penalty_present:
+        confidence_penalty_total = max(
+            0.0,
+            float(existing_confidence_penalty) + float(issue_penalty),
+        )
+    else:
+        confidence_penalty_total = max(
+            0.0,
+            float(existing_confidence_penalty) + float(issue_penalty) + float(relaxed_gate_penalty_total),
+        )
+    confidence_final = confidence_raw_canonical if confidence_raw_canonical is not None else confidence_raw
     if confidence_final is not None:
         confidence_final = max(0.0, min(1.0, float(confidence_raw_canonical) - float(confidence_penalty_total)))
     blockers = _dedupe_issue_codes(hard_blockers + soft_penalties + warnings)
@@ -5342,6 +5359,16 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "final_qty": _trade_attr(trade, "final_qty", None),
         "rank_score": _trade_attr(trade, "rank_score", None),
         "setup_strength": _trade_attr(trade, "setup_strength", None),
+        "setup_score": _trade_attr(trade, "setup_score", None),
+        "trigger_score": _trade_attr(trade, "trigger_score", None),
+        "entry_quality_score": _trade_attr(trade, "entry_quality_score", None),
+        "entry_quality_reason": _trade_attr(trade, "entry_quality_reason", None),
+        "overextension_score": _trade_attr(trade, "overextension_score", None),
+        "overextension_penalty": _trade_attr(trade, "overextension_penalty", None),
+        "entry_distance_to_invalidation": _trade_attr(trade, "entry_distance_to_invalidation", None),
+        "session_mode": _trade_attr(trade, "session_mode", None),
+        "strategy_regime_mode": _trade_attr(trade, "strategy_regime_mode", None),
+        "session_entry_penalty": _trade_attr(trade, "session_entry_penalty", None),
         "regime_fit": _trade_attr(trade, "regime_fit", None),
         "liquidity_score": _trade_attr(trade, "liquidity_score", None),
         "spread_score": _trade_attr(trade, "spread_score", None),
@@ -5352,12 +5379,114 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "penalty_reasons": _trade_attr(trade, "penalty_reasons", None),
         "score_inputs_used": _trade_attr(trade, "score_inputs_used", None),
         "opportunity_score": _trade_attr(trade, "opportunity_score", None),
+        "final_score": _trade_attr(trade, "final_score", None),
+        "signal_score": _trade_attr(trade, "signal_score", None),
+        "execution_score": _trade_attr(trade, "execution_score", None),
+        "priority_score": _trade_attr(trade, "priority_score", None),
+        "priority_weight_signal": _trade_attr(trade, "priority_weight_signal", None),
+        "priority_weight_execution": _trade_attr(trade, "priority_weight_execution", None),
+        "family_feedback_adjustment": _trade_attr(trade, "family_feedback_adjustment", None),
+        "family_feedback_confidence": _trade_attr(trade, "family_feedback_confidence", None),
+        "family_feedback_applied": _trade_attr(trade, "family_feedback_applied", None),
+        "family_learning_adjustment": _trade_attr(trade, "family_learning_adjustment", None),
+        "family_cap_effective": _trade_attr(trade, "family_cap_effective", None),
+        "family_cap_reason": _trade_attr(trade, "family_cap_reason", None),
+        "family_consensus_score": _trade_attr(trade, "family_consensus_score", None),
+        "family_consensus_components": _trade_attr(trade, "family_consensus_components", None),
+        "family_survival_score": _trade_attr(trade, "family_survival_score", None),
+        "family_survival_components": _trade_attr(trade, "family_survival_components", None),
+        "family_survived": _trade_attr(trade, "family_survived", None),
+        "family_reject_reason": _trade_attr(trade, "family_reject_reason", None),
+        "expectancy_score": _trade_attr(trade, "expectancy_score", None),
+        "family_learning_state_generated_at": _trade_attr(trade, "family_learning_state_generated_at", None),
+        "family_learning_state_version": _trade_attr(trade, "family_learning_state_version", None),
+        "strategy_weight_adjustment": _trade_attr(trade, "strategy_weight_adjustment", None),
+        "strategy_weight_confidence": _trade_attr(trade, "strategy_weight_confidence", None),
+        "strategy_weight_applied": _trade_attr(trade, "strategy_weight_applied", None),
+        "strategy_weight_state_generated_at": _trade_attr(trade, "strategy_weight_state_generated_at", None),
+        "strategy_weight_state_version": _trade_attr(trade, "strategy_weight_state_version", None),
+        "adaptive_threshold_adjustment": _trade_attr(trade, "adaptive_threshold_adjustment", None),
+        "adaptive_threshold_impact_score": _trade_attr(trade, "adaptive_threshold_impact_score", None),
+        "adaptive_threshold_applied": _trade_attr(trade, "adaptive_threshold_applied", None),
+        "adaptive_threshold_key": _trade_attr(trade, "adaptive_threshold_key", None),
+        "risk_budget_ok": _trade_attr(trade, "risk_budget_ok", None),
+        "risk_budget_reason": _trade_attr(trade, "risk_budget_reason", None),
+        "position_size_estimate": _trade_attr(trade, "position_size_estimate", None),
+        "portfolio_heat_score": _trade_attr(trade, "portfolio_heat_score", None),
+        "correlation_penalty": _trade_attr(trade, "correlation_penalty", None),
+        "exposure_blocker": _trade_attr(trade, "exposure_blocker", None),
+        "daily_kill_switch_active": _trade_attr(trade, "daily_kill_switch_active", None),
+        "regime_failure_throttle": _trade_attr(trade, "regime_failure_throttle", None),
+        "family_failure_throttle": _trade_attr(trade, "family_failure_throttle", None),
+        "risk_learning_adjustment": _trade_attr(trade, "risk_learning_adjustment", None),
+        "risk_learning_confidence": _trade_attr(trade, "risk_learning_confidence", None),
+        "rejected_at_stage": _trade_attr(trade, "rejected_at_stage", None),
+        "rejection_reason_code": _trade_attr(trade, "rejection_reason_code", None),
+        "rejection_bucket": _trade_attr(trade, "rejection_bucket", None),
+        "rejection_severity": _trade_attr(trade, "rejection_severity", None),
+        "raw_candidate_count": _trade_attr(trade, "raw_candidate_count", None),
+        "surviving_candidate_count": _trade_attr(trade, "surviving_candidate_count", None),
+        "survival_rate": _trade_attr(trade, "survival_rate", None),
+        "executable_rate": _trade_attr(trade, "executable_rate", None),
+        "advisory_rate": _trade_attr(trade, "advisory_rate", None),
+        "no_trade_rate": _trade_attr(trade, "no_trade_rate", None),
+        "top_family_share": _trade_attr(trade, "top_family_share", None),
+        "starvation_flag": _trade_attr(trade, "starvation_flag", None),
+        "starvation_reason": _trade_attr(trade, "starvation_reason", None),
+        "warning_engine_too_timid": _trade_attr(trade, "warning_engine_too_timid", None),
+        "warning_filtering_without_edge_improvement": _trade_attr(trade, "warning_filtering_without_edge_improvement", None),
+        "warning_family_starvation": _trade_attr(trade, "warning_family_starvation", None),
+        "warning_threshold_cluster": _trade_attr(trade, "warning_threshold_cluster", None),
+        "rejection_impact_warning": _trade_attr(trade, "rejection_impact_warning", None),
+        "starvation_warning": _trade_attr(trade, "starvation_warning", None),
+        "edge_improved_flag": _trade_attr(trade, "edge_improved_flag", None),
+        "filtering_without_edge_flag": _trade_attr(trade, "filtering_without_edge_flag", None),
+        "top_damaging_gate_rank": _trade_attr(trade, "top_damaging_gate_rank", None),
+        "recommended_threshold_delta": _trade_attr(trade, "recommended_threshold_delta", None),
+        "gate_protected_flag": _trade_attr(trade, "gate_protected_flag", None),
+        "aggressiveness_mode": _trade_attr(trade, "aggressiveness_mode", None),
+        "aggressiveness_adjustment": _trade_attr(trade, "aggressiveness_adjustment", None),
+        "aggressiveness_adjustment_applied": _trade_attr(trade, "aggressiveness_adjustment_applied", None),
         "opportunity_rank": _trade_attr(trade, "opportunity_rank", None),
         "rank_global": _trade_attr(trade, "rank_global", None),
         "rank_within_symbol": _trade_attr(trade, "rank_within_symbol", None),
         "opportunity_bucket": _trade_attr(trade, "opportunity_bucket", None),
+        "candidate_class": _trade_attr(trade, "candidate_class", None),
+        "market_mode": _trade_attr(trade, "market_mode", None),
+        "data_state": _trade_attr(trade, "data_state", None),
+        "data_confidence": _trade_attr(trade, "data_confidence", None),
+        "spread_stability_score": _trade_attr(trade, "spread_stability_score", None),
+        "book_freshness_score": _trade_attr(trade, "book_freshness_score", None),
+        "quote_completeness_score": _trade_attr(trade, "quote_completeness_score", None),
+        "quote_consistency_score": _trade_attr(trade, "quote_consistency_score", None),
+        "quote_completeness": _trade_attr(trade, "quote_completeness", None),
+        "quote_consistency_ok": _trade_attr(trade, "quote_consistency_ok", None),
+        "ltp_age_sec": _trade_attr(trade, "ltp_age_sec", None),
+        "bid_age_sec": _trade_attr(trade, "bid_age_sec", None),
+        "ask_age_sec": _trade_attr(trade, "ask_age_sec", None),
+        "chain_snapshot_age_sec": _trade_attr(trade, "chain_snapshot_age_sec", None),
+        "spread_source": _trade_attr(trade, "spread_source", None),
+        "liquidity_validation_mode": _trade_attr(trade, "liquidity_validation_mode", None),
+        "fresh_quote_ok": _trade_attr(trade, "fresh_quote_ok", None),
+        "liquidity_ok": _trade_attr(trade, "liquidity_ok", None),
+        "spread_ok": _trade_attr(trade, "spread_ok", None),
+        "primary_blocker": _trade_attr(trade, "primary_blocker", None),
         "selected_for_execution": _trade_attr(trade, "selected_for_execution", None),
         "selection_reason": _trade_attr(trade, "selection_reason", None),
+        "selector_outcome": _trade_attr(trade, "selector_outcome", None),
+        "selection_probability": _trade_attr(trade, "selection_probability", None),
+        "simulation_outcome": _trade_attr(trade, "simulation_outcome", None),
+        "simulation_fill_status": _trade_attr(trade, "simulation_fill_status", None),
+        "simulation_fill_qty": _trade_attr(trade, "simulation_fill_qty", None),
+        "mfe": _trade_attr(trade, "mfe", None),
+        "mae": _trade_attr(trade, "mae", None),
+        "simulated_pnl": _trade_attr(trade, "simulated_pnl", None),
+        "would_have_worked": _trade_attr(trade, "would_have_worked", None),
+        "rejection_saved_loss": _trade_attr(trade, "rejection_saved_loss", None),
+        "rejection_missed_win": _trade_attr(trade, "rejection_missed_win", None),
+        "realized_r_multiple": _trade_attr(trade, "realized_r_multiple", None),
+        "stop_hit_before_target": _trade_attr(trade, "stop_hit_before_target", None),
+        "risk_plan_respected": _trade_attr(trade, "risk_plan_respected", None),
         "size_multiplier_reason": _trade_attr(trade, "size_multiplier_reason", None),
         "opportunity_size_multiplier": _trade_attr(trade, "opportunity_size_multiplier", None),
         "threshold_base": _trade_attr(trade, "threshold_base", None),
@@ -5378,8 +5507,17 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "strategy_name": strategy_name,
         "candidate_type": _trade_attr(trade, "candidate_type", None),
         "strategy_family": _trade_attr(trade, "strategy_family", None),
+        "direction_family": _trade_attr(trade, "direction_family", None),
+        "family_rank": _trade_attr(trade, "family_rank", None),
+        "family_blocker": _trade_attr(trade, "family_blocker", None),
+        "family_strength": _trade_attr(trade, "family_strength", None),
         "setup_variant": _trade_attr(trade, "setup_variant", None),
         "candidate_status": _trade_attr(trade, "candidate_status", None),
+        "fallback_candidate": (
+            _trade_attr(trade, "fallback_candidate", None)
+            if _trade_attr(trade, "fallback_candidate", None) is not None
+            else bool((_trade_attr(trade, "source_flags", {}) or {}).get("fallback_candidate"))
+        ),
         "regime": _trade_attr(trade, "regime"),
         "regime_confidence": _trade_attr(trade, "regime_confidence"),
         "day_confidence": _trade_attr(trade, "day_confidence"),
