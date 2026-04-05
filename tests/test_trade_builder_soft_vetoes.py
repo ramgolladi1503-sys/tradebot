@@ -2356,3 +2356,45 @@ def test_candidate_rejection_records_stage_and_reason(monkeypatch, tmp_path):
     assert float(builder_record["trigger_score"] or 0.0) >= 0.0
     assert float(builder_record["entry_quality_score"] or 0.0) >= 0.0
     assert float(builder_record["family_survival_score"] or 0.0) >= 0.0
+
+
+def test_builder_reads_session_policy_without_behavior_change(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorFixed(0.85))
+    _disable_opportunity_signals(monkeypatch)
+    market_data = _opportunity_market_data(symbol="NIFTY")
+    market_data["minutes_since_open"] = 150
+    market_data["minutes_to_close"] = 180
+    market_data["vwap"] = 24998.0
+    market_data["ltp_change_window"] = 0.25
+    market_data["ltp_change_5m"] = 0.05
+    market_data["ltp_change_10m"] = 0.1
+    monkeypatch.setattr(trade_builder_module, "ensemble_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+    monkeypatch.setattr(trade_builder_module, "event_breakout_signal", lambda *_args, **_kwargs: _signal("BUY_CALL"), raising=True)
+
+    baseline_candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="unit_test_session_policy_baseline",
+    )
+    baseline_directional = next(candidate for candidate in baseline_candidates if candidate.strategy == "OPP_DIRECTIONAL")
+
+    original = cfg.get_session_policy
+
+    def _wrapped_policy(session_mode=None):
+        policy = dict(original(session_mode))
+        policy["policy_source"] = "test_session_policy"
+        return policy
+
+    monkeypatch.setattr(cfg, "get_session_policy", _wrapped_policy, raising=True)
+    patched_candidates = builder._build_nonlive_opportunity_candidates(
+        market_data,
+        ltp=float(market_data["ltp"]),
+        vwap=float(market_data["vwap"]),
+        trigger_reason="unit_test_session_policy_wrapped",
+    )
+    patched_directional = next(candidate for candidate in patched_candidates if candidate.strategy == "OPP_DIRECTIONAL")
+
+    assert patched_directional.session_mode == baseline_directional.session_mode
+    assert patched_directional.execution_allowed == baseline_directional.execution_allowed
+    assert patched_directional.effective_session_policy["policy_source"] == "test_session_policy"

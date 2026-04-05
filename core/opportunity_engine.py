@@ -9,6 +9,8 @@ from typing import Any, Iterable
 from config import config as cfg
 from core.analytics.confidence_calibration import calibrate_confidence, load_latest_confidence_calibration_report
 from core.capital_allocator import allocate_capital_slots
+from core.contextual_thresholds import get_contextual_threshold_delta as _contextual_threshold_delta
+from core.decision_authority import apply_stage_authority
 from core.execution_quality import evaluate_pretrade_execution_quality
 from core.feature_builder import assess_trade_feature_quality
 from core.learning_state import load_learning_state, save_learning_state
@@ -23,9 +25,13 @@ from core.threshold_audit import (
 )
 from core.threshold_tuning import (
     build_threshold_tuning_recommendations,
-    get_contextual_threshold_adjustment as _threshold_tuning_contextual_adjustment,
     load_threshold_tuning_recommendations,
     save_threshold_tuning_recommendations,
+)
+from core.threshold_triage import (
+    build_tuning_shortlist,
+    load_threshold_tuning_shortlist,
+    save_threshold_tuning_shortlist,
 )
 from core.trade_scoring import compute_final_score
 
@@ -112,7 +118,7 @@ def _get_contextual_threshold_adjustment(
     recommendations: dict[str, Any] | None,
 ) -> float:
     return float(
-        _threshold_tuning_contextual_adjustment(
+        _contextual_threshold_delta(
             stage,
             family,
             session,
@@ -1676,6 +1682,26 @@ def annotate_ranked_opportunities(
         existing_rejection_bucket = _get_value(candidate, "rejection_bucket") or metrics.get("rejection_bucket")
         existing_rejection_severity = _get_value(candidate, "rejection_severity") or metrics.get("rejection_severity")
         shadow_meta = shadow_by_key.get(_candidate_key(candidate), {})
+        effective_session_policy = dict(
+            _get_value(candidate, "effective_session_policy")
+            or cfg.get_session_policy(metrics.get("session_mode"))
+        )
+        effective_regime_policy = dict(
+            _get_value(candidate, "effective_regime_policy")
+            or cfg.get_regime_policy(metrics.get("strategy_regime_mode"))
+        )
+        effective_risk_policy = dict(
+            _get_value(candidate, "effective_risk_policy")
+            or cfg.get_risk_policy()
+        )
+        effective_family_survival_policy = dict(
+            _get_value(candidate, "effective_family_survival_policy")
+            or cfg.get_family_survival_policy(
+                _get_value(candidate, "strategy_family") or metrics.get("strategy_family"),
+                metrics.get("session_mode"),
+                metrics.get("strategy_regime_mode"),
+            )
+        )
         source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
         source_flags.update(
             {
@@ -1745,6 +1771,10 @@ def annotate_ranked_opportunities(
                 "liquidity_validation_mode": metrics.get("liquidity_validation_mode"),
                 "primary_blocker": metrics.get("primary_blocker"),
                 "selection_probability": round(float(selection_probability), 6),
+                "effective_session_policy": effective_session_policy,
+                "effective_regime_policy": effective_regime_policy,
+                "effective_risk_policy": effective_risk_policy,
+                "effective_family_survival_policy": effective_family_survival_policy,
                 "family_feedback_adjustment": round(float(metrics.get("family_feedback_adjustment") or 0.0), 6),
                 "family_feedback_confidence": round(float(metrics.get("family_feedback_confidence") or 0.0), 6),
                 "family_feedback_applied": bool(metrics.get("family_feedback_applied", False)),
@@ -2041,21 +2071,34 @@ def annotate_ranked_opportunities(
             or ""
         ).strip().lower() or None
         if selected_for_execution:
-            rejection_reason_code = _get_value(candidate, "rejection_reason_code")
-            rejected_at_stage = _get_value(candidate, "rejected_at_stage")
+            authority_meta = apply_stage_authority(
+                {
+                    "existing_rejected_at_stage": _get_value(candidate, "rejected_at_stage"),
+                    "existing_rejection_reason_code": _get_value(candidate, "rejection_reason_code"),
+                    "incoming_rejected_at_stage": None,
+                    "incoming_rejection_reason_code": None,
+                }
+            )
         else:
-            rejection_reason_code = selection_reason or _get_value(candidate, "rejection_reason_code")
-            rejected_at_stage = None
+            authority_meta = apply_stage_authority(
+                {
+                    "existing_rejected_at_stage": _get_value(candidate, "rejected_at_stage"),
+                    "existing_rejection_reason_code": _get_value(candidate, "rejection_reason_code"),
+                    "incoming_rejected_at_stage": None,
+                    "incoming_rejection_reason_code": selection_reason,
+                }
+            )
         provisional_records.append(
             build_candidate_decision_record(
                 candidate,
                 decision_phase="selector",
                 decision_scope=decision_scope,
                 decision_batch_id=decision_batch_id,
-                rejected_at_stage=rejected_at_stage,
-                rejection_reason_code=rejection_reason_code,
+                rejected_at_stage=authority_meta.get("rejected_at_stage"),
+                rejection_reason_code=authority_meta.get("rejection_reason_code"),
                 selector_outcome=selector_outcome,
                 selected_for_execution=selected_for_execution,
+                stage_authority_warning=bool(authority_meta.get("stage_authority_warning", False)),
             )
         )
     batch_summary = compute_starvation_diagnostics(provisional_records)
@@ -2081,6 +2124,7 @@ def annotate_ranked_opportunities(
             warning_engine_too_timid=bool(batch_summary.get("starvation_flag", False)),
             warning_family_starvation=bool(batch_summary.get("starvation_reason") == "family_dominance"),
             warning_threshold_cluster=bool(batch_summary.get("starvation_reason") == "threshold_cluster"),
+            stage_authority_warning=bool(record.get("stage_authority_warning", False)),
         )
         for candidate, record in zip(annotated, provisional_records)
     ]
@@ -2088,6 +2132,7 @@ def annotate_ranked_opportunities(
     survival_summary: dict[str, Any] = {"groups": {}, "warning_filtering_without_edge_improvement": False}
     top_damaging_gates_summary: dict[str, Any] = {"gates": []}
     tuning_recommendations: dict[str, Any] = {}
+    triage_shortlist: dict[str, Any] = {}
     if audit_enabled:
         existing_records = load_candidate_decisions()
         summary_payload = write_threshold_audit_summaries(
@@ -2104,6 +2149,15 @@ def annotate_ranked_opportunities(
                 top_damaging_gates=top_damaging_gates_summary,
             )
             save_threshold_tuning_recommendations(tuning_recommendations)
+        if offline_scope and bool(getattr(cfg, "OFFLINE_THRESHOLD_TRIAGE_ENABLE", True)):
+            triage_shortlist = build_tuning_shortlist(
+                rejection_impact_summary=dict(summary_payload.get("rejection_impact_summary") or {}),
+                starvation_by_group_summary=dict(summary_payload.get("starvation_by_group_summary") or {}),
+                survival_expectancy_summary=survival_summary,
+                top_damaging_gates=top_damaging_gates_summary,
+                top_n=int(getattr(cfg, "OFFLINE_THRESHOLD_TRIAGE_TOP_N", 3) or 3),
+            )
+            save_threshold_tuning_shortlist(triage_shortlist)
         if offline_scope:
             save_learning_state(
                 {
@@ -2117,6 +2171,8 @@ def annotate_ranked_opportunities(
             )
     if not tuning_recommendations and offline_scope:
         tuning_recommendations = load_threshold_tuning_recommendations()
+    if not triage_shortlist and offline_scope:
+        triage_shortlist = load_threshold_tuning_shortlist()
     warning_engine_too_timid = bool(
         batch_summary.get("starvation_flag", False)
         or threshold_summary.get("warning_engine_too_timid", False)
@@ -2136,7 +2192,11 @@ def annotate_ranked_opportunities(
         for item in (top_damaging_gates_summary.get("gates") or [])
         if str(item.get("gate_key") or "").strip()
     }
-    protected_gate_map = dict(tuning_recommendations.get("protected_gate_map") or {})
+    protected_gate_map = dict(triage_shortlist.get("protected_gate_map") or tuning_recommendations.get("protected_gate_map") or {})
+    loosen_gate_map = dict(triage_shortlist.get("loosen_gate_map") or {})
+    starvation_review_group_map = dict(triage_shortlist.get("starvation_review_group_map") or {})
+    edge_preserve_group_map = dict(triage_shortlist.get("edge_preserve_group_map") or {})
+    filtering_without_edge_group_map = dict(triage_shortlist.get("filtering_without_edge_group_map") or {})
     for candidate, record in zip(annotated, final_records):
         group_key = "|".join(
             [
@@ -2163,6 +2223,9 @@ def annotate_ranked_opportunities(
         )
         edge_improved_flag = bool(group_summary.get("edge_improved_flag", False))
         filtering_without_edge_flag = bool(group_summary.get("filtering_without_edge_flag", False))
+        edge_preserve_flag = bool(
+            edge_preserve_group_map.get(group_key, {}).get("edge_preserve_flag", False)
+        )
         recommended_threshold_delta = _get_contextual_threshold_adjustment(
             record.get("rejected_at_stage"),
             record.get("strategy_family"),
@@ -2189,6 +2252,17 @@ def annotate_ranked_opportunities(
                 {},
             ).get("gate_protected_flag", False)
         )
+        triage_recommendation = None
+        if gate_protected_flag:
+            triage_recommendation = "protect_gate"
+        elif gate_key and gate_key in loosen_gate_map:
+            triage_recommendation = str(loosen_gate_map.get(gate_key, {}).get("triage_recommendation") or "review_loosen_gate")
+        elif group_key in starvation_review_group_map:
+            triage_recommendation = str(starvation_review_group_map.get(group_key, {}).get("triage_recommendation") or "review_starvation_group")
+        elif group_key in edge_preserve_group_map:
+            triage_recommendation = str(edge_preserve_group_map.get(group_key, {}).get("triage_recommendation") or "leave_alone_edge_improved")
+        elif group_key in filtering_without_edge_group_map:
+            triage_recommendation = str(filtering_without_edge_group_map.get(group_key, {}).get("triage_recommendation") or "review_filtering_without_edge")
         record["warning_engine_too_timid"] = warning_engine_too_timid
         record["warning_family_starvation"] = warning_family_starvation
         record["warning_threshold_cluster"] = warning_threshold_cluster
@@ -2211,6 +2285,8 @@ def annotate_ranked_opportunities(
             else None
         )
         record["gate_protected_flag"] = gate_protected_flag
+        record["triage_recommendation"] = triage_recommendation
+        record["edge_preserve_flag"] = edge_preserve_flag
         if audit_enabled:
             record_candidate_decision(record)
         source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
@@ -2221,6 +2297,7 @@ def annotate_ranked_opportunities(
                 "rejection_reason_code": record.get("rejection_reason_code"),
                 "rejection_bucket": record.get("rejection_bucket"),
                 "rejection_severity": record.get("rejection_severity"),
+                "stage_authority_warning": bool(record.get("stage_authority_warning", False)),
                 "raw_candidate_count": int(record.get("raw_candidate_count") or 0),
                 "surviving_candidate_count": int(record.get("surviving_candidate_count") or 0),
                 "survival_rate": round(float(record.get("survival_rate") or 0.0), 6),
@@ -2241,9 +2318,31 @@ def annotate_ranked_opportunities(
                 "top_damaging_gate_rank": record.get("top_damaging_gate_rank"),
                 "recommended_threshold_delta": record.get("recommended_threshold_delta"),
                 "gate_protected_flag": bool(record.get("gate_protected_flag", False)),
+                "triage_recommendation": record.get("triage_recommendation"),
+                "edge_preserve_flag": bool(record.get("edge_preserve_flag", False)),
                 "aggressiveness_mode": aggressiveness_mode,
                 "aggressiveness_adjustment": round(float(aggressiveness_adjustment), 6),
                 "aggressiveness_adjustment_applied": bool(abs(float(aggressiveness_adjustment)) > 0.0),
+                "effective_session_policy": dict(
+                    _get_value(candidate, "effective_session_policy")
+                    or cfg.get_session_policy(_get_value(candidate, "session_mode"))
+                ),
+                "effective_regime_policy": dict(
+                    _get_value(candidate, "effective_regime_policy")
+                    or cfg.get_regime_policy(_get_value(candidate, "strategy_regime_mode"))
+                ),
+                "effective_risk_policy": dict(
+                    _get_value(candidate, "effective_risk_policy")
+                    or cfg.get_risk_policy()
+                ),
+                "effective_family_survival_policy": dict(
+                    _get_value(candidate, "effective_family_survival_policy")
+                    or cfg.get_family_survival_policy(
+                        _get_value(candidate, "strategy_family"),
+                        _get_value(candidate, "session_mode"),
+                        _get_value(candidate, "strategy_regime_mode"),
+                    )
+                ),
             }
         )
         post_annotated.append(
@@ -2254,6 +2353,7 @@ def annotate_ranked_opportunities(
                 rejection_reason_code=record.get("rejection_reason_code"),
                 rejection_bucket=record.get("rejection_bucket"),
                 rejection_severity=record.get("rejection_severity"),
+                stage_authority_warning=bool(record.get("stage_authority_warning", False)),
                 raw_candidate_count=int(record.get("raw_candidate_count") or 0),
                 surviving_candidate_count=int(record.get("surviving_candidate_count") or 0),
                 survival_rate=round(float(record.get("survival_rate") or 0.0), 6),
@@ -2274,9 +2374,15 @@ def annotate_ranked_opportunities(
                 top_damaging_gate_rank=record.get("top_damaging_gate_rank"),
                 recommended_threshold_delta=record.get("recommended_threshold_delta"),
                 gate_protected_flag=bool(record.get("gate_protected_flag", False)),
+                triage_recommendation=record.get("triage_recommendation"),
+                edge_preserve_flag=bool(record.get("edge_preserve_flag", False)),
                 aggressiveness_mode=aggressiveness_mode,
                 aggressiveness_adjustment=round(float(aggressiveness_adjustment), 6),
                 aggressiveness_adjustment_applied=bool(abs(float(aggressiveness_adjustment)) > 0.0),
+                effective_session_policy=source_flags.get("effective_session_policy") or {},
+                effective_regime_policy=source_flags.get("effective_regime_policy") or {},
+                effective_risk_policy=source_flags.get("effective_risk_policy") or {},
+                effective_family_survival_policy=source_flags.get("effective_family_survival_policy") or {},
                 source_flags=source_flags,
             )
         )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import threading
 import time
 from pathlib import Path
@@ -83,6 +84,37 @@ def get_jsonl_writer(path: Path) -> JsonlWriter:
             writer = JsonlWriter(Path(path))
             _WRITERS[key] = writer
         return writer
+
+
+def get_rotating_logger(
+    name: str,
+    path: Path,
+    *,
+    max_bytes: int = 5 * 1024 * 1024,
+    backup_count: int = 3,
+    level: int = logging.INFO,
+) -> logging.Logger:
+    """Return a file-backed rotating logger without duplicating handlers."""
+
+    logger_name = str(name or "").strip() or "rotating_logger"
+    target = Path(path)
+    file_key = str(target.resolve()) if target.is_absolute() else str(target)
+    file_logger = logging.getLogger(logger_name)
+    file_logger.setLevel(level)
+    file_logger.propagate = False
+    for handler in file_logger.handlers:
+        if isinstance(handler, RotatingFileHandler) and getattr(handler, "baseFilename", "") == file_key:
+            return file_logger
+    target.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        target,
+        maxBytes=max(1, int(max_bytes)),
+        backupCount=max(0, int(backup_count)),
+        encoding="utf-8",
+    )
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    file_logger.addHandler(handler)
+    return file_logger
 
 
 def _close_all_writers() -> None:

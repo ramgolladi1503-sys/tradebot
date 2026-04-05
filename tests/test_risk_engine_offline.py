@@ -72,3 +72,21 @@ def test_aggressiveness_mode_detects_starvation():
     )
 
     assert mode == "STARVING"
+
+
+def test_risk_engine_reads_risk_policy_without_behavior_change(monkeypatch):
+    original = cfg.get_risk_policy
+    baseline = evaluate_candidate_risk(_candidate(stop_loss=98.0), portfolio_state={"capital": 100000.0})
+
+    def _wrapped_policy():
+        policy = dict(original())
+        policy["policy_source"] = "test_risk_policy"
+        return policy
+
+    monkeypatch.setattr(cfg, "get_risk_policy", _wrapped_policy, raising=True)
+
+    assessment = evaluate_candidate_risk(_candidate(stop_loss=98.0), portfolio_state={"capital": 100000.0})
+
+    assert assessment.risk_budget_ok == baseline.risk_budget_ok
+    assert assessment.position_size_estimate == baseline.position_size_estimate
+    assert assessment.context["effective_risk_policy"]["policy_source"] == "test_risk_policy"

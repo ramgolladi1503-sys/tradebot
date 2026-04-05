@@ -1058,6 +1058,19 @@ OFFLINE_THRESHOLD_TUNING_STARVATION_RELIEF_ENABLE = os.getenv(
     "OFFLINE_THRESHOLD_TUNING_STARVATION_RELIEF_ENABLE",
     "true",
 ).lower() == "true"
+OFFLINE_THRESHOLD_TRIAGE_ENABLE = os.getenv("OFFLINE_THRESHOLD_TRIAGE_ENABLE", "true").lower() == "true"
+OFFLINE_THRESHOLD_TRIAGE_TOP_N = int(
+    os.getenv("OFFLINE_THRESHOLD_TRIAGE_TOP_N", str(OFFLINE_REJECTION_IMPACT_TOP_N))
+)
+OFFLINE_THRESHOLD_TRIAGE_PROTECT_SAVED_LOSS_RATE = float(
+    os.getenv("OFFLINE_THRESHOLD_TRIAGE_PROTECT_SAVED_LOSS_RATE", "0.40")
+)
+OFFLINE_THRESHOLD_TRIAGE_MIN_MISSED_WIN_RATE = float(
+    os.getenv("OFFLINE_THRESHOLD_TRIAGE_MIN_MISSED_WIN_RATE", "0.30")
+)
+OFFLINE_THRESHOLD_TRIAGE_MIN_EDGE_R_DELTA = float(
+    os.getenv("OFFLINE_THRESHOLD_TRIAGE_MIN_EDGE_R_DELTA", str(OFFLINE_EDGE_IMPROVEMENT_MIN_R_DELTA))
+)
 OFFLINE_THRESHOLD_LEARNING_ENABLE = os.getenv("OFFLINE_THRESHOLD_LEARNING_ENABLE", "false").lower() == "true"
 OFFLINE_THRESHOLD_LEARNING_MIN_SAMPLES = int(
     os.getenv("OFFLINE_THRESHOLD_LEARNING_MIN_SAMPLES", "20")
@@ -2399,6 +2412,53 @@ def get_regime_policy(strategy_regime_mode: str | None = None) -> dict[str, floa
         "counter_regime_directional_exceptional_strength": float(COUNTER_REGIME_DIRECTIONAL_EXCEPTIONAL_STRENGTH),
         "low_vol_exceptional_strength": float(NONLIVE_LOW_VOL_EXCEPTIONAL_STRENGTH),
         "family_consensus_min_score": float(family_consensus_min),
+    }
+
+
+def get_risk_policy() -> dict[str, float | int | bool]:
+    return {
+        "offline_risk_budget_enable": bool(OFFLINE_RISK_BUDGET_ENABLE),
+        "account_capital": float(OFFLINE_RISK_ACCOUNT_CAPITAL),
+        "risk_per_trade_pct": float(OFFLINE_RISK_PER_TRADE_PCT),
+        "max_stop_distance_pct": float(OFFLINE_RISK_MAX_STOP_DISTANCE_PCT),
+        "max_stop_atr_mult": float(OFFLINE_RISK_MAX_STOP_ATR_MULT),
+        "min_rr": float(OFFLINE_RISK_MIN_RR),
+        "max_portfolio_heat": float(OFFLINE_RISK_MAX_PORTFOLIO_HEAT),
+        "max_directional_heat": float(OFFLINE_RISK_MAX_DIRECTIONAL_HEAT),
+        "max_family_exposure": int(OFFLINE_RISK_MAX_FAMILY_EXPOSURE),
+        "correlation_penalty": float(OFFLINE_RISK_CORRELATION_PENALTY),
+        "daily_kill_switch_pct": float(OFFLINE_RISK_DAILY_KILL_SWITCH_PCT),
+        "regime_failure_limit": int(OFFLINE_RISK_REGIME_FAILURE_LIMIT),
+        "family_failure_limit": int(OFFLINE_RISK_FAMILY_FAILURE_LIMIT),
+        "session_failure_limit": int(OFFLINE_RISK_SESSION_FAILURE_LIMIT),
+        "failure_throttle_penalty": float(OFFLINE_RISK_FAILURE_THROTTLE_PENALTY),
+        "aggressiveness_too_timid_survival_rate": float(OFFLINE_AGGRESSIVENESS_TOO_TIMID_SURVIVAL_RATE),
+        "aggressiveness_starving_no_trade_rate": float(OFFLINE_AGGRESSIVENESS_STARVING_NO_TRADE_RATE),
+        "aggressiveness_overtrading_survival_rate": float(OFFLINE_AGGRESSIVENESS_OVERTRADING_SURVIVAL_RATE),
+    }
+
+
+def get_family_survival_policy(
+    strategy_family: str | None = None,
+    session_mode: str | None = None,
+    regime_mode: str | None = None,
+) -> dict[str, float | str | dict[str, float | int | str | None]]:
+    effective_session_policy = get_session_policy(session_mode)
+    effective_regime_policy = get_regime_policy(regime_mode)
+    return {
+        "strategy_family": str(strategy_family or "unknown").strip().lower() or "unknown",
+        "session_mode": str(effective_session_policy.get("session_mode") or "OFFHOURS"),
+        "strategy_regime_mode": str(effective_regime_policy.get("strategy_regime_mode") or "UNCERTAIN"),
+        "weight_setup": float(FAMILY_SURVIVAL_WEIGHT_SETUP),
+        "weight_trigger": float(FAMILY_SURVIVAL_WEIGHT_TRIGGER),
+        "weight_entry_quality": float(FAMILY_SURVIVAL_WEIGHT_ENTRY_QUALITY),
+        "weight_execution": float(FAMILY_SURVIVAL_WEIGHT_EXECUTION),
+        "weight_consensus": float(FAMILY_SURVIVAL_WEIGHT_CONSENSUS),
+        "component_min": float(FAMILY_SURVIVAL_COMPONENT_MIN),
+        "min_score": float(FAMILY_SURVIVAL_MIN_SCORE),
+        "executable_min_score": float(NONLIVE_EXECUTABLE_MIN_FAMILY_SURVIVAL),
+        "effective_session_policy": dict(effective_session_policy),
+        "effective_regime_policy": dict(effective_regime_policy),
     }
 
 MAX_QUOTE_AGE_SEC = float(os.getenv("MAX_QUOTE_AGE_SEC", "2.0"))

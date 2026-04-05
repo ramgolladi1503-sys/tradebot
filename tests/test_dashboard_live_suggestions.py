@@ -719,6 +719,25 @@ def test_dashboard_table_model_includes_tuning_recommendation_fields():
         assert field in CANONICAL_COLUMNS
 
 
+def test_dashboard_table_model_includes_triage_fields():
+    for field in (
+        "triage_recommendation",
+        "edge_preserve_flag",
+    ):
+        assert field in CANONICAL_COLUMNS
+
+
+def test_dashboard_table_model_includes_stage_authority_policy_fields():
+    for field in (
+        "stage_authority_warning",
+        "effective_session_policy",
+        "effective_regime_policy",
+        "effective_risk_policy",
+        "effective_family_survival_policy",
+    ):
+        assert field in CANONICAL_COLUMNS
+
+
 def test_load_live_suggestions_df_filters_queue_only_row_when_entry_missing(tmp_path, monkeypatch):
     row = {
         "trade_id": "T-QUEUE-MISSING",

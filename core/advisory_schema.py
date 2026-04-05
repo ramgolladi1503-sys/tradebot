@@ -377,6 +377,9 @@ def _derive_candidate_status(payload: dict[str, Any]) -> str:
     if existing in {"scored", "ranked", "advisory_only", "near_executable", "blocked", "blocked_contract", "executable"}:
         return existing
     status = str(payload.get("status") or "").strip().upper()
+    execution_status = str(payload.get("execution_status") or "").strip().lower()
+    permission = str(payload.get("permission") or "").strip().upper()
+    final_action = str(payload.get("final_action") or "").strip().upper()
     hard_reason = str(payload.get("hard_reason") or "").strip().lower()
     permission_reason = str(payload.get("permission_reason") or "").strip().lower()
     if (
@@ -390,9 +393,6 @@ def _derive_candidate_status(payload: dict[str, Any]) -> str:
         return "blocked"
     execution_entry = _safe_float(payload.get("execution_entry"))
     execution_entry_status = str(payload.get("execution_entry_status") or "").strip().lower()
-    execution_status = str(payload.get("execution_status") or "").strip().lower()
-    permission = str(payload.get("permission") or "").strip().upper()
-    final_action = str(payload.get("final_action") or "").strip().upper()
     readiness = str(payload.get("readiness") or "").strip().upper()
     if (
         execution_entry is not None
@@ -1183,6 +1183,10 @@ def _enforce_executable_entry_invariant(payload: dict[str, Any]) -> dict[str, An
     claims_executable = execution_status == "executable" or bool(out.get("is_executable")) or readiness == "READY" or final_action == "EXECUTE" or permission == "EXECUTE" or row_status == "READY"
     missing_executable_entry = not executable_ready
     if not claims_executable:
+        if execution_entry is not None and execution_entry_status != "executable":
+            out["execution_entry"] = None
+            out["execution_entry_source"] = "none"
+            out["execution_entry_status"] = execution_entry_status or "non_executable"
         return _apply_post_level_entry_mutation_policy(
             out,
             entry_before=entry_before,

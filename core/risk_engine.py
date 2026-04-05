@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from config import config as cfg
+from core.decision_authority import apply_stage_authority
 from core.exposure_ledger import estimate_trade_exposure, estimate_trade_greeks
 from core.position_sizer import PositionSizer
 from core.threshold_audit import classify_rejection_metadata
@@ -43,13 +44,14 @@ def _clamp01(value: float | None, *, default: float = 0.0) -> float:
 
 def adjust_system_aggressiveness(metrics: dict[str, Any] | None) -> str:
     payload = dict(metrics or {})
+    risk_policy = cfg.get_risk_policy()
     survival_rate = max(0.0, min(1.0, float(_safe_float(payload.get("survival_rate"), 0.0) or 0.0)))
     no_trade_rate = max(0.0, min(1.0, float(_safe_float(payload.get("no_trade_rate"), 0.0) or 0.0)))
-    if survival_rate < float(getattr(cfg, "OFFLINE_AGGRESSIVENESS_TOO_TIMID_SURVIVAL_RATE", 0.10) or 0.10):
+    if survival_rate < float(risk_policy.get("aggressiveness_too_timid_survival_rate", 0.10) or 0.10):
         return "TOO_TIMID"
-    if no_trade_rate > float(getattr(cfg, "OFFLINE_AGGRESSIVENESS_STARVING_NO_TRADE_RATE", 0.70) or 0.70):
+    if no_trade_rate > float(risk_policy.get("aggressiveness_starving_no_trade_rate", 0.70) or 0.70):
         return "STARVING"
-    if survival_rate > float(getattr(cfg, "OFFLINE_AGGRESSIVENESS_OVERTRADING_SURVIVAL_RATE", 0.50) or 0.50):
+    if survival_rate > float(risk_policy.get("aggressiveness_overtrading_survival_rate", 0.50) or 0.50):
         return "OVERTRADING"
     return "NORMAL"
 
@@ -153,6 +155,7 @@ class OfflineCandidateRiskAssessment:
     rejection_reason_code: str | None = None
     rejection_bucket: str | None = None
     rejection_severity: str | None = None
+    stage_authority_warning: bool = False
     context: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -179,6 +182,7 @@ class OfflineCandidateRiskAssessment:
             "rejection_reason_code": self.rejection_reason_code,
             "rejection_bucket": self.rejection_bucket,
             "rejection_severity": self.rejection_severity,
+            "stage_authority_warning": bool(self.stage_authority_warning),
             "context": dict(self.context or {}),
         }
 
@@ -192,6 +196,7 @@ def evaluate_candidate_risk(
 ) -> OfflineCandidateRiskAssessment:
     portfolio = dict(portfolio_state or {})
     selected = list(selected_candidates or [])
+    risk_policy = cfg.get_risk_policy()
     entry_price = _safe_float(
         _candidate_get(candidate, "execution_entry", _candidate_get(candidate, "entry_price")),
         0.0,
@@ -230,11 +235,11 @@ def evaluate_candidate_risk(
 
     account_capital = max(
         1.0,
-        float(_safe_float(portfolio.get("capital"), getattr(cfg, "OFFLINE_RISK_ACCOUNT_CAPITAL", getattr(cfg, "CAPITAL", 100000.0))) or 1.0),
+        float(_safe_float(portfolio.get("capital"), risk_policy.get("account_capital", getattr(cfg, "CAPITAL", 100000.0))) or 1.0),
     )
     risk_per_trade_pct = max(
         0.0,
-        float(_safe_float(portfolio.get("risk_per_trade_pct"), getattr(cfg, "OFFLINE_RISK_PER_TRADE_PCT", 0.004)) or 0.0),
+        float(_safe_float(portfolio.get("risk_per_trade_pct"), risk_policy.get("risk_per_trade_pct", 0.004)) or 0.0),
     )
     max_risk_amount = float(account_capital) * float(risk_per_trade_pct)
     size_result = PositionSizer().size_from_budget(max_risk_amount, stop_distance)
@@ -246,13 +251,13 @@ def evaluate_candidate_risk(
     if stop_distance in (None, 0.0):
         risk_budget_ok = False
         risk_budget_reason = "missing_stop_distance"
-    elif stop_distance_pct is not None and stop_distance_pct > float(getattr(cfg, "OFFLINE_RISK_MAX_STOP_DISTANCE_PCT", 0.35) or 0.35):
+    elif stop_distance_pct is not None and stop_distance_pct > float(risk_policy.get("max_stop_distance_pct", 0.35) or 0.35):
         risk_budget_ok = False
         risk_budget_reason = "stop_distance_too_wide_pct"
-    elif atr and float(stop_distance) > (float(atr) * float(getattr(cfg, "OFFLINE_RISK_MAX_STOP_ATR_MULT", 1.80) or 1.80)):
+    elif atr and float(stop_distance) > (float(atr) * float(risk_policy.get("max_stop_atr_mult", 1.80) or 1.80)):
         risk_budget_ok = False
         risk_budget_reason = "stop_distance_too_wide_atr"
-    elif risk_reward_ratio is not None and float(risk_reward_ratio) < float(getattr(cfg, "OFFLINE_RISK_MIN_RR", 1.20) or 1.20):
+    elif risk_reward_ratio is not None and float(risk_reward_ratio) < float(risk_policy.get("min_rr", 1.20) or 1.20):
         risk_budget_ok = False
         risk_budget_reason = "risk_reward_too_low"
     elif size_result.qty <= 0:
@@ -294,20 +299,20 @@ def evaluate_candidate_risk(
         if same_symbol_related > 0:
             correlation_penalty = min(
                 1.0,
-                float(same_symbol_related) * float(getattr(cfg, "OFFLINE_RISK_CORRELATION_PENALTY", 0.08) or 0.08),
+                float(same_symbol_related) * float(risk_policy.get("correlation_penalty", 0.08) or 0.08),
             )
 
     exposure_blocker = None
-    if portfolio_heat_score >= float(getattr(cfg, "OFFLINE_RISK_MAX_PORTFOLIO_HEAT", 0.025) or 0.025):
+    if portfolio_heat_score >= float(risk_policy.get("max_portfolio_heat", 0.025) or 0.025):
         exposure_blocker = "portfolio_heat_limit"
-    elif directional_heat >= float(getattr(cfg, "OFFLINE_RISK_MAX_DIRECTIONAL_HEAT", 0.015) or 0.015):
+    elif directional_heat >= float(risk_policy.get("max_directional_heat", 0.015) or 0.015):
         exposure_blocker = "directional_heat_limit"
-    elif family_exposure >= int(getattr(cfg, "OFFLINE_RISK_MAX_FAMILY_EXPOSURE", 1) or 1):
+    elif family_exposure >= int(risk_policy.get("max_family_exposure", 1) or 1):
         exposure_blocker = "family_exposure_limit"
 
     daily_kill_switch_active = bool(portfolio.get("daily_kill_switch_active", False))
     daily_pnl_pct = _safe_float(portfolio.get("daily_pnl_pct"))
-    if daily_pnl_pct is not None and float(daily_pnl_pct) <= -abs(float(getattr(cfg, "OFFLINE_RISK_DAILY_KILL_SWITCH_PCT", getattr(cfg, "MAX_DAILY_LOSS_PCT", 0.02)) or 0.02)):
+    if daily_pnl_pct is not None and float(daily_pnl_pct) <= -abs(float(risk_policy.get("daily_kill_switch_pct", getattr(cfg, "MAX_DAILY_LOSS_PCT", 0.02)) or 0.02)):
         daily_kill_switch_active = True
 
     regime_failure_count = int(
@@ -322,14 +327,14 @@ def evaluate_candidate_risk(
     )
     regime_failure_throttle = 0.0
     family_failure_throttle = 0.0
-    if regime_failure_count >= int(getattr(cfg, "OFFLINE_RISK_REGIME_FAILURE_LIMIT", 3) or 3):
-        regime_failure_throttle = float(getattr(cfg, "OFFLINE_RISK_FAILURE_THROTTLE_PENALTY", 0.12) or 0.12)
-    if family_failure_count >= int(getattr(cfg, "OFFLINE_RISK_FAMILY_FAILURE_LIMIT", 3) or 3):
-        family_failure_throttle = float(getattr(cfg, "OFFLINE_RISK_FAILURE_THROTTLE_PENALTY", 0.12) or 0.12)
-    if session_failure_count >= int(getattr(cfg, "OFFLINE_RISK_SESSION_FAILURE_LIMIT", 2) or 2):
+    if regime_failure_count >= int(risk_policy.get("regime_failure_limit", 3) or 3):
+        regime_failure_throttle = float(risk_policy.get("failure_throttle_penalty", 0.12) or 0.12)
+    if family_failure_count >= int(risk_policy.get("family_failure_limit", 3) or 3):
+        family_failure_throttle = float(risk_policy.get("failure_throttle_penalty", 0.12) or 0.12)
+    if session_failure_count >= int(risk_policy.get("session_failure_limit", 2) or 2):
         family_failure_throttle = max(
             family_failure_throttle,
-            float(getattr(cfg, "OFFLINE_RISK_FAILURE_THROTTLE_PENALTY", 0.12) or 0.12) * 0.5,
+            float(risk_policy.get("failure_throttle_penalty", 0.12) or 0.12) * 0.5,
         )
 
     risk_learning_adjustment, risk_learning_confidence = _lookup_offline_risk_learning(
@@ -348,7 +353,14 @@ def evaluate_candidate_risk(
         rejection_reason_code = "regime_failure_throttle"
     elif family_failure_throttle > 0.0:
         rejection_reason_code = "family_failure_throttle"
-    rejection_meta = classify_rejection_metadata(rejection_reason_code)
+    rejection_meta = apply_stage_authority(
+        {
+            "existing_rejected_at_stage": _candidate_get(candidate, "rejected_at_stage"),
+            "existing_rejection_reason_code": _candidate_get(candidate, "rejection_reason_code"),
+            "incoming_rejected_at_stage": None,
+            "incoming_rejection_reason_code": rejection_reason_code,
+        }
+    )
     return OfflineCandidateRiskAssessment(
         risk_budget_ok=bool(risk_budget_ok),
         risk_budget_reason=str(risk_budget_reason),
@@ -372,6 +384,7 @@ def evaluate_candidate_risk(
         rejection_reason_code=rejection_meta.get("rejection_reason_code"),
         rejection_bucket=rejection_meta.get("rejection_bucket"),
         rejection_severity=rejection_meta.get("rejection_severity"),
+        stage_authority_warning=bool(rejection_meta.get("stage_authority_warning", False)),
         context={
             "sizing_reason": str(size_result.reason),
             "stop_distance_pct": round(float(stop_distance_pct), 6) if stop_distance_pct is not None else None,
@@ -380,6 +393,7 @@ def evaluate_candidate_risk(
             "family_failure_count": family_failure_count,
             "session_failure_count": session_failure_count,
             "selected_family_count": selected_family_count,
+            "effective_risk_policy": dict(risk_policy),
         },
     )
 

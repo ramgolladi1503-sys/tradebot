@@ -209,6 +209,7 @@ def build_candidate_decision_record(
     warning_filtering_without_edge_improvement: bool | None = None,
     warning_family_starvation: bool | None = None,
     warning_threshold_cluster: bool | None = None,
+    stage_authority_warning: bool | None = None,
 ) -> dict[str, Any]:
     source_flags = _source_flags(candidate)
     reason_meta = classify_rejection_metadata(
@@ -266,6 +267,11 @@ def build_candidate_decision_record(
         "rejection_reason_code": reason_meta["rejection_reason_code"],
         "rejection_bucket": reason_meta["rejection_bucket"],
         "rejection_severity": reason_meta["rejection_severity"],
+        "stage_authority_warning": bool(
+            _safe_bool(stage_authority_warning)
+            if stage_authority_warning is not None
+            else _safe_bool(_candidate_get(candidate, "stage_authority_warning"))
+        ),
         "raw_candidate_count": _safe_int(raw_candidate_count),
         "surviving_candidate_count": _safe_int(surviving_candidate_count),
         "survival_rate": _safe_float(survival_rate),
@@ -420,6 +426,7 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         "rejection_reason_code": reason_meta["rejection_reason_code"],
         "rejection_bucket": reason_meta["rejection_bucket"],
         "rejection_severity": reason_meta["rejection_severity"],
+        "stage_authority_warning": _safe_bool(source.get("stage_authority_warning")),
         "raw_candidate_count": _safe_int(source.get("raw_candidate_count")),
         "surviving_candidate_count": _safe_int(source.get("surviving_candidate_count")),
         "survival_rate": _safe_float(source.get("survival_rate")),

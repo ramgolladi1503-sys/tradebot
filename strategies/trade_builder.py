@@ -19,6 +19,7 @@ from core.execution_engine import ExecutionEngine
 from core.alpha_ensemble import AlphaEnsemble
 from core.decision_trace import build_trade_decision_trace
 from core.decision_telemetry import build_scan_summary, emit_scan_summary
+from core.decision_authority import apply_stage_authority
 from core.reject_shadow import record_candidate_decision
 from core.trade_schema import Trade, build_instrument_id, validate_trade_identity
 from typing import Optional
@@ -3102,6 +3103,7 @@ class TradeBuilder:
             or (classify_strategy_regime_mode(market_data).get("regime_mode"))
             or "UNCERTAIN"
         ).strip().upper() or "UNCERTAIN"
+        regime_policy = cfg.get_regime_policy(strategy_regime_mode)
         allow_nonlive_executable = bool(getattr(cfg, "NONLIVE_OPPORTUNITY_EXECUTION_ENABLE", True))
         min_exec_quality = float(getattr(cfg, "NONLIVE_OPPORTUNITY_EXECUTION_MIN_SCORE", 0.34))
         executable_nonlive = bool(
@@ -3122,6 +3124,11 @@ class TradeBuilder:
         source_flags["strategy_regime_mode"] = strategy_regime_mode
         source_flags["session_mode"] = session_mode
         source_flags["session_entry_penalty"] = session_entry_penalty
+        source_flags["effective_session_policy"] = dict(session_policy)
+        source_flags["effective_regime_policy"] = dict(cfg.get_regime_policy(strategy_regime_mode))
+        source_flags["effective_family_survival_policy"] = dict(
+            cfg.get_family_survival_policy(strategy_family, session_mode, strategy_regime_mode)
+        )
         source_flags["direction_family"] = str(direction_family or "sideways").strip().lower() or "sideways"
         source_flags["family_rank"] = int(family_rank) if family_rank is not None else None
         source_flags["family_blocker"] = (
@@ -3233,6 +3240,10 @@ class TradeBuilder:
             strategy_weight_applied=source_flags.get("strategy_weight_applied"),
             strategy_weight_state_generated_at=source_flags.get("strategy_weight_state_generated_at"),
             strategy_weight_state_version=source_flags.get("strategy_weight_state_version"),
+            effective_session_policy=source_flags.get("effective_session_policy") or {},
+            effective_regime_policy=source_flags.get("effective_regime_policy") or {},
+            effective_risk_policy=source_flags.get("effective_risk_policy") or {},
+            effective_family_survival_policy=source_flags.get("effective_family_survival_policy") or {},
             setup_variant=setup_variant,
             candidate_status=("executable" if executable_nonlive else "advisory_only"),
             permission=("EXECUTE" if executable_nonlive else "ADVISORY_ONLY"),
@@ -3441,15 +3452,20 @@ class TradeBuilder:
                 float(trade_source_flags.get("family_consensus_score") or 0.0),
                 6,
             )
+            family_survival_policy = cfg.get_family_survival_policy(
+                strategy_family,
+                session_mode,
+                strategy_regime_mode,
+            )
             family_survival_score = round(
                 float(
                     self._clamp_confidence(
                         (
-                            float(setup_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_SETUP", 0.30))
-                            + float(trigger_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_TRIGGER", 0.25))
-                            + float(entry_quality_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_ENTRY_QUALITY", 0.25))
-                            + float(execution_feasibility_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_EXECUTION", 0.10))
-                            + float(family_consensus_score) * float(getattr(cfg, "FAMILY_SURVIVAL_WEIGHT_CONSENSUS", 0.10))
+                            float(setup_score) * float(family_survival_policy.get("weight_setup", 0.30))
+                            + float(trigger_score) * float(family_survival_policy.get("weight_trigger", 0.25))
+                            + float(entry_quality_score) * float(family_survival_policy.get("weight_entry_quality", 0.25))
+                            + float(execution_feasibility_score) * float(family_survival_policy.get("weight_execution", 0.10))
+                            + float(family_consensus_score) * float(family_survival_policy.get("weight_consensus", 0.10))
                         )
                     )
                     or 0.0
@@ -3464,9 +3480,9 @@ class TradeBuilder:
                 "family_consensus_score": round(float(family_consensus_score), 6),
                 "regime_alignment": round(float(regime_alignment_component), 6),
             }
-            component_floor = float(getattr(cfg, "FAMILY_SURVIVAL_COMPONENT_MIN", 0.26) or 0.26)
-            survival_floor = float(getattr(cfg, "FAMILY_SURVIVAL_MIN_SCORE", 0.42) or 0.42)
-            executable_survival_floor = float(getattr(cfg, "NONLIVE_EXECUTABLE_MIN_FAMILY_SURVIVAL", 0.55) or 0.55)
+            component_floor = float(family_survival_policy.get("component_min", 0.26) or 0.26)
+            survival_floor = float(family_survival_policy.get("min_score", 0.42) or 0.42)
+            executable_survival_floor = float(family_survival_policy.get("executable_min_score", 0.55) or 0.55)
             weakest_survival_component = min(float(setup_score), float(trigger_score), float(entry_quality_score))
             risk_assessment = evaluate_candidate_risk(
                 built_trade,
@@ -3495,7 +3511,14 @@ class TradeBuilder:
                 hard_execution_blockers.append("family_failure_throttle")
             hard_execution_blockers = list(dict.fromkeys(hard_execution_blockers))
             primary_rejection_reason = hard_execution_blockers[0] if hard_execution_blockers else None
-            rejection_meta = classify_rejection_metadata(primary_rejection_reason)
+            rejection_meta = apply_stage_authority(
+                {
+                    "existing_rejected_at_stage": getattr(built_trade, "rejected_at_stage", None),
+                    "existing_rejection_reason_code": getattr(built_trade, "rejection_reason_code", None),
+                    "incoming_rejected_at_stage": None,
+                    "incoming_rejection_reason_code": primary_rejection_reason,
+                }
+            )
             soft_candidate_viable = bool(
                 family_survival_score >= survival_floor
                 and weakest_survival_component >= max(component_floor * 0.85, 0.10)
@@ -3543,6 +3566,10 @@ class TradeBuilder:
                     "rejection_reason_code": rejection_meta.get("rejection_reason_code"),
                     "rejection_bucket": rejection_meta.get("rejection_bucket"),
                     "rejection_severity": rejection_meta.get("rejection_severity"),
+                    "stage_authority_warning": bool(
+                        rejection_meta.get("stage_authority_warning", False)
+                        or getattr(risk_assessment, "stage_authority_warning", False)
+                    ),
                     "risk_budget_ok": bool(risk_assessment.risk_budget_ok),
                     "risk_budget_reason": str(risk_assessment.risk_budget_reason),
                     "position_size_estimate": int(risk_assessment.position_size_estimate),
@@ -3621,6 +3648,10 @@ class TradeBuilder:
                     "overextension_penalty": overextension_penalty,
                     "entry_distance_to_invalidation": entry_distance_to_invalidation,
                     "risk_assessment": risk_assessment.to_dict(),
+                    "effective_session_policy": dict(session_policy),
+                    "effective_regime_policy": dict(regime_policy),
+                    "effective_risk_policy": dict((risk_assessment.context or {}).get("effective_risk_policy") or {}),
+                    "effective_family_survival_policy": dict(family_survival_policy),
                     **dict(quality_detail_map),
                 }
             )
@@ -3658,6 +3689,10 @@ class TradeBuilder:
                 rejection_reason_code=rejection_meta.get("rejection_reason_code"),
                 rejection_bucket=rejection_meta.get("rejection_bucket"),
                 rejection_severity=rejection_meta.get("rejection_severity"),
+                stage_authority_warning=bool(
+                    rejection_meta.get("stage_authority_warning", False)
+                    or getattr(risk_assessment, "stage_authority_warning", False)
+                ),
                 family_feedback_adjustment=trade_source_flags.get("family_feedback_adjustment"),
                 family_feedback_confidence=trade_source_flags.get("family_feedback_confidence"),
                 family_feedback_applied=trade_source_flags.get("family_feedback_applied"),
@@ -3685,6 +3720,10 @@ class TradeBuilder:
                 family_failure_throttle=round(float(risk_assessment.family_failure_throttle), 6),
                 risk_learning_adjustment=round(float(risk_assessment.risk_learning_adjustment), 6),
                 risk_learning_confidence=round(float(risk_assessment.risk_learning_confidence), 6),
+                effective_session_policy=dict(session_policy),
+                effective_regime_policy=dict(regime_policy),
+                effective_risk_policy=dict((risk_assessment.context or {}).get("effective_risk_policy") or {}),
+                effective_family_survival_policy=dict(family_survival_policy),
             )
             logger.info(
                 "OPPORTUNITY_CANDIDATE_BUILT symbol=%s strategy=%s direction=%s quality=%s execution_feasibility=%s trigger=%s setup=%s entry_quality=%s survival=%s risk_ok=%s",
@@ -4798,6 +4837,7 @@ class TradeBuilder:
                 starvation_reason=starvation_reason,
                 warning_engine_too_timid=starvation_flag,
                 warning_family_starvation=(starvation_reason == "family_dominance"),
+                stage_authority_warning=bool(getattr(candidate, "stage_authority_warning", False)),
             )
             record_threshold_candidate_decision(decision_record)
             source_flags.update(
@@ -4806,6 +4846,7 @@ class TradeBuilder:
                     "rejection_reason_code": decision_record.get("rejection_reason_code"),
                     "rejection_bucket": decision_record.get("rejection_bucket"),
                     "rejection_severity": decision_record.get("rejection_severity"),
+                    "stage_authority_warning": bool(decision_record.get("stage_authority_warning", False)),
                     "raw_candidate_count": raw_candidate_count,
                     "surviving_candidate_count": surviving_candidate_count,
                     "survival_rate": round(float(survival_rate), 6),
@@ -4829,6 +4870,7 @@ class TradeBuilder:
                     rejection_reason_code=decision_record.get("rejection_reason_code"),
                     rejection_bucket=decision_record.get("rejection_bucket"),
                     rejection_severity=decision_record.get("rejection_severity"),
+                    stage_authority_warning=bool(decision_record.get("stage_authority_warning", False)),
                     raw_candidate_count=int(raw_candidate_count),
                     surviving_candidate_count=int(surviving_candidate_count),
                     survival_rate=round(float(survival_rate), 6),

@@ -284,6 +284,42 @@ def test_review_queue_preserves_tuning_recommendation_fields_if_present():
     assert payload["gate_protected_flag"] is True
 
 
+def test_review_queue_preserves_triage_fields_if_present():
+    payload, *_ = review_queue._build_review_queue_entry(
+        _make_trade(
+            triage_recommendation="protect_gate",
+            edge_preserve_flag=True,
+            gate_protected_flag=True,
+            top_damaging_gate_rank=2,
+        ),
+        extra=None,
+    )
+
+    assert payload["triage_recommendation"] == "protect_gate"
+    assert payload["edge_preserve_flag"] is True
+    assert payload["gate_protected_flag"] is True
+    assert payload["top_damaging_gate_rank"] == 2
+
+
+def test_review_queue_preserves_stage_authority_and_policy_fields_if_present():
+    payload, *_ = review_queue._build_review_queue_entry(
+        _make_trade(
+            stage_authority_warning=True,
+            effective_session_policy={"session_mode": "MIDDAY", "policy_source": "test"},
+            effective_regime_policy={"strategy_regime_mode": "TRENDING"},
+            effective_risk_policy={"risk_per_trade_pct": 0.004},
+            effective_family_survival_policy={"component_min": 0.26},
+        ),
+        extra=None,
+    )
+
+    assert payload["stage_authority_warning"] is True
+    assert payload["effective_session_policy"]["policy_source"] == "test"
+    assert payload["effective_regime_policy"]["strategy_regime_mode"] == "TRENDING"
+    assert payload["effective_risk_policy"]["risk_per_trade_pct"] == 0.004
+    assert payload["effective_family_survival_policy"]["component_min"] == 0.26
+
+
 def test_finalize_entry_lifecycle_restores_snapshot_after_mutation(caplog):
     finalized = review_queue.finalize_entry_lifecycle(
         {

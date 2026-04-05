@@ -223,6 +223,7 @@ class Trade:
     rejection_reason_code: str | None = None
     rejection_bucket: str | None = None
     rejection_severity: str | None = None
+    stage_authority_warning: bool | None = None
     raw_candidate_count: int | None = None
     surviving_candidate_count: int | None = None
     survival_rate: float | None = None
@@ -243,6 +244,12 @@ class Trade:
     top_damaging_gate_rank: int | None = None
     recommended_threshold_delta: float | None = None
     gate_protected_flag: bool | None = None
+    triage_recommendation: str | None = None
+    edge_preserve_flag: bool | None = None
+    effective_session_policy: dict = field(default_factory=dict)
+    effective_regime_policy: dict = field(default_factory=dict)
+    effective_risk_policy: dict = field(default_factory=dict)
+    effective_family_survival_policy: dict = field(default_factory=dict)
     aggressiveness_mode: str | None = None
     aggressiveness_adjustment: float | None = None
     aggressiveness_adjustment_applied: bool | None = None
@@ -629,6 +636,8 @@ class Trade:
             object.__setattr__(self, "rejection_bucket", self.source_flags.get("rejection_bucket"))
         if self.rejection_severity is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "rejection_severity", self.source_flags.get("rejection_severity"))
+        if self.stage_authority_warning is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "stage_authority_warning", self.source_flags.get("stage_authority_warning"))
         if self.raw_candidate_count is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "raw_candidate_count", self.source_flags.get("raw_candidate_count"))
         if self.surviving_candidate_count is None and isinstance(self.source_flags, dict):
@@ -669,6 +678,22 @@ class Trade:
             object.__setattr__(self, "recommended_threshold_delta", self.source_flags.get("recommended_threshold_delta"))
         if self.gate_protected_flag is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "gate_protected_flag", self.source_flags.get("gate_protected_flag"))
+        if self.triage_recommendation is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "triage_recommendation", self.source_flags.get("triage_recommendation"))
+        if self.edge_preserve_flag is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "edge_preserve_flag", self.source_flags.get("edge_preserve_flag"))
+        if not self.effective_session_policy and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "effective_session_policy", self.source_flags.get("effective_session_policy") or {})
+        if not self.effective_regime_policy and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "effective_regime_policy", self.source_flags.get("effective_regime_policy") or {})
+        if not self.effective_risk_policy and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "effective_risk_policy", self.source_flags.get("effective_risk_policy") or {})
+        if not self.effective_family_survival_policy and isinstance(self.source_flags, dict):
+            object.__setattr__(
+                self,
+                "effective_family_survival_policy",
+                self.source_flags.get("effective_family_survival_policy") or {},
+            )
         if self.aggressiveness_mode is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "aggressiveness_mode", self.source_flags.get("aggressiveness_mode"))
         if self.aggressiveness_adjustment is None and isinstance(self.source_flags, dict):
