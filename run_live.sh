@@ -115,6 +115,37 @@ configure_openmp_runtime() {
   return 0
 }
 
+is_truthy() {
+  [[ "${1:-}" =~ ^([Tt][Rr][Uu][Ee]|1|[Yy][Ee]?[Ss])$ ]]
+}
+
+resolve_live_predictor_startup_mode() {
+  local operator_override="${LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD:-}"
+  if [[ -n "$operator_override" ]]; then
+    if is_truthy "$operator_override"; then
+      export LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD="true"
+    else
+      export LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD="false"
+    fi
+    echo "[RUN_LIVE] honoring operator predictor override LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD=$LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD"
+    return 0
+  fi
+
+  echo "[RUN_LIVE] Probing persisted predictor startup health..."
+  if env EXECUTION_MODE=LIVE TRADING_MODE=LIVE LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD=false python - <<'PY' >/dev/null 2>&1
+from ml.trade_predictor import TradePredictor
+
+TradePredictor(load_existing=True)
+PY
+  then
+    export LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD="false"
+    echo "[RUN_LIVE] persisted predictor startup probe passed; keeping live model load enabled."
+  else
+    export LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD="true"
+    echo "[RUN_LIVE][WARN] persisted predictor startup probe failed; enabling startup-safe predictor fallback."
+  fi
+}
+
 if [[ "$LOGIN_ONLY" -eq 1 && "$VALIDATE_ONLY" -eq 1 ]]; then
   echo "[RUN_LIVE] ERROR: --login-only and --validate-only cannot be used together."
   exit 2
@@ -131,7 +162,12 @@ if [[ -z "${KITE_API_KEY:-}" ]]; then
   exit 1
 fi
 
-configure_openmp_runtime
+RUN_LIVE_CONFIGURE_OPENMP_RUNTIME="${RUN_LIVE_CONFIGURE_OPENMP_RUNTIME:-false}"
+if [[ "$RUN_LIVE_CONFIGURE_OPENMP_RUNTIME" =~ ^([Tt][Rr][Uu][Ee]|1|[Yy][Ee]?[Ss])$ ]]; then
+  configure_openmp_runtime
+else
+  echo "[RUN_LIVE] Skipping OpenMP runtime injection (set RUN_LIVE_CONFIGURE_OPENMP_RUNTIME=true to re-enable)."
+fi
 
 token_len=0
 
@@ -238,7 +274,18 @@ if [[ "${#KITE_ACCESS_TOKEN}" -lt 20 ]]; then
   exit 2
 fi
 
+if [[ "${DRY_RUN:-false}" =~ ^([Tt][Rr][Uu][Ee]|1|[Yy][Ee]?[Ss])$ ]]; then
+  echo "[RUN_LIVE][FATAL] DRY_RUN=true is incompatible with live production startup."
+  exit 2
+fi
+
+export TRADING_MODE="LIVE"
+export EXECUTION_MODE="LIVE"
+resolve_live_predictor_startup_mode
+
 echo "[RUN_LIVE] exported KITE_ACCESS_TOKEN len=${#KITE_ACCESS_TOKEN} tail4=${KITE_ACCESS_TOKEN: -4}"
+echo "[RUN_LIVE] forced runtime mode TRADING_MODE=$TRADING_MODE EXECUTION_MODE=$EXECUTION_MODE"
+echo "[RUN_LIVE] forcing startup-safe predictor mode LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD=$LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD"
 
 echo "[RUN_LIVE] Starting main.py ..."
 exec python "$ROOT_DIR/main.py"

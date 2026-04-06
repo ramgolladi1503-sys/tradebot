@@ -81,3 +81,29 @@ def test_trade_predictor_live_startup_still_uses_persisted_model_load(monkeypatc
 
     assert load_calls == [str(model_path)]
     assert predictor.meta.get("loaded_via_test") is True
+
+
+def test_trade_predictor_live_startup_safe_mode_skips_persisted_model_load(monkeypatch, tmp_path):
+    model_path = tmp_path / "xgb_live_model.pkl"
+    model_path.write_bytes(b"placeholder")
+    events = []
+
+    def _fail_if_called(self, path):
+        raise AssertionError(f"load should be skipped for live safe startup: {path}")
+
+    monkeypatch.setattr(tp, "get_active_entry", lambda _kind: None)
+    monkeypatch.setattr(tp, "get_shadow_entry", lambda _kind: None)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD", True, raising=False)
+    monkeypatch.setattr(tp.TradePredictor, "load", _fail_if_called, raising=False)
+    monkeypatch.setattr(tp, "append_runtime_event", lambda event_type, payload: events.append((event_type, dict(payload))))
+
+    predictor = tp.TradePredictor(model_path=str(model_path), load_existing=True)
+
+    assert predictor.model_runtime == "dummy"
+    assert predictor.xgb_available is False
+    assert isinstance(predictor.models.get("GLOBAL"), DummyClassifier)
+    assert predictor.meta.get("degraded_reason") == "live_startup_skip_persisted_model_load"
+    assert events
+    assert events[0][0] == "predictor_degraded_startup"
+    assert events[0][1]["execution_mode"] == "LIVE"

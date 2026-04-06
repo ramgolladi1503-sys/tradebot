@@ -55,6 +55,13 @@ def _global_readiness_blocker_sets():
     return explicit, prefixes
 
 
+def _startup_monitor_only_readiness_blockers():
+    allowed = set()
+    if bool(getattr(cfg, "READINESS_ALLOW_RISK_HALT_MONITORING_STARTUP", True)):
+        allowed.add("risk_halt_active")
+    return allowed
+
+
 def _is_global_readiness_blocker(blocker: str) -> bool:
     text = _normalize_readiness_blocker(blocker)
     if not text:
@@ -77,7 +84,13 @@ def _classify_readiness_abort(readiness: dict) -> tuple[bool, list[str]]:
     if state != "BLOCKED":
         return False, []
     global_blockers = [b for b in blockers if _is_global_readiness_blocker(b)]
-    return bool(global_blockers), global_blockers
+    startup_monitor_only = _startup_monitor_only_readiness_blockers()
+    abort_blockers = [
+        blocker
+        for blocker in global_blockers
+        if _normalize_readiness_blocker(blocker) not in startup_monitor_only
+    ]
+    return bool(abort_blockers), abort_blockers
 
 
 def _ensure_runtime_dirs(repo_root: Path) -> None:

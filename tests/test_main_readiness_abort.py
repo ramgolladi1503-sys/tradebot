@@ -19,6 +19,7 @@ def test_non_global_readiness_blocker_does_not_abort(monkeypatch):
 def test_global_readiness_blocker_aborts(monkeypatch):
     monkeypatch.setattr(cfg, "READINESS_GLOBAL_ABORT_BLOCKERS", ["risk_halt_active"], raising=False)
     monkeypatch.setattr(cfg, "READINESS_GLOBAL_ABORT_PREFIXES", ["audit_chain:"], raising=False)
+    monkeypatch.setattr(cfg, "READINESS_ALLOW_RISK_HALT_MONITORING_STARTUP", False, raising=False)
     readiness = {
         "state": "BLOCKED",
         "market_open": True,
@@ -28,6 +29,21 @@ def test_global_readiness_blocker_aborts(monkeypatch):
     should_abort, reasons = main_module._classify_readiness_abort(readiness)
     assert should_abort is True
     assert reasons == ["risk_halt_active"]
+
+
+def test_risk_halt_blocker_allows_monitoring_startup_when_enabled(monkeypatch):
+    monkeypatch.setattr(cfg, "READINESS_GLOBAL_ABORT_BLOCKERS", ["risk_halt_active"], raising=False)
+    monkeypatch.setattr(cfg, "READINESS_GLOBAL_ABORT_PREFIXES", ["audit_chain:"], raising=False)
+    monkeypatch.setattr(cfg, "READINESS_ALLOW_RISK_HALT_MONITORING_STARTUP", True, raising=False)
+    readiness = {
+        "state": "BLOCKED",
+        "market_open": True,
+        "blockers": ["risk_halt_active"],
+        "reasons": ["risk_halt_active"],
+    }
+    should_abort, reasons = main_module._classify_readiness_abort(readiness)
+    assert should_abort is False
+    assert reasons == []
 
 
 def test_market_closed_aborts(monkeypatch):

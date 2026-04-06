@@ -1540,6 +1540,9 @@ ML_MODEL_PATH = "models/xgb_live_model.pkl"
 NONLIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD = (
     os.getenv("NONLIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD", "true").lower() == "true"
 )
+LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD = (
+    os.getenv("LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD", "false").lower() == "true"
+)
 ML_CHALLENGER_MODEL_PATH = os.getenv("ML_CHALLENGER_MODEL_PATH", "models/xgb_live_model_challenger.pkl")
 ML_ONLINE_UPDATE_ASYNC = os.getenv("ML_ONLINE_UPDATE_ASYNC", "true").lower() == "true"
 ML_ONLINE_UPDATE_MAX_BLOCK_SEC = float(os.getenv("ML_ONLINE_UPDATE_MAX_BLOCK_SEC", "0.2"))
@@ -1749,6 +1752,9 @@ READINESS_REQUIRE_KITE_AUTH = os.getenv("READINESS_REQUIRE_KITE_AUTH", "true").l
 READINESS_REQUIRE_FEED_HEALTH = os.getenv("READINESS_REQUIRE_FEED_HEALTH", "true").lower() == "true"
 READINESS_REQUIRE_AUDIT_CHAIN = os.getenv("READINESS_REQUIRE_AUDIT_CHAIN", "true").lower() == "true"
 READINESS_REQUIRE_RISK_HALT_CLEAR = os.getenv("READINESS_REQUIRE_RISK_HALT_CLEAR", "true").lower() == "true"
+READINESS_ALLOW_RISK_HALT_MONITORING_STARTUP = (
+    os.getenv("READINESS_ALLOW_RISK_HALT_MONITORING_STARTUP", "true").lower() == "true"
+)
 READINESS_REQUIRE_TRADE_SCHEMA = os.getenv("READINESS_REQUIRE_TRADE_SCHEMA", "true").lower() == "true"
 READINESS_ENFORCE_ON_EXEC = os.getenv("READINESS_ENFORCE_ON_EXEC", "true").lower() == "true"
 READINESS_ENFORCE_PAPER = os.getenv("READINESS_ENFORCE_PAPER", "false").lower() == "true"

@@ -348,10 +348,14 @@ def update_index_quote_snapshot(
     ts_epoch: float | None = None,
     source: str = "ws",
     ltp=None,
+    *,
+    book_source: str | None = None,
+    volume=None,
+    last_price_source: str | None = None,
 ):
     """
     Update index quote cache from live sources (WS/REST) in a uniform structure:
-      bid, ask, mid, ts_epoch, source
+      bid, ask, mid, ts_epoch, source, book_source, volume, last_price_source
     """
     sym = str(symbol or "").upper()
     if not sym:
@@ -365,6 +369,15 @@ def update_index_quote_snapshot(
         except Exception:
             return None
         return None
+
+    def _valid_nonnegative(value):
+        try:
+            resolved = float(value)
+        except Exception:
+            return None
+        if not math.isfinite(resolved) or resolved < 0:
+            return None
+        return float(resolved)
 
     if mid is None and bid is not None and ask is not None:
         try:
@@ -396,14 +409,22 @@ def update_index_quote_snapshot(
         resolved_mid = (resolved_bid + resolved_ask) / 2.0
     if resolved_mid is None:
         resolved_mid = _valid_price(prev.get("mid"))
+    resolved_volume = _valid_nonnegative(volume)
+    if resolved_volume is None:
+        resolved_volume = _valid_nonnegative(prev.get("volume"))
+    resolved_book_source = str(book_source or prev.get("book_source") or "").strip() or None
+    resolved_last_price_source = str(last_price_source or prev.get("last_price_source") or "").strip() or None
     snap = {
         "symbol": sym,
         "bid": resolved_bid,
         "ask": resolved_ask,
         "mid": resolved_mid,
         "last_price": resolved_last_price,
+        "volume": resolved_volume,
         "ts_epoch": ts,
         "source": str(source or "unknown"),
+        "book_source": resolved_book_source,
+        "last_price_source": resolved_last_price_source,
     }
     cache["index_quote"] = snap
     if resolved_last_price is not None:

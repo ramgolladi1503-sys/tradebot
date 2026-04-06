@@ -66,18 +66,29 @@ class TradePredictor:
             and self.execution_mode != "LIVE"
             and bool(getattr(cfg, "NONLIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD", True))
         )
-        if non_live_skip_persisted_load:
+        live_skip_persisted_load = bool(
+            load_existing
+            and self.execution_mode == "LIVE"
+            and bool(getattr(cfg, "LIVE_PREDICTOR_SKIP_PERSISTED_MODEL_LOAD", False))
+        )
+        startup_skip_reason = None
+        if live_skip_persisted_load:
+            startup_skip_reason = "live_startup_skip_persisted_model_load"
+        elif non_live_skip_persisted_load:
+            startup_skip_reason = "nonlive_startup_skip_persisted_model_load"
+
+        if startup_skip_reason:
             self.xgb_available = False
             self.model_runtime = "dummy"
             self.models = {"GLOBAL": DummyClassifier(strategy="prior")}
             self.feature_list = None
             self.meta = {
-                "degraded_reason": "nonlive_startup_skip_persisted_model_load",
+                "degraded_reason": startup_skip_reason,
                 "execution_mode": self.execution_mode,
                 "model_path": self.model_path,
             }
             self._emit_predictor_degraded_startup(
-                reason="nonlive_startup_skip_persisted_model_load",
+                reason=startup_skip_reason,
                 load_existing=load_existing,
             )
         else:
