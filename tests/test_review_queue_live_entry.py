@@ -320,6 +320,21 @@ def test_review_queue_preserves_stage_authority_and_policy_fields_if_present():
     assert payload["effective_family_survival_policy"]["component_min"] == 0.26
 
 
+def test_review_queue_preserves_density_fields_if_present():
+    payload, *_ = review_queue._build_review_queue_entry(
+        _make_trade(
+            trade_density_limit_applied=True,
+            density_policy_name="MIDDAY:TRENDING",
+            density_reject_reason="trade_density_executable_cap",
+        ),
+        extra=None,
+    )
+
+    assert payload["trade_density_limit_applied"] is True
+    assert payload["density_policy_name"] == "MIDDAY:TRENDING"
+    assert payload["density_reject_reason"] == "trade_density_executable_cap"
+
+
 def test_finalize_entry_lifecycle_restores_snapshot_after_mutation(caplog):
     finalized = review_queue.finalize_entry_lifecycle(
         {

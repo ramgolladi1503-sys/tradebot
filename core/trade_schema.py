@@ -146,6 +146,9 @@ class Trade:
     family_rank: int | None = None
     family_blocker: str | None = None
     family_strength: float | None = None
+    family_allowed_in_context: bool | None = None
+    family_gate_reason: str | None = None
+    family_gate_override_applied: bool | None = None
     setup_variant: str | None = None
     candidate_status: str | None = None
     global_confidence: float | None = None
@@ -224,6 +227,9 @@ class Trade:
     rejection_bucket: str | None = None
     rejection_severity: str | None = None
     stage_authority_warning: bool | None = None
+    trade_density_limit_applied: bool | None = None
+    density_policy_name: str | None = None
+    density_reject_reason: str | None = None
     raw_candidate_count: int | None = None
     surviving_candidate_count: int | None = None
     survival_rate: float | None = None
@@ -249,6 +255,8 @@ class Trade:
     effective_session_policy: dict = field(default_factory=dict)
     effective_regime_policy: dict = field(default_factory=dict)
     effective_risk_policy: dict = field(default_factory=dict)
+    effective_family_risk_profile: dict = field(default_factory=dict)
+    risk_profile_override_applied: bool | None = None
     effective_family_survival_policy: dict = field(default_factory=dict)
     aggressiveness_mode: str | None = None
     aggressiveness_adjustment: float | None = None
@@ -528,6 +536,12 @@ class Trade:
             object.__setattr__(self, "family_blocker", self.source_flags.get("family_blocker"))
         if self.family_strength is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "family_strength", self.source_flags.get("family_strength"))
+        if self.family_allowed_in_context is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "family_allowed_in_context", self.source_flags.get("family_allowed_in_context"))
+        if self.family_gate_reason is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "family_gate_reason", self.source_flags.get("family_gate_reason"))
+        if self.family_gate_override_applied is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "family_gate_override_applied", self.source_flags.get("family_gate_override_applied"))
         if self.signal_score is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "signal_score", self.source_flags.get("signal_score"))
         if self.execution_score is None and isinstance(self.source_flags, dict):
@@ -638,6 +652,12 @@ class Trade:
             object.__setattr__(self, "rejection_severity", self.source_flags.get("rejection_severity"))
         if self.stage_authority_warning is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "stage_authority_warning", self.source_flags.get("stage_authority_warning"))
+        if self.trade_density_limit_applied is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "trade_density_limit_applied", self.source_flags.get("trade_density_limit_applied"))
+        if self.density_policy_name is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "density_policy_name", self.source_flags.get("density_policy_name"))
+        if self.density_reject_reason is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "density_reject_reason", self.source_flags.get("density_reject_reason"))
         if self.raw_candidate_count is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "raw_candidate_count", self.source_flags.get("raw_candidate_count"))
         if self.surviving_candidate_count is None and isinstance(self.source_flags, dict):
@@ -688,6 +708,18 @@ class Trade:
             object.__setattr__(self, "effective_regime_policy", self.source_flags.get("effective_regime_policy") or {})
         if not self.effective_risk_policy and isinstance(self.source_flags, dict):
             object.__setattr__(self, "effective_risk_policy", self.source_flags.get("effective_risk_policy") or {})
+        if not self.effective_family_risk_profile and isinstance(self.source_flags, dict):
+            object.__setattr__(
+                self,
+                "effective_family_risk_profile",
+                self.source_flags.get("effective_family_risk_profile") or {},
+            )
+        if self.risk_profile_override_applied is None and isinstance(self.source_flags, dict):
+            object.__setattr__(
+                self,
+                "risk_profile_override_applied",
+                self.source_flags.get("risk_profile_override_applied"),
+            )
         if not self.effective_family_survival_policy and isinstance(self.source_flags, dict):
             object.__setattr__(
                 self,

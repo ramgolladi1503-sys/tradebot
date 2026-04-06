@@ -738,6 +738,15 @@ def test_dashboard_table_model_includes_stage_authority_policy_fields():
         assert field in CANONICAL_COLUMNS
 
 
+def test_dashboard_table_model_includes_density_fields():
+    for field in (
+        "trade_density_limit_applied",
+        "density_policy_name",
+        "density_reject_reason",
+    ):
+        assert field in CANONICAL_COLUMNS
+
+
 def test_load_live_suggestions_df_filters_queue_only_row_when_entry_missing(tmp_path, monkeypatch):
     row = {
         "trade_id": "T-QUEUE-MISSING",

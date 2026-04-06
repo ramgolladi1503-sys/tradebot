@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections import Counter
 from dataclasses import replace
 import hashlib
 from typing import Any, Iterable
@@ -127,6 +128,101 @@ def _get_contextual_threshold_adjustment(
         )
         or 0.0
     )
+
+
+def _trade_density_family_key(candidate: Any) -> str:
+    return (
+        str(
+            _get_value(candidate, "strategy_family")
+            or (_get_value(candidate, "source_flags", {}) or {}).get("strategy_family")
+            or "unknown"
+        )
+        .strip()
+        .lower()
+        .replace("_", "-")
+        or "unknown"
+    )
+
+
+def _candidate_density_policy(candidate: Any) -> dict[str, Any]:
+    session_mode = _get_value(candidate, "session_mode") or (_get_value(candidate, "source_flags", {}) or {}).get("session_mode")
+    regime_mode = _get_value(candidate, "strategy_regime_mode") or (_get_value(candidate, "source_flags", {}) or {}).get("strategy_regime_mode")
+    return dict(cfg.get_trade_density_policy(session_mode, regime_mode))
+
+
+def _candidate_density_eligible(candidate: Any) -> bool:
+    candidate_class = str(_get_value(candidate, "candidate_class") or "").strip().upper()
+    if candidate_class != "EXECUTABLE":
+        return False
+    if not bool(_get_value(candidate, "execution_allowed", False)):
+        return False
+    if not bool(_get_value(candidate, "tradable", False)):
+        return False
+    return bool(_is_executable_opportunity(candidate))
+
+
+def _apply_trade_density_controller(candidates: Iterable[Any]) -> list[Any]:
+    candidate_list = list(candidates or [])
+    if not candidate_list:
+        return candidate_list
+    if not bool(getattr(cfg, "OFFLINE_TRADE_DENSITY_ENABLE", True)):
+        return candidate_list
+    if not any(_candidate_market_mode(candidate) in {"SIM", "PAPER", "OFFHOURS"} for candidate in candidate_list):
+        return candidate_list
+
+    eligible_rank_counts: Counter[str] = Counter()
+    selected_counts: Counter[str] = Counter()
+    selected_family_counts: Counter[tuple[str, str]] = Counter()
+    updated_candidates: list[Any] = []
+    for candidate in candidate_list:
+        policy = _candidate_density_policy(candidate)
+        policy_name = str(policy.get("policy_name") or "UNKNOWN:UNKNOWN")
+        density_reject_reason = None
+        density_eligible = _candidate_density_eligible(candidate)
+        selected_for_execution = bool(_get_value(candidate, "selected_for_execution", False))
+        if density_eligible:
+            next_ranked_count = int(eligible_rank_counts.get(policy_name, 0)) + 1
+            if next_ranked_count > int(policy.get("max_ranked_candidates", 0) or 0):
+                density_reject_reason = "trade_density_rank_cap"
+            else:
+                eligible_rank_counts[policy_name] = next_ranked_count
+        if density_reject_reason is None and selected_for_execution:
+            family_key = _trade_density_family_key(candidate)
+            if int(selected_counts.get(policy_name, 0)) >= int(policy.get("max_executable_candidates", 0) or 0):
+                density_reject_reason = "trade_density_executable_cap"
+            elif int(selected_family_counts.get((policy_name, family_key), 0)) >= int(policy.get("max_per_family", 0) or 0):
+                density_reject_reason = "trade_density_family_cap"
+            else:
+                selected_counts[policy_name] += 1
+                selected_family_counts[(policy_name, family_key)] += 1
+        trade_density_limit_applied = density_reject_reason is not None
+        source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
+        source_flags.update(
+            {
+                "trade_density_limit_applied": bool(trade_density_limit_applied),
+                "density_policy_name": policy_name,
+                "density_reject_reason": density_reject_reason,
+                "effective_trade_density_policy": dict(policy),
+            }
+        )
+        updates: dict[str, Any] = {
+            "trade_density_limit_applied": bool(trade_density_limit_applied),
+            "density_policy_name": policy_name,
+            "density_reject_reason": density_reject_reason,
+            "source_flags": source_flags,
+        }
+        if trade_density_limit_applied:
+            updates.update(
+                {
+                    "selected_for_execution": False,
+                    "selection_reason": density_reject_reason,
+                    "portfolio_optimization_selected": False,
+                    "slot_id": None,
+                    "capital_assigned": None,
+                }
+            )
+        updated_candidates.append(_update_candidate(candidate, **updates))
+    return updated_candidates
 
 
 def _bool_from_candidate(candidate: Any, field: str, fallback: Any = False) -> bool:
@@ -372,10 +468,14 @@ def _derive_candidate_class(candidate: Any, *, metrics: dict[str, Any] | None = 
     tradable = bool(_get_value(candidate, "tradable", False))
     executable_truth = bool(metrics.get("executable_truth")) if "executable_truth" in metrics else _is_executable_opportunity(candidate)
     execution_ok = True if metrics.get("execution_ok") is None else bool(metrics.get("execution_ok"))
+    display_entry = _safe_float(_get_value(candidate, "display_entry"))
+    display_entry_status = str(_get_value(candidate, "display_entry_status") or "").strip().lower()
     if is_fallback or planning_only:
         return "ADVISORY_ONLY"
     if execution_allowed and tradable and executable_truth and execution_ok and fresh_quote_ok and liquidity_ok and spread_ok:
         return "EXECUTABLE"
+    if (not executable_truth) and display_entry is not None and display_entry_status in {"displayable", "non_executable"}:
+        return "ADVISORY_ONLY"
     return "NEAR_EXECUTABLE"
 
 
@@ -2030,6 +2130,7 @@ def annotate_ranked_opportunities(
             annotated,
             current_portfolio_exposure=current_portfolio_exposure,
         )
+    annotated = _apply_trade_density_controller(annotated)
     executable_candidates_seen = sum(1 for candidate in annotated if _is_executable_opportunity(candidate))
     selected_executable = [
         candidate
@@ -2287,6 +2388,9 @@ def annotate_ranked_opportunities(
         record["gate_protected_flag"] = gate_protected_flag
         record["triage_recommendation"] = triage_recommendation
         record["edge_preserve_flag"] = edge_preserve_flag
+        record["trade_density_limit_applied"] = bool(_get_value(candidate, "trade_density_limit_applied", False))
+        record["density_policy_name"] = _get_value(candidate, "density_policy_name")
+        record["density_reject_reason"] = _get_value(candidate, "density_reject_reason")
         if audit_enabled:
             record_candidate_decision(record)
         source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
@@ -2320,6 +2424,9 @@ def annotate_ranked_opportunities(
                 "gate_protected_flag": bool(record.get("gate_protected_flag", False)),
                 "triage_recommendation": record.get("triage_recommendation"),
                 "edge_preserve_flag": bool(record.get("edge_preserve_flag", False)),
+                "trade_density_limit_applied": bool(record.get("trade_density_limit_applied", False)),
+                "density_policy_name": record.get("density_policy_name"),
+                "density_reject_reason": record.get("density_reject_reason"),
                 "aggressiveness_mode": aggressiveness_mode,
                 "aggressiveness_adjustment": round(float(aggressiveness_adjustment), 6),
                 "aggressiveness_adjustment_applied": bool(abs(float(aggressiveness_adjustment)) > 0.0),
@@ -2376,6 +2483,9 @@ def annotate_ranked_opportunities(
                 gate_protected_flag=bool(record.get("gate_protected_flag", False)),
                 triage_recommendation=record.get("triage_recommendation"),
                 edge_preserve_flag=bool(record.get("edge_preserve_flag", False)),
+                trade_density_limit_applied=bool(record.get("trade_density_limit_applied", False)),
+                density_policy_name=record.get("density_policy_name"),
+                density_reject_reason=record.get("density_reject_reason"),
                 aggressiveness_mode=aggressiveness_mode,
                 aggressiveness_adjustment=round(float(aggressiveness_adjustment), 6),
                 aggressiveness_adjustment_applied=bool(abs(float(aggressiveness_adjustment)) > 0.0),

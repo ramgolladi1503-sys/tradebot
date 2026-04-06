@@ -116,6 +116,7 @@ def classify_rejection_metadata(
             "bullish_regime_countertrend_family",
             "sideways_regime_weak_directional_family",
             "low_vol_regime_weak_directional_family",
+            "regime_mismatch_family_reject",
             "family_consensus_below_threshold",
             "family_survival_below_threshold",
         }:
@@ -210,6 +211,9 @@ def build_candidate_decision_record(
     warning_family_starvation: bool | None = None,
     warning_threshold_cluster: bool | None = None,
     stage_authority_warning: bool | None = None,
+    trade_density_limit_applied: bool | None = None,
+    density_policy_name: str | None = None,
+    density_reject_reason: str | None = None,
 ) -> dict[str, Any]:
     source_flags = _source_flags(candidate)
     reason_meta = classify_rejection_metadata(
@@ -272,6 +276,23 @@ def build_candidate_decision_record(
             if stage_authority_warning is not None
             else _safe_bool(_candidate_get(candidate, "stage_authority_warning"))
         ),
+        "trade_density_limit_applied": bool(
+            _safe_bool(trade_density_limit_applied)
+            if trade_density_limit_applied is not None
+            else _safe_bool(_candidate_get(candidate, "trade_density_limit_applied"))
+        ),
+        "density_policy_name": str(
+            density_policy_name
+            if density_policy_name is not None
+            else (_candidate_get(candidate, "density_policy_name") or "")
+        ).strip()
+        or None,
+        "density_reject_reason": str(
+            density_reject_reason
+            if density_reject_reason is not None
+            else (_candidate_get(candidate, "density_reject_reason") or "")
+        ).strip()
+        or None,
         "raw_candidate_count": _safe_int(raw_candidate_count),
         "surviving_candidate_count": _safe_int(surviving_candidate_count),
         "survival_rate": _safe_float(survival_rate),
@@ -427,6 +448,9 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         "rejection_bucket": reason_meta["rejection_bucket"],
         "rejection_severity": reason_meta["rejection_severity"],
         "stage_authority_warning": _safe_bool(source.get("stage_authority_warning")),
+        "trade_density_limit_applied": _safe_bool(source.get("trade_density_limit_applied")),
+        "density_policy_name": str(source.get("density_policy_name") or "").strip() or None,
+        "density_reject_reason": str(source.get("density_reject_reason") or "").strip().lower() or None,
         "raw_candidate_count": _safe_int(source.get("raw_candidate_count")),
         "surviving_candidate_count": _safe_int(source.get("surviving_candidate_count")),
         "survival_rate": _safe_float(source.get("survival_rate")),

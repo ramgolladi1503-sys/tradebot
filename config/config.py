@@ -974,6 +974,16 @@ RANGE_WATCHLIST_MIN_STRENGTH = float(os.getenv("RANGE_WATCHLIST_MIN_STRENGTH", "
 RANGE_WATCHLIST_EDGE_MIN = float(os.getenv("RANGE_WATCHLIST_EDGE_MIN", "0.80"))
 RANGE_WATCHLIST_EDGE_MAX = float(os.getenv("RANGE_WATCHLIST_EDGE_MAX", "2.80"))
 RANGE_WATCHLIST_COMPRESSION_ATR_MAX = float(os.getenv("RANGE_WATCHLIST_COMPRESSION_ATR_MAX", "0.45"))
+FAMILY_CONTEXT_GATE_OVERRIDE_ENABLE = os.getenv("FAMILY_CONTEXT_GATE_OVERRIDE_ENABLE", "true").lower() == "true"
+FAMILY_CONTEXT_GATE_OVERRIDE_MIN_STRENGTH = float(
+    os.getenv("FAMILY_CONTEXT_GATE_OVERRIDE_MIN_STRENGTH", "2.25")
+)
+FAMILY_CONTEXT_GATE_OVERRIDE_MIN_REGIME_CONFIDENCE = float(
+    os.getenv("FAMILY_CONTEXT_GATE_OVERRIDE_MIN_REGIME_CONFIDENCE", "0.45")
+)
+FAMILY_CONTEXT_GATE_OVERRIDE_MIN_QUALITY = float(
+    os.getenv("FAMILY_CONTEXT_GATE_OVERRIDE_MIN_QUALITY", "0.78")
+)
 STRATEGY_REGIME_CONFIDENCE_MIN = float(os.getenv("STRATEGY_REGIME_CONFIDENCE_MIN", "0.45"))
 STRATEGY_REGIME_UNCERTAIN_CONFIDENCE_MAX = float(os.getenv("STRATEGY_REGIME_UNCERTAIN_CONFIDENCE_MAX", "0.30"))
 STRATEGY_REGIME_TREND_ATR_MIN = float(os.getenv("STRATEGY_REGIME_TREND_ATR_MIN", "0.35"))
@@ -2370,6 +2380,89 @@ OFFLINE_RISK_LEARNING_MAE_WEIGHT = float(os.getenv("OFFLINE_RISK_LEARNING_MAE_WE
 OFFLINE_RISK_LEARNING_R_MULTIPLE_WEIGHT = float(os.getenv("OFFLINE_RISK_LEARNING_R_MULTIPLE_WEIGHT", "0.35"))
 OFFLINE_RISK_LEARNING_SAVED_LOSS_WEIGHT = float(os.getenv("OFFLINE_RISK_LEARNING_SAVED_LOSS_WEIGHT", "0.25"))
 OFFLINE_RISK_PLAN_MAX_OVERSHOOT_R = float(os.getenv("OFFLINE_RISK_PLAN_MAX_OVERSHOOT_R", "0.20"))
+FAMILY_RISK_BREAKOUT_MIN_RR = float(os.getenv("FAMILY_RISK_BREAKOUT_MIN_RR", "1.20"))
+FAMILY_RISK_BREAKOUT_MAX_STOP_ATR_MULT = float(
+    os.getenv("FAMILY_RISK_BREAKOUT_MAX_STOP_ATR_MULT", "3.00")
+)
+FAMILY_RISK_CONTINUATION_MIN_RR = float(os.getenv("FAMILY_RISK_CONTINUATION_MIN_RR", "1.00"))
+FAMILY_RISK_CONTINUATION_MAX_STOP_ATR_MULT = float(
+    os.getenv("FAMILY_RISK_CONTINUATION_MAX_STOP_ATR_MULT", "2.50")
+)
+FAMILY_RISK_MEAN_REVERSION_MIN_RR = float(os.getenv("FAMILY_RISK_MEAN_REVERSION_MIN_RR", "0.60"))
+FAMILY_RISK_MEAN_REVERSION_MAX_STOP_ATR_MULT = float(
+    os.getenv("FAMILY_RISK_MEAN_REVERSION_MAX_STOP_ATR_MULT", "1.50")
+)
+FAMILY_RISK_RANGE_WATCHLIST_MIN_RR = float(os.getenv("FAMILY_RISK_RANGE_WATCHLIST_MIN_RR", "0.50"))
+FAMILY_RISK_RANGE_WATCHLIST_MAX_STOP_ATR_MULT = float(
+    os.getenv("FAMILY_RISK_RANGE_WATCHLIST_MAX_STOP_ATR_MULT", "1.25")
+)
+OFFLINE_TRADE_DENSITY_ENABLE = os.getenv("OFFLINE_TRADE_DENSITY_ENABLE", "true").lower() == "true"
+TRADE_DENSITY_OPENING_MAX_RANKED_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_OPENING_MAX_RANKED_CANDIDATES", "4")
+)
+TRADE_DENSITY_OPENING_MAX_EXECUTABLE_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_OPENING_MAX_EXECUTABLE_CANDIDATES", "2")
+)
+TRADE_DENSITY_OPENING_MAX_PER_FAMILY = int(
+    os.getenv("TRADE_DENSITY_OPENING_MAX_PER_FAMILY", "2")
+)
+TRADE_DENSITY_MIDDAY_MAX_RANKED_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_MIDDAY_MAX_RANKED_CANDIDATES", "2")
+)
+TRADE_DENSITY_MIDDAY_MAX_EXECUTABLE_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_MIDDAY_MAX_EXECUTABLE_CANDIDATES", "1")
+)
+TRADE_DENSITY_MIDDAY_MAX_PER_FAMILY = int(
+    os.getenv("TRADE_DENSITY_MIDDAY_MAX_PER_FAMILY", "1")
+)
+TRADE_DENSITY_CLOSING_MAX_RANKED_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_CLOSING_MAX_RANKED_CANDIDATES", "3")
+)
+TRADE_DENSITY_CLOSING_MAX_EXECUTABLE_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_CLOSING_MAX_EXECUTABLE_CANDIDATES", "1")
+)
+TRADE_DENSITY_CLOSING_MAX_PER_FAMILY = int(
+    os.getenv("TRADE_DENSITY_CLOSING_MAX_PER_FAMILY", "1")
+)
+TRADE_DENSITY_OFFHOURS_MAX_RANKED_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_OFFHOURS_MAX_RANKED_CANDIDATES", "2")
+)
+TRADE_DENSITY_OFFHOURS_MAX_EXECUTABLE_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_OFFHOURS_MAX_EXECUTABLE_CANDIDATES", "0")
+)
+TRADE_DENSITY_OFFHOURS_MAX_PER_FAMILY = int(
+    os.getenv("TRADE_DENSITY_OFFHOURS_MAX_PER_FAMILY", "1")
+)
+TRADE_DENSITY_TRENDING_RANKED_BONUS = int(
+    os.getenv("TRADE_DENSITY_TRENDING_RANKED_BONUS", "1")
+)
+TRADE_DENSITY_TRENDING_EXECUTABLE_BONUS = int(
+    os.getenv("TRADE_DENSITY_TRENDING_EXECUTABLE_BONUS", "1")
+)
+TRADE_DENSITY_TRENDING_PER_FAMILY_BONUS = int(
+    os.getenv("TRADE_DENSITY_TRENDING_PER_FAMILY_BONUS", "1")
+)
+TRADE_DENSITY_SIDEWAYS_MAX_EXECUTABLE_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_SIDEWAYS_MAX_EXECUTABLE_CANDIDATES", "1")
+)
+TRADE_DENSITY_SIDEWAYS_MAX_PER_FAMILY = int(
+    os.getenv("TRADE_DENSITY_SIDEWAYS_MAX_PER_FAMILY", "1")
+)
+TRADE_DENSITY_LOW_VOL_MAX_EXECUTABLE_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_LOW_VOL_MAX_EXECUTABLE_CANDIDATES", "1")
+)
+TRADE_DENSITY_LOW_VOL_MAX_PER_FAMILY = int(
+    os.getenv("TRADE_DENSITY_LOW_VOL_MAX_PER_FAMILY", "1")
+)
+TRADE_DENSITY_UNCERTAIN_MAX_RANKED_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_UNCERTAIN_MAX_RANKED_CANDIDATES", "2")
+)
+TRADE_DENSITY_UNCERTAIN_MAX_EXECUTABLE_CANDIDATES = int(
+    os.getenv("TRADE_DENSITY_UNCERTAIN_MAX_EXECUTABLE_CANDIDATES", "1")
+)
+TRADE_DENSITY_UNCERTAIN_MAX_PER_FAMILY = int(
+    os.getenv("TRADE_DENSITY_UNCERTAIN_MAX_PER_FAMILY", "1")
+)
 
 
 def get_session_policy(session_mode: str | None = None) -> dict[str, float | int | str | None]:
@@ -2438,6 +2531,37 @@ def get_risk_policy() -> dict[str, float | int | bool]:
     }
 
 
+def get_family_risk_profile(strategy_family: str | None = None) -> dict[str, float | str]:
+    normalized = str(strategy_family or "").strip().lower().replace("_", "-")
+    aliases = {
+        "meanreversion": "mean-reversion",
+        "rangewatchlist": "range-watchlist",
+    }
+    normalized = aliases.get(normalized, normalized)
+    profiles = {
+        "breakout": {
+            "min_rr": float(FAMILY_RISK_BREAKOUT_MIN_RR),
+            "max_stop_atr_mult": float(FAMILY_RISK_BREAKOUT_MAX_STOP_ATR_MULT),
+        },
+        "continuation": {
+            "min_rr": float(FAMILY_RISK_CONTINUATION_MIN_RR),
+            "max_stop_atr_mult": float(FAMILY_RISK_CONTINUATION_MAX_STOP_ATR_MULT),
+        },
+        "mean-reversion": {
+            "min_rr": float(FAMILY_RISK_MEAN_REVERSION_MIN_RR),
+            "max_stop_atr_mult": float(FAMILY_RISK_MEAN_REVERSION_MAX_STOP_ATR_MULT),
+        },
+        "range-watchlist": {
+            "min_rr": float(FAMILY_RISK_RANGE_WATCHLIST_MIN_RR),
+            "max_stop_atr_mult": float(FAMILY_RISK_RANGE_WATCHLIST_MAX_STOP_ATR_MULT),
+        },
+    }
+    profile = dict(profiles.get(normalized) or {})
+    if profile:
+        profile["strategy_family"] = normalized
+    return profile
+
+
 def get_family_survival_policy(
     strategy_family: str | None = None,
     session_mode: str | None = None,
@@ -2459,6 +2583,84 @@ def get_family_survival_policy(
         "executable_min_score": float(NONLIVE_EXECUTABLE_MIN_FAMILY_SURVIVAL),
         "effective_session_policy": dict(effective_session_policy),
         "effective_regime_policy": dict(effective_regime_policy),
+    }
+
+
+def get_trade_density_policy(
+    session_mode: str | None = None,
+    strategy_regime_mode: str | None = None,
+) -> dict[str, int | str]:
+    normalized_session = str(session_mode or "OFFHOURS").strip().upper() or "OFFHOURS"
+    normalized_regime = str(strategy_regime_mode or "UNCERTAIN").strip().upper() or "UNCERTAIN"
+    session_defaults = {
+        "OPENING": {
+            "max_ranked_candidates": int(TRADE_DENSITY_OPENING_MAX_RANKED_CANDIDATES),
+            "max_executable_candidates": int(TRADE_DENSITY_OPENING_MAX_EXECUTABLE_CANDIDATES),
+            "max_per_family": int(TRADE_DENSITY_OPENING_MAX_PER_FAMILY),
+        },
+        "MIDDAY": {
+            "max_ranked_candidates": int(TRADE_DENSITY_MIDDAY_MAX_RANKED_CANDIDATES),
+            "max_executable_candidates": int(TRADE_DENSITY_MIDDAY_MAX_EXECUTABLE_CANDIDATES),
+            "max_per_family": int(TRADE_DENSITY_MIDDAY_MAX_PER_FAMILY),
+        },
+        "CLOSING": {
+            "max_ranked_candidates": int(TRADE_DENSITY_CLOSING_MAX_RANKED_CANDIDATES),
+            "max_executable_candidates": int(TRADE_DENSITY_CLOSING_MAX_EXECUTABLE_CANDIDATES),
+            "max_per_family": int(TRADE_DENSITY_CLOSING_MAX_PER_FAMILY),
+        },
+        "OFFHOURS": {
+            "max_ranked_candidates": int(TRADE_DENSITY_OFFHOURS_MAX_RANKED_CANDIDATES),
+            "max_executable_candidates": int(TRADE_DENSITY_OFFHOURS_MAX_EXECUTABLE_CANDIDATES),
+            "max_per_family": int(TRADE_DENSITY_OFFHOURS_MAX_PER_FAMILY),
+        },
+    }
+    policy = dict(session_defaults.get(normalized_session) or session_defaults["OFFHOURS"])
+    if normalized_regime == "TRENDING":
+        policy["max_ranked_candidates"] += int(TRADE_DENSITY_TRENDING_RANKED_BONUS)
+        policy["max_executable_candidates"] += int(TRADE_DENSITY_TRENDING_EXECUTABLE_BONUS)
+        policy["max_per_family"] += int(TRADE_DENSITY_TRENDING_PER_FAMILY_BONUS)
+    elif normalized_regime == "SIDEWAYS":
+        policy["max_executable_candidates"] = min(
+            int(policy["max_executable_candidates"]),
+            int(TRADE_DENSITY_SIDEWAYS_MAX_EXECUTABLE_CANDIDATES),
+        )
+        policy["max_per_family"] = min(
+            int(policy["max_per_family"]),
+            int(TRADE_DENSITY_SIDEWAYS_MAX_PER_FAMILY),
+        )
+    elif normalized_regime == "LOW_VOL":
+        policy["max_executable_candidates"] = min(
+            int(policy["max_executable_candidates"]),
+            int(TRADE_DENSITY_LOW_VOL_MAX_EXECUTABLE_CANDIDATES),
+        )
+        policy["max_per_family"] = min(
+            int(policy["max_per_family"]),
+            int(TRADE_DENSITY_LOW_VOL_MAX_PER_FAMILY),
+        )
+    elif normalized_regime == "UNCERTAIN":
+        policy["max_ranked_candidates"] = min(
+            int(policy["max_ranked_candidates"]),
+            int(TRADE_DENSITY_UNCERTAIN_MAX_RANKED_CANDIDATES),
+        )
+        policy["max_executable_candidates"] = min(
+            int(policy["max_executable_candidates"]),
+            int(TRADE_DENSITY_UNCERTAIN_MAX_EXECUTABLE_CANDIDATES),
+        )
+        policy["max_per_family"] = min(
+            int(policy["max_per_family"]),
+            int(TRADE_DENSITY_UNCERTAIN_MAX_PER_FAMILY),
+        )
+    policy["max_ranked_candidates"] = max(1, int(policy["max_ranked_candidates"]))
+    policy["max_executable_candidates"] = max(0, int(policy["max_executable_candidates"]))
+    policy["max_per_family"] = max(1, int(policy["max_per_family"]))
+    policy_name = f"{normalized_session}:{normalized_regime}"
+    return {
+        "policy_name": policy_name,
+        "session_mode": normalized_session,
+        "strategy_regime_mode": normalized_regime,
+        "max_ranked_candidates": int(policy["max_ranked_candidates"]),
+        "max_executable_candidates": int(policy["max_executable_candidates"]),
+        "max_per_family": int(policy["max_per_family"]),
     }
 
 MAX_QUOTE_AGE_SEC = float(os.getenv("MAX_QUOTE_AGE_SEC", "2.0"))

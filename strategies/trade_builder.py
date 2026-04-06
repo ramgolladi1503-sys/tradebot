@@ -74,6 +74,36 @@ logger = logging.getLogger(__name__)
 _AUTO_TUNE_CACHE = {"ts": 0, "data": {}}
 
 
+def _normalize_family_context_key(strategy_family: str | None) -> str:
+    normalized = str(strategy_family or "").strip().lower().replace("_", "-")
+    aliases = {
+        "meanreversion": "mean-reversion",
+        "mean_reversion": "mean-reversion",
+        "rangewatchlist": "range-watchlist",
+        "range_watchlist": "range-watchlist",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _family_allowed_in_context(
+    strategy_family: str | None,
+    regime_mode: str | None,
+    session_mode: str | None,
+) -> bool:
+    del session_mode
+    regime_mode_normalized = str(regime_mode or "").strip().upper()
+    allowed = {
+        "breakout": {"TRENDING", "EXPANSION", "LOW_VOL", "UNCERTAIN"},
+        "continuation": {"TRENDING", "EXPANSION", "LOW_VOL", "UNCERTAIN"},
+        "pullback": {"TRENDING", "LOW_VOL", "UNCERTAIN"},
+        "mean-reversion": {"SIDEWAYS", "LOW_VOL", "UNCERTAIN"},
+        "range-watchlist": {"SIDEWAYS", "LOW_VOL", "UNCERTAIN"},
+    }
+    family_key = _normalize_family_context_key(strategy_family)
+    allowed_regimes = allowed.get(family_key, {"UNCERTAIN"})
+    return regime_mode_normalized in allowed_regimes
+
+
 def _env_debug_enabled(name: str) -> bool:
     return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -3085,6 +3115,9 @@ class TradeBuilder:
             candidate_quality_score = opportunity_confidence
         candidate_quality_score = round(float(candidate_quality_score), 6)
         quality_detail_map = dict(quality_detail or {})
+        family_allowed_in_context = quality_detail_map.get("family_allowed_in_context")
+        family_gate_reason = quality_detail_map.get("family_gate_reason")
+        family_gate_override_applied = bool(quality_detail_map.get("family_gate_override_applied", False))
         session_ctx = classify_session_mode(market_data)
         session_mode = str(
             quality_detail_map.get("session_mode") or session_ctx.get("session_mode") or "OFFHOURS"
@@ -3137,6 +3170,13 @@ class TradeBuilder:
         source_flags["family_strength"] = (
             round(float(family_strength), 6) if family_strength is not None else None
         )
+        source_flags["family_allowed_in_context"] = (
+            bool(family_allowed_in_context) if family_allowed_in_context is not None else None
+        )
+        source_flags["family_gate_reason"] = (
+            str(family_gate_reason).strip().lower() if family_gate_reason not in (None, "", "None") else None
+        )
+        source_flags["family_gate_override_applied"] = bool(family_gate_override_applied)
         if isinstance(family_feedback_detail, dict):
             for key in (
                 "family_feedback_adjustment",
@@ -3222,6 +3262,9 @@ class TradeBuilder:
             family_rank=source_flags.get("family_rank"),
             family_blocker=source_flags.get("family_blocker"),
             family_strength=source_flags.get("family_strength"),
+            family_allowed_in_context=source_flags.get("family_allowed_in_context"),
+            family_gate_reason=source_flags.get("family_gate_reason"),
+            family_gate_override_applied=source_flags.get("family_gate_override_applied"),
             family_feedback_adjustment=source_flags.get("family_feedback_adjustment"),
             family_feedback_confidence=source_flags.get("family_feedback_confidence"),
             family_feedback_applied=source_flags.get("family_feedback_applied"),
@@ -3243,6 +3286,8 @@ class TradeBuilder:
             effective_session_policy=source_flags.get("effective_session_policy") or {},
             effective_regime_policy=source_flags.get("effective_regime_policy") or {},
             effective_risk_policy=source_flags.get("effective_risk_policy") or {},
+            effective_family_risk_profile=source_flags.get("effective_family_risk_profile") or {},
+            risk_profile_override_applied=source_flags.get("risk_profile_override_applied"),
             effective_family_survival_policy=source_flags.get("effective_family_survival_policy") or {},
             setup_variant=setup_variant,
             candidate_status=("executable" if executable_nonlive else "advisory_only"),
@@ -3651,6 +3696,8 @@ class TradeBuilder:
                     "effective_session_policy": dict(session_policy),
                     "effective_regime_policy": dict(regime_policy),
                     "effective_risk_policy": dict((risk_assessment.context or {}).get("effective_risk_policy") or {}),
+                    "effective_family_risk_profile": dict((risk_assessment.context or {}).get("effective_family_risk_profile") or {}),
+                    "risk_profile_override_applied": bool((risk_assessment.context or {}).get("risk_profile_override_applied", False)),
                     "effective_family_survival_policy": dict(family_survival_policy),
                     **dict(quality_detail_map),
                 }
@@ -3723,6 +3770,8 @@ class TradeBuilder:
                 effective_session_policy=dict(session_policy),
                 effective_regime_policy=dict(regime_policy),
                 effective_risk_policy=dict((risk_assessment.context or {}).get("effective_risk_policy") or {}),
+                effective_family_risk_profile=dict((risk_assessment.context or {}).get("effective_family_risk_profile") or {}),
+                risk_profile_override_applied=bool((risk_assessment.context or {}).get("risk_profile_override_applied", False)),
                 effective_family_survival_policy=dict(family_survival_policy),
             )
             logger.info(
@@ -3802,6 +3851,10 @@ class TradeBuilder:
         regime_ctx = derive_regime_context(market_data)
         strategy_regime_ctx = classify_strategy_regime_mode(market_data)
         strategy_regime_mode = str(strategy_regime_ctx.get("regime_mode") or "UNCERTAIN").strip().upper()
+        strategy_regime_confidence = max(
+            0.0,
+            min(1.0, float(strategy_regime_ctx.get("regime_confidence") or regime_ctx.get("regime_confidence") or 0.0)),
+        )
         session_ctx = classify_session_mode(market_data)
         session_mode = str(session_ctx.get("session_mode") or "OFFHOURS").strip().upper()
         session_entry_penalty = float(session_ctx.get("session_entry_penalty") or 0.0)
@@ -3897,6 +3950,21 @@ class TradeBuilder:
         counter_regime_exceptional_strength = max(
             float(getattr(cfg, "COUNTER_REGIME_DIRECTIONAL_EXCEPTIONAL_STRENGTH", 1.5) or 1.5),
             strength_activation_min,
+        )
+        family_context_gate_override_enabled = bool(
+            getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_ENABLE", True)
+        )
+        family_context_gate_override_min_strength = max(
+            float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_STRENGTH", 2.25) or 2.25),
+            strength_activation_min,
+        )
+        family_context_gate_override_min_regime_confidence = max(
+            float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_REGIME_CONFIDENCE", 0.70) or 0.70),
+            0.0,
+        )
+        family_context_gate_override_min_quality = max(
+            float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_QUALITY", 0.78) or 0.78),
+            0.0,
         )
         directional_activation_threshold = float(strength_activation_min)
         if strategy_regime_sideways:
@@ -4126,6 +4194,102 @@ class TradeBuilder:
                 return round(float(min(max(breakout_strength, bullish_structure_strength), 5.0)), 6)
             return round(float(min(max(breakout_strength, bearish_structure_strength), 5.0)), 6)
 
+        def _family_gate_override_allowed(
+            strategy_family_name: str,
+            *,
+            family_strength_value: float,
+            quality_score_value: float,
+        ) -> bool:
+            if not family_context_gate_override_enabled:
+                return False
+            family_key = _normalize_family_context_key(strategy_family_name)
+            required_strength = family_context_gate_override_min_strength
+            if family_key in {"breakout", "continuation", "pullback"}:
+                required_strength = max(
+                    required_strength,
+                    directional_exceptional_strength,
+                    counter_regime_exceptional_strength,
+                )
+            elif family_key in {"mean-reversion", "range-watchlist"}:
+                required_strength = max(
+                    required_strength,
+                    low_vol_exceptional_strength,
+                )
+            confidence_gate = bool(
+                strategy_regime_confidence >= family_context_gate_override_min_regime_confidence
+            )
+            if (
+                not confidence_gate
+                and strategy_regime_mode in {"SIDEWAYS", "LOW_VOL"}
+                and family_key in {"breakout", "continuation", "pullback"}
+            ):
+                confidence_gate = bool(
+                    float(family_strength_value) >= float(required_strength + 0.5)
+                )
+            return bool(
+                confidence_gate
+                and float(family_strength_value) >= float(required_strength)
+                and float(quality_score_value) >= family_context_gate_override_min_quality
+            )
+
+        pre_generation_filtered_specs: list[dict] = []
+
+        def _admit_family_spec(spec: dict) -> bool:
+            strategy_family_name = str(spec.get("strategy_family") or "").strip()
+            family_strength_value = float(spec.get("family_strength") or 0.0)
+            quality_score_value = float(spec.get("quality_score") or 0.0)
+            family_allowed = _family_allowed_in_context(
+                strategy_family_name,
+                strategy_regime_mode,
+                session_mode,
+            )
+            override_applied = False
+            gate_reason = None
+            if not family_allowed:
+                override_applied = _family_gate_override_allowed(
+                    strategy_family_name,
+                    family_strength_value=family_strength_value,
+                    quality_score_value=quality_score_value,
+                )
+                gate_reason = (
+                    "regime_mismatch_family_reject"
+                    if not override_applied
+                    else "regime_mismatch_override"
+                )
+            spec["family_allowed_in_context"] = bool(family_allowed)
+            spec["family_gate_reason"] = gate_reason
+            spec["family_gate_override_applied"] = bool(override_applied)
+            quality_detail = dict(spec.get("quality_detail") or {})
+            quality_detail.update(
+                {
+                    "family_allowed_in_context": bool(family_allowed),
+                    "family_gate_reason": gate_reason,
+                    "family_gate_override_applied": bool(override_applied),
+                    "strategy_regime_confidence": round(float(strategy_regime_confidence), 6),
+                }
+            )
+            spec["quality_detail"] = quality_detail
+            if family_allowed or override_applied:
+                return True
+            pre_generation_filtered_specs.append(
+                {
+                    "strategy": spec.get("strategy"),
+                    "strategy_family": strategy_family_name,
+                    "direction_family": spec.get("direction_family"),
+                    "session_mode": session_mode,
+                    "strategy_regime_mode": strategy_regime_mode,
+                    "family_consensus_score": spec.get("family_consensus_score"),
+                    "quality_score": quality_score_value,
+                    "family_blocker": gate_reason,
+                    "family_reject_reason": gate_reason,
+                    "family_allowed_in_context": False,
+                    "family_gate_reason": gate_reason,
+                    "family_gate_override_applied": False,
+                    "family_survived": False,
+                }
+            )
+            return False
+
         def _family_blocker(strategy_name: str, resolved_direction: str) -> str | None:
             family = _direction_family(strategy_name, resolved_direction)
             strategy_name_norm = str(strategy_name or "").strip().upper()
@@ -4291,72 +4455,78 @@ class TradeBuilder:
                 + min(0.45, breakout_strength * 0.18)
                 + (0.08 if directional_signal is not None else 0.0),
             ) or 0.45
-            opportunity_specs.append(
-                {
-                    "strategy": "OPP_DIRECTIONAL",
-                    "reason": "NONLIVE_OPPORTUNITY_DIRECTIONAL",
-                    "direction": directional_direction,
-                    "confidence": max(float(directional_quality), 0.35),
-                    "quality_score": max(float(directional_quality), 0.35),
-                    "quality_detail": {"breakout_strength": round(min(breakout_strength, 2.0), 6)},
-                    "strategy_family": "continuation",
-                    "candidate_type": "directional",
-                    "setup_variant": "opportunity_directional",
-                    "soft_veto_codes": [] if directional_signal is not None else ["weak_directional_signal"],
-                    "penalty_reasons": [] if directional_signal is not None else ["weak_directional_signal"],
-                    "direction_family": _direction_family("OPP_DIRECTIONAL", directional_direction),
-                    "family_blocker": _family_blocker("OPP_DIRECTIONAL", directional_direction),
-                    "family_strength": _family_strength("OPP_DIRECTIONAL", directional_direction),
-                }
-            )
+            directional_spec = {
+                "strategy": "OPP_DIRECTIONAL",
+                "reason": "NONLIVE_OPPORTUNITY_DIRECTIONAL",
+                "direction": directional_direction,
+                "confidence": max(float(directional_quality), 0.35),
+                "quality_score": max(float(directional_quality), 0.35),
+                "quality_detail": {"breakout_strength": round(min(breakout_strength, 2.0), 6)},
+                "strategy_family": "continuation",
+                "candidate_type": "directional",
+                "setup_variant": "opportunity_directional",
+                "soft_veto_codes": [] if directional_signal is not None else ["weak_directional_signal"],
+                "penalty_reasons": [] if directional_signal is not None else ["weak_directional_signal"],
+                "direction_family": _direction_family("OPP_DIRECTIONAL", directional_direction),
+                "family_blocker": _family_blocker("OPP_DIRECTIONAL", directional_direction),
+                "family_strength": _family_strength("OPP_DIRECTIONAL", directional_direction),
+            }
+            if _admit_family_spec(directional_spec):
+                opportunity_specs.append(
+                    directional_spec
+                )
         if has_mean_signal:
             mean_quality = self._clamp_confidence(
                 0.32
                 + min(0.44, mean_reversion_strength * 0.16)
                 + (0.08 if mean_signal is not None else 0.0),
             ) or 0.4
-            opportunity_specs.append(
-                {
-                    "strategy": "OPP_MEAN_REVERT",
-                    "reason": "NONLIVE_OPPORTUNITY_MEAN_REVERSION",
-                    "direction": mean_direction,
-                    "confidence": max(float(mean_quality), 0.32),
-                    "quality_score": max(float(mean_quality), 0.32),
-                    "quality_detail": {"mean_reversion_strength": round(min(mean_reversion_strength, 2.0), 6)},
-                    "strategy_family": "mean-reversion",
-                    "candidate_type": "mean_reversion",
-                    "setup_variant": "opportunity_mean_reversion",
-                    "soft_veto_codes": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
-                    "penalty_reasons": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
-                    "direction_family": _direction_family("OPP_MEAN_REVERT", mean_direction),
-                    "family_blocker": _family_blocker("OPP_MEAN_REVERT", mean_direction),
-                    "family_strength": _family_strength("OPP_MEAN_REVERT", mean_direction),
-                }
-            )
+            mean_spec = {
+                "strategy": "OPP_MEAN_REVERT",
+                "reason": "NONLIVE_OPPORTUNITY_MEAN_REVERSION",
+                "direction": mean_direction,
+                "confidence": max(float(mean_quality), 0.32),
+                "quality_score": max(float(mean_quality), 0.32),
+                "quality_detail": {"mean_reversion_strength": round(min(mean_reversion_strength, 2.0), 6)},
+                "strategy_family": "mean-reversion",
+                "candidate_type": "mean_reversion",
+                "setup_variant": "opportunity_mean_reversion",
+                "soft_veto_codes": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
+                "penalty_reasons": [] if mean_signal is not None else ["weak_mean_reversion_signal"],
+                "direction_family": _direction_family("OPP_MEAN_REVERT", mean_direction),
+                "family_blocker": _family_blocker("OPP_MEAN_REVERT", mean_direction),
+                "family_strength": _family_strength("OPP_MEAN_REVERT", mean_direction),
+            }
+            if _admit_family_spec(mean_spec):
+                opportunity_specs.append(
+                    mean_spec
+                )
         if has_expansion_signal:
             expansion_quality = self._clamp_confidence(
                 0.34
                 + min(0.46, volatility_expansion_strength * 0.16)
                 + (0.08 if expansion_signal is not None else 0.0),
             ) or 0.4
-            opportunity_specs.append(
-                {
-                    "strategy": "OPP_VOL_EXPANSION",
-                    "reason": "NONLIVE_OPPORTUNITY_VOLATILITY_EXPANSION",
-                    "direction": expansion_direction,
-                    "confidence": max(float(expansion_quality), 0.34),
-                    "quality_score": max(float(expansion_quality), 0.34),
-                    "quality_detail": {"volatility_expansion_strength": round(min(volatility_expansion_strength, 2.0), 6)},
-                    "strategy_family": "breakout",
-                    "candidate_type": "volatility_expansion",
-                    "setup_variant": "opportunity_volatility_expansion",
-                    "soft_veto_codes": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
-                    "penalty_reasons": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
-                    "direction_family": _direction_family("OPP_VOL_EXPANSION", expansion_direction),
-                    "family_blocker": _family_blocker("OPP_VOL_EXPANSION", expansion_direction),
-                    "family_strength": _family_strength("OPP_VOL_EXPANSION", expansion_direction),
-                }
-            )
+            expansion_spec = {
+                "strategy": "OPP_VOL_EXPANSION",
+                "reason": "NONLIVE_OPPORTUNITY_VOLATILITY_EXPANSION",
+                "direction": expansion_direction,
+                "confidence": max(float(expansion_quality), 0.34),
+                "quality_score": max(float(expansion_quality), 0.34),
+                "quality_detail": {"volatility_expansion_strength": round(min(volatility_expansion_strength, 2.0), 6)},
+                "strategy_family": "breakout",
+                "candidate_type": "volatility_expansion",
+                "setup_variant": "opportunity_volatility_expansion",
+                "soft_veto_codes": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
+                "penalty_reasons": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
+                "direction_family": _direction_family("OPP_VOL_EXPANSION", expansion_direction),
+                "family_blocker": _family_blocker("OPP_VOL_EXPANSION", expansion_direction),
+                "family_strength": _family_strength("OPP_VOL_EXPANSION", expansion_direction),
+            }
+            if _admit_family_spec(expansion_spec):
+                opportunity_specs.append(
+                    expansion_spec
+                )
         if (
             strategy_regime_sideways
             and bool(getattr(cfg, "RANGE_WATCHLIST_ENABLE", True))
@@ -4380,31 +4550,33 @@ class TradeBuilder:
             watchlist_quality = self._clamp_confidence(
                 0.30 + min(0.18, watchlist_strength * 0.08)
             ) or 0.34
-            opportunity_specs.append(
-                {
-                    "strategy": "OPP_RANGE_WATCHLIST",
-                    "reason": "NONLIVE_SIDEWAYS_WATCHLIST",
-                    "direction": watchlist_direction,
-                    "confidence": max(float(watchlist_quality), 0.30),
-                    "quality_score": max(float(watchlist_quality), 0.30),
-                    "quality_detail": {
-                        "watchlist_strength": round(min(watchlist_strength, 2.0), 6),
-                        "trend_mode": trend_mode,
-                        "range_edge_strength": round(float(range_edge_strength), 6),
-                        "support_touch": bool(support_touch),
-                        "resistance_touch": bool(resistance_touch),
-                        "range_compression": bool(range_compression),
-                    },
-                    "strategy_family": "range-watchlist",
-                    "candidate_type": "watchlist",
-                    "setup_variant": "opportunity_range_watchlist",
-                    "soft_veto_codes": ["sideways_watchlist_only", watchlist_trigger_reason],
-                    "penalty_reasons": ["sideways_watchlist_only"],
-                    "direction_family": "sideways",
-                    "family_blocker": "sideways_watchlist_only",
-                    "family_strength": round(float(min(watchlist_strength, 5.0)), 6),
-                }
-            )
+            watchlist_spec = {
+                "strategy": "OPP_RANGE_WATCHLIST",
+                "reason": "NONLIVE_SIDEWAYS_WATCHLIST",
+                "direction": watchlist_direction,
+                "confidence": max(float(watchlist_quality), 0.30),
+                "quality_score": max(float(watchlist_quality), 0.30),
+                "quality_detail": {
+                    "watchlist_strength": round(min(watchlist_strength, 2.0), 6),
+                    "trend_mode": trend_mode,
+                    "range_edge_strength": round(float(range_edge_strength), 6),
+                    "support_touch": bool(support_touch),
+                    "resistance_touch": bool(resistance_touch),
+                    "range_compression": bool(range_compression),
+                },
+                "strategy_family": "range-watchlist",
+                "candidate_type": "watchlist",
+                "setup_variant": "opportunity_range_watchlist",
+                "soft_veto_codes": ["sideways_watchlist_only", watchlist_trigger_reason],
+                "penalty_reasons": ["sideways_watchlist_only"],
+                "direction_family": "sideways",
+                "family_blocker": "sideways_watchlist_only",
+                "family_strength": round(float(min(watchlist_strength, 5.0)), 6),
+            }
+            if _admit_family_spec(watchlist_spec):
+                opportunity_specs.append(
+                    watchlist_spec
+                )
         for spec in opportunity_specs:
             direction_family = str(spec.get("direction_family") or "sideways").strip().lower() or "sideways"
             spec_quality_detail = dict(spec.get("quality_detail") or {})
@@ -4493,8 +4665,8 @@ class TradeBuilder:
                 ),
                 6,
             )
-        raw_candidate_count = len(opportunity_specs)
-        family_filtered_specs = []
+        raw_candidate_count = len(opportunity_specs) + len(pre_generation_filtered_specs)
+        family_filtered_specs = list(pre_generation_filtered_specs)
         fatal_family_blockers = {
             "insufficient_positive_bearish_structure",
             "insufficient_positive_bullish_structure",
@@ -4516,6 +4688,9 @@ class TradeBuilder:
                         "family_consensus_score": spec.get("family_consensus_score"),
                         "quality_score": spec.get("quality_score"),
                         "family_blocker": blocker,
+                        "family_allowed_in_context": spec.get("family_allowed_in_context"),
+                        "family_gate_reason": spec.get("family_gate_reason"),
+                        "family_gate_override_applied": spec.get("family_gate_override_applied"),
                     }
                 )
                 continue
@@ -4580,6 +4755,15 @@ class TradeBuilder:
                             "strategy_regime_mode": strategy_regime_mode,
                             "family_consensus_score": round(float(top_family_consensus), 6),
                             "family_blocker": "family_consensus_below_threshold",
+                            "family_allowed_in_context": next(
+                                (row.get("family_allowed_in_context") for row in capped_specs if row.get("family_allowed_in_context") is not None),
+                                None,
+                            ),
+                            "family_gate_reason": next(
+                                (row.get("family_gate_reason") for row in capped_specs if row.get("family_gate_reason") is not None),
+                                None,
+                            ),
+                            "family_gate_override_applied": any(bool(row.get("family_gate_override_applied", False)) for row in capped_specs),
                             "family_reject_reason": "family_consensus_below_threshold",
                             "family_survived": False,
                         }
@@ -4655,12 +4839,15 @@ class TradeBuilder:
                                 "direction_family": family,
                                 "session_mode": session_mode,
                                 "strategy_regime_mode": strategy_regime_mode,
-                                "family_consensus_score": spec.get("family_consensus_score"),
-                                "quality_score": spec.get("quality_score"),
-                                "family_blocker": "family_scarcity_cap",
-                                "family_reject_reason": "family_scarcity_cap",
-                                "family_survived": False,
-                            }
+                            "family_consensus_score": spec.get("family_consensus_score"),
+                            "quality_score": spec.get("quality_score"),
+                            "family_blocker": "family_scarcity_cap",
+                            "family_allowed_in_context": spec.get("family_allowed_in_context"),
+                            "family_gate_reason": spec.get("family_gate_reason"),
+                            "family_gate_override_applied": spec.get("family_gate_override_applied"),
+                            "family_reject_reason": "family_scarcity_cap",
+                            "family_survived": False,
+                        }
                         )
                         continue
                     scarce_specs.append(spec)

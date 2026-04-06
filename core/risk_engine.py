@@ -62,6 +62,15 @@ def _family_key(strategy_family: Any, direction_family: Any) -> str:
     return f"{strategy}|{direction}"
 
 
+def _normalize_strategy_family(strategy_family: Any) -> str:
+    normalized = str(strategy_family or "unknown").strip().lower().replace("_", "-") or "unknown"
+    aliases = {
+        "meanreversion": "mean-reversion",
+        "rangewatchlist": "range-watchlist",
+    }
+    return aliases.get(normalized, normalized)
+
+
 def _lookup_offline_risk_learning(
     strategy_family: Any,
     direction_family: Any,
@@ -151,6 +160,8 @@ class OfflineCandidateRiskAssessment:
     family_failure_throttle: float
     risk_learning_adjustment: float
     risk_learning_confidence: float
+    effective_family_risk_profile: dict[str, Any] = field(default_factory=dict)
+    risk_profile_override_applied: bool = False
     rejected_at_stage: str | None = None
     rejection_reason_code: str | None = None
     rejection_bucket: str | None = None
@@ -178,6 +189,8 @@ class OfflineCandidateRiskAssessment:
             "family_failure_throttle": float(self.family_failure_throttle),
             "risk_learning_adjustment": float(self.risk_learning_adjustment),
             "risk_learning_confidence": float(self.risk_learning_confidence),
+            "effective_family_risk_profile": dict(self.effective_family_risk_profile or {}),
+            "risk_profile_override_applied": bool(self.risk_profile_override_applied),
             "rejected_at_stage": self.rejected_at_stage,
             "rejection_reason_code": self.rejection_reason_code,
             "rejection_bucket": self.rejection_bucket,
@@ -196,7 +209,21 @@ def evaluate_candidate_risk(
 ) -> OfflineCandidateRiskAssessment:
     portfolio = dict(portfolio_state or {})
     selected = list(selected_candidates or [])
+    strategy_family = _normalize_strategy_family(_candidate_get(candidate, "strategy_family") or "unknown")
+    direction_family = str(_candidate_get(candidate, "direction_family") or "unknown").strip().lower() or "unknown"
     risk_policy = cfg.get_risk_policy()
+    family_risk_profile = dict(getattr(cfg, "get_family_risk_profile", lambda _family: {})(strategy_family) or {})
+    effective_risk_policy = dict(risk_policy)
+    for key in ("min_rr", "max_stop_atr_mult"):
+        profile_value = _safe_float(family_risk_profile.get(key))
+        if profile_value is not None:
+            effective_risk_policy[key] = float(profile_value)
+    risk_profile_override_applied = any(
+        _safe_float(family_risk_profile.get(key)) is not None
+        and float(_safe_float(effective_risk_policy.get(key), 0.0) or 0.0)
+        != float(_safe_float(risk_policy.get(key), 0.0) or 0.0)
+        for key in ("min_rr", "max_stop_atr_mult")
+    )
     entry_price = _safe_float(
         _candidate_get(candidate, "execution_entry", _candidate_get(candidate, "entry_price")),
         0.0,
@@ -228,8 +255,6 @@ def evaluate_candidate_risk(
         else:
             atr = max(float(underlying_ltp or 0.0) * 0.002, 1.0)
     regime = str(_candidate_get(candidate, "regime") or portfolio.get("regime") or "NEUTRAL").strip().upper()
-    direction_family = str(_candidate_get(candidate, "direction_family") or "unknown").strip().lower() or "unknown"
-    strategy_family = str(_candidate_get(candidate, "strategy_family") or "unknown").strip().lower() or "unknown"
     symbol = str(_candidate_get(candidate, "symbol") or "").strip().upper()
     cluster_key = f"{symbol}|{direction_family}|{strategy_family}" if symbol else None
 
@@ -254,10 +279,10 @@ def evaluate_candidate_risk(
     elif stop_distance_pct is not None and stop_distance_pct > float(risk_policy.get("max_stop_distance_pct", 0.35) or 0.35):
         risk_budget_ok = False
         risk_budget_reason = "stop_distance_too_wide_pct"
-    elif atr and float(stop_distance) > (float(atr) * float(risk_policy.get("max_stop_atr_mult", 1.80) or 1.80)):
+    elif atr and float(stop_distance) > (float(atr) * float(effective_risk_policy.get("max_stop_atr_mult", 1.80) or 1.80)):
         risk_budget_ok = False
         risk_budget_reason = "stop_distance_too_wide_atr"
-    elif risk_reward_ratio is not None and float(risk_reward_ratio) < float(risk_policy.get("min_rr", 1.20) or 1.20):
+    elif risk_reward_ratio is not None and float(risk_reward_ratio) < float(effective_risk_policy.get("min_rr", 1.20) or 1.20):
         risk_budget_ok = False
         risk_budget_reason = "risk_reward_too_low"
     elif size_result.qty <= 0:
@@ -380,6 +405,8 @@ def evaluate_candidate_risk(
         family_failure_throttle=round(float(family_failure_throttle), 6),
         risk_learning_adjustment=round(float(risk_learning_adjustment), 6),
         risk_learning_confidence=round(float(risk_learning_confidence), 6),
+        effective_family_risk_profile=dict(family_risk_profile),
+        risk_profile_override_applied=bool(risk_profile_override_applied),
         rejected_at_stage=rejection_meta.get("rejected_at_stage"),
         rejection_reason_code=rejection_meta.get("rejection_reason_code"),
         rejection_bucket=rejection_meta.get("rejection_bucket"),
@@ -393,7 +420,9 @@ def evaluate_candidate_risk(
             "family_failure_count": family_failure_count,
             "session_failure_count": session_failure_count,
             "selected_family_count": selected_family_count,
-            "effective_risk_policy": dict(risk_policy),
+            "effective_risk_policy": dict(effective_risk_policy),
+            "effective_family_risk_profile": dict(family_risk_profile),
+            "risk_profile_override_applied": bool(risk_profile_override_applied),
         },
     )
 

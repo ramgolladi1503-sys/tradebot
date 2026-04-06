@@ -90,3 +90,69 @@ def test_risk_engine_reads_risk_policy_without_behavior_change(monkeypatch):
     assert assessment.risk_budget_ok == baseline.risk_budget_ok
     assert assessment.position_size_estimate == baseline.position_size_estimate
     assert assessment.context["effective_risk_policy"]["policy_source"] == "test_risk_policy"
+
+
+def test_breakout_family_uses_wider_stop_profile():
+    assessment = evaluate_candidate_risk(
+        _candidate(
+            strategy_family="breakout",
+            stop_loss=97.5,
+            target=110.0,
+            atr=1.0,
+        )
+    )
+
+    assert assessment.risk_budget_ok is True
+    assert assessment.risk_budget_reason == "ok"
+    assert assessment.risk_profile_override_applied is True
+    assert float(assessment.context["effective_risk_policy"]["max_stop_atr_mult"]) == 3.0
+    assert float(assessment.effective_family_risk_profile["max_stop_atr_mult"]) == 3.0
+
+
+def test_mean_reversion_family_uses_tighter_stop_profile():
+    assessment = evaluate_candidate_risk(
+        _candidate(
+            strategy_family="mean-reversion",
+            stop_loss=98.4,
+            target=102.0,
+            atr=1.0,
+        )
+    )
+
+    assert assessment.risk_budget_ok is False
+    assert assessment.risk_budget_reason == "stop_distance_too_wide_atr"
+    assert assessment.risk_profile_override_applied is True
+    assert float(assessment.context["effective_risk_policy"]["max_stop_atr_mult"]) == 1.5
+    assert float(assessment.effective_family_risk_profile["min_rr"]) == 0.6
+
+
+def test_family_risk_profile_does_not_bypass_hard_kill_switch():
+    assessment = evaluate_candidate_risk(
+        _candidate(
+            strategy_family="breakout",
+            stop_loss=97.5,
+            target=110.0,
+            atr=1.0,
+        ),
+        portfolio_state={"daily_kill_switch_active": True},
+    )
+
+    assert assessment.risk_budget_ok is True
+    assert assessment.daily_kill_switch_active is True
+    assert assessment.rejection_reason_code == "daily_kill_switch_active"
+
+
+def test_missing_family_profile_preserves_default_risk_policy(monkeypatch):
+    assessment = evaluate_candidate_risk(
+        _candidate(
+            strategy_family="unknown-family",
+            stop_loss=98.4,
+            target=102.0,
+            atr=1.0,
+        )
+    )
+
+    assert assessment.risk_budget_ok is True
+    assert assessment.risk_profile_override_applied is False
+    assert assessment.effective_family_risk_profile == {}
+    assert float(assessment.context["effective_risk_policy"]["max_stop_atr_mult"]) == float(cfg.get_risk_policy()["max_stop_atr_mult"])
