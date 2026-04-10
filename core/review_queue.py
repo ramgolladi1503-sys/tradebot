@@ -3380,6 +3380,8 @@ def _apply_level_normalization_and_promotion(row: dict) -> dict:
             out.get("target"),
         )
         return out
+    if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+        return out
     return _promote_queue_only_candidate(out)
 
 

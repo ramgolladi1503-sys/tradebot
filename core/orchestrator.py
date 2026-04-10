@@ -987,6 +987,13 @@ def _augment_ranked_candidates_with_soft_reject(
     reject_gate_reasons = [str(x) for x in (reject_ctx.get("gate_reasons") or []) if str(x).strip()]
     if not reject_gate_reasons:
         reject_gate_reasons = [reject_reason]
+    if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+        logger.info(
+            "soft_reject_strict_mode_skip symbol=%s reason=%s",
+            symbol,
+            reject_reason,
+        )
+        return ranked, [], reject_reason, reject_gate_reasons
     mode = str(execution_mode or "").strip().upper()
     if reject_reason == "trend_vwap_fallback":
         return ranked, [], reject_reason, reject_gate_reasons

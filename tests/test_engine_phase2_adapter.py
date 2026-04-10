@@ -599,6 +599,36 @@ def test_run_engine_phase2_forced_fallback_execution_when_no_enter(monkeypatch):
     assert out["selected"]["execution_status"] == "executable"
 
 
+def test_run_engine_phase2_strict_mode_disables_forced_fallback(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.9, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_FORCE_FALLBACK_EXECUTION_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_FORCE_FALLBACK_MIN_SCORE", 0.05, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_FORCE_FALLBACK_ALLOW_LIVE", False, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
+
+    out = run_engine_phase2(
+        [
+            {
+                "trade_id": "STRICT_WEAK_BUT_VALID",
+                "symbol": "NIFTY",
+                "final_score": 0.11,
+                "execution_mode": "SIM",
+                "spread_pct": 0.005,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "liquidity_score": 0.8,
+                "execution_entry": 100.0,
+                "stop_loss": 80.0,
+                "target": 130.0,
+                "quote_source": "tick_store",
+            }
+        ]
+    )
+    assert out["state"] == "WATCHLIST"
+    assert out["reason"] != "forced_fallback_execution"
+
+
 def test_build_candidates_phase2_relaxes_no_signal_and_latency(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_RELAX_ALLOW_LIVE", False, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_RELAX_NO_SIGNAL", True, raising=False)

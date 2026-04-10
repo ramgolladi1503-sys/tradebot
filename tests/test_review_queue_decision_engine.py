@@ -200,6 +200,48 @@ def test_queue_only_normalization_path_delegates_to_decision_engine(monkeypatch)
     assert out["promotion_block_reason"] == "decision_engine_reject"
 
 
+def test_level_normalization_does_not_promote_in_strict_mode(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
+    monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_ENABLE", True, raising=False)
+
+    out = review_queue._apply_level_normalization_and_promotion(
+        {
+            "trade_id": "tbsoft_NIFTY_STRICT",
+            "symbol": "NIFTY",
+            "candidate_status": "near_executable",
+            "execution_status": "queue_only",
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "readiness": "QUEUE_ONLY",
+            "execution_entry": 150.0,
+            "execution_entry_status": "executable",
+            "display_entry": 150.0,
+            "entry": 150.0,
+            "stop_loss": 120.0,
+            "target": 210.0,
+            "tradable": True,
+            "execution_allowed": True,
+            "execution_ok": True,
+            "execution_blocked": False,
+            "hard_blockers": [],
+            "unresolved_contract": False,
+            "source_flags": {"recoverable_soft_reject": True},
+            "quote_source": "tick_store",
+            "quote_validation_status": "OK",
+            "quote_age_sec": 0.5,
+            "raw_rank_score": 0.80,
+            "rank_score": 0.80,
+            "gating_final_confidence": 0.85,
+            "selected_for_execution": True,
+        }
+    )
+
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out.get("promotion_candidate") is None
+
+
 def test_terminal_scoring_is_idempotent_and_bounded(monkeypatch):
     monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_ABS_DELTA", 0.15, raising=False)
     monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_MULT", 1.35, raising=False)

@@ -353,6 +353,8 @@ class TradeBuilder:
         strategy_tag: str | None = None,
         direction: str | None = None,
     ):
+        if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+            return None
         symbol = str(
             market_data.get("symbol")
             or market_data.get("underlying")
@@ -563,6 +565,8 @@ class TradeBuilder:
         return out
 
     def _soft_reject_enabled(self, execution_mode: str | None) -> bool:
+        if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+            return False
         try:
             enabled = bool(getattr(cfg, "TRADE_BUILDER_SOFT_REJECT_ENABLE", True))
         except Exception:
@@ -603,6 +607,8 @@ class TradeBuilder:
         strategy_tag: str | None = None,
         direction: str | None = None,
     ):
+        if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+            return None
         if not isinstance(market_data, dict):
             return None
         execution_mode = str(
@@ -7033,6 +7039,8 @@ class TradeBuilder:
                     market_data.get("ltp_change"),
                     market_data.get("ltp_change_window"),
                 )
+            if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+                return None
             raw_confidence = (
                 self._coerce_positive_float(market_data.get("confidence_raw"))
                 or self._coerce_positive_float(market_data.get("confidence"))

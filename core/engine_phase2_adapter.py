@@ -679,7 +679,10 @@ def run_engine_phase2(
         if min_enter_score is not None
         else getattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.70)
     )
+    strict_real_only = bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False))
     force_fallback = bool(getattr(cfg, "PHASE2_FORCE_FALLBACK_EXECUTION_ENABLE", True))
+    if strict_real_only:
+        force_fallback = False
     force_fallback_min_score = float(getattr(cfg, "PHASE2_FORCE_FALLBACK_MIN_SCORE", 0.05) or 0.05)
     allow_fallback_live = bool(getattr(cfg, "PHASE2_FORCE_FALLBACK_ALLOW_LIVE", False))
     ranked_top = list(ranked[:top_limit])

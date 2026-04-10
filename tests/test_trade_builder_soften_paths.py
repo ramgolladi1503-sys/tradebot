@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from config import config as cfg
 from core import orchestrator as orch
 from strategies.trade_builder import TradeBuilder
 
@@ -230,3 +231,28 @@ def test_borderline_candidate_downgrades_when_contract_unresolved(monkeypatch):
     assert cand["candidate_status"] == "advisory_only"
     assert cand["eligible_for_execution"] is False
     assert cand["execution_block_reason"] == "unresolved_contract"
+
+
+def test_soften_reject_disabled_in_strict_mode(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
+    tb = TradeBuilder()
+    cand = tb._soften_reject_to_candidate(
+        market_data=_market_data(),
+        reject_ctx={"symbol": "NIFTY", "reason": "weak_momentum", "gate_reasons": ["weak_momentum"]},
+        strategy_tag="CORE",
+        direction="BUY_CALL",
+    )
+    assert cand is None
+
+
+def test_borderline_candidate_disabled_in_strict_mode(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
+    tb = TradeBuilder()
+    cand = tb._build_borderline_candidate(
+        market_data=_market_data(),
+        reason="weak_signal",
+        confidence=0.2,
+        strategy_tag="CORE",
+        direction="BUY_CALL",
+    )
+    assert cand is None
