@@ -368,6 +368,8 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
         "option_last_tick_sample": snapshot_option_tick_sample,
         "last_tick_epoch_memory": last_tick_epoch,
         "last_tick_age_sec": last_tick_age,
+        "last_ws_tick_epoch": last_tick_epoch,
+        "last_ws_tick_age_sec": last_tick_age,
         "last_db_tick_epoch": db_tick_epoch,
         "last_db_tick_age_sec": db_tick_age,
         "ticks_table_exists": bool(ticks_table_exists),

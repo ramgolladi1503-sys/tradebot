@@ -9,7 +9,7 @@ from types import MappingProxyType
 from pathlib import Path
 import pandas as pd
 from datetime import datetime, timedelta, timezone
-from dataclasses import replace
+from dataclasses import fields, replace
 from strategies.trade_builder import TradeBuilder
 from core.market_data import fetch_live_market_data, ensure_startup_warmup_bootstrap, refresh_index_quote_from_rest
 from core.risk_engine import RiskEngine
@@ -17,7 +17,7 @@ from core.execution_guard import ExecutionGuard
 from core.trade_logger import log_trade, update_trade_outcome, update_trade_fill
 from core.telegram_alerts import send_telegram_message, send_trade_ticket
 from core.trade_ticket import TradeTicket
-from core.trade_schema import build_instrument_id, validate_trade_identity
+from core.trade_schema import Trade, build_instrument_id, validate_trade_identity
 from core.auto_retrain import AutoRetrain
 from ml.trade_predictor import TradePredictor
 from core.execution_engine import ExecutionEngine, evaluate as evaluate_execution_decision
@@ -104,7 +104,7 @@ from core.runtime_health import write_runtime_health_snapshot
 from core.paths import logs_dir
 from core.observability.pipeline import write_pipeline_funnel
 from core.outcome_labels import attach_candidate_outcome_labels
-from core.opportunity_engine import select_top_opportunities
+from core.engine_phase2_adapter import run_engine_phase2
 from core.market_snapshot_builder import (
     build_market_snapshot as build_dashboard_market_snapshot,
     build_symbol_market_snapshot,
@@ -243,24 +243,7 @@ def _candidate_visibility_bucket(candidate) -> str:
     permission = str(_trade_attr(candidate, "permission", "") or "").strip().upper()
     final_action = str(_trade_attr(candidate, "final_action", "") or "").strip().upper()
     readiness = str(_trade_attr(candidate, "readiness", "") or "").strip().upper()
-    if (
-        candidate_status == "executable"
-        or execution_status == "executable"
-        or permission == "EXECUTE"
-        or final_action == "EXECUTE"
-        or readiness == "READY"
-    ):
-        return "executable"
-    if (
-        candidate_status in {"advisory_only", "near_executable", "ranked", "scored"}
-        or execution_status in {"advisory_only", "queue_only"}
-        or permission in {"ADVISORY_ONLY", "QUEUE_ONLY"}
-        or final_action in {"ADVISORY_ONLY", "QUEUE_ONLY"}
-        or readiness in {"ADVISORY_ONLY", "QUEUE_ONLY"}
-        or bool(_trade_attr(candidate, "planning_only", False))
-    ):
-        return "advisory"
-    if (
+    hard_blocked = (
         candidate_status == "blocked"
         or execution_status == "blocked"
         or permission == "BLOCK"
@@ -269,8 +252,37 @@ def _candidate_visibility_bucket(candidate) -> str:
         or bool(_trade_attr(candidate, "execution_blocked", False))
         or bool(_trade_attr(candidate, "hard_blockers", None))
         or bool(_trade_attr(candidate, "blockers", None))
+        or bool(_trade_attr(candidate, "unresolved_contract", False))
+    )
+    near_executable_promotable = (
+        candidate_status == "near_executable"
+        and execution_status not in {"advisory_only", "blocked"}
+        and permission not in {"ADVISORY_ONLY", "BLOCK"}
+        and final_action not in {"ADVISORY_ONLY", "BLOCK"}
+        and readiness not in {"ADVISORY_ONLY", "BLOCKED"}
+        and not hard_blocked
+        and str(_trade_attr(candidate, "strategy_family", "") or "").strip().lower() != "synthetic_advisory"
+    )
+    if (
+        candidate_status == "executable"
+        or execution_status == "executable"
+        or permission == "EXECUTE"
+        or final_action == "EXECUTE"
+        or readiness == "READY"
+        or near_executable_promotable
     ):
+        return "executable"
+    if hard_blocked:
         return "blocked"
+    if (
+        candidate_status in {"advisory_only", "ranked", "scored"}
+        or execution_status in {"advisory_only", "queue_only"}
+        or permission in {"ADVISORY_ONLY", "QUEUE_ONLY"}
+        or final_action in {"ADVISORY_ONLY", "QUEUE_ONLY"}
+        or readiness in {"ADVISORY_ONLY", "QUEUE_ONLY"}
+        or bool(_trade_attr(candidate, "planning_only", False))
+    ):
+        return "advisory"
     return "blocked"
 
 
@@ -308,6 +320,58 @@ def _replace_trade_fields(trade, updates: dict):
                 setattr(trade, key, value)
             except Exception:
                 continue
+        return trade
+
+
+def _coerce_trade_dict_to_schema(trade, market_data: dict | None = None):
+    if not isinstance(trade, dict):
+        return trade
+    payload = dict(trade or {})
+    symbol = str(payload.get("symbol") or (market_data or {}).get("symbol") or "UNKNOWN").strip().upper() or "UNKNOWN"
+    instrument = str(payload.get("instrument") or payload.get("instrument_type") or "OPT").strip().upper() or "OPT"
+    direction = str(payload.get("direction") or "").strip().upper()
+    side = str(payload.get("side") or "").strip().upper()
+    if not side:
+        side = "BUY" if direction in {"BUY_CALL", "BUY_PUT", "BUY"} else "SELL" if direction in {"SELL_CALL", "SELL_PUT", "SELL"} else "BUY"
+    entry_price = float(
+        payload.get("entry_price")
+        or payload.get("execution_entry")
+        or payload.get("display_entry")
+        or payload.get("current_ltp")
+        or (market_data or {}).get("ltp")
+        or 0.0
+    )
+    if entry_price <= 0.0:
+        entry_price = 1.0
+    stop_loss = float(payload.get("stop_loss") or max(entry_price * 0.98, 0.5))
+    target = float(payload.get("target") or max(entry_price * 1.02, entry_price + 0.5))
+    qty = int(payload.get("qty") or 1)
+    allowed_fields = {field.name for field in fields(Trade)}
+    trade_payload = {
+        "trade_id": str(payload.get("trade_id") or f"{symbol}-SOFT-{int(time.time() * 1000)}"),
+        "timestamp": payload.get("timestamp") if isinstance(payload.get("timestamp"), datetime) else datetime.now(),
+        "symbol": symbol,
+        "instrument": instrument,
+        "instrument_token": payload.get("instrument_token"),
+        "strike": int(payload.get("strike") or 0),
+        "expiry": str(payload.get("expiry") or ""),
+        "side": side,
+        "entry_price": float(entry_price),
+        "stop_loss": float(stop_loss),
+        "target": float(target),
+        "qty": int(max(1, qty)),
+        "capital_at_risk": float(payload.get("capital_at_risk") or abs(float(entry_price) - float(stop_loss))),
+        "expected_slippage": float(payload.get("expected_slippage") or 0.0),
+        "confidence": float(payload.get("confidence") or payload.get("rank_score") or 0.0),
+        "strategy": str(payload.get("strategy") or payload.get("strategy_name") or payload.get("strategy_family") or "SOFT_REJECT"),
+        "regime": str(payload.get("regime") or (market_data or {}).get("regime") or "NEUTRAL"),
+    }
+    for key, value in payload.items():
+        if key in allowed_fields and key not in trade_payload:
+            trade_payload[key] = value
+    try:
+        return Trade(**trade_payload)
+    except Exception:
         return trade
 
 
@@ -415,11 +479,23 @@ def _build_top_opportunities_payload(
     candidates: list,
     executable_top_n: int | None = None,
     advisory_top_n: int | None = None,
+    active_trade: dict | None = None,
 ) -> dict:
-    selected = select_top_opportunities(
+    exec_limit = max(0, int(executable_top_n if executable_top_n is not None else getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)))
+    advisory_limit = max(0, int(advisory_top_n if advisory_top_n is not None else getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)))
+    phase2_top_n = max(1, int(getattr(cfg, "PHASE2_TOP_N", max(exec_limit, advisory_limit, 1)) or max(exec_limit, advisory_limit, 1)))
+    phase2_result = run_engine_phase2(
         candidates or [],
-        executable_top_n=executable_top_n,
-        advisory_top_n=advisory_top_n,
+        active_trade=active_trade,
+        top_n=phase2_top_n,
+        min_enter_score=float(getattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.70) or 0.70),
+    )
+    logger.info(
+        "phase2_decision_snapshot state=%s reason=%s selected_trade_id=%s ranked_count=%s",
+        phase2_result.get("state"),
+        phase2_result.get("reason"),
+        _trade_attr(phase2_result.get("selected"), "trade_id"),
+        len(list(phase2_result.get("ranked") or [])),
     )
     notes: list[str] = []
 
@@ -434,14 +510,48 @@ def _build_top_opportunities_payload(
                 notes.append(f"{label}_projection_failed:{trade_id}")
         return projected
 
-    top_executable = _project(list(selected.get("top_executable_opportunities") or []), "executable")
-    top_advisory = _project(list(selected.get("top_advisory_opportunities") or []), "advisory")
+    phase2_state = str(phase2_result.get("state") or "NO_TRADE").strip().upper() or "NO_TRADE"
+    ranked = list(phase2_result.get("ranked") or [])
+    selected = phase2_result.get("selected")
+    selected_id = str(_trade_attr(selected, "trade_id", "") or "").strip() if selected is not None else ""
+
+    top_executable_seed: list = []
+    if selected is not None and phase2_state in {"ENTER", "REPLACE", "HOLD"}:
+        top_executable_seed.append(selected)
+    if exec_limit > 0:
+        top_executable_seed = top_executable_seed[:exec_limit]
+    else:
+        top_executable_seed = []
+
+    top_advisory_seed: list = []
+    for candidate in ranked:
+        trade_id = str(_trade_attr(candidate, "trade_id", "") or "").strip()
+        if selected_id and trade_id and trade_id == selected_id:
+            continue
+        top_advisory_seed.append(candidate)
+        if advisory_limit > 0 and len(top_advisory_seed) >= advisory_limit:
+            break
+
+    top_executable = _project(top_executable_seed, "executable")
+    top_advisory = _project(top_advisory_seed, "advisory")
+    if phase2_state in {"ENTER", "REPLACE", "HOLD"}:
+        selector_outcome = "EXECUTE_TOP"
+    elif phase2_state == "WATCHLIST":
+        selector_outcome = "WATCHLIST_ONLY"
+    else:
+        selector_outcome = "NO_EXECUTABLE_OPPORTUNITY"
     return {
         "top_executable_opportunities": top_executable,
         "top_advisory_opportunities": top_advisory,
         "top_executable_count": int(len(top_executable)),
         "top_advisory_count": int(len(top_advisory)),
-        "source_candidate_count": int(selected.get("candidates_considered") or 0),
+        "source_candidate_count": int(len(candidates or [])),
+        "selector_outcome": selector_outcome,
+        "phase2_state": phase2_state,
+        "phase2_reason": str(phase2_result.get("reason") or ""),
+        "phase2_ranked_count": int(len(ranked)),
+        "phase2_selected_trade_id": selected_id or None,
+        "_phase2_next_active_trade": phase2_result.get("next_active_trade"),
         "notes": notes,
     }
 
@@ -708,7 +818,9 @@ def _queue_rejected_candidate_for_analytics(
         payload_extra.setdefault("permission", "ADVISORY_ONLY")
         payload_extra.setdefault("readiness", "ADVISORY_ONLY")
         payload_extra.setdefault("final_action", "ADVISORY_ONLY")
-        payload_extra.setdefault("execution_status", "advisory_only")
+        payload_extra.setdefault("execution_status", "scored")
+        payload_extra.setdefault("candidate_status", "scored")
+        payload_extra.setdefault("eligible_for_execution", False)
     payload_extra.setdefault("analytics_only", True)
     advisory_row = project_advisory_row(selected, extra=payload_extra)
     if advisory_row is None:
@@ -880,6 +992,41 @@ def _augment_ranked_candidates_with_soft_reject(
         return ranked, [], reject_reason, reject_gate_reasons
     if reject_reason == "no_candidates_survived" and mode == "LIVE":
         return ranked, [], reject_reason, reject_gate_reasons
+    hard_reason_raw = str(
+        getattr(
+            cfg,
+            "TRADE_BUILDER_HARD_REJECT_REASONS",
+            "feed_stale,quote_missing,unresolved_contract,invalid_risk_levels,missing_live_quote,no_live_option_feed",
+        )
+        or ""
+    )
+    hard_reason_codes = {
+        item.strip().upper()
+        for item in hard_reason_raw.split(",")
+        if item and item.strip()
+    }
+    hard_reason_codes.update(
+        {
+            "MISSING_LIVE_BIDASK",
+            "MISSING_CONTRACT_FIELDS",
+            "MISSING_OPTION_TOKEN",
+            "NO_TOKEN",
+            "NO_QUOTE",
+            "NO_LIVE_QUOTE",
+            "STALE_OPTION_TICK",
+            "STALE_OPTION_QUOTE",
+        }
+    )
+
+    def _should_keep_as_advisory(candidate_reasons: list[str]) -> bool:
+        for code in candidate_reasons:
+            text = str(code or "").strip().upper()
+            if not text:
+                continue
+            if text in hard_reason_codes or text.startswith("HARD_"):
+                return True
+        return False
+
     soft_reject_candidates: list[dict] = []
     soft_enabled = soft_reject_enabled(execution_mode)
     critical_reasons = critical_reject_reasons()
@@ -928,6 +1075,49 @@ def _augment_ranked_candidates_with_soft_reject(
                     soft_candidate["strategy_family"] = "builder_soft_reject"
                 if str(soft_candidate.get("setup_variant") or "").strip().lower() in {"", "unknown"}:
                     soft_candidate["setup_variant"] = "softened_builder_path"
+                try:
+                    attach_contract = getattr(trade_builder, "_attach_softened_candidate_contract", None)
+                    if callable(attach_contract):
+                        enriched_candidate = attach_contract(soft_candidate, market_data=market_data)
+                        if isinstance(enriched_candidate, dict):
+                            soft_candidate = enriched_candidate
+                except Exception:
+                    logger.exception("soft_candidate_contract_enrichment_failed symbol=%s", symbol)
+                candidate_reasons = list(reject_gate_reasons or [reject_reason])
+                if _should_keep_as_advisory(candidate_reasons):
+                    soft_candidate["candidate_status"] = "advisory_only"
+                    soft_candidate["execution_status"] = "advisory_only"
+                    soft_candidate["eligible_for_execution"] = False
+                    soft_candidate["execution_allowed"] = False
+                    soft_candidate["execution_ok"] = False
+                    soft_candidate["execution_blocked"] = True
+                    print(
+                        "SOFT_REJECT_WATCHLIST_ONLY",
+                        {
+                            "symbol": soft_candidate.get("symbol"),
+                            "trade_id": soft_candidate.get("trade_id"),
+                            "reason": soft_candidate.get("reason") or soft_candidate.get("reject_reason"),
+                        },
+                    )
+                else:
+                    conf_floor = float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18)
+                    soft_candidate["confidence"] = max(float(soft_candidate.get("confidence") or 0.0), conf_floor)
+                    soft_candidate["confidence_final"] = max(float(soft_candidate.get("confidence_final") or 0.0), conf_floor)
+                    soft_candidate["rank_score"] = max(float(soft_candidate.get("rank_score") or 0.0), conf_floor)
+                    soft_candidate["final_score"] = max(float(soft_candidate.get("final_score") or 0.0), conf_floor)
+                    soft_candidate["candidate_status"] = "near_executable"
+                    soft_candidate["execution_status"] = "scored"
+                    soft_candidate["eligible_for_execution"] = True
+                    soft_candidate["execution_allowed"] = True
+                    soft_candidate["execution_ok"] = True
+                    soft_candidate["execution_blocked"] = False
+                    soft_candidate["execution_block_reason"] = None
+                    soft_candidate["permission"] = "QUEUE_ONLY"
+                    soft_candidate["final_action"] = "QUEUE_ONLY"
+                    soft_candidate["readiness"] = "QUEUE_ONLY"
+                    source_flags = dict(soft_candidate.get("source_flags") or {})
+                    source_flags["soft_blockers"] = [str(code) for code in candidate_reasons if str(code).strip()]
+                    soft_candidate["source_flags"] = source_flags
                 soft_reject_candidates.append(soft_candidate)
         if soft_reject_candidates:
             for soft_candidate in soft_reject_candidates:
@@ -1137,6 +1327,7 @@ class Orchestrator:
         self._last_decay_date = None
         self._pilot_check_cache = {"ts": 0, "ok": True, "reasons": []}
         self._decision_traces = []
+        self._phase2_active_trade = None
         self.circuit_breaker = CircuitBreaker()
         self.run_lock = RunLock()
         self.exposure_ledger = ExposureLedger(total_capital=total_capital)
@@ -3843,6 +4034,17 @@ class Orchestrator:
                             top_gate_reasons=reject_gate_reasons,
                         )
                         continue
+                    trade = _coerce_trade_dict_to_schema(trade, market_data=market_data)
+                    if isinstance(trade, dict):
+                        cycle_candidates_blocked += 1
+                        cycle_blockers["trade_schema_coerce_failed"] += 1
+                        logger.warning(
+                            "trade_schema_coerce_failed symbol=%s trade_id=%s strategy_family=%s",
+                            sym,
+                            trade.get("trade_id"),
+                            trade.get("strategy_family"),
+                        )
+                        continue
                     cycle_candidates_seen += 1
                     self._observe_price_mismatch_breaker([])
                     self._log_cycle_symbol_summary(
@@ -3852,14 +4054,16 @@ class Orchestrator:
                         quote_age_gate_pass=True,
                         trade_build_attempted=True,
                         trade_generated=True,
-                        permission=getattr(trade, "permission", None),
-                        final_action=getattr(trade, "final_action", None),
+                        permission=_trade_attr(trade, "permission", None),
+                        final_action=_trade_attr(trade, "final_action", None),
                         reject_reason=None,
                         top_gate_reasons=[],
                     )
-                    if str(trade.strategy).upper() in getattr(cfg, "HALT_STRATEGIES", []):
+                    if str(_trade_attr(trade, "strategy", "") or "").upper() in getattr(cfg, "HALT_STRATEGIES", []):
                         try:
-                            update_execution(trade.trade_id, {"veto_reasons": ["halt_strategy"]})
+                            trade_id_for_update = _trade_attr(trade, "trade_id", None)
+                            if trade_id_for_update:
+                                update_execution(trade_id_for_update, {"veto_reasons": ["halt_strategy"]})
                         except Exception:
                             pass
                         continue
@@ -3871,8 +4075,8 @@ class Orchestrator:
                         missing = set((cross_q.get("missing") or {}).keys())
                         if (stale | missing) & optional:
                             mult = float(getattr(cfg, "CROSS_ASSET_OPTIONAL_SIZE_MULT", 0.85))
-                            current = float(getattr(trade, "size_mult", 1.0) or 1.0)
-                            trade = replace(trade, size_mult=min(current, mult))
+                            current = float(_trade_attr(trade, "size_mult", 1.0) or 1.0)
+                            trade = _replace_trade_fields(trade, {"size_mult": min(current, mult)})
                     except Exception:
                         pass
                     # Spread suggestions (advisory only; defined-risk)
@@ -3991,13 +4195,15 @@ class Orchestrator:
                     )
                     if decision_snapshot_obj is not None:
                         try:
-                            source_flags = dict(getattr(trade, "source_flags", {}) or {})
+                            source_flags = dict(_trade_attr(trade, "source_flags", {}) or {})
                             source_flags["decision_snapshot"] = decision_snapshot_obj.to_dict()
                             source_flags["decision_snapshot_id"] = str(decision_snapshot_obj.snapshot_id)
-                            trade = replace(
+                            trade = _replace_trade_fields(
                                 trade,
-                                snapshot_id=str(decision_snapshot_obj.snapshot_id),
-                                source_flags=source_flags,
+                                {
+                                    "snapshot_id": str(decision_snapshot_obj.snapshot_id),
+                                    "source_flags": source_flags,
+                                },
                             )
                         except Exception:
                             pass
@@ -4036,7 +4242,7 @@ class Orchestrator:
                         decision_id = self._log_decision_safe(event, trade)
                         self._log_meta_shadow(trade, market_data)
                     except Exception:
-                        decision_id = trade.trade_id
+                        decision_id = _trade_attr(trade, "trade_id")
                     if self.decision_store is not None:
                         try:
                             snapshot_payload = (
@@ -4059,7 +4265,7 @@ class Orchestrator:
                             decision = build_decision(
                                 meta={
                                     "ts_epoch": time.time(),
-                                    "run_id": decision_id or trade.trade_id,
+                                    "run_id": decision_id or _trade_attr(trade, "trade_id"),
                                     "symbol": sym,
                                     "timeframe": str(market_data.get("timeframe", "")),
                                 },
@@ -4101,6 +4307,8 @@ class Orchestrator:
                             self.decision_store.save_decision(decision)
                         except Exception as exc:
                             logger.warning("decision_store_save_failed err=%s", exc)
+                    trade_id_for_update = _trade_attr(trade, "trade_id", None)
+                    strategy_name = str(_trade_attr(trade, "strategy", "") or "")
                     try:
                         self.risk_state.record_trade_attempt(trade)
                         ok, reason = self.risk_state.approve(trade)
@@ -4110,7 +4318,8 @@ class Orchestrator:
                             if debug_flag:
                                 _log_advisory_debug("risk_state_trade_blocked reason=%s", reason)
                             try:
-                                update_execution(trade.trade_id, {"risk_allowed": 0, "veto_reasons": [reason]})
+                                if trade_id_for_update:
+                                    update_execution(trade_id_for_update, {"risk_allowed": 0, "veto_reasons": [reason]})
                             except Exception:
                                 pass
                             if self.decision_store is not None and decision_id:
@@ -4120,30 +4329,36 @@ class Orchestrator:
                                     logger.warning("decision_store_update_rejected_failed err=%s", exc)
                             continue
                         try:
-                            update_execution(trade.trade_id, {"risk_allowed": 1})
+                            if trade_id_for_update:
+                                update_execution(trade_id_for_update, {"risk_allowed": 1})
                         except Exception:
                             pass
                     except Exception:
                         pass
                     if self.strategy_tracker.is_disabled(
-                        trade.strategy,
+                        strategy_name,
                         min_trades=getattr(cfg, "STRATEGY_MIN_TRADES", 30),
                         threshold=getattr(cfg, "STRATEGY_DISABLE_THRESHOLD", 0.45)
                     ):
-                        logger.info("strategy_tracker_disabled strategy=%s", trade.strategy)
+                        logger.info("strategy_tracker_disabled strategy=%s", strategy_name)
                         continue
                     # Decay-based gating
-                    action, _prob = self.strategy_tracker.decay_action(trade.strategy)
+                    action, _prob = self.strategy_tracker.decay_action(strategy_name)
                     if action == "hard":
                         try:
-                            update_execution(trade.trade_id, {"veto_reasons": ["decay_quarantine"]})
+                            if trade_id_for_update:
+                                update_execution(trade_id_for_update, {"veto_reasons": ["decay_quarantine"]})
                         except Exception:
                             pass
                         continue
                     elif action == "soft":
                         try:
-                            trade.size_mult = (trade.size_mult or 1.0) * float(getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6))
-                            update_execution(trade.trade_id, {"action_size_multiplier": trade.size_mult})
+                            next_size_mult = float(_trade_attr(trade, "size_mult", 1.0) or 1.0) * float(
+                                getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6)
+                            )
+                            trade = _replace_trade_fields(trade, {"size_mult": next_size_mult})
+                            if trade_id_for_update:
+                                update_execution(trade_id_for_update, {"action_size_multiplier": next_size_mult})
                         except Exception:
                             pass
                     # Best trade per day filter
@@ -4923,13 +5138,16 @@ class Orchestrator:
                 except Exception as funnel_exc:
                     logger.warning("pipeline_funnel_write_failed err=%s", funnel_exc)
                 try:
+                    top_payload = _build_top_opportunities_payload(
+                        candidates=list(cycle_ranked_candidates),
+                        executable_top_n=int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
+                        advisory_top_n=int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
+                        active_trade=self._phase2_active_trade if isinstance(self._phase2_active_trade, dict) else None,
+                    )
+                    self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     write_snapshot_atomic(
                         TOP_OPPORTUNITIES_LATEST_PATH,
-                        payload=_build_top_opportunities_payload(
-                            candidates=list(cycle_ranked_candidates),
-                            executable_top_n=int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
-                            advisory_top_n=int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
-                        ),
+                        payload=top_payload,
                         producer="orchestrator",
                     )
                 except Exception as top_exc:

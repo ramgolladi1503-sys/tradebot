@@ -11,6 +11,12 @@ from core.trade_schema import build_instrument_id, validate_trade_identity
 from core.trade_ticket import TradeTicket
 
 
+def _trade_attr(trade, name: str, default=None):
+    if isinstance(trade, dict):
+        return trade.get(name, default)
+    return getattr(trade, name, default)
+
+
 def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: bool, veto_reasons=None, pilot_allowed=None, pilot_reasons=None):
     now_text = now_ist().isoformat()
     veto_reasons = list(veto_reasons or [])
@@ -58,11 +64,11 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
                 decision_snapshot = dict(snap)
             if not snapshot_id:
                 snapshot_id = source_flags.get("decision_snapshot_id")
-    symbol = (trade.symbol if trade else market_data.get("symbol"))
+    symbol = (_trade_attr(trade, "symbol") if trade else market_data.get("symbol"))
     trade_instrument_id = getattr(trade, "instrument_id", None) if trade else None
     instrument_id = trade_instrument_id
     if instrument_id is None and trade and instrument_type:
-        instrument_id = build_instrument_id(trade.symbol, instrument_type, expiry, strike, right)
+        instrument_id = build_instrument_id(_trade_attr(trade, "symbol"), instrument_type, expiry, strike, right)
     if instrument_id is None:
         fb_symbol = str(symbol or "UNKNOWN")
         fb_instrument_type = str(instrument_type or market_data.get("instrument") or "UNKNOWN")
@@ -99,7 +105,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
 
     _quote_age = orch._quote_age_sec(market_data.get("quote_ts"))
     event = {
-        "trade_id": trade.trade_id if trade else None,
+        "trade_id": _trade_attr(trade, "trade_id") if trade else None,
         "ts": now_text,
         "symbol": symbol,
         "mode": market_ctx.mode,
@@ -107,12 +113,12 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "planning_only": bool(market_ctx.planning_only),
         "allow_stale_quotes": bool(market_ctx.allow_stale_quotes),
         "require_live_quotes": bool(market_ctx.require_live_quotes),
-        "strategy_id": trade.strategy if trade else None,
-        "regime": market_data.get("regime") or (trade.regime if trade else None),
+        "strategy_id": _trade_attr(trade, "strategy") if trade else None,
+        "regime": market_data.get("regime") or (_trade_attr(trade, "regime") if trade else None),
         "regime_probs": market_data.get("regime_probs"),
         "shock_score": market_data.get("shock_score"),
-        "side": trade.side if trade else None,
-        "instrument": trade.instrument if trade else None,
+        "side": _trade_attr(trade, "side") if trade else None,
+        "instrument": _trade_attr(trade, "instrument") if trade else None,
         "instrument_id": instrument_id,
         "strike": strike,
         "expiry": expiry,
@@ -121,7 +127,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "option_type": getattr(trade, "option_type", None) if trade else None,
         "right": right,
         "instrument_type": instrument_type,
-        "underlying": trade.symbol if trade else None,
+        "underlying": _trade_attr(trade, "symbol") if trade else None,
         "underlying_spot": (getattr(trade, "underlying_spot", None) if trade else None) or market_data.get("underlying_spot") or market_data.get("ltp"),
         "spot_source": (getattr(trade, "spot_source", None) if trade else None)
         or market_data.get("spot_source")
@@ -140,8 +146,8 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "dte": orch._calc_dte(getattr(trade, "expiry", None)) if trade else None,
         "expiry_bucket": market_data.get("expiry_type") or market_data.get("expiry_bucket"),
         "score_0_100": getattr(trade, "trade_score", None) if trade else None,
-        "xgb_proba": trade.confidence if trade and getattr(trade, "model_type", None) == "xgb" else None,
-        "deep_proba": trade.confidence if trade and getattr(trade, "model_type", None) == "deep" else None,
+        "xgb_proba": _trade_attr(trade, "confidence") if trade and _trade_attr(trade, "model_type", None) == "xgb" else None,
+        "deep_proba": _trade_attr(trade, "confidence") if trade and _trade_attr(trade, "model_type", None) == "deep" else None,
         "micro_proba": (opt or {}).get("micro_pred"),
         "ensemble_proba": getattr(trade, "alpha_confidence", None) if trade else None,
         "ensemble_uncertainty": getattr(trade, "alpha_uncertainty", None) if trade else None,
@@ -197,7 +203,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "daily_pnl": orch.portfolio.get("daily_pnl", orch.portfolio.get("daily_profit", 0.0) + orch.portfolio.get("daily_loss", 0.0)),
         "daily_pnl_pct": orch.portfolio.get("daily_pnl_pct"),
         "drawdown_pct": orch.risk_state.daily_max_drawdown if hasattr(orch.risk_state, "daily_max_drawdown") else None,
-        "loss_streak": orch.loss_streak.get(trade.symbol, 0) if trade else 0,
+        "loss_streak": orch.loss_streak.get(_trade_attr(trade, "symbol"), 0) if trade else 0,
         "open_risk": orch.portfolio.get("open_risk", orch._open_risk()),
         "open_risk_pct": orch.portfolio.get("open_risk_pct"),
         "delta_exposure": None,
@@ -231,7 +237,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
             event["veto_reasons"] = veto_reasons
     if event.get("instrument_id") is None and trade:
         ok, _reason = validate_trade_identity(
-            trade.symbol,
+            _trade_attr(trade, "symbol"),
             instrument_type,
             expiry,
             strike,
@@ -416,7 +422,7 @@ def instrument_id(_orch, trade):
         right = getattr(trade, "right", None) or getattr(trade, "option_type", None)
         expiry = getattr(trade, "expiry", None)
         strike = getattr(trade, "strike", None)
-        return build_instrument_id(trade.symbol, instrument_type, expiry, strike, right)
+        return build_instrument_id(_trade_attr(trade, "symbol"), instrument_type, expiry, strike, right)
     except Exception:
         return None
 
@@ -424,11 +430,13 @@ def instrument_id(_orch, trade):
 def build_trade_ticket(orch, trade, _market_data: dict) -> TradeTicket:
     validity = int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180))
     reason_codes = []
-    if getattr(trade, "regime", None):
-        reason_codes.append(f"regime:{trade.regime}")
-    if getattr(trade, "strategy", None):
-        reason_codes.append(f"strategy:{trade.strategy}")
-    for blocked_reason in list(getattr(trade, "tradable_reasons_blocking", []) or []):
+    regime_value = _trade_attr(trade, "regime", None)
+    strategy_value = _trade_attr(trade, "strategy", None)
+    if regime_value:
+        reason_codes.append(f"regime:{regime_value}")
+    if strategy_value:
+        reason_codes.append(f"strategy:{strategy_value}")
+    for blocked_reason in list(_trade_attr(trade, "tradable_reasons_blocking", []) or []):
         reason_codes.append(f"block:{blocked_reason}")
     guardrails = []
     max_spread = float(getattr(cfg, "MAX_SPREAD_PCT", 0.03))
@@ -442,7 +450,7 @@ def build_trade_ticket(orch, trade, _market_data: dict) -> TradeTicket:
         guardrails=guardrails,
         desk_id=getattr(cfg, "DESK_ID", "DEFAULT"),
     )
-    meta = orch.trade_meta.get(getattr(trade, "trade_id", ""), {}) or {}
+    meta = orch.trade_meta.get(_trade_attr(trade, "trade_id", ""), {}) or {}
     if meta:
         ticket.trailing_enabled = bool(meta.get("trailing_enabled", ticket.trailing_enabled))
         ticket.trailing_method = meta.get("trailing_method", ticket.trailing_method)
@@ -457,25 +465,26 @@ def log_meta_shadow(orch, trade, market_data):
     if not orch.meta_model:
         return
     try:
-        stats = dict(orch.strategy_tracker.stats.get(trade.strategy, {}) or {})
-        decay = orch.strategy_tracker.decay_probs.get(trade.strategy, {})
+        strategy_name = _trade_attr(trade, "strategy", None)
+        stats = dict(orch.strategy_tracker.stats.get(strategy_name, {}) or {})
+        decay = orch.strategy_tracker.decay_probs.get(strategy_name, {})
         if decay:
             stats.update(decay)
         try:
-            baseline_weight = float(orch.strategy_allocator._weight(trade.strategy))
+            baseline_weight = float(orch.strategy_allocator._weight(strategy_name))
         except Exception:
             baseline_weight = 1.0
         suggestion = orch.meta_model.suggest(
-            trade.strategy,
-            getattr(trade, "model_type", None),
+            strategy_name,
+            _trade_attr(trade, "model_type", None),
             market_data,
             stats,
         )
         payload = {
             "ts_epoch": now_utc_epoch(),
-            "symbol": trade.symbol,
-            "strategy": trade.strategy,
-            "trade_id": trade.trade_id,
+            "symbol": _trade_attr(trade, "symbol"),
+            "strategy": strategy_name,
+            "trade_id": _trade_attr(trade, "trade_id"),
             "baseline_weight": baseline_weight,
             "suggested_weight": suggestion.get("suggested_weight"),
             "weight_delta": (suggestion.get("suggested_weight") or 0) - baseline_weight,

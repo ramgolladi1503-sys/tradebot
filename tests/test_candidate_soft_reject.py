@@ -45,3 +45,46 @@ def test_unknown_reject_candidate_is_rankable():
     assert payload["candidate_status"] == "advisory_only"
     assert payload["execution_status"] == "advisory_only"
     assert payload["rank_score"] is not None
+
+
+def test_build_soft_reject_candidate_recoverable_is_promotable():
+    candidate = build_soft_reject_candidate(
+        {"symbol": "NIFTY"},
+        reject_reason="no_signal",
+        reject_source="orchestrator_trade_builder_reject",
+        gate_reasons=["no_signal"],
+        base_candidate={"strategy_family": "ensemble_opt", "candidate_type": "directional"},
+        execution_mode="LIVE",
+    )
+
+    assert candidate is not None
+    assert candidate["candidate_status"] == "near_executable"
+    assert candidate["execution_status"] == "scored"
+    assert candidate["execution_blocked"] is False
+    assert candidate["eligible_for_execution"] is True
+    assert candidate["execution_allowed"] is True
+    assert candidate["execution_ok"] is True
+    assert candidate["strategy_family"] == "ensemble_opt"
+    assert str(candidate["trade_id"]).startswith("tbsoft_")
+    assert candidate["source_flags"]["recoverable_soft_reject"] is True
+
+
+def test_build_soft_reject_candidate_nonrecoverable_stays_advisory():
+    candidate = build_soft_reject_candidate(
+        {"symbol": "BANKNIFTY"},
+        reject_reason="FEED_STALE",
+        reject_source="orchestrator_trade_builder_reject",
+        gate_reasons=["FEED_STALE"],
+        base_candidate={"strategy_family": "ensemble_opt", "candidate_type": "directional"},
+        execution_mode="LIVE",
+    )
+
+    assert candidate is not None
+    assert candidate["candidate_status"] == "advisory_only"
+    assert candidate["execution_status"] == "advisory_only"
+    assert candidate["execution_blocked"] is True
+    assert candidate["eligible_for_execution"] is False
+    assert candidate["execution_allowed"] is False
+    assert candidate["execution_ok"] is False
+    assert str(candidate["trade_id"]).startswith("softrej_")
+    assert candidate["source_flags"]["recoverable_soft_reject"] is False

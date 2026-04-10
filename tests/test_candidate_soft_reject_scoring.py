@@ -42,3 +42,24 @@ def test_soft_reject_hides_unknown_instrument(monkeypatch):
     assert cand is not None
     assert cand["instrument_type"] == "UNKNOWN"
     assert cand["advisory_visible"] is False
+
+
+def test_soft_reject_candidate_queue_only_when_confident(monkeypatch):
+    monkeypatch.setattr(cfg, "CANDIDATE_SOFT_REJECT_CONFIDENCE", 0.7, raising=False)
+    monkeypatch.setattr(cfg, "CANDIDATE_SOFT_REJECT_CONF_MIN", 0.05, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18, raising=False)
+
+    cand = csr.build_soft_reject_candidate(
+        {"symbol": "NIFTY"},
+        reject_reason="no_signal",
+        reject_source="orchestrator",
+        gate_reasons=["no_signal"],
+        base_candidate={"candidate_type": "directional"},
+        execution_mode="SIM",
+    )
+
+    assert cand is not None
+    assert cand["execution_status"] == "scored"
+    assert cand["candidate_status"] == "near_executable"
+    assert cand["eligible_for_execution"] is True
+    assert cand["execution_blocked"] is False

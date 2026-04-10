@@ -13,7 +13,11 @@ def _patch_common_ok(monkeypatch):
     monkeypatch.setattr(readiness_gate, "_check_kite_auth", lambda: (True, "ok", "OK"))
     monkeypatch.setattr(readiness_gate, "_check_trade_identity_schema", lambda: (True, "ok"))
     monkeypatch.setattr(readiness_gate, "_disk_free_gb", lambda _=".": 10.0)
-    monkeypatch.setattr(readiness_gate, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(
+        readiness_gate,
+        "feed_breaker_maybe_auto_clear",
+        lambda _state=None: {"tripped": False, "cleared": False, "reason": None},
+    )
     monkeypatch.setattr(readiness_gate, "now_ist", lambda: datetime(2026, 2, 10, 10, 0, 0))
     monkeypatch.setattr(readiness_gate, "is_market_open_ist", lambda now=None: True)
 

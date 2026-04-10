@@ -729,3 +729,14 @@ def test_advisory_schema_backfills_instrument_type_for_advisory_only():
 
     assert out["instrument_type"] == "OPT"
     assert out.get("instrument_type_source") in {"candidate_type", "option_type", "explicit", "fallback"}
+
+
+def test_advisory_schema_accepts_scored_execution_status():
+    row = _valid_row(
+        execution_status="scored",
+        permission="ADVISORY_ONLY",
+        final_action="ADVISORY_ONLY",
+        readiness="ADVISORY_ONLY",
+    )
+    out = advisory_schema.serialize_advisory_row(row)
+    assert out["execution_status"] == "scored"

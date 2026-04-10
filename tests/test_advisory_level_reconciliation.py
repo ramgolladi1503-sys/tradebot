@@ -112,3 +112,72 @@ def test_schema_rejects_canonical_buy_row_with_target_below_entry():
                 stop_loss=100.0,
             )
         )
+
+
+def test_normalize_trade_levels_converts_mixed_price_space_to_premium():
+    row = {
+        "trade_id": "T-MIXED-SPACE",
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "execution_entry": 203.75,
+        "stop_loss": 23317.287,
+        "target": 24269.013,
+    }
+    out = review_queue._normalize_trade_levels(row)
+
+    assert out["level_space"] == "premium_normalized"
+    assert out["level_recompute_reason"] == "mixed_price_spaces"
+    assert float(out["stop_loss"]) < float(out["execution_entry"]) < float(out["target"])
+
+
+def test_apply_level_normalization_promotes_valid_queue_only_candidate():
+    row = {
+        "trade_id": "T-QUEUE-PROMOTE-LEVEL",
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "candidate_status": "near_executable",
+        "execution_status": "scored",
+        "candidate_origin": "softened_builder_path",
+        "source_flags": {"recoverable_soft_reject": True},
+        "permission": "QUEUE_ONLY",
+        "final_action": "QUEUE_ONLY",
+        "readiness": "QUEUE_ONLY",
+        "execution_blocked": False,
+        "hard_blockers": [],
+        "unresolved_contract": False,
+        "execution_entry": 200.0,
+        "stop_loss": 150.0,
+        "target": 260.0,
+    }
+    out = review_queue._apply_level_normalization_and_promotion(row)
+
+    assert out["execution_status"] == "executable"
+    assert out["permission"] == "EXECUTE"
+    assert out["final_action"] == "EXECUTE"
+    assert out["readiness"] == "READY"
+    assert out["execution_entry_status"] == "executable"
+    assert out["execution_allowed"] is True
+
+
+def test_apply_level_normalization_preserves_row_when_levels_missing():
+    row = {
+        "trade_id": "T-QUEUE-BLOCK-LEVEL",
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "candidate_status": "near_executable",
+        "execution_status": "scored",
+        "permission": "QUEUE_ONLY",
+        "final_action": "QUEUE_ONLY",
+        "readiness": "QUEUE_ONLY",
+        "execution_blocked": False,
+        "hard_blockers": [],
+        "unresolved_contract": False,
+        "execution_entry": None,
+        "display_entry": None,
+        "entry": None,
+    }
+    out = review_queue._apply_level_normalization_and_promotion(row)
+
+    assert out["execution_status"] == "scored"
+    assert out["candidate_status"] == "near_executable"
+    assert list(out.get("hard_blockers") or []) == []

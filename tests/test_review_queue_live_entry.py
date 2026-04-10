@@ -680,8 +680,9 @@ def test_review_queue_persists_freshness_evidence_from_validation(tmp_path, monk
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
-    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (565.0, 100.0))
-    monkeypatch.setattr(review_queue.time, "time", lambda: 102.1)
+    base_epoch = 1_700_000_000.0
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (565.0, base_epoch + 100.0))
+    monkeypatch.setattr(review_queue.time, "time", lambda: base_epoch + 101.5)
     trade = _make_trade(
         instrument_token=99123,
         tradingsymbol="SENSEX26MAR81700PE",
@@ -694,8 +695,8 @@ def test_review_queue_persists_freshness_evidence_from_validation(tmp_path, monk
     rows = json.loads(qpath.read_text())
     assert rows[0]["freshness_reason"] == "quote_within_threshold"
     assert rows[0]["freshness_selected_source"] == "quote"
-    assert abs(float(rows[0]["freshness_selected_age_sec"]) - 2.1) < 1e-6
-    assert abs(float(rows[0]["price_age_sec"]) - 2.1) < 1e-6
+    assert abs(float(rows[0]["freshness_selected_age_sec"]) - 1.5) < 1e-6
+    assert abs(float(rows[0]["price_age_sec"]) - 1.5) < 1e-6
 
 
 def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypatch):
@@ -704,7 +705,8 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
     monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
-    now = {"ts": 112.0, "ltp_ts": 100.0}
+    base_epoch = 1_700_000_000.0
+    now = {"ts": base_epoch + 112.0, "ltp_ts": base_epoch + 100.0}
     monkeypatch.setattr(review_queue.time, "time", lambda: now["ts"])
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (565.0, now["ltp_ts"]))
     trade = _make_trade(
@@ -726,8 +728,8 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
     assert stale_row["freshness_reason"] == "quote_exceeds_threshold"
     assert float(stale_row["price_age_sec"]) > float(stale_row["freshness_threshold_sec"])
 
-    now["ts"] = 102.1
-    now["ltp_ts"] = 100.0
+    now["ts"] = base_epoch + 101.5
+    now["ltp_ts"] = base_epoch + 100.0
     review_queue.add_to_queue(trade)
     fresh_row = _row_by_trade_id(qpath, "T-STALE-RECOVER")
     assert "STALE_OPTION_LTP" not in list(fresh_row.get("blockers") or [])

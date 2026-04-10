@@ -247,6 +247,39 @@ def _compute_soft_reject_confidence(reject_reason: str, penalties: list[str]) ->
     return score
 
 
+def _soft_reject_status_from_confidence(candidate: dict[str, Any]) -> tuple[str, str]:
+    confidence = 0.0
+    try:
+        confidence = max(
+            float(candidate.get("confidence", 0.0) or 0.0),
+            float(candidate.get("rank_score", 0.0) or 0.0),
+            float(candidate.get("confidence_final", 0.0) or 0.0),
+        )
+    except Exception:
+        confidence = 0.0
+    borderline_floor = float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18)
+    if confidence >= borderline_floor:
+        return "scored", "soft_reject_but_salvageable"
+    return "advisory_only", "soft_reject_low_confidence"
+
+
+def _recoverable_soft_reject_reasons() -> set[str]:
+    raw = _normalize_text(
+        getattr(
+            cfg,
+            "CANDIDATE_SOFT_REJECT_RECOVERABLE_REASONS",
+            "no_signal,weak_signal,no_candidates_survived,latency_guard_cooldown,regime_unstable",
+        )
+    )
+    if not raw:
+        return {"no_signal", "weak_signal", "no_candidates_survived", "latency_guard_cooldown", "regime_unstable"}
+    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+
+def _is_recoverable_soft_reject(reason: str) -> bool:
+    return _lower_text(reason) in _recoverable_soft_reject_reasons()
+
+
 def build_soft_reject_candidate(
     market_data: dict[str, Any] | None,
     *,
@@ -262,40 +295,89 @@ def build_soft_reject_candidate(
     if not symbol:
         return None
     ts_epoch = _now_epoch()
-    trade_id = _normalize_text(payload.get("trade_id"))
-    if not trade_id:
-        trade_id = f"softrej_{symbol}_{int(ts_epoch * 1000)}"
     penalties = _coerce_reason_list(gate_reasons or []) or _coerce_reason_list([reject_reason])
     reject_text = _lower_text(reject_reason)
     confidence = _compute_soft_reject_confidence(reject_reason, penalties)
     reject_source_label = _normalize_text(reject_source)
     if reject_text == "unknown_reject":
         reject_source_label = "fallback_unknown"
+    recoverable = _is_recoverable_soft_reject(reject_reason)
+
+    if recoverable:
+        candidate_status = "near_executable"
+        final_action = "QUEUE_ONLY"
+        permission = "QUEUE_ONLY"
+        readiness_state = "QUEUE_ONLY"
+        execution_status = "scored"
+        execution_entry = payload.get("execution_entry")
+        execution_entry_source = _normalize_text(payload.get("execution_entry_source")) or "soft_reject_recovery"
+        execution_entry_status = _normalize_text(payload.get("execution_entry_status")) or "pending"
+        display_entry = payload.get("display_entry")
+        display_entry_source = _normalize_text(payload.get("display_entry_source")) or "soft_reject_recovery"
+        display_entry_status = _normalize_text(payload.get("display_entry_status")) or "pending"
+        entry = payload.get("entry")
+        entry_source = _normalize_text(payload.get("entry_source")) or "soft_reject_recovery"
+        entry_status = _normalize_text(payload.get("entry_status")) or "pending"
+        execution_blocked = False
+        execution_block_reason = None
+        eligible_for_execution = True
+        execution_allowed = True
+        execution_ok = True
+        row_kind = "queue_only"
+        candidate_origin = "softened_builder_path"
+        candidate_class = "softened"
+        trade_id = _normalize_text(payload.get("trade_id")) or f"tbsoft_{symbol}_{int(ts_epoch * 1000)}"
+    else:
+        candidate_status = "advisory_only"
+        final_action = "ADVISORY_ONLY"
+        permission = "ADVISORY_ONLY"
+        readiness_state = "ADVISORY_ONLY"
+        execution_status = "advisory_only"
+        execution_entry = None
+        execution_entry_source = "none"
+        execution_entry_status = "non_executable"
+        display_entry = None
+        display_entry_source = "none"
+        display_entry_status = "missing"
+        entry = None
+        entry_source = "none"
+        entry_status = "missing"
+        execution_blocked = True
+        execution_block_reason = _normalize_text(reject_reason) or "soft_reject"
+        eligible_for_execution = False
+        execution_allowed = False
+        execution_ok = False
+        row_kind = "advisory_only"
+        candidate_origin = _normalize_text(payload.get("candidate_origin")) or "synthetic_advisory"
+        candidate_class = "synthetic"
+        trade_id = _normalize_text(payload.get("trade_id")) or f"softrej_{symbol}_{int(ts_epoch * 1000)}"
 
     payload.update(
         {
             "trade_id": trade_id,
             "symbol": symbol,
             "tradingsymbol": _normalize_text(payload.get("tradingsymbol")) or symbol,
-            "candidate_type": _normalize_text(payload.get("candidate_type")) or "unknown",
-            "strategy_family": _normalize_text(payload.get("strategy_family")) or "unknown",
-            "setup_variant": _normalize_text(payload.get("setup_variant")) or "unknown",
+            "candidate_type": _normalize_text(payload.get("candidate_type")) or ("directional" if recoverable else "unknown"),
+            "strategy_family": _normalize_text(payload.get("strategy_family")) or ("builder_soft_reject" if recoverable else "synthetic_advisory"),
+            "setup_variant": _normalize_text(payload.get("setup_variant")) or ("softened_builder_path" if recoverable else "unknown"),
             "direction": _normalize_text(payload.get("direction")) or "UNKNOWN",
-            "candidate_status": "advisory_only",
+            "candidate_origin": candidate_origin,
+            "candidate_class": candidate_class,
+            "candidate_status": candidate_status,
             "advisory_visible": True,
-            "final_action": "ADVISORY_ONLY",
-            "permission": "ADVISORY_ONLY",
-            "readiness": "ADVISORY_ONLY",
-            "execution_status": "advisory_only",
-            "execution_entry": None,
-            "execution_entry_source": "none",
-            "execution_entry_status": "non_executable",
-            "display_entry": None,
-            "display_entry_source": "none",
-            "display_entry_status": "missing",
-            "entry": None,
-            "entry_source": "none",
-            "entry_status": "missing",
+            "final_action": final_action,
+            "permission": permission,
+            "readiness": readiness_state,
+            "execution_status": execution_status,
+            "execution_entry": execution_entry,
+            "execution_entry_source": execution_entry_source,
+            "execution_entry_status": execution_entry_status,
+            "display_entry": display_entry,
+            "display_entry_source": display_entry_source,
+            "display_entry_status": display_entry_status,
+            "entry": entry,
+            "entry_source": entry_source,
+            "entry_status": entry_status,
             "entry_clear_reason": _lower_text(reject_reason) or "soft_reject",
             "entry_block_code": _lower_text(reject_reason) or "soft_reject",
             "soft_penalties": penalties,
@@ -305,8 +387,11 @@ def build_soft_reject_candidate(
             "reject_source": reject_source_label,
             "reject_reason_source": reject_source_label,
             "gate_reasons": penalties,
-            "execution_blocked": True,
-            "execution_block_reason": _normalize_text(reject_reason) or "soft_reject",
+            "execution_blocked": execution_blocked,
+            "execution_block_reason": execution_block_reason,
+            "eligible_for_execution": eligible_for_execution,
+            "execution_allowed": execution_allowed,
+            "execution_ok": execution_ok,
             "confidence_raw": confidence,
             "confidence_penalty": 0.0,
             "confidence_final": confidence,
@@ -315,9 +400,22 @@ def build_soft_reject_candidate(
             "opportunity_score": float(payload.get("opportunity_score") or confidence),
             "ts_epoch": float(payload.get("ts_epoch") or ts_epoch),
             "timestamp": payload.get("timestamp") or datetime.fromtimestamp(ts_epoch, tz=timezone.utc).isoformat(),
-            "row_kind": "advisory_only",
+            "row_kind": row_kind,
         }
     )
+    if recoverable:
+        existing_family = _normalize_text(
+            (base_candidate or {}).get("strategy_family") if isinstance(base_candidate, dict) else payload.get("strategy_family")
+        )
+        if existing_family and existing_family.lower() != "synthetic_advisory":
+            payload["strategy_family"] = existing_family
+        elif _normalize_text(payload.get("strategy_family")).lower() in {"", "unknown", "synthetic_advisory"}:
+            payload["strategy_family"] = "builder_soft_reject"
+    source_flags = dict(payload.get("source_flags") or {})
+    source_flags["candidate_origin"] = candidate_origin
+    source_flags["soft_reject_reason"] = _normalize_text(reject_reason)
+    source_flags["recoverable_soft_reject"] = bool(recoverable)
+    payload["source_flags"] = source_flags
     option_type, option_source = _infer_option_type(payload, market_data)
     if option_type:
         payload["option_type"] = option_type
@@ -400,19 +498,36 @@ def apply_latency_penalty(
     was_executable = str(out.get("execution_status") or "").lower() == "executable" or bool(
         out.get("execution_allowed")
     )
-    out["execution_allowed"] = False
-    out["execution_ok"] = False
-    out["execution_status"] = "advisory_only"
+    soft_status, subreason = _soft_reject_status_from_confidence(
+        {
+            "confidence": confidence_after,
+            "rank_score": rank_after,
+            "confidence_final": confidence_after,
+        }
+    )
+    out["execution_allowed"] = bool(soft_status == "scored")
+    out["execution_ok"] = bool(soft_status == "scored")
+    out["execution_status"] = soft_status
     out["order_policy"] = "reject"
     out["order_policy_reason"] = warning_code
-    out["execution_blocked"] = True
-    out["execution_block_reason"] = warning_code
+    out["execution_blocked"] = bool(soft_status != "scored")
+    out["execution_block_reason"] = warning_code if soft_status != "scored" else None
     if was_executable:
         out["candidate_status"] = "near_executable"
     else:
-        out.setdefault("candidate_status", "advisory_only")
+        out.setdefault("candidate_status", "near_executable" if soft_status == "scored" else "advisory_only")
+    out["eligible_for_execution"] = bool(soft_status == "scored")
 
-    out.setdefault("row_kind", "advisory_only")
+    out.setdefault("row_kind", "near_executable" if soft_status == "scored" else "advisory_only")
+    print(
+        "SOFT_REJECT_WATCHLIST_ONLY",
+        {
+            "trade_id": out.get("trade_id"),
+            "symbol": out.get("symbol"),
+            "status": out.get("candidate_status"),
+            "subreason": subreason,
+        },
+    )
     preserve_strategy = bool(getattr(cfg, "LATENCY_SOFTEN_PRESERVE_STRATEGY_FAMILY", True))
     if not preserve_strategy and not out.get("strategy_family"):
         out["strategy_family"] = "unknown"

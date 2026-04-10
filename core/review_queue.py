@@ -41,6 +41,7 @@ from core.advisory_row_integrity import (
     log_corrupt_advisory_row,
     recompute_levels_from_final_entry,
 )
+from core.decision_engine import evaluate_candidate_decision
 from core.blocker_lifecycle import TARGET_BLOCKER_CODES, evaluate_advisory_contract_blockers, get_blocker_registry
 from core.candidate_scoring import score_candidate
 from core.execution_entry_trace import append_execution_entry_trace
@@ -264,16 +265,148 @@ def _is_synthetic_advisory_entry(entry: dict) -> bool:
     return False
 
 
+_HARD_EXECUTION_BLOCKER_CODES = {
+    "FEED_STALE",
+    "NO_LIVE_OPTION_FEED",
+    "UNRESOLVED_CONTRACT",
+    "MISSING_CONTRACT_FIELDS",
+    "QUOTE_MISSING",
+    "NO_TOKEN",
+    "MISSING_OPTION_TOKEN",
+    "MISSING_ENTRY",
+}
+
+_SOFT_EXECUTION_BLOCKER_CODES = {
+    "LATENCY_GUARD_COOLDOWN",
+    "REGIME_UNSTABLE",
+}
+
+
+def _candidate_confidence(entry: dict) -> float:
+    if not isinstance(entry, dict):
+        return 0.0
+    return max(
+        float(_safe_float(entry.get("confidence")) or 0.0),
+        float(_safe_float(entry.get("rank_score")) or 0.0),
+        float(_safe_float(entry.get("confidence_final")) or 0.0),
+    )
+
+
+def _entry_reason_codes(entry: dict) -> set[str]:
+    codes: set[str] = set()
+    if not isinstance(entry, dict):
+        return codes
+    for field in ("reject_reason", "entry_block_code", "permission_reason", "reason"):
+        text = str(entry.get(field) or "").strip().lower()
+        if text:
+            codes.add(text)
+    for key in ("gate_reasons", "soft_penalties", "warnings", "blockers", "hard_blockers"):
+        for item in list(entry.get(key) or []):
+            text = str(item or "").strip().lower()
+            if text:
+                codes.add(text)
+    source_flags = entry.get("source_flags") or {}
+    if isinstance(source_flags, dict):
+        text = str(source_flags.get("soft_reject_reason") or "").strip().lower()
+        if text:
+            codes.add(text)
+    return codes
+
+
+def _is_weak_signal_candidate(entry: dict) -> bool:
+    codes = _entry_reason_codes(entry)
+    return bool(codes & {"weak_signal", "no_signal"})
+
+
+def _is_hard_execution_blocker(reason: str) -> bool:
+    code = str(reason or "").strip().upper()
+    if not code:
+        return False
+    if code in _HARD_EXECUTION_BLOCKER_CODES:
+        return True
+    return code.startswith("HARD_")
+
+
+def _is_soft_execution_blocker(reason: str) -> bool:
+    code = str(reason or "").strip().upper()
+    return bool(code and code in _SOFT_EXECUTION_BLOCKER_CODES)
+
+
+def _mark_synthetic_advisory_entry(entry: dict, *, emit_log: bool = False) -> dict:
+    out = dict(entry or {})
+    score_cap = float(getattr(cfg, "PHASE2_MIN_BORDERLINE_SCORE", 0.12) or 0.12)
+    for field in ("rank_score", "final_score", "opportunity_score", "confidence", "confidence_final"):
+        value = _safe_float(out.get(field))
+        if value is not None:
+            out[field] = min(float(value), float(score_cap))
+    out["strategy_family"] = "synthetic_advisory"
+    out["setup_variant"] = "synthetic_advisory"
+    if out.get("direction") in (None, "", "None"):
+        out["direction"] = "UNKNOWN"
+    out["eligible_for_execution"] = False
+    out["execution_allowed"] = False
+    out["execution_status"] = "advisory_only"
+    out["candidate_status"] = "advisory_only"
+    if emit_log:
+        print(
+            "SYNTHETIC_SKIPPED_FROM_EXECUTION",
+            {
+                "trade_id": out.get("trade_id"),
+                "symbol": out.get("symbol"),
+                "strategy_family": out.get("strategy_family"),
+            },
+        )
+    return out
+
+
+def _is_execution_eligible(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if str(entry.get("strategy_family") or "").strip().lower() == "synthetic_advisory":
+        return False
+    execution_status = str(entry.get("execution_status") or "").strip().lower()
+    candidate_status = str(entry.get("candidate_status") or "").strip().lower()
+    if execution_status in {"advisory_only", "blocked"}:
+        return False
+    if candidate_status in {"advisory_only", "blocked", "blocked_contract"}:
+        return False
+    if bool(entry.get("eligible_for_execution", entry.get("execution_allowed", False))):
+        return True
+    return execution_status == "executable"
+
+
+def _compute_execution_decision(entry: dict) -> tuple[str, str]:
+    out = dict(entry or {})
+    if _is_synthetic_advisory_entry(out):
+        return "advisory_only", "synthetic_skipped"
+    blocker_codes = _dedupe_issue_codes(
+        list(out.get("hard_blockers") or [])
+        + list(out.get("blockers") or [])
+        + list(out.get("gate_reasons") or [])
+        + list(out.get("execution_blockers") or [])
+    )
+    hard_blockers = [code for code in blocker_codes if _is_hard_execution_blocker(code)]
+    if hard_blockers:
+        return "blocked", "hard_blocker"
+    confidence = _candidate_confidence(out)
+    soft_blockers = [code for code in blocker_codes if _is_soft_execution_blocker(code)]
+    if soft_blockers and confidence >= float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18):
+        return "queue_only", "strong_conf_soft_block_override"
+    if soft_blockers:
+        return "advisory_only", "soft_blocker"
+    if confidence >= float(getattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.18) or 0.18) and not blocker_codes:
+        return "executable", "clean_confident_candidate"
+    if confidence >= float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18):
+        return "queue_only", "borderline_candidate"
+    return "advisory_only", "low_confidence"
+
+
 def _apply_candidate_identity(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
     if _is_synthetic_advisory_entry(out):
-        out["strategy_family"] = "synthetic_advisory"
-        out["setup_variant"] = "synthetic_advisory"
-        if out.get("direction") in (None, "", "None"):
-            out["direction"] = "UNKNOWN"
-        return out
+        return _mark_synthetic_advisory_entry(out, emit_log=True)
     identity = infer_candidate_identity(out)
     for field in ("candidate_type", "strategy_family", "setup_variant", "direction"):
         value = out.get(field)
@@ -923,8 +1056,7 @@ def _apply_candidate_scoring(
         return entry
     out = dict(entry)
     if _is_synthetic_advisory_entry(out):
-        out["strategy_family"] = "synthetic_advisory"
-        out["setup_variant"] = "synthetic_advisory"
+        out = _mark_synthetic_advisory_entry(out, emit_log=True)
     else:
         if not out.get("strategy_family"):
             out["strategy_family"] = "fallback_breakout"
@@ -988,6 +1120,7 @@ def _apply_candidate_scoring(
     if _should_backfill_candidate_score(out.get("opportunity_score")) and opportunity_score is not None:
         out["opportunity_score"] = opportunity_score
 
+    out = _capture_score_integrity(out)
     return _apply_candidate_scoring_status(out)
 
 
@@ -1029,6 +1162,38 @@ def _candidate_scoring_inputs(
     return market_data, context
 
 
+def _capture_score_integrity(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    out = dict(entry)
+
+    raw_rank = _safe_float(out.get("raw_rank_score"))
+    if raw_rank is None:
+        raw_rank = _safe_float(out.get("rank_score"))
+        if raw_rank is not None:
+            out["raw_rank_score"] = raw_rank
+
+    raw_opp = _safe_float(out.get("raw_opportunity_score"))
+    if raw_opp is None:
+        raw_opp = _safe_float(out.get("opportunity_score"))
+        if raw_opp is not None:
+            out["raw_opportunity_score"] = raw_opp
+
+    final_rank = _safe_float(out.get("rank_score"))
+    if raw_rank is not None and final_rank is not None:
+        out["score_inflation_ratio"] = round(float(final_rank) / max(float(raw_rank), 1e-6), 6)
+        if float(final_rank) > float(raw_rank) * 1.5:
+            logger.warning(
+                "score_inflation_detected trade_id=%s symbol=%s raw_rank=%s final_rank=%s ratio=%s",
+                out.get("trade_id"),
+                out.get("symbol"),
+                raw_rank,
+                final_rank,
+                out.get("score_inflation_ratio"),
+            )
+    return out
+
+
 def _apply_terminal_candidate_scoring(
     entry: dict,
     *,
@@ -1051,8 +1216,7 @@ def _apply_terminal_candidate_scoring(
         market_open_for_entry=market_open_for_entry,
     )
     if _is_synthetic_advisory_entry(out):
-        out["strategy_family"] = "synthetic_advisory"
-        out["setup_variant"] = "synthetic_advisory"
+        out = _mark_synthetic_advisory_entry(out, emit_log=True)
     else:
         if not out.get("strategy_family"):
             out["strategy_family"] = "fallback_breakout"
@@ -1087,6 +1251,7 @@ def _apply_terminal_candidate_scoring(
         )
     if bool(getattr(cfg, "CANDIDATE_SCORING_ASSERT_ENABLE", False)):
         assert "rank_score" in out
+    out = _capture_score_integrity(out)
     return _apply_candidate_scoring_status(out)
 
 
@@ -1103,8 +1268,7 @@ def _finalize_append_payload_for_runtime_write(payload: dict) -> dict:
         if formatted:
             out["display_ts_ist"] = formatted
     if _is_synthetic_advisory_entry(out):
-        out["strategy_family"] = "synthetic_advisory"
-        out["setup_variant"] = "synthetic_advisory"
+        out = _mark_synthetic_advisory_entry(out, emit_log=True)
     else:
         strategy_family = str(out.get("strategy_family") or "").strip().lower()
         candidate_type = str(out.get("candidate_type") or "").strip().lower()
@@ -1477,6 +1641,8 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
     if permission == "QUEUE_ONLY":
         out["execution_status"] = "queue_only"
         out["is_executable"] = False
+        if not bool(out.get("unresolved_contract")) and not bool(_dedupe_issue_codes(list(out.get("hard_blockers") or []))):
+            out["eligible_for_execution"] = True
         return out
     claims_executable = execution_status == "executable" or bool(out.get("is_executable")) or readiness == "READY" or final_action == "EXECUTE" or permission == "EXECUTE" or row_status == "READY"
     if not claims_executable and not recovered_executable_entry:
@@ -1521,16 +1687,54 @@ def _enforce_executable_entry_invariant(entry: dict) -> dict:
         out["hard_blockers"] = hard_blockers
         out["blockers"] = blockers
         has_hard_blockers = True
-    out["execution_status"] = "blocked" if has_hard_blockers or not display_only_entry else "advisory_only"
+    decision_status, decision_reason = _compute_execution_decision(out)
+    if has_hard_blockers or not display_only_entry:
+        resolved_execution_status = "blocked"
+    elif decision_status in {"queue_only", "executable"}:
+        resolved_execution_status = "queue_only"
+    else:
+        resolved_execution_status = "advisory_only"
+    out["execution_status"] = resolved_execution_status
+    out["execution_allowed"] = False
     out["is_executable"] = False
     if readiness == "READY":
-        out["readiness"] = "BLOCKED" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
+        if resolved_execution_status == "queue_only":
+            out["readiness"] = "QUEUE_ONLY"
+        else:
+            out["readiness"] = "BLOCKED" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if final_action == "EXECUTE":
-        out["final_action"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
+        if resolved_execution_status == "queue_only":
+            out["final_action"] = "QUEUE_ONLY"
+        else:
+            out["final_action"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if permission == "EXECUTE":
-        out["permission"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
+        if resolved_execution_status == "queue_only":
+            out["permission"] = "QUEUE_ONLY"
+        else:
+            out["permission"] = "BLOCK" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
     if row_status == "READY":
-        out["status"] = "INVALID" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
+        if resolved_execution_status == "queue_only":
+            out["status"] = "QUEUE_ONLY"
+        else:
+            out["status"] = "INVALID" if has_hard_blockers or not display_only_entry else "ADVISORY_ONLY"
+    if resolved_execution_status == "queue_only":
+        out["candidate_status"] = "near_executable"
+        out["eligible_for_execution"] = not has_hard_blockers and not bool(out.get("unresolved_contract")) and not bool(out.get("execution_blocked"))
+        print(
+            "EXECUTABLE_CANDIDATE_SURVIVED",
+            {
+                "trade_id": out.get("trade_id"),
+                "symbol": out.get("symbol"),
+                "confidence": _candidate_confidence(out),
+                "reason": decision_reason,
+            },
+        )
+    elif resolved_execution_status == "advisory_only":
+        out["candidate_status"] = "advisory_only"
+        out["eligible_for_execution"] = False
+    else:
+        out["candidate_status"] = "blocked"
+        out["eligible_for_execution"] = False
     if not str(out.get("entry_clear_reason") or "").strip():
         reason = "missing_execution_entry" if missing_executable_entry else str(out.get("entry_status") or "missing_entry").strip().lower()
         out["entry_clear_reason"] = reason or "missing_entry"
@@ -2307,6 +2511,8 @@ def _emit_review_queue_logs(entry: dict) -> dict:
     if str(advisory_payload.get("final_action") or "").strip().upper() == "BLOCK":
         advisory_payload = _preserve_blocked_candidate_metadata(advisory_payload, terminal=False)
     advisory_payload = _classify_candidate_status(advisory_payload)
+    advisory_payload = _apply_level_normalization_and_promotion(advisory_payload)
+    advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload["row_kind"] = _derive_review_queue_row_kind(advisory_payload)
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
     print(
@@ -2320,6 +2526,18 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         advisory_payload.get("entry_status"),
         advisory_payload.get("permission"),
     )
+    if not _is_execution_eligible(advisory_payload):
+        print(
+            "FINAL_EMIT_ABORT",
+            {
+                "trade_id": advisory_payload.get("trade_id"),
+                "symbol": advisory_payload.get("symbol"),
+                "execution_status": advisory_payload.get("execution_status"),
+                "candidate_status": advisory_payload.get("candidate_status"),
+                "strategy_family": advisory_payload.get("strategy_family"),
+                "reason": "no_execution_candidates",
+            },
+        )
     print(
         "FINAL EMIT:",
         advisory_payload.get("execution_entry"),
@@ -2894,6 +3112,220 @@ def _safe_float(value):
         return float(value)
     except Exception:
         return None
+
+
+def _resolved_entry_price(payload: dict) -> float | None:
+    if not isinstance(payload, dict):
+        return None
+    return _safe_float(payload.get("execution_entry") or payload.get("display_entry") or payload.get("entry"))
+
+
+def _is_buy_side(payload: dict) -> bool:
+    side = str(payload.get("side") or payload.get("direction") or "").strip().upper()
+    option_type = str(payload.get("option_type") or "").strip().upper()
+    if "SELL" in side:
+        return False
+    if side in {"BUY", "BUY_CALL", "BUY_PUT"}:
+        return True
+    if option_type in {"CE", "PE"}:
+        return True
+    return True
+
+
+def _looks_like_underlying_level(value: float | None, entry: float | None) -> bool:
+    if value is None or entry is None or entry <= 0:
+        return False
+    return float(value) > (float(entry) * 20.0)
+
+
+def _premium_targets_from_entry(entry: float, buy_side: bool) -> tuple[float, float]:
+    if buy_side:
+        stop_loss = round(entry * 0.75, 3)
+        target = round(entry * 1.35, 3)
+    else:
+        stop_loss = round(entry * 1.25, 3)
+        target = round(entry * 0.65, 3)
+    return stop_loss, target
+
+
+def _set_level_fields(payload: dict, *, stop_loss: float | None, target: float | None) -> None:
+    payload["stop_loss"] = stop_loss
+    payload["stop"] = stop_loss
+    payload["stop_price"] = stop_loss
+    payload["original_stop"] = stop_loss
+    payload["current_stop"] = stop_loss
+    payload["target"] = target
+    payload["target_price"] = target
+
+
+def _levels_valid(payload: dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    entry = _resolved_entry_price(payload)
+    stop_loss = _safe_float(payload.get("stop_loss"))
+    if stop_loss is None:
+        stop_loss = _safe_float(payload.get("stop"))
+    target = _safe_float(payload.get("target"))
+    if entry is None or stop_loss is None or target is None:
+        return False
+    if _is_buy_side(payload):
+        return bool(stop_loss < entry < target)
+    return bool(target < entry < stop_loss)
+
+
+def _normalize_trade_levels(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    entry = _resolved_entry_price(out)
+    if entry is None or entry <= 0:
+        return out
+    stop_loss = _safe_float(out.get("stop_loss"))
+    if stop_loss is None:
+        stop_loss = _safe_float(out.get("stop"))
+    target = _safe_float(out.get("target"))
+    buy_side = _is_buy_side(out)
+
+    sl_underlying = _looks_like_underlying_level(stop_loss, entry)
+    tg_underlying = _looks_like_underlying_level(target, entry)
+    if sl_underlying or tg_underlying:
+        sl_new, tg_new = _premium_targets_from_entry(entry, buy_side)
+        _set_level_fields(out, stop_loss=sl_new, target=tg_new)
+        out["level_space"] = "premium_normalized"
+        out["level_recompute_reason"] = "mixed_price_spaces"
+        logger.warning(
+            "LEVEL_NORMALIZATION_APPLIED trade_id=%s symbol=%s entry=%s stop_loss=%s target=%s level_space=%s reason=%s",
+            out.get("trade_id"),
+            out.get("symbol"),
+            entry,
+            out.get("stop_loss"),
+            out.get("target"),
+            out.get("level_space"),
+            out.get("level_recompute_reason"),
+        )
+        return out
+
+    if stop_loss is None or target is None:
+        sl_new, tg_new = _premium_targets_from_entry(entry, buy_side)
+        _set_level_fields(
+            out,
+            stop_loss=sl_new if stop_loss is None else stop_loss,
+            target=tg_new if target is None else target,
+        )
+        out["level_space"] = "premium_backfilled"
+        out["level_recompute_reason"] = "missing_levels"
+        logger.warning(
+            "LEVEL_NORMALIZATION_APPLIED trade_id=%s symbol=%s entry=%s stop_loss=%s target=%s level_space=%s reason=%s",
+            out.get("trade_id"),
+            out.get("symbol"),
+            entry,
+            out.get("stop_loss"),
+            out.get("target"),
+            out.get("level_space"),
+            out.get("level_recompute_reason"),
+        )
+        return out
+
+    return out
+
+
+def _promote_queue_only_candidate(row: dict) -> dict:
+    if not isinstance(row, dict):
+        return row
+    out = dict(row)
+    candidate_status = str(out.get("candidate_status") or "").strip().lower()
+    execution_status = str(out.get("execution_status") or "").strip().lower()
+    permission = str(out.get("permission") or "").strip().upper()
+    blocked = bool(out.get("execution_blocked"))
+    hard_blockers = list(out.get("hard_blockers") or [])
+    unresolved_contract = bool(out.get("unresolved_contract"))
+    source_flags = out.get("source_flags") if isinstance(out.get("source_flags"), dict) else {}
+    candidate_origin = str(out.get("candidate_origin") or "").strip().lower()
+    trade_id = str(out.get("trade_id") or "").strip().lower()
+    promotable_source = bool(source_flags.get("recoverable_soft_reject")) or candidate_origin == "softened_builder_path" or trade_id.startswith("tbsoft_")
+
+    promotable = (
+        promotable_source
+        and
+        candidate_status == "near_executable"
+        and execution_status in {"scored", "queue_only"}
+        and permission == "QUEUE_ONLY"
+        and not blocked
+        and not hard_blockers
+        and not unresolved_contract
+        and _levels_valid(out)
+    )
+    if not promotable:
+        return out
+
+    resolved_entry = _resolved_entry_price(out)
+    if resolved_entry is not None and _safe_float(out.get("execution_entry")) is None:
+        out["execution_entry"] = resolved_entry
+    out["execution_status"] = "executable"
+    out["permission"] = "EXECUTE"
+    out["final_action"] = "EXECUTE"
+    out["readiness"] = "READY"
+    out["execution_entry_status"] = "executable"
+    out["execution_allowed"] = True
+    out["execution_ok"] = True
+    out["eligible_for_execution"] = True
+    out["is_executable"] = True
+    return out
+
+
+def _apply_level_normalization_and_promotion(row: dict) -> dict:
+    if not isinstance(row, dict):
+        return row
+    out = _normalize_trade_levels(row)
+    if not _levels_valid(out):
+        out = _normalize_trade_levels(out)
+    if not _levels_valid(out):
+        existing_hard_block = (
+            bool(out.get("unresolved_contract"))
+            or bool(list(out.get("hard_blockers") or []))
+            or str(out.get("permission") or "").strip().upper() == "BLOCK"
+            or str(out.get("execution_status") or "").strip().lower() == "blocked"
+            or str(out.get("candidate_status") or "").strip().lower() in {"blocked", "blocked_contract"}
+        )
+        entry = _resolved_entry_price(out)
+        stop_loss = _safe_float(out.get("stop_loss"))
+        if stop_loss is None:
+            stop_loss = _safe_float(out.get("stop"))
+        target = _safe_float(out.get("target"))
+        if existing_hard_block or entry is None or stop_loss is None or target is None:
+            return out
+        out["execution_status"] = "blocked"
+        out["candidate_status"] = "blocked_levels"
+        out["execution_blocked"] = True
+        out["execution_block_reason"] = "invalid_level_geometry"
+        hard_blockers = list(out.get("hard_blockers") or [])
+        if "invalid_level_geometry" not in hard_blockers:
+            hard_blockers.append("invalid_level_geometry")
+        out["hard_blockers"] = hard_blockers
+        blockers = list(out.get("blockers") or [])
+        if "invalid_level_geometry" not in blockers:
+            blockers.append("invalid_level_geometry")
+        out["blockers"] = blockers
+        out["reject_reason"] = "invalid_level_geometry"
+        out["failure_reason"] = "invalid_level_geometry"
+        out["permission"] = "BLOCK"
+        out["final_action"] = "BLOCK"
+        out["readiness"] = "BLOCKED"
+        out["execution_allowed"] = False
+        out["eligible_for_execution"] = False
+        out["is_executable"] = False
+        logger.error(
+            "LEVEL_GEOMETRY_BLOCK trade_id=%s symbol=%s candidate_status=%s execution_status=%s entry=%s stop_loss=%s target=%s",
+            out.get("trade_id"),
+            out.get("symbol"),
+            out.get("candidate_status"),
+            out.get("execution_status"),
+            entry,
+            out.get("stop_loss") if out.get("stop_loss") is not None else out.get("stop"),
+            out.get("target"),
+        )
+        return out
+    return _promote_queue_only_candidate(out)
 
 
 def _normalize_text(value) -> str:
@@ -3742,6 +4174,9 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    if _is_synthetic_advisory_entry(out):
+        out["promotion_block_reason"] = "synthetic_advisory"
+        return out
     try:
         promotion_enabled = bool(getattr(cfg, "PERMISSION_PROMOTION_ENABLE", True))
     except Exception:
@@ -3777,31 +4212,48 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
         return out
     if not _promotion_rank_is_eligible(out):
         return out
-    confidence_value = _promotion_confidence(out)
-    try:
-        min_conf = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_CONF", 0.72))
-    except Exception:
-        min_conf = 0.72
-    try:
-        strong_conf = float(getattr(cfg, "PERMISSION_PROMOTION_STRONG_CONF", 0.80))
-    except Exception:
-        strong_conf = 0.80
-    if confidence_value is None or float(confidence_value) < float(min_conf):
+    decision = evaluate_candidate_decision(out)
+    out["raw_score"] = decision.get("raw_score")
+    out["final_score"] = decision.get("final_score")
+    out["candidate_class"] = decision.get("candidate_class")
+    out["class_score_cap"] = decision.get("class_score_cap")
+    out["feed_confidence"] = (decision.get("feed") or {}).get("feed_confidence")
+    out["feed_state"] = (decision.get("feed") or {}).get("feed_state")
+    out["decision_reason"] = decision.get("decision_reason")
+    out["execution_ready"] = decision.get("execution_ready")
+    out["readiness_reasons"] = list(decision.get("readiness_reasons") or [])
+    out["adaptive_execution_threshold"] = decision.get("adaptive_execution_threshold")
+    out["score_inflation_ratio"] = decision.get("score_inflation_ratio")
+
+    action = str(decision.get("decision_action") or "REJECT").upper()
+    if action == "QUEUE":
+        out["permission"] = "QUEUE_ONLY"
+        out["final_action"] = "QUEUE_ONLY"
+        out["readiness"] = "QUEUE_ONLY"
+        out["status"] = "QUEUE_ONLY"
+        out["execution_status"] = "queue_only"
+        out["execution_allowed"] = False
+        out["execution_ok"] = False
+        out["eligible_for_execution"] = True
+        out["is_executable"] = False
+        out["promotion_block_reason"] = str(decision.get("decision_reason") or "queue_only")
         return out
-    if float(confidence_value) >= float(strong_conf):
-        promotion_reason = "strong_confidence_executable_entry"
-    elif out.get("selected_for_execution") is True or _safe_float(out.get("rank_global")) is not None:
-        promotion_reason = "ranked_top_candidate_promoted"
-    else:
-        promotion_reason = "clean_executable_candidate"
+    if action != "EXECUTE":
+        out["promotion_block_reason"] = str(
+            decision.get("decision_reason") or "decision_engine_reject"
+        )
+        return out
+
     out["permission_promoted_from"] = old_permission
     out["final_action_promoted_from"] = old_final_action
-    out["promotion_reason"] = promotion_reason
+    out["promotion_reason"] = str(decision.get("decision_reason") or "decision_engine_execute")
     out["permission"] = "EXECUTE"
     out["final_action"] = "EXECUTE"
     out["readiness"] = "READY"
     out["status"] = "READY"
     out["execution_allowed"] = True
+    out["execution_ok"] = True
+    out["eligible_for_execution"] = True
     out["execution_status"] = "executable"
     out["is_executable"] = True
     _append_permission_promotion_trace(out, old_permission=old_permission, old_final_action=old_final_action)
@@ -4329,8 +4781,10 @@ def _refresh_opportunity_survival_state(entry: dict) -> dict:
         out["is_executable"] = False
         if permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
             out["execution_status"] = "queue_only"
+            out["eligible_for_execution"] = not approval_blocked and not unresolved_contract and not bool(hard_blockers)
         else:
             out["execution_status"] = "advisory_only"
+            out["eligible_for_execution"] = False
         return _classify_candidate_status(out)
 
     if displayable_truth and (
@@ -4343,8 +4797,10 @@ def _refresh_opportunity_survival_state(entry: dict) -> dict:
         out["is_executable"] = False
         if permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
             out["execution_status"] = "queue_only"
+            out["eligible_for_execution"] = not approval_blocked and not unresolved_contract and not bool(hard_blockers)
         else:
             out["execution_status"] = "advisory_only"
+            out["eligible_for_execution"] = False
         return _classify_candidate_status(out)
 
     out["tradable"] = False
@@ -6452,6 +6908,8 @@ def _build_canonical_advisory_entry(
     advisory_payload = _reconcile_locked_final_entry(advisory_payload)
     if str(advisory_payload.get("final_action") or "").strip().upper() == "BLOCK":
         advisory_payload = _preserve_blocked_candidate_metadata(advisory_payload, terminal=False)
+    advisory_payload = _classify_candidate_status(advisory_payload)
+    advisory_payload = _apply_level_normalization_and_promotion(advisory_payload)
     advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload["row_kind"] = _derive_review_queue_row_kind(advisory_payload)
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
