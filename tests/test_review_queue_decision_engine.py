@@ -148,6 +148,58 @@ def test_queue_only_backdoor_promotion_blocked_for_weak_signal(monkeypatch):
     assert out["promotion_block_reason"] == "weak_signal_queue_only"
 
 
+def test_queue_only_normalization_path_delegates_to_decision_engine(monkeypatch):
+    monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35, raising=False)
+    calls = {"count": 0}
+
+    def _stub_maybe_promote(entry):
+        calls["count"] += 1
+        out = dict(entry)
+        out["promotion_block_reason"] = "decision_engine_reject"
+        return out
+
+    monkeypatch.setattr(review_queue, "_maybe_promote_execute_candidate", _stub_maybe_promote)
+
+    out = review_queue._promote_queue_only_candidate(
+        {
+            "trade_id": "tbsoft_NIFTY_3",
+            "symbol": "NIFTY",
+            "candidate_status": "near_executable",
+            "execution_status": "queue_only",
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "readiness": "QUEUE_ONLY",
+            "execution_entry": 150.0,
+            "execution_entry_status": "executable",
+            "display_entry": 150.0,
+            "entry": 150.0,
+            "stop_loss": 120.0,
+            "target": 210.0,
+            "tradable": True,
+            "execution_allowed": True,
+            "execution_ok": True,
+            "execution_blocked": False,
+            "hard_blockers": [],
+            "unresolved_contract": False,
+            "source_flags": {"recoverable_soft_reject": True},
+            "quote_source": "tick_store",
+            "quote_validation_status": "OK",
+            "quote_age_sec": 0.5,
+            "raw_rank_score": 0.50,
+            "rank_score": 0.72,
+            "gating_final_confidence": 0.82,
+            "selected_for_execution": True,
+        }
+    )
+
+    assert calls["count"] == 1
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out.get("promotion_candidate") == "post_level_normalization"
+    assert out["promotion_block_reason"] == "decision_engine_reject"
+
+
 def test_terminal_scoring_is_idempotent_and_bounded(monkeypatch):
     monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_ABS_DELTA", 0.15, raising=False)
     monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_MULT", 1.35, raising=False)

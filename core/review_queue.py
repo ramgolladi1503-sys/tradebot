@@ -3322,16 +3322,10 @@ def _promote_queue_only_candidate(row: dict) -> dict:
     resolved_entry = _resolved_entry_price(out)
     if resolved_entry is not None and _safe_float(out.get("execution_entry")) is None:
         out["execution_entry"] = resolved_entry
-    out["execution_status"] = "executable"
-    out["permission"] = "EXECUTE"
-    out["final_action"] = "EXECUTE"
-    out["readiness"] = "READY"
-    out["execution_entry_status"] = "executable"
-    out["execution_allowed"] = True
-    out["execution_ok"] = True
-    out["eligible_for_execution"] = True
-    out["is_executable"] = True
-    return out
+    # Execution promotion authority remains centralized in `_maybe_promote_execute_candidate`
+    # so level-normalization path cannot bypass decision-engine safeguards.
+    out["promotion_candidate"] = "post_level_normalization"
+    return _maybe_promote_execute_candidate(out)
 
 
 def _apply_level_normalization_and_promotion(row: dict) -> dict:
