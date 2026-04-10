@@ -67,6 +67,9 @@ def test_build_soft_reject_candidate_recoverable_is_promotable():
     assert candidate["strategy_family"] == "ensemble_opt"
     assert str(candidate["trade_id"]).startswith("tbsoft_")
     assert candidate["source_flags"]["recoverable_soft_reject"] is True
+    assert candidate["rank_score"] is None
+    assert candidate["opportunity_score"] is None
+    assert candidate["soft_reject_seed_confidence"] == candidate["confidence"]
 
 
 def test_build_soft_reject_candidate_nonrecoverable_stays_advisory():

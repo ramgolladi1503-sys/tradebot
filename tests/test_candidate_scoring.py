@@ -77,8 +77,37 @@ def test_score_candidate_degrades_gracefully_when_some_inputs_are_missing():
     assert 0.25 < scored["confidence_final"] < 0.70
     assert scored["rank_score"] > 0.20
     assert scored["opportunity_score"] > 0.20
-    assert "missing_rr_context" in scored["penalty_reasons"]
+    assert "rr_estimated_context" in scored["penalty_reasons"]
     assert scored["score_breakdown"]["missing_reasons"]
+
+
+def test_score_candidate_missing_entry_still_flags_missing_rr_context():
+    candidate = {
+        "trade_id": "T-MISSING-RR",
+        "builder_confidence": 0.31,
+        "entry_price": None,
+        "stop_loss": None,
+        "target": None,
+    }
+    market_data = {
+        "regime": "UNKNOWN",
+        "market_open": True,
+        "quote_source": "tick_store",
+        "current_ltp": None,
+    }
+    context = {
+        "mode": "LIVE",
+        "market_open": True,
+        "blockers": [],
+        "hard_blockers": [],
+        "soft_penalties": [],
+        "warnings": [],
+    }
+
+    scored = score_candidate(candidate, market_data, context)
+
+    assert "missing_rr_context" in scored["penalty_reasons"]
+    assert "rr_estimated_context" not in scored["penalty_reasons"]
 
 
 def test_score_candidate_weak_setup_is_penalized_without_zeroing_everything():

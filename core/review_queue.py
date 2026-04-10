@@ -745,9 +745,33 @@ def _apply_sizing_telemetry(entry: dict) -> dict:
     return out
 
 
-def _should_backfill_candidate_score(value: object) -> bool:
+def _should_backfill_candidate_score(
+    value: object,
+    *,
+    row: dict | None = None,
+    field: str | None = None,
+) -> bool:
     numeric = _safe_float(value)
-    return numeric is None or float(numeric) <= 0.0
+    if numeric is None:
+        return True
+    if float(numeric) <= 0.0:
+        return True
+    if not isinstance(row, dict):
+        return False
+    if str(field or "").strip().lower() not in {"rank_score", "opportunity_score"}:
+        return False
+    source_flags = row.get("source_flags") if isinstance(row.get("source_flags"), dict) else {}
+    candidate_origin = str(row.get("candidate_origin") or "").strip().lower()
+    trade_id = str(row.get("trade_id") or "").strip().lower()
+    seeded_soft_reject = (
+        bool(source_flags.get("recoverable_soft_reject"))
+        or candidate_origin in {"softened_builder_path", "softened"}
+        or trade_id.startswith("tbsoft_")
+    )
+    if not seeded_soft_reject:
+        return False
+    min_rank = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35) or 0.35)
+    return float(numeric) < min_rank
 
 
 _CANDIDATE_STATUS_VALUES = {
@@ -1114,10 +1138,18 @@ def _apply_candidate_scoring(
 
     rank_score = _safe_float(scored.get("rank_score"))
     assert rank_score is not None, "SCORING NOT APPLIED IN REVIEW_QUEUE"
-    if _should_backfill_candidate_score(out.get("rank_score")) and rank_score is not None:
+    if _should_backfill_candidate_score(
+        out.get("rank_score"),
+        row=out,
+        field="rank_score",
+    ) and rank_score is not None:
         out["rank_score"] = rank_score
     opportunity_score = _safe_float(scored.get("opportunity_score"))
-    if _should_backfill_candidate_score(out.get("opportunity_score")) and opportunity_score is not None:
+    if _should_backfill_candidate_score(
+        out.get("opportunity_score"),
+        row=out,
+        field="opportunity_score",
+    ) and opportunity_score is not None:
         out["opportunity_score"] = opportunity_score
 
     out = _capture_score_integrity(out)
@@ -1203,8 +1235,11 @@ def _apply_terminal_candidate_scoring(
 ) -> dict:
     if not isinstance(entry, dict):
         return entry
+    out = dict(entry)
+    if bool(out.get("terminal_scoring_applied")):
+        return out
     out = _apply_candidate_scoring(
-        entry,
+        out,
         mode_for_entry=mode_for_entry,
         allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
         market_open_for_entry=market_open_for_entry,
@@ -1223,7 +1258,20 @@ def _apply_terminal_candidate_scoring(
         if not out.get("candidate_type"):
             out["candidate_type"] = "fallback_directional"
     scored = score_candidate(out, market_data, context)
-    out["rank_score"] = _safe_float(scored.get("rank_score"))
+    raw_rank = _safe_float(out.get("raw_rank_score"))
+    existing_rank = _safe_float(out.get("rank_score"))
+    scored_rank = _safe_float(scored.get("rank_score"))
+    if raw_rank is None:
+        raw_rank = existing_rank
+    if raw_rank is not None and _safe_float(out.get("raw_rank_score")) is None:
+        out["raw_rank_score"] = float(raw_rank)
+    final_rank = scored_rank
+    if raw_rank is not None and scored_rank is not None:
+        max_abs_delta = float(getattr(cfg, "TERMINAL_SCORING_MAX_ABS_DELTA", 0.15) or 0.15)
+        max_mult = float(getattr(cfg, "TERMINAL_SCORING_MAX_MULT", 1.35) or 1.35)
+        max_rank = max(float(raw_rank) + max_abs_delta, float(raw_rank) * max_mult)
+        final_rank = min(float(scored_rank), float(max_rank))
+    out["rank_score"] = _safe_float(final_rank)
     assert out.get("rank_score") is not None, "SCORING NOT APPLIED IN REVIEW_QUEUE"
     out["opportunity_score"] = _safe_float(scored.get("opportunity_score"))
     out["confidence_raw"] = _safe_float(scored.get("confidence_raw"))
@@ -1251,6 +1299,7 @@ def _apply_terminal_candidate_scoring(
         )
     if bool(getattr(cfg, "CANDIDATE_SCORING_ASSERT_ENABLE", False)):
         assert "rank_score" in out
+    out["terminal_scoring_applied"] = True
     out = _capture_score_integrity(out)
     return _apply_candidate_scoring_status(out)
 
@@ -1276,11 +1325,13 @@ def _finalize_append_payload_for_runtime_write(payload: dict) -> dict:
             out["strategy_family"] = "forced"
         if not candidate_type or candidate_type == "unknown":
             out["candidate_type"] = "forced"
-    score = score_candidate(out, market_data={}, context={})
-    out["rank_score"] = score.get("rank_score", score.get("confidence_final"))
-    out["opportunity_score"] = score.get("opportunity_score", out.get("rank_score"))
-    out["confidence_final"] = score.get("confidence_final", out.get("confidence_final"))
-    out["score_breakdown"] = score.get("score_breakdown", score)
+    if not bool(out.get("terminal_scoring_applied")) or _safe_float(out.get("rank_score")) is None:
+        score = score_candidate(out, market_data={}, context={})
+        out["rank_score"] = score.get("rank_score", score.get("confidence_final"))
+        out["opportunity_score"] = score.get("opportunity_score", out.get("rank_score"))
+        out["confidence_final"] = score.get("confidence_final", out.get("confidence_final"))
+        out["score_breakdown"] = score.get("score_breakdown", score)
+        out["terminal_scoring_applied"] = True
     print(
         "FINAL_APPEND_PATCH",
         out.get("rank_score"),
@@ -3256,6 +3307,16 @@ def _promote_queue_only_candidate(row: dict) -> dict:
         and _levels_valid(out)
     )
     if not promotable:
+        return out
+    raw_rank = _safe_float(out.get("raw_rank_score"))
+    if raw_rank is None:
+        raw_rank = _safe_float(out.get("rank_score"))
+    min_raw_rank = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35) or 0.35)
+    if raw_rank is None or float(raw_rank) < min_raw_rank:
+        out["promotion_block_reason"] = "raw_rank_below_execute_floor"
+        return out
+    if _is_weak_signal_candidate(out):
+        out["promotion_block_reason"] = "weak_signal_queue_only"
         return out
 
     resolved_entry = _resolved_entry_price(out)

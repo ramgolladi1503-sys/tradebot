@@ -18,6 +18,21 @@ def _cfg_float(name: str, default: float) -> float:
         return float(default)
 
 
+def _cfg_bool(name: str, default: bool) -> bool:
+    try:
+        value = getattr(cfg, name, default)
+    except Exception:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
 def _safe_float(value: Any) -> float | None:
     try:
         if value in (None, "", "None"):
@@ -234,6 +249,28 @@ def _rr_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inpu
     )
     stop_price = _first_float(candidate.get("stop_price"), candidate.get("stop"), candidate.get("stop_loss"))
     target_price = _first_float(candidate.get("target_price"), candidate.get("target"))
+    fallback_reason: str | None = None
+    if (
+        entry_basis is not None
+        and (stop_price is None or target_price is None)
+        and _cfg_bool("CANDIDATE_SCORING_RR_FALLBACK_ENABLE", True)
+    ):
+        direction_hint = str(candidate.get("side") or candidate.get("direction") or "").strip().upper()
+        buy_side = not any(token in direction_hint for token in ("SELL", "SHORT"))
+        if stop_price is None:
+            if buy_side:
+                stop_mult = _cfg_float("CANDIDATE_SCORING_RR_FALLBACK_BUY_STOP_MULT", 0.75)
+            else:
+                stop_mult = _cfg_float("CANDIDATE_SCORING_RR_FALLBACK_SELL_STOP_MULT", 1.25)
+            stop_price = float(entry_basis) * float(stop_mult)
+        if target_price is None:
+            if buy_side:
+                target_mult = _cfg_float("CANDIDATE_SCORING_RR_FALLBACK_BUY_TARGET_MULT", 1.35)
+            else:
+                target_mult = _cfg_float("CANDIDATE_SCORING_RR_FALLBACK_SELL_TARGET_MULT", 0.65)
+            target_price = float(entry_basis) * float(target_mult)
+        fallback_reason = "rr_estimated_context"
+
     if entry_basis is None or stop_price is None or target_price is None:
         score_inputs_used["rr_basis"] = {
             "entry_basis": entry_basis,
@@ -245,6 +282,8 @@ def _rr_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inpu
     reward = abs(float(target_price) - float(entry_basis))
     risk = max(abs(float(entry_basis) - float(stop_price)), 1e-6)
     rr_ratio = reward / risk
+    if fallback_reason:
+        score_inputs_used["rr_source"] = "fallback_estimated"
     score_inputs_used["rr_ratio"] = rr_ratio
     if rr_ratio >= 3.0:
         score = 1.0
@@ -258,7 +297,10 @@ def _rr_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inpu
         score = 0.4
     else:
         score = 0.22
-    return _clamp01(score, default=0.45), []
+    reasons: list[str] = []
+    if fallback_reason:
+        reasons.append(fallback_reason)
+    return _clamp01(score, default=0.45), reasons
 
 
 def _timing_score(candidate: dict[str, Any], market_data: dict[str, Any], context: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:

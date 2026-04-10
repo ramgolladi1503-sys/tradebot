@@ -396,8 +396,17 @@ def build_soft_reject_candidate(
             "confidence_penalty": 0.0,
             "confidence_final": confidence,
             "confidence": confidence,
-            "rank_score": float(payload.get("rank_score") or confidence),
-            "opportunity_score": float(payload.get("opportunity_score") or confidence),
+            "soft_reject_seed_confidence": confidence,
+            "rank_score": (
+                _safe_float(payload.get("rank_score"))
+                if _safe_float(payload.get("rank_score")) is not None
+                else (None if recoverable else confidence)
+            ),
+            "opportunity_score": (
+                _safe_float(payload.get("opportunity_score"))
+                if _safe_float(payload.get("opportunity_score")) is not None
+                else (None if recoverable else confidence)
+            ),
             "ts_epoch": float(payload.get("ts_epoch") or ts_epoch),
             "timestamp": payload.get("timestamp") or datetime.fromtimestamp(ts_epoch, tz=timezone.utc).isoformat(),
             "row_kind": row_kind,

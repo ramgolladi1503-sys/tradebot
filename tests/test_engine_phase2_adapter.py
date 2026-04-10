@@ -393,6 +393,186 @@ def test_build_candidates_phase2_applies_data_fallback_defaults(monkeypatch):
     assert ranked[0]["tick_volume"] == 1.0
 
 
+def test_build_candidates_phase2_applies_market_context_fallbacks(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_SPREAD_FALLBACK_PCT", 0.003, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_LIQUIDITY_FALLBACK_SCORE", 0.5, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "CTX_FALLBACK",
+                "symbol": "NIFTY",
+                "final_score": 0.8,
+                "spread_pct": None,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.7,
+                "liquidity_score": None,
+                "quote_source": None,
+            }
+        ]
+    )
+    assert len(ranked) == 1
+    assert ranked[0]["spread_pct"] == 0.003
+    assert ranked[0]["liquidity_score"] == 0.5
+    assert ranked[0]["quote_source"] == "unknown"
+    assert "unknown_quote_source" in list(ranked[0].get("phase2_soft_penalties") or [])
+
+
+def test_build_candidates_phase2_soft_degrades_noncritical_execution_context(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
+    monkeypatch.setattr(
+        cfg,
+        "PHASE2_SOFT_CONTEXT_REASON_CODES",
+        "missing_rr_context,missing_liquidity_context,missing_spread_context,missing_timing_context,unknown_quote_source",
+        raising=False,
+    )
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "SOFT_DEGRADE_PASS",
+                "symbol": "BANKNIFTY",
+                "candidate_status": "near_executable",
+                "execution_status": "queue_only",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "execution_allowed": False,
+                "tradable": False,
+                "execution_ok": False,
+                "execution_score": 0.1,
+                "liquidity_score": 0.5,
+                "spread_pct": None,
+                "quote_source": "unknown",
+                "penalty_reasons": [
+                    "missing_rr_context",
+                    "missing_liquidity_context",
+                    "missing_spread_context",
+                    "missing_timing_context",
+                ],
+            }
+        ]
+    )
+    assert [row["trade_id"] for row in ranked] == ["SOFT_DEGRADE_PASS"]
+    assert "execution_context_degraded" in list(ranked[0].get("phase2_soft_penalties") or [])
+
+
+def test_build_candidates_phase2_keeps_critical_execution_failure_hard_block(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "CRITICAL_BLOCK",
+                "symbol": "SENSEX",
+                "candidate_status": "near_executable",
+                "execution_status": "queue_only",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "execution_allowed": False,
+                "tradable": False,
+                "execution_ok": False,
+                "execution_score": 0.1,
+                "liquidity_score": 0.5,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "hard_blockers": ["FEED_STALE"],
+            }
+        ]
+    )
+    assert ranked == []
+
+
+def test_build_candidates_phase2_soft_degrades_quality_only_failure(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_QUALITY_SCORE", 0.3, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_SOFT_EXECUTION_DEGRADE_PENALTY", 0.1, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "QUALITY_ONLY_SOFT",
+                "symbol": "NIFTY",
+                "candidate_status": "near_executable",
+                "execution_status": "queue_only",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.55,
+                "execution_quality_score": 0.24,
+                "liquidity_score": 0.6,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "final_score": 0.72,
+            }
+        ]
+    )
+    assert [row["trade_id"] for row in ranked] == ["QUALITY_ONLY_SOFT"]
+    assert "soft_execution_degraded" in list(ranked[0].get("phase2_soft_penalties") or [])
+    assert ranked[0].get("phase2_soft_degrade_reason") == "execution_quality_low"
+    assert ranked[0].get("max_final_action") == "QUEUE_ONLY"
+    assert float(ranked[0]["final_score"]) < 0.72
+
+
+def test_build_candidates_phase2_quality_failure_with_critical_reason_stays_hard_block(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_QUALITY_SCORE", 0.3, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "QUALITY_BUT_CRITICAL",
+                "symbol": "BANKNIFTY",
+                "candidate_status": "near_executable",
+                "execution_status": "queue_only",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.55,
+                "execution_quality_score": 0.24,
+                "liquidity_score": 0.6,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "hard_blockers": ["UNRESOLVED_CONTRACT"],
+                "final_score": 0.75,
+            }
+        ]
+    )
+    assert ranked == []
+
+
+def test_build_candidates_phase2_recomputes_zero_placeholder_final_score(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "ZERO_PLACEHOLDER",
+                "symbol": "NIFTY",
+                "final_score": 0.0,
+                "rank_score": 0.42,
+                "confidence": 0.39,
+                "confidence_final": 0.39,
+                "gating_final_confidence": 0.39,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.62,
+                "liquidity_score": 0.7,
+                "spread_pct": 0.004,
+                "quote_source": "tick_store",
+            }
+        ]
+    )
+    assert len(ranked) == 1
+    assert float(ranked[0]["final_score"]) > 0.0
+    assert bool((ranked[0].get("phase2_score_detail") or {}).get("phase2_recomputed_final_score")) is True
+
+
 def test_run_engine_phase2_forced_fallback_execution_when_no_enter(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.9, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_FORCE_FALLBACK_EXECUTION_ENABLE", True, raising=False)
@@ -470,3 +650,100 @@ def test_run_engine_phase2_does_not_force_fallback_in_live_by_default(monkeypatc
         ]
     )
     assert out["state"] == "WATCHLIST"
+
+
+def test_run_engine_phase2_respects_queue_only_cap_even_with_enter_score(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.6, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_FORCE_FALLBACK_EXECUTION_ENABLE", False, raising=False)
+    out = run_engine_phase2(
+        [
+            {
+                "trade_id": "QUEUE_CAP",
+                "symbol": "NIFTY",
+                "final_score": 0.91,
+                "max_final_action": "QUEUE_ONLY",
+                "spread_pct": 0.004,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "liquidity_score": 0.8,
+            }
+        ]
+    )
+    assert out["state"] == "WATCHLIST"
+    assert out["reason"] == "queue_only_cap"
+
+
+def test_build_candidates_phase2_strict_mode_drops_soft_reject_placeholders(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "tbsoft_NIFTY_1",
+                "symbol": "NIFTY",
+                "candidate_origin": "softened_builder_path",
+                "strategy_family": "builder_soft_reject",
+                "candidate_status": "near_executable",
+                "execution_status": "queue_only",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.8,
+                "spread_pct": 0.003,
+                "liquidity_score": 0.7,
+                "quote_source": "tick_store",
+            }
+        ]
+    )
+    assert ranked == []
+
+
+def test_build_candidates_phase2_strict_mode_drops_degraded_context(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "STRICT_DROP_CONTEXT",
+                "symbol": "BANKNIFTY",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.8,
+                "spread_pct": 0.003,
+                "liquidity_score": 0.7,
+                "quote_source": "tick_store",
+                "penalty_reasons": ["rr_estimated_context"],
+                "execution_entry": 120.0,
+                "stop_loss": 100.0,
+                "target": 150.0,
+            }
+        ]
+    )
+    assert ranked == []
+
+
+def test_build_candidates_phase2_strict_mode_keeps_clean_real_candidate(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "STRICT_KEEP_REAL",
+                "symbol": "NIFTY",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.8,
+                "execution_quality_score": 0.8,
+                "spread_pct": 0.003,
+                "liquidity_score": 0.8,
+                "quote_source": "tick_store",
+                "execution_entry": 180.0,
+                "display_entry": 180.0,
+                "entry": 180.0,
+                "stop_loss": 150.0,
+                "target": 230.0,
+                "final_score": 0.7,
+            }
+        ]
+    )
+    assert [row["trade_id"] for row in ranked] == ["STRICT_KEEP_REAL"]

@@ -719,8 +719,8 @@ HIGH_EXECUTE_MIN_CONF = float(
 OPPORTUNITY_ENGINE_ENABLE = os.getenv("OPPORTUNITY_ENGINE_ENABLE", "true").lower() == "true"
 PHASE2_ENGINE_ENABLE = os.getenv("PHASE2_ENGINE_ENABLE", "true").lower() == "true"
 PHASE2_TOP_N = int(os.getenv("PHASE2_TOP_N", "5"))
-PHASE2_MIN_ENTER_SCORE = float(os.getenv("PHASE2_MIN_ENTER_SCORE", "0.50"))
-PHASE2_MIN_BORDERLINE_SCORE = float(os.getenv("PHASE2_MIN_BORDERLINE_SCORE", "0.40"))
+PHASE2_MIN_ENTER_SCORE = float(os.getenv("PHASE2_MIN_ENTER_SCORE", "0.42"))
+PHASE2_MIN_BORDERLINE_SCORE = float(os.getenv("PHASE2_MIN_BORDERLINE_SCORE", "0.32"))
 PHASE2_REPLACE_MIN_ABS_DELTA = float(os.getenv("PHASE2_REPLACE_MIN_ABS_DELTA", "0.12"))
 PHASE2_REPLACE_MIN_REL_DELTA = float(os.getenv("PHASE2_REPLACE_MIN_REL_DELTA", "0.20"))
 PHASE2_MAX_SPREAD_PCT = float(os.getenv("PHASE2_MAX_SPREAD_PCT", str(MAX_SPREAD_PCT)))
@@ -730,8 +730,29 @@ PHASE2_MARKET_START_HOUR = int(os.getenv("PHASE2_MARKET_START_HOUR", "9"))
 PHASE2_MARKET_END_HOUR = int(os.getenv("PHASE2_MARKET_END_HOUR", "15"))
 PHASE2_SPREAD_OFFHOURS_MULT = float(os.getenv("PHASE2_SPREAD_OFFHOURS_MULT", "1.5"))
 PHASE2_MIN_EXECUTION_SCORE = float(os.getenv("PHASE2_MIN_EXECUTION_SCORE", "0.50"))
+PHASE2_MIN_EXECUTION_QUALITY_SCORE = float(
+    os.getenv("PHASE2_MIN_EXECUTION_QUALITY_SCORE", "0.30")
+)
 PHASE2_MIN_LIQUIDITY_SCORE = float(os.getenv("PHASE2_MIN_LIQUIDITY_SCORE", "0.35"))
 PHASE2_LIQUIDITY_SOFT_PENALTY = float(os.getenv("PHASE2_LIQUIDITY_SOFT_PENALTY", "0.08"))
+PHASE2_SOFT_EXECUTION_DEGRADE_PENALTY = float(
+    os.getenv("PHASE2_SOFT_EXECUTION_DEGRADE_PENALTY", "0.10")
+)
+PHASE2_SPREAD_FALLBACK_PCT = float(os.getenv("PHASE2_SPREAD_FALLBACK_PCT", "0.003"))
+PHASE2_LIQUIDITY_FALLBACK_SCORE = float(
+    os.getenv("PHASE2_LIQUIDITY_FALLBACK_SCORE", "0.50")
+)
+PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE = (
+    os.getenv("PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", "true").lower() == "true"
+)
+PHASE2_SOFT_CONTEXT_REASON_CODES = os.getenv(
+    "PHASE2_SOFT_CONTEXT_REASON_CODES",
+    "missing_rr_context,rr_estimated_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,low_data_confidence,unknown_quote_source",
+)
+PHASE2_CRITICAL_EXECUTION_REASON_CODES = os.getenv(
+    "PHASE2_CRITICAL_EXECUTION_REASON_CODES",
+    "feed_stale,no_live_option_feed,unresolved_contract,missing_contract_fields,missing_option_token,no_token,missing_entry,invalid_level_geometry,hard_spread_too_wide,spread_breached,execution_quality_reject",
+)
 PHASE2_FILTER_DROP_DEBUG_LIMIT = int(os.getenv("PHASE2_FILTER_DROP_DEBUG_LIMIT", "25"))
 PHASE2_ACTIVE_TRADE_MAX_AGE_SEC = float(os.getenv("PHASE2_ACTIVE_TRADE_MAX_AGE_SEC", "30"))
 PHASE2_RELAX_ALLOW_LIVE = os.getenv("PHASE2_RELAX_ALLOW_LIVE", "false").lower() == "true"
@@ -745,6 +766,13 @@ PHASE2_FORCE_FALLBACK_MIN_SCORE = float(
 )
 PHASE2_FORCE_FALLBACK_ALLOW_LIVE = (
     os.getenv("PHASE2_FORCE_FALLBACK_ALLOW_LIVE", "false").lower() == "true"
+)
+PHASE2_STRICT_REAL_CANDIDATES_ONLY = (
+    os.getenv("PHASE2_STRICT_REAL_CANDIDATES_ONLY", "false").lower() == "true"
+)
+PHASE2_STRICT_DROP_REASON_CODES = os.getenv(
+    "PHASE2_STRICT_DROP_REASON_CODES",
+    "weak_signal,no_signal,rr_estimated_context,missing_rr_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,unknown_quote_source,execution_context_degraded",
 )
 REVIEW_QUEUE_RUNTIME_RANKING_ENABLE = (
     os.getenv("REVIEW_QUEUE_RUNTIME_RANKING_ENABLE", "true").lower() == "true"
@@ -763,6 +791,27 @@ CANDIDATE_SCORING_TRACE_ENABLE = (
 )
 CANDIDATE_SCORING_ASSERT_ENABLE = (
     os.getenv("CANDIDATE_SCORING_ASSERT_ENABLE", "false").lower() == "true"
+)
+CANDIDATE_SCORING_RR_FALLBACK_ENABLE = (
+    os.getenv("CANDIDATE_SCORING_RR_FALLBACK_ENABLE", "true").lower() == "true"
+)
+CANDIDATE_SCORING_RR_FALLBACK_BUY_STOP_MULT = float(
+    os.getenv("CANDIDATE_SCORING_RR_FALLBACK_BUY_STOP_MULT", "0.75")
+)
+CANDIDATE_SCORING_RR_FALLBACK_BUY_TARGET_MULT = float(
+    os.getenv("CANDIDATE_SCORING_RR_FALLBACK_BUY_TARGET_MULT", "1.35")
+)
+CANDIDATE_SCORING_RR_FALLBACK_SELL_STOP_MULT = float(
+    os.getenv("CANDIDATE_SCORING_RR_FALLBACK_SELL_STOP_MULT", "1.25")
+)
+CANDIDATE_SCORING_RR_FALLBACK_SELL_TARGET_MULT = float(
+    os.getenv("CANDIDATE_SCORING_RR_FALLBACK_SELL_TARGET_MULT", "0.65")
+)
+TERMINAL_SCORING_MAX_ABS_DELTA = float(
+    os.getenv("TERMINAL_SCORING_MAX_ABS_DELTA", "0.15")
+)
+TERMINAL_SCORING_MAX_MULT = float(
+    os.getenv("TERMINAL_SCORING_MAX_MULT", "1.35")
 )
 OPPORTUNITY_TOP_N_EXECUTABLE = int(os.getenv("OPPORTUNITY_TOP_N_EXECUTABLE", "1"))
 TOP_EXECUTABLE_OPPORTUNITIES_N = int(os.getenv("TOP_EXECUTABLE_OPPORTUNITIES_N", "5"))

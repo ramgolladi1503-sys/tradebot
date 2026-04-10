@@ -34,6 +34,14 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
     return bool(default)
 
 
+def _cfg_csv_set(name: str, default: str) -> set[str]:
+    try:
+        raw = str(getattr(cfg, name, default) or default)
+    except Exception:
+        raw = str(default or "")
+    return {part.strip().upper() for part in raw.split(",") if part.strip()}
+
+
 def _mode_for_candidate(candidate: dict[str, Any] | None = None) -> str:
     if isinstance(candidate, dict):
         text = str(
@@ -148,7 +156,14 @@ def _reason_codes(candidate: dict[str, Any]) -> list[str]:
         text = str(candidate.get(key) or "").strip()
         if text:
             out.append(text.upper())
-    for key in ("gate_reasons", "blockers", "hard_blockers", "execution_blockers"):
+    for key in (
+        "gate_reasons",
+        "blockers",
+        "hard_blockers",
+        "execution_blockers",
+        "penalty_reasons",
+        "confidence_penalty_reasons",
+    ):
         for value in list(candidate.get(key) or []):
             text = str(value or "").strip()
             if text:
@@ -191,6 +206,50 @@ def _is_borderline_execution_candidate(candidate: dict[str, Any]) -> bool:
     return bool(candidate.get("soft_blockers"))
 
 
+def _strict_placeholder_candidate(candidate: dict[str, Any]) -> bool:
+    trade_id = str(candidate.get("trade_id") or "").strip().lower()
+    candidate_origin = str(candidate.get("candidate_origin") or "").strip().lower()
+    strategy_family = str(candidate.get("strategy_family") or "").strip().lower()
+    source_flags = candidate.get("source_flags")
+    recoverable_soft_reject = False
+    if isinstance(source_flags, dict):
+        recoverable_soft_reject = _safe_bool(source_flags.get("recoverable_soft_reject"), default=False)
+    if trade_id.startswith("tbsoft_") or trade_id.startswith("softrej_"):
+        return True
+    if candidate_origin in {"softened_builder_path", "softened", "fallback_min_breadth", "fallback"}:
+        return True
+    if strategy_family in {"synthetic_advisory", "builder_soft_reject"}:
+        return True
+    return recoverable_soft_reject
+
+
+def _strict_mode_drop_reason(candidate: dict[str, Any]) -> str | None:
+    if not bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+        return None
+    if _strict_placeholder_candidate(candidate):
+        return "strict_placeholder_candidate"
+    reason_codes = set(_reason_codes(candidate))
+    strict_codes = _cfg_csv_set(
+        "PHASE2_STRICT_DROP_REASON_CODES",
+        "weak_signal,no_signal,rr_estimated_context,missing_rr_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,unknown_quote_source,execution_context_degraded",
+    )
+    if reason_codes & strict_codes:
+        return "strict_degraded_context"
+    quote_source = str(candidate.get("quote_source") or "").strip().lower()
+    if quote_source in {"", "unknown", "none"}:
+        return "strict_unknown_quote_source"
+    entry = (
+        _safe_float(candidate.get("execution_entry"))
+        or _safe_float(candidate.get("display_entry"))
+        or _safe_float(candidate.get("entry"))
+    )
+    stop_loss = _safe_float(candidate.get("stop_loss"))
+    target = _safe_float(candidate.get("target"))
+    if entry is None or stop_loss is None or target is None:
+        return "strict_missing_trade_levels"
+    return None
+
+
 def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     soft_penalties: list[str] = list(candidate.get("phase2_soft_penalties") or [])
@@ -226,6 +285,14 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     execution_ok = candidate.get("execution_ok")
     execution_blocked = _safe_bool(candidate.get("execution_blocked"), default=False)
     min_execution_score = float(getattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.50) or 0.50)
+    min_execution_quality_score = float(
+        getattr(cfg, "PHASE2_MIN_EXECUTION_QUALITY_SCORE", 0.30) or 0.30
+    )
+    execution_quality_score = _safe_float(candidate.get("execution_quality_score"))
+    execution_quality_low = (
+        execution_quality_score is not None
+        and execution_quality_score < min_execution_quality_score
+    )
     execution_score = _execution_quality_score(candidate)
     no_signal_candidate = _is_no_signal_candidate(candidate)
     latency_only_block = _is_latency_only_block(candidate)
@@ -238,14 +305,64 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
         execution_blocked = False
         if execution_ok is False:
             execution_ok = True
-    if (
+    execution_failure = (
         (not execution_allowed)
         or (not tradable)
         or execution_blocked
         or execution_ok is False
         or execution_score < min_execution_score
-    ):
-        reasons.append("hard_execution")
+    )
+    if execution_failure:
+        reason_codes = set(_reason_codes(candidate))
+        critical_codes = _cfg_csv_set(
+            "PHASE2_CRITICAL_EXECUTION_REASON_CODES",
+            "feed_stale,no_live_option_feed,unresolved_contract,missing_contract_fields,missing_option_token,no_token,missing_entry,invalid_level_geometry,hard_spread_too_wide,spread_breached,execution_quality_reject",
+        )
+        soft_context_codes = _cfg_csv_set(
+            "PHASE2_SOFT_CONTEXT_REASON_CODES",
+            "missing_rr_context,rr_estimated_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,low_data_confidence,unknown_quote_source",
+        )
+        has_critical = bool(reason_codes & critical_codes) or any(code.startswith("HARD_") for code in reason_codes)
+        allow_soft_degrade = bool(getattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True))
+        only_soft_context = bool(reason_codes) and not has_critical and not bool(reason_codes - soft_context_codes)
+        if not reason_codes and str(candidate.get("quote_source") or "").strip().lower() in {"", "unknown", "none"}:
+            reason_codes.add("UNKNOWN_QUOTE_SOURCE")
+            only_soft_context = True
+        quality_only_failure = (
+            execution_allowed
+            and tradable
+            and (execution_ok is not False)
+            and (not execution_blocked)
+            and (not has_critical)
+            and execution_quality_low
+        )
+        execution_degrade_penalty = float(
+            getattr(cfg, "PHASE2_SOFT_EXECUTION_DEGRADE_PENALTY", 0.10) or 0.10
+        )
+        if has_critical:
+            reasons.append("hard_execution")
+        elif allow_soft_degrade and quality_only_failure:
+            soft_penalties.append("soft_execution_degraded")
+            candidate["phase2_soft_degrade_reason"] = "execution_quality_low"
+            candidate["execution_context_degraded"] = True
+            candidate["phase2_execution_penalty"] = max(
+                execution_degrade_penalty,
+                float(min_execution_quality_score - float(execution_quality_score or 0.0)),
+            )
+            candidate["max_final_action"] = "QUEUE_ONLY"
+        elif allow_soft_degrade and _is_borderline_execution_candidate(candidate) and (
+            only_soft_context or str(candidate.get("quote_source") or "").strip().lower() in {"", "unknown", "none"}
+        ):
+            soft_penalties.append("execution_context_degraded")
+            candidate["phase2_soft_degrade_reason"] = "execution_context_low"
+            candidate["execution_context_degraded"] = True
+            candidate["phase2_execution_penalty"] = max(
+                float(getattr(cfg, "PHASE2_LIQUIDITY_SOFT_PENALTY", 0.08) or 0.08),
+                float(min_execution_score - max(execution_score, 0.0)),
+            )
+            candidate["max_final_action"] = "QUEUE_ONLY"
+        else:
+            reasons.append("hard_execution")
 
     min_liq_score = float(getattr(cfg, "PHASE2_MIN_LIQUIDITY_SCORE", 0.35) or 0.35)
     liquidity_score = _liquidity_score(candidate)
@@ -263,88 +380,127 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
 
 def _compute_phase2_final_score(candidate: dict[str, Any]) -> tuple[float, dict[str, Any]]:
     existing = _safe_float(candidate.get("final_score"))
-    if existing is not None:
-        return float(existing), {}
-
-    market_mode = str(
-        candidate.get("market_mode")
-        or candidate.get("execution_mode")
-        or getattr(cfg, "EXECUTION_MODE", "SIM")
-    ).strip().upper()
-    candidate_class = str(candidate.get("candidate_class") or "").strip().upper()
-    if not candidate_class:
-        if _safe_bool(candidate.get("execution_allowed"), True) and _safe_bool(candidate.get("tradable"), True):
-            candidate_class = "EXECUTABLE"
-        else:
-            candidate_class = "ADVISORY_ONLY"
-
-    signal_score = safe_get(candidate, "signal_score", 0.0)
-    execution_score = safe_get(candidate, "execution_score", 0.0)
-    liquidity_score = safe_get(candidate, "liquidity_score", 0.0)
-
-    setup_score = _safe_float(candidate.get("setup_score"))
-    trigger_score = _safe_float(candidate.get("trigger_score"))
-    entry_quality_score = _safe_float(candidate.get("entry_quality_score"))
-    family_survival_score = _safe_float(candidate.get("family_survival_score"))
-    setup_quality = setup_score
-    if setup_quality is None:
-        setup_quality = signal_score
-    if setup_quality is None:
-        setup_quality = _safe_float(candidate.get("trade_score"))
-        if setup_quality is not None and setup_quality > 1.0:
-            setup_quality = max(0.0, min(1.0, setup_quality / 100.0))
-    confluence_score = (
-        _safe_float(candidate.get("confidence_final"))
-        or _safe_float(candidate.get("gating_final_confidence"))
-        or _safe_float(candidate.get("confidence"))
-        or _safe_float(candidate.get("signal_score"))
-        or 0.0
+    score_origin = str(
+        candidate.get("score_origin")
+        or candidate.get("final_score_source")
+        or ""
+    ).strip().lower()
+    authoritative_existing = (
+        existing is not None
+        and (
+            bool(candidate.get("phase2_score_detail"))
+            or score_origin in {"phase2", "decision_engine", "review_queue_terminal"}
+            or float(existing) > 0.0
+        )
     )
-    regime_fit = (
-        _safe_float(candidate.get("regime_fit"))
-        or _safe_float(candidate.get("regime_score"))
-        or _safe_float(candidate.get("trade_alignment"))
-        or 0.5
-    )
+    result: dict[str, Any] = {}
+    final_score: float
 
-    result = compute_final_score(
-        candidate,
-        candidate_class=candidate_class,
-        market_mode=market_mode or "SIM",
-        setup_quality=setup_quality,
-        confluence_score=confluence_score,
-        regime_fit=regime_fit,
-        liquidity_quality=max(_liquidity_score(candidate), liquidity_score),
-        freshness_quality=(
-            _safe_float(candidate.get("freshness_quality"))
-            or (1.0 if _safe_bool(candidate.get("fresh_quote_ok"), default=True) else 0.0)
-        ),
-        execution_feasibility=max(_execution_quality_score(candidate), execution_score),
-        data_confidence=_safe_float(candidate.get("data_confidence")),
-        setup_score=setup_score,
-        trigger_score=trigger_score,
-        entry_quality_score=entry_quality_score,
-        family_survival_score=family_survival_score,
-        risk_learning_adjustment=_safe_float(candidate.get("risk_learning_adjustment")),
-        risk_learning_confidence=_safe_float(candidate.get("risk_learning_confidence")),
-        is_fallback=_safe_bool(candidate.get("synthetic_candidate"), default=False),
-        stale_quote=not _safe_bool(candidate.get("fresh_quote_ok"), default=True),
-        missing_liquidity=not _safe_bool(candidate.get("liquidity_ok"), default=True),
-        spread_uncertain=_safe_float(candidate.get("spread_pct")) is None,
-    )
-    final_score = _safe_float(result.get("final_score")) or 0.0
+    if authoritative_existing:
+        final_score = float(existing)
+        result["phase2_reused_final_score"] = True
+    else:
+        market_mode = str(
+            candidate.get("market_mode")
+            or candidate.get("execution_mode")
+            or getattr(cfg, "EXECUTION_MODE", "SIM")
+        ).strip().upper()
+        candidate_class = str(candidate.get("candidate_class") or "").strip().upper()
+        if not candidate_class:
+            if _safe_bool(candidate.get("execution_allowed"), True) and _safe_bool(candidate.get("tradable"), True):
+                candidate_class = "EXECUTABLE"
+            else:
+                candidate_class = "ADVISORY_ONLY"
+
+        signal_score = safe_get(candidate, "signal_score", 0.0)
+        execution_score = safe_get(candidate, "execution_score", 0.0)
+        liquidity_score = safe_get(candidate, "liquidity_score", 0.0)
+
+        setup_score = _safe_float(candidate.get("setup_score"))
+        trigger_score = _safe_float(candidate.get("trigger_score"))
+        entry_quality_score = _safe_float(candidate.get("entry_quality_score"))
+        family_survival_score = _safe_float(candidate.get("family_survival_score"))
+        setup_quality = setup_score
+        if setup_quality is None:
+            setup_quality = signal_score
+        if setup_quality is None:
+            setup_quality = _safe_float(candidate.get("trade_score"))
+            if setup_quality is not None and setup_quality > 1.0:
+                setup_quality = max(0.0, min(1.0, setup_quality / 100.0))
+        confluence_score = (
+            _safe_float(candidate.get("confidence_final"))
+            or _safe_float(candidate.get("gating_final_confidence"))
+            or _safe_float(candidate.get("confidence"))
+            or _safe_float(candidate.get("signal_score"))
+            or 0.0
+        )
+        regime_fit = (
+            _safe_float(candidate.get("regime_fit"))
+            or _safe_float(candidate.get("regime_score"))
+            or _safe_float(candidate.get("trade_alignment"))
+            or 0.5
+        )
+
+        result = compute_final_score(
+            candidate,
+            candidate_class=candidate_class,
+            market_mode=market_mode or "SIM",
+            setup_quality=setup_quality,
+            confluence_score=confluence_score,
+            regime_fit=regime_fit,
+            liquidity_quality=max(_liquidity_score(candidate), liquidity_score),
+            freshness_quality=(
+                _safe_float(candidate.get("freshness_quality"))
+                or (1.0 if _safe_bool(candidate.get("fresh_quote_ok"), default=True) else 0.0)
+            ),
+            execution_feasibility=max(_execution_quality_score(candidate), execution_score),
+            data_confidence=_safe_float(candidate.get("data_confidence")),
+            setup_score=setup_score,
+            trigger_score=trigger_score,
+            entry_quality_score=entry_quality_score,
+            family_survival_score=family_survival_score,
+            risk_learning_adjustment=_safe_float(candidate.get("risk_learning_adjustment")),
+            risk_learning_confidence=_safe_float(candidate.get("risk_learning_confidence")),
+            is_fallback=_safe_bool(candidate.get("synthetic_candidate"), default=False),
+            stale_quote=not _safe_bool(candidate.get("fresh_quote_ok"), default=True),
+            missing_liquidity=not _safe_bool(candidate.get("liquidity_ok"), default=True),
+            spread_uncertain=_safe_float(candidate.get("spread_pct")) is None,
+        )
+        final_score = _safe_float(result.get("final_score")) or 0.0
     soft_penalties = list(candidate.get("phase2_soft_penalties") or [])
     if "liquidity_penalty" in soft_penalties:
         liquidity_penalty = float(getattr(cfg, "PHASE2_LIQUIDITY_SOFT_PENALTY", 0.08) or 0.08)
         final_score = max(0.0, float(final_score) - float(liquidity_penalty))
         result["phase2_liquidity_soft_penalty"] = float(liquidity_penalty)
+    execution_penalty = _safe_float(candidate.get("phase2_execution_penalty"))
+    if execution_penalty is not None and execution_penalty > 0.0:
+        final_score = max(0.0, float(final_score) - float(execution_penalty))
+        result["phase2_execution_soft_penalty"] = float(execution_penalty)
+    if soft_penalties:
         result["phase2_soft_penalties"] = soft_penalties
+    if not authoritative_existing:
+        result["phase2_recomputed_final_score"] = True
     return float(final_score), dict(result or {})
 
 
 def _apply_data_fallbacks(candidate: dict[str, Any]) -> None:
     if _safe_float(candidate.get("quote_age_sec")) is None:
         candidate["quote_age_sec"] = 1.0
+    if _safe_float(candidate.get("spread_pct")) is None:
+        candidate["spread_pct"] = float(getattr(cfg, "PHASE2_SPREAD_FALLBACK_PCT", 0.003) or 0.003)
+        candidate["phase2_spread_fallback_used"] = True
+    if _safe_float(candidate.get("liquidity_score")) is None:
+        candidate["liquidity_score"] = float(getattr(cfg, "PHASE2_LIQUIDITY_FALLBACK_SCORE", 0.5) or 0.5)
+        candidate["phase2_liquidity_fallback_used"] = True
+    quote_source = str(candidate.get("quote_source") or "").strip().lower()
+    if not quote_source:
+        candidate["quote_source"] = "unknown"
+        quote_source = "unknown"
+    if quote_source == "unknown":
+        phase2_soft_penalties = list(candidate.get("phase2_soft_penalties") or [])
+        if "unknown_quote_source" not in phase2_soft_penalties:
+            phase2_soft_penalties.append("unknown_quote_source")
+        candidate["phase2_soft_penalties"] = phase2_soft_penalties
     depth_score = _safe_float(candidate.get("depth_score"))
     if depth_score is not None and float(depth_score) == 0.0:
         candidate["depth_score"] = 0.5
@@ -368,6 +524,23 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
                 candidate.get("trade_id"),
                 candidate.get("symbol"),
             )
+            continue
+        strict_drop_reason = _strict_mode_drop_reason(candidate)
+        if strict_drop_reason:
+            drop_reason_counts[strict_drop_reason] = int(drop_reason_counts.get(strict_drop_reason, 0)) + 1
+            if drop_debug_budget > 0:
+                print(
+                    "DEBUG_FILTER_DROP",
+                    {
+                        "trade_id": candidate.get("trade_id"),
+                        "symbol": candidate.get("symbol"),
+                        "reasons": [strict_drop_reason],
+                        "candidate_status": candidate.get("candidate_status"),
+                        "execution_status": candidate.get("execution_status"),
+                        "candidate_origin": candidate.get("candidate_origin"),
+                    },
+                )
+                drop_debug_budget -= 1
             continue
         _apply_data_fallbacks(candidate)
         hard_reasons = _hard_filter_reasons(candidate)
@@ -458,6 +631,12 @@ def _should_clear_trade(active_trade: dict[str, Any] | None) -> bool:
     return (time.time() - float(anchor_epoch)) > float(max_age)
 
 
+def _queue_only_capped(candidate: dict[str, Any] | None) -> bool:
+    if not isinstance(candidate, dict):
+        return False
+    return str(candidate.get("max_final_action") or "").strip().upper() == "QUEUE_ONLY"
+
+
 def run_engine_phase2(
     raw_candidates: list[Any] | None,
     *,
@@ -529,11 +708,15 @@ def run_engine_phase2(
     min_rel_delta = float(getattr(cfg, "PHASE2_REPLACE_MIN_REL_DELTA", 0.20) or 0.20)
 
     if active_trade_dict is not None:
-        if top_score >= min_enter and _should_replace(
+        if (
+            top_score >= min_enter
+            and not _queue_only_capped(top)
+            and _should_replace(
             active_score,
             top_score,
             min_abs_delta=min_abs_delta,
             min_rel_delta=min_rel_delta,
+            )
         ):
             selected = _normalize_selected(top)
             if selected is None:
@@ -564,6 +747,16 @@ def run_engine_phase2(
         }
 
     if top_score >= min_enter:
+        if _queue_only_capped(top):
+            selected = _normalize_selected(top)
+            _log_state("WATCHLIST", selected, ranked_count=len(ranked_top))
+            return {
+                "state": "WATCHLIST",
+                "reason": "queue_only_cap",
+                "selected": selected,
+                "ranked": ranked_top,
+                "next_active_trade": None,
+            }
         selected = _normalize_selected(top)
         if selected is None:
             _log_state("NO_TRADE", None, ranked_count=len(ranked_top))
@@ -586,6 +779,15 @@ def run_engine_phase2(
     selected = _normalize_selected(top)
 
     if force_fallback and selected is not None:
+        if _queue_only_capped(selected):
+            _log_state("WATCHLIST", selected, ranked_count=len(ranked_top))
+            return {
+                "state": "WATCHLIST",
+                "reason": "queue_only_cap",
+                "selected": selected,
+                "ranked": ranked_top,
+                "next_active_trade": None,
+            }
         mode = _mode_for_candidate(selected)
         allow_mode = (not _live_mode(mode)) or allow_fallback_live
         if allow_mode and top_score >= force_fallback_min_score:

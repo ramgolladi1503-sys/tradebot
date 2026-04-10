@@ -75,3 +75,129 @@ def test_clean_strong_candidate_promotes_to_execute(monkeypatch):
     assert out["permission"] == "EXECUTE"
     assert out["final_action"] == "EXECUTE"
     assert out["execution_status"] == "executable"
+
+
+def test_queue_only_backdoor_promotion_blocked_by_raw_rank_floor(monkeypatch):
+    monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35, raising=False)
+    out = review_queue._promote_queue_only_candidate(
+        {
+            "trade_id": "tbsoft_NIFTY_1",
+            "symbol": "NIFTY",
+            "candidate_status": "near_executable",
+            "execution_status": "queue_only",
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "readiness": "QUEUE_ONLY",
+            "execution_entry": 150.0,
+            "execution_entry_status": "executable",
+            "display_entry": 150.0,
+            "entry": 150.0,
+            "stop_loss": 120.0,
+            "target": 210.0,
+            "tradable": True,
+            "execution_allowed": True,
+            "execution_ok": True,
+            "execution_blocked": False,
+            "hard_blockers": [],
+            "unresolved_contract": False,
+            "source_flags": {"recoverable_soft_reject": True},
+            "raw_rank_score": 0.18,
+            "rank_score": 0.72,
+        }
+    )
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out["promotion_block_reason"] == "raw_rank_below_execute_floor"
+
+
+def test_queue_only_backdoor_promotion_blocked_for_weak_signal(monkeypatch):
+    monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35, raising=False)
+    out = review_queue._promote_queue_only_candidate(
+        {
+            "trade_id": "tbsoft_NIFTY_2",
+            "symbol": "NIFTY",
+            "candidate_status": "near_executable",
+            "execution_status": "queue_only",
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "readiness": "QUEUE_ONLY",
+            "execution_entry": 150.0,
+            "execution_entry_status": "executable",
+            "display_entry": 150.0,
+            "entry": 150.0,
+            "stop_loss": 120.0,
+            "target": 210.0,
+            "tradable": True,
+            "execution_allowed": True,
+            "execution_ok": True,
+            "execution_blocked": False,
+            "hard_blockers": [],
+            "unresolved_contract": False,
+            "source_flags": {
+                "recoverable_soft_reject": True,
+                "soft_reject_reason": "weak_signal",
+            },
+            "raw_rank_score": 0.50,
+            "rank_score": 0.72,
+        }
+    )
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out["promotion_block_reason"] == "weak_signal_queue_only"
+
+
+def test_terminal_scoring_is_idempotent_and_bounded(monkeypatch):
+    monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_ABS_DELTA", 0.15, raising=False)
+    monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_MULT", 1.35, raising=False)
+
+    calls = {"count": 0}
+
+    def _fake_score_candidate(candidate, market_data, context):
+        calls["count"] += 1
+        return {
+            "rank_score": 0.90,
+            "opportunity_score": 0.90,
+            "confidence_raw": 0.90,
+            "confidence_final": 0.90,
+            "score_breakdown": {},
+            "penalty_reasons": [],
+            "score_inputs_used": {},
+            "confluence_score": 0.90,
+            "setup_strength": 0.90,
+            "regime_fit": 0.90,
+            "liquidity_score": 0.90,
+            "spread_score": 0.90,
+            "rr_score": 0.90,
+            "timing_score": 0.90,
+            "penalty_score": 0.0,
+        }
+
+    monkeypatch.setattr(review_queue, "score_candidate", _fake_score_candidate)
+
+    row = {
+        "trade_id": "T-TERM-BOUNDED",
+        "symbol": "NIFTY",
+        "strategy_family": "ensemble_opt",
+        "candidate_type": "directional",
+        "rank_score": 0.18,
+        "raw_rank_score": 0.18,
+    }
+    out1 = review_queue._apply_terminal_candidate_scoring(
+        row,
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+        market_open_for_entry=True,
+    )
+    out2 = review_queue._apply_terminal_candidate_scoring(
+        out1,
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+        market_open_for_entry=True,
+    )
+
+    assert round(float(out1["rank_score"]), 6) == 0.33
+    assert out1["terminal_scoring_applied"] is True
+    assert float(out2["rank_score"]) == float(out1["rank_score"])
+    assert calls["count"] == 2

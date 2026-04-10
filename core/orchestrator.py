@@ -1103,8 +1103,10 @@ def _augment_ranked_candidates_with_soft_reject(
                     conf_floor = float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18)
                     soft_candidate["confidence"] = max(float(soft_candidate.get("confidence") or 0.0), conf_floor)
                     soft_candidate["confidence_final"] = max(float(soft_candidate.get("confidence_final") or 0.0), conf_floor)
-                    soft_candidate["rank_score"] = max(float(soft_candidate.get("rank_score") or 0.0), conf_floor)
-                    soft_candidate["final_score"] = max(float(soft_candidate.get("final_score") or 0.0), conf_floor)
+                    soft_candidate["soft_reject_seed_confidence"] = float(conf_floor)
+                    soft_candidate.setdefault("score_origin", "soft_reject_seed")
+                    soft_candidate["rank_score"] = None
+                    soft_candidate["opportunity_score"] = None
                     soft_candidate["candidate_status"] = "near_executable"
                     soft_candidate["execution_status"] = "scored"
                     soft_candidate["eligible_for_execution"] = True

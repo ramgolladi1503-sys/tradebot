@@ -364,6 +364,7 @@ class TradeBuilder:
             or getattr(cfg, "EXECUTION_MODE", "")
         ).strip().upper()
         confidence_value = max(float(confidence or 0.0), float(self._borderline_confidence_floor()))
+        weak_reason = str(reason or "").strip().lower() in {"weak_signal", "no_signal"}
         base_candidate = {
             "symbol": symbol,
             "strategy": strategy_tag or "BORDERLINE_SIGNAL",
@@ -373,8 +374,8 @@ class TradeBuilder:
             "direction": direction or ("BUY_CALL" if float(market_data.get("ltp") or 0.0) >= float(market_data.get("vwap") or market_data.get("ltp") or 0.0) else "BUY_PUT"),
             "confidence": confidence_value,
             "confidence_final": confidence_value,
-            "rank_score": confidence_value,
-            "final_score": confidence_value,
+            "rank_score": None if weak_reason else confidence_value,
+            "final_score": None if weak_reason else confidence_value,
         }
         candidate = build_soft_reject_candidate(
             market_data,
@@ -390,22 +391,43 @@ class TradeBuilder:
         candidate["source_flags"] = dict(candidate.get("source_flags") or {})
         candidate["source_flags"]["candidate_origin"] = "softened_builder_path"
         candidate["source_flags"]["soft_reject_reason"] = str(reason)
-        candidate["execution_status"] = "scored"
-        candidate["candidate_status"] = "near_executable"
-        candidate["eligible_for_execution"] = True
-        candidate["execution_allowed"] = True
-        candidate["execution_ok"] = True
-        candidate["execution_blocked"] = False
-        candidate["execution_block_reason"] = None
-        candidate["permission"] = "QUEUE_ONLY"
-        candidate["final_action"] = "QUEUE_ONLY"
-        candidate["readiness"] = "QUEUE_ONLY"
-        candidate["planning_only"] = False
-        candidate["tradable"] = True
+        if weak_reason:
+            candidate["execution_status"] = "advisory_only"
+            candidate["candidate_status"] = "advisory_only"
+            candidate["eligible_for_execution"] = False
+            candidate["execution_allowed"] = False
+            candidate["execution_ok"] = False
+            candidate["execution_blocked"] = True
+            candidate["execution_block_reason"] = "weak_signal_builder"
+            candidate["permission"] = "ADVISORY_ONLY"
+            candidate["final_action"] = "ADVISORY_ONLY"
+            candidate["readiness"] = "ADVISORY_ONLY"
+            candidate["planning_only"] = True
+            candidate["tradable"] = False
+        else:
+            candidate["execution_status"] = "scored"
+            candidate["candidate_status"] = "near_executable"
+            candidate["eligible_for_execution"] = True
+            candidate["execution_allowed"] = True
+            candidate["execution_ok"] = True
+            candidate["execution_blocked"] = False
+            candidate["execution_block_reason"] = None
+            candidate["permission"] = "QUEUE_ONLY"
+            candidate["final_action"] = "QUEUE_ONLY"
+            candidate["readiness"] = "QUEUE_ONLY"
+            candidate["planning_only"] = False
+            candidate["tradable"] = True
         candidate["confidence"] = confidence_value
         candidate["confidence_final"] = confidence_value
-        candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_value)
-        candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_value)
+        candidate["soft_reject_seed_confidence"] = confidence_value
+        candidate.setdefault("score_origin", "soft_reject_seed")
+        if weak_reason:
+            candidate["rank_score"] = None
+            candidate["opportunity_score"] = None
+            candidate["final_score"] = None
+        else:
+            candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_value)
+            candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_value)
         candidate["reason"] = str(reason or "weak_signal")
         candidate = self._attach_softened_candidate_contract(candidate, market_data=market_data)
         return candidate
@@ -647,22 +669,44 @@ class TradeBuilder:
         if str(candidate.get("setup_variant") or "").strip().lower() in {"", "unknown"}:
             candidate["setup_variant"] = "softened_builder_path"
         confidence_floor = float(self._borderline_confidence_floor())
-        candidate["execution_status"] = "scored"
-        candidate["candidate_status"] = "near_executable"
-        candidate["eligible_for_execution"] = True
-        candidate["execution_allowed"] = True
-        candidate["execution_ok"] = True
-        candidate["execution_blocked"] = False
-        candidate["execution_block_reason"] = None
-        candidate["permission"] = "QUEUE_ONLY"
-        candidate["final_action"] = "QUEUE_ONLY"
-        candidate["readiness"] = "QUEUE_ONLY"
-        candidate["planning_only"] = False
-        candidate["tradable"] = True
+        weak_reason = str(reason or "").strip().lower() in {"weak_signal", "no_signal"}
+        if weak_reason:
+            candidate["execution_status"] = "advisory_only"
+            candidate["candidate_status"] = "advisory_only"
+            candidate["eligible_for_execution"] = False
+            candidate["execution_allowed"] = False
+            candidate["execution_ok"] = False
+            candidate["execution_blocked"] = True
+            candidate["execution_block_reason"] = "weak_signal_builder"
+            candidate["permission"] = "ADVISORY_ONLY"
+            candidate["final_action"] = "ADVISORY_ONLY"
+            candidate["readiness"] = "ADVISORY_ONLY"
+            candidate["planning_only"] = True
+            candidate["tradable"] = False
+        else:
+            candidate["execution_status"] = "scored"
+            candidate["candidate_status"] = "near_executable"
+            candidate["eligible_for_execution"] = True
+            candidate["execution_allowed"] = True
+            candidate["execution_ok"] = True
+            candidate["execution_blocked"] = False
+            candidate["execution_block_reason"] = None
+            candidate["permission"] = "QUEUE_ONLY"
+            candidate["final_action"] = "QUEUE_ONLY"
+            candidate["readiness"] = "QUEUE_ONLY"
+            candidate["planning_only"] = False
+            candidate["tradable"] = True
         candidate["confidence"] = max(float(candidate.get("confidence") or 0.0), confidence_floor)
         candidate["confidence_final"] = max(float(candidate.get("confidence_final") or 0.0), confidence_floor)
-        candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_floor)
-        candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_floor)
+        candidate["soft_reject_seed_confidence"] = confidence_floor
+        candidate.setdefault("score_origin", "soft_reject_seed")
+        if weak_reason:
+            candidate["rank_score"] = None
+            candidate["opportunity_score"] = None
+            candidate["final_score"] = None
+        else:
+            candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_floor)
+            candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_floor)
         candidate["reason"] = reason
         candidate = self._attach_softened_candidate_contract(candidate, market_data=market_data)
         logger.info(
@@ -679,13 +723,23 @@ class TradeBuilder:
             candidate.get("rank_score"),
         )
         try:
-            self._set_last_ranked_candidates([candidate])
+            if candidate.get("rank_score") is not None:
+                self._set_last_ranked_candidates([candidate])
+            else:
+                self._set_last_ranked_candidates([])
             self._scan_accepted = 1
-            logger.info(
-                "candidate_pool_append source=softened_builder_path symbol=%s reason=%s",
-                symbol,
-                reason,
-            )
+            if candidate.get("rank_score") is not None:
+                logger.info(
+                    "candidate_pool_append source=softened_builder_path symbol=%s reason=%s",
+                    symbol,
+                    reason,
+                )
+            else:
+                logger.info(
+                    "candidate_pool_skip source=softened_builder_path symbol=%s reason=%s rank_score=none",
+                    symbol,
+                    reason,
+                )
         except Exception:
             pass
         return candidate
@@ -6994,13 +7048,23 @@ class TradeBuilder:
             )
             if borderline_candidate is not None:
                 self._reject_ctx = {}
-                self._set_last_ranked_candidates([borderline_candidate])
+                if borderline_candidate.get("rank_score") is not None:
+                    self._set_last_ranked_candidates([borderline_candidate])
+                else:
+                    self._set_last_ranked_candidates([])
                 self._scan_accepted = 1
-                logger.info(
-                    "candidate_pool_append source=weak_signal_borderline symbol=%s reason=%s",
-                    symbol,
-                    "weak_signal",
-                )
+                if borderline_candidate.get("rank_score") is not None:
+                    logger.info(
+                        "candidate_pool_append source=weak_signal_borderline symbol=%s reason=%s",
+                        symbol,
+                        "weak_signal",
+                    )
+                else:
+                    logger.info(
+                        "candidate_pool_skip source=weak_signal_borderline symbol=%s reason=%s rank_score=none",
+                        symbol,
+                        "weak_signal",
+                    )
                 return borderline_candidate
             return None
         setup_family = self._candidate_setup_family(signal, force_family=force_family)

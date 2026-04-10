@@ -22,5 +22,7 @@ def test_trade_builder_returns_borderline_candidate_when_no_signal():
     }
     out = tb.build(md)
     assert out is not None
-    assert out.get("candidate_status") == "near_executable"
-    assert out.get("execution_status") == "scored"
+    assert out.get("candidate_status") == "advisory_only"
+    assert out.get("execution_status") == "advisory_only"
+    assert out.get("rank_score") is None
+    assert out.get("soft_reject_seed_confidence") is not None

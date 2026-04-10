@@ -124,10 +124,25 @@ def test_no_signal_soften_builds_borderline_candidate():
         direction="BUY_CALL",
     )
     assert cand is not None
-    assert cand["execution_status"] == "scored"
-    assert cand["candidate_status"] == "near_executable"
-    assert cand["eligible_for_execution"] is True
+    assert cand["execution_status"] == "advisory_only"
+    assert cand["candidate_status"] == "advisory_only"
+    assert cand["eligible_for_execution"] is False
     assert cand["execution_blocked"] is False
+    assert cand["execution_block_reason"] is None
+    assert cand["rank_score"] is None
+    assert cand["score_origin"] == "soft_reject_seed"
+
+
+def test_no_signal_softened_candidate_does_not_enter_ranked_pool():
+    tb = TradeBuilder()
+    _ = tb._soften_reject_to_candidate(
+        market_data=_market_data(),
+        reject_ctx={"symbol": "NIFTY", "reason": "no_signal", "gate_reasons": ["no_signal"]},
+        strategy_tag="CORE",
+        direction="BUY_CALL",
+    )
+    ranked = orch._consume_trade_builder_ranked_candidates(tb)
+    assert ranked == []
 
 
 def test_borderline_candidate_not_marked_execution_blocked():
@@ -140,10 +155,12 @@ def test_borderline_candidate_not_marked_execution_blocked():
         direction="BUY_CALL",
     )
     assert cand is not None
-    assert cand["execution_status"] == "scored"
-    assert cand["candidate_status"] == "near_executable"
-    assert cand["execution_allowed"] is True
+    assert cand["execution_status"] == "advisory_only"
+    assert cand["candidate_status"] == "advisory_only"
+    assert cand["execution_allowed"] is False
     assert cand["execution_blocked"] is False
+    assert cand["execution_block_reason"] is None
+    assert cand["rank_score"] is None
 
 
 def test_borderline_candidate_resolves_contract_from_chain():
@@ -179,8 +196,9 @@ def test_borderline_candidate_resolves_contract_from_chain():
     assert cand.get("tradingsymbol") == "NIFTY26APR25000CE"
     assert cand.get("expiry") == "2026-04-30"
     assert cand.get("unresolved_contract") is False
-    assert cand["execution_status"] == "scored"
-    assert cand["candidate_status"] == "near_executable"
+    assert cand["execution_status"] == "advisory_only"
+    assert cand["candidate_status"] == "advisory_only"
+    assert cand["rank_score"] is None
 
 
 def test_borderline_candidate_downgrades_when_contract_unresolved(monkeypatch):
