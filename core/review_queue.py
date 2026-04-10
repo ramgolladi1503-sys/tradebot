@@ -318,6 +318,36 @@ def _is_weak_signal_candidate(entry: dict) -> bool:
     return bool(codes & {"weak_signal", "no_signal"})
 
 
+def _soft_reject_reason(entry: dict) -> str:
+    if not isinstance(entry, dict):
+        return ""
+    source_flags = entry.get("source_flags") or {}
+    if isinstance(source_flags, dict):
+        reason = str(source_flags.get("soft_reject_reason") or "").strip().lower()
+        if reason:
+            return reason
+    return str(
+        entry.get("entry_block_code")
+        or entry.get("reject_reason")
+        or ""
+    ).strip().lower()
+
+
+def _blocks_execute_due_to_soft_reject(entry: dict) -> bool:
+    soft_reason = _soft_reject_reason(entry)
+    if soft_reason in {"weak_signal", "no_signal", "signal_score_below_min"}:
+        return True
+    source_flags = entry.get("source_flags") or {}
+    candidate_origin = ""
+    if isinstance(source_flags, dict):
+        candidate_origin = str(source_flags.get("candidate_origin") or "").strip().lower()
+    if not candidate_origin:
+        candidate_origin = str(entry.get("candidate_origin") or "").strip().lower()
+    if candidate_origin in {"softened_builder_path", "softened"} and bool(soft_reason):
+        return True
+    return False
+
+
 def _is_hard_execution_blocker(reason: str) -> bool:
     code = str(reason or "").strip().upper()
     if not code:
@@ -3316,7 +3346,7 @@ def _promote_queue_only_candidate(row: dict) -> dict:
         out["promotion_block_reason"] = "raw_rank_below_execute_floor"
         return out
     if _is_weak_signal_candidate(out):
-        out["promotion_block_reason"] = "weak_signal_queue_only"
+        out["promotion_block_reason"] = "soft_reject_weak_signal_blocks_execute"
         return out
 
     resolved_entry = _resolved_entry_price(out)
@@ -4233,6 +4263,9 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
     out = dict(entry)
     if _is_synthetic_advisory_entry(out):
         out["promotion_block_reason"] = "synthetic_advisory"
+        return out
+    if _blocks_execute_due_to_soft_reject(out):
+        out["promotion_block_reason"] = "soft_reject_weak_signal_blocks_execute"
         return out
     try:
         promotion_enabled = bool(getattr(cfg, "PERMISSION_PROMOTION_ENABLE", True))

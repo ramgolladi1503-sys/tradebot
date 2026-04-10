@@ -129,5 +129,5 @@ def test_review_queue_respects_decision_engine_queue_for_weak_signal():
     out = review_queue._maybe_promote_execute_candidate(entry)
     assert out["permission"] == "QUEUE_ONLY"
     assert out["final_action"] == "QUEUE_ONLY"
-    assert out["execution_status"] == "queue_only"
-    assert out["decision_reason"] == "weak_signal_queue_only"
+    assert out["execution_status"] in {"queue_only", "advisory_only"}
+    assert out.get("promotion_block_reason") == "soft_reject_weak_signal_blocks_execute"

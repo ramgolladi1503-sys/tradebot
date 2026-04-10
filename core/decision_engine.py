@@ -75,6 +75,38 @@ def _is_weak_signal_candidate(candidate: Any) -> bool:
     return bool(codes & {"weak_signal", "no_signal"})
 
 
+def _soft_reject_reason(candidate: Any) -> str:
+    source_flags = _get_value(candidate, "source_flags", {}) or {}
+    soft_reason = ""
+    if isinstance(source_flags, dict):
+        soft_reason = str(source_flags.get("soft_reject_reason") or "").strip().lower()
+    if soft_reason:
+        return soft_reason
+    return str(
+        _get_value(candidate, "entry_block_code")
+        or _get_value(candidate, "reject_reason")
+        or ""
+    ).strip().lower()
+
+
+def _blocks_execute_due_to_soft_reject(candidate: Any) -> bool:
+    soft_reason = _soft_reject_reason(candidate)
+    candidate_origin = str(
+        (
+            (_get_value(candidate, "source_flags", {}) or {}).get("candidate_origin")
+            if isinstance(_get_value(candidate, "source_flags", {}) or {}, dict)
+            else ""
+        )
+        or _get_value(candidate, "candidate_origin")
+        or ""
+    ).strip().lower()
+    if soft_reason in {"weak_signal", "no_signal", "signal_score_below_min"}:
+        return True
+    if candidate_origin in {"softened_builder_path", "softened"} and bool(soft_reason):
+        return True
+    return False
+
+
 def _infer_candidate_class(candidate: Any) -> str:
     explicit = str(_get_value(candidate, "candidate_class") or "").strip().lower()
     if explicit:
@@ -491,6 +523,10 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
         "advisory",
     }:
         decision_reason = "non_real_candidate_class"
+    elif _blocks_execute_due_to_soft_reject(candidate):
+        if execution_ready and max(final_score, raw_score) >= queue_min_score:
+            decision_action = "QUEUE"
+        decision_reason = "soft_reject_weak_signal_blocks_execute"
     elif _is_weak_signal_candidate(candidate) and not weak_signal_execute_enable:
         if execution_ready and max(final_score, raw_score) >= queue_min_score:
             decision_action = "QUEUE"
@@ -526,10 +562,25 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
     else:
         decision_reason = "below_queue_threshold"
 
+    permission = "ADVISORY_ONLY"
+    final_action = "ADVISORY_ONLY"
+    execution_status = "advisory_only"
+    if decision_action == "QUEUE":
+        permission = "QUEUE_ONLY"
+        final_action = "QUEUE_ONLY"
+        execution_status = "queue_only"
+    elif decision_action == "EXECUTE":
+        permission = "EXECUTE"
+        final_action = "EXECUTE"
+        execution_status = "executable"
+
     return {
         **score_payload,
         "execution_ready": execution_ready,
         "readiness_reasons": readiness_reasons,
         "decision_action": decision_action,
         "decision_reason": decision_reason,
+        "permission": permission,
+        "final_action": final_action,
+        "execution_status": execution_status,
     }

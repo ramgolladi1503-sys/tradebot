@@ -250,6 +250,34 @@ def _strict_mode_drop_reason(candidate: dict[str, Any]) -> str | None:
     return None
 
 
+def _soft_reject_reason(candidate: dict[str, Any]) -> str:
+    source_flags = candidate.get("source_flags")
+    if isinstance(source_flags, dict):
+        reason = str(source_flags.get("soft_reject_reason") or "").strip().lower()
+        if reason:
+            return reason
+    return str(
+        candidate.get("entry_block_code")
+        or candidate.get("reject_reason")
+        or ""
+    ).strip().lower()
+
+
+def _blocks_execute_due_to_soft_reject(candidate: dict[str, Any]) -> bool:
+    soft_reason = _soft_reject_reason(candidate)
+    if soft_reason in {"weak_signal", "no_signal", "signal_score_below_min"}:
+        return True
+    source_flags = candidate.get("source_flags")
+    candidate_origin = ""
+    if isinstance(source_flags, dict):
+        candidate_origin = str(source_flags.get("candidate_origin") or "").strip().lower()
+    if not candidate_origin:
+        candidate_origin = str(candidate.get("candidate_origin") or "").strip().lower()
+    if candidate_origin in {"softened_builder_path", "softened"} and bool(soft_reason):
+        return True
+    return False
+
+
 def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     soft_penalties: list[str] = list(candidate.get("phase2_soft_penalties") or [])
@@ -293,6 +321,11 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
         execution_quality_score is not None
         and execution_quality_score < min_execution_quality_score
     )
+    weak_soft_reject_execute_block = _blocks_execute_due_to_soft_reject(candidate)
+    if weak_soft_reject_execute_block:
+        candidate["max_final_action"] = "QUEUE_ONLY"
+        candidate["execution_allowed"] = False
+        candidate["truth_allows_execution"] = False
     execution_score = _execution_quality_score(candidate)
     no_signal_candidate = _is_no_signal_candidate(candidate)
     latency_only_block = _is_latency_only_block(candidate)
@@ -341,6 +374,15 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
         )
         if has_critical:
             reasons.append("hard_execution")
+        elif allow_soft_degrade and weak_soft_reject_execute_block:
+            soft_penalties.append("soft_reject_execute_block")
+            candidate["phase2_soft_degrade_reason"] = "soft_reject_weak_signal_blocks_execute"
+            candidate["execution_context_degraded"] = True
+            candidate["phase2_execution_penalty"] = max(
+                execution_degrade_penalty,
+                float(getattr(cfg, "PHASE2_LIQUIDITY_SOFT_PENALTY", 0.08) or 0.08),
+            )
+            candidate["max_final_action"] = "QUEUE_ONLY"
         elif allow_soft_degrade and quality_only_failure:
             soft_penalties.append("soft_execution_degraded")
             candidate["phase2_soft_degrade_reason"] = "execution_quality_low"
