@@ -52,7 +52,7 @@ class AdvisorySchemaError(ValueError):
 
 ENTRY_STATUSES = set(DISPLAY_ENTRY_STATUSES)
 READINESS_STATES = {"READY", "QUEUE_ONLY", "ADVISORY_ONLY", "BLOCKED"}
-EXECUTION_STATUSES = {"blocked", "advisory_only", "queue_only", "executable"}
+EXECUTION_STATUSES = {"blocked", "advisory_only", "queue_only", "executable", "scored"}
 QUOTE_SOURCES = {
     "tick_store",
     "rest_fallback",
@@ -457,9 +457,12 @@ def _derive_blockers(payload: dict[str, Any]) -> list[str]:
 
 
 def _derive_execution_status(payload: dict[str, Any], readiness: str, hard_blockers: list[str]) -> str:
-    existing = _normalize_text(payload.get("execution_status"))
+    existing = (_normalize_text(payload.get("execution_status")) or "").strip().lower()
     if existing:
-        return str(existing).strip().lower()
+        if existing in EXECUTION_STATUSES:
+            return existing
+        if existing == "near_executable":
+            return "queue_only"
     if hard_blockers:
         return "blocked"
     if _has_executable_entry_truth(
@@ -474,7 +477,11 @@ def _derive_execution_status(payload: dict[str, Any], readiness: str, hard_block
         return "executable"
     if permission == "QUEUE_ONLY" and final_action == "QUEUE_ONLY" and readiness == "QUEUE_ONLY":
         return "queue_only"
-    return "advisory_only"
+    if permission == "BLOCK" or final_action == "BLOCK" or readiness == "BLOCKED":
+        return "blocked"
+    if permission == "ADVISORY_ONLY" or final_action == "ADVISORY_ONLY" or readiness == "ADVISORY_ONLY":
+        return "advisory_only"
+    return "scored"
 
 
 def _derive_readiness(payload: dict[str, Any], blockers: list[str]) -> str:

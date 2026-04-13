@@ -77,6 +77,42 @@ ISSUE_POLICY_REGISTRY: dict[str, IssuePolicy] = {
         0.0,
         "Option subscription is unavailable.",
     ),
+    "missing_rr_context": IssuePolicy(
+        "missing_rr_context",
+        ISSUE_CATEGORY_SOFT,
+        0.08,
+        "Risk/reward context is incomplete; candidate should be penalized but not hard-blocked.",
+    ),
+    "rr_estimated_context": IssuePolicy(
+        "rr_estimated_context",
+        ISSUE_CATEGORY_SOFT,
+        0.03,
+        "Risk/reward context is estimated from fallback levels.",
+    ),
+    "missing_liquidity_context": IssuePolicy(
+        "missing_liquidity_context",
+        ISSUE_CATEGORY_SOFT,
+        0.06,
+        "Liquidity context is incomplete.",
+    ),
+    "missing_spread_context": IssuePolicy(
+        "missing_spread_context",
+        ISSUE_CATEGORY_SOFT,
+        0.05,
+        "Spread context is incomplete.",
+    ),
+    "missing_timing_context": IssuePolicy(
+        "missing_timing_context",
+        ISSUE_CATEGORY_SOFT,
+        0.04,
+        "Timing context is incomplete.",
+    ),
+    "missing_live_timing_context": IssuePolicy(
+        "missing_live_timing_context",
+        ISSUE_CATEGORY_WARNING,
+        0.0,
+        "Timing context is missing but market state allows degraded advisory evaluation.",
+    ),
 }
 
 

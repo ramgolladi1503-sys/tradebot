@@ -19,11 +19,13 @@ def auto_clear_risk_halt_if_safe() -> Dict[str, Any]:
     - AUTO_CLEAR_RISK_HALT_ON_START=True
     - AUTO_CLEAR_RISK_HALT_REQUIRE_MARKET_CLOSED=True
     - AUTO_CLEAR_RISK_HALT_REQUIRE_NO_OPEN_POSITIONS=True
+    - AUTO_CLEAR_RISK_HALT_ALLOW_MARKET_OPEN_IF_FLAT=True
     """
     now = now_ist()
     enabled = bool(getattr(cfg, "AUTO_CLEAR_RISK_HALT_ON_START", True))
     require_market_closed = bool(getattr(cfg, "AUTO_CLEAR_RISK_HALT_REQUIRE_MARKET_CLOSED", True))
     require_no_positions = bool(getattr(cfg, "AUTO_CLEAR_RISK_HALT_REQUIRE_NO_OPEN_POSITIONS", True))
+    allow_market_open_if_flat = bool(getattr(cfg, "AUTO_CLEAR_RISK_HALT_ALLOW_MARKET_OPEN_IF_FLAT", True))
     market_open = bool(is_market_open_ist(now=now))
 
     result: Dict[str, Any] = {
@@ -50,8 +52,9 @@ def auto_clear_risk_halt_if_safe() -> Dict[str, Any]:
         result["open_positions_count"] = open_positions_count
 
         if require_market_closed and market_open:
-            result["reason_code"] = "HALT_CLEAR_BLOCKED_MARKET_OPEN"
-            return _write_guard_log(result)
+            if not (allow_market_open_if_flat and (not require_no_positions or open_positions_count == 0)):
+                result["reason_code"] = "HALT_CLEAR_BLOCKED_MARKET_OPEN"
+                return _write_guard_log(result)
 
         if require_no_positions and open_positions_count > 0:
             result["reason_code"] = "HALT_CLEAR_BLOCKED_OPEN_POSITIONS"

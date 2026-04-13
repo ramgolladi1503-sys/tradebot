@@ -58,3 +58,28 @@ def test_normalize_option_row_infers_missing_type():
     assert opt is not None
     assert opt["type"] == "CE"
     assert opt.get("type_inferred") is True
+
+
+def test_resolve_option_contract_uses_nearest_strike_fallback():
+    tb = TradeBuilder()
+    market_data = {
+        "option_chain": [
+            {
+                "type": "CE",
+                "strike": 25000.0,
+                "expiry": "2026-04-30",
+                "tradingsymbol": "NIFTY26APR25000CE",
+                "instrument_token": 112233,
+            }
+        ]
+    }
+    contract = tb._resolve_option_contract(
+        "NIFTY",
+        25050.0,
+        "CE",
+        "2026-04-30",
+        market_data,
+    )
+    assert contract["tradingsymbol"] == "NIFTY26APR25000CE"
+    assert int(contract["instrument_token"]) == 112233
+    assert contract.get("fallback_applied") is True

@@ -174,3 +174,34 @@ def test_classify_issue_severe_price_mismatch_is_hard():
 
     assert out.category == ISSUE_CATEGORY_HARD
     assert out.penalty == 0.0
+
+
+def test_classify_issue_missing_rr_context_is_soft():
+    out = classify_issue(
+        "missing_rr_context",
+        {
+            "mode": "LIVE",
+            "market_open": True,
+            "allow_stale_quotes": False,
+            "permission": "EXECUTE",
+            "quote_source": "tick_store",
+            "quote_age_sec": 0.4,
+        },
+    )
+
+    assert out.category == ISSUE_CATEGORY_SOFT
+    assert out.penalty > 0.0
+
+
+def test_classify_issue_unregistered_code_remains_hard():
+    out = classify_issue(
+        "UNREGISTERED_FATAL_CHECK",
+        {
+            "mode": "LIVE",
+            "market_open": True,
+            "permission": "EXECUTE",
+        },
+    )
+
+    assert out.category == ISSUE_CATEGORY_HARD
+    assert out.penalty == 0.0

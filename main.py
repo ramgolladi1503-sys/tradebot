@@ -1,5 +1,6 @@
 import os
 import atexit
+import time
 from pathlib import Path
 
 import core.runtime_guard  # noqa: F401  (import side-effects intentional)
@@ -7,6 +8,7 @@ from config import config as cfg
 
 from core.orchestrator import Orchestrator
 from core.readiness_gate import run_readiness_check
+from core.feed_debug import get_feed_debug
 from core.audit_log import append_event as audit_append
 from core.events import append_event as append_runtime_event, events_path
 from core.event_integrity import repair_events_file, validate_events_file
@@ -246,26 +248,113 @@ def main():
     pilot_mode = bool(getattr(cfg, "LIVE_PILOT_MODE", False))
 
     if live_mode or pilot_mode:
+        grace_enabled = bool(getattr(cfg, "STARTUP_READINESS_BREAKER_GRACE_ENABLE", True))
+        grace_sec = float(getattr(cfg, "STARTUP_READINESS_BREAKER_GRACE_SEC", 30.0) or 30.0)
+        poll_sec = max(0.1, float(getattr(cfg, "STARTUP_READINESS_BREAKER_POLL_SEC", 1.0) or 1.0))
         readiness = run_readiness_check(write_log=True)
         state = readiness.get("state", "BLOCKED")
         can_trade = bool(readiness.get("can_trade", readiness.get("ready", False)))
         should_abort, abort_reasons = _classify_readiness_abort(readiness)
 
         if should_abort:
-            risk_halt.set_halt("readiness_gate_fail", {"reasons": abort_reasons})
-            try:
-                audit_append(
+            only_feed_breaker = (
+                len(abort_reasons) == 1
+                and _normalize_readiness_blocker(abort_reasons[0]) == "feed_circuit_breaker_tripped"
+            )
+            if only_feed_breaker and grace_enabled:
+                readiness_start_ts = float(time.time())
+                print(
+                    "ACTIVE_STARTUP_GRACE_PATH",
                     {
-                        "event": "READINESS_FAIL",
-                        "state": state,
-                        "reasons": abort_reasons,
-                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
-                    }
+                        "phase": "enter",
+                        "grace_sec": grace_sec,
+                        "poll_sec": poll_sec,
+                        "abort_reasons": list(abort_reasons),
+                    },
                 )
-            except Exception as exc:
-                print(f"[AUDIT_ERROR] readiness_fail err={exc}")
-            print(f"[Readiness] Not ready: {','.join(abort_reasons)}")
-            return
+                while should_abort:
+                    elapsed_sec = max(0.0, float(time.time() - readiness_start_ts))
+                    if elapsed_sec >= grace_sec:
+                        print(
+                            "ACTIVE_STARTUP_GRACE_PATH",
+                            {
+                                "phase": "timeout",
+                                "elapsed_sec": round(elapsed_sec, 3),
+                                "abort_reasons": list(abort_reasons),
+                            },
+                        )
+                        break
+
+                    try:
+                        feed_debug = dict(get_feed_debug() or {})
+                    except Exception:
+                        feed_debug = {}
+                    breaker_payload = dict((readiness.get("checks") or {}).get("feed_breaker") or {})
+                    ws_tick_epoch = feed_debug.get("last_ws_tick_epoch")
+                    first_tick_seen = False
+                    try:
+                        first_tick_seen = bool(float(ws_tick_epoch or 0.0) > 0.0)
+                    except Exception:
+                        first_tick_seen = False
+                    print(
+                        "STARTUP_WAIT",
+                        {
+                            "ws_connected": feed_debug.get("ws_connected"),
+                            "first_tick_seen": first_tick_seen,
+                            "last_ws_tick_age_sec": feed_debug.get("last_ws_tick_age_sec"),
+                            "last_tick_age_sec": feed_debug.get("last_tick_age_sec"),
+                            "breaker_tripped": bool(breaker_payload.get("tripped", False)),
+                            "breaker_reason": breaker_payload.get("reason"),
+                            "elapsed_sec": round(elapsed_sec, 3),
+                        },
+                    )
+                    time.sleep(poll_sec)
+
+                    readiness = run_readiness_check(write_log=True)
+                    state = readiness.get("state", "BLOCKED")
+                    can_trade = bool(readiness.get("can_trade", readiness.get("ready", False)))
+                    should_abort, abort_reasons = _classify_readiness_abort(readiness)
+                    only_feed_breaker = (
+                        len(abort_reasons) == 1
+                        and _normalize_readiness_blocker(abort_reasons[0]) == "feed_circuit_breaker_tripped"
+                    )
+                    if not should_abort:
+                        print(
+                            "ACTIVE_STARTUP_GRACE_PATH",
+                            {
+                                "phase": "recovered",
+                                "elapsed_sec": round(elapsed_sec, 3),
+                                "state": state,
+                                "can_trade": can_trade,
+                            },
+                        )
+                        break
+                    if not only_feed_breaker:
+                        print(
+                            "ACTIVE_STARTUP_GRACE_PATH",
+                            {
+                                "phase": "exit_non_feed_breaker",
+                                "elapsed_sec": round(elapsed_sec, 3),
+                                "abort_reasons": list(abort_reasons),
+                            },
+                        )
+                        break
+
+            if should_abort:
+                risk_halt.set_halt("readiness_gate_fail", {"reasons": abort_reasons})
+                try:
+                    audit_append(
+                        {
+                            "event": "READINESS_FAIL",
+                            "state": state,
+                            "reasons": abort_reasons,
+                            "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                        }
+                    )
+                except Exception as exc:
+                    print(f"[AUDIT_ERROR] readiness_fail err={exc}")
+                print(f"[Readiness] Not ready: {','.join(abort_reasons)}")
+                return
 
         if state == "BLOCKED":
             reasons = readiness.get("blockers") or readiness.get("reasons") or []

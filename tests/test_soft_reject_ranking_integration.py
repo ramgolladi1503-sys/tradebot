@@ -26,8 +26,14 @@ def test_soft_reject_enters_rank_pool_when_non_critical(monkeypatch):
     assert gate_reasons == ["spread_pct"]
     assert len(soft_candidates) == 1
     assert len(ranked) == 1
-    assert ranked[0].get("rank_score") is not None
-    assert ranked[0].get("execution_status") == "advisory_only"
+    assert ranked[0].get("rank_score") is None
+    assert ranked[0].get("soft_reject_seed_confidence") == float(
+        getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18)
+    )
+    assert ranked[0].get("score_origin") == "soft_reject_seed"
+    assert ranked[0].get("candidate_status") == "near_executable"
+    assert ranked[0].get("execution_status") == "scored"
+    assert ranked[0].get("permission") == "QUEUE_ONLY"
 
 
 def test_soft_reject_skips_critical_reason(monkeypatch):
@@ -65,7 +71,7 @@ def test_missing_reason_falls_back_to_unknown_reject(monkeypatch):
         symbol="NIFTY",
     )
 
-    assert reject_reason == "unknown_reject"
-    assert gate_reasons == ["unknown_reject"]
+    assert reject_reason == "unspecified_trade_builder_reject"
+    assert gate_reasons == ["unspecified_trade_builder_reject"]
     assert len(soft_candidates) == 1
     assert len(ranked) == 1

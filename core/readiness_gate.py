@@ -15,7 +15,7 @@ from config import config as cfg
 from core import risk_halt
 from core.audit_log import verify_chain as verify_audit_chain
 from core.auth_health import get_kite_auth_health, run_preopen_auth_warm_check
-from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
+from core.feed_circuit_breaker import maybe_auto_clear as feed_breaker_maybe_auto_clear
 from core.feed_debug import get_feed_debug
 from core.market_context import derive_market_context
 from core.freshness_policy import resolve_freshness_policy
@@ -481,8 +481,9 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
         "source": "decision_dag",
     }
 
-    breaker_tripped = feed_breaker_tripped()
-    checks["feed_breaker"] = {"tripped": breaker_tripped}
+    breaker_eval = feed_breaker_maybe_auto_clear(feed_debug if isinstance(feed_debug, dict) else {})
+    breaker_tripped = bool((breaker_eval or {}).get("tripped", False))
+    checks["feed_breaker"] = dict(breaker_eval or {"tripped": breaker_tripped})
     if breaker_tripped:
         blockers.append("feed_circuit_breaker_tripped")
 
@@ -498,6 +499,7 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
         state = ReadinessState.BOOTING
         can_trade = False
     elif blockers:
+        print("WHY_BLOCKED:", blockers)
         state = ReadinessState.BLOCKED
         can_trade = False
     else:

@@ -8,6 +8,7 @@ from __future__ import annotations
 from core.paths import data_root, logs_dir
 import json
 from pathlib import Path
+import time
 from typing import Any
 
 from config import config as cfg
@@ -17,6 +18,20 @@ from core.feed_circuit_breaker import trip as trip_feed_breaker
 from core.freshness_sla import get_freshness_status
 from core.market_context import derive_market_context
 from core.time_utils import compute_age_sec, now_ist, now_utc_epoch
+
+_PROCESS_START_MONOTONIC = time.monotonic()
+
+
+def _startup_grace_active(ctx: Any) -> bool:
+    if not bool(getattr(cfg, "SLO_STARTUP_GRACE_ENABLE", True)):
+        return False
+    if str(getattr(ctx, "mode", "")).upper() != "LIVE":
+        return False
+    grace_sec = float(getattr(cfg, "SLO_STARTUP_GRACE_SEC", 30.0) or 30.0)
+    if grace_sec <= 0.0:
+        return False
+    uptime_sec = max(0.0, float(time.monotonic()) - float(_PROCESS_START_MONOTONIC))
+    return uptime_sec < grace_sec
 
 
 def _state_path() -> Path:
@@ -102,6 +117,7 @@ def evaluate_slo_status(
     enforce_live_only = bool(getattr(cfg, "SLO_ENFORCE_LIVE_ONLY", True))
     guard_enabled = bool(getattr(cfg, "SLO_GUARD_ENABLE", True))
     should_enforce = bool(guard_enabled and (live_open or (not enforce_live_only)))
+    startup_grace_active = bool(_startup_grace_active(ctx))
 
     auth = dict(auth_payload or get_kite_auth_health(force=False) or {})
     feed = dict(feed_payload or get_freshness_status(force=True) or {})
@@ -132,8 +148,20 @@ def evaluate_slo_status(
     reasons: list[str] = []
     warnings: list[str] = []
     suppressed: list[str] = []
+    startup_suppressed: list[str] = []
+    startup_transient_codes = {
+        "FEED_LTP_TS_MISSING",
+        "FEED_LTP_STALE",
+        "FEED_DEPTH_TS_MISSING",
+        "FEED_DEPTH_STALE",
+        "AUTH_LATENCY_MISSING",
+        "AUTH_LATENCY_BREACH",
+    }
 
     def _record(code: str, *, suppress: bool = False) -> None:
+        if startup_grace_active and code in startup_transient_codes:
+            startup_suppressed.append(code)
+            return
         if suppress:
             suppressed.append(code)
             return
@@ -244,6 +272,8 @@ def evaluate_slo_status(
         "reasons": list(reasons),
         "warnings": list(warnings),
         "suppressed_warnings": list(suppressed),
+        "startup_grace_active": bool(startup_grace_active),
+        "startup_suppressed_warnings": list(startup_suppressed),
         "consecutive_breaches": int(consecutive),
         "failover_triggered": bool(failover_triggered),
         "failover_reason_code": failover_reason_code,

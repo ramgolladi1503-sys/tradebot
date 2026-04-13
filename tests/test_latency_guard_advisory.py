@@ -19,7 +19,7 @@ def test_latency_soften_preserves_strategy_family():
     assert softened["strategy_family"] == "breakout"
     assert softened.get("strategy_family") != "latency_guard"
     assert softened.get("option_type") == "PE"
-    assert softened.get("execution_status") == "advisory_only"
+    assert softened.get("execution_status") == "scored"
     assert softened.get("execution_allowed") is False
     assert softened.get("candidate_status") in {"near_executable", "advisory_only"}
     assert softened.get("rank_score") is not None

@@ -318,7 +318,255 @@ class TradeBuilder:
         self._soft_reject_reasons_cache = reasons
         return reasons
 
+    def _hard_reject_reasons(self) -> set[str]:
+        raw = str(
+            getattr(
+                cfg,
+                "TRADE_BUILDER_HARD_REJECT_REASONS",
+                "feed_stale,quote_missing,unresolved_contract,invalid_risk_levels,missing_live_quote,no_live_option_feed",
+            )
+            or ""
+        )
+        return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+    def _classify_reject_reason(self, reason: str | None) -> str:
+        text = str(reason or "").strip().lower()
+        if not text:
+            return "soft"
+        hard_reasons = self._hard_reject_reasons()
+        if text in hard_reasons:
+            return "hard"
+        soft_reasons = self._soft_reject_reasons()
+        if text in soft_reasons:
+            return "soft"
+        return "soft"
+
+    def _borderline_confidence_floor(self) -> float:
+        return float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18)
+
+    def _build_borderline_candidate(
+        self,
+        *,
+        market_data: dict,
+        reason: str,
+        confidence: float,
+        strategy_tag: str | None = None,
+        direction: str | None = None,
+    ):
+        if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+            return None
+        symbol = str(
+            market_data.get("symbol")
+            or market_data.get("underlying")
+            or "UNKNOWN"
+        ).strip().upper() or "UNKNOWN"
+        execution_mode = str(
+            market_data.get("execution_mode")
+            or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+            or getattr(cfg, "EXECUTION_MODE", "")
+        ).strip().upper()
+        confidence_value = max(float(confidence or 0.0), float(self._borderline_confidence_floor()))
+        weak_reason = str(reason or "").strip().lower() in {"weak_signal", "no_signal"}
+        base_candidate = {
+            "symbol": symbol,
+            "strategy": strategy_tag or "BORDERLINE_SIGNAL",
+            "strategy_name": strategy_tag or "BORDERLINE_SIGNAL",
+            "strategy_family": str(strategy_tag or "builder_soft_reject").strip().lower() or "builder_soft_reject",
+            "candidate_type": "directional",
+            "direction": direction or ("BUY_CALL" if float(market_data.get("ltp") or 0.0) >= float(market_data.get("vwap") or market_data.get("ltp") or 0.0) else "BUY_PUT"),
+            "confidence": confidence_value,
+            "confidence_final": confidence_value,
+            "rank_score": None if weak_reason else confidence_value,
+            "final_score": None if weak_reason else confidence_value,
+        }
+        candidate = build_soft_reject_candidate(
+            market_data,
+            reject_reason=reason,
+            reject_source="trade_builder_borderline",
+            gate_reasons=[reason],
+            base_candidate=base_candidate,
+            execution_mode=execution_mode,
+        )
+        if not candidate:
+            return None
+        candidate["candidate_origin"] = "softened_builder_path"
+        candidate["source_flags"] = dict(candidate.get("source_flags") or {})
+        candidate["source_flags"]["candidate_origin"] = "softened_builder_path"
+        candidate["source_flags"]["soft_reject_reason"] = str(reason)
+        if weak_reason:
+            candidate["execution_status"] = "advisory_only"
+            candidate["candidate_status"] = "advisory_only"
+            candidate["eligible_for_execution"] = False
+            candidate["execution_allowed"] = False
+            candidate["execution_ok"] = False
+            candidate["execution_blocked"] = True
+            candidate["execution_block_reason"] = "weak_signal_builder"
+            candidate["permission"] = "ADVISORY_ONLY"
+            candidate["final_action"] = "ADVISORY_ONLY"
+            candidate["readiness"] = "ADVISORY_ONLY"
+            candidate["planning_only"] = True
+            candidate["tradable"] = False
+        else:
+            candidate["execution_status"] = "scored"
+            candidate["candidate_status"] = "near_executable"
+            candidate["eligible_for_execution"] = True
+            candidate["execution_allowed"] = True
+            candidate["execution_ok"] = True
+            candidate["execution_blocked"] = False
+            candidate["execution_block_reason"] = None
+            candidate["permission"] = "QUEUE_ONLY"
+            candidate["final_action"] = "QUEUE_ONLY"
+            candidate["readiness"] = "QUEUE_ONLY"
+            candidate["planning_only"] = False
+            candidate["tradable"] = True
+        candidate["confidence"] = confidence_value
+        candidate["confidence_final"] = confidence_value
+        candidate["soft_reject_seed_confidence"] = confidence_value
+        candidate.setdefault("score_origin", "soft_reject_seed")
+        if weak_reason:
+            candidate["rank_score"] = None
+            candidate["opportunity_score"] = None
+            candidate["final_score"] = None
+        else:
+            candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_value)
+            candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_value)
+        candidate["reason"] = str(reason or "weak_signal")
+        candidate = self._attach_softened_candidate_contract(candidate, market_data=market_data)
+        return candidate
+
+    def _attach_softened_candidate_contract(self, candidate: dict | None, *, market_data: dict | None) -> dict | None:
+        if not isinstance(candidate, dict):
+            return candidate
+        data = dict(market_data or {})
+        out = dict(candidate)
+        symbol = str(out.get("symbol") or data.get("symbol") or "").strip().upper()
+        if not symbol:
+            return out
+        direction = str(out.get("direction") or "").strip().upper()
+        if "PUT" in direction or direction.endswith("PE"):
+            opt_type = "PE"
+        elif "CALL" in direction or direction.endswith("CE"):
+            opt_type = "CE"
+        else:
+            opt_type = "CE"
+        spot = (
+            self._coerce_positive_float(data.get("underlying_spot"))
+            or self._coerce_positive_float(data.get("ltp"))
+            or self._coerce_positive_float(out.get("signal_price"))
+        )
+        step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
+        step = float(step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)) or 0.0)
+        if spot is None or step <= 0:
+            out["unresolved_contract"] = True
+            out["execution_blocked"] = True
+            out["execution_block_reason"] = "unresolved_contract"
+            out["execution_status"] = "advisory_only"
+            out["candidate_status"] = "advisory_only"
+            out["eligible_for_execution"] = False
+            out["execution_allowed"] = False
+            out["execution_ok"] = False
+            out["permission"] = "ADVISORY_ONLY"
+            out["final_action"] = "ADVISORY_ONLY"
+            out["readiness"] = "ADVISORY_ONLY"
+            return out
+        atm_strike = int(round(float(spot) / float(step)) * float(step))
+        expiry_resolved = self._resolve_expiry_for_symbol(symbol, data)
+        search_steps = max(0, int(getattr(cfg, "TRADE_BUILDER_CONTRACT_STRIKE_FALLBACK_STEPS", 2) or 2))
+        strike_candidates: list[int] = [int(atm_strike)]
+        for step_idx in range(1, search_steps + 1):
+            delta = int(round(float(step) * float(step_idx)))
+            strike_candidates.append(int(atm_strike - delta))
+            strike_candidates.append(int(atm_strike + delta))
+        seen_strikes: set[int] = set()
+        deduped_strikes: list[int] = []
+        for strike in strike_candidates:
+            if strike in seen_strikes:
+                continue
+            seen_strikes.add(strike)
+            deduped_strikes.append(strike)
+        resolved_contract: dict | None = None
+        requested_expiry = expiry_resolved
+        for strike in deduped_strikes:
+            contract = self._resolve_option_contract(symbol, strike, opt_type, expiry_resolved, data)
+            if contract.get("tradingsymbol") or contract.get("instrument_token") is not None:
+                resolved_contract = dict(contract)
+                resolved_contract["resolved_strike"] = strike
+                break
+        if resolved_contract is None:
+            available_expiries: list[str] = []
+            available_strikes: list[float] = []
+            chain = data.get("option_chain")
+            if isinstance(chain, (list, tuple)):
+                for row in chain:
+                    if not isinstance(row, dict):
+                        continue
+                    row_type = str(row.get("type") or row.get("option_type") or row.get("right") or "").strip().upper()
+                    if row_type != opt_type:
+                        continue
+                    exp_text = self._coerce_date_str(self._option_expiry(row, data))
+                    if exp_text:
+                        available_expiries.append(exp_text)
+                    try:
+                        strike_val = float(row.get("strike") or row.get("strike_price") or row.get("strikePrice"))
+                    except Exception:
+                        strike_val = None
+                    if strike_val is not None:
+                        available_strikes.append(strike_val)
+            print(
+                "CONTRACT_RESOLUTION_FAILED",
+                {
+                    "symbol": symbol,
+                    "requested_expiry": requested_expiry,
+                    "requested_strike": atm_strike,
+                    "option_type": opt_type,
+                    "available_expiries": sorted(list(dict.fromkeys(available_expiries)))[:5],
+                    "available_strikes_sample": sorted(list(dict.fromkeys(available_strikes)))[:10],
+                },
+            )
+            out["unresolved_contract"] = True
+            out["execution_blocked"] = True
+            out["execution_block_reason"] = "unresolved_contract"
+            out["execution_status"] = "advisory_only"
+            out["candidate_status"] = "advisory_only"
+            out["eligible_for_execution"] = False
+            out["execution_allowed"] = False
+            out["execution_ok"] = False
+            out["permission"] = "ADVISORY_ONLY"
+            out["final_action"] = "ADVISORY_ONLY"
+            out["readiness"] = "ADVISORY_ONLY"
+            return out
+        resolved_expiry = str(resolved_contract.get("expiry") or expiry_resolved or "").strip()
+        resolved_strike = resolved_contract.get("resolved_strike")
+        try:
+            strike_value = int(float(resolved_strike if resolved_strike is not None else atm_strike))
+        except Exception:
+            strike_value = int(atm_strike)
+        instrument_token = resolved_contract.get("instrument_token")
+        try:
+            instrument_token = int(instrument_token) if instrument_token is not None else None
+        except Exception:
+            instrument_token = None
+        out["instrument"] = "OPT"
+        out["instrument_type"] = "OPT"
+        out["option_type"] = opt_type
+        out["right"] = opt_type
+        out["strike"] = strike_value
+        out["expiry"] = resolved_expiry
+        out["expiry_date"] = resolved_expiry
+        out["tradingsymbol"] = resolved_contract.get("tradingsymbol")
+        out["instrument_token"] = instrument_token
+        out["instrument_id"] = (
+            resolved_contract.get("instrument_id")
+            or build_instrument_id(symbol, "OPT", resolved_expiry, float(strike_value), opt_type)
+        )
+        out["unresolved_contract"] = False
+        out["execution_blocked"] = False
+        out["execution_block_reason"] = None
+        return out
+
     def _soft_reject_enabled(self, execution_mode: str | None) -> bool:
+        if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+            return False
         try:
             enabled = bool(getattr(cfg, "TRADE_BUILDER_SOFT_REJECT_ENABLE", True))
         except Exception:
@@ -359,6 +607,8 @@ class TradeBuilder:
         strategy_tag: str | None = None,
         direction: str | None = None,
     ):
+        if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+            return None
         if not isinstance(market_data, dict):
             return None
         execution_mode = str(
@@ -375,6 +625,8 @@ class TradeBuilder:
                 reason = primary_reason
         if not reason:
             return None
+        if self._classify_reject_reason(reason) == "hard":
+            return None
         if execution_mode in {"SIM", "PAPER", "OFFHOURS"} and reason in {"no_candidates_survived", "no_viable_candidates", "no_signal"}:
             ltp = self._coerce_positive_float(market_data.get("ltp")) or 0.0
             vwap = self._coerce_positive_float(market_data.get("vwap")) or ltp
@@ -387,7 +639,6 @@ class TradeBuilder:
             )
             if best_trade is not None:
                 return best_trade
-            return None
         if is_critical_reject_reason(reason, critical_reject_reasons()):
             return None
         symbol = str(reject_ctx.get("symbol") or market_data.get("symbol") or market_data.get("underlying") or "").strip()
@@ -423,7 +674,47 @@ class TradeBuilder:
             candidate["strategy_family"] = str(strategy_tag or "builder_soft_reject").strip().lower() or "builder_soft_reject"
         if str(candidate.get("setup_variant") or "").strip().lower() in {"", "unknown"}:
             candidate["setup_variant"] = "softened_builder_path"
+        confidence_floor = float(self._borderline_confidence_floor())
+        weak_reason = str(reason or "").strip().lower() in {"weak_signal", "no_signal"}
+        if weak_reason:
+            candidate["execution_status"] = "advisory_only"
+            candidate["candidate_status"] = "advisory_only"
+            candidate["eligible_for_execution"] = False
+            candidate["execution_allowed"] = False
+            candidate["execution_ok"] = False
+            candidate["execution_blocked"] = True
+            candidate["execution_block_reason"] = "weak_signal_builder"
+            candidate["permission"] = "ADVISORY_ONLY"
+            candidate["final_action"] = "ADVISORY_ONLY"
+            candidate["readiness"] = "ADVISORY_ONLY"
+            candidate["planning_only"] = True
+            candidate["tradable"] = False
+        else:
+            candidate["execution_status"] = "scored"
+            candidate["candidate_status"] = "near_executable"
+            candidate["eligible_for_execution"] = True
+            candidate["execution_allowed"] = True
+            candidate["execution_ok"] = True
+            candidate["execution_blocked"] = False
+            candidate["execution_block_reason"] = None
+            candidate["permission"] = "QUEUE_ONLY"
+            candidate["final_action"] = "QUEUE_ONLY"
+            candidate["readiness"] = "QUEUE_ONLY"
+            candidate["planning_only"] = False
+            candidate["tradable"] = True
+        candidate["confidence"] = max(float(candidate.get("confidence") or 0.0), confidence_floor)
+        candidate["confidence_final"] = max(float(candidate.get("confidence_final") or 0.0), confidence_floor)
+        candidate["soft_reject_seed_confidence"] = confidence_floor
+        candidate.setdefault("score_origin", "soft_reject_seed")
+        if weak_reason:
+            candidate["rank_score"] = None
+            candidate["opportunity_score"] = None
+            candidate["final_score"] = None
+        else:
+            candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_floor)
+            candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_floor)
         candidate["reason"] = reason
+        candidate = self._attach_softened_candidate_contract(candidate, market_data=market_data)
         logger.info(
             "candidate_softened reason=%s symbol=%s strategy=%s",
             reason,
@@ -438,13 +729,23 @@ class TradeBuilder:
             candidate.get("rank_score"),
         )
         try:
-            self._set_last_ranked_candidates([candidate])
+            if candidate.get("rank_score") is not None:
+                self._set_last_ranked_candidates([candidate])
+            else:
+                self._set_last_ranked_candidates([])
             self._scan_accepted = 1
-            logger.info(
-                "candidate_pool_append source=softened_builder_path symbol=%s reason=%s",
-                symbol,
-                reason,
-            )
+            if candidate.get("rank_score") is not None:
+                logger.info(
+                    "candidate_pool_append source=softened_builder_path symbol=%s reason=%s",
+                    symbol,
+                    reason,
+                )
+            else:
+                logger.info(
+                    "candidate_pool_skip source=softened_builder_path symbol=%s reason=%s rank_score=none",
+                    symbol,
+                    reason,
+                )
         except Exception:
             pass
         return candidate
@@ -2142,6 +2443,8 @@ class TradeBuilder:
         if quote_age_sec is None and quote_ts_epoch is not None:
             quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
         allow_stale_quotes = bool(getattr(market_ctx, "allow_stale_quotes", False))
+        soft_stale_sec = float(max(option_tick_sla_sec, float(getattr(cfg, "OPTION_TICK_SOFT_STALE_SEC", 3.0))))
+        hard_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "OPTION_TICK_HARD_STALE_SEC", 6.0))))
         if quote_age_sec is None or quote_age_sec > option_tick_sla_sec:
             if allow_stale_quotes:
                 return True, {
@@ -2164,6 +2467,62 @@ class TradeBuilder:
                     "stale_option_tick": True,
                     "stale_allowed": True,
                 }
+            bid = self._coerce_nonnegative_float(opt.get("best_bid"))
+            if bid is None:
+                bid = self._coerce_nonnegative_float(opt.get("bid"))
+            if bid is None:
+                bid = self._coerce_nonnegative_float(opt.get("opt_bid"))
+            ask = self._coerce_nonnegative_float(opt.get("best_ask"))
+            if ask is None:
+                ask = self._coerce_nonnegative_float(opt.get("ask"))
+            if ask is None:
+                ask = self._coerce_nonnegative_float(opt.get("opt_ask"))
+            ltp_ref = self._coerce_nonnegative_float(opt.get("ltp"))
+            if ltp_ref is None:
+                ltp_ref = self._coerce_nonnegative_float(opt.get("current_ltp"))
+            if ltp_ref is None:
+                ltp_ref = self._coerce_nonnegative_float(opt.get("last_price"))
+            spread_pct = None
+            if bid is not None and ask is not None and ask >= bid and ltp_ref not in (None, 0):
+                try:
+                    spread_pct = float(ask - bid) / float(ltp_ref)
+                except Exception:
+                    spread_pct = None
+            max_spread_pct = float(getattr(cfg, "MAX_SPREAD_PCT", 0.02))
+            spread_ok = spread_pct is not None and spread_pct <= max_spread_pct
+            require_volume = bool(getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False))
+            volume_val = self._coerce_nonnegative_float(opt.get("volume"))
+            volume_ok = bool(volume_val is not None and volume_val > 0) if require_volume else True
+            live_soften_enabled = bool(getattr(cfg, "TRADE_BUILDER_ALLOW_LIVE_STALE_OPTION_TICK_SOFTEN", True))
+            market_mode_live = str(market_mode or "").strip().upper() == "LIVE"
+            mildly_stale = quote_age_sec is not None and quote_age_sec <= soft_stale_sec
+            hard_stale = quote_age_sec is None or quote_age_sec > hard_stale_sec
+            if live_soften_enabled and market_mode_live and mildly_stale and not hard_stale and spread_ok and volume_ok:
+                return True, {
+                    "reason_code": "STALE_OPTION_TICK",
+                    "reason_text": "Option tick mildly stale in LIVE; downgraded to advisory penalty",
+                    "gate_name": "option_tradability_precondition",
+                    "contract": contract_label,
+                    "strike": strike,
+                    "option_type": opt_type,
+                    "direction": direction,
+                    "instrument_token": instrument_token,
+                    "tradingsymbol": tradingsymbol,
+                    "expiry_date": expiry_resolved,
+                    "quote_source": quote_source or None,
+                    "option_ltp_source": option_ltp_source or None,
+                    "quote_age_sec": quote_age_sec,
+                    "tick_age_sec": quote_age_sec,
+                    "sla_threshold_sec": option_tick_sla_sec,
+                    "option_tick_sla_sec": option_tick_sla_sec,
+                    "option_tick_soft_stale_sec": soft_stale_sec,
+                    "option_tick_hard_stale_sec": hard_stale_sec,
+                    "stale_option_tick": True,
+                    "stale_allowed": True,
+                    "live_softened": True,
+                    "spread_ok": spread_ok,
+                    "volume_ok": volume_ok,
+                }
             return False, {
                 "reason_code": "STALE_OPTION_TICK",
                 "reason_text": "Option candidate rejected because option tick is missing/stale by SLA",
@@ -2181,6 +2540,9 @@ class TradeBuilder:
                 "tick_age_sec": quote_age_sec,
                 "sla_threshold_sec": option_tick_sla_sec,
                 "option_tick_sla_sec": option_tick_sla_sec,
+                "option_tick_soft_stale_sec": soft_stale_sec,
+                "option_tick_hard_stale_sec": hard_stale_sec,
+                "hard_stale": bool(quote_age_sec is None or quote_age_sec > hard_stale_sec),
             }
 
         opt["expiry"] = expiry_resolved
@@ -2530,28 +2892,89 @@ class TradeBuilder:
                 "instrument_id": None,
             }
         chain = data.get("option_chain")
+        contract_selected = None
+        fallback_applied = False
+        nearest_diff = None
+        chain_candidates: list[dict] = []
         if isinstance(chain, (list, tuple)):
             for row in chain:
                 if not isinstance(row, dict):
                     continue
-                if row.get("type") != opt_type:
+                row_type = str(row.get("type") or row.get("option_type") or row.get("right") or "").strip().upper()
+                if row_type != str(opt_type).upper():
                     continue
-                if row.get("strike") is None:
+                row_strike_raw = row.get("strike")
+                if row_strike_raw is None:
+                    row_strike_raw = row.get("strike_price")
+                if row_strike_raw is None:
+                    row_strike_raw = row.get("strikePrice")
+                if row_strike_raw is None:
                     continue
                 try:
-                    if float(row.get("strike")) != float(strike_val):
-                        continue
+                    row_strike = float(row_strike_raw)
                 except Exception:
                     continue
                 row_exp = self._option_expiry(row, data)
+                row_exp_text = self._coerce_date_str(row_exp)
+                chain_candidates.append(
+                    {
+                        "row": row,
+                        "strike": row_strike,
+                        "expiry": row_exp_text,
+                        "tradingsymbol": row.get("tradingsymbol"),
+                        "instrument_token": row.get("instrument_token"),
+                    }
+                )
+                if float(row_strike) != float(strike_val):
+                    continue
                 if exp_text and row_exp and str(row_exp) != exp_text:
                     continue
                 if not exp_text and row_exp:
                     exp_text = self._coerce_date_str(row_exp)
+                contract_selected = dict(row)
                 tradingsymbol = row.get("tradingsymbol") or tradingsymbol
                 instrument_token = row.get("instrument_token") or instrument_token
                 if tradingsymbol or instrument_token:
                     break
+        if (tradingsymbol is None and instrument_token is None) and chain_candidates:
+            fallback_steps = max(0, int(getattr(cfg, "TRADE_BUILDER_CONTRACT_STRIKE_FALLBACK_STEPS", 2) or 2))
+            step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
+            step = float(step_map.get(str(symbol or "").upper(), getattr(cfg, "STRIKE_STEP", 50)) or 0.0)
+            max_strike_delta = float(step * fallback_steps) if step > 0 and fallback_steps > 0 else None
+
+            def _candidate_sort_key(item: dict) -> tuple[float, int, str]:
+                c_exp = str(item.get("expiry") or "")
+                expiry_penalty = 0 if (not exp_text or c_exp == exp_text) else 1
+                return (abs(float(item.get("strike") or 0.0) - float(strike_val)), expiry_penalty, c_exp)
+
+            sorted_candidates = sorted(chain_candidates, key=_candidate_sort_key)
+            if sorted_candidates:
+                best = sorted_candidates[0]
+                diff = abs(float(best.get("strike") or 0.0) - float(strike_val))
+                allow_fallback = True
+                if max_strike_delta is not None:
+                    allow_fallback = bool(diff <= max_strike_delta + 1e-9)
+                if allow_fallback:
+                    fallback_applied = True
+                    nearest_diff = diff
+                    tradingsymbol = best.get("tradingsymbol") or tradingsymbol
+                    instrument_token = best.get("instrument_token") or instrument_token
+                    best_expiry = str(best.get("expiry") or "")
+                    if best_expiry:
+                        exp_text = best_expiry
+                    if tradingsymbol or instrument_token:
+                        print(
+                            "CONTRACT_RESOLUTION_FALLBACK",
+                            {
+                                "symbol": str(symbol or "").upper(),
+                                "requested_strike": float(strike_val),
+                                "resolved_strike": float(best.get("strike") or strike_val),
+                                "requested_expiry": self._coerce_date_str(expiry),
+                                "resolved_expiry": exp_text,
+                                "option_type": str(opt_type).upper(),
+                                "nearest_diff": float(diff),
+                            },
+                        )
         if not exp_text:
             exp_text = self._resolve_expiry_for_symbol(symbol, data)
         exchange = self._option_exchange(symbol)
@@ -2574,6 +2997,35 @@ class TradeBuilder:
                     break
             except Exception:
                 pass
+        if tradingsymbol is None and instrument_token is None:
+            available_expiries = sorted(
+                {
+                    str(item.get("expiry") or "")
+                    for item in chain_candidates
+                    if str(item.get("expiry") or "").strip()
+                }
+            )
+            available_strikes = sorted(
+                {
+                    float(item.get("strike"))
+                    for item in chain_candidates
+                    if item.get("strike") is not None
+                }
+            )
+            print(
+                "CONTRACT_RESOLUTION_FAILED",
+                {
+                    "symbol": str(symbol or "").upper(),
+                    "requested_strike": float(strike_val),
+                    "requested_expiry": self._coerce_date_str(expiry),
+                    "resolved_expiry": exp_text,
+                    "option_type": str(opt_type).upper(),
+                    "available_expiries": available_expiries[:5],
+                    "available_strikes_sample": available_strikes[:10],
+                    "fallback_applied": bool(fallback_applied),
+                    "nearest_diff": nearest_diff,
+                },
+            )
         instrument_id = build_instrument_id(symbol, "OPT", exp_text, strike_val, opt_type) if exp_text else None
         return {
             "expiry": exp_text,
@@ -2581,6 +3033,7 @@ class TradeBuilder:
             "tradingsymbol": tradingsymbol,
             "instrument_token": instrument_token,
             "instrument_id": instrument_id,
+            "fallback_applied": bool(fallback_applied),
         }
 
     def _percentile(self, values: list[float], pct: float) -> float | None:
@@ -5958,7 +6411,7 @@ class TradeBuilder:
         return max(width, entry_f * 0.08, 1.0)
 
     def _raw_confidence_gate_threshold(self, regime_day: str | None, *, quick_mode: bool = False) -> float:
-        legacy_threshold = float(getattr(cfg, "ML_MIN_PROBA", 0.6))
+        legacy_threshold = float(getattr(cfg, "ML_MIN_PROBA", 0.45))
         threshold = float(getattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN", legacy_threshold))
         explicit_default = getattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN_DEFAULT", None)
         try:
@@ -6586,6 +7039,41 @@ class TradeBuilder:
                     market_data.get("ltp_change"),
                     market_data.get("ltp_change_window"),
                 )
+            if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+                return None
+            raw_confidence = (
+                self._coerce_positive_float(market_data.get("confidence_raw"))
+                or self._coerce_positive_float(market_data.get("confidence"))
+                or self._coerce_positive_float(market_data.get("gating_base_confidence"))
+                or 0.0
+            )
+            borderline_candidate = self._build_borderline_candidate(
+                market_data=market_data,
+                reason="weak_signal",
+                confidence=max(float(raw_confidence), float(self._borderline_confidence_floor())),
+                strategy_tag=("QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"),
+                direction=None,
+            )
+            if borderline_candidate is not None:
+                self._reject_ctx = {}
+                if borderline_candidate.get("rank_score") is not None:
+                    self._set_last_ranked_candidates([borderline_candidate])
+                else:
+                    self._set_last_ranked_candidates([])
+                self._scan_accepted = 1
+                if borderline_candidate.get("rank_score") is not None:
+                    logger.info(
+                        "candidate_pool_append source=weak_signal_borderline symbol=%s reason=%s",
+                        symbol,
+                        "weak_signal",
+                    )
+                else:
+                    logger.info(
+                        "candidate_pool_skip source=weak_signal_borderline symbol=%s reason=%s rank_score=none",
+                        symbol,
+                        "weak_signal",
+                    )
+                return borderline_candidate
             return None
         setup_family = self._candidate_setup_family(signal, force_family=force_family)
         strategy_tag = "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"
