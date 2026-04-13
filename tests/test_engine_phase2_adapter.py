@@ -815,3 +815,164 @@ def test_build_candidates_phase2_strict_mode_keeps_clean_real_candidate(monkeypa
         ]
     )
     assert [row["trade_id"] for row in ranked] == ["STRICT_KEEP_REAL"]
+
+
+def test_build_candidates_phase2_injects_profile_rejection_setup_fields():
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "PR_SETUP_1",
+                "symbol": "NIFTY",
+                "strategy_family": "profile_rejection",
+                "direction": "BUY_CALL",
+                "execution_entry": 150.0,
+                "stop_loss": 120.0,
+                "target": 210.0,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.8,
+                "liquidity_score": 0.8,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "final_score": 0.7,
+            }
+        ]
+    )
+    assert len(ranked) == 1
+    row = ranked[0]
+    assert row.get("profile_rejection_detected") is True
+    assert row.get("setup_name") == "mean_reversion_profile_rejection"
+    assert row.get("decision_playbook") == "profile_rejection"
+    assert float(row.get("setup_score") or 0.0) > 0.0
+    assert float(row.get("trigger_score") or 0.0) > 0.0
+    assert float(row.get("entry_quality_score") or 0.0) > 0.0
+
+
+def test_build_candidates_phase2_profile_rejection_not_detected_without_identity():
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "PR_SETUP_2",
+                "symbol": "NIFTY",
+                "strategy_family": "ensemble_opt",
+                "direction": "BUY_CALL",
+                "execution_entry": 150.0,
+                "stop_loss": 120.0,
+                "target": 210.0,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.8,
+                "liquidity_score": 0.8,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "final_score": 0.7,
+            }
+        ]
+    )
+    assert len(ranked) == 1
+    assert ranked[0].get("profile_rejection_detected") is False
+
+
+def test_build_candidates_phase2_selects_profile_rejection_playbook_in_range(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "PLAYBOOK_RANGE_1",
+                "symbol": "NIFTY",
+                "regime": "RANGE",
+                "strategy_family": "profile_rejection",
+                "direction": "BUY_CALL",
+                "execution_entry": 203.0,
+                "display_entry": 203.0,
+                "entry": 203.0,
+                "stop_loss": 170.0,
+                "target": 250.0,
+                "day_high": 200.0,
+                "day_low": 180.0,
+                "candle_open": 198.0,
+                "candle_close": 203.0,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.85,
+                "liquidity_score": 0.8,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "final_score": 0.7,
+            }
+        ]
+    )
+    assert len(ranked) == 1
+    row = ranked[0]
+    assert row.get("selected_playbook") == "profile_rejection"
+    assert row.get("decision_playbook") == "profile_rejection"
+    assert row.get("profile_rejection_detected") is True
+
+
+def test_build_candidates_phase2_selects_breakout_playbook_in_trend(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "PLAYBOOK_TREND_1",
+                "symbol": "BANKNIFTY",
+                "regime": "TREND",
+                "strategy_family": "ensemble_opt",
+                "direction": "BUY_CALL",
+                "execution_entry": 305.0,
+                "display_entry": 305.0,
+                "entry": 305.0,
+                "stop_loss": 270.0,
+                "target": 360.0,
+                "day_high": 300.0,
+                "day_low": 280.0,
+                "candle_open": 297.0,
+                "candle_close": 305.0,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.85,
+                "liquidity_score": 0.8,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "final_score": 0.7,
+            }
+        ]
+    )
+    assert len(ranked) == 1
+    row = ranked[0]
+    assert row.get("selected_playbook") == "breakout_continuation"
+    assert row.get("decision_playbook") == "breakout_continuation"
+    assert row.get("breakout_detected") is True
+
+
+def test_build_candidates_phase2_filters_when_no_playbook_detected(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "PLAYBOOK_NONE_1",
+                "symbol": "NIFTY",
+                "regime": "RANGE",
+                "strategy_family": "ensemble_opt",
+                "direction": "BUY_CALL",
+                "execution_entry": 150.0,
+                "display_entry": 150.0,
+                "entry": 150.0,
+                "stop_loss": 120.0,
+                "target": 200.0,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.85,
+                "liquidity_score": 0.8,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "final_score": 0.7,
+            }
+        ]
+    )
+    assert ranked == []

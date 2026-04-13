@@ -774,6 +774,24 @@ PHASE2_STRICT_DROP_REASON_CODES = os.getenv(
     "PHASE2_STRICT_DROP_REASON_CODES",
     "weak_signal,no_signal,rr_estimated_context,missing_rr_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,unknown_quote_source,execution_context_degraded",
 )
+PHASE2_PLAYBOOK_SELECTION_ENABLE = (
+    os.getenv("PHASE2_PLAYBOOK_SELECTION_ENABLE", "false").lower() == "true"
+)
+PHASE2_BREAKOUT_BUFFER_PCT = float(os.getenv("PHASE2_BREAKOUT_BUFFER_PCT", "0.001"))
+PHASE2_BREAKOUT_MIN_BODY_PCT = float(os.getenv("PHASE2_BREAKOUT_MIN_BODY_PCT", "0.003"))
+PHASE2_BREAKOUT_SETUP_SCORE_DEFAULT = float(
+    os.getenv("PHASE2_BREAKOUT_SETUP_SCORE_DEFAULT", "0.70")
+)
+PHASE2_BREAKOUT_TRIGGER_SCORE_DEFAULT = float(
+    os.getenv("PHASE2_BREAKOUT_TRIGGER_SCORE_DEFAULT", "0.68")
+)
+PHASE2_BREAKOUT_ENTRY_QUALITY_SCORE_DEFAULT = float(
+    os.getenv("PHASE2_BREAKOUT_ENTRY_QUALITY_SCORE_DEFAULT", "0.66")
+)
+PHASE2_BREAKOUT_BUY_STOP_MULT = float(os.getenv("PHASE2_BREAKOUT_BUY_STOP_MULT", "0.88"))
+PHASE2_BREAKOUT_BUY_TARGET_MULT = float(os.getenv("PHASE2_BREAKOUT_BUY_TARGET_MULT", "1.24"))
+PHASE2_BREAKOUT_SELL_STOP_MULT = float(os.getenv("PHASE2_BREAKOUT_SELL_STOP_MULT", "1.12"))
+PHASE2_BREAKOUT_SELL_TARGET_MULT = float(os.getenv("PHASE2_BREAKOUT_SELL_TARGET_MULT", "0.76"))
 REVIEW_QUEUE_RUNTIME_RANKING_ENABLE = (
     os.getenv("REVIEW_QUEUE_RUNTIME_RANKING_ENABLE", "true").lower() == "true"
 )
@@ -2102,8 +2120,25 @@ EXIT_INTEL_STALL_SECONDS = float(os.getenv("EXIT_INTEL_STALL_SECONDS", "45"))
 EXIT_INTEL_STALL_MOMENTUM_BREAK = float(os.getenv("EXIT_INTEL_STALL_MOMENTUM_BREAK", "-0.001"))
 EXIT_INTEL_STALL_ACTION = os.getenv("EXIT_INTEL_STALL_ACTION", "PARTIAL_EXIT").upper()
 EXIT_INTEL_PARTIAL_EXIT_FRACTION = float(os.getenv("EXIT_INTEL_PARTIAL_EXIT_FRACTION", "0.5"))
+EXECUTION_OPTIMIZER_ENABLE = os.getenv("EXECUTION_OPTIMIZER_ENABLE", "true").lower() == "true"
 EXIT_INTEL_LOG_PATH = str(
     Path(os.getenv("EXIT_INTEL_LOG_PATH", str(Path(DESK_LOG_DIR) / "exit_intelligence_actions.jsonl")))
+)
+POSITION_STATE_ENGINE_ENABLE = os.getenv("POSITION_STATE_ENGINE_ENABLE", "true").lower() == "true"
+POSITION_STATE_STORE_PATH = str(
+    Path(os.getenv("POSITION_STATE_STORE_PATH", str(Path(DESK_LOG_DIR) / "position_state")))
+)
+POSITION_STATE_EXIT_MANAGER_ENABLE = (
+    os.getenv("POSITION_STATE_EXIT_MANAGER_ENABLE", "true").lower() == "true"
+)
+POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE = (
+    os.getenv("POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE", "false").lower() == "true"
+)
+POSITION_STATE_PERSIST_EVERY_CYCLE = (
+    os.getenv("POSITION_STATE_PERSIST_EVERY_CYCLE", "true").lower() == "true"
+)
+POSITION_STATE_EXIT_SHADOW_COMPARE_ENABLE = (
+    os.getenv("POSITION_STATE_EXIT_SHADOW_COMPARE_ENABLE", "true").lower() == "true"
 )
 REQUIRE_LIVE_OPTION_QUOTES = os.getenv("REQUIRE_LIVE_OPTION_QUOTES", "true").lower() == "true"
 REQUIRE_DEPTH_QUOTES_FOR_TRADE = os.getenv("REQUIRE_DEPTH_QUOTES_FOR_TRADE", "true").lower() == "true"

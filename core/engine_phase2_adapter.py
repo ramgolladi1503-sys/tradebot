@@ -7,6 +7,9 @@ import time
 from typing import Any
 
 from config import config as cfg
+from core.playbook_selector import select_playbook
+from core.setup_breakout_continuation import evaluate_breakout_continuation_setup
+from core.setup_profile_rejection import evaluate_profile_rejection_setup
 from core.trade_scoring import compute_final_score
 
 logger = logging.getLogger("phase2")
@@ -550,6 +553,132 @@ def _apply_data_fallbacks(candidate: dict[str, Any]) -> None:
         candidate["tick_volume"] = 1.0
 
 
+def _apply_profile_rejection_setup(candidate: dict[str, Any]) -> None:
+    try:
+        setup = evaluate_profile_rejection_setup(candidate)
+    except Exception:
+        return
+
+    telemetry = dict(setup.telemetry or {})
+
+    candidate["profile_rejection_detected"] = bool(setup.detected)
+    candidate["profile_rejection_telemetry"] = telemetry
+
+    source_flags = candidate.get("source_flags")
+    if not isinstance(source_flags, dict):
+        source_flags = {}
+
+    source_flags["profile_rejection_detected"] = bool(setup.detected)
+
+    if telemetry:
+        source_flags["profile_rejection_telemetry"] = telemetry
+
+    if not setup.detected:
+        candidate["source_flags"] = source_flags
+        return
+
+    candidate.setdefault("strategy_family", "profile_rejection")
+    candidate["setup_name"] = "mean_reversion_profile_rejection"
+    candidate["decision_playbook"] = "profile_rejection"
+    candidate["setup_direction"] = setup.direction
+
+    candidate["setup_score"] = max(
+        float(candidate.get("setup_score") or 0.0),
+        float(setup.setup_score),
+    )
+    candidate["profile_rejection_setup_score"] = float(setup.setup_score)
+    candidate["trigger_score"] = max(
+        float(candidate.get("trigger_score") or 0.0),
+        float(setup.trigger_score),
+    )
+    candidate["profile_rejection_trigger_score"] = float(setup.trigger_score)
+    candidate["entry_quality_score"] = max(
+        float(candidate.get("entry_quality_score") or 0.0),
+        float(setup.entry_quality_score),
+    )
+    candidate["profile_rejection_entry_quality_score"] = float(setup.entry_quality_score)
+
+    candidate["profile_rejection_rr"] = float(setup.rr)
+
+    if candidate.get("entry") is None:
+        candidate["entry"] = float(setup.entry)
+
+    if candidate.get("execution_entry") is None:
+        candidate["execution_entry"] = float(setup.entry)
+
+    if candidate.get("display_entry") is None:
+        candidate["display_entry"] = float(setup.entry)
+
+    if candidate.get("stop_loss") is None:
+        candidate["stop_loss"] = float(setup.stop)
+
+    if candidate.get("target") is None:
+        candidate["target"] = float(setup.target)
+
+    source_flags["setup_name"] = "mean_reversion_profile_rejection"
+    source_flags["profile_rejection_rr"] = float(setup.rr)
+
+    candidate["source_flags"] = source_flags
+
+
+def _apply_breakout_setup(candidate: dict[str, Any]) -> None:
+    try:
+        setup = evaluate_breakout_continuation_setup(candidate)
+    except Exception:
+        return
+
+    telemetry = dict(setup.telemetry or {})
+    candidate["breakout_detected"] = bool(setup.detected)
+    candidate["breakout_telemetry"] = telemetry
+
+    source_flags = candidate.get("source_flags")
+    if not isinstance(source_flags, dict):
+        source_flags = {}
+    source_flags["breakout_detected"] = bool(setup.detected)
+    if telemetry:
+        source_flags["breakout_telemetry"] = telemetry
+
+    if not setup.detected:
+        candidate["source_flags"] = source_flags
+        return
+
+    candidate.setdefault("strategy_family", "breakout_continuation")
+    candidate["breakout_setup_score"] = float(setup.setup_score)
+    candidate["breakout_trigger_score"] = float(setup.trigger_score)
+    candidate["breakout_entry_quality_score"] = float(setup.entry_quality_score)
+    candidate["setup_name"] = "trend_breakout_continuation"
+    candidate["setup_direction"] = setup.direction
+    candidate["breakout_rr"] = float(setup.rr)
+
+    candidate["setup_score"] = max(
+        float(candidate.get("setup_score") or 0.0),
+        float(setup.setup_score),
+    )
+    candidate["trigger_score"] = max(
+        float(candidate.get("trigger_score") or 0.0),
+        float(setup.trigger_score),
+    )
+    candidate["entry_quality_score"] = max(
+        float(candidate.get("entry_quality_score") or 0.0),
+        float(setup.entry_quality_score),
+    )
+
+    if candidate.get("entry") is None:
+        candidate["entry"] = float(setup.entry)
+    if candidate.get("execution_entry") is None:
+        candidate["execution_entry"] = float(setup.entry)
+    if candidate.get("display_entry") is None:
+        candidate["display_entry"] = float(setup.entry)
+    if candidate.get("stop_loss") is None:
+        candidate["stop_loss"] = float(setup.stop)
+    if candidate.get("target") is None:
+        candidate["target"] = float(setup.target)
+
+    source_flags["breakout_rr"] = float(setup.rr)
+    source_flags["setup_name"] = "trend_breakout_continuation"
+    candidate["source_flags"] = source_flags
+
+
 def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dict[str, Any]]:
     raw_list = list(raw_candidates or [])
     if not raw_list:
@@ -585,6 +714,43 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
                 drop_debug_budget -= 1
             continue
         _apply_data_fallbacks(candidate)
+        _apply_profile_rejection_setup(candidate)
+        if bool(getattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False)):
+            _apply_breakout_setup(candidate)
+            selected_playbook = select_playbook(candidate)
+            candidate["selected_playbook"] = selected_playbook
+            source_flags = candidate.get("source_flags")
+            if not isinstance(source_flags, dict):
+                source_flags = {}
+            source_flags["selected_playbook"] = selected_playbook
+            candidate["source_flags"] = source_flags
+
+            playbook_drop_reason: str | None = None
+            if selected_playbook == "none":
+                playbook_drop_reason = "playbook_none_selected"
+            elif selected_playbook == "profile_rejection" and not bool(candidate.get("profile_rejection_detected")):
+                playbook_drop_reason = "playbook_profile_rejection_not_detected"
+            elif selected_playbook == "breakout_continuation" and not bool(candidate.get("breakout_detected")):
+                playbook_drop_reason = "playbook_breakout_not_detected"
+
+            if playbook_drop_reason is not None:
+                drop_reason_counts[playbook_drop_reason] = int(drop_reason_counts.get(playbook_drop_reason, 0)) + 1
+                if drop_debug_budget > 0:
+                    print(
+                        "DEBUG_FILTER_DROP",
+                        {
+                            "trade_id": candidate.get("trade_id"),
+                            "symbol": candidate.get("symbol"),
+                            "reasons": [playbook_drop_reason],
+                            "selected_playbook": selected_playbook,
+                            "profile_rejection_detected": candidate.get("profile_rejection_detected"),
+                            "breakout_detected": candidate.get("breakout_detected"),
+                        },
+                    )
+                    drop_debug_budget -= 1
+                continue
+
+            candidate["decision_playbook"] = selected_playbook
         hard_reasons = _hard_filter_reasons(candidate)
         if hard_reasons:
             for reason in hard_reasons:

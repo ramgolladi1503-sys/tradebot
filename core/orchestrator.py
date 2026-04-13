@@ -129,7 +129,17 @@ from core.decision_side_effects import handle_post_decision_side_effects
 from core.market_context import derive_market_context
 from core.slo_guard import evaluate_slo_status
 from core.slippage_guard import evaluate_slippage_budget
+from core.execution_optimizer import build_execution_plan
 from core.exit_intelligence import ExitAction, evaluate_exit
+from core.exit_manager import evaluate_exit_action
+from core.position_state_engine import (
+    PositionState,
+    apply_exit_action as apply_position_exit_action,
+    initialize_position_state,
+    position_state_to_dict,
+    update_position_state,
+)
+from core.position_state_store import load_position_state, save_position_state
 from core.suggestion_reliability import (
     evaluate_suggestion_reliability,
     persist_suggestion_reliability,
@@ -1327,6 +1337,7 @@ class Orchestrator:
         self.meta_model = MetaModel() if getattr(cfg, "META_MODEL_ENABLED", False) else None
         self.open_trades = {}
         self.trade_meta = {}
+        self.position_states: dict[str, PositionState] = {}
         self.last_trade_sync = 0
         self.blocked_tracker = BlockedTradeTracker()
         self.last_md_by_symbol = {}
@@ -1610,6 +1621,130 @@ class Orchestrator:
                 handle.write(json.dumps(payload, sort_keys=True) + "\n")
         except Exception:
             pass
+
+    def _position_state_path(self, trade_id: str) -> Path:
+        base = Path(str(getattr(cfg, "POSITION_STATE_STORE_PATH", "") or "").strip())
+        if not str(base):
+            base = logs_dir() / "position_state"
+        return base / f"{str(trade_id)}.json"
+
+    def _persist_position_state(self, state: PositionState) -> None:
+        if not bool(getattr(cfg, "POSITION_STATE_ENGINE_ENABLE", True)):
+            return
+        if not bool(getattr(cfg, "POSITION_STATE_PERSIST_EVERY_CYCLE", True)):
+            return
+        if not state.trade_id:
+            return
+        try:
+            save_position_state(self._position_state_path(state.trade_id), state)
+        except Exception as exc:
+            logger.warning("position_state_persist_failed trade_id=%s err=%s", state.trade_id, exc)
+
+    def _load_position_state(self, trade_id: str) -> PositionState | None:
+        if not bool(getattr(cfg, "POSITION_STATE_ENGINE_ENABLE", True)):
+            return None
+        key = str(trade_id or "")
+        if not key:
+            return None
+        cached = self.position_states.get(key)
+        if cached is not None:
+            return cached
+        loaded = load_position_state(self._position_state_path(key))
+        if loaded is not None:
+            self.position_states[key] = loaded
+        return loaded
+
+    def _initialize_position_state(self, trade, meta: dict, now_ts: float) -> PositionState | None:
+        if not bool(getattr(cfg, "POSITION_STATE_ENGINE_ENABLE", True)):
+            return None
+        trade_id = str(getattr(trade, "trade_id", "") or "")
+        if not trade_id:
+            return None
+        existing = self._load_position_state(trade_id)
+        if existing is not None:
+            return existing
+        try:
+            fill_payload = {
+                "trade_id": trade_id,
+                "fill_price": float(meta.get("entry_price", getattr(trade, "entry_price", 0.0)) or getattr(trade, "entry_price", 0.0)),
+                "qty": int(meta.get("remaining_qty_units", getattr(trade, "qty_units", getattr(trade, "qty", 1))) or 1),
+            }
+            candidate_payload = {
+                "trade_id": trade_id,
+                "symbol": getattr(trade, "symbol", ""),
+                "side": getattr(trade, "side", "BUY"),
+                "selected_playbook": (
+                    meta.get("selected_playbook")
+                    or getattr(trade, "selected_playbook", None)
+                    or getattr(trade, "decision_playbook", None)
+                    or "none"
+                ),
+                "entry": getattr(trade, "entry_price", None),
+                "execution_entry": getattr(trade, "entry_price", None),
+                "stop_loss": getattr(trade, "stop_loss", None),
+                "target": getattr(trade, "target", None),
+                "setup_score": getattr(trade, "setup_score", None),
+                "trigger_score": getattr(trade, "trigger_score", None),
+                "entry_quality_score": getattr(trade, "entry_quality_score", None),
+                "execution_quality_score": meta.get("execution_quality_score"),
+                "qty": fill_payload["qty"],
+            }
+            state = initialize_position_state(fill_payload, candidate_payload, now_ts=now_ts)
+            self.position_states[trade_id] = state
+            self._persist_position_state(state)
+            return state
+        except Exception as exc:
+            logger.warning("position_state_initialize_failed trade_id=%s err=%s", trade_id, exc)
+            return None
+
+    def _refresh_position_state(self, trade, meta: dict, market: dict, now_ts: float) -> PositionState | None:
+        state = self._initialize_position_state(trade, meta, now_ts=now_ts)
+        if state is None:
+            return None
+        try:
+            state = update_position_state(state, market, now_ts=now_ts)
+            state.telemetry.update(
+                {
+                    "playbook": state.playbook,
+                    "status": state.status,
+                    "tp1_done": bool(state.tp1_done),
+                    "breakeven_done": bool(state.breakeven_done),
+                    "trailing_active": bool(state.trailing_active),
+                    "mfe_r": float(state.mfe_r),
+                    "mae_r": float(state.mae_r),
+                    "current_stop": float(state.current_stop),
+                    "remaining_qty": int(state.remaining_qty),
+                }
+            )
+            self.position_states[state.trade_id] = state
+            if bool(getattr(cfg, "POSITION_STATE_EXIT_MANAGER_ENABLE", True)):
+                exit_action = evaluate_exit_action(position_state_to_dict(state), market)
+                state.telemetry["exit_manager_last_action"] = str(exit_action.action)
+                state.telemetry["exit_manager_last_reason"] = str(exit_action.reason)
+                state.telemetry["exit_manager_last_telemetry"] = dict(exit_action.telemetry or {})
+                meta["position_state_advisory_action"] = str(exit_action.action)
+                meta["position_state_advisory_reason"] = str(exit_action.reason)
+                mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").strip().upper()
+                allow_authoritative = mode in {"SIM", "PAPER", "BACKTEST"}
+                if bool(getattr(cfg, "POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE", False)) and allow_authoritative:
+                    state = apply_position_exit_action(
+                        state,
+                        {
+                            "action": str(exit_action.action),
+                            "new_stop": exit_action.new_stop,
+                            "exit_fraction": float(exit_action.exit_fraction),
+                            "reason": str(exit_action.reason),
+                        },
+                        now_ts=now_ts,
+                    )
+                    self.position_states[state.trade_id] = state
+                elif bool(getattr(cfg, "POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE", False)) and not allow_authoritative:
+                    state.telemetry["exit_manager_authoritative_blocked"] = "live_mode_not_allowed"
+            self._persist_position_state(state)
+            return state
+        except Exception as exc:
+            logger.warning("position_state_refresh_failed trade_id=%s err=%s", getattr(trade, "trade_id", None), exc)
+            return state
 
     def _append_gate_status(self, market_data: dict, gate_allowed, gate_family, gate_reasons, stage: str):
         symbol = str((market_data or {}).get("symbol") or "")
@@ -4824,6 +4959,87 @@ class Orchestrator:
                             if trade.side == "SELL" and market_data.get("ltp", 0) > trade.entry_price * (1 - confirm):
                                 continue
 
+                    if bool(getattr(cfg, "EXECUTION_OPTIMIZER_ENABLE", True)):
+                        playbook_name = (
+                            str(
+                                getattr(trade, "selected_playbook", None)
+                                or getattr(trade, "decision_playbook", None)
+                                or ""
+                            )
+                            .strip()
+                            .lower()
+                        )
+                        execution_plan = build_execution_plan(
+                            {
+                                "trade_id": trade.trade_id,
+                                "symbol": trade.symbol,
+                                "selected_playbook": playbook_name,
+                                "spread_pct": market_data.get("spread_pct"),
+                                "liquidity_score": getattr(trade, "liquidity_score", None) or market_data.get("liquidity_score"),
+                                "execution_quality_score": getattr(trade, "execution_quality_score", None),
+                                "execution_entry": getattr(trade, "entry_price", None),
+                                "entry": getattr(trade, "entry_price", None),
+                                "stop_loss": getattr(trade, "stop_loss", None),
+                                "target": getattr(trade, "target", None),
+                            },
+                            {
+                                "urgency": 0.8 if playbook_name == "breakout_continuation" else 0.4,
+                            },
+                        )
+
+                        if not bool(execution_plan.should_execute):
+                            logger.warning(
+                                "execution_optimizer_blocked trade_id=%s symbol=%s reason=%s effective_rr=%.3f",
+                                trade.trade_id,
+                                trade.symbol,
+                                execution_plan.reason,
+                                float(execution_plan.effective_rr),
+                            )
+                            try:
+                                update_execution(
+                                    trade.trade_id,
+                                    {
+                                        "execution_optimizer_allowed": 0,
+                                        "execution_optimizer_reason": execution_plan.reason,
+                                        "execution_optimizer_effective_rr": float(execution_plan.effective_rr),
+                                        "veto_reasons": [f"execution_optimizer:{execution_plan.reason}"],
+                                    },
+                                )
+                            except Exception:
+                                pass
+                            continue
+
+                        try:
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "execution_optimizer_allowed": 1,
+                                    "execution_optimizer_reason": execution_plan.reason,
+                                    "execution_optimizer_effective_rr": float(execution_plan.effective_rr),
+                                    "execution_order_style": execution_plan.order_style,
+                                    "execution_expected_slippage_bps": float(execution_plan.expected_slippage_bps),
+                                },
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            source_flags = dict(getattr(trade, "source_flags", {}) or {})
+                            source_flags["execution_plan"] = {
+                                "should_execute": bool(execution_plan.should_execute),
+                                "order_style": str(execution_plan.order_style),
+                                "entry_limit": execution_plan.entry_limit,
+                                "max_chase_pct": float(execution_plan.max_chase_pct),
+                                "timeout_sec": float(execution_plan.timeout_sec),
+                                "replace_limit": int(execution_plan.replace_limit),
+                                "expected_slippage_bps": float(execution_plan.expected_slippage_bps),
+                                "effective_rr": float(execution_plan.effective_rr),
+                                "reason": str(execution_plan.reason),
+                                "telemetry": dict(execution_plan.telemetry or {}),
+                            }
+                            trade = replace(trade, source_flags=source_flags)
+                        except Exception:
+                            pass
+
                     # Execute trade (simulation only)
                     # Require real quotes (no synthetic bid/ask)
                     if trade.instrument == "OPT":
@@ -5487,6 +5703,11 @@ class Orchestrator:
             "last_action_ts": 0.0,
             "reason_codes": [],
             "last_exit_intent_id": None,
+            "selected_playbook": (
+                getattr(trade, "selected_playbook", None)
+                or getattr(trade, "decision_playbook", None)
+                or "none"
+            ),
         }
         if trade.strategy == "SCALP":
             meta["max_hold_sec"] = getattr(cfg, "SCALP_MAX_HOLD_MINUTES", 12) * 60
@@ -5506,6 +5727,7 @@ class Orchestrator:
             )
         except Exception:
             pass
+        self._initialize_position_state(trade, meta, now_ts=time.time())
 
     def _check_open_trades(self, market_data):
         sym = market_data.get("symbol")
@@ -5537,6 +5759,37 @@ class Orchestrator:
                 if current_price is None:
                     remaining.append(tr)
                     continue
+
+            position_state = self._refresh_position_state(
+                tr,
+                meta,
+                {
+                    "last_price": float(current_price),
+                    "ltp": float(current_price),
+                    "volatility": market_data.get("volatility"),
+                    "quote_age_sec": (
+                        option_snapshot.get("quote_age_sec")
+                        if isinstance(option_snapshot, dict)
+                        else market_data.get("quote_age_sec")
+                    ),
+                    "spread_pct": (
+                        option_snapshot.get("spread_pct")
+                        if isinstance(option_snapshot, dict)
+                        else market_data.get("spread_pct")
+                    ),
+                },
+                now_ts=time.time(),
+            )
+            if position_state is not None:
+                meta["position_state_status"] = position_state.status
+                meta["position_state_tp1_done"] = bool(position_state.tp1_done)
+                meta["position_state_breakeven_done"] = bool(position_state.breakeven_done)
+                meta["position_state_trailing_active"] = bool(position_state.trailing_active)
+                meta["position_state_mfe_r"] = float(position_state.mfe_r)
+                meta["position_state_mae_r"] = float(position_state.mae_r)
+                meta["position_state_current_stop"] = float(position_state.current_stop)
+                meta["position_state_remaining_qty"] = int(position_state.remaining_qty)
+                meta["selected_playbook"] = str(position_state.playbook or meta.get("selected_playbook") or "none")
 
             # Store last price for unrealized PnL computation
             meta["last_price"] = current_price
@@ -5608,11 +5861,35 @@ class Orchestrator:
                 now_ts=time.time(),
                 cfg=cfg,
             )
+            mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").strip().upper()
+            if (
+                mode in {"SIM", "PAPER"}
+                and bool(getattr(cfg, "POSITION_STATE_EXIT_SHADOW_COMPARE_ENABLE", True))
+                and position_state is not None
+            ):
+                try:
+                    shadow_action = str(meta.get("position_state_advisory_action") or "UNKNOWN").upper()
+                    shadow_reason = str(meta.get("position_state_advisory_reason") or "unknown")
+                    live_action = str(decision.action.value or "UNKNOWN").upper()
+                    live_reason = str((list(decision.reason_codes or []) or ["none"])[0])
+                    logger.info(
+                        "EXIT_SHADOW_COMPARE trade_id=%s symbol=%s live_action=%s live_reason=%s shadow_action=%s shadow_reason=%s playbook=%s",
+                        tr.trade_id,
+                        tr.symbol,
+                        live_action,
+                        live_reason,
+                        shadow_action,
+                        shadow_reason,
+                        str(meta.get("selected_playbook") or "none"),
+                    )
+                except Exception:
+                    pass
             meta = self._apply_exit_state_patch(tr, meta, decision.state_patch, float(current_price))
             reason_codes = list(decision.reason_codes or [])
             meta["exit_intel_action"] = decision.action.value
             self.trade_meta[tr.trade_id] = meta
             self._write_exit_intel_state(tr, meta, float(current_price))
+            position_state = self._load_position_state(tr.trade_id)
             if decision.action == ExitAction.NOOP:
                 if reason_codes:
                     meta["reason_codes"] = reason_codes
@@ -5635,6 +5912,20 @@ class Orchestrator:
             self.trade_meta[tr.trade_id] = meta
 
             if decision.action == ExitAction.MODIFY_PLAN:
+                if position_state is not None:
+                    new_stop = meta.get("current_sl")
+                    if new_stop is not None:
+                        position_state = apply_position_exit_action(
+                            position_state,
+                            {
+                                "action": "MOVE_STOP",
+                                "new_stop": float(new_stop),
+                                "reason": "exit_intel_modify_plan",
+                            },
+                            now_ts=time.time(),
+                        )
+                        self.position_states[position_state.trade_id] = position_state
+                        self._persist_position_state(position_state)
                 remaining.append(tr)
                 continue
 
@@ -5671,6 +5962,20 @@ class Orchestrator:
                     )
                 except Exception:
                     pass
+                if position_state is not None:
+                    denom_qty = max(1, int(position_state.qty))
+                    exit_fraction = max(0.0, min(1.0, float(exit_qty) / float(denom_qty)))
+                    position_state = apply_position_exit_action(
+                        position_state,
+                        {
+                            "action": "PARTIAL_EXIT",
+                            "exit_fraction": exit_fraction,
+                            "reason": "exit_intel_partial_exit",
+                        },
+                        now_ts=time.time(),
+                    )
+                    self.position_states[position_state.trade_id] = position_state
+                    self._persist_position_state(position_state)
                 remaining.append(tr)
                 continue
 
@@ -5811,6 +6116,18 @@ class Orchestrator:
             meta["remaining_qty_units"] = 0
             self.trade_meta[tr.trade_id] = meta
             self._write_exit_intel_state(tr, meta, float(current_price))
+            if position_state is not None:
+                position_state = apply_position_exit_action(
+                    position_state,
+                    {
+                        "action": "FULL_EXIT",
+                        "exit_fraction": 1.0,
+                        "reason": str(exit_reason_code or "exit_intel_full_exit"),
+                    },
+                    now_ts=time.time(),
+                )
+                self.position_states[position_state.trade_id] = position_state
+                self._persist_position_state(position_state)
 
         self.open_trades[key] = remaining
         # Update unrealized PnL across all open trades using last known prices
