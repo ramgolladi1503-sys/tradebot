@@ -2123,6 +2123,19 @@ EXIT_INTEL_PARTIAL_EXIT_FRACTION = float(os.getenv("EXIT_INTEL_PARTIAL_EXIT_FRAC
 EXIT_INTEL_LOG_PATH = str(
     Path(os.getenv("EXIT_INTEL_LOG_PATH", str(Path(DESK_LOG_DIR) / "exit_intelligence_actions.jsonl")))
 )
+POSITION_STATE_ENGINE_ENABLE = os.getenv("POSITION_STATE_ENGINE_ENABLE", "true").lower() == "true"
+POSITION_STATE_STORE_PATH = str(
+    Path(os.getenv("POSITION_STATE_STORE_PATH", str(Path(DESK_LOG_DIR) / "position_state")))
+)
+POSITION_STATE_EXIT_MANAGER_ENABLE = (
+    os.getenv("POSITION_STATE_EXIT_MANAGER_ENABLE", "true").lower() == "true"
+)
+POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE = (
+    os.getenv("POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE", "false").lower() == "true"
+)
+POSITION_STATE_PERSIST_EVERY_CYCLE = (
+    os.getenv("POSITION_STATE_PERSIST_EVERY_CYCLE", "true").lower() == "true"
+)
 REQUIRE_LIVE_OPTION_QUOTES = os.getenv("REQUIRE_LIVE_OPTION_QUOTES", "true").lower() == "true"
 REQUIRE_DEPTH_QUOTES_FOR_TRADE = os.getenv("REQUIRE_DEPTH_QUOTES_FOR_TRADE", "true").lower() == "true"
 REQUIRE_VOLUME_FOR_TRADE = os.getenv("REQUIRE_VOLUME_FOR_TRADE", "true").lower() == "true"
