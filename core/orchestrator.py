@@ -129,6 +129,7 @@ from core.decision_side_effects import handle_post_decision_side_effects
 from core.market_context import derive_market_context
 from core.slo_guard import evaluate_slo_status
 from core.slippage_guard import evaluate_slippage_budget
+from core.execution_optimizer import build_execution_plan
 from core.exit_intelligence import ExitAction, evaluate_exit
 from core.exit_manager import evaluate_exit_action
 from core.position_state_engine import (
@@ -1723,7 +1724,9 @@ class Orchestrator:
                 state.telemetry["exit_manager_last_telemetry"] = dict(exit_action.telemetry or {})
                 meta["position_state_advisory_action"] = str(exit_action.action)
                 meta["position_state_advisory_reason"] = str(exit_action.reason)
-                if bool(getattr(cfg, "POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE", False)):
+                mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").strip().upper()
+                allow_authoritative = mode in {"SIM", "PAPER", "BACKTEST"}
+                if bool(getattr(cfg, "POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE", False)) and allow_authoritative:
                     state = apply_position_exit_action(
                         state,
                         {
@@ -1735,6 +1738,8 @@ class Orchestrator:
                         now_ts=now_ts,
                     )
                     self.position_states[state.trade_id] = state
+                elif bool(getattr(cfg, "POSITION_STATE_EXIT_MANAGER_AUTHORITATIVE", False)) and not allow_authoritative:
+                    state.telemetry["exit_manager_authoritative_blocked"] = "live_mode_not_allowed"
             self._persist_position_state(state)
             return state
         except Exception as exc:
@@ -4954,6 +4959,87 @@ class Orchestrator:
                             if trade.side == "SELL" and market_data.get("ltp", 0) > trade.entry_price * (1 - confirm):
                                 continue
 
+                    if bool(getattr(cfg, "EXECUTION_OPTIMIZER_ENABLE", True)):
+                        playbook_name = (
+                            str(
+                                getattr(trade, "selected_playbook", None)
+                                or getattr(trade, "decision_playbook", None)
+                                or ""
+                            )
+                            .strip()
+                            .lower()
+                        )
+                        execution_plan = build_execution_plan(
+                            {
+                                "trade_id": trade.trade_id,
+                                "symbol": trade.symbol,
+                                "selected_playbook": playbook_name,
+                                "spread_pct": market_data.get("spread_pct"),
+                                "liquidity_score": getattr(trade, "liquidity_score", None) or market_data.get("liquidity_score"),
+                                "execution_quality_score": getattr(trade, "execution_quality_score", None),
+                                "execution_entry": getattr(trade, "entry_price", None),
+                                "entry": getattr(trade, "entry_price", None),
+                                "stop_loss": getattr(trade, "stop_loss", None),
+                                "target": getattr(trade, "target", None),
+                            },
+                            {
+                                "urgency": 0.8 if playbook_name == "breakout_continuation" else 0.4,
+                            },
+                        )
+
+                        if not bool(execution_plan.should_execute):
+                            logger.warning(
+                                "execution_optimizer_blocked trade_id=%s symbol=%s reason=%s effective_rr=%.3f",
+                                trade.trade_id,
+                                trade.symbol,
+                                execution_plan.reason,
+                                float(execution_plan.effective_rr),
+                            )
+                            try:
+                                update_execution(
+                                    trade.trade_id,
+                                    {
+                                        "execution_optimizer_allowed": 0,
+                                        "execution_optimizer_reason": execution_plan.reason,
+                                        "execution_optimizer_effective_rr": float(execution_plan.effective_rr),
+                                        "veto_reasons": [f"execution_optimizer:{execution_plan.reason}"],
+                                    },
+                                )
+                            except Exception:
+                                pass
+                            continue
+
+                        try:
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "execution_optimizer_allowed": 1,
+                                    "execution_optimizer_reason": execution_plan.reason,
+                                    "execution_optimizer_effective_rr": float(execution_plan.effective_rr),
+                                    "execution_order_style": execution_plan.order_style,
+                                    "execution_expected_slippage_bps": float(execution_plan.expected_slippage_bps),
+                                },
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            source_flags = dict(getattr(trade, "source_flags", {}) or {})
+                            source_flags["execution_plan"] = {
+                                "should_execute": bool(execution_plan.should_execute),
+                                "order_style": str(execution_plan.order_style),
+                                "entry_limit": execution_plan.entry_limit,
+                                "max_chase_pct": float(execution_plan.max_chase_pct),
+                                "timeout_sec": float(execution_plan.timeout_sec),
+                                "replace_limit": int(execution_plan.replace_limit),
+                                "expected_slippage_bps": float(execution_plan.expected_slippage_bps),
+                                "effective_rr": float(execution_plan.effective_rr),
+                                "reason": str(execution_plan.reason),
+                                "telemetry": dict(execution_plan.telemetry or {}),
+                            }
+                            trade = replace(trade, source_flags=source_flags)
+                        except Exception:
+                            pass
+
                     # Execute trade (simulation only)
                     # Require real quotes (no synthetic bid/ask)
                     if trade.instrument == "OPT":
@@ -5775,6 +5861,29 @@ class Orchestrator:
                 now_ts=time.time(),
                 cfg=cfg,
             )
+            mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").strip().upper()
+            if (
+                mode in {"SIM", "PAPER"}
+                and bool(getattr(cfg, "POSITION_STATE_EXIT_SHADOW_COMPARE_ENABLE", True))
+                and position_state is not None
+            ):
+                try:
+                    shadow_action = str(meta.get("position_state_advisory_action") or "UNKNOWN").upper()
+                    shadow_reason = str(meta.get("position_state_advisory_reason") or "unknown")
+                    live_action = str(decision.action.value or "UNKNOWN").upper()
+                    live_reason = str((list(decision.reason_codes or []) or ["none"])[0])
+                    logger.info(
+                        "EXIT_SHADOW_COMPARE trade_id=%s symbol=%s live_action=%s live_reason=%s shadow_action=%s shadow_reason=%s playbook=%s",
+                        tr.trade_id,
+                        tr.symbol,
+                        live_action,
+                        live_reason,
+                        shadow_action,
+                        shadow_reason,
+                        str(meta.get("selected_playbook") or "none"),
+                    )
+                except Exception:
+                    pass
             meta = self._apply_exit_state_patch(tr, meta, decision.state_patch, float(current_price))
             reason_codes = list(decision.reason_codes or [])
             meta["exit_intel_action"] = decision.action.value
