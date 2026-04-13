@@ -176,7 +176,7 @@ def apply_exit_action(state: PositionState, action: dict[str, Any], now_ts: floa
     state.updated_ts = float(now_ts)
 
     if action_name == "PARTIAL_EXIT":
-        if state.tp1_done and reason.lower() in {"tp1_hit", "tp1"}:
+        if state.tp1_done and reason == "tp1_hit":
             return state
         if state.remaining_qty <= 0:
             return state
@@ -189,7 +189,8 @@ def apply_exit_action(state: PositionState, action: dict[str, Any], now_ts: floa
             return state
         state.realized_qty = int(state.realized_qty) + int(exit_qty)
         state.remaining_qty = max(0, int(state.remaining_qty) - int(exit_qty))
-        state.tp1_done = True
+        if reason == "tp1_hit":
+            state.tp1_done = True
         state.status = "PARTIAL" if state.remaining_qty > 0 else "CLOSED"
 
     elif action_name == "MOVE_STOP":
@@ -247,4 +248,3 @@ def position_state_from_dict(payload: dict[str, Any]) -> PositionState:
         low_watermark=_safe_float(data.get("low_watermark")),
         telemetry=dict(data.get("telemetry") or {}),
     )
-

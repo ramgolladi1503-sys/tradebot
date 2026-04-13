@@ -40,22 +40,13 @@ def _signed_pnl_r(side: str, entry: float, stop: float, current: float) -> float
 
 def _playbook_thresholds(playbook: str) -> dict[str, float]:
     value = str(playbook or "").strip().lower()
-    if value == "breakout_continuation":
-        return {
-            "tp1_r": 1.10,
-            "be_r": 1.30,
-            "trail_start_r": 1.60,
-            "stall_r": 0.95,
-            "stall_vol_max": 0.18,
-            "trail_pullback_r": 0.55,
-        }
     if value == "profile_rejection":
         return {
             "tp1_r": 0.80,
             "be_r": 1.00,
             "trail_start_r": 1.20,
             "stall_r": 0.60,
-            "stall_vol_max": 0.24,
+            "stall_vol_max": 0.18,
             "trail_pullback_r": 0.35,
         }
     return {
@@ -63,7 +54,7 @@ def _playbook_thresholds(playbook: str) -> dict[str, float]:
         "be_r": 1.20,
         "trail_start_r": 1.40,
         "stall_r": 0.70,
-        "stall_vol_max": 0.20,
+        "stall_vol_max": 0.12,
         "trail_pullback_r": 0.45,
     }
 
@@ -119,7 +110,7 @@ def evaluate_exit_action(position: dict[str, Any], market: dict[str, Any]) -> Ex
         return ExitAction("FULL_EXIT", None, 1.0, "stop_hit", telemetry)
 
     # TP1 is one-shot.
-    if (not tp1_done) and pnl_r >= thresholds["tp1_r"] and remaining_qty > 1:
+    if (not tp1_done) and pnl_r >= thresholds["tp1_r"]:
         return ExitAction("PARTIAL_EXIT", None, 0.5, "tp1_hit", telemetry)
 
     # Break-even shift is one-shot.
@@ -143,7 +134,7 @@ def evaluate_exit_action(position: dict[str, Any], market: dict[str, Any]) -> Ex
             return ExitAction("MOVE_STOP", float(new_stop), 0.0, "trail_pullback", telemetry)
 
     # Stall exit: playbook-dependent.
-    if (not tp1_done) and pnl_r >= thresholds["stall_r"] and recent_volatility <= thresholds["stall_vol_max"] and remaining_qty > 1:
+    if pnl_r >= thresholds["stall_r"] and recent_volatility <= thresholds["stall_vol_max"]:
         return ExitAction("PARTIAL_EXIT", None, 0.5, "stall_exit", telemetry)
 
     return ExitAction("HOLD", None, 0.0, "hold", telemetry)
