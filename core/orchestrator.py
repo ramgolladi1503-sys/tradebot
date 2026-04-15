@@ -211,21 +211,35 @@ def _trade_attr(trade, name: str, default=None):
     return getattr(trade, name, default)
 
 
-def _is_synthetic_candidate(candidate) -> bool:
-    if candidate is None:
-        return False
+def _candidate_origin(candidate) -> str:
     origin_value = _trade_attr(candidate, "candidate_origin", None)
-    origin = ""
     if isinstance(origin_value, dict):
-        origin = str(
+        return str(
             origin_value.get("candidate_origin")
             or origin_value.get("origin")
             or origin_value.get("source")
             or ""
         ).strip().lower()
-    else:
-        origin = str(origin_value or "").strip().lower()
+    return str(origin_value or "").strip().lower()
+
+
+def _is_synthetic_candidate(candidate) -> bool:
+    if candidate is None:
+        return False
+    origin = _candidate_origin(candidate)
+    source_flags = _trade_attr(candidate, "source_flags", None)
+    if not isinstance(source_flags, dict):
+        source_flags = {}
+    source_origin = str(
+        source_flags.get("candidate_origin")
+        or source_flags.get("origin")
+        or source_flags.get("source")
+        or ""
+    ).strip().lower()
+    soft_reason = str(source_flags.get("soft_reject_reason") or "").strip().lower()
     candidate_type = str(_trade_attr(candidate, "candidate_type", "") or "").strip().lower()
+    strategy_family = str(_trade_attr(candidate, "strategy_family", "") or "").strip().lower()
+    score_origin = str(_trade_attr(candidate, "score_origin", "") or "").strip().lower()
     trade_id = str(_trade_attr(candidate, "trade_id", "") or "").strip()
     permission = str(_trade_attr(candidate, "permission", "") or "").strip().upper()
     final_action = str(_trade_attr(candidate, "final_action", "") or "").strip().upper()
@@ -237,14 +251,77 @@ def _is_synthetic_candidate(candidate) -> bool:
     )
     if candidate_type == "fallback_market_candidate":
         return True
-    if trade_id.startswith("softrej_"):
+    if trade_id.startswith(("softrej_", "tbsoft_")):
         return True
-    synthetic_origins = {"pre_builder_gate", "invalid_snapshot", "fallback", "fallback_min_breadth"}
-    if origin in synthetic_origins:
+    if strategy_family == "synthetic_advisory":
         return True
-    if advisory_lifecycle and (candidate_type.startswith("fallback") or origin in synthetic_origins or trade_id.startswith("softrej_")):
+    if score_origin == "soft_reject_seed":
+        return True
+    synthetic_origins = {
+        "pre_builder_gate",
+        "invalid_snapshot",
+        "fallback",
+        "fallback_min_breadth",
+        "softened_builder_path",
+        "softened",
+        "planning_only",
+    }
+    if origin in synthetic_origins or source_origin in synthetic_origins:
+        return True
+    if bool(source_flags.get("recoverable_soft_reject")):
+        return True
+    if soft_reason:
+        return True
+    if advisory_lifecycle and (
+        candidate_type.startswith("fallback")
+        or origin in synthetic_origins
+        or source_origin in synthetic_origins
+        or trade_id.startswith(("softrej_", "tbsoft_"))
+    ):
         return True
     return False
+
+
+def _is_reportable_executable_candidate(candidate) -> bool:
+    if candidate is None or _is_synthetic_candidate(candidate):
+        return False
+    trade_id = str(_trade_attr(candidate, "trade_id", "") or "").strip().lower()
+    if trade_id.startswith(("softrej_", "tbsoft_")):
+        return False
+    strategy_family = str(_trade_attr(candidate, "strategy_family", "") or "").strip().lower()
+    if strategy_family == "synthetic_advisory":
+        return False
+    candidate_status = str(_trade_attr(candidate, "candidate_status", "") or "").strip().lower()
+    execution_status = str(_trade_attr(candidate, "execution_status", "") or "").strip().lower()
+    execution_entry_status = str(_trade_attr(candidate, "execution_entry_status", "") or "").strip().lower()
+    permission = str(_trade_attr(candidate, "permission", "") or "").strip().upper()
+    final_action = str(_trade_attr(candidate, "final_action", "") or "").strip().upper()
+    readiness = str(_trade_attr(candidate, "readiness", "") or "").strip().upper()
+    if candidate_status in {"advisory_only", "blocked", "blocked_contract"}:
+        return False
+    if execution_status != "executable":
+        return False
+    if execution_entry_status != "executable":
+        return False
+    if permission in {"ADVISORY_ONLY", "QUEUE_ONLY", "BLOCK"}:
+        return False
+    if final_action in {"ADVISORY_ONLY", "QUEUE_ONLY", "BLOCK"}:
+        return False
+    if readiness in {"ADVISORY_ONLY", "QUEUE_ONLY", "BLOCKED"}:
+        return False
+    if not bool(_trade_attr(candidate, "execution_allowed", False)):
+        return False
+    if not bool(_trade_attr(candidate, "eligible_for_execution", False)):
+        return False
+    if bool(_trade_attr(candidate, "execution_blocked", False)):
+        return False
+    if bool(_trade_attr(candidate, "hard_blockers", None)) or bool(_trade_attr(candidate, "blockers", None)):
+        return False
+    if bool(_trade_attr(candidate, "unresolved_contract", False)):
+        return False
+    if _trade_attr(candidate, "execution_entry", None) in (None, "", "None"):
+        return False
+    return True
 
 
 def _candidate_visibility_bucket(candidate) -> str:
@@ -264,23 +341,7 @@ def _candidate_visibility_bucket(candidate) -> str:
         or bool(_trade_attr(candidate, "blockers", None))
         or bool(_trade_attr(candidate, "unresolved_contract", False))
     )
-    near_executable_promotable = (
-        candidate_status == "near_executable"
-        and execution_status not in {"advisory_only", "blocked"}
-        and permission not in {"ADVISORY_ONLY", "BLOCK"}
-        and final_action not in {"ADVISORY_ONLY", "BLOCK"}
-        and readiness not in {"ADVISORY_ONLY", "BLOCKED"}
-        and not hard_blocked
-        and str(_trade_attr(candidate, "strategy_family", "") or "").strip().lower() != "synthetic_advisory"
-    )
-    if (
-        candidate_status == "executable"
-        or execution_status == "executable"
-        or permission == "EXECUTE"
-        or final_action == "EXECUTE"
-        or readiness == "READY"
-        or near_executable_promotable
-    ):
+    if _is_reportable_executable_candidate(candidate):
         return "executable"
     if hard_blocked:
         return "blocked"
@@ -305,6 +366,10 @@ def _candidate_trace_payload(candidate) -> dict:
         "rank_score": _trade_attr(candidate, "rank_score"),
         "candidate_status": _trade_attr(candidate, "candidate_status"),
         "execution_status": _trade_attr(candidate, "execution_status"),
+        "execution_entry_status": _trade_attr(candidate, "execution_entry_status"),
+        "permission": _trade_attr(candidate, "permission"),
+        "final_action": _trade_attr(candidate, "final_action"),
+        "execution_allowed": _trade_attr(candidate, "execution_allowed"),
         "reason": _trade_attr(candidate, "reason"),
     }
 
@@ -897,25 +962,25 @@ def _queue_market_data_fallback_candidate_for_analytics(
             "gate_reasons": list(reasons),
         },
     }
-    return _queue_review_candidate(
-        candidate,
-        queue_path=queue_path,
-        extra={
-            "category": category,
-            "tier": "ANALYTICS",
-            "decision_stage": decision_stage,
-            "gate_reasons": list(reasons),
-            "builder_reject_reason": block_reason,
-            "execution_blocked": True,
-            "execution_block_reason": block_reason,
-            "permission": "ADVISORY_ONLY",
-            "readiness": "ADVISORY_ONLY",
-            "final_action": "ADVISORY_ONLY",
-            "execution_status": "advisory_only",
-        },
-        reject_source=reject_source,
-        allow_unresolved_for_analytics=True,
-    )
+    payload_extra = {
+        "category": category,
+        "tier": "ANALYTICS",
+        "decision_stage": decision_stage,
+        "gate_reasons": list(reasons),
+        "builder_reject_reason": block_reason,
+        "execution_blocked": True,
+        "execution_block_reason": block_reason,
+        "permission": "ADVISORY_ONLY",
+        "readiness": "ADVISORY_ONLY",
+        "final_action": "ADVISORY_ONLY",
+        "execution_status": "advisory_only",
+        "analytics_only": True,
+    }
+    advisory_row = project_advisory_row(candidate, extra=payload_extra)
+    if advisory_row is None:
+        return False, None
+    _append_review_jsonl(rejected_candidates_paths(), advisory_row)
+    return True, advisory_row
 
 
 def _queue_prebuilder_gate_candidate_for_analytics(
@@ -976,6 +1041,50 @@ def _consume_trade_builder_ranked_candidates(builder) -> list:
     return ranked
 
 
+def _best_trade_builder_reject_reason(
+    reject_ctx: dict | None,
+    *,
+    fallback: str = "unspecified_trade_builder_reject",
+) -> str:
+    generic = "unspecified_trade_builder_reject"
+    ctx = dict(reject_ctx or {})
+    for field in (
+        "reason",
+        "reject_reason",
+        "final_blocker",
+        "hard_reason",
+        "permission_reason",
+        "entry_block_code",
+        "quote_validation_status",
+    ):
+        value = str(ctx.get(field) or "").strip()
+        if value and value.lower() != generic:
+            return value
+    for collection in ("gate_reasons", "hard_blockers", "blockers", "warnings"):
+        for item in list(ctx.get(collection) or []):
+            text = str(item or "").strip()
+            if text and text.lower() != generic:
+                return text
+    fallback_value = str(ctx.get("reason") or ctx.get("reject_reason") or fallback).strip()
+    return fallback_value or fallback
+
+
+def _soft_option_scan_gate_reasons() -> set[str]:
+    raw = str(getattr(cfg, "OPTION_SCAN_SOFT_GATE_REASONS", "type_mismatch,iv_skew_curvature,iv_bounds") or "")
+    return {item.strip().upper() for item in raw.split(",") if item and item.strip()}
+
+
+def _should_harden_soft_scan_reason(reason: str) -> bool:
+    code = str(reason or "").strip().upper()
+    if code == "TYPE_MISMATCH":
+        return bool(getattr(cfg, "OPTION_TYPE_MISMATCH_HARD_REJECT", False))
+    if code == "IV_BOUNDS":
+        return bool(getattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", False))
+    if code == "IV_SKEW_CURVATURE":
+        return bool(getattr(cfg, "OPTION_IV_SKEW_CURVATURE_HARD_REJECT", False))
+    return False
+
+
 def _augment_ranked_candidates_with_soft_reject(
     *,
     trade_builder,
@@ -990,13 +1099,31 @@ def _augment_ranked_candidates_with_soft_reject(
         reject_ctx = dict(getattr(trade_builder, "_reject_ctx", {}) or {})
     except Exception:
         reject_ctx = {}
-    reject_reason = str(reject_ctx.get("reason") or "").strip()
-    if not reject_reason:
-        reject_reason = "unspecified_trade_builder_reject"
+    reject_reason = _best_trade_builder_reject_reason(
+        reject_ctx,
+        fallback="unspecified_trade_builder_reject",
+    )
+    if str(reject_reason).strip().lower() == "unspecified_trade_builder_reject":
+        try:
+            scan_counts = dict(getattr(trade_builder, "_scan_reject_counts", {}) or {})
+        except Exception:
+            scan_counts = {}
+        ranked_scan_reasons = sorted(
+            (
+                (str(code or "").strip(), int(count or 0))
+                for code, count in scan_counts.items()
+                if str(code or "").strip()
+                and str(code or "").strip().lower() != "unspecified_trade_builder_reject"
+            ),
+            key=lambda item: (-int(item[1]), str(item[0])),
+        )
+        if ranked_scan_reasons:
+            reject_reason = str(ranked_scan_reasons[0][0]).strip() or reject_reason
+            reject_ctx = dict(reject_ctx)
+            reject_ctx.setdefault("gate_reasons", [reject_reason])
+    if str(reject_reason).strip().lower() == "unspecified_trade_builder_reject":
         logger.warning("trade_builder_reject_reason_missing symbol=%s", symbol)
     reject_gate_reasons = [str(x) for x in (reject_ctx.get("gate_reasons") or []) if str(x).strip()]
-    if not reject_gate_reasons:
-        reject_gate_reasons = [reject_reason]
     if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
         logger.info(
             "soft_reject_strict_mode_skip symbol=%s reason=%s",
@@ -1034,6 +1161,19 @@ def _augment_ranked_candidates_with_soft_reject(
             "STALE_OPTION_QUOTE",
         }
     )
+    soft_scan_reasons = _soft_option_scan_gate_reasons()
+    reject_gate_reasons = [
+        reason
+        for reason in reject_gate_reasons
+        if (
+            str(reason or "").strip().upper() not in soft_scan_reasons
+            or _should_harden_soft_scan_reason(reason)
+        )
+    ]
+    if not reject_gate_reasons:
+        normalized_reject_reason = str(reject_reason or "").strip().upper()
+        if normalized_reject_reason in hard_reason_codes:
+            reject_gate_reasons = [str(reject_reason)]
 
     def _should_keep_as_advisory(candidate_reasons: list[str]) -> bool:
         for code in candidate_reasons:
@@ -1078,6 +1218,18 @@ def _augment_ranked_candidates_with_soft_reject(
                 execution_mode=execution_mode,
             )
             if soft_candidate:
+                candidate_reason = str(
+                    soft_candidate.get("reason")
+                    or soft_candidate.get("reject_reason")
+                    or ""
+                ).strip()
+                if (
+                    candidate_reason
+                    and candidate_reason.lower() != "unspecified_trade_builder_reject"
+                    and str(reject_reason).strip().lower() == "unspecified_trade_builder_reject"
+                ):
+                    reject_reason = candidate_reason
+                    reject_gate_reasons = [candidate_reason]
                 source_flags = dict(soft_candidate.get("source_flags") or {})
                 source_flags["candidate_origin"] = "softened_builder_path"
                 source_flags["soft_reject_reason"] = reject_reason or "trade_builder_reject"
@@ -3841,7 +3993,8 @@ class Orchestrator:
                             },
                         )
                     scan_summary = dict(getattr(self.trade_builder, "_last_scan_summary", {}) or {})
-                    cycle_candidate_pool_count += int(scan_summary.get("total_candidates") or 0)
+                    raw_candidate_count = int(scan_summary.get("total_candidates") or 0)
+                    cycle_candidate_pool_count += raw_candidate_count
                     cycle_scored_candidate_count += int(scan_summary.get("accepted") or 0)
                     decision_build_ms += (time.perf_counter() - decision_stage_start) * 1000.0
                     if decision_trace is not None:
@@ -3850,6 +4003,7 @@ class Orchestrator:
                         except Exception:
                             pass
                     ranked_candidates = _consume_trade_builder_ranked_candidates(self.trade_builder)
+                    post_scan_survivor_count = len(ranked_candidates or [])
                     reject_reason = None
                     reject_gate_reasons: list[str] = []
                     soft_reject_candidates: list[dict] = []
@@ -3865,6 +4019,7 @@ class Orchestrator:
                                 symbol=sym,
                             )
                         )
+                    post_soft_reject_count = len(ranked_candidates or [])
                     if latency_soften_active and ranked_candidates:
                         pre_latency_real = sum(
                             1 for cand in ranked_candidates if not _is_synthetic_candidate(cand)
@@ -3947,7 +4102,7 @@ class Orchestrator:
                         )
                     ranked_executable_candidates = [
                         cand for cand in real_candidates
-                        if _candidate_visibility_bucket(cand) == "executable"
+                        if _is_reportable_executable_candidate(cand)
                     ]
                     ranked_advisory_candidates = [
                         cand for cand in real_candidates
@@ -3957,6 +4112,8 @@ class Orchestrator:
                         cand for cand in real_candidates
                         if _candidate_visibility_bucket(cand) == "blocked"
                     ]
+                    post_real_filter_count = len(real_candidates)
+                    post_executable_filter_count = len(ranked_executable_candidates)
                     eligible_real_candidates = []
                     if trade is not None and not _is_synthetic_candidate(trade):
                         cycle_real_trade_symbols.add(sym)
@@ -3966,6 +4123,26 @@ class Orchestrator:
                     if trade is None and not suppress_synthetic_emit:
                         eligible_synthetic_candidates = list(soft_reject_candidates) + list(breadth_candidates)
                     if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+                        print(
+                            "RAW_CANDIDATE_COUNT",
+                            {"symbol": sym, "count": raw_candidate_count},
+                        )
+                        print(
+                            "POST_SCAN_SURVIVOR_COUNT",
+                            {"symbol": sym, "count": post_scan_survivor_count},
+                        )
+                        print(
+                            "POST_SOFT_REJECT_COUNT",
+                            {"symbol": sym, "count": post_soft_reject_count},
+                        )
+                        print(
+                            "POST_REAL_FILTER_COUNT",
+                            {"symbol": sym, "count": post_real_filter_count},
+                        )
+                        print(
+                            "POST_EXECUTABLE_FILTER_COUNT",
+                            {"symbol": sym, "count": post_executable_filter_count},
+                        )
                         print(
                             "TB_RANKED_COUNT_REAL",
                             {"symbol": sym, "count": len(real_candidates)},
@@ -4065,22 +4242,40 @@ class Orchestrator:
                                     sym,
                                 )
                         else:
+                            queue_synthetic_candidates = bool(
+                                getattr(cfg, "QUEUE_SYNTHETIC_CANDIDATES_ENABLE", False)
+                            )
                             if soft_reject_candidates:
                                 for soft_candidate in soft_reject_candidates:
                                     try:
                                         trade_id = str(soft_candidate.get("trade_id") or "")
                                         if trade_id and trade_id in enqueued_trade_ids:
                                             continue
-                                        add_to_queue(soft_candidate)
+                                        if queue_synthetic_candidates:
+                                            add_to_queue(soft_candidate)
+                                        else:
+                                            _queue_rejected_candidate_for_analytics(
+                                                [soft_candidate],
+                                                gate_reasons=reject_gate_reasons,
+                                                reject_reason=reject_reason,
+                                                reject_source="orchestrator_soft_reject_candidate",
+                                                extra={
+                                                    "symbol": sym,
+                                                    "decision_stage": "trade_builder_gate",
+                                                    "category": "synthetic_soft_reject",
+                                                },
+                                                exclude_trade_ids=enqueued_trade_ids,
+                                            )
                                         if trade_id:
                                             enqueued_trade_ids.add(trade_id)
                                         cycle_candidates_enqueued += 1
                                         logger.info(
-                                            "soft_reject_candidate_enqueued symbol=%s trade_id=%s reason=%s gate_reasons=%s",
+                                            "soft_reject_candidate_enqueued symbol=%s trade_id=%s reason=%s gate_reasons=%s queue_synthetic=%s",
                                             soft_candidate.get("symbol"),
                                             soft_candidate.get("trade_id"),
                                             reject_reason or "trade_builder_reject",
                                             ",".join(reject_gate_reasons),
+                                            queue_synthetic_candidates,
                                         )
                                     except Exception:
                                         logger.exception("soft_reject_candidate_enqueue_failed symbol=%s", soft_candidate.get("symbol"))
@@ -4090,14 +4285,29 @@ class Orchestrator:
                                         trade_id = str(breadth_candidate.get("trade_id") or "")
                                         if trade_id and trade_id in enqueued_trade_ids:
                                             continue
-                                        add_to_queue(breadth_candidate)
+                                        if queue_synthetic_candidates:
+                                            add_to_queue(breadth_candidate)
+                                        else:
+                                            _queue_rejected_candidate_for_analytics(
+                                                [breadth_candidate],
+                                                gate_reasons=["fallback_min_breadth"],
+                                                reject_reason="fallback_min_breadth",
+                                                reject_source="orchestrator_breadth_backfill_candidate",
+                                                extra={
+                                                    "symbol": sym,
+                                                    "decision_stage": "trade_builder_gate",
+                                                    "category": "synthetic_breadth_backfill",
+                                                },
+                                                exclude_trade_ids=enqueued_trade_ids,
+                                            )
                                         if trade_id:
                                             enqueued_trade_ids.add(trade_id)
                                         cycle_candidates_enqueued += 1
                                         logger.info(
-                                            "candidate_breadth_backfill_enqueued symbol=%s trade_id=%s",
+                                            "candidate_breadth_backfill_enqueued symbol=%s trade_id=%s queue_synthetic=%s",
                                             breadth_candidate.get("symbol"),
                                             breadth_candidate.get("trade_id"),
+                                            queue_synthetic_candidates,
                                         )
                                     except Exception:
                                         logger.exception("candidate_breadth_backfill_enqueue_failed symbol=%s", sym)

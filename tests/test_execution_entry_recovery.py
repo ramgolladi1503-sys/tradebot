@@ -250,8 +250,12 @@ def test_recover_missing_execution_entry_uses_final_stage_prices():
     assert out["entry_status"] == "displayable"
     assert out["entry_recovered"] is True
     assert out["entry_recovered_from"] == "expected_entry"
-    assert out["tradable"] is True
+    assert out["tradable"] is False
     assert out["execution_allowed"] is False
+    assert out["eligible_for_execution"] is False
+    assert out["execution_status"] == "advisory_only"
+    assert out["candidate_status"] == "advisory_only"
+    assert out["is_executable"] is False
     assert "MISSING_ENTRY" not in list(out.get("hard_blockers") or [])
     assert "MISSING_ENTRY" not in list(out.get("blockers") or [])
     assert "spread_pct" in list(out.get("blockers") or [])
@@ -415,7 +419,10 @@ def test_last_chance_execution_entry_recovery_ignores_entry_status_when_price_ex
     assert out["entry_status"] == "displayable"
     assert out["entry_recovered"] is True
     assert out["entry_recovered_from"] == "display_entry"
-    assert out["tradable"] is True
+    assert out["tradable"] is False
+    assert out["execution_status"] == "advisory_only"
+    assert out["candidate_status"] == "advisory_only"
+    assert out["is_executable"] is False
 
 
 def test_last_chance_execution_entry_recovery_does_not_depend_on_permission_state():
@@ -578,3 +585,31 @@ def test_refresh_opportunity_survival_state_preserves_recovered_last_execution_e
     assert out["execution_status"] == "queue_only"
     assert out["tradable"] is True
     assert out["execution_allowed"] is False
+
+
+def test_clear_fabricated_entry_lifecycle_preserves_display_row():
+    out = review_queue._clear_fabricated_entry_lifecycle(
+        {
+            "trade_id": "T-CLEAR-DISPLAY",
+            "display_entry": 26.65,
+            "display_entry_source": "mark",
+            "display_entry_status": "displayable",
+            "entry": 26.65,
+            "entry_source": "mark",
+            "entry_status": "displayable",
+            "execution_entry": 26.70,
+            "execution_entry_source": "ask",
+            "execution_entry_status": "executable",
+            "entry_recovered": True,
+            "entry_recovered_from": "expected_entry",
+        }
+    )
+    assert out["execution_entry"] is None
+    assert out["execution_entry_status"] == "non_executable"
+    assert out["display_entry"] == 26.65
+    assert out["display_entry_source"] == "mark"
+    assert out["display_entry_status"] == "displayable"
+    assert out["entry"] == 26.65
+    assert out["entry_status"] == "displayable"
+    assert out["entry_clear_reason"] is None
+    assert "entry_recovered" not in out

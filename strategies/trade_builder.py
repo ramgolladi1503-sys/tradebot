@@ -329,6 +329,36 @@ class TradeBuilder:
         )
         return {item.strip().lower() for item in raw.split(",") if item.strip()}
 
+    def _soft_scan_gate_reasons(self) -> set[str]:
+        raw = str(
+            getattr(
+                cfg,
+                "OPTION_SCAN_SOFT_GATE_REASONS",
+                "type_mismatch,iv_skew_curvature,iv_bounds",
+            )
+            or ""
+        )
+        return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+    def _is_scan_reason_hard_gate(self, reason: str | None) -> bool:
+        code = str(reason or "").strip().lower()
+        if not code:
+            return False
+        if code == "type_mismatch":
+            return bool(getattr(cfg, "OPTION_TYPE_MISMATCH_HARD_REJECT", False))
+        if code == "iv_bounds":
+            return bool(getattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", False))
+        if code == "iv_skew_curvature":
+            return bool(getattr(cfg, "OPTION_IV_SKEW_CURVATURE_HARD_REJECT", False))
+        if code in {"iv_skew_curve_call", "iv_skew_curve_put"}:
+            return bool(getattr(cfg, "OPTION_IV_SKEW_CURVE_HARD_REJECT", False))
+        if code in {"stale_option_tick", "stale_option_quote", "no_volume", "invalid_option_ltp"}:
+            return True
+        hard_reasons = self._hard_reject_reasons()
+        if code in hard_reasons:
+            return True
+        return code.startswith("hard_")
+
     def _classify_reject_reason(self, reason: str | None) -> str:
         text = str(reason or "").strip().lower()
         if not text:
@@ -752,9 +782,18 @@ class TradeBuilder:
 
     def _ensure_reject_reason(self, market_data: dict | None, reason: str | None = None) -> str:
         reject_ctx = dict(self._reject_ctx or {})
-        reject_reason = str(reason or reject_ctx.get("reason") or "").strip()
-        if not reject_reason:
+        reject_reason = self._resolve_reject_reason(
+            reason=reason,
+            reject_ctx=reject_ctx,
+            fallback="unspecified_trade_builder_reject",
+        )
+        if not str(reject_reason or "").strip():
             reject_reason = "unspecified_trade_builder_reject"
+        if str(reject_reason).strip().lower() == "unspecified_trade_builder_reject":
+            derived = self._derive_reject_reason_from_scan_context()
+            if derived:
+                reject_reason = derived
+        if str(reject_reason).strip().lower() == "unspecified_trade_builder_reject":
             reject_ctx = dict(reject_ctx)
             symbol = (market_data or {}).get("symbol") if isinstance(market_data, dict) else None
             if symbol:
@@ -762,13 +801,108 @@ class TradeBuilder:
             reject_ctx["reason"] = reject_reason
             self._reject_ctx = reject_ctx
             logger.warning("trade_builder_reject_reason_missing symbol=%s", symbol)
-        return reject_reason
+        return str(reject_reason).strip()
+
+    def _resolve_reject_reason(
+        self,
+        *,
+        reason: str | None = None,
+        reject_ctx: dict | None = None,
+        extra: dict | None = None,
+        fallback: str = "unspecified_trade_builder_reject",
+    ) -> str:
+        generic = "unspecified_trade_builder_reject"
+        ctx = dict(reject_ctx or {})
+        ext = dict(extra or {})
+        fields = (
+            reason,
+            ctx.get("reason"),
+            ctx.get("reject_reason"),
+            ext.get("reason"),
+            ext.get("reject_reason"),
+            ext.get("final_blocker"),
+            ext.get("hard_reason"),
+            ext.get("permission_reason"),
+            ext.get("entry_block_code"),
+            ext.get("quote_validation_status"),
+            ctx.get("final_blocker"),
+            ctx.get("hard_reason"),
+            ctx.get("permission_reason"),
+            ctx.get("entry_block_code"),
+            ctx.get("quote_validation_status"),
+        )
+        for value in fields:
+            text = str(value or "").strip()
+            if text and text.lower() != generic:
+                return text
+        for collection in ("gate_reasons", "hard_blockers", "blockers", "warnings"):
+            for item in list(ext.get(collection) or ctx.get(collection) or []):
+                text = str(item or "").strip()
+                if text and text.lower() != generic:
+                    return text
+        fallback_reason = str(
+            reason
+            or ctx.get("reason")
+            or ext.get("reason")
+            or ext.get("reject_reason")
+            or ctx.get("reject_reason")
+            or fallback
+        ).strip()
+        return fallback_reason or fallback
+
+    def _derive_reject_reason_from_scan_context(self) -> str | None:
+        try:
+            scan_counts = dict(self._scan_reject_counts or {})
+        except Exception:
+            scan_counts = {}
+        filtered: list[tuple[str, int]] = []
+        for code, count in scan_counts.items():
+            text = str(code or "").strip()
+            if not text:
+                continue
+            if text.lower() == "unspecified_trade_builder_reject":
+                continue
+            try:
+                count_int = int(count)
+            except Exception:
+                count_int = 0
+            filtered.append((text, count_int))
+        if filtered:
+            filtered.sort(key=lambda item: (-int(item[1]), str(item[0])))
+            return str(filtered[0][0]).strip() or None
+        try:
+            option_summary = dict(getattr(self, "_last_option_scan_summary", {}) or {})
+        except Exception:
+            option_summary = {}
+        top_rejects = dict(option_summary.get("top_rejects") or {})
+        if top_rejects:
+            ranked = sorted(
+                (
+                    (str(code or "").strip(), int(count or 0))
+                    for code, count in top_rejects.items()
+                    if str(code or "").strip()
+                    and str(code or "").strip().lower() != "unspecified_trade_builder_reject"
+                ),
+                key=lambda item: (-int(item[1]), str(item[0])),
+            )
+            if ranked:
+                return str(ranked[0][0]).strip() or None
+        return None
 
     def _reject_exit(self, market_data: dict | None, reason: str | None, extra: dict | None = None) -> None:
         reject_ctx = dict(self._reject_ctx or {})
-        reject_reason = str(reason or reject_ctx.get("reason") or "").strip()
-        if not reject_reason:
+        reject_reason = self._resolve_reject_reason(
+            reason=reason,
+            reject_ctx=reject_ctx,
+            extra=extra,
+            fallback="unspecified_trade_builder_reject",
+        )
+        if not str(reject_reason or "").strip():
             reject_reason = "unspecified_trade_builder_reject"
+        if str(reject_reason).strip().lower() == "unspecified_trade_builder_reject":
+            derived = self._derive_reject_reason_from_scan_context()
+            if derived:
+                reject_reason = derived
         extra_payload = dict(extra or {})
         symbol = str(
             extra_payload.get("symbol")
@@ -797,6 +931,11 @@ class TradeBuilder:
             if not top_rejects:
                 ordered = list(reject_counts.items())
                 top_rejects = {str(code): int(count) for code, count in ordered[:8]}
+            hard_top_rejects = {
+                str(code): int(count)
+                for code, count in top_rejects.items()
+                if self._is_scan_reason_hard_gate(code)
+            }
             option_reject_total = int(option_summary.get("option_reject_total") or sum(top_rejects.values()))
             logger.warning(
                 "TB_REJECT_SUMMARY %s",
@@ -809,22 +948,25 @@ class TradeBuilder:
                 },
             )
             logger.warning(
-                "OPTION_SCAN_REJECT_SUMMARY symbol=%s considered=%s survivors=%s option_reject_total=%s top_rejects=%s",
+                "OPTION_SCAN_REJECT_SUMMARY symbol=%s considered=%s survivors=%s option_reject_total=%s top_rejects=%s hard_top_rejects=%s",
                 symbol,
                 considered,
                 survivors,
                 option_reject_total,
                 top_rejects,
+                hard_top_rejects,
             )
             logger.warning(
-                "NO_CANDIDATE_PATH symbol=%s considered=%s survivors=%s top_rejects=%s",
+                "NO_CANDIDATE_PATH symbol=%s considered=%s survivors=%s hard_top_rejects=%s top_rejects=%s",
                 symbol,
                 considered,
                 survivors,
+                hard_top_rejects,
                 top_rejects,
             )
             reject_ctx.setdefault("reject_counts", reject_counts)
             reject_ctx.setdefault("top_reject_counts", top_rejects)
+            reject_ctx.setdefault("hard_top_rejects", hard_top_rejects)
             reject_ctx.setdefault("option_rows_considered", considered)
             reject_ctx.setdefault("survivor_count", survivors)
         reject_ctx["reason"] = reject_reason
@@ -2232,9 +2374,9 @@ class TradeBuilder:
             opt["type_inferred"] = True
             opt["type_inferred_source"] = "expected_type"
         if opt_side != expected:
-            exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
-            allow_soften = bool(getattr(cfg, "ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", True)) and exec_mode in {"SIM", "PAPER"}
-            if allow_soften and expected in {"CE", "PE"}:
+            allow_soften = bool(getattr(cfg, "ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", True))
+            hard_reject = bool(getattr(cfg, "OPTION_TYPE_MISMATCH_HARD_REJECT", False))
+            if expected in {"CE", "PE"} and (allow_soften or not hard_reject):
                 opt_side = expected
                 opt["type_inferred"] = True
                 opt["type_inferred_source"] = "type_mismatch_soft"
@@ -2339,6 +2481,139 @@ class TradeBuilder:
             getattr(cfg, "TRADE_BUILDER_ALLOW_NON_LIVE_STALE_OPTION_TICK_ADVISORY", True)
             and getattr(market_ctx, "allow_stale_quotes", False)
         )
+
+    def _allow_stale_option_tick_bypass(
+        self,
+        market_ctx,
+        *,
+        market_mode: str,
+        quote_age_sec: float | None,
+    ) -> bool:
+        if not bool(getattr(cfg, "TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_ENABLE", False)):
+            return False
+        mode = str(market_mode or "").strip().upper()
+        allow_live = bool(getattr(cfg, "TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_ALLOW_LIVE", False))
+        if mode == "LIVE" and not allow_live:
+            return False
+        if quote_age_sec is None:
+            return False
+        max_age = float(getattr(cfg, "TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_MAX_SEC", 20.0) or 20.0)
+        return float(max_age) <= 0 or float(quote_age_sec) <= float(max_age)
+
+    def _option_scan_min_survivor_modes(self) -> set[str]:
+        raw = str(getattr(cfg, "OPTION_SCAN_MIN_SURVIVORS_ALLOWED_MODES", "SIM,PAPER,OFFHOURS") or "")
+        return {item.strip().upper() for item in raw.split(",") if item.strip()}
+
+    def _inject_option_scan_min_survivors(
+        self,
+        *,
+        symbol: str,
+        market_data: dict,
+        execution_mode: str,
+        candidates: list,
+        rejected: list[dict],
+        strategy_tag: str | None,
+        direction: str,
+    ) -> list:
+        if candidates:
+            return candidates
+        if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+            return candidates
+        if not bool(getattr(cfg, "OPTION_SCAN_MIN_SURVIVORS_ENABLE", False)):
+            return candidates
+        allowed_modes = self._option_scan_min_survivor_modes()
+        if allowed_modes and str(execution_mode or "").strip().upper() not in allowed_modes:
+            return candidates
+        min_survivors = int(getattr(cfg, "OPTION_SCAN_MIN_SURVIVORS_COUNT", 0) or 0)
+        if min_survivors <= 0:
+            return candidates
+
+        fallback_score = float(getattr(cfg, "OPTION_SCAN_MIN_SURVIVOR_SCORE", 0.32) or 0.32)
+
+        def _rejected_rank(record: dict) -> tuple[float, float, float]:
+            ltp = float(record.get("ltp") or 0.0)
+            volume = float(record.get("volume") or 0.0)
+            oi = float(record.get("oi") or 0.0)
+            return (ltp, volume, oi)
+
+        selected_rejected = sorted(
+            [row for row in list(rejected or []) if isinstance(row, dict)],
+            key=_rejected_rank,
+            reverse=True,
+        )[: min_survivors * 2]
+        if not selected_rejected:
+            return candidates
+
+        injected: list[dict] = []
+        for idx, rec in enumerate(selected_rejected, start=1):
+            degraded = self._build_borderline_candidate(
+                market_data=market_data,
+                reason="scan_min_survivor",
+                confidence=fallback_score,
+                strategy_tag=strategy_tag,
+                direction=direction,
+            )
+            if not isinstance(degraded, dict):
+                continue
+            entry_val = self._coerce_positive_float(rec.get("ltp"))
+            if entry_val is not None:
+                degraded["display_entry"] = entry_val
+                degraded["display_entry_source"] = "scan_min_survivor"
+                degraded["display_entry_status"] = "displayable"
+                degraded["entry"] = entry_val
+                degraded["entry_source"] = "scan_min_survivor"
+                degraded["entry_status"] = "displayable"
+            stop_val = self._coerce_positive_float(rec.get("stop"))
+            target_val = self._coerce_positive_float(rec.get("target"))
+            if stop_val is not None:
+                degraded["stop_loss"] = stop_val
+            if target_val is not None:
+                degraded["target"] = target_val
+            degraded["trade_id"] = str(
+                degraded.get("trade_id")
+                or f"tbscan_{symbol}_{idx}"
+            )
+            degraded["candidate_origin"] = "scan_min_survivor"
+            degraded["candidate_status"] = "queue_only"
+            degraded["execution_status"] = "queue_only"
+            degraded["permission"] = "QUEUE_ONLY"
+            degraded["final_action"] = "QUEUE_ONLY"
+            degraded["readiness"] = "QUEUE_ONLY"
+            degraded["planning_only"] = True
+            degraded["tradable"] = False
+            degraded["execution_allowed"] = False
+            degraded["execution_ok"] = False
+            degraded["eligible_for_execution"] = False
+            degraded["is_executable"] = False
+            degraded["max_final_action"] = "QUEUE_ONLY"
+            degraded["execution_blocked"] = True
+            degraded["execution_block_reason"] = "scan_min_survivor"
+            degraded["reason"] = str(rec.get("reason") or "scan_min_survivor")
+            degraded["rank_score"] = max(float(degraded.get("rank_score") or 0.0), fallback_score)
+            degraded["final_score"] = max(float(degraded.get("final_score") or 0.0), fallback_score)
+            degraded["opportunity_score"] = max(
+                float(degraded.get("opportunity_score") or 0.0),
+                fallback_score,
+            )
+            source_flags = dict(degraded.get("source_flags") or {})
+            source_flags["candidate_origin"] = "scan_min_survivor"
+            source_flags["scan_min_survivor"] = True
+            source_flags["scan_min_survivor_reject_reason"] = str(rec.get("reason") or "")
+            degraded["source_flags"] = source_flags
+            injected.append(degraded)
+            if len(injected) >= min_survivors:
+                break
+
+        if injected:
+            logger.warning(
+                "OPTION_SCAN_MIN_SURVIVORS_APPLIED symbol=%s requested=%s injected=%s reasons=%s",
+                symbol,
+                min_survivors,
+                len(injected),
+                [str(row.get("reason") or "") for row in injected],
+            )
+            return list(candidates) + injected
+        return candidates
 
     def _option_tradability_precondition(
         self,
@@ -2446,6 +2721,33 @@ class TradeBuilder:
         soft_stale_sec = float(max(option_tick_sla_sec, float(getattr(cfg, "OPTION_TICK_SOFT_STALE_SEC", 3.0))))
         hard_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "OPTION_TICK_HARD_STALE_SEC", 6.0))))
         if quote_age_sec is None or quote_age_sec > option_tick_sla_sec:
+            stale_bypass = self._allow_stale_option_tick_bypass(
+                market_ctx,
+                market_mode=market_mode,
+                quote_age_sec=quote_age_sec,
+            )
+            if stale_bypass:
+                return True, {
+                    "reason_code": "STALE_OPTION_TICK",
+                    "reason_text": "Option tick stale by SLA but bypassed by diagnostic stale-tick setting",
+                    "gate_name": "option_tradability_precondition",
+                    "contract": contract_label,
+                    "strike": strike,
+                    "option_type": opt_type,
+                    "direction": direction,
+                    "instrument_token": instrument_token,
+                    "tradingsymbol": tradingsymbol,
+                    "expiry_date": expiry_resolved,
+                    "quote_source": quote_source or None,
+                    "option_ltp_source": option_ltp_source or None,
+                    "quote_age_sec": quote_age_sec,
+                    "tick_age_sec": quote_age_sec,
+                    "sla_threshold_sec": option_tick_sla_sec,
+                    "option_tick_sla_sec": option_tick_sla_sec,
+                    "stale_option_tick": True,
+                    "stale_allowed": True,
+                    "stale_bypass": True,
+                }
             if allow_stale_quotes:
                 return True, {
                     "reason_code": "STALE_OPTION_TICK",
@@ -7160,7 +7462,16 @@ class TradeBuilder:
                         "quick_mode": bool(quick_mode),
                     },
                 )
-            return self._reject_exit(market_data, "signal_score_below_min")
+            hard_reject_signal_score = bool(
+                getattr(cfg, "TRADE_BUILDER_SIGNAL_SCORE_BELOW_MIN_HARD_REJECT", False)
+            )
+            if hard_reject_signal_score:
+                return self._reject_exit(market_data, "signal_score_below_min")
+            # Treat low signal score as soft weakness so phase2/decision layers can queue-rank it.
+            _append_unique(pre_soft_veto_codes, "signal_score_below_min")
+            signal["reason"] = str(signal.get("reason") or "weak_signal")
+            signal["signal_strength"] = "weak"
+            signal["signal_score_below_min"] = True
 
         direction = signal["direction"]
         orb_soft_veto_codes: list[str] = []
@@ -7350,15 +7661,22 @@ class TradeBuilder:
             )
             top = ordered[:5]
             top_reasons = [str(code) for code, _count in top]
+            hard_top_reasons = [code for code in top_reasons if self._is_scan_reason_hard_gate(code)]
             summary = {
                 "top_option_reject_reasons": top_reasons,
+                "hard_gate_reasons": list(hard_top_reasons),
                 "option_reject_reason_counts": {str(code): int(count) for code, count in top},
+                "hard_top_rejects": {
+                    str(code): int(count)
+                    for code, count in top
+                    if self._is_scan_reason_hard_gate(code)
+                },
                 "option_reject_total": int(sum(option_reject_counts.values())),
             }
             self._reject_ctx = {
                 "symbol": symbol,
                 "reason": "no_viable_candidates",
-                "gate_reasons": list(top_reasons),
+                "gate_reasons": list(hard_top_reasons),
                 **summary,
             }
             mode = (
@@ -7369,7 +7687,7 @@ class TradeBuilder:
             append_reject_reasons(
                 symbol=symbol,
                 strategy=candidate_strategy_tag,
-                reasons=top_reasons,
+                reasons=hard_top_reasons,
                 mode=mode,
                 source="trade_builder_option_scan",
                 extra=dict(summary),
@@ -7416,6 +7734,9 @@ class TradeBuilder:
                 warning_codes,
             )
             non_live_relaxed_gate_codes: list[str] = []
+            if bool(opt.get("type_mismatch_soft")):
+                _record_issue("type_mismatch", role=ISSUE_CATEGORY_SOFT)
+                _append_unique(non_live_relaxed_gate_codes, "type_mismatch")
             require_depth_quotes = bool(getattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", False))
             require_volume = bool(getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False))
             if exec_mode in {"SIM", "PAPER"} and bool(getattr(cfg, "RELAX_VOLUME_REQUIREMENTS_NONLIVE", True)):
@@ -7603,7 +7924,12 @@ class TradeBuilder:
                     tradability_ctx.get("option_tick_sla_sec") or tradability_ctx.get("sla_threshold_sec"),
                     tradability_ctx.get("option_ltp_source") or tradability_ctx.get("quote_source"),
                 )
-                if bool(getattr(market_ctx, "allow_stale_quotes", False)) and not (
+                stale_allowed = bool(
+                    getattr(market_ctx, "allow_stale_quotes", False)
+                    or tradability_ctx.get("stale_allowed")
+                    or tradability_ctx.get("stale_bypass")
+                )
+                if stale_allowed and not (
                     hard_missing_quote or hard_depth_required_fail or hard_volume_required_fail
                 ):
                     _append_unique(advisory_flags, "stale_option_quote")
@@ -7765,7 +8091,7 @@ class TradeBuilder:
                         continue
                 if opt.get("iv") is not None:
                     if (opt["iv"] < getattr(cfg, "MIN_IV", 0.1) or opt["iv"] > getattr(cfg, "MAX_IV", 0.6)) and not _relax("iv_bounds"):
-                        if is_live_mode:
+                        if bool(getattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", False)):
                             _count_option_reject("iv_bounds")
                             if debug_reasons:
                                 _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_bounds", symbol, opt.get("strike"), opt_type)
@@ -7820,7 +8146,7 @@ class TradeBuilder:
                         continue
                 if opt.get("iv_skew_curvature") is not None:
                     if abs(opt["iv_skew_curvature"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curvature"):
-                        if is_live_mode:
+                        if bool(getattr(cfg, "OPTION_IV_SKEW_CURVATURE_HARD_REJECT", False)):
                             _count_option_reject("iv_skew_curvature")
                             if debug_reasons:
                                 _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curvature", symbol, opt.get("strike"), opt_type)
@@ -7830,18 +8156,24 @@ class TradeBuilder:
                         _append_unique(non_live_relaxed_gate_codes, "iv_skew_curvature")
                 if opt_type == "CE" and opt.get("iv_skew_curvature_call") is not None:
                     if abs(opt["iv_skew_curvature_call"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curve_call"):
-                        _count_option_reject("iv_skew_curve_call")
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_call", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_call", atr=atr))
-                        continue
+                        if bool(getattr(cfg, "OPTION_IV_SKEW_CURVE_HARD_REJECT", False)):
+                            _count_option_reject("iv_skew_curve_call")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_call", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_call", atr=atr))
+                            continue
+                        _record_issue("iv_skew_curvature", role=ISSUE_CATEGORY_SOFT)
+                        _append_unique(non_live_relaxed_gate_codes, "iv_skew_curve_call")
                 if opt_type == "PE" and opt.get("iv_skew_curvature_put") is not None:
                     if abs(opt["iv_skew_curvature_put"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_curve_put"):
-                        _count_option_reject("iv_skew_curve_put")
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_put", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_put", atr=atr))
-                        continue
+                        if bool(getattr(cfg, "OPTION_IV_SKEW_CURVE_HARD_REJECT", False)):
+                            _count_option_reject("iv_skew_curve_put")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_skew_curve_put", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "iv_skew_curve_put", atr=atr))
+                            continue
+                        _record_issue("iv_skew_curvature", role=ISSUE_CATEGORY_SOFT)
+                        _append_unique(non_live_relaxed_gate_codes, "iv_skew_curve_put")
                 if opt.get("iv_term") is not None:
                     if (opt["iv_term"] < getattr(cfg, "IV_TERM_MIN", -0.05) or opt["iv_term"] > getattr(cfg, "IV_TERM_MAX", 0.05)) and not _relax("iv_term"):
                         _count_option_reject("iv_term")
@@ -8720,6 +9052,15 @@ class TradeBuilder:
             pool = rejected if rejected else debug_candidates
             if pool:
                 self._write_debug_candidates(pool, top_n=top_n)
+        candidates = self._inject_option_scan_min_survivors(
+            symbol=symbol,
+            market_data=market_data,
+            execution_mode=exec_mode,
+            candidates=candidates,
+            rejected=rejected,
+            strategy_tag=candidate_strategy_tag,
+            direction=direction,
+        )
         option_reject_total = int(sum(option_reject_counts.values()))
         top_rejects: dict[str, int] = {}
         if option_reject_counts:

@@ -142,6 +142,7 @@ def test_build_tracks_iv_reject_and_emits_summary(caplog, monkeypatch):
     _patch_builder(monkeypatch, builder)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", True, raising=False)
 
     with caplog.at_level(logging.INFO):
         builder.build(
@@ -162,6 +163,7 @@ def test_build_emits_reject_summary_on_softened_no_viable_path(caplog, monkeypat
     monkeypatch.setattr(cfg, "DEBUG_TRADE_MODE", False, raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", True, raising=False)
 
     with caplog.at_level(logging.INFO):
         trade = builder.build(
@@ -199,11 +201,12 @@ def test_build_non_live_iv_bounds_survives_as_soft_veto(monkeypatch):
     assert "iv_bounds" in list(getattr(trade, "source_flags", {}).get("non_live_relaxed_gate_codes") or [])
 
 
-def test_build_live_iv_bounds_still_rejects(monkeypatch):
+def test_build_live_iv_bounds_still_rejects_when_hard_gate_enabled(monkeypatch):
     builder = TradeBuilder(predictor=_PredictorStub())
     _patch_builder(monkeypatch, builder)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", True, raising=False)
 
     trade = builder.build(
         _market_data_with_option_overrides(iv=0.8),
@@ -214,6 +217,137 @@ def test_build_live_iv_bounds_still_rejects(monkeypatch):
 
     assert trade is None
     assert int(builder._scan_reject_counts.get("iv_bounds", 0)) >= 1
+
+
+def test_build_live_iv_bounds_softens_by_default(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", False, raising=False)
+
+    trade = builder.build(
+        _market_data_with_option_overrides(iv=0.8),
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is not None
+    source_flags = getattr(trade, "source_flags", {}) or {}
+    assert "iv_bounds" in list(source_flags.get("soft_veto_codes") or [])
+    assert "iv_bounds" in list(source_flags.get("non_live_relaxed_gate_codes") or [])
+
+
+def test_build_live_iv_skew_curvature_softens_by_default(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_SKEW_CURVATURE_HARD_REJECT", False, raising=False)
+
+    trade = builder.build(
+        _market_data_with_option_overrides(iv_skew_curvature=2.0),
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is not None
+    source_flags = getattr(trade, "source_flags", {}) or {}
+    assert "iv_skew_curvature" in list(source_flags.get("soft_veto_codes") or [])
+    assert "iv_skew_curvature" in list(source_flags.get("non_live_relaxed_gate_codes") or [])
+
+
+def test_build_live_iv_skew_curvature_still_rejects_when_hard_gate_enabled(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_SKEW_CURVATURE_HARD_REJECT", True, raising=False)
+
+    trade = builder.build(
+        _market_data_with_option_overrides(iv_skew_curvature=2.0),
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is None
+    assert int(builder._scan_reject_counts.get("iv_skew_curvature", 0)) >= 1
+
+
+def test_build_live_iv_skew_curve_call_softens_by_default(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_SKEW_CURVE_HARD_REJECT", False, raising=False)
+
+    trade = builder.build(
+        _market_data_with_option_overrides(iv_skew_curvature_call=2.0),
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is not None
+    source_flags = getattr(trade, "source_flags", {}) or {}
+    assert "iv_skew_curvature" in list(source_flags.get("soft_veto_codes") or [])
+    assert "iv_skew_curve_call" in list(source_flags.get("non_live_relaxed_gate_codes") or [])
+
+
+def test_build_live_iv_skew_curve_call_rejects_when_hard_gate_enabled(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_IV_SKEW_CURVE_HARD_REJECT", True, raising=False)
+
+    trade = builder.build(
+        _market_data_with_option_overrides(iv_skew_curvature_call=2.0),
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is None
+    assert int(builder._scan_reject_counts.get("iv_skew_curve_call", 0)) >= 1
+
+
+def test_build_can_inject_min_scan_survivors_when_all_rows_rejected(monkeypatch):
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "OPTION_SCAN_MIN_SURVIVORS_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "OPTION_SCAN_MIN_SURVIVORS_COUNT", 2, raising=False)
+    monkeypatch.setattr(cfg, "OPTION_SCAN_MIN_SURVIVOR_SCORE", 0.33, raising=False)
+    monkeypatch.setattr(cfg, "OPTION_SCAN_MIN_SURVIVORS_ALLOWED_MODES", "SIM", raising=False)
+
+    trade = builder.build(
+        _market_data_with_option_overrides(
+            ltp=0.0,
+            last_price=0.0,
+            bid=0.0,
+            ask=0.0,
+            best_bid=0.0,
+            best_ask=0.0,
+        ),
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is not None
+    if isinstance(trade, dict):
+        source_flags = dict(trade.get("source_flags") or {})
+        candidate_origin = trade.get("candidate_origin")
+    else:
+        source_flags = dict(getattr(trade, "source_flags", {}) or {})
+        candidate_origin = getattr(trade, "candidate_origin", None)
+    assert source_flags.get("scan_min_survivor") is True
+    assert candidate_origin == "scan_min_survivor"
 
 
 def test_build_non_live_low_trade_score_survives_to_candidate(monkeypatch):

@@ -319,16 +319,32 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     min_execution_quality_score = float(
         getattr(cfg, "PHASE2_MIN_EXECUTION_QUALITY_SCORE", 0.30) or 0.30
     )
+    allow_soft_degrade = bool(getattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True))
     execution_quality_score = _safe_float(candidate.get("execution_quality_score"))
     execution_quality_low = (
         execution_quality_score is not None
         and execution_quality_score < min_execution_quality_score
     )
-    weak_soft_reject_execute_block = _blocks_execute_due_to_soft_reject(candidate)
+    weak_soft_reject_candidate = _blocks_execute_due_to_soft_reject(candidate)
+    soft_reject_execute_block_enable = bool(
+        getattr(cfg, "PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", False)
+    )
+    weak_soft_reject_execute_block = weak_soft_reject_candidate and soft_reject_execute_block_enable
     if weak_soft_reject_execute_block:
         candidate["max_final_action"] = "QUEUE_ONLY"
         candidate["execution_allowed"] = False
         candidate["truth_allows_execution"] = False
+    elif allow_soft_degrade and weak_soft_reject_candidate:
+        soft_penalties.append("weak_signal_penalty")
+        candidate["phase2_soft_degrade_reason"] = "weak_signal_soft_penalty"
+        candidate["execution_context_degraded"] = True
+        weak_signal_penalty = float(
+            getattr(cfg, "PHASE2_WEAK_SIGNAL_SOFT_PENALTY", 0.06) or 0.06
+        )
+        existing_penalty = _safe_float(candidate.get("phase2_execution_penalty")) or 0.0
+        candidate["phase2_execution_penalty"] = max(existing_penalty, weak_signal_penalty)
+        if bool(getattr(cfg, "PHASE2_WEAK_SIGNAL_QUEUE_CAP_ENABLE", False)):
+            candidate["max_final_action"] = "QUEUE_ONLY"
     execution_score = _execution_quality_score(candidate)
     no_signal_candidate = _is_no_signal_candidate(candidate)
     latency_only_block = _is_latency_only_block(candidate)
@@ -359,7 +375,6 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
             "missing_rr_context,rr_estimated_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,low_data_confidence,unknown_quote_source",
         )
         has_critical = bool(reason_codes & critical_codes) or any(code.startswith("HARD_") for code in reason_codes)
-        allow_soft_degrade = bool(getattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True))
         only_soft_context = bool(reason_codes) and not has_critical and not bool(reason_codes - soft_context_codes)
         if not reason_codes and str(candidate.get("quote_source") or "").strip().lower() in {"", "unknown", "none"}:
             reason_codes.add("UNKNOWN_QUOTE_SOURCE")
@@ -377,15 +392,6 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
         )
         if has_critical:
             reasons.append("hard_execution")
-        elif allow_soft_degrade and weak_soft_reject_execute_block:
-            soft_penalties.append("soft_reject_execute_block")
-            candidate["phase2_soft_degrade_reason"] = "soft_reject_weak_signal_blocks_execute"
-            candidate["execution_context_degraded"] = True
-            candidate["phase2_execution_penalty"] = max(
-                execution_degrade_penalty,
-                float(getattr(cfg, "PHASE2_LIQUIDITY_SOFT_PENALTY", 0.08) or 0.08),
-            )
-            candidate["max_final_action"] = "QUEUE_ONLY"
         elif allow_soft_degrade and quality_only_failure:
             soft_penalties.append("soft_execution_degraded")
             candidate["phase2_soft_degrade_reason"] = "execution_quality_low"

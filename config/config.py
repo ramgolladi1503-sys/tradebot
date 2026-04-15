@@ -300,6 +300,10 @@ DECISION_ENGINE_QUEUE_MIN_SCORE = float(
 DECISION_ENGINE_WEAK_SIGNAL_EXECUTE_ENABLE = (
     os.getenv("DECISION_ENGINE_WEAK_SIGNAL_EXECUTE_ENABLE", "false").lower() == "true"
 )
+DECISION_ENGINE_SOFT_REJECT_EXECUTE_BLOCK_ENABLE = (
+    os.getenv("DECISION_ENGINE_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", "false").lower()
+    == "true"
+)
 DECISION_ENGINE_FEED_INVALID_MAX = float(
     os.getenv("DECISION_ENGINE_FEED_INVALID_MAX", "0.50")
 )
@@ -745,6 +749,15 @@ PHASE2_LIQUIDITY_FALLBACK_SCORE = float(
 PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE = (
     os.getenv("PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", "true").lower() == "true"
 )
+PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE = (
+    os.getenv("PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", "false").lower() == "true"
+)
+PHASE2_WEAK_SIGNAL_QUEUE_CAP_ENABLE = (
+    os.getenv("PHASE2_WEAK_SIGNAL_QUEUE_CAP_ENABLE", "false").lower() == "true"
+)
+PHASE2_WEAK_SIGNAL_SOFT_PENALTY = float(
+    os.getenv("PHASE2_WEAK_SIGNAL_SOFT_PENALTY", "0.06")
+)
 PHASE2_SOFT_CONTEXT_REASON_CODES = os.getenv(
     "PHASE2_SOFT_CONTEXT_REASON_CODES",
     "missing_rr_context,rr_estimated_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,low_data_confidence,unknown_quote_source",
@@ -1055,6 +1068,12 @@ NO_SIGNAL_FALLBACK_ENABLE = os.getenv("NO_SIGNAL_FALLBACK_ENABLE", "true").lower
 NO_SIGNAL_FALLBACK_SCORE = float(os.getenv("NO_SIGNAL_FALLBACK_SCORE", "0.45"))
 # Allow softening option type mismatches in non-live runs.
 ALLOW_OPTION_TYPE_MISMATCH_SOFTEN = os.getenv("ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", "true").lower() == "true"
+# Emergency rollback knob: when true, type mismatch is a hard reject instead of soft penalty.
+OPTION_TYPE_MISMATCH_HARD_REJECT = os.getenv("OPTION_TYPE_MISMATCH_HARD_REJECT", "false").lower() == "true"
+TRADE_BUILDER_SIGNAL_SCORE_BELOW_MIN_HARD_REJECT = (
+    os.getenv("TRADE_BUILDER_SIGNAL_SCORE_BELOW_MIN_HARD_REJECT", "false").lower()
+    == "true"
+)
 # Relax volume requirements in non-live runs.
 RELAX_VOLUME_REQUIREMENTS_NONLIVE = os.getenv("RELAX_VOLUME_REQUIREMENTS_NONLIVE", "true").lower() == "true"
 # Planning-only signal controls (PAPER/SIM/OFFHOURS).
@@ -1410,6 +1429,17 @@ TRADE_BUILDER_ALLOW_LIVE_STALE_OPTION_TICK_SOFTEN = os.getenv(
     "TRADE_BUILDER_ALLOW_LIVE_STALE_OPTION_TICK_SOFTEN",
     "true",
 ).lower() == "true"
+TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_ENABLE = os.getenv(
+    "TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_ENABLE",
+    "false",
+).lower() == "true"
+TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_ALLOW_LIVE = os.getenv(
+    "TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_ALLOW_LIVE",
+    "false",
+).lower() == "true"
+TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_MAX_SEC = float(
+    os.getenv("TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_MAX_SEC", "20.0")
+)
 ADVISORY_SCHEMA_STRICT_LEVEL_INVARIANTS = os.getenv(
     "ADVISORY_SCHEMA_STRICT_LEVEL_INVARIANTS",
     "true",
@@ -2056,6 +2086,10 @@ IV_SKEW_CURVE_MAX = 1.2
 IV_TERM_MIN = -0.05
 IV_TERM_MAX = 0.05
 ENABLE_TERM_STRUCTURE = True
+# Execution safety toggles for option-chain overfiltering.
+OPTION_IV_BOUNDS_HARD_REJECT = os.getenv("OPTION_IV_BOUNDS_HARD_REJECT", "false").lower() == "true"
+OPTION_IV_SKEW_CURVATURE_HARD_REJECT = os.getenv("OPTION_IV_SKEW_CURVATURE_HARD_REJECT", "false").lower() == "true"
+OPTION_IV_SKEW_CURVE_HARD_REJECT = os.getenv("OPTION_IV_SKEW_CURVE_HARD_REJECT", "false").lower() == "true"
 
 # Volatility targeting
 VOL_TARGET = 0.002
@@ -3041,8 +3075,9 @@ SPREAD_MIN_IV = float(os.getenv("SPREAD_MIN_IV", "0.15"))
 ENABLE_TARGET_POINTS_SUGGESTIONS = os.getenv("ENABLE_TARGET_POINTS_SUGGESTIONS", "true").lower() == "true"
 QUEUE_REJECTED_CANDIDATES_ENABLE = os.getenv("QUEUE_REJECTED_CANDIDATES_ENABLE", "true").lower() == "true"
 QUEUE_REJECTED_CANDIDATES_FORCE_ADVISORY = os.getenv("QUEUE_REJECTED_CANDIDATES_FORCE_ADVISORY", "true").lower() == "true"
-QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE = os.getenv("QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE", "true").lower() == "true"
-QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE = os.getenv("QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE", "true").lower() == "true"
+QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE = os.getenv("QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE", "false").lower() == "true"
+QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE = os.getenv("QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE", "false").lower() == "true"
+QUEUE_SYNTHETIC_CANDIDATES_ENABLE = os.getenv("QUEUE_SYNTHETIC_CANDIDATES_ENABLE", "false").lower() == "true"
 TRADE_BUILDER_RESULT_TRACE_ENABLE = os.getenv("TRADE_BUILDER_RESULT_TRACE_ENABLE", "true").lower() == "true"
 GATE_REJECT_TRACE_ENABLE = os.getenv("GATE_REJECT_TRACE_ENABLE", "true").lower() == "true"
 TARGET_POINTS_MIN = float(os.getenv("TARGET_POINTS_MIN", "20.0"))
@@ -3055,6 +3090,24 @@ TRADE_BUILDER_SOFT_REJECT_REASONS = os.getenv(
 TRADE_BUILDER_HARD_REJECT_REASONS = os.getenv(
     "TRADE_BUILDER_HARD_REJECT_REASONS",
     "feed_stale,quote_missing,unresolved_contract,invalid_risk_levels,missing_live_quote,no_live_option_feed",
+)
+OPTION_SCAN_SOFT_GATE_REASONS = os.getenv(
+    "OPTION_SCAN_SOFT_GATE_REASONS",
+    "type_mismatch,iv_skew_curvature,iv_skew_curve_call,iv_skew_curve_put,iv_bounds",
+)
+OPTION_SCAN_MIN_SURVIVORS_ENABLE = os.getenv(
+    "OPTION_SCAN_MIN_SURVIVORS_ENABLE",
+    "false",
+).lower() == "true"
+OPTION_SCAN_MIN_SURVIVORS_COUNT = int(
+    os.getenv("OPTION_SCAN_MIN_SURVIVORS_COUNT", "0")
+)
+OPTION_SCAN_MIN_SURVIVORS_ALLOWED_MODES = os.getenv(
+    "OPTION_SCAN_MIN_SURVIVORS_ALLOWED_MODES",
+    "SIM,PAPER,OFFHOURS",
+)
+OPTION_SCAN_MIN_SURVIVOR_SCORE = float(
+    os.getenv("OPTION_SCAN_MIN_SURVIVOR_SCORE", "0.32")
 )
 TRADE_BUILDER_BORDERLINE_CONF_MIN = float(os.getenv("TRADE_BUILDER_BORDERLINE_CONF_MIN", "0.18"))
 TRADE_BUILDER_CONTRACT_STRIKE_FALLBACK_STEPS = int(

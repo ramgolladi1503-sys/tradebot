@@ -244,6 +244,11 @@ def _candidate_origin_value(entry: dict) -> str:
     return str(origin_value or "").strip().lower()
 
 
+def _is_softened_candidate_origin(entry: dict) -> bool:
+    origin = _candidate_origin_value(entry)
+    return origin in {"softened_builder_path", "softened"}
+
+
 def _is_synthetic_advisory_entry(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
@@ -311,6 +316,34 @@ def _entry_reason_codes(entry: dict) -> set[str]:
         if text:
             codes.add(text)
     return codes
+
+
+def _best_reject_reason(entry: dict, *, default: str = "unspecified_trade_builder_reject") -> str:
+    if not isinstance(entry, dict):
+        return str(default or "unspecified_trade_builder_reject")
+    generic = "unspecified_trade_builder_reject"
+    preferred_fields = (
+        "final_blocker",
+        "hard_reason",
+        "permission_reason",
+        "entry_block_code",
+        "quote_validation_status",
+        "reject_reason",
+        "reason",
+    )
+    for field in preferred_fields:
+        value = str(entry.get(field) or "").strip()
+        if value and value.lower() != generic:
+            return value
+    for collection in ("hard_blockers", "blockers", "gate_reasons", "warnings"):
+        for item in list(entry.get(collection) or []):
+            text = str(item or "").strip()
+            if text and text.lower() != generic:
+                return text
+    fallback = str(entry.get("reject_reason") or entry.get("reason") or "").strip()
+    if fallback:
+        return fallback
+    return str(default or generic)
 
 
 def _is_weak_signal_candidate(entry: dict) -> bool:
@@ -392,7 +425,11 @@ def _mark_synthetic_advisory_entry(entry: dict, *, emit_log: bool = False) -> di
 def _is_execution_eligible(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
-    if str(entry.get("strategy_family") or "").strip().lower() == "synthetic_advisory":
+    strategy_family = str(entry.get("strategy_family") or "").strip().lower()
+    execution_source = str(entry.get("execution_entry_source") or "").strip().lower()
+    if strategy_family == "synthetic_advisory":
+        return False
+    if execution_source in {"recovered_fallback", "rest_fallback", "synthetic_offhours"}:
         return False
     execution_status = str(entry.get("execution_status") or "").strip().lower()
     candidate_status = str(entry.get("candidate_status") or "").strip().lower()
@@ -492,16 +529,29 @@ def _clear_fabricated_entry_lifecycle(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    preserved_display_entry = _safe_float(out.get("display_entry"))
+    preserved_display_source = str(out.get("display_entry_source") or "").strip().lower() or "none"
     out["execution_entry"] = None
     out["execution_entry_source"] = "none"
     out["execution_entry_status"] = "non_executable"
-    out["display_entry"] = None
-    out["display_entry_source"] = "none"
-    out["display_entry_status"] = "missing"
-    out["entry"] = None
-    out["entry_source"] = "none"
-    out["entry_status"] = "missing"
-    out["entry_clear_reason"] = str(out.get("entry_clear_reason") or "missing_entry").strip().lower() or "missing_entry"
+    if preserved_display_entry is not None:
+        out["display_entry"] = preserved_display_entry
+        out["display_entry_source"] = preserved_display_source
+        out["display_entry_status"] = "displayable"
+        out["entry"] = preserved_display_entry
+        out["entry_source"] = preserved_display_source
+        out["entry_status"] = "displayable"
+        out["entry_clear_reason"] = None
+    else:
+        out["display_entry"] = None
+        out["display_entry_source"] = "none"
+        out["display_entry_status"] = "missing"
+        out["entry"] = None
+        out["entry_source"] = "none"
+        out["entry_status"] = "missing"
+        out["entry_clear_reason"] = (
+            str(out.get("entry_clear_reason") or "missing_entry").strip().lower() or "missing_entry"
+        )
     out.pop("entry_recovered", None)
     out.pop("entry_recovered_from", None)
     return out
@@ -643,7 +693,12 @@ def _recover_missing_execution_entry(entry: dict, lifecycle: dict) -> tuple[dict
     out["entry_status"] = "displayable"
     out["entry_recovered"] = True
     out["entry_recovered_from"] = recovered_from
-    out["tradable"] = True
+    out["tradable"] = False
+    out["eligible_for_execution"] = False
+    out["execution_allowed"] = False
+    out["execution_status"] = "advisory_only"
+    out["candidate_status"] = "advisory_only"
+    out["is_executable"] = False
     out["entry_clear_reason"] = None
     if str(out.get("entry_block_code") or "").strip().upper() == "MISSING_ENTRY":
         out["entry_block_code"] = None
@@ -693,8 +748,12 @@ def _last_chance_execution_entry_recovery(entry: dict) -> dict:
     out["execution_entry_status"] = "non_executable"
     out["execution_entry_source"] = "recovered_fallback"
     out["entry_recovered"] = True
-    out["tradable"] = True
+    out["tradable"] = False
+    out["eligible_for_execution"] = False
     out["execution_allowed"] = False
+    out["execution_status"] = "advisory_only"
+    out["candidate_status"] = "advisory_only"
+    out["is_executable"] = False
     out["entry_recovered_from"] = recovered_from
     if _safe_float(out.get("display_entry")) is None:
         out["display_entry"] = recovered
@@ -1013,16 +1072,10 @@ def _preserve_blocked_candidate_metadata(
             allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
             market_open_for_entry=market_open_for_entry,
         )
-    block_reason = str(
-        reason
-        or out.get("final_blocker")
-        or out.get("permission_reason")
-        or out.get("entry_block_code")
-        or out.get("quote_validation_status")
-        or out.get("entry_status")
-        or out.get("hard_reason")
-        or "execution_blocked"
-    ).strip() or "execution_blocked"
+    reason_probe = dict(out)
+    if reason:
+        reason_probe["reason"] = reason
+    block_reason = _best_reject_reason(reason_probe, default="execution_blocked")
     out["execution_blocked"] = True
     out["execution_block_reason"] = block_reason
     return out
@@ -1034,6 +1087,23 @@ def _classify_candidate_status(entry: dict) -> dict:
     out = dict(entry)
     if _is_blocked_contract_row(out):
         out["candidate_status"] = "blocked_contract"
+        out["eligible_for_execution"] = False
+        out["execution_allowed"] = False
+        out["is_executable"] = False
+        return out
+    execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    if _is_softened_candidate_origin(out) and execution_entry_status != "executable":
+        out["candidate_status"] = "advisory_only"
+        out["eligible_for_execution"] = False
+        out["execution_allowed"] = False
+        out["is_executable"] = False
+        return out
+    execution_source = str(out.get("execution_entry_source") or "").strip().lower()
+    if execution_source in {"recovered_fallback", "rest_fallback", "synthetic_offhours"}:
+        out["candidate_status"] = "advisory_only"
+        out["eligible_for_execution"] = False
+        out["execution_allowed"] = False
+        out["is_executable"] = False
         return out
     existing = str(out.get("candidate_status") or "").strip().lower()
     if existing not in _CANDIDATE_STATUS_VALUES:
@@ -1055,6 +1125,9 @@ def _classify_candidate_status(entry: dict) -> dict:
         return out
     if execution_status == "blocked" or permission == "BLOCK" or final_action == "BLOCK" or readiness == "BLOCKED":
         out["candidate_status"] = "blocked"
+        out["eligible_for_execution"] = False
+        out["execution_allowed"] = False
+        out["is_executable"] = False
         return out
     if (
         execution_status == "queue_only"
@@ -1077,6 +1150,9 @@ def _classify_candidate_status(entry: dict) -> dict:
             or bool(out.get("unresolved_contract"))
         ):
             out["candidate_status"] = "advisory_only"
+            out["eligible_for_execution"] = False
+            out["execution_allowed"] = False
+            out["is_executable"] = False
             return out
     if existing in _CANDIDATE_STATUS_VALUES:
         return out
@@ -3345,7 +3421,10 @@ def _promote_queue_only_candidate(row: dict) -> dict:
     if raw_rank is None or float(raw_rank) < min_raw_rank:
         out["promotion_block_reason"] = "raw_rank_below_execute_floor"
         return out
-    if _is_weak_signal_candidate(out):
+    soft_reject_execute_block_enable = bool(
+        getattr(cfg, "DECISION_ENGINE_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", False)
+    )
+    if soft_reject_execute_block_enable and _is_weak_signal_candidate(out):
         out["promotion_block_reason"] = "soft_reject_weak_signal_blocks_execute"
         return out
 
@@ -4264,7 +4343,10 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
     if _is_synthetic_advisory_entry(out):
         out["promotion_block_reason"] = "synthetic_advisory"
         return out
-    if _blocks_execute_due_to_soft_reject(out):
+    soft_reject_execute_block_enable = bool(
+        getattr(cfg, "DECISION_ENGINE_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", False)
+    )
+    if soft_reject_execute_block_enable and _blocks_execute_due_to_soft_reject(out):
         out["promotion_block_reason"] = "soft_reject_weak_signal_blocks_execute"
         return out
     try:
@@ -5206,16 +5288,9 @@ def _update_suggestions_status_latest(
                     suggestion_count = sum(1 for line in fh if str(line).strip())
         except Exception:
             pass
-        hard_blockers = [str(code or "").strip() for code in list(status_entry.get("hard_blockers") or []) if str(code or "").strip()]
-        primary_blocker = (
-            (hard_blockers[0] if hard_blockers else "")
-            or str(status_entry.get("final_blocker") or "").strip()
-            or str(status_entry.get("entry_block_code") or "").strip()
-            or str(status_entry.get("hard_reason") or "").strip()
-            or str(status_entry.get("entry_status") or "").strip()
-            or str(status_entry.get("permission_reason") or "").strip()
-            or None
-        )
+        primary_blocker = _best_reject_reason(status_entry, default="")
+        if not str(primary_blocker or "").strip():
+            primary_blocker = None
         status = "blocked" if _is_entry_status_blocking(status_entry.get("entry_status")) or str(status_entry.get("permission") or "").upper() == "BLOCK" else "ok"
         emission_ok = not isinstance(emission_result, dict) or bool(emission_result.get("ok"))
         emission_target = (

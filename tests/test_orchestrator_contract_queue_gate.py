@@ -184,13 +184,14 @@ def test_queue_rejected_candidate_for_analytics_skips_excluded_trade_ids(monkeyp
 
 
 def test_queue_prebuilder_gate_candidate_for_analytics_builds_fallback_candidate(monkeypatch):
-    queued = []
-
-    def _queue(trade, **kwargs):
-        queued.append((trade, kwargs))
-        return True, trade
-
-    monkeypatch.setattr(orchestrator_mod, "_queue_review_candidate", _queue)
+    captured = []
+    monkeypatch.setattr(orchestrator_mod, "_append_review_jsonl", lambda paths, payload: captured.append((paths, payload)))
+    monkeypatch.setattr(orchestrator_mod, "rejected_candidates_paths", lambda: ["rejected.jsonl"])
+    monkeypatch.setattr(
+        orchestrator_mod,
+        "project_advisory_row",
+        lambda trade, extra=None: {**dict(trade), **(extra or {})},
+    )
     monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_PREBUILDER_GATE_CANDIDATES_ENABLE", True, raising=False)
 
     ok, prepared = orchestrator_mod._queue_prebuilder_gate_candidate_for_analytics(
@@ -209,22 +210,22 @@ def test_queue_prebuilder_gate_candidate_for_analytics_builds_fallback_candidate
     assert prepared["strategy_family"] == "fallback"
     assert prepared["candidate_type"] == "fallback"
     assert prepared["confidence"] == 0.1
-    assert len(queued) == 1
-    assert queued[0][1]["allow_unresolved_for_analytics"] is True
-    assert queued[0][1]["reject_source"] == "unit_test_prebuilder_gate"
-    assert queued[0][1]["extra"]["execution_blocked"] is True
-    assert queued[0][1]["extra"]["execution_block_reason"] == "pre_builder_gate"
-    assert queued[0][1]["extra"]["final_action"] == "ADVISORY_ONLY"
+    assert len(captured) == 1
+    assert captured[0][1]["execution_blocked"] is True
+    assert captured[0][1]["execution_block_reason"] == "pre_builder_gate"
+    assert captured[0][1]["final_action"] == "ADVISORY_ONLY"
+    assert captured[0][1]["analytics_only"] is True
 
 
 def test_queue_invalid_snapshot_candidate_for_analytics_builds_fallback_candidate(monkeypatch):
-    queued = []
-
-    def _queue(trade, **kwargs):
-        queued.append((trade, kwargs))
-        return True, trade
-
-    monkeypatch.setattr(orchestrator_mod, "_queue_review_candidate", _queue)
+    captured = []
+    monkeypatch.setattr(orchestrator_mod, "_append_review_jsonl", lambda paths, payload: captured.append((paths, payload)))
+    monkeypatch.setattr(orchestrator_mod, "rejected_candidates_paths", lambda: ["rejected.jsonl"])
+    monkeypatch.setattr(
+        orchestrator_mod,
+        "project_advisory_row",
+        lambda trade, extra=None: {**dict(trade), **(extra or {})},
+    )
     monkeypatch.setattr(orchestrator_mod.cfg, "QUEUE_INVALID_SNAPSHOT_CANDIDATES_ENABLE", True, raising=False)
 
     ok, prepared = orchestrator_mod._queue_invalid_snapshot_candidate_for_analytics(
@@ -245,9 +246,8 @@ def test_queue_invalid_snapshot_candidate_for_analytics_builds_fallback_candidat
     assert prepared["candidate_type"] == "fallback"
     assert prepared["setup_variant"] == "invalid_snapshot"
     assert prepared["trade_id"].startswith("INVALID_SNAPSHOT-BANKNIFTY-")
-    assert len(queued) == 1
-    assert queued[0][1]["allow_unresolved_for_analytics"] is True
-    assert queued[0][1]["reject_source"] == "unit_test_invalid_snapshot"
-    assert queued[0][1]["extra"]["decision_stage"] == "invalid_snapshot"
-    assert queued[0][1]["extra"]["execution_blocked"] is True
-    assert queued[0][1]["extra"]["execution_block_reason"] == "historical_empty"
+    assert len(captured) == 1
+    assert captured[0][1]["decision_stage"] == "invalid_snapshot"
+    assert captured[0][1]["execution_blocked"] is True
+    assert captured[0][1]["execution_block_reason"] == "historical_empty"
+    assert captured[0][1]["analytics_only"] is True
