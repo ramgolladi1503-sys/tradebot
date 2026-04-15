@@ -449,6 +449,8 @@ def build_entry_state(
         "execution_entry": execution_entry,
         "execution_entry_source": execution_entry_source,
         "execution_entry_status": execution_entry_status,
+        # Explicit execution-truth field so downstream gating does not rely on display lifecycle.
+        "entry_execution_status": execution_entry_status,
         "display_entry": display_entry,
         "display_entry_source": display_entry_source,
         "display_entry_status": display_entry_status,

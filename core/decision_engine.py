@@ -490,6 +490,9 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
     score_payload = build_decision_score(candidate)
     execution_ready, readiness_reasons = _is_execution_ready(candidate, score_payload)
 
+    soft_reject_execute_block_enable = bool(
+        getattr(cfg, "DECISION_ENGINE_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", False)
+    )
     weak_signal_execute_enable = bool(
         getattr(cfg, "DECISION_ENGINE_WEAK_SIGNAL_EXECUTE_ENABLE", False)
     )
@@ -523,7 +526,7 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
         "advisory",
     }:
         decision_reason = "non_real_candidate_class"
-    elif _blocks_execute_due_to_soft_reject(candidate):
+    elif soft_reject_execute_block_enable and _blocks_execute_due_to_soft_reject(candidate):
         if execution_ready and max(final_score, raw_score) >= queue_min_score:
             decision_action = "QUEUE"
         decision_reason = "soft_reject_weak_signal_blocks_execute"

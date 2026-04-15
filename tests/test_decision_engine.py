@@ -57,7 +57,7 @@ def test_weak_signal_candidate_queues_not_executes():
         )
     )
     assert result["decision_action"] == "QUEUE"
-    assert result["decision_reason"] == "soft_reject_weak_signal_blocks_execute"
+    assert result["decision_reason"] == "weak_signal_queue_only"
     assert result["permission"] == "QUEUE_ONLY"
     assert result["final_action"] == "QUEUE_ONLY"
 
@@ -75,7 +75,7 @@ def test_no_signal_softened_candidate_never_executes():
     )
     assert result["decision_action"] in {"QUEUE", "REJECT"}
     assert result["decision_action"] != "EXECUTE"
-    assert result["decision_reason"] == "soft_reject_weak_signal_blocks_execute"
+    assert result["decision_reason"] == "weak_signal_queue_only"
 
 
 def test_synthetic_candidate_rejects():

@@ -43,7 +43,7 @@ def test_weak_signal_candidate_never_promotes_to_execute(monkeypatch):
 
     assert out["permission"] == "QUEUE_ONLY"
     assert out["final_action"] == "QUEUE_ONLY"
-    assert out.get("promotion_block_reason") == "soft_reject_weak_signal_blocks_execute"
+    assert out.get("promotion_block_reason") == "weak_signal_queue_only"
 
 
 def test_low_raw_rank_candidate_never_promotes_even_if_final_confidence_high(monkeypatch):
@@ -140,12 +140,18 @@ def test_queue_only_backdoor_promotion_blocked_for_weak_signal(monkeypatch):
             },
             "raw_rank_score": 0.50,
             "rank_score": 0.72,
+            "gating_final_confidence": 0.82,
+            "quote_source": "tick_store",
+            "quote_validation_status": "OK",
+            "quote_age_sec": 0.5,
+            "selected_for_execution": True,
+            "rank_global": 1,
         }
     )
     assert out["permission"] == "QUEUE_ONLY"
     assert out["final_action"] == "QUEUE_ONLY"
     assert out["execution_status"] == "queue_only"
-    assert out["promotion_block_reason"] == "soft_reject_weak_signal_blocks_execute"
+    assert out["promotion_block_reason"] == "weak_signal_queue_only"
 
 
 def test_queue_only_normalization_path_delegates_to_decision_engine(monkeypatch):

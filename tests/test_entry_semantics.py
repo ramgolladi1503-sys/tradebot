@@ -25,6 +25,7 @@ def test_build_entry_state_buy_uses_fresh_ask_for_execution_and_display():
     assert float(out["execution_entry"]) == 72.8
     assert out["execution_entry_source"] == "ask"
     assert out["execution_entry_status"] == "executable"
+    assert out["entry_execution_status"] == "executable"
     assert float(out["display_entry"]) == 72.8
     assert out["display_entry_source"] == "ask"
     assert out["display_entry_status"] == "displayable"
@@ -82,6 +83,7 @@ def test_build_entry_state_uses_mark_for_display_when_executable_quote_missing()
 
     assert out["execution_entry"] is None
     assert out["execution_entry_status"] == "non_executable"
+    assert out["entry_execution_status"] == "non_executable"
     assert float(out["display_entry"]) == 73.1
     assert out["display_entry_source"] == "mark"
     assert out["display_entry_status"] == "displayable"

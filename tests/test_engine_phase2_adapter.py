@@ -631,6 +631,7 @@ def test_run_engine_phase2_strict_mode_disables_forced_fallback(monkeypatch):
 
 def test_soft_reject_weak_signal_candidates_are_queue_capped(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.4, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", True, raising=False)
     raw = [
         {
             "trade_id": "TB_SOFT_WEAK",
@@ -665,6 +666,45 @@ def test_soft_reject_weak_signal_candidates_are_queue_capped(monkeypatch):
     out = run_engine_phase2(raw)
     assert out["state"] == "WATCHLIST"
     assert out["reason"] == "queue_only_cap"
+
+
+def test_soft_reject_weak_signal_defaults_to_soft_penalty_not_hard_cap(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.4, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_WEAK_SIGNAL_QUEUE_CAP_ENABLE", False, raising=False)
+    raw = [
+        {
+            "trade_id": "TB_SOFT_WEAK_RELAXED",
+            "symbol": "NIFTY",
+            "candidate_status": "near_executable",
+            "execution_status": "queue_only",
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "execution_allowed": True,
+            "tradable": True,
+            "execution_ok": True,
+            "execution_score": 0.9,
+            "execution_quality_score": 0.9,
+            "liquidity_score": 0.8,
+            "spread_pct": 0.003,
+            "quote_source": "tick_store",
+            "raw_rank_score": 0.9,
+            "rank_score": 0.9,
+            "final_score": 0.9,
+            "source_flags": {
+                "soft_reject_reason": "weak_signal",
+                "candidate_origin": "softened_builder_path",
+            },
+        }
+    ]
+    ranked = build_candidates_phase2(raw)
+    assert len(ranked) == 1
+    assert ranked[0].get("phase2_soft_degrade_reason") == "weak_signal_soft_penalty"
+    assert ranked[0].get("max_final_action") != "QUEUE_ONLY"
+    assert ranked[0].get("execution_allowed") is True
+
+    out = run_engine_phase2(raw)
+    assert out["state"] == "ENTER"
 
 
 def test_build_candidates_phase2_relaxes_no_signal_and_latency(monkeypatch):
