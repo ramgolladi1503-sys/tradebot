@@ -1,6 +1,7 @@
 from core.orchestrator import (
     _augment_ranked_candidates_with_soft_reject,
     _candidate_visibility_bucket,
+    _is_reportable_executable_candidate,
     _is_synthetic_candidate,
 )
 
@@ -53,8 +54,8 @@ def test_soft_reject_created_for_no_candidates_survived_in_sim():
     assert soft[0]["candidate_status"] == "near_executable"
     assert soft[0]["eligible_for_execution"] is True
     assert soft[0]["execution_blocked"] is False
-    assert _is_synthetic_candidate(soft[0]) is False
-    assert _candidate_visibility_bucket(soft[0]) == "executable"
+    assert _is_synthetic_candidate(soft[0]) is True
+    assert _candidate_visibility_bucket(soft[0]) == "advisory"
     assert ranked and ranked[0]["trade_id"] == soft[0]["trade_id"]
 
 
@@ -76,7 +77,7 @@ def test_soft_reject_skipped_for_no_candidates_survived_in_live():
     assert ranked and ranked[0]["trade_id"] == "cand_1"
 
 
-def test_builder_path_advisory_candidate_is_not_synthetic():
+def test_builder_path_advisory_candidate_is_synthetic():
     candidate = {
         "trade_id": "tbsoft_NIFTY_12345",
         "candidate_origin": "softened_builder_path",
@@ -88,7 +89,7 @@ def test_builder_path_advisory_candidate_is_not_synthetic():
         "execution_allowed": False,
     }
 
-    assert _is_synthetic_candidate(candidate) is False
+    assert _is_synthetic_candidate(candidate) is True
     assert _candidate_visibility_bucket(candidate) == "advisory"
 
 
@@ -129,3 +130,40 @@ def test_soft_reject_with_hard_reason_stays_advisory_only():
     assert soft[0]["eligible_for_execution"] is False
     assert soft[0]["execution_blocked"] is True
     assert ranked and ranked[0]["trade_id"] == soft[0]["trade_id"]
+
+
+def test_reportable_executable_candidate_requires_strict_execution_truth():
+    synthetic_candidate = {
+        "trade_id": "tbsoft_SENSEX_12",
+        "candidate_origin": "softened_builder_path",
+        "strategy_family": "builder_soft_reject",
+        "candidate_status": "near_executable",
+        "execution_status": "executable",
+        "execution_entry_status": "executable",
+        "execution_entry": 100.0,
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "readiness": "READY",
+        "execution_allowed": True,
+        "eligible_for_execution": True,
+    }
+    assert _is_reportable_executable_candidate(synthetic_candidate) is False
+
+    real_candidate = {
+        "trade_id": "nifty_live_1",
+        "candidate_origin": "strategy",
+        "strategy_family": "breakout",
+        "candidate_status": "executable",
+        "execution_status": "executable",
+        "execution_entry_status": "executable",
+        "execution_entry": 225.4,
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "readiness": "READY",
+        "execution_allowed": True,
+        "eligible_for_execution": True,
+        "execution_blocked": False,
+        "hard_blockers": [],
+        "blockers": [],
+    }
+    assert _is_reportable_executable_candidate(real_candidate) is True
