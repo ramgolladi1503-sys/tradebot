@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from config import config as cfg
 from strategies.trade_builder import TradeBuilder
 
 
@@ -58,6 +59,43 @@ def test_normalize_option_row_infers_missing_type():
     assert opt is not None
     assert opt["type"] == "CE"
     assert opt.get("type_inferred") is True
+
+
+def test_normalize_option_row_softens_type_mismatch_by_default(monkeypatch):
+    tb = TradeBuilder()
+    monkeypatch.setattr(cfg, "ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", True, raising=False)
+    monkeypatch.setattr(cfg, "OPTION_TYPE_MISMATCH_HARD_REJECT", False, raising=False)
+    row = {
+        "type": "PE",
+        "strike": 25000,
+        "ltp": 100.0,
+        "best_bid": 99.5,
+        "best_ask": 100.5,
+        "quote_ts_epoch": 1771400000.0,
+    }
+    opt, err = tb._normalize_option_row(row, expected_type="CE")
+    assert err is None
+    assert opt is not None
+    assert opt["type"] == "CE"
+    assert bool(opt.get("type_mismatch_soft")) is True
+    assert opt.get("type_inferred_source") == "type_mismatch_soft"
+
+
+def test_normalize_option_row_can_hard_reject_type_mismatch(monkeypatch):
+    tb = TradeBuilder()
+    monkeypatch.setattr(cfg, "ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", False, raising=False)
+    monkeypatch.setattr(cfg, "OPTION_TYPE_MISMATCH_HARD_REJECT", True, raising=False)
+    row = {
+        "type": "PE",
+        "strike": 25000,
+        "ltp": 100.0,
+        "best_bid": 99.5,
+        "best_ask": 100.5,
+        "quote_ts_epoch": 1771400000.0,
+    }
+    opt, err = tb._normalize_option_row(row, expected_type="CE")
+    assert opt is None
+    assert err == "type_mismatch"
 
 
 def test_resolve_option_contract_uses_nearest_strike_fallback():

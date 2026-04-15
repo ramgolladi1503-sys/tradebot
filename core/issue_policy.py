@@ -107,6 +107,42 @@ ISSUE_POLICY_REGISTRY: dict[str, IssuePolicy] = {
         0.04,
         "Timing context is incomplete.",
     ),
+    "type_mismatch": IssuePolicy(
+        "type_mismatch",
+        ISSUE_CATEGORY_SOFT,
+        0.03,
+        "Option contract type mismatch was softened for ranking.",
+    ),
+    "iv_bounds": IssuePolicy(
+        "iv_bounds",
+        ISSUE_CATEGORY_SOFT,
+        0.04,
+        "Option IV is outside preferred bounds.",
+    ),
+    "iv_skew_curvature": IssuePolicy(
+        "iv_skew_curvature",
+        ISSUE_CATEGORY_SOFT,
+        0.04,
+        "Option IV skew curvature is outside preferred bounds.",
+    ),
+    "signal_score_below_min": IssuePolicy(
+        "signal_score_below_min",
+        ISSUE_CATEGORY_SOFT,
+        0.05,
+        "Signal score is below strict minimum; keep as queue/advisory weakness.",
+    ),
+    "weak_signal": IssuePolicy(
+        "weak_signal",
+        ISSUE_CATEGORY_SOFT,
+        0.05,
+        "Signal quality is weak and should be penalized, not hard-blocked.",
+    ),
+    "no_signal": IssuePolicy(
+        "no_signal",
+        ISSUE_CATEGORY_SOFT,
+        0.06,
+        "No strong signal detected in this cycle; candidate remains low-confidence.",
+    ),
     "missing_live_timing_context": IssuePolicy(
         "missing_live_timing_context",
         ISSUE_CATEGORY_WARNING,
@@ -186,7 +222,12 @@ def _base_issue_policy(issue_code: str) -> IssuePolicy:
     code = str(issue_code or "").strip()
     if not code:
         return IssuePolicy("", ISSUE_CATEGORY_WARNING, 0.0, "Unknown issue")
-    return ISSUE_POLICY_REGISTRY.get(code, IssuePolicy(code, ISSUE_CATEGORY_HARD, 0.0, "Unregistered issue"))
+    if code in ISSUE_POLICY_REGISTRY:
+        return ISSUE_POLICY_REGISTRY[code]
+    lowered = code.lower()
+    if lowered in ISSUE_POLICY_REGISTRY:
+        return ISSUE_POLICY_REGISTRY[lowered]
+    return IssuePolicy(code, ISSUE_CATEGORY_HARD, 0.0, "Unregistered issue")
 
 
 def _log_classification(decision: IssueClassification, ctx: dict[str, Any]) -> None:
@@ -303,6 +344,41 @@ def classify_issue(issue_code: str, ctx: dict[str, Any] | None = None) -> IssueC
         category = ISSUE_CATEGORY_HARD
         penalty = 0.0
         reason = "execution_identity_or_entry_missing"
+    elif code == "type_mismatch":
+        if bool(getattr(cfg, "OPTION_TYPE_MISMATCH_HARD_REJECT", False)):
+            category = ISSUE_CATEGORY_HARD
+            penalty = 0.0
+            reason = "type_mismatch_hard_reject_enabled"
+        else:
+            category = ISSUE_CATEGORY_SOFT
+            penalty = _cfg_float("ISSUE_POLICY_TYPE_MISMATCH_SOFT_PENALTY", policy.default_penalty)
+            reason = "type_mismatch_softened"
+    elif code == "iv_bounds":
+        if bool(getattr(cfg, "OPTION_IV_BOUNDS_HARD_REJECT", False)):
+            category = ISSUE_CATEGORY_HARD
+            penalty = 0.0
+            reason = "iv_bounds_hard_reject_enabled"
+        else:
+            category = ISSUE_CATEGORY_SOFT
+            penalty = _cfg_float("ISSUE_POLICY_IV_BOUNDS_SOFT_PENALTY", policy.default_penalty)
+            reason = "iv_bounds_softened"
+    elif code == "iv_skew_curvature":
+        if bool(getattr(cfg, "OPTION_IV_SKEW_CURVATURE_HARD_REJECT", False)):
+            category = ISSUE_CATEGORY_HARD
+            penalty = 0.0
+            reason = "iv_skew_curvature_hard_reject_enabled"
+        else:
+            category = ISSUE_CATEGORY_SOFT
+            penalty = _cfg_float("ISSUE_POLICY_IV_SKEW_CURVATURE_SOFT_PENALTY", policy.default_penalty)
+            reason = "iv_skew_curvature_softened"
+    elif code == "signal_score_below_min":
+        category = ISSUE_CATEGORY_SOFT
+        penalty = _cfg_float("ISSUE_POLICY_SIGNAL_SCORE_BELOW_MIN_SOFT_PENALTY", policy.default_penalty)
+        reason = "signal_score_softened"
+    elif code in {"weak_signal", "no_signal"}:
+        category = ISSUE_CATEGORY_SOFT
+        penalty = _cfg_float("ISSUE_POLICY_WEAK_SIGNAL_SOFT_PENALTY", policy.default_penalty)
+        reason = "weak_signal_softened"
 
     decision = IssueClassification(
         code=code,
