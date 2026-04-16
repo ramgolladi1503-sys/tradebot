@@ -1,3 +1,5 @@
+import logging
+
 from config import config as cfg
 import core.governance_gate as gate
 
@@ -127,3 +129,34 @@ def test_index_instrument_does_not_require_depth(monkeypatch):
     )
     assert snap.allowed is True
     assert "FEED_STALE" not in snap.reasons
+
+
+def test_trading_allowed_snapshot_logs_feed_stale_evidence(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "GOV_GATE_REQUIRE_AUTH", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True, raising=False)
+    now_epoch = 5_000.0
+    monkeypatch.setattr(gate, "now_utc_epoch", lambda: now_epoch)
+    monkeypatch.setattr(gate.risk_halt, "is_halted", lambda: False)
+    monkeypatch.setattr(gate, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(
+        gate,
+        "_load_recent_auth_health",
+        lambda now_epoch: {"ok": True, "age_sec": 1.0, "reason": "", "auth_state": "OK"},
+    )
+    caplog.set_level(logging.WARNING, logger="core.governance_gate")
+    snap = gate.trading_allowed_snapshot(
+        {
+            **_base_market_data(),
+            "ltp_ts_epoch": now_epoch - 9.0,
+            "depth_age_sec": 0.3,
+            "timestamp_epoch": now_epoch,
+            "latest_option_tick_ts": now_epoch - 0.4,
+            "latest_option_tick_age_sec": 0.4,
+            "ws_connected": True,
+            "subscribed_option_tokens_count": 68,
+        }
+    )
+    assert snap.allowed is False
+    assert "FEED_STALE" in snap.reasons
+    assert "FEED_STALE_EVIDENCE symbol=NIFTY" in caplog.text

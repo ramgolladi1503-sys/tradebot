@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -12,6 +13,8 @@ from typing import Any, Callable, Mapping, Sequence
 from config import config as cfg
 from core.market_context import coerce_segment_for_market_context, derive_market_context
 from core.time_utils import compute_age_sec, now_utc_epoch
+
+logger = logging.getLogger(__name__)
 
 ReasonCode = str
 
@@ -554,6 +557,30 @@ def _node_feed_fresh(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Map
         return NodeResult(ok=True, facts=feed)
     if bool(feed.get("is_fresh")):
         return NodeResult(ok=True, facts=feed)
+    if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+        feed_ltp = feed.get("ltp") if isinstance(feed.get("ltp"), Mapping) else {}
+        feed_depth = feed.get("depth") if isinstance(feed.get("depth"), Mapping) else {}
+        raw = snapshot.raw_data if isinstance(snapshot.raw_data, Mapping) else {}
+        logger.warning(
+            "FEED_STALE_EVIDENCE symbol=%s source=decision_dag mode=%s market_open=%s allow_stale_quotes=%s feed_is_fresh=%s ltp_age_sec=%s ltp_max_age_sec=%s depth_age_sec=%s depth_max_age_sec=%s ltp_ts_epoch=%s depth_ts_epoch=%s timestamp_epoch=%s latest_option_tick_ts=%s latest_option_tick_age_sec=%s ws_connected=%s subscribed_option_tokens_count=%s reasons=%s",
+            str(snapshot.symbol or ""),
+            str(snapshot.mode or ""),
+            bool(snapshot.market_open),
+            bool(snapshot.allow_stale_quotes),
+            bool(feed.get("is_fresh", False)),
+            feed_ltp.get("age_sec", feed.get("ltp_age_sec")),
+            feed_ltp.get("max_age_sec", feed.get("ltp_max_age_sec")),
+            feed_depth.get("age_sec", feed.get("depth_age_sec")),
+            feed_depth.get("max_age_sec", feed.get("depth_max_age_sec")),
+            snapshot.ltp_ts_epoch,
+            snapshot.depth_ts_epoch,
+            raw.get("timestamp_epoch"),
+            raw.get("latest_option_tick_ts"),
+            raw.get("latest_option_tick_age_sec"),
+            raw.get("ws_connected", feed.get("ws_connected")),
+            raw.get("subscribed_option_tokens_count", feed.get("subscribed_option_tokens_count")),
+            list(feed.get("reasons") or []),
+        )
     return NodeResult(ok=False, reasons=(REASON_FEED_STALE,), facts=feed)
 
 

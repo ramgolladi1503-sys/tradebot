@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -21,6 +22,8 @@ from core.time_utils import (
     normalize_epoch_seconds,
     now_utc_epoch,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -363,6 +366,37 @@ def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> Tr
 
     if market_open and (not allow_stale_quotes) and not bool(freshness.get("ok")):
         reasons.append("FEED_STALE")
+        if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+            feed_health = (market_data or {}).get("feed_health") if isinstance(market_data, dict) else {}
+            if not isinstance(feed_health, dict):
+                feed_health = {}
+            ltp_payload = freshness.get("ltp") if isinstance(freshness.get("ltp"), dict) else {}
+            depth_payload = freshness.get("depth") if isinstance(freshness.get("depth"), dict) else {}
+            ltp_max_age = ltp_payload.get("max_age_sec")
+            if ltp_max_age is None:
+                ltp_max_age = feed_health.get("ltp_max_age_sec")
+            depth_max_age = depth_payload.get("max_age_sec")
+            if depth_max_age is None:
+                depth_max_age = feed_health.get("depth_max_age_sec")
+            logger.warning(
+                "FEED_STALE_EVIDENCE symbol=%s freshness_source=%s freshness_state=%s freshness_ok=%s market_open=%s allow_stale_quotes=%s ltp_age_sec=%s ltp_max_age_sec=%s depth_age_sec=%s depth_max_age_sec=%s timestamp_epoch=%s latest_option_tick_ts=%s latest_option_tick_age_sec=%s ws_connected=%s subscribed_option_tokens_count=%s reasons=%s",
+                str((market_data or {}).get("symbol") if isinstance(market_data, dict) else "") or "",
+                str(freshness.get("source") or ""),
+                str(freshness_state or ""),
+                bool(freshness.get("ok")),
+                bool(market_open),
+                bool(allow_stale_quotes),
+                ltp_payload.get("age_sec"),
+                ltp_max_age,
+                depth_payload.get("age_sec"),
+                depth_max_age,
+                (market_data or {}).get("timestamp_epoch") if isinstance(market_data, dict) else None,
+                (market_data or {}).get("latest_option_tick_ts") if isinstance(market_data, dict) else None,
+                (market_data or {}).get("latest_option_tick_age_sec") if isinstance(market_data, dict) else None,
+                (market_data or {}).get("ws_connected", feed_health.get("ws_connected")) if isinstance(market_data, dict) else feed_health.get("ws_connected"),
+                (market_data or {}).get("subscribed_option_tokens_count", feed_health.get("subscribed_option_tokens_count")) if isinstance(market_data, dict) else feed_health.get("subscribed_option_tokens_count"),
+                list(freshness.get("reasons") or []),
+            )
 
     auth_check = _load_recent_auth_health(now_epoch)
     auth_required = bool(getattr(cfg, "GOV_GATE_REQUIRE_AUTH", True))

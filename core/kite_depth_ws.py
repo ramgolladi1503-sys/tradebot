@@ -2000,6 +2000,19 @@ def on_ticks(ws, ticks):
     _ = ws
     if not ticks:
         return
+    try:
+        if not _should_throttle_ws_event("depth_ws_ticks", now_epoch=float(time.time()), cooldown_sec=5.0):
+            logger.info(
+                "depth_ws_ticks count=%d sample_tokens=%s",
+                len(ticks or []),
+                [
+                    t.get("instrument_token")
+                    for t in list(ticks or [])[:5]
+                    if isinstance(t, dict)
+                ],
+            )
+    except Exception:
+        pass
     now_epoch = float(now_utc_epoch())
     max_tick_epoch = None
     try:
@@ -2589,6 +2602,16 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         final_set.difference_update(to_unsubscribe)
         _LAST_TOKENS = sorted(final_set)
         tokens[:] = list(_LAST_TOKENS)
+        logger.info(
+            "depth_ws_subscribe_apply subscribe_count=%d unsubscribe_count=%d final_count=%d",
+            len(to_subscribe),
+            len(to_unsubscribe),
+            len(_LAST_TOKENS or []),
+        )
+        logger.info(
+            "depth_ws_subscribe_tokens sample=%s",
+            list((_LAST_TOKENS or [])[:10]),
+        )
         if _LAST_TOKENS:
             try:
                 ws.set_mode(ws.MODE_FULL, _LAST_TOKENS)
@@ -2623,6 +2646,16 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             ws.set_mode(ws.MODE_FULL, desired)
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
+        logger.info(
+            "depth_ws_subscribe_apply subscribe_count=%d unsubscribe_count=%d final_count=%d",
+            len(desired),
+            0,
+            len(desired),
+        )
+        logger.info(
+            "depth_ws_subscribe_tokens sample=%s",
+            list((desired or [])[:10]),
+        )
         _RUNTIME_STATE = "RUNNING"
         _LAST_RUNTIME_ERROR = ""
         option_state = _option_runtime_state(
@@ -2662,6 +2695,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
             _log_ws("FEED_CONNECT", {"tokens": len(tokens), "response": str(response)})
+            logger.info(
+                "depth_ws_connected token_count=%d first_tokens=%s",
+                len(tokens or []),
+                list((tokens or [])[:10]),
+            )
             # Reset stale tracker and invalidate pre-existing depth timestamps so
             # watchdog waits for fresh post-connect ticks.
             _STALE_STRIKES = 0
@@ -2862,6 +2900,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 tokens=_LAST_TOKENS,
                 expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
                 min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+            )
+            try:
+                with _KITE_TICKER_LOCK:
+                    ws_connected_runtime = bool(_KITE_TICKER is not None)
+            except Exception:
+                ws_connected_runtime = False
+            logger.info(
+                "depth_ws_runtime ws_connected=%s subscribed_option_tokens=%s option_block_reasons=%s latest_ws_tick=%s",
+                ws_connected_runtime,
+                int(option_state.get("option_count") or 0),
+                dict(option_state.get("feed_block_reason_by_symbol") or {}),
+                _LAST_WS_TICK_EPOCH if _LAST_WS_TICK_EPOCH > 0 else None,
             )
             _write_feed_runtime_snapshot(
                 now_epoch=now_epoch,

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from core.orchestrator import Orchestrator
+from core.time_utils import now_utc_epoch
 
 
 def test_build_decision_event_includes_shadow_fields():
@@ -75,7 +76,6 @@ def test_build_decision_event_includes_shadow_fields():
     assert event["qty_units"] == 50
     assert event["quote_age_sec"] is not None
     assert event["mode"] == "PAPER"
-    assert event["planning_only"] is True
     assert event["allow_stale_quotes"] is True
     assert event["require_live_quotes"] is False
 
@@ -105,3 +105,63 @@ def test_build_decision_event_non_trade_uses_fallback_instrument_id():
 
     assert str(event["instrument_id"]).startswith("MISSING_CONTRACT::NIFTY:OPT:")
     assert event["quote_age_sec"] == 1.0
+
+
+def test_build_decision_event_uses_latest_option_tick_epoch_fallback():
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.portfolio = {
+        "capital": 100000.0,
+        "equity_high": 100000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+    }
+    orch.loss_streak = {}
+    orch.risk_state = SimpleNamespace(daily_max_drawdown=0.0)
+    orch._open_risk = lambda: 0.0
+
+    market_data = {
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "quote_ts": None,
+        "quote_ts_epoch": None,
+        "quote_age_sec": None,
+        "timestamp_epoch": None,
+        "latest_option_tick_ts": now_utc_epoch() - 1.2,
+        "latest_option_tick_age_sec": 1.2,
+    }
+
+    event = orch._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=[])
+
+    assert event["quote_age_sec"] is not None
+    assert float(event["quote_age_sec"]) >= 0.0
+    assert "epoch_missing" not in list(event.get("veto_reasons") or [])
+
+
+def test_build_decision_event_global_halt_does_not_inject_epoch_missing():
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.portfolio = {
+        "capital": 100000.0,
+        "equity_high": 100000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+    }
+    orch.loss_streak = {}
+    orch.risk_state = SimpleNamespace(daily_max_drawdown=0.0)
+    orch._open_risk = lambda: 0.0
+
+    event = orch._build_decision_event(
+        None,
+        {"symbol": "GLOBAL"},
+        gatekeeper_allowed=False,
+        veto_reasons=["latency_breach"],
+    )
+
+    reasons = list(event.get("veto_reasons") or [])
+    assert "latency_breach" in reasons
+    assert "epoch_missing" not in reasons
+    assert event["quote_age_sec"] == -1.0

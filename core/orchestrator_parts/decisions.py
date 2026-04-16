@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from pathlib import Path
 from core.paths import logs_dir
@@ -6,9 +7,11 @@ from core.paths import logs_dir
 from config import config as cfg
 from core.market_context import derive_market_context
 from core.reject_logger import append_reject_reasons
-from core.time_utils import now_ist, now_utc_epoch
+from core.time_utils import compute_age_sec, now_ist, now_utc_epoch
 from core.trade_schema import build_instrument_id, validate_trade_identity
 from core.trade_ticket import TradeTicket
+
+logger = logging.getLogger(__name__)
 
 
 def _trade_attr(trade, name: str, default=None):
@@ -19,6 +22,7 @@ def _trade_attr(trade, name: str, default=None):
 
 def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: bool, veto_reasons=None, pilot_allowed=None, pilot_reasons=None):
     now_text = now_ist().isoformat()
+    now_epoch = float(now_utc_epoch())
     veto_reasons = list(veto_reasons or [])
     pilot_reasons = pilot_reasons or []
     opt = orch._match_option_snapshot(trade, market_data) if trade else None
@@ -39,6 +43,39 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
     quote_ts_epoch = orch._quote_ts_epoch(quote_ts)
     if quote_ts_epoch is None:
         quote_ts_epoch = market_data.get("quote_ts_epoch")
+    feed_health = market_data.get("feed_health") if isinstance(market_data.get("feed_health"), dict) else {}
+    if quote_ts_epoch is None:
+        for candidate_epoch in (
+            market_data.get("timestamp_epoch"),
+            market_data.get("latest_option_tick_ts"),
+            market_data.get("last_tick_ts"),
+            market_data.get("last_ws_tick_epoch"),
+            market_data.get("feed_timestamp_epoch"),
+            market_data.get("ts_epoch"),
+            feed_health.get("latest_option_tick_ts"),
+            feed_health.get("last_tick_epoch"),
+            feed_health.get("ts_epoch"),
+        ):
+            normalized_epoch = orch._quote_ts_epoch(candidate_epoch)
+            if normalized_epoch is not None:
+                quote_ts_epoch = normalized_epoch
+                break
+    if quote_age_sec is None and quote_ts_epoch is not None:
+        quote_age_sec = compute_age_sec(quote_ts_epoch, now_epoch)
+    if quote_age_sec is None:
+        for candidate_age in (
+            market_data.get("latest_option_tick_age_sec"),
+            market_data.get("last_tick_age_sec"),
+            feed_health.get("option_quote_age_sec"),
+            feed_health.get("ltp_age_sec"),
+        ):
+            try:
+                if candidate_age is None:
+                    continue
+                quote_age_sec = float(candidate_age)
+                break
+            except Exception:
+                continue
     bid_qty = (opt or {}).get("bid_qty") or (opt or {}).get("bidQty")
     ask_qty = (opt or {}).get("ask_qty") or (opt or {}).get("askQty")
     depth_imb = market_data.get("depth_imbalance")
@@ -194,7 +231,7 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         "quote_age_sec": quote_age_sec,
         "quote_ts_epoch": quote_ts_epoch,
         "depth_age_sec": market_data.get("depth_age_sec"),
-        "feed_health": market_data.get("feed_health"),
+        "feed_health": feed_health or market_data.get("feed_health"),
         "time_sanity": market_data.get("time_sanity"),
         "fill_prob_est": getattr(cfg, "EXEC_FILL_PROB", None),
         "portfolio_equity": orch.portfolio.get("capital"),
@@ -250,8 +287,22 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
     if event.get("quote_age_sec") is None:
         event["quote_age_sec"] = market_data.get("quote_age_sec")
     if event.get("quote_age_sec") is None:
+        is_global_event = str(symbol or "").strip().upper() == "GLOBAL"
+        logger.warning(
+            "DECISION_FEED_EVIDENCE symbol=%s is_global=%s timestamp_epoch=%s latest_option_tick_ts=%s latest_option_tick_age_sec=%s ws_connected=%s subscribed_option_tokens_count=%s quote_ts_epoch=%s quote_age_sec=%s veto_reasons=%s",
+            symbol,
+            bool(is_global_event),
+            market_data.get("timestamp_epoch"),
+            market_data.get("latest_option_tick_ts"),
+            market_data.get("latest_option_tick_age_sec"),
+            market_data.get("ws_connected", feed_health.get("ws_connected")),
+            market_data.get("subscribed_option_tokens_count", feed_health.get("subscribed_option_tokens_count")),
+            quote_ts_epoch,
+            event.get("quote_age_sec"),
+            list(veto_reasons),
+        )
         event["quote_age_sec"] = -1.0
-        if "epoch_missing" not in veto_reasons:
+        if not is_global_event and "epoch_missing" not in veto_reasons:
             veto_reasons.append("epoch_missing")
         event["veto_reasons"] = veto_reasons
     if decision_snapshot is not None:

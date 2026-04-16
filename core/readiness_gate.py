@@ -2,7 +2,7 @@
 # Readiness feed state now exposes OFFHOURS fields and SLA thresholds for market-closed mode.
 
 from __future__ import annotations
-from core.paths import data_root, logs_dir
+from core.paths import data_root, logs_dir, runtime_dir
 
 import json
 import logging
@@ -35,6 +35,129 @@ _LIFECYCLE_FEED_BLOCKER_CODES = {
     "PRICE_MISMATCH",
     "NO_TOKEN",
 }
+
+
+def _safe_mtime(path: Path) -> float | None:
+    try:
+        return float(path.stat().st_mtime)
+    except Exception:
+        return None
+
+
+def _read_json_dict(path: Path) -> Dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _feed_runtime_snapshot_paths() -> list[Path]:
+    return [
+        logs_dir() / "feed_runtime_latest.json",
+        runtime_dir() / "feed_runtime_latest.json",
+    ]
+
+
+def _unwrap_feed_runtime_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    nested = payload.get("payload")
+    if isinstance(nested, dict):
+        return dict(nested)
+    return dict(payload)
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return 0
+
+
+def _load_fresh_feed_runtime_snapshot(now_epoch: float) -> Dict[str, Any]:
+    max_age_sec = max(1.0, float(getattr(cfg, "READINESS_FEED_RUNTIME_MAX_AGE_SEC", 60.0) or 60.0))
+    selected: Dict[str, Any] | None = None
+    selected_mtime = -1.0
+    selected_age_sec: float | None = None
+    selected_path: Path | None = None
+
+    for path in _feed_runtime_snapshot_paths():
+        raw = _read_json_dict(path)
+        mtime = _safe_mtime(path)
+        if raw is None or mtime is None:
+            continue
+        payload = _unwrap_feed_runtime_payload(raw)
+        ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
+        age_sec = compute_age_sec(ts_epoch, now_epoch) if ts_epoch is not None else compute_age_sec(mtime, now_epoch)
+        if age_sec is None or age_sec > max_age_sec:
+            continue
+        if mtime > selected_mtime:
+            selected = payload
+            selected_mtime = mtime
+            selected_age_sec = age_sec
+            selected_path = path
+
+    if not isinstance(selected, dict):
+        return {}
+
+    out = dict(selected)
+    out["_source_path"] = str(selected_path) if selected_path is not None else None
+    out["_source_mtime"] = float(selected_mtime) if selected_mtime >= 0.0 else None
+    out["_source_age_sec"] = selected_age_sec
+    return out
+
+
+def _feed_runtime_block_reasons(snapshot: Dict[str, Any]) -> list[str]:
+    if not isinstance(snapshot, dict):
+        return []
+
+    reasons: list[str] = []
+    ws_connected = snapshot.get("ws_connected")
+    if ws_connected is False:
+        reasons.append("NO_LIVE_OPTION_FEED")
+
+    runtime_state = str(snapshot.get("runtime_state") or "").strip().upper()
+    if runtime_state in {"SUBSCRIBE_FAILED", "NO_RECONNECT", "DISCONNECTED", "FAILED", "ERROR"}:
+        reasons.append("NO_LIVE_OPTION_FEED_SUBSCRIPTION" if runtime_state == "SUBSCRIBE_FAILED" else "NO_LIVE_OPTION_FEED")
+
+    intended_tokens = _as_int(snapshot.get("intended_tokens_count"))
+    subscribed_option_tokens = _as_int(snapshot.get("subscribed_option_tokens_count"))
+    if intended_tokens > 0 and subscribed_option_tokens <= 0:
+        reasons.append("NO_LIVE_OPTION_FEED_SUBSCRIPTION")
+
+    block_reasons = snapshot.get("option_feed_block_reason_by_symbol")
+    if isinstance(block_reasons, dict):
+        for value in block_reasons.values():
+            code = str(value or "").strip().upper()
+            if not code or code in {"OK", "NONE"}:
+                continue
+            reasons.append(code)
+
+    return list(dict.fromkeys(reasons))
+
+
+def readiness_snapshot_is_stale(
+    readiness_path: Path | None = None,
+    *,
+    feed_paths: list[Path] | None = None,
+) -> bool:
+    ready_path = readiness_path or (logs_dir() / "readiness_state.json")
+    ready_mtime = _safe_mtime(ready_path) or 0.0
+    compare_paths = list(feed_paths or _feed_runtime_snapshot_paths())
+    latest_feed_mtime = max((_safe_mtime(path) or 0.0) for path in compare_paths)
+    margin_sec = max(0.0, float(getattr(cfg, "READINESS_STATE_STALE_MARGIN_SEC", 1.0) or 1.0))
+    return latest_feed_mtime > (ready_mtime + margin_sec)
+
+
+def load_or_recompute_readiness_state(write_log: bool = True) -> Dict[str, object]:
+    state_path = logs_dir() / "readiness_state.json"
+    if readiness_snapshot_is_stale(state_path):
+        return run_readiness_check(write_log=write_log)
+    cached = _read_json_dict(state_path)
+    if isinstance(cached, dict):
+        return cached
+    return run_readiness_check(write_log=write_log)
 
 
 def _disk_free_gb(path: str = ".") -> float:
@@ -187,6 +310,8 @@ def _decision_gate_health(now_epoch: float, market_open: bool, execution_mode: s
     for sym, row in rows.items():
         row_blockers = [str(x) for x in (row.get("decision_blockers") or row.get("gate_reasons") or []) if str(x).strip()]
         blockers_by_symbol[sym] = row_blockers
+        row_ts_epoch = normalize_epoch_seconds(row.get("ts_epoch"))
+        row_age_sec = compute_age_sec(row_ts_epoch, now_epoch)
         if bool(row.get("gate_allowed")):
             allowed_rows.append(row)
         else:
@@ -207,8 +332,27 @@ def _decision_gate_health(now_epoch: float, market_open: bool, execution_mode: s
                 max_depth_age = depth_age if max_depth_age is None else max(max_depth_age, depth_age)
             if market_open and (fhs.get("is_fresh") is False):
                 feed_stale_symbols.append(sym)
+                if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+                    logger.warning(
+                        "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=feed_health_snapshot_not_fresh row_ts_epoch=%s row_age_sec=%s feed_is_fresh=%s ltp_age_sec=%s depth_age_sec=%s blockers=%s",
+                        sym,
+                        row_ts_epoch,
+                        row_age_sec,
+                        fhs.get("is_fresh"),
+                        fhs.get("ltp_age_sec"),
+                        fhs.get("depth_age_sec"),
+                        row_blockers,
+                    )
         if market_open and any(str(reason).upper() == "FEED_STALE" for reason in row_blockers):
             feed_stale_symbols.append(sym)
+            if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+                logger.warning(
+                    "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=decision_blocker_feed_stale row_ts_epoch=%s row_age_sec=%s blockers=%s",
+                    sym,
+                    row_ts_epoch,
+                    row_age_sec,
+                    row_blockers,
+                )
         if latest_explain is None and row.get("decision_explain") is not None:
             latest_explain = row.get("decision_explain")
 
@@ -440,6 +584,38 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
     if market_open and active_feed_blockers and not decision_engine_active:
         feed_ok = False
         feed_reasons = list(dict.fromkeys(active_feed_blockers + feed_reasons))
+
+    feed_runtime_snapshot = _load_fresh_feed_runtime_snapshot(now_epoch=float(checks["ts_epoch"]))
+    feed_runtime_reasons = _feed_runtime_block_reasons(feed_runtime_snapshot)
+    if market_open and feed_runtime_reasons:
+        feed_ok = False
+        feed_reasons = list(dict.fromkeys(feed_runtime_reasons + feed_reasons))
+
+    checks["feed_runtime_snapshot"] = {
+        "present": bool(feed_runtime_snapshot),
+        "path": feed_runtime_snapshot.get("_source_path") if isinstance(feed_runtime_snapshot, dict) else None,
+        "mtime_epoch": feed_runtime_snapshot.get("_source_mtime") if isinstance(feed_runtime_snapshot, dict) else None,
+        "age_sec": feed_runtime_snapshot.get("_source_age_sec") if isinstance(feed_runtime_snapshot, dict) else None,
+        "runtime_state": (
+            str(feed_runtime_snapshot.get("runtime_state") or "").strip().upper()
+            if isinstance(feed_runtime_snapshot, dict)
+            else None
+        ),
+        "ws_connected": (
+            feed_runtime_snapshot.get("ws_connected") if isinstance(feed_runtime_snapshot, dict) else None
+        ),
+        "subscribed_option_tokens_count": (
+            _as_int(feed_runtime_snapshot.get("subscribed_option_tokens_count"))
+            if isinstance(feed_runtime_snapshot, dict)
+            else 0
+        ),
+        "option_feed_block_reason_by_symbol": (
+            dict(feed_runtime_snapshot.get("option_feed_block_reason_by_symbol") or {})
+            if isinstance(feed_runtime_snapshot, dict)
+            else {}
+        ),
+        "derived_reasons": feed_runtime_reasons,
+    }
     if require_live_quotes and (not feed_ok):
         blockers.append(f"feed_health:{','.join(feed_reasons) or 'feed_stale'}")
     checks["feed_health"] = {
@@ -479,6 +655,10 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
             ),
         },
         "source": "decision_dag",
+        "runtime_snapshot_path": checks["feed_runtime_snapshot"].get("path"),
+        "runtime_snapshot_age_sec": checks["feed_runtime_snapshot"].get("age_sec"),
+        "runtime_snapshot_state": checks["feed_runtime_snapshot"].get("runtime_state"),
+        "runtime_snapshot_ws_connected": checks["feed_runtime_snapshot"].get("ws_connected"),
     }
 
     breaker_eval = feed_breaker_maybe_auto_clear(feed_debug if isinstance(feed_debug, dict) else {})
@@ -547,19 +727,39 @@ def _log_state_transition(payload: Dict[str, object]) -> None:
                 prev = json.loads(state_path.read_text())
             except Exception:
                 prev = {}
-        curr = {
+        checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
+        feed_runtime = checks.get("feed_runtime_snapshot") if isinstance(checks.get("feed_runtime_snapshot"), dict) else {}
+        curr_core = {
             "state": payload.get("state"),
             "blockers": payload.get("blockers"),
             "warnings": payload.get("warnings"),
             "market_open": payload.get("market_open"),
         }
-        if prev != curr:
-            state_path.write_text(json.dumps(curr, indent=2))
+        curr = {
+            **curr_core,
+            "computed_at": payload.get("ts_epoch"),
+            "computed_at_ist": payload.get("ts_ist"),
+            "source_feed_mtime": feed_runtime.get("mtime_epoch"),
+            "source_feed_runtime_state": feed_runtime.get("runtime_state"),
+            "source_ws_connected": feed_runtime.get("ws_connected"),
+            "source_feed_path": feed_runtime.get("path"),
+            "source_feed_snapshot_age_sec": feed_runtime.get("age_sec"),
+            "source_feed_block_reasons": list(feed_runtime.get("derived_reasons") or []),
+        }
+        state_path.write_text(json.dumps(curr, indent=2))
+
+        prev_core = {
+            "state": prev.get("state"),
+            "blockers": prev.get("blockers"),
+            "warnings": prev.get("warnings"),
+            "market_open": prev.get("market_open"),
+        }
+        if prev_core != curr_core:
             with log_path.open("a") as f:
                 f.write(json.dumps({
                     "ts_epoch": payload.get("ts_epoch"),
                     "ts_ist": payload.get("ts_ist"),
-                    **curr,
+                    **curr_core,
                 }) + "\n")
     except Exception:
         pass

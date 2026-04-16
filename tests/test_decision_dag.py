@@ -1,5 +1,6 @@
 import importlib
 import json
+import logging
 from unittest.mock import Mock
 
 from config import config as cfg
@@ -75,6 +76,27 @@ def test_feed_stale_never_emitted_when_snapshot_is_fresh(monkeypatch):
     decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
     assert decision.facts["feed_health"]["is_fresh"] is True
     assert "FEED_STALE" not in decision.blockers
+
+
+def test_feed_stale_emits_symbol_evidence_log(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True, raising=False)
+    now_epoch = 1_050.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "ltp_ts_epoch": now_epoch - 30.0,
+            "latest_option_tick_ts": now_epoch - 0.4,
+            "latest_option_tick_age_sec": 0.4,
+            "ws_connected": True,
+            "subscribed_option_tokens_count": 70,
+        }
+    )
+    caplog.set_level(logging.WARNING, logger="core.decision_dag")
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert "FEED_STALE" in decision.blockers
+    assert "FEED_STALE_EVIDENCE symbol=NIFTY source=decision_dag" in caplog.text
 
 
 def test_paper_stale_feed_is_allowed_without_offhours_relabel(monkeypatch):
