@@ -39,6 +39,47 @@ def _check_env():
         print("[Config Warning] Missing env vars: " + ", ".join(missing))
 
 
+def _normalize_runtime_mode(value: str | None) -> str | None:
+    if value is None:
+        return None
+    mode = str(value).strip().upper()
+    if mode not in {"LIVE", "PAPER", "SIM"}:
+        return None
+    return mode
+
+
+def _validate_runtime_mode_config_alignment(exec_mode: str) -> None:
+    env_execution_mode = os.getenv("EXECUTION_MODE")
+    env_trading_mode = os.getenv("TRADING_MODE")
+    requested_mode = _normalize_runtime_mode(env_trading_mode) or _normalize_runtime_mode(env_execution_mode)
+    config_exec_mode = _normalize_runtime_mode(str(getattr(cfg, "EXECUTION_MODE", "SIM"))) or "SIM"
+    config_trading_mode = _normalize_runtime_mode(str(getattr(cfg, "TRADING_MODE", config_exec_mode))) or config_exec_mode
+    runtime_mode = _normalize_runtime_mode(exec_mode) or "SIM"
+
+    mismatch = requested_mode is not None and requested_mode != runtime_mode
+    if not mismatch:
+        return
+
+    message = (
+        f"runtime_mode_mismatch requested={requested_mode or 'unset'} "
+        f"runtime={runtime_mode} cfg_execution={config_exec_mode} cfg_trading={config_trading_mode}"
+    )
+    _audit_startup_state(
+        "STARTUP_MODE_CONFIG_MISMATCH",
+        message=message,
+        extra={
+            "requested_mode": requested_mode,
+            "runtime_mode": runtime_mode,
+            "cfg_execution_mode": config_exec_mode,
+            "cfg_trading_mode": config_trading_mode,
+            "env_execution_mode": env_execution_mode,
+            "env_trading_mode": env_trading_mode,
+        },
+    )
+    print(f"[BOOT_MODE_ERROR] {message}")
+    raise SystemExit(2)
+
+
 def _normalize_readiness_blocker(value: str) -> str:
     return str(value or "").strip().lower()
 
@@ -162,6 +203,7 @@ def main():
     print(f"[BOOT] repo_root={repo_root}")
     exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     print(f"[BOOT] exec_mode={exec_mode}")
+    _validate_runtime_mode_config_alignment(exec_mode)
 
     _ensure_runtime_dirs(repo_root)
     _repair_events_log_if_needed()

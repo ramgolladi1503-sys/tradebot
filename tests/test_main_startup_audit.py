@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 import main as main_module
 
 
@@ -18,12 +20,45 @@ class _DummyOrchestrator:
 
 
 def _patch_common_startup(monkeypatch):
+    monkeypatch.delenv("EXECUTION_MODE", raising=False)
+    monkeypatch.delenv("TRADING_MODE", raising=False)
     monkeypatch.setattr(main_module, "_ensure_runtime_dirs", lambda repo_root: None)
     monkeypatch.setattr(main_module, "_repair_events_log_if_needed", lambda: None)
     monkeypatch.setattr(main_module, "_check_env", lambda: None)
     monkeypatch.setattr(main_module, "ensure_trade_log_exists", lambda: None)
     monkeypatch.setattr(main_module, "auto_clear_risk_halt_if_safe", lambda: {"cleared": False, "reason_code": "HALT_NOT_ACTIVE"})
     monkeypatch.setattr(main_module, "validate_kite_startup_credentials", lambda **_kwargs: None)
+
+
+def test_runtime_mode_alignment_guard_blocks_mismatch(monkeypatch):
+    monkeypatch.setenv("EXECUTION_MODE", "LIVE")
+    monkeypatch.setenv("TRADING_MODE", "LIVE")
+    monkeypatch.setattr(main_module.cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(main_module.cfg, "TRADING_MODE", "SIM", raising=False)
+    audit_events = []
+    runtime_events = []
+    monkeypatch.setattr(main_module, "audit_append", lambda payload: audit_events.append(payload))
+    monkeypatch.setattr(main_module, "append_runtime_event", lambda event_type, payload: runtime_events.append((event_type, payload)))
+
+    with pytest.raises(SystemExit) as exc:
+        main_module._validate_runtime_mode_config_alignment("SIM")
+
+    assert exc.value.code == 2
+    assert audit_events
+    assert audit_events[0]["event"] == "STARTUP_MODE_CONFIG_MISMATCH"
+    assert runtime_events
+    assert runtime_events[0][0] == "startup_mode_config_mismatch"
+
+
+def test_runtime_mode_alignment_guard_allows_aligned_live(monkeypatch):
+    monkeypatch.setenv("EXECUTION_MODE", "LIVE")
+    monkeypatch.setenv("TRADING_MODE", "LIVE")
+    monkeypatch.setattr(main_module.cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(main_module.cfg, "TRADING_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(main_module, "audit_append", lambda payload: None)
+    monkeypatch.setattr(main_module, "append_runtime_event", lambda event_type, payload: None)
+
+    main_module._validate_runtime_mode_config_alignment("LIVE")
 
 
 def test_main_audits_db_init_failure(monkeypatch):
