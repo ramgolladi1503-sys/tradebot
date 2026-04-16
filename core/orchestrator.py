@@ -1576,21 +1576,37 @@ class Orchestrator:
         except Exception:
             pass
         self._startup_warmup_rows = self._run_startup_warmup_bootstrap()
+        self._start_depth_ws_or_raise(start_depth_ws_enabled=bool(start_depth_ws_enabled))
+        self.eps_history = []
+        self._load_suggestion_eval()
+        self.rl_size_agent = SizeRLAgent(cfg.RL_SIZE_MODEL_PATH) if getattr(cfg, "RL_ENABLED", False) else None
+
+    def _start_depth_ws_or_raise(self, *, start_depth_ws_enabled: bool) -> None:
         runtime_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         dry_run_mode = bool(getattr(cfg, "DRY_RUN", False))
         should_start_depth_ws = bool(start_depth_ws_enabled and runtime_mode == "LIVE" and not dry_run_mode)
-        if should_start_depth_ws:
-            self._start_depth_ws()
-        else:
+        if not should_start_depth_ws:
             logger.info(
                 "depth_ws_start_skipped mode=%s dry_run=%s enabled=%s",
                 runtime_mode,
                 dry_run_mode,
                 bool(start_depth_ws_enabled),
             )
-        self.eps_history = []
-        self._load_suggestion_eval()
-        self.rl_size_agent = SizeRLAgent(cfg.RL_SIZE_MODEL_PATH) if getattr(cfg, "RL_ENABLED", False) else None
+            return
+        logger.info(
+            "depth_ws_start_attempt mode=%s dry_run=%s enabled=%s",
+            runtime_mode,
+            dry_run_mode,
+            bool(start_depth_ws_enabled),
+        )
+        try:
+            self._start_depth_ws()
+        except Exception as exc:
+            logger.error("DEPTH_WS_FATAL: %s", exc, exc_info=True)
+            fail_closed = bool(getattr(cfg, "DEPTH_WS_STARTUP_FAIL_CLOSED", True))
+            if fail_closed:
+                raise
+            logger.warning("depth_ws_start_failed_fail_open err=%s", exc)
 
     def _build_decision_snapshot(
         self,
@@ -5811,7 +5827,9 @@ class Orchestrator:
     def _start_depth_ws(self):
         if not cfg.KITE_USE_DEPTH:
             return
+        logger.info("DEPTH_WS_START_TRIGGERED")
         kite_client.ensure()
+        logger.info("WS: kite_client.ensure() done")
         ws_client = kite_client.kite
         if not ws_client:
             detail = getattr(kite_client, "last_init_error", None) or "kite_not_initialized"
@@ -5824,6 +5842,7 @@ class Orchestrator:
                 "Check: (1) cfg/env api_key present (2) token not expired (3) token generated using same api_key."
             )
         user_id = str((auth_payload or {}).get("user_id", "") or "")
+        logger.info("WS: auth check passed")
         logger.info("kite_ws_profile_verified user_last4=%s", user_id[-4:] if user_id else "NONE")
         # Resolve a minimal depth subscription universe (index + ATM window).
         from core.kite_depth_ws import build_depth_subscription_tokens
@@ -5839,7 +5858,36 @@ class Orchestrator:
                 logger.info("kite_ws_fallback_index_tokens token_count=%d", len(tokens))
         if not tokens:
             raise RuntimeError("kite_depth_ws_init_failed:no_tokens_resolved")
+        logger.info("WS: tokens_count=%d", len(tokens))
         start_depth_ws(tokens, profile_verified=True)
+        from core.feed.runtime_store import read_latest_runtime_snapshot
+
+        snapshot = read_latest_runtime_snapshot() or {}
+        runtime_state = str(snapshot.get("runtime_state") or "").strip().upper()
+        runtime_source = str(snapshot.get("source") or "").strip()
+        ws_connected = snapshot.get("ws_connected")
+        snapshot_age_sec = None
+        try:
+            ts_epoch = float(snapshot.get("ts_epoch")) if snapshot.get("ts_epoch") is not None else None
+            if ts_epoch is not None:
+                snapshot_age_sec = max(0.0, float(time.time()) - float(ts_epoch))
+        except Exception:
+            snapshot_age_sec = None
+        age_text = f"{snapshot_age_sec:.3f}" if snapshot_age_sec is not None else "none"
+        logger.info(
+            "WS: start_depth_ws dispatched runtime_state=%s source=%s ws_connected=%s snapshot_age_sec=%s",
+            runtime_state or "UNKNOWN",
+            runtime_source or "unknown",
+            ws_connected,
+            age_text,
+        )
+        if runtime_state in {"SUBSCRIBE_FAILED", "AUTH_BLOCKED", "IMPORT_MISSING"}:
+            max_snapshot_age_sec = float(getattr(cfg, "DEPTH_WS_STARTUP_SNAPSHOT_MAX_AGE_SEC", 30.0))
+            if snapshot_age_sec is not None and snapshot_age_sec <= max_snapshot_age_sec:
+                detail = str(snapshot.get("last_error") or runtime_source or runtime_state).strip()
+                raise RuntimeError(
+                    f"kite_depth_ws_init_failed:runtime_state={runtime_state} detail={detail}"
+                )
 
     def _run_preopen_auth_warm_check(self):
         try:
