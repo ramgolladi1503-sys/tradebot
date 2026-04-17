@@ -188,14 +188,22 @@ else
 fi
 
 validate_token() {
-  python - <<'PY'
+  EXECUTION_MODE=LIVE TRADING_MODE=LIVE python - <<'PY'
 from core.auth_health import get_kite_auth_health
 
 payload = get_kite_auth_health(force=True)
-if not payload.get("ok"):
-    print(f"[RUN_LIVE] Token invalid: {payload.get('error')}")
+auth_ok = bool(payload.get("ok"))
+auth_state = str(payload.get("auth_state") or "").strip().upper()
+user_id = str(payload.get("user_id") or "").strip()
+if (not auth_ok) or auth_state != "OK" or not user_id:
+    print(
+        "[RUN_LIVE] Token invalid: "
+        f"auth_state={auth_state or 'UNKNOWN'} "
+        f"user_id_present={bool(user_id)} "
+        f"error={payload.get('error')}"
+    )
     raise SystemExit(12)
-print(f"[RUN_LIVE] Token valid. user_id={payload.get('user_id')}")
+print(f"[RUN_LIVE] Token valid. user_id={user_id}")
 PY
 }
 
