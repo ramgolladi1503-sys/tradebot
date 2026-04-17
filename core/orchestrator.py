@@ -68,7 +68,14 @@ from core.candidate_soft_reject import (
 )
 from core.v2_pipeline import run_v2_pipeline
 from core.blocked_tracker import BlockedTradeTracker
-from core.trade_store import insert_execution_stat, update_trailing_state, insert_trail_event, insert_trade_leg, update_trade_close
+from core.trade_store import (
+    fetch_open_positions_dict,
+    insert_execution_stat,
+    update_trailing_state,
+    insert_trail_event,
+    insert_trade_leg,
+    update_trade_close,
+)
 from core.depth_store import depth_store
 from core.kite_depth_ws import start_depth_ws, restart_depth_ws
 from core.auto_tune import maybe_auto_tune
@@ -1531,6 +1538,7 @@ class Orchestrator:
         self._audit_chain_ok = True
         self._audit_chain_status = None
         self._last_global_halt_reason = None
+        self._slo_failover_runtime_clear_streak = 0
         self._regime_unstable_streak_by_symbol: dict[str, int] = {}
         self._feed_auto_repair_state: dict[str, dict] = {}
         self._last_suggestion_reliability_eval_ts = 0.0
@@ -2047,6 +2055,85 @@ class Orchestrator:
                 create_incident("SEV1", "KILL_SWITCH", {"desk_id": getattr(cfg, "DESK_ID", "DEFAULT")})
             except Exception:
                 pass
+
+    def _maybe_auto_clear_runtime_slo_failover_halt(self) -> None:
+        if not bool(getattr(cfg, "AUTO_CLEAR_SLO_FAILOVER_RUNTIME_ENABLE", True)):
+            self._slo_failover_runtime_clear_streak = 0
+            return
+        try:
+            halt_state = risk_halt.load_halt() or {}
+        except Exception:
+            halt_state = {}
+        halted = bool(halt_state.get("halted", False))
+        reason = str(halt_state.get("reason") or "").strip().lower()
+        if (not halted) or reason != "slo_failover":
+            self._slo_failover_runtime_clear_streak = 0
+            return
+        max_open_positions = max(
+            0,
+            int(getattr(cfg, "AUTO_CLEAR_SLO_FAILOVER_RUNTIME_MAX_OPEN_POSITIONS", 0) or 0),
+        )
+        try:
+            open_positions_count = len(fetch_open_positions_dict(limit=5000))
+        except Exception:
+            open_positions_count = 10_000
+        if open_positions_count > max_open_positions:
+            self._slo_failover_runtime_clear_streak = 0
+            logger.warning(
+                "slo_failover_runtime_clear_blocked_open_positions open_positions=%s max_allowed=%s",
+                open_positions_count,
+                max_open_positions,
+            )
+            return
+        try:
+            slo_status = evaluate_slo_status(enforce_failover=False)
+        except Exception as exc:
+            self._slo_failover_runtime_clear_streak = 0
+            logger.warning("slo_failover_runtime_clear_eval_failed err=%s", exc)
+            return
+        healthy = bool(slo_status.get("ok", False)) and not bool(slo_status.get("reasons"))
+        if not healthy:
+            self._slo_failover_runtime_clear_streak = 0
+            logger.info(
+                "slo_failover_runtime_clear_waiting status=%s reasons=%s warnings=%s",
+                str(slo_status.get("status") or "UNKNOWN"),
+                ",".join(list(slo_status.get("reasons") or []) or ["none"]),
+                ",".join(list(slo_status.get("warnings") or []) or ["none"]),
+            )
+            return
+        self._slo_failover_runtime_clear_streak = int(self._slo_failover_runtime_clear_streak or 0) + 1
+        required_streak = max(
+            1,
+            int(getattr(cfg, "AUTO_CLEAR_SLO_FAILOVER_RUNTIME_OK_STREAK", 2) or 2),
+        )
+        logger.info(
+            "slo_failover_runtime_clear_progress ok_streak=%s required=%s",
+            self._slo_failover_runtime_clear_streak,
+            required_streak,
+        )
+        if self._slo_failover_runtime_clear_streak < required_streak:
+            return
+        try:
+            risk_halt.clear_halt()
+            self._slo_failover_runtime_clear_streak = 0
+            logger.warning(
+                "slo_failover_runtime_halt_cleared open_positions=%s status=%s",
+                open_positions_count,
+                str(slo_status.get("status") or "UNKNOWN"),
+            )
+            try:
+                audit_append(
+                    {
+                        "event": "SLO_FAILOVER_RUNTIME_HALT_CLEARED",
+                        "open_positions_count": int(open_positions_count),
+                        "required_ok_streak": int(required_streak),
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                    }
+                )
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.warning("slo_failover_runtime_halt_clear_failed err=%s", exc)
 
     def _latency_guard_action(self) -> str:
         state = getattr(self, "_latency_guard_state", {}) or {}
@@ -3473,6 +3560,10 @@ class Orchestrator:
                     importlib.reload(cfg)
                 except Exception:
                     pass
+                try:
+                    self._maybe_auto_clear_runtime_slo_failover_halt()
+                except Exception as exc:
+                    logger.warning("slo_failover_runtime_clear_cycle_error err=%s", exc)
                 global_halt_reason = resolve_global_halt_reason(self.circuit_breaker)
                 if global_halt_reason:
                     cycle_reason = global_halt_reason
