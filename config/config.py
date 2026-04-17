@@ -1987,6 +1987,14 @@ AUTO_CLEAR_SLO_FAILOVER_RUNTIME_OK_STREAK = int(
 AUTO_CLEAR_SLO_FAILOVER_RUNTIME_MAX_OPEN_POSITIONS = int(
     os.getenv("AUTO_CLEAR_SLO_FAILOVER_RUNTIME_MAX_OPEN_POSITIONS", "0")
 )
+AUTO_CLEAR_SLO_FAILOVER_RUNTIME_ALLOWED_REASONS = [
+    s.strip().upper()
+    for s in os.getenv(
+        "AUTO_CLEAR_SLO_FAILOVER_RUNTIME_ALLOWED_REASONS",
+        "AUTH_LATENCY_BREACH",
+    ).split(",")
+    if s.strip()
+]
 
 # Pre-open auth warmup
 AUTH_WARMUP_TRIGGER_RISK_HALT = os.getenv("AUTH_WARMUP_TRIGGER_RISK_HALT", "true").lower() == "true"

@@ -2091,13 +2091,22 @@ class Orchestrator:
             self._slo_failover_runtime_clear_streak = 0
             logger.warning("slo_failover_runtime_clear_eval_failed err=%s", exc)
             return
-        healthy = bool(slo_status.get("ok", False)) and not bool(slo_status.get("reasons"))
+        reasons = [str(r or "").strip().upper() for r in list(slo_status.get("reasons") or []) if str(r or "").strip()]
+        allowed_reasons = {
+            str(code or "").strip().upper()
+            for code in list(getattr(cfg, "AUTO_CLEAR_SLO_FAILOVER_RUNTIME_ALLOWED_REASONS", []) or [])
+            if str(code or "").strip()
+        }
+        disallowed_reasons = [code for code in reasons if code not in allowed_reasons]
+        auth_payload = slo_status.get("auth") if isinstance(slo_status.get("auth"), dict) else {}
+        auth_ok = bool(auth_payload.get("ok", slo_status.get("ok", False)))
+        healthy = bool(auth_ok) and (not disallowed_reasons)
         if not healthy:
             self._slo_failover_runtime_clear_streak = 0
-            logger.info(
+            logger.warning(
                 "slo_failover_runtime_clear_waiting status=%s reasons=%s warnings=%s",
                 str(slo_status.get("status") or "UNKNOWN"),
-                ",".join(list(slo_status.get("reasons") or []) or ["none"]),
+                ",".join(reasons or ["none"]),
                 ",".join(list(slo_status.get("warnings") or []) or ["none"]),
             )
             return
@@ -2106,10 +2115,12 @@ class Orchestrator:
             1,
             int(getattr(cfg, "AUTO_CLEAR_SLO_FAILOVER_RUNTIME_OK_STREAK", 2) or 2),
         )
-        logger.info(
-            "slo_failover_runtime_clear_progress ok_streak=%s required=%s",
+        logger.warning(
+            "slo_failover_runtime_clear_progress ok_streak=%s required=%s reasons=%s allowed_reasons=%s",
             self._slo_failover_runtime_clear_streak,
             required_streak,
+            ",".join(reasons or ["none"]),
+            ",".join(sorted(allowed_reasons) or ["none"]),
         )
         if self._slo_failover_runtime_clear_streak < required_streak:
             return
