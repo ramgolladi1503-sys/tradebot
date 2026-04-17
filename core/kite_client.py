@@ -49,6 +49,38 @@ KiteConnect = _guarded_kiteconnect if _RAW_KITECONNECT is not None else None
 logger = logging.getLogger(__name__)
 
 
+def _is_retryable_generate_session_error(exc: Exception) -> bool:
+    """
+    Fail closed for auth-class errors, but allow bounded retries for transient
+    network/timeout/session-edge transport failures during session exchange.
+    """
+    text = str(exc or "").strip().lower()
+    name = type(exc).__name__.strip().lower()
+    if not text and not name:
+        return False
+    auth_markers = ("tokenexception", "permissionexception", "authenticationerror", "invalid api_key", "invalid api key")
+    if any(marker in text for marker in auth_markers) or any(marker in name for marker in auth_markers):
+        return False
+    retry_name_markers = ("timeout", "connectionerror", "readtimeout", "connecttimeout", "gaierror", "sslerror")
+    retry_text_markers = (
+        "timed out",
+        "timeout",
+        "connection reset",
+        "connection aborted",
+        "temporarily unavailable",
+        "temporary failure",
+        "name resolution",
+        "failed to resolve",
+        "ssl",
+        "max retries exceeded",
+    )
+    if any(marker in name for marker in retry_name_markers):
+        return True
+    if any(marker in text for marker in retry_text_markers):
+        return True
+    return False
+
+
 class KiteClient:
     def __init__(self):
         self.kite = None
@@ -367,11 +399,35 @@ class KiteClient:
         if not api_key:
             raise RuntimeError("kite_api_key_missing")
         kite = self._create_kite_for_auth(api_key=api_key)
-        data = kite.generate_session(request_token, api_secret=api_secret)
-        access_token = data.get("access_token")
-        if access_token:
-            kite.set_access_token(access_token)
-        return data
+        retry_attempts = max(
+            1,
+            int(getattr(cfg, "KITE_GENERATE_SESSION_RETRY_ATTEMPTS", 2) or 2),
+        )
+        retry_backoff_sec = max(
+            0.0,
+            float(getattr(cfg, "KITE_GENERATE_SESSION_RETRY_BACKOFF_SEC", 0.8) or 0.8),
+        )
+        for attempt in range(1, retry_attempts + 1):
+            try:
+                data = kite.generate_session(request_token, api_secret=api_secret)
+                access_token = data.get("access_token")
+                if access_token:
+                    kite.set_access_token(access_token)
+                return data
+            except Exception as exc:
+                is_retryable = _is_retryable_generate_session_error(exc)
+                if (not is_retryable) or attempt >= retry_attempts:
+                    raise
+                sleep_sec = retry_backoff_sec * (2 ** (attempt - 1))
+                logger.warning(
+                    "kite_generate_session_retry attempt=%s/%s sleep_sec=%.2f err=%s",
+                    attempt,
+                    retry_attempts,
+                    sleep_sec,
+                    f"{type(exc).__name__}:{exc}",
+                )
+                time.sleep(sleep_sec)
+        raise RuntimeError("kite_generate_session_unreachable")
 
     def set_access_token(self, token: str):
         token = (token or "").strip()
