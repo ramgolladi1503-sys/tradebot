@@ -125,6 +125,7 @@ def evaluate_slo_status(
     feed_allow_stale = bool(feed.get("allow_stale_quotes", ctx.allow_stale_quotes))
     ignore_feed_stale = bool(feed_allow_stale or (not feed_market_open))
     suppress_auth_checks = bool((not should_enforce) and (not bool(ctx.is_market_open)))
+    auth_latency_hard_block = bool(getattr(cfg, "SLO_AUTH_LATENCY_HARD_BLOCK_ENABLE", False))
 
     auth_age_sec = compute_age_sec(auth.get("ts_epoch"), now_ts)
     auth_latency_sec = _coerce_float(auth.get("latency_sec"))
@@ -170,6 +171,15 @@ def evaluate_slo_status(
         else:
             warnings.append(code)
 
+    def _record_warning(code: str, *, suppress: bool = False) -> None:
+        if startup_grace_active and code in startup_transient_codes:
+            startup_suppressed.append(code)
+            return
+        if suppress:
+            suppressed.append(code)
+            return
+        warnings.append(code)
+
     if not bool(auth.get("ok", False)):
         _record("AUTH_UNHEALTHY", suppress=suppress_auth_checks)
     if auth_age_sec is None:
@@ -179,7 +189,10 @@ def evaluate_slo_status(
     if auth_latency_sec is None:
         _record("AUTH_LATENCY_MISSING", suppress=suppress_auth_checks)
     elif auth_latency_sec > max_auth_latency_sec:
-        _record("AUTH_LATENCY_BREACH", suppress=suppress_auth_checks)
+        if auth_latency_hard_block:
+            _record("AUTH_LATENCY_BREACH", suppress=suppress_auth_checks)
+        else:
+            _record_warning("AUTH_LATENCY_BREACH", suppress=suppress_auth_checks)
 
     if ltp_age_sec is None:
         _record("FEED_LTP_TS_MISSING", suppress=ignore_feed_stale)
@@ -284,6 +297,7 @@ def evaluate_slo_status(
             "latency_sec": auth_latency_sec,
             "max_age_sec": max_auth_age_sec,
             "max_latency_sec": max_auth_latency_sec,
+            "latency_hard_block": bool(auth_latency_hard_block),
         },
         "feed": {
             "ltp_age_sec": ltp_age_sec,
