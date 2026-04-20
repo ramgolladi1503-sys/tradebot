@@ -7285,6 +7285,32 @@ class TradeBuilder:
                     signal.get("score"),
                     signal.get("reason"),
                 )
+        if (
+            not signal
+            and exec_mode == "LIVE"
+            and allow_fallbacks
+            and bool(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_ENABLE", True))
+        ):
+            try:
+                live_signal = self._quick_neutral_fallback_signal(
+                    market_data,
+                    float(ltp or 0.0),
+                    float(vwap or 0.0),
+                )
+            except Exception:
+                live_signal = None
+            min_live_score = float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.60))
+            if live_signal and float(live_signal.get("score") or 0.0) >= min_live_score:
+                live_signal["reason"] = "Live structured no-signal fallback"
+                signal = live_signal
+                if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+                    logger.info(
+                        "LIVE_NO_SIGNAL_FALLBACK_SIGNAL symbol=%s direction=%s score=%s reason=%s",
+                        symbol,
+                        signal.get("direction"),
+                        signal.get("score"),
+                        signal.get("reason"),
+                    )
         if not signal:
             fallback_allowed = bool(market_data.get("allow_planning_no_signal_fallback"))
             if exec_mode == "LIVE":
@@ -7342,6 +7368,10 @@ class TradeBuilder:
                     market_data.get("ltp_change_window"),
                 )
             if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+                return None
+            if exec_mode == "LIVE" and not bool(
+                getattr(cfg, "LIVE_ALLOW_WEAK_SIGNAL_BORDERLINE_CANDIDATE", False)
+            ):
                 return None
             raw_confidence = (
                 self._coerce_positive_float(market_data.get("confidence_raw"))

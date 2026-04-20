@@ -146,6 +146,36 @@ def test_no_signal_softened_candidate_does_not_enter_ranked_pool():
     assert ranked == []
 
 
+def test_live_no_signal_without_live_fallback_returns_none_and_skips_borderline(monkeypatch):
+    tb = TradeBuilder()
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_ALLOW_WEAK_SIGNAL_BORDERLINE_CANDIDATE", False, raising=False)
+    monkeypatch.setattr(tb, "_signal_for_symbol", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tb, "_resolve_index_bid_ask", lambda md, _mode: dict(md, quote_ok=True, bid=1.0, ask=1.1))
+    monkeypatch.setattr(tb, "_resolve_underlying_spot", lambda *_args, **_kwargs: (25000.0, "live", True, None))
+    monkeypatch.setattr(tb, "_reject_exit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tb, "_log_blocked_candidate", lambda *_args, **_kwargs: None)
+
+    trade = tb.build(
+        {
+            **_market_data(),
+            "execution_mode": "LIVE",
+            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "market_open": True,
+            "chain_source": "live",
+            "quote_ok": True,
+            "bid": 1.0,
+            "ask": 1.1,
+        }
+    )
+
+    assert trade is None
+    ranked = orch._consume_trade_builder_ranked_candidates(tb)
+    assert ranked == []
+
+
 def test_borderline_candidate_not_marked_execution_blocked():
     tb = TradeBuilder()
     cand = tb._build_borderline_candidate(

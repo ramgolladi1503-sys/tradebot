@@ -543,6 +543,24 @@ RL_DD_ALERT = -5.0
 EWMA_SPAN = 10
 FILL_RATIO_ALERT = 0.8
 DEPTH_SNAPSHOT_LIMIT = 10000
+DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC = float(
+    os.getenv("DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", "0.50")
+)
+DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC = float(
+    os.getenv("DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", "10.0")
+)
+DEPTH_SNAPSHOT_DB_WRITE_RETRY_ATTEMPTS = int(
+    os.getenv("DEPTH_SNAPSHOT_DB_WRITE_RETRY_ATTEMPTS", "3")
+)
+DEPTH_SNAPSHOT_DB_WRITE_RETRY_BACKOFF_SEC = float(
+    os.getenv("DEPTH_SNAPSHOT_DB_WRITE_RETRY_BACKOFF_SEC", "0.05")
+)
+DEPTH_SNAPSHOT_DB_LOCK_SKIP_ENABLE = (
+    os.getenv("DEPTH_SNAPSHOT_DB_LOCK_SKIP_ENABLE", "true").lower() == "true"
+)
+DEPTH_SNAPSHOT_DB_LOCK_MAX_WARN_EVERY_SEC = float(
+    os.getenv("DEPTH_SNAPSHOT_DB_LOCK_MAX_WARN_EVERY_SEC", "30.0")
+)
 IMBALANCE_ALERT = 0.6
 IMBALANCE_ALERT_ENABLE = False
 TRAILING_STOP_ATR_MULT = 0.8
@@ -1066,6 +1084,11 @@ QUICK_NEUTRAL_SCORE_CAP = float(os.getenv("QUICK_NEUTRAL_SCORE_CAP", "0.68"))
 # No-signal fallback (SIM/PAPER only).
 NO_SIGNAL_FALLBACK_ENABLE = os.getenv("NO_SIGNAL_FALLBACK_ENABLE", "true").lower() == "true"
 NO_SIGNAL_FALLBACK_SCORE = float(os.getenv("NO_SIGNAL_FALLBACK_SCORE", "0.45"))
+LIVE_NO_SIGNAL_FALLBACK_ENABLE = os.getenv("LIVE_NO_SIGNAL_FALLBACK_ENABLE", "true").lower() == "true"
+LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN = float(os.getenv("LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", "0.60"))
+LIVE_ALLOW_WEAK_SIGNAL_BORDERLINE_CANDIDATE = (
+    os.getenv("LIVE_ALLOW_WEAK_SIGNAL_BORDERLINE_CANDIDATE", "false").lower() == "true"
+)
 # Allow softening option type mismatches in non-live runs.
 ALLOW_OPTION_TYPE_MISMATCH_SOFTEN = os.getenv("ALLOW_OPTION_TYPE_MISMATCH_SOFTEN", "true").lower() == "true"
 # Emergency rollback knob: when true, type mismatch is a hard reject instead of soft penalty.
@@ -1495,7 +1518,7 @@ MIN_BREADTH_DIRECTION_INFERENCE_ENABLE = os.getenv(
 # Candidate soft-reject policy
 # -------------------------------
 CANDIDATE_SOFT_REJECT_ENABLE = os.getenv("CANDIDATE_SOFT_REJECT_ENABLE", "true").lower() == "true"
-CANDIDATE_SOFT_REJECT_ALLOW_LIVE = os.getenv("CANDIDATE_SOFT_REJECT_ALLOW_LIVE", "true").lower() == "true"
+CANDIDATE_SOFT_REJECT_ALLOW_LIVE = os.getenv("CANDIDATE_SOFT_REJECT_ALLOW_LIVE", "false").lower() == "true"
 CANDIDATE_SOFT_REJECT_MAX_PER_SYMBOL = int(os.getenv("CANDIDATE_SOFT_REJECT_MAX_PER_SYMBOL", "3"))
 CANDIDATE_SOFT_REJECT_CONFIDENCE = _float_env("CANDIDATE_SOFT_REJECT_CONFIDENCE", 0.1)
 CANDIDATE_SOFT_REJECT_UNKNOWN_CONFIDENCE = _float_env("CANDIDATE_SOFT_REJECT_UNKNOWN_CONFIDENCE", 0.08)
@@ -1855,6 +1878,10 @@ DESK_DATA_DIR = os.getenv("DESK_DATA_DIR", str(canonical_desks_dir(DESK_ID)))
 DESK_LOG_DIR = os.getenv("DESK_LOG_DIR", str(canonical_desk_logs_dir(DESK_ID)))
 DB_PATH = os.getenv("DB_PATH", str(canonical_trade_db_path(DESK_ID)))
 TRADE_DB_PATH = os.getenv("TRADE_DB_PATH", DB_PATH)
+TRADE_DB_TIMEOUT_SEC = float(os.getenv("TRADE_DB_TIMEOUT_SEC", "10.0"))
+TRADE_DB_ENABLE_WAL = os.getenv("TRADE_DB_ENABLE_WAL", "true").lower() == "true"
+TRADE_DB_BUSY_TIMEOUT_MS = int(os.getenv("TRADE_DB_BUSY_TIMEOUT_MS", "10000"))
+TRADE_DB_SYNCHRONOUS = os.getenv("TRADE_DB_SYNCHRONOUS", "NORMAL").upper()
 # Ensure canonical runtime tree exists before any SQLite open attempts.
 canonical_ensure_dir(DESK_DATA_DIR)
 canonical_ensure_dir(DESK_LOG_DIR)
@@ -3114,7 +3141,7 @@ TRADE_BUILDER_RESULT_TRACE_ENABLE = os.getenv("TRADE_BUILDER_RESULT_TRACE_ENABLE
 GATE_REJECT_TRACE_ENABLE = os.getenv("GATE_REJECT_TRACE_ENABLE", "true").lower() == "true"
 TARGET_POINTS_MIN = float(os.getenv("TARGET_POINTS_MIN", "20.0"))
 TRADE_BUILDER_SOFT_REJECT_ENABLE = os.getenv("TRADE_BUILDER_SOFT_REJECT_ENABLE", "true").lower() == "true"
-TRADE_BUILDER_SOFT_REJECT_ALLOW_LIVE = os.getenv("TRADE_BUILDER_SOFT_REJECT_ALLOW_LIVE", "true").lower() == "true"
+TRADE_BUILDER_SOFT_REJECT_ALLOW_LIVE = os.getenv("TRADE_BUILDER_SOFT_REJECT_ALLOW_LIVE", "false").lower() == "true"
 TRADE_BUILDER_SOFT_REJECT_REASONS = os.getenv(
     "TRADE_BUILDER_SOFT_REJECT_REASONS",
     "premium_band_fail,no_viable_candidates,no_signal,weak_momentum,move_too_small,flat_vs_vwap,trend_regime_conflict,spread_pct,latency_guard_cooldown,regime_unstable",

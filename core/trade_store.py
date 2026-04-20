@@ -1,6 +1,7 @@
 import json
 import logging
 import sqlite3
+import threading
 import time
 from datetime import datetime, timezone
 from config import config as cfg
@@ -10,10 +11,28 @@ from core.fs_utils import ensure_parent_dir
 
 logger = logging.getLogger(__name__)
 
+_DB_SCHEMA_INIT_LOCK = threading.Lock()
+_DB_SCHEMA_INIT_PATH = None
+_LAST_DEPTH_PRUNE_EPOCH = 0.0
+_LAST_DEPTH_LOCK_WARN_EPOCH = 0.0
+
 
 def _conn():
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
-    return sqlite3.connect(str(db_path))
+    timeout_sec = max(1.0, float(getattr(cfg, "TRADE_DB_TIMEOUT_SEC", 10.0) or 10.0))
+    conn = sqlite3.connect(str(db_path), timeout=timeout_sec)
+    try:
+        busy_timeout_ms = max(1000, int(getattr(cfg, "TRADE_DB_BUSY_TIMEOUT_MS", 10000) or 10000))
+        conn.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
+    except Exception:
+        pass
+    try:
+        if bool(getattr(cfg, "TRADE_DB_ENABLE_WAL", True)):
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute(f"PRAGMA synchronous={str(getattr(cfg, 'TRADE_DB_SYNCHRONOUS', 'NORMAL') or 'NORMAL')}")
+    except Exception:
+        pass
+    return conn
 
 
 def classify_outcome_label(realized_pnl: float, epsilon: float = 1e-6) -> str:
@@ -36,9 +55,14 @@ def classify_outcome_grade(r_multiple_realized: float) -> str:
     return "D"
 
 
-def init_db():
-    with _conn() as conn:
-        conn.execute(
+def init_db(force: bool = False):
+    global _DB_SCHEMA_INIT_PATH
+    target_db_path = str(ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH))))
+    with _DB_SCHEMA_INIT_LOCK:
+        if (not force) and _DB_SCHEMA_INIT_PATH == target_db_path:
+            return
+        with _conn() as conn:
+            conn.execute(
             """
         CREATE TABLE IF NOT EXISTS trades (
             trade_id TEXT PRIMARY KEY,
@@ -360,6 +384,13 @@ def init_db():
         )
         """
         )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_depth_snapshots_ts_epoch ON depth_snapshots(timestamp_epoch)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_depth_snapshots_token_ts ON depth_snapshots(instrument_token, timestamp_epoch)"
+        )
+        _DB_SCHEMA_INIT_PATH = target_db_path
 
 
 def insert_trade(entry):
@@ -620,6 +651,44 @@ def fetch_depth_imbalance(limit=1000):
     return cols, rows
 
 
+def _is_database_locked_error(exc: Exception) -> bool:
+    if not isinstance(exc, sqlite3.OperationalError):
+        return False
+    message = str(exc or "").strip().lower()
+    return "database is locked" in message or "database table is locked" in message
+
+
+def _should_prune_depth_snapshots(now_epoch: float) -> bool:
+    global _LAST_DEPTH_PRUNE_EPOCH
+    interval_sec = max(
+        0.0,
+        float(getattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 10.0) or 10.0),
+    )
+    if interval_sec <= 0.0:
+        _LAST_DEPTH_PRUNE_EPOCH = now_epoch
+        return True
+    if (now_epoch - float(_LAST_DEPTH_PRUNE_EPOCH or 0.0)) >= interval_sec:
+        _LAST_DEPTH_PRUNE_EPOCH = now_epoch
+        return True
+    return False
+
+
+def _warn_depth_db_lock_once(err: Exception) -> None:
+    global _LAST_DEPTH_LOCK_WARN_EPOCH
+    now_epoch = time.time()
+    warn_every_sec = max(
+        1.0,
+        float(getattr(cfg, "DEPTH_SNAPSHOT_DB_LOCK_MAX_WARN_EVERY_SEC", 30.0) or 30.0),
+    )
+    if (now_epoch - float(_LAST_DEPTH_LOCK_WARN_EPOCH or 0.0)) < warn_every_sec:
+        return
+    _LAST_DEPTH_LOCK_WARN_EPOCH = now_epoch
+    logger.warning(
+        "depth_snapshot_db_lock_skip retry_exhausted=true err=%s",
+        f"{type(err).__name__}:{err}",
+    )
+
+
 def insert_depth_snapshot(ts_iso, instrument_token, depth_json, ts_epoch=None):
     init_db()
     # Ensure timestamp fields are always present and normalized
@@ -629,7 +698,6 @@ def insert_depth_snapshot(ts_iso, instrument_token, depth_json, ts_epoch=None):
         except Exception:
             ts_epoch = None
     if ts_epoch is None:
-        import time
         ts_epoch = time.time()
     if not ts_iso:
         try:
@@ -637,28 +705,50 @@ def insert_depth_snapshot(ts_iso, instrument_token, depth_json, ts_epoch=None):
             ts_iso = datetime.fromtimestamp(ts_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         except Exception:
             ts_iso = None
-    try:
-        with _conn() as conn:
-            conn.execute(
-                """
-            INSERT INTO depth_snapshots (timestamp, instrument_token, depth_json, timestamp_iso, timestamp_epoch)
-            VALUES (?,?,?,?,?)
-            """,
-                (ts_iso, instrument_token, depth_json, ts_iso, ts_epoch),
-            )
-            limit = getattr(__import__("config.config", fromlist=["DEPTH_SNAPSHOT_LIMIT"]), "DEPTH_SNAPSHOT_LIMIT", 10000)
-            conn.execute(
-                """
-            DELETE FROM depth_snapshots
-            WHERE rowid NOT IN (
-                SELECT rowid FROM depth_snapshots ORDER BY timestamp DESC LIMIT ?
-            )
-            """,
-                (limit,),
-            )
-    except Exception as exc:
-        trigger_db_write_fail({"table": "depth_snapshots", "error": str(exc)})
-        raise
+    retry_attempts = max(
+        1,
+        int(getattr(cfg, "DEPTH_SNAPSHOT_DB_WRITE_RETRY_ATTEMPTS", 3) or 3),
+    )
+    retry_backoff_sec = max(
+        0.0,
+        float(getattr(cfg, "DEPTH_SNAPSHOT_DB_WRITE_RETRY_BACKOFF_SEC", 0.05) or 0.05),
+    )
+    skip_on_lock = bool(getattr(cfg, "DEPTH_SNAPSHOT_DB_LOCK_SKIP_ENABLE", True))
+    should_prune = _should_prune_depth_snapshots(float(ts_epoch or time.time()))
+    for attempt in range(1, retry_attempts + 1):
+        try:
+            with _conn() as conn:
+                conn.execute(
+                    """
+                INSERT INTO depth_snapshots (timestamp, instrument_token, depth_json, timestamp_iso, timestamp_epoch)
+                VALUES (?,?,?,?,?)
+                """,
+                    (ts_iso, instrument_token, depth_json, ts_iso, ts_epoch),
+                )
+                if should_prune:
+                    limit = int(getattr(cfg, "DEPTH_SNAPSHOT_LIMIT", 10000) or 10000)
+                    conn.execute(
+                        """
+                    DELETE FROM depth_snapshots
+                    WHERE rowid NOT IN (
+                        SELECT rowid FROM depth_snapshots ORDER BY timestamp_epoch DESC LIMIT ?
+                    )
+                    """,
+                        (limit,),
+                    )
+            return True
+        except Exception as exc:
+            if _is_database_locked_error(exc) and attempt < retry_attempts:
+                sleep_sec = retry_backoff_sec * (2 ** (attempt - 1))
+                if sleep_sec > 0:
+                    time.sleep(sleep_sec)
+                continue
+            if _is_database_locked_error(exc) and skip_on_lock:
+                _warn_depth_db_lock_once(exc)
+                return False
+            trigger_db_write_fail({"table": "depth_snapshots", "error": str(exc)})
+            raise
+    return False
 
 
 def insert_broker_fill(row):

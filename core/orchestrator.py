@@ -1181,6 +1181,8 @@ def _augment_ranked_candidates_with_soft_reject(
         normalized_reject_reason = str(reject_reason or "").strip().upper()
         if normalized_reject_reason in hard_reason_codes:
             reject_gate_reasons = [str(reject_reason)]
+        elif str(reject_reason or "").strip():
+            reject_gate_reasons = [str(reject_reason).strip()]
 
     def _should_keep_as_advisory(candidate_reasons: list[str]) -> bool:
         for code in candidate_reasons:
