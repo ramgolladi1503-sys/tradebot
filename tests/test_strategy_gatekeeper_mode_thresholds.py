@@ -39,6 +39,7 @@ def test_gatekeeper_uses_unstable_reasons_not_legacy_boolean(monkeypatch):
 def test_gatekeeper_blocks_when_unstable_reasons_present(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_CROSS_ASSET", False, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1, raising=False)
 
     md = _base_market_data()
     md.update(
@@ -117,6 +118,7 @@ def test_live_mode_never_applies_paper_soft_unblock(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_CROSS_ASSET", False, raising=False)
     monkeypatch.setattr(cfg, "PAPER_RELAX_GATES", True, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1, raising=False)
     monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_CONF_MIN", 0.80, raising=False)
     monkeypatch.setattr(cfg, "PAPER_SOFT_UNBLOCK_CONTRADICTORY_REASONS", ["entropy_too_high", "prob_too_low"], raising=False)
@@ -136,3 +138,30 @@ def test_live_mode_never_applies_paper_soft_unblock(monkeypatch):
     assert gate.allowed is False
     assert "regime_unstable" in gate.reasons
     assert "paper_soft_unblock" not in gate.reasons
+
+
+def test_live_regime_unstable_uses_consecutive_debounce(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_CROSS_ASSET", False, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_RELAX_GATES", False, raising=False)
+    monkeypatch.setattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 2, raising=False)
+
+    md = _base_market_data()
+    md.update(
+        {
+            "primary_regime": "TREND",
+            "regime_probs": {"TREND": 0.88, "RANGE": 0.08, "EVENT": 0.04},
+            "regime_entropy": 0.25,
+            "unstable_reasons": ["warmup_incomplete"],
+            "indicators_ok": True,
+        }
+    )
+    gatekeeper = StrategyGatekeeper()
+    first = gatekeeper.evaluate(dict(md), mode="MAIN")
+    second = gatekeeper.evaluate(dict(md), mode="MAIN")
+
+    assert first.allowed is True
+    assert "regime_unstable_debounced:1/2" in first.reasons
+    assert second.allowed is False
+    assert "regime_unstable" in second.reasons

@@ -292,6 +292,9 @@ def _is_synthetic_candidate(candidate) -> bool:
 def _is_reportable_executable_candidate(candidate) -> bool:
     if candidate is None or _is_synthetic_candidate(candidate):
         return False
+    allow_status_fallback = bool(
+        getattr(cfg, "ORCHESTRATOR_EXECUTABLE_REPORT_ALLOW_STATUS_FALLBACK", True)
+    )
     trade_id = str(_trade_attr(candidate, "trade_id", "") or "").strip().lower()
     if trade_id.startswith(("softrej_", "tbsoft_")):
         return False
@@ -306,7 +309,14 @@ def _is_reportable_executable_candidate(candidate) -> bool:
     readiness = str(_trade_attr(candidate, "readiness", "") or "").strip().upper()
     if candidate_status in {"advisory_only", "blocked", "blocked_contract"}:
         return False
-    if execution_status != "executable":
+    status_derived_executable = (
+        allow_status_fallback
+        and execution_status in {"", "none", "null"}
+        and execution_entry_status == "executable"
+        and bool(_trade_attr(candidate, "execution_allowed", False))
+        and candidate_status not in {"advisory_only", "blocked", "blocked_contract"}
+    )
+    if execution_status != "executable" and not status_derived_executable:
         return False
     if execution_entry_status != "executable":
         return False
@@ -318,7 +328,10 @@ def _is_reportable_executable_candidate(candidate) -> bool:
         return False
     if not bool(_trade_attr(candidate, "execution_allowed", False)):
         return False
-    if not bool(_trade_attr(candidate, "eligible_for_execution", False)):
+    eligible_for_execution = _trade_attr(candidate, "eligible_for_execution", None)
+    if eligible_for_execution is None:
+        eligible_for_execution = _trade_attr(candidate, "execution_allowed", False)
+    if not bool(eligible_for_execution):
         return False
     if bool(_trade_attr(candidate, "execution_blocked", False)):
         return False
@@ -463,6 +476,45 @@ def _read_json_dict(path: Path) -> dict:
         return raw if isinstance(raw, dict) else {}
     except Exception:
         return {}
+
+
+def _safe_float(value):
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _normalize_feed_runtime_payload(raw: dict) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    payload = raw.get("payload")
+    if isinstance(payload, dict):
+        return dict(payload)
+    return dict(raw)
+
+
+def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
+    candidates = [
+        Path(getattr(cfg, "DATA_ROOT", ".runtime")).expanduser() / "feed_runtime_latest.json",
+        logs_dir() / "feed_runtime_latest.json",
+    ]
+    newest: tuple[dict, Path | None, float] = ({}, None, 0.0)
+    for path in candidates:
+        try:
+            if not path.exists():
+                continue
+            mtime = float(path.stat().st_mtime)
+        except Exception:
+            continue
+        payload = _normalize_feed_runtime_payload(_read_json_dict(path))
+        if not payload:
+            continue
+        if newest[1] is None or mtime >= newest[2]:
+            newest = (payload, path, mtime)
+    return newest[0], newest[1]
 
 
 def _count_jsonl_rows(path: Path) -> int:
@@ -2247,6 +2299,48 @@ class Orchestrator:
         if not isinstance(market_data_list, list):
             self._cycle_market_snapshot_by_symbol = {}
             return []
+        feed_runtime_payload, _feed_runtime_path = _read_latest_feed_runtime_payload()
+        feed_runtime_ts = _safe_float(
+            feed_runtime_payload.get("ts_epoch")
+            or feed_runtime_payload.get("last_ws_tick_epoch")
+            or feed_runtime_payload.get("last_db_tick_epoch")
+        )
+        feed_runtime_ws_connected = feed_runtime_payload.get("ws_connected")
+        feed_runtime_subscribed_total = int(
+            feed_runtime_payload.get("subscribed_option_tokens_count")
+            or feed_runtime_payload.get("subscribed_tokens_count")
+            or 0
+        )
+        feed_runtime_last_tick_ts = _safe_float(
+            feed_runtime_payload.get("last_ws_tick_epoch")
+            or feed_runtime_payload.get("last_db_tick_epoch")
+            or feed_runtime_payload.get("last_tick_epoch")
+        )
+        feed_runtime_last_tick_age = _safe_float(
+            feed_runtime_payload.get("last_tick_age_sec")
+            or feed_runtime_payload.get("last_db_tick_age_sec")
+        )
+        feed_runtime_state = str(feed_runtime_payload.get("runtime_state") or "").strip().upper()
+        tick_ts_by_symbol = (
+            dict(feed_runtime_payload.get("last_option_tick_ts_by_symbol") or {})
+            if isinstance(feed_runtime_payload.get("last_option_tick_ts_by_symbol"), dict)
+            else {}
+        )
+        tick_age_by_symbol = (
+            dict(feed_runtime_payload.get("option_last_tick_age_by_symbol") or {})
+            if isinstance(feed_runtime_payload.get("option_last_tick_age_by_symbol"), dict)
+            else {}
+        )
+        block_reason_by_symbol = (
+            dict(feed_runtime_payload.get("option_feed_block_reason_by_symbol") or {})
+            if isinstance(feed_runtime_payload.get("option_feed_block_reason_by_symbol"), dict)
+            else {}
+        )
+        subscribed_count_by_symbol = (
+            dict(feed_runtime_payload.get("option_tokens_subscribed_count_by_symbol") or {})
+            if isinstance(feed_runtime_payload.get("option_tokens_subscribed_count_by_symbol"), dict)
+            else {}
+        )
         per_symbol: dict[str, dict] = {}
         symbol_order: list[str] = []
         for raw in market_data_list:
@@ -2264,6 +2358,54 @@ class Orchestrator:
             cycle_id = getattr(self, "_gate_status_cycle_id", None)
             if cycle_id is not None:
                 snap["cycle_id"] = cycle_id
+            if symbol:
+                symbol_tick_ts = _safe_float(tick_ts_by_symbol.get(symbol))
+                symbol_tick_age = _safe_float(tick_age_by_symbol.get(symbol))
+                if symbol_tick_ts is None:
+                    symbol_tick_ts = feed_runtime_last_tick_ts
+                if symbol_tick_age is None and symbol_tick_ts is not None:
+                    try:
+                        symbol_tick_age = max(0.0, float(now_utc_epoch()) - float(symbol_tick_ts))
+                    except Exception:
+                        symbol_tick_age = None
+                if symbol_tick_age is None:
+                    symbol_tick_age = feed_runtime_last_tick_age
+                symbol_subscribed = int(
+                    subscribed_count_by_symbol.get(symbol)
+                    or feed_runtime_subscribed_total
+                    or 0
+                )
+                block_reason = str(block_reason_by_symbol.get(symbol) or "").strip().upper()
+                if feed_runtime_ws_connected is not None:
+                    snap["ws_connected"] = bool(feed_runtime_ws_connected)
+                snap["subscribed_option_tokens_count"] = int(symbol_subscribed)
+                if symbol_tick_ts is not None:
+                    snap["latest_option_tick_ts"] = float(symbol_tick_ts)
+                if symbol_tick_age is not None:
+                    snap["latest_option_tick_age_sec"] = float(symbol_tick_age)
+                if feed_runtime_ts is not None:
+                    snap["feed_timestamp_epoch"] = float(feed_runtime_ts)
+                    if _safe_float(snap.get("timestamp_epoch")) is None and symbol_tick_ts is not None:
+                        snap["timestamp_epoch"] = float(symbol_tick_ts)
+                if block_reason:
+                    snap["option_feed_block_reason"] = block_reason
+                feed_health = dict(snap.get("feed_health") or {}) if isinstance(snap.get("feed_health"), dict) else {}
+                if feed_runtime_state:
+                    feed_health["runtime_state"] = feed_runtime_state
+                if feed_runtime_ws_connected is not None:
+                    feed_health["ws_connected"] = bool(feed_runtime_ws_connected)
+                feed_health["subscribed_option_tokens_count"] = int(symbol_subscribed)
+                if symbol_tick_ts is not None:
+                    feed_health["latest_option_tick_ts"] = float(symbol_tick_ts)
+                if symbol_tick_age is not None:
+                    feed_health["latest_option_tick_age_sec"] = float(symbol_tick_age)
+                if feed_runtime_ts is not None:
+                    feed_health["ts_epoch"] = float(feed_runtime_ts)
+                if block_reason:
+                    feed_health["option_feed_block_reason"] = block_reason
+                    if block_reason != "OK":
+                        feed_health["is_fresh"] = False
+                snap["feed_health"] = feed_health
             # Keep the latest snapshot for this symbol in the cycle.
             try:
                 ts_epoch = float(snap.get("timestamp") or 0.0)
@@ -2318,7 +2460,16 @@ class Orchestrator:
         if "segment" not in ctx_payload:
             ctx_payload["segment"] = market_data.get("segment")
         market_ctx = derive_market_context(ctx_payload)
-        default_block_after = max(1, int(getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1)))
+        default_block_after = max(
+            1,
+            int(
+                getattr(
+                    cfg,
+                    "LIVE_REGIME_UNSTABLE_CONSECUTIVE_BLOCK",
+                    getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1),
+                )
+            ),
+        )
         if bool(market_ctx.allow_stale_quotes):
             return max(
                 1,
@@ -4204,11 +4355,13 @@ class Orchestrator:
                             len(breadth_candidates),
                         )
                     if real_candidates or synthetic_candidates:
-                        softened = sum(1 for cand in real_candidates if cand.get("latency_softened"))
+                        softened = sum(
+                            1 for cand in real_candidates if bool(_trade_attr(cand, "latency_softened", False))
+                        )
                         fallback = sum(
                             1
                             for cand in synthetic_candidates
-                            if str(cand.get("candidate_origin") or "") == "fallback_min_breadth"
+                            if str(_trade_attr(cand, "candidate_origin", "") or "") == "fallback_min_breadth"
                         )
                         normal = max(0, len(real_candidates) - softened)
                         total_candidates = len(real_candidates) + len(synthetic_candidates)

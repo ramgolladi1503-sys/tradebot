@@ -55,7 +55,13 @@ class StrategyGatekeeper:
         paper_relax = bool(market_ctx.allow_stale_quotes) and bool(
             getattr(cfg, "PAPER_RELAX_GATES", True)
         )
-        unstable_block_after_default = int(getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1))
+        unstable_block_after_default = int(
+            getattr(
+                cfg,
+                "LIVE_REGIME_UNSTABLE_CONSECUTIVE_BLOCK",
+                getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1),
+            )
+        )
         unstable_block_after = unstable_block_after_default
         if paper_relax:
             unstable_block_after = int(

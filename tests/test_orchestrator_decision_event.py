@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
-from core.orchestrator import Orchestrator
+from config import config as cfg
+import core.orchestrator as orchestrator_module
+from core.orchestrator import Orchestrator, _is_reportable_executable_candidate, _trade_attr
 from core.time_utils import now_utc_epoch
 
 
@@ -165,3 +167,193 @@ def test_build_decision_event_global_halt_does_not_inject_epoch_missing():
     assert "latency_breach" in reasons
     assert "epoch_missing" not in reasons
     assert event["quote_age_sec"] == -1.0
+
+
+def test_candidate_pool_counts_handle_trade_objects_without_dict_get():
+    real_candidates = [
+        SimpleNamespace(latency_softened=True),
+        {"latency_softened": False},
+    ]
+    synthetic_candidates = [
+        SimpleNamespace(candidate_origin="fallback_min_breadth"),
+        {"candidate_origin": "softened_builder_path"},
+    ]
+
+    softened = sum(1 for cand in real_candidates if bool(_trade_attr(cand, "latency_softened", False)))
+    fallback = sum(
+        1
+        for cand in synthetic_candidates
+        if str(_trade_attr(cand, "candidate_origin", "") or "") == "fallback_min_breadth"
+    )
+
+    assert softened == 1
+    assert fallback == 1
+
+
+def test_reportable_executable_candidate_allows_status_fallback_when_enabled(monkeypatch):
+    monkeypatch.setattr(cfg, "ORCHESTRATOR_EXECUTABLE_REPORT_ALLOW_STATUS_FALLBACK", True, raising=False)
+    candidate = {
+        "trade_id": "NIFTY-123",
+        "symbol": "NIFTY",
+        "strategy_family": "breakout",
+        "candidate_status": "executable",
+        "execution_status": None,
+        "execution_entry_status": "executable",
+        "execution_allowed": True,
+        "eligible_for_execution": None,
+        "execution_blocked": False,
+        "execution_entry": 124.5,
+    }
+    assert _is_reportable_executable_candidate(candidate) is True
+
+
+def test_reportable_executable_candidate_status_fallback_can_be_disabled(monkeypatch):
+    monkeypatch.setattr(cfg, "ORCHESTRATOR_EXECUTABLE_REPORT_ALLOW_STATUS_FALLBACK", False, raising=False)
+    candidate = {
+        "trade_id": "NIFTY-124",
+        "symbol": "NIFTY",
+        "strategy_family": "breakout",
+        "candidate_status": "executable",
+        "execution_status": None,
+        "execution_entry_status": "executable",
+        "execution_allowed": True,
+        "execution_blocked": False,
+        "execution_entry": 124.5,
+    }
+    assert _is_reportable_executable_candidate(candidate) is False
+
+
+def test_build_cycle_market_data_attaches_feed_runtime_evidence(monkeypatch):
+    orch = Orchestrator.__new__(Orchestrator)
+    orch._cycle_market_snapshot_by_symbol = {}
+    monkeypatch.setattr(
+        orchestrator_module,
+        "_read_latest_feed_runtime_payload",
+        lambda: (
+            {
+                "ts_epoch": 2000.0,
+                "ws_connected": True,
+                "subscribed_option_tokens_count": 66,
+                "last_option_tick_ts_by_symbol": {"NIFTY": 1999.2},
+                "option_last_tick_age_by_symbol": {"NIFTY": 0.8},
+                "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+                "option_tokens_subscribed_count_by_symbol": {"NIFTY": 24},
+                "runtime_state": "RUNNING",
+            },
+            None,
+        ),
+        raising=False,
+    )
+
+    out = orch._build_cycle_market_data(
+        [
+            {
+                "symbol": "NIFTY",
+                "instrument": "OPT",
+                "timestamp": 1999.5,
+                "feed_health": {"time_sanity": {"ok": True}},
+            }
+        ]
+    )
+
+    assert len(out) == 1
+    row = out[0]
+    assert row["ws_connected"] is True
+    assert row["subscribed_option_tokens_count"] == 24
+    assert row["latest_option_tick_ts"] == 1999.2
+    assert row["latest_option_tick_age_sec"] == 0.8
+    assert row["option_feed_block_reason"] == "OK"
+    assert row["feed_timestamp_epoch"] == 2000.0
+    assert row["timestamp_epoch"] == 1999.2
+    assert isinstance(row.get("feed_health"), dict)
+    assert row["feed_health"]["ws_connected"] is True
+    assert row["feed_health"]["runtime_state"] == "RUNNING"
+
+
+def test_build_decision_event_does_not_flag_unresolved_when_broker_identity_present():
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.portfolio = {
+        "capital": 100000.0,
+        "equity_high": 100000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+    }
+    orch.loss_streak = {}
+    orch.risk_state = SimpleNamespace(daily_max_drawdown=0.0)
+    orch._open_risk = lambda: 0.0
+
+    trade = SimpleNamespace(
+        trade_id="NIFTY-TEST-IDENTITY",
+        symbol="NIFTY",
+        instrument="OPT",
+        instrument_type="OPT",
+        strike=24650,
+        right="CE",
+        option_type="CE",
+        expiry="2026-04-23",
+        expiry_date=None,
+        tradingsymbol="NIFTY26APR24650CE",
+        instrument_token=123456,
+        instrument_id=None,
+        qty_lots=1,
+        qty_units=50,
+    )
+    market_data = {
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "quote_age_sec": 0.5,
+    }
+
+    event = orch._build_decision_event(trade, market_data, gatekeeper_allowed=True, veto_reasons=[])
+    assert "unresolved_contract" not in list(event.get("veto_reasons") or [])
+
+
+def test_build_decision_event_skips_unresolved_for_synthetic_placeholder():
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.portfolio = {
+        "capital": 100000.0,
+        "equity_high": 100000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+    }
+    orch.loss_streak = {}
+    orch.risk_state = SimpleNamespace(daily_max_drawdown=0.0)
+    orch._open_risk = lambda: 0.0
+
+    trade = SimpleNamespace(
+        trade_id="PRE_BUILDER_GATE-NIFTY-123",
+        symbol="NIFTY",
+        instrument="OPT",
+        instrument_type="OPT",
+        strategy_family="synthetic_advisory",
+        candidate_origin="pre_builder_gate",
+        right="CE",
+    )
+    market_data = {
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "quote_age_sec": 1.0,
+    }
+
+    event = orch._build_decision_event(trade, market_data, gatekeeper_allowed=False, veto_reasons=["no_signal"])
+    reasons = list(event.get("veto_reasons") or [])
+    assert "unresolved_contract" not in reasons
+    assert "no_signal" in reasons
+
+
+def test_regime_unstable_block_after_prefers_live_override(monkeypatch):
+    orch = Orchestrator.__new__(Orchestrator)
+    monkeypatch.setattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1, raising=False)
+    monkeypatch.setattr(cfg, "LIVE_REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 2, raising=False)
+    monkeypatch.setattr(cfg, "PAPER_REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 3, raising=False)
+
+    out = orch._regime_unstable_block_after(
+        {"symbol": "NIFTY", "market_context": {"execution_mode": "LIVE", "market_open": True}}
+    )
+    assert out == 2

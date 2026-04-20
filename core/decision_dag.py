@@ -374,6 +374,18 @@ def build_market_snapshot(
     ltp_ts_epoch = _to_float(data.get("ltp_ts_epoch"))
     if ltp_ts_epoch is None:
         ltp_ts_epoch = _to_float(data.get("tick_last_epoch"))
+    if ltp_ts_epoch is None:
+        for fallback_key in (
+            "quote_ts_epoch",
+            "latest_option_tick_ts",
+            "last_tick_ts",
+            "timestamp_epoch",
+            "feed_timestamp_epoch",
+            "ts_epoch",
+        ):
+            ltp_ts_epoch = _to_float(data.get(fallback_key))
+            if ltp_ts_epoch is not None:
+                break
     ltp_source = str(data.get("ltp_source") or "").strip() or None
 
     bid = _to_float(data.get("bid"))
@@ -475,24 +487,124 @@ def build_market_snapshot(
         )
     if max_ltp_age is None:
         max_ltp_age = 2.5
+
+    max_depth_age = _to_float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if offhours_mode else "SLA_MAX_DEPTH_AGE_SEC",
+            None,
+        )
+    )
+    if max_depth_age is None:
+        max_depth_age = _to_float(
+            getattr(
+                cfg,
+                "OFFHOURS_MAX_DEPTH_AGE_SEC" if offhours_mode else "MAX_DEPTH_AGE_SEC",
+                900.0 if offhours_mode else 6.0,
+            )
+        )
+    if max_depth_age is None:
+        max_depth_age = 6.0
+
+    max_option_tick_age = _to_float(
+        getattr(
+            cfg,
+            "OFFHOURS_MAX_OPTION_QUOTE_AGE_SEC" if offhours_mode else "MAX_OPTION_QUOTE_AGE_SEC",
+            max_ltp_age,
+        )
+    )
+    if max_option_tick_age is None:
+        max_option_tick_age = max_ltp_age
+
     if ltp_ts_epoch is None:
         ltp_age_sec = float("inf")
     else:
         ltp_age_sec = compute_age_sec(ltp_ts_epoch, now_value)
         if ltp_age_sec is None:
             ltp_age_sec = float("inf")
+
     if depth_ts_epoch is None:
         depth_age_sec = depth_age_from_row
     else:
         depth_age_sec = compute_age_sec(depth_ts_epoch, now_value)
+
+    raw_feed_health = data.get("feed_health") if isinstance(data.get("feed_health"), Mapping) else {}
+    latest_option_tick_ts = _to_float(data.get("latest_option_tick_ts"))
+    if latest_option_tick_ts is None:
+        latest_option_tick_ts = _to_float(raw_feed_health.get("latest_option_tick_ts"))
+    latest_option_tick_age_sec = _to_float(data.get("latest_option_tick_age_sec"))
+    if latest_option_tick_age_sec is None:
+        latest_option_tick_age_sec = _to_float(raw_feed_health.get("latest_option_tick_age_sec"))
+    if latest_option_tick_age_sec is None and latest_option_tick_ts is not None:
+        latest_option_tick_age_sec = compute_age_sec(latest_option_tick_ts, now_value)
+
+    ws_connected = data.get("ws_connected")
+    if ws_connected is None:
+        ws_connected = raw_feed_health.get("ws_connected")
+    subscribed_option_tokens_count = _to_float(data.get("subscribed_option_tokens_count"))
+    if subscribed_option_tokens_count is None:
+        subscribed_option_tokens_count = _to_float(raw_feed_health.get("subscribed_option_tokens_count"))
+
+    option_feed_block_reason = str(data.get("option_feed_block_reason") or "").strip().upper()
+    if not option_feed_block_reason:
+        option_feed_block_reason = str(raw_feed_health.get("option_feed_block_reason") or "").strip().upper()
+
+    ltp_fresh = bool(ltp is not None and ltp > 0 and ltp_age_sec <= float(max_ltp_age))
+    option_tick_fresh = bool(
+        latest_option_tick_age_sec is not None
+        and float(latest_option_tick_age_sec) <= float(max_option_tick_age)
+    )
+    option_feed_ok = option_feed_block_reason in {"", "OK"}
+    option_feed_fresh = bool(
+        str(instrument or "").upper() == "OPT"
+        and option_tick_fresh
+        and option_feed_ok
+    )
+
+    is_fresh = bool(allow_stale_quotes or ltp_fresh or option_feed_fresh)
+    stale_reasons: list[str] = []
+    if not is_fresh:
+        if ltp is None or float(ltp) <= 0.0:
+            stale_reasons.append("ltp_missing")
+        elif not ltp_fresh:
+            stale_reasons.append("ltp_stale")
+        if str(instrument or "").upper() == "OPT":
+            if not option_feed_ok:
+                stale_reasons.append(f"option_feed_block:{option_feed_block_reason}")
+            elif not option_tick_fresh:
+                stale_reasons.append("option_tick_stale")
+            if ws_connected is False:
+                stale_reasons.append("ws_disconnected")
+            if subscribed_option_tokens_count is not None and int(subscribed_option_tokens_count) <= 0:
+                stale_reasons.append("no_option_subscriptions")
+
     feed_health = {
         "ltp_age_sec": ltp_age_sec,
+        "ltp_max_age_sec": float(max_ltp_age),
         "depth_age_sec": depth_age_sec,
-        "is_fresh": bool(allow_stale_quotes or (ltp is not None and ltp > 0 and ltp_age_sec <= float(max_ltp_age))),
+        "depth_max_age_sec": float(max_depth_age),
+        "latest_option_tick_ts": latest_option_tick_ts,
+        "latest_option_tick_age_sec": latest_option_tick_age_sec,
+        "latest_option_tick_max_age_sec": float(max_option_tick_age),
+        "ws_connected": ws_connected,
+        "subscribed_option_tokens_count": (
+            int(subscribed_option_tokens_count) if subscribed_option_tokens_count is not None else None
+        ),
+        "option_feed_block_reason": option_feed_block_reason or None,
+        "is_fresh": bool(is_fresh),
         "source": ltp_source or "unknown",
         "offhours_mode": bool(offhours_mode),
         "allow_stale_quotes": bool(allow_stale_quotes),
         "ts_epoch": float(now_value),
+        "ltp": {
+            "age_sec": ltp_age_sec,
+            "max_age_sec": float(max_ltp_age),
+        },
+        "depth": {
+            "age_sec": depth_age_sec,
+            "max_age_sec": float(max_depth_age),
+        },
+        "reasons": list(stale_reasons),
     }
 
     return MarketSnapshot(
@@ -722,15 +834,28 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
         unstable_reasons = [r for r in unstable_reasons if r not in {"prob_too_low", "entropy_too_high"}]
 
     unstable_reasons = list(_clean_reasons(unstable_reasons))
-    debounce_block_after = 1
+    debounce_default = int(
+        getattr(
+            cfg,
+            "PAPER_REGIME_UNSTABLE_CONSECUTIVE_BLOCK",
+            getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1),
+        )
+        if snapshot.allow_stale_quotes
+        else getattr(
+            cfg,
+            "LIVE_REGIME_UNSTABLE_CONSECUTIVE_BLOCK",
+            getattr(cfg, "REGIME_UNSTABLE_CONSECUTIVE_BLOCK", 1),
+        )
+    )
+    debounce_block_after = max(1, debounce_default)
     debounce_streak = 0
     try:
         debounce_block_after = max(
             1,
-            int(snapshot.raw_data.get("regime_unstable_block_after") or 1),
+            int(snapshot.raw_data.get("regime_unstable_block_after") or debounce_default),
         )
     except Exception:
-        debounce_block_after = 1
+        debounce_block_after = max(1, debounce_default)
     try:
         debounce_streak = max(
             0,

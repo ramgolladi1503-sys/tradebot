@@ -309,6 +309,8 @@ class TradeBuilder:
         self._last_scan_summary = {}
         self._last_ranked_candidates = []
         self._soft_reject_reasons_cache: set[str] | None = None
+        self._feed_runtime_cache_ts = 0.0
+        self._feed_runtime_cache_payload: dict = {}
 
     def _soft_reject_reasons(self) -> set[str]:
         if self._soft_reject_reasons_cache is not None:
@@ -1335,19 +1337,90 @@ class TradeBuilder:
         )
 
     def _heartbeat_feed_snapshot(self) -> dict:
-        payload = {}
-        try:
-            payload = json.loads((logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-            if not isinstance(payload, dict):
-                payload = {}
-        except Exception:
-            payload = {}
+        payload = self._cached_feed_runtime_snapshot(now_epoch=now_utc_epoch())
         return {
             "feed_ok": payload.get("feed_ok"),
             "ws_connected": payload.get("ws_connected"),
             "subscribed_option_tokens_count": payload.get("subscribed_option_tokens_count"),
             "missing_option_tokens_count": payload.get("missing_option_tokens_count"),
         }
+
+    def _cached_feed_runtime_snapshot(self, *, now_epoch: float | None = None) -> dict:
+        ttl_sec = max(0.1, float(getattr(cfg, "TRADE_BUILDER_FEED_RUNTIME_CACHE_TTL_SEC", 1.0) or 1.0))
+        epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
+        if (epoch - float(self._feed_runtime_cache_ts or 0.0)) <= ttl_sec and isinstance(self._feed_runtime_cache_payload, dict):
+            return dict(self._feed_runtime_cache_payload)
+        payload = {}
+        latest_mtime = -1.0
+        candidates = [
+            Path(data_root()) / "feed_runtime_latest.json",
+            logs_dir() / "feed_runtime_latest.json",
+        ]
+        for candidate_path in candidates:
+            try:
+                if not candidate_path.exists():
+                    continue
+                mtime = float(candidate_path.stat().st_mtime)
+            except Exception:
+                continue
+            try:
+                raw = json.loads(candidate_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(raw, dict):
+                continue
+            normalized = raw.get("payload") if isinstance(raw.get("payload"), dict) else raw
+            if not isinstance(normalized, dict):
+                continue
+            if mtime >= latest_mtime:
+                latest_mtime = mtime
+                payload = dict(normalized)
+        self._feed_runtime_cache_ts = epoch
+        self._feed_runtime_cache_payload = dict(payload)
+        return dict(payload)
+
+    def _symbol_feed_option_tick_age(self, symbol: str, *, now_epoch: float | None = None) -> float | None:
+        if not bool(getattr(cfg, "TRADE_BUILDER_USE_SYMBOL_FEED_AGE_FALLBACK", True)):
+            return None
+        payload = self._cached_feed_runtime_snapshot(now_epoch=now_epoch)
+        if not isinstance(payload, dict):
+            return None
+        if payload.get("ws_connected") is False:
+            return None
+        symbol_key = str(symbol or "").strip().upper()
+        if not symbol_key:
+            return None
+        reason_map = payload.get("option_feed_block_reason_by_symbol")
+        if isinstance(reason_map, dict):
+            reason_code = str(reason_map.get(symbol_key) or "").strip().upper()
+            if reason_code and reason_code not in {"OK", "NONE"}:
+                return None
+        tick_ages = payload.get("option_last_tick_age_by_symbol")
+        if isinstance(tick_ages, dict):
+            try:
+                age = float(tick_ages.get(symbol_key))
+                if age >= 0.0:
+                    return age
+            except Exception:
+                pass
+        tick_ts = None
+        tick_map = payload.get("last_option_tick_ts_by_symbol")
+        if isinstance(tick_map, dict):
+            try:
+                tick_ts = float(tick_map.get(symbol_key))
+            except Exception:
+                tick_ts = None
+        if tick_ts is None:
+            try:
+                tick_ts = float(payload.get("last_db_tick_epoch"))
+            except Exception:
+                tick_ts = None
+        if tick_ts is None:
+            return None
+        age_val = compute_age_sec(tick_ts, now_epoch if now_epoch is not None else now_utc_epoch())
+        if age_val is None:
+            return None
+        return float(age_val)
 
     def _status_file_payload(self, filename: str) -> dict:
         try:
@@ -2720,6 +2793,20 @@ class TradeBuilder:
         allow_stale_quotes = bool(getattr(market_ctx, "allow_stale_quotes", False))
         soft_stale_sec = float(max(option_tick_sla_sec, float(getattr(cfg, "OPTION_TICK_SOFT_STALE_SEC", 3.0))))
         hard_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "OPTION_TICK_HARD_STALE_SEC", 6.0))))
+        market_mode_live = str(market_mode or "").strip().upper() == "LIVE"
+        if market_mode_live:
+            soft_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "LIVE_OPTION_TICK_SOFT_STALE_SEC", soft_stale_sec))))
+            hard_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "LIVE_OPTION_TICK_HARD_STALE_SEC", hard_stale_sec))))
+            fallback_max_sec = max(
+                0.0,
+                float(getattr(cfg, "TRADE_BUILDER_FEED_AGE_FALLBACK_MAX_SEC", 3.0) or 3.0),
+            )
+            if quote_age_sec is None or quote_age_sec > option_tick_sla_sec:
+                symbol_age = self._symbol_feed_option_tick_age(symbol, now_epoch=now_utc_epoch())
+                if symbol_age is not None and symbol_age <= fallback_max_sec:
+                    quote_age_sec = float(symbol_age)
+                    opt["quote_age_sec"] = float(symbol_age)
+                    opt["quote_age_fallback_source"] = "feed_runtime_symbol_age"
         if quote_age_sec is None or quote_age_sec > option_tick_sla_sec:
             stale_bypass = self._allow_stale_option_tick_bypass(
                 market_ctx,
@@ -2793,16 +2880,53 @@ class TradeBuilder:
             max_spread_pct = float(getattr(cfg, "MAX_SPREAD_PCT", 0.02))
             spread_ok = spread_pct is not None and spread_pct <= max_spread_pct
             require_volume = bool(getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False))
+            if market_mode_live:
+                try:
+                    mode_profile = get_runtime_profile(mode=market_mode)
+                    require_volume = bool(require_volume and mode_profile.suggestion_require_volume)
+                except Exception:
+                    require_volume = bool(require_volume)
             volume_val = self._coerce_nonnegative_float(opt.get("volume"))
             volume_ok = bool(volume_val is not None and volume_val > 0) if require_volume else True
+            oi_val = self._coerce_nonnegative_float(opt.get("oi"))
+            min_oi_soften = max(
+                0.0,
+                float(getattr(cfg, "TRADE_BUILDER_LIVE_STALE_SOFTEN_MIN_OI", 1000.0) or 1000.0),
+            )
+            oi_ok = bool(oi_val is not None and oi_val >= min_oi_soften)
+            quote_ok_raw = opt.get("quote_ok")
+            if quote_ok_raw is None:
+                quote_ok_raw = bool(
+                    bid is not None
+                    and ask is not None
+                    and ask >= bid
+                    and ltp_ref not in (None, 0)
+                )
+            require_quote_ok_soften = bool(
+                getattr(cfg, "TRADE_BUILDER_LIVE_STALE_SOFTEN_REQUIRE_QUOTE_OK", True)
+            )
+            quote_ok_for_soften = (not require_quote_ok_soften) or bool(quote_ok_raw)
+            liquidity_ok_for_soften = bool(spread_ok and (volume_ok or oi_ok))
             live_soften_enabled = bool(getattr(cfg, "TRADE_BUILDER_ALLOW_LIVE_STALE_OPTION_TICK_SOFTEN", True))
-            market_mode_live = str(market_mode or "").strip().upper() == "LIVE"
             mildly_stale = quote_age_sec is not None and quote_age_sec <= soft_stale_sec
             hard_stale = quote_age_sec is None or quote_age_sec > hard_stale_sec
-            if live_soften_enabled and market_mode_live and mildly_stale and not hard_stale and spread_ok and volume_ok:
+            stale_within_live_window = quote_age_sec is not None and quote_age_sec <= hard_stale_sec
+            if (
+                live_soften_enabled
+                and market_mode_live
+                and stale_within_live_window
+                and liquidity_ok_for_soften
+                and quote_ok_for_soften
+                and not hard_stale
+            ):
+                reason_text = (
+                    "Option tick mildly stale in LIVE; downgraded to advisory penalty"
+                    if mildly_stale
+                    else "Option tick stale in LIVE hard window; downgraded to advisory penalty"
+                )
                 return True, {
                     "reason_code": "STALE_OPTION_TICK",
-                    "reason_text": "Option tick mildly stale in LIVE; downgraded to advisory penalty",
+                    "reason_text": reason_text,
                     "gate_name": "option_tradability_precondition",
                     "contract": contract_label,
                     "strike": strike,
@@ -2824,6 +2948,11 @@ class TradeBuilder:
                     "live_softened": True,
                     "spread_ok": spread_ok,
                     "volume_ok": volume_ok,
+                    "oi": oi_val,
+                    "oi_ok": oi_ok,
+                    "min_oi_soften": min_oi_soften,
+                    "quote_ok_for_soften": quote_ok_for_soften,
+                    "liquidity_ok_for_soften": liquidity_ok_for_soften,
                 }
             return False, {
                 "reason_code": "STALE_OPTION_TICK",
@@ -3178,6 +3307,7 @@ class TradeBuilder:
     def _resolve_option_contract(self, symbol: str, strike, opt_type: str, expiry: str, market_data: dict | None) -> dict:
         data = market_data or {}
         exp_text = self._coerce_date_str(expiry)
+        opt_type = self._coerce_option_type(opt_type)
         strike_val = None
         try:
             strike_val = float(strike) if strike is not None else None
@@ -3239,10 +3369,28 @@ class TradeBuilder:
                 if tradingsymbol or instrument_token:
                     break
         if (tradingsymbol is None and instrument_token is None) and chain_candidates:
-            fallback_steps = max(0, int(getattr(cfg, "TRADE_BUILDER_CONTRACT_STRIKE_FALLBACK_STEPS", 2) or 2))
+            fallback_steps = max(0, int(getattr(cfg, "TRADE_BUILDER_CONTRACT_STRIKE_FALLBACK_STEPS", 4) or 4))
             step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
             step = float(step_map.get(str(symbol or "").upper(), getattr(cfg, "STRIKE_STEP", 50)) or 0.0)
             max_strike_delta = float(step * fallback_steps) if step > 0 and fallback_steps > 0 else None
+            max_strike_delta_abs = self._coerce_positive_float(
+                getattr(cfg, "TRADE_BUILDER_CONTRACT_STRIKE_FALLBACK_MAX_DIFF_ABS", None)
+            )
+            max_strike_delta_pct = self._coerce_positive_float(
+                getattr(cfg, "TRADE_BUILDER_CONTRACT_STRIKE_FALLBACK_MAX_DIFF_PCT", None)
+            )
+            underlying_spot = self._coerce_positive_float(
+                data.get("underlying_spot")
+                or data.get("spot")
+                or data.get("ltp")
+            )
+            max_strike_delta_pct_abs = (
+                float(underlying_spot) * float(max_strike_delta_pct)
+                if underlying_spot is not None and max_strike_delta_pct is not None
+                else None
+            )
+            delta_limits = [float(limit) for limit in (max_strike_delta, max_strike_delta_abs, max_strike_delta_pct_abs) if limit is not None]
+            effective_max_strike_delta = max(delta_limits) if delta_limits else None
 
             def _candidate_sort_key(item: dict) -> tuple[float, int, str]:
                 c_exp = str(item.get("expiry") or "")
@@ -3253,12 +3401,12 @@ class TradeBuilder:
             if sorted_candidates:
                 best = sorted_candidates[0]
                 diff = abs(float(best.get("strike") or 0.0) - float(strike_val))
+                nearest_diff = diff
                 allow_fallback = True
-                if max_strike_delta is not None:
-                    allow_fallback = bool(diff <= max_strike_delta + 1e-9)
+                if effective_max_strike_delta is not None:
+                    allow_fallback = bool(diff <= effective_max_strike_delta + 1e-9)
                 if allow_fallback:
                     fallback_applied = True
-                    nearest_diff = diff
                     tradingsymbol = best.get("tradingsymbol") or tradingsymbol
                     instrument_token = best.get("instrument_token") or instrument_token
                     best_expiry = str(best.get("expiry") or "")
@@ -3275,6 +3423,7 @@ class TradeBuilder:
                                 "resolved_expiry": exp_text,
                                 "option_type": str(opt_type).upper(),
                                 "nearest_diff": float(diff),
+                                "fallback_limit": float(effective_max_strike_delta) if effective_max_strike_delta is not None else None,
                             },
                         )
         if not exp_text:
@@ -7208,6 +7357,12 @@ class TradeBuilder:
         if exec_mode == "PAPER" and getattr(cfg, "PAPER_STRICT_MODE", False):
             relax_reason = ""
         def _relax(reason: str) -> bool:
+            if (
+                exec_mode == "LIVE"
+                and reason in {"iv_term", "iv_surface_slope"}
+                and bool(getattr(cfg, "LIVE_RELAX_IV_STRUCTURE_GATES_ENABLE", True))
+            ):
+                return True
             if exec_mode in {"SIM", "PAPER"} and reason in {"spread_pct", "low_volume", "low_oi", "delta"}:
                 return True
             return bool(relax_reason) and reason == relax_reason
@@ -7288,9 +7443,9 @@ class TradeBuilder:
         if (
             not signal
             and exec_mode == "LIVE"
-            and allow_fallbacks
             and bool(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_ENABLE", True))
         ):
+            live_signal = None
             try:
                 live_signal = self._quick_neutral_fallback_signal(
                     market_data,
@@ -7299,7 +7454,30 @@ class TradeBuilder:
                 )
             except Exception:
                 live_signal = None
-            min_live_score = float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.60))
+            if not live_signal:
+                try:
+                    live_signal = self._planning_signal_fallback_signal(
+                        market_data,
+                        float(ltp or 0.0),
+                        float(vwap or 0.0),
+                    )
+                except Exception:
+                    live_signal = None
+            if not live_signal:
+                bias = str(market_data.get("bias") or "").strip().upper()
+                ltp_change = float(market_data.get("ltp_change") or 0.0)
+                direction = None
+                if bias in {"BULLISH", "UP"} or ltp_change > 0:
+                    direction = "BUY_CALL"
+                elif bias in {"BEARISH", "DOWN"} or ltp_change < 0:
+                    direction = "BUY_PUT"
+                if direction:
+                    live_signal = {
+                        "direction": direction,
+                        "reason": "Live no-signal bias fallback",
+                        "score": float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.58)),
+                    }
+            min_live_score = float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.58))
             if live_signal and float(live_signal.get("score") or 0.0) >= min_live_score:
                 live_signal["reason"] = "Live structured no-signal fallback"
                 signal = live_signal
@@ -7769,6 +7947,9 @@ class TradeBuilder:
                 _append_unique(non_live_relaxed_gate_codes, "type_mismatch")
             require_depth_quotes = bool(getattr(cfg, "REQUIRE_DEPTH_QUOTES_FOR_TRADE", False))
             require_volume = bool(getattr(cfg, "REQUIRE_VOLUME_FOR_TRADE", False))
+            if exec_mode == "LIVE":
+                # LIVE suggestion flow should honor profile-level volume strictness. Execution-stage guards remain strict.
+                require_volume = bool(require_volume and runtime_profile.suggestion_require_volume)
             if exec_mode in {"SIM", "PAPER"} and bool(getattr(cfg, "RELAX_VOLUME_REQUIREMENTS_NONLIVE", True)):
                 require_volume = False
             premium_soft_veto = False
@@ -8219,25 +8400,43 @@ class TradeBuilder:
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_surface_slope", atr=atr))
                         continue
                 if opt.get("oi_build"):
-                    if direction == "BUY_CALL" and opt["oi_build"] not in ("LONG", "SHORT_COVER") and not _relax("oi_build"):
-                        _count_option_reject("oi_build")
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
-                        continue
-                    if direction == "BUY_PUT" and opt["oi_build"] not in ("SHORT", "LONG_LIQ") and not _relax("oi_build"):
-                        _count_option_reject("oi_build")
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
-                        continue
+                    enforce_oi_build_alignment = True
+                    if exec_mode == "LIVE" and not bool(getattr(cfg, "LIVE_REQUIRE_OI_BUILD_ALIGNMENT", False)):
+                        enforce_oi_build_alignment = False
+                    if direction == "BUY_CALL" and opt["oi_build"] not in ("LONG", "SHORT_COVER"):
+                        if enforce_oi_build_alignment and not _relax("oi_build"):
+                            _count_option_reject("oi_build")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
+                            continue
+                        _record_issue("oi_build", role=ISSUE_CATEGORY_SOFT)
+                        _append_unique(non_live_relaxed_gate_codes, "oi_build")
+                    if direction == "BUY_PUT" and opt["oi_build"] not in ("SHORT", "LONG_LIQ"):
+                        if enforce_oi_build_alignment and not _relax("oi_build"):
+                            _count_option_reject("oi_build")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=oi_build", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "oi_build", atr=atr))
+                            continue
+                        _record_issue("oi_build", role=ISSUE_CATEGORY_SOFT)
+                        _append_unique(non_live_relaxed_gate_codes, "oi_build")
                 if opt.get("delta") is not None:
-                    if (abs(opt["delta"]) < getattr(cfg, "DELTA_MIN", 0.25) or abs(opt["delta"]) > getattr(cfg, "DELTA_MAX", 0.7)) and not _relax("delta"):
-                        _count_option_reject("delta")
-                        if debug_reasons:
-                            _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=delta", symbol, opt.get("strike"), opt_type)
-                            rejected.append(self._reject_record(symbol, opt, opt_type, "delta", atr=atr))
-                        continue
+                    delta_min = float(getattr(cfg, "DELTA_MIN", 0.25))
+                    delta_max = float(getattr(cfg, "DELTA_MAX", 0.7))
+                    if exec_mode == "LIVE":
+                        delta_min = float(getattr(cfg, "LIVE_DELTA_MIN", delta_min))
+                        delta_max = float(getattr(cfg, "LIVE_DELTA_MAX", delta_max))
+                    if (abs(opt["delta"]) < delta_min or abs(opt["delta"]) > delta_max) and not _relax("delta"):
+                        if exec_mode == "LIVE" and not bool(getattr(cfg, "LIVE_DELTA_HARD_REJECT_ENABLE", False)):
+                            _record_issue("delta", role=ISSUE_CATEGORY_SOFT)
+                            _append_unique(non_live_relaxed_gate_codes, "delta")
+                        else:
+                            _count_option_reject("delta")
+                            if debug_reasons:
+                                _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=delta", symbol, opt.get("strike"), opt_type)
+                                rejected.append(self._reject_record(symbol, opt, opt_type, "delta", atr=atr))
+                            continue
 
             # Premium gate: hard only for poor liquidity, otherwise soft-veto.
             min_p, max_p = premium_band_used
@@ -8703,11 +8902,13 @@ class TradeBuilder:
                 tune = _get_auto_tune()
                 if tune.get("enabled"):
                     min_score = float(tune.get("trade_score_min", min_score))
+            if is_live_mode:
+                min_score = min(min_score, float(getattr(cfg, "LIVE_TRADE_SCORE_MIN", min_score)))
             if planning_relaxed:
                 min_score = min(min_score, float(getattr(cfg, "PLANNING_TRADE_SCORE_MIN", 58)))
             relaxed_trade_score_gate = False
             if score < min_score:
-                if is_live_mode:
+                if is_live_mode and bool(getattr(cfg, "LIVE_TRADE_SCORE_HARD_REJECT_ENABLE", False)):
                     _count_option_reject("trade_score")
                     if debug_reasons:
                         rec = self._reject_record(symbol, opt, opt_type, "trade_score", atr=atr)
@@ -8775,6 +8976,7 @@ class TradeBuilder:
 
             tier = "EXPLORATION" if quick_mode else "MAIN"
             resolved_contract = opt.get("_resolved_contract") if isinstance(opt.get("_resolved_contract"), dict) else {}
+            option_right = self._coerce_option_type(opt.get("type") or opt.get("option_type") or opt.get("right")) or opt_type
             expiry_resolved = (
                 resolved_contract.get("expiry")
                 or self._option_expiry(opt, market_data)
@@ -8786,7 +8988,7 @@ class TradeBuilder:
                 else self._resolve_option_contract(
                     symbol,
                     opt.get("strike"),
-                    opt.get("type"),
+                    option_right,
                     expiry_resolved,
                     market_data,
                 )
@@ -8799,7 +9001,7 @@ class TradeBuilder:
                 "OPT",
                 expiry_resolved,
                 opt.get("strike"),
-                opt.get("type"),
+                option_right,
                 1,
             )
             if not instrument_id and contract.get("instrument_id"):
@@ -8816,7 +9018,7 @@ class TradeBuilder:
                     market_data=market_data,
                     extra={
                         "strike": opt.get("strike"),
-                        "option_type": opt.get("type"),
+                        "option_type": option_right,
                         "expiry": expiry_resolved,
                         "expiry_date": expiry_resolved,
                         "tradingsymbol": tradingsymbol,
@@ -8839,7 +9041,7 @@ class TradeBuilder:
                     market_data=market_data,
                     extra={
                         "strike": opt.get("strike"),
-                        "option_type": opt.get("type"),
+                        "option_type": option_right,
                         "expiry": expiry_resolved,
                         "tradingsymbol": tradingsymbol,
                     },
@@ -8967,21 +9169,21 @@ class TradeBuilder:
             )
             trade = Trade(
                 trade_id=(
-                    f"{symbol}-{expiry_resolved}-{int(float(opt['strike']))}-{opt['type']}-"
+                    f"{symbol}-{expiry_resolved}-{int(float(opt['strike']))}-{option_right}-"
                     f"{str(setup_family).replace(' ', '_')}-{int(datetime.now().timestamp())}"
                 ),
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
                 instrument_type=instrument_type,
-                right=opt.get("type"),
+                right=option_right,
                 instrument_id=instrument_id,
                 instrument_token=instrument_token,
                 strike=opt["strike"],
                 expiry=expiry_resolved,
                 expiry_date=expiry_resolved,
                 tradingsymbol=tradingsymbol,
-                option_type=opt.get("type"),
+                option_type=option_right,
                 side="BUY",
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),
@@ -10112,11 +10314,12 @@ class TradeBuilder:
             return None
 
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        option_right = self._coerce_option_type(opt.get("type") or opt.get("option_type") or opt.get("right")) or opt_type
         expiry_resolved = self._option_expiry(opt, market_data) or expiry_resolved
         contract = self._resolve_option_contract(
             symbol,
             opt.get("strike"),
-            opt.get("type"),
+            option_right,
             expiry_resolved,
             market_data,
         )
@@ -10128,7 +10331,7 @@ class TradeBuilder:
             "OPT",
             expiry_resolved,
             opt.get("strike"),
-            opt.get("type"),
+            option_right,
             1,
         )
         if ident_err or not expiry_resolved or not tradingsymbol or not instrument_id:
@@ -10138,7 +10341,7 @@ class TradeBuilder:
                     "no_contract",
                     "Zero-to-hero blocked: unresolved contract",
                     market_data=market_data,
-                    extra={"strike": opt.get("strike"), "option_type": opt.get("type")},
+                    extra={"strike": opt.get("strike"), "option_type": option_right},
                 )
             return None
         if instrument_token is None and debug_reasons:
@@ -10147,7 +10350,7 @@ class TradeBuilder:
                 "no_token",
                 "Zero-to-hero continuing without resolved instrument token",
                 market_data=market_data,
-                extra={"strike": opt.get("strike"), "option_type": opt.get("type"), "tradingsymbol": tradingsymbol},
+                extra={"strike": opt.get("strike"), "option_type": option_right, "tradingsymbol": tradingsymbol},
             )
 
         intent = self.trade_intent_flags(market_data, opt=opt, additional_blockers=[])
@@ -10157,19 +10360,19 @@ class TradeBuilder:
         zero_hero_confidence = float(chosen["confidence"])
 
         trade = Trade(
-            trade_id=f"{symbol}-{opt.get('type')}-{int(opt.get('strike'))}-ZTH-{ts}",
+            trade_id=f"{symbol}-{option_right}-{int(opt.get('strike'))}-ZTH-{ts}",
             timestamp=datetime.now(),
             symbol=symbol,
             instrument="OPT",
             instrument_type=instrument_type,
-            right=opt.get("type"),
+            right=option_right,
             instrument_id=instrument_id,
             instrument_token=instrument_token,
             strike=opt.get("strike"),
             expiry=expiry_resolved,
             expiry_date=expiry_resolved,
             tradingsymbol=tradingsymbol,
-            option_type=opt.get("type"),
+            option_type=option_right,
             side="BUY",
             entry_price=round(entry_price, 2),
             stop_loss=round(stop_loss, 2),
@@ -11017,10 +11220,11 @@ class TradeBuilder:
             expiry_resolved = self._option_expiry(opt, data)
             if not expiry_resolved:
                 expiry_resolved = self._resolve_expiry_for_symbol(symbol, data)
+            option_right = self._coerce_option_type(opt.get("type") or opt.get("option_type") or opt.get("right")) or opt_type
             contract = self._resolve_option_contract(
                 symbol,
                 opt.get("strike"),
-                opt.get("type"),
+                option_right,
                 expiry_resolved,
                 data,
             )
@@ -11032,7 +11236,7 @@ class TradeBuilder:
                 "OPT",
                 expiry_resolved,
                 opt.get("strike"),
-                opt.get("type"),
+                option_right,
                 1,
             )
             if ident_err or not expiry_resolved or not tradingsymbol or not instrument_id:
@@ -11044,19 +11248,19 @@ class TradeBuilder:
                 extra_blockers.append("instrument_token_missing")
             intent = self.trade_intent_flags(data, opt=opt, additional_blockers=extra_blockers)
             trade = Trade(
-                trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-ZEROEXP-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+                trade_id=f"{symbol}-{option_right}-{int(opt['strike'])}-ZEROEXP-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
                 instrument_type=instrument_type,
-                right=opt.get("type"),
+                right=option_right,
                 instrument_id=instrument_id,
                 instrument_token=instrument_token,
                 strike=opt["strike"],
                 expiry=expiry_resolved,
                 expiry_date=expiry_resolved,
                 tradingsymbol=tradingsymbol,
-                option_type=opt.get("type"),
+                option_type=option_right,
                 side="BUY",
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),
@@ -11539,12 +11743,13 @@ class TradeBuilder:
                 )
                 continue
             ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            option_right = self._coerce_option_type(opt.get("type") or opt.get("option_type") or opt.get("right")) or opt_type
             instrument_type, instrument_id, qty_units, ident_err = self._identity_fields(
                 symbol,
                 "OPT",
                 self._option_expiry(opt, market_data),
                 opt.get("strike"),
-                opt.get("type"),
+                option_right,
                 1,
             )
             if ident_err:
@@ -11559,17 +11764,17 @@ class TradeBuilder:
                 continue
             intent = self.trade_intent_flags(market_data, opt=opt)
             trade = Trade(
-                trade_id=f"{symbol}-{opt['type']}-{int(opt['strike'])}-SCALP-{ts}",
+                trade_id=f"{symbol}-{option_right}-{int(opt['strike'])}-SCALP-{ts}",
                 timestamp=datetime.now(),
                 symbol=symbol,
                 instrument="OPT",
                 instrument_type=instrument_type,
-                right=opt.get("type"),
+                right=option_right,
                 instrument_id=instrument_id,
                 instrument_token=opt.get("instrument_token"),
                 strike=opt["strike"],
                 expiry=self._option_expiry(opt, market_data),
-                option_type=opt.get("type"),
+                option_type=option_right,
                 side="BUY",
                 entry_price=round(entry_price, 2),
                 stop_loss=round(stop_loss, 2),

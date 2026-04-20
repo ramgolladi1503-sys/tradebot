@@ -20,6 +20,48 @@ def _trade_attr(trade, name: str, default=None):
     return getattr(trade, name, default)
 
 
+def _has_broker_option_contract_identity(trade) -> bool:
+    if trade is None:
+        return False
+    right = str(
+        _trade_attr(trade, "right", None)
+        or _trade_attr(trade, "option_type", None)
+        or ""
+    ).strip().upper()
+    expiry_text = str(
+        _trade_attr(trade, "expiry_date", None)
+        or _trade_attr(trade, "expiry", None)
+        or ""
+    ).strip()
+    tradingsymbol = str(_trade_attr(trade, "tradingsymbol", None) or "").strip()
+    strike = _trade_attr(trade, "strike", None)
+    token = _trade_attr(trade, "instrument_token", None)
+    try:
+        token_ok = int(token) > 0
+    except Exception:
+        token_ok = False
+    return bool(token_ok and tradingsymbol and expiry_text and strike is not None and right in {"CE", "PE"})
+
+
+def _is_synthetic_contract_placeholder(trade) -> bool:
+    if trade is None:
+        return False
+    strategy_family = str(_trade_attr(trade, "strategy_family", "") or "").strip().lower()
+    if strategy_family == "synthetic_advisory":
+        return True
+    origin = _trade_attr(trade, "candidate_origin", None)
+    if not origin and isinstance(_trade_attr(trade, "source_flags", None), dict):
+        origin = _trade_attr(trade, "source_flags", {}).get("candidate_origin")
+    if isinstance(origin, dict):
+        origin = origin.get("candidate_origin") or origin.get("origin") or origin.get("source")
+    origin_text = str(origin or "").strip().lower()
+    trade_id = str(_trade_attr(trade, "trade_id", "") or "")
+    return bool(
+        origin_text in {"pre_builder_gate", "invalid_snapshot", "fallback", "fallback_min_breadth"}
+        or trade_id.startswith("PRE_BUILDER_GATE-")
+    )
+
+
 def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: bool, veto_reasons=None, pilot_allowed=None, pilot_reasons=None):
     now_text = now_ist().isoformat()
     now_epoch = float(now_utc_epoch())
@@ -268,7 +310,8 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
                 veto_reasons.append(reason)
         event["veto_reasons"] = veto_reasons
     if trade and str(instrument_type or "").upper() == "OPT":
-        if (getattr(trade, "instrument_id", None) is None) or (not getattr(trade, "expiry_date", None)):
+        has_identity = _has_broker_option_contract_identity(trade)
+        if (not has_identity) and (not _is_synthetic_contract_placeholder(trade)):
             if "unresolved_contract" not in veto_reasons:
                 veto_reasons.append("unresolved_contract")
             event["veto_reasons"] = veto_reasons
