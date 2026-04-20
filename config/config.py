@@ -3051,6 +3051,10 @@ MAX_P95_DECISION_MS = float(os.getenv("MAX_P95_DECISION_MS", "80"))
 SUSTAINED_WINDOWS = int(os.getenv("SUSTAINED_WINDOWS", "3"))
 EXIT_ONLY_COOLDOWN_S = float(os.getenv("EXIT_ONLY_COOLDOWN_S", "30"))
 HALT_ON_BREACH = os.getenv("HALT_ON_BREACH", "true").lower() == "true"
+LATENCY_GUARD_USE_CRITICAL_PATH_ONLY = os.getenv("LATENCY_GUARD_USE_CRITICAL_PATH_ONLY", "true").lower() == "true"
+LATENCY_GUARD_BACKGROUND_OVERHEAD_WARN_MS = float(
+    os.getenv("LATENCY_GUARD_BACKGROUND_OVERHEAD_WARN_MS", "250")
+)
 RUNTIME_HEALTH_PATH = os.getenv("RUNTIME_HEALTH_PATH", f"{LOGS_ROOT}/runtime_health_latest.json")
 SHADOW_EVAL_STATUS_PATH = os.getenv("SHADOW_EVAL_STATUS_PATH", f"{LOGS_ROOT}/shadow_eval_status_latest.json")
 GATE_QUALITY_STATUS_PATH = os.getenv("GATE_QUALITY_STATUS_PATH", f"{LOGS_ROOT}/gate_quality_status_latest.json")

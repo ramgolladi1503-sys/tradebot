@@ -527,6 +527,42 @@ def _count_jsonl_rows(path: Path) -> int:
         return 0
 
 
+def _build_cycle_latency_snapshot(
+    *,
+    latency_monitor: LatencyMonitor,
+    cycle_perf_start: float,
+    critical_path_end_perf: float | None,
+    feature_build_ms: float,
+    decision_build_ms: float,
+    execution_route_ms: float,
+    use_critical_path_only: bool | None = None,
+) -> dict:
+    cycle_end_perf = time.perf_counter()
+    guard_uses_critical_path = bool(
+        getattr(cfg, "LATENCY_GUARD_USE_CRITICAL_PATH_ONLY", True)
+        if use_critical_path_only is None
+        else use_critical_path_only
+    )
+    effective_critical_end = float(critical_path_end_perf or cycle_end_perf)
+    critical_path_ms = max(0.0, (effective_critical_end - float(cycle_perf_start)) * 1000.0)
+    full_cycle_ms = max(critical_path_ms, (cycle_end_perf - float(cycle_perf_start)) * 1000.0)
+    background_overhead_ms = max(0.0, full_cycle_ms - critical_path_ms)
+    guard_total_ms = critical_path_ms if guard_uses_critical_path else full_cycle_ms
+
+    latency_monitor.record("feature_build", feature_build_ms)
+    latency_monitor.record("decision_build", decision_build_ms)
+    latency_monitor.record("execution_route", execution_route_ms)
+    latency_stats = dict(latency_monitor.tick_end(guard_total_ms) or {})
+    latency_stats["cycle"] = {
+        "critical_path_ms": float(critical_path_ms),
+        "full_cycle_ms": float(full_cycle_ms),
+        "background_overhead_ms": float(background_overhead_ms),
+        "guard_total_ms": float(guard_total_ms),
+        "guard_uses_critical_path": bool(guard_uses_critical_path),
+    }
+    return latency_stats
+
+
 def _scan_visible_suggestions(path: Path) -> dict:
     counts = {
         "visible_suggestion_count": 0,
@@ -3691,6 +3727,7 @@ class Orchestrator:
             cycle_stage = "cycle_start"
             cycle_error = ""
             cycle_perf_start = time.perf_counter()
+            latency_critical_path_end_perf = None
             feature_build_ms = 0.0
             decision_build_ms = 0.0
             execution_route_ms = 0.0
@@ -5714,6 +5751,8 @@ class Orchestrator:
                     except Exception:
                         pass
 
+                latency_critical_path_end_perf = time.perf_counter()
+
                 # Phase F: Check and retrain model if needed
                 self.retrainer.update_model()
 
@@ -5755,12 +5794,29 @@ class Orchestrator:
                         logger.warning("circuit_breaker_incident_error err=%s", type(exc).__name__)
             finally:
                 try:
-                    total_loop_ms = (time.perf_counter() - cycle_perf_start) * 1000.0
-                    self.latency_monitor.record("feature_build", feature_build_ms)
-                    self.latency_monitor.record("decision_build", decision_build_ms)
-                    self.latency_monitor.record("execution_route", execution_route_ms)
-                    latency_stats = self.latency_monitor.tick_end(total_loop_ms)
+                    latency_stats = _build_cycle_latency_snapshot(
+                        latency_monitor=self.latency_monitor,
+                        cycle_perf_start=cycle_perf_start,
+                        critical_path_end_perf=latency_critical_path_end_perf,
+                        feature_build_ms=feature_build_ms,
+                        decision_build_ms=decision_build_ms,
+                        execution_route_ms=execution_route_ms,
+                    )
                     self._last_latency_stats = latency_stats
+                    cycle_latency = dict(latency_stats.get("cycle") or {})
+                    background_overhead_ms = float(cycle_latency.get("background_overhead_ms") or 0.0)
+                    background_warn_ms = max(
+                        0.0, float(getattr(cfg, "LATENCY_GUARD_BACKGROUND_OVERHEAD_WARN_MS", 250.0))
+                    )
+                    if background_warn_ms > 0.0 and background_overhead_ms >= background_warn_ms:
+                        logger.warning(
+                            "latency_background_overhead critical_path_ms=%.1f full_cycle_ms=%.1f background_overhead_ms=%.1f guard_total_ms=%.1f use_critical_path_only=%s",
+                            float(cycle_latency.get("critical_path_ms") or 0.0),
+                            float(cycle_latency.get("full_cycle_ms") or 0.0),
+                            background_overhead_ms,
+                            float(cycle_latency.get("guard_total_ms") or 0.0),
+                            bool(cycle_latency.get("guard_uses_critical_path")),
+                        )
                     market_open = False
                     if isinstance(market_data_list, list) and market_data_list:
                         market_open = any(bool((row or {}).get("market_open")) for row in market_data_list)

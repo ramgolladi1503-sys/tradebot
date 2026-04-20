@@ -95,3 +95,36 @@ def test_latency_guard_cooldown_on_transient_breach():
     out2 = guard.evaluate(stats, market_open=True, now_ts=205.0)
     assert out1.action == ACTION_COOLDOWN
     assert out2.action == ACTION_COOLDOWN
+
+
+def test_latency_guard_ignores_background_overhead_when_guard_metric_stays_healthy():
+    monitor = LatencyMonitor(
+        window_size=32,
+        max_p95_total_ms=120.0,
+        max_p95_decision_ms=80.0,
+        sustained_windows=3,
+    )
+    stats = {}
+    for _ in range(3):
+        monitor.record("feature_build", 10.0)
+        monitor.record("decision_build", 24.0)
+        monitor.record("execution_route", 8.0)
+        stats = monitor.tick_end(42.0)
+    stats["cycle"] = {
+        "critical_path_ms": 42.0,
+        "full_cycle_ms": 360.0,
+        "background_overhead_ms": 318.0,
+        "guard_total_ms": 42.0,
+        "guard_uses_critical_path": True,
+    }
+
+    guard = LatencyGuard(
+        max_p95_total_ms=120.0,
+        max_p95_decision_ms=80.0,
+        sustained_windows=3,
+        cooldown_sec=10.0,
+        halt_on_breach=True,
+    )
+    out = guard.evaluate(stats, market_open=True, now_ts=300.0)
+    assert out.action == ACTION_OK
+    assert out.blocks_new_entries is False
