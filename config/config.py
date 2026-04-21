@@ -304,6 +304,22 @@ DECISION_ENGINE_SOFT_REJECT_EXECUTE_BLOCK_ENABLE = (
     os.getenv("DECISION_ENGINE_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", "false").lower()
     == "true"
 )
+DECISION_ENGINE_HARD_EXECUTION_QUALITY_REASONS = tuple(
+    code.strip().lower()
+    for code in os.getenv(
+        "DECISION_ENGINE_HARD_EXECUTION_QUALITY_REASONS",
+        "data_not_live,fallback_driven_data,missing_quote,spread_breached",
+    ).split(",")
+    if code.strip()
+)
+DECISION_ENGINE_SOFT_EXECUTION_QUALITY_REASONS = tuple(
+    code.strip().lower()
+    for code in os.getenv(
+        "DECISION_ENGINE_SOFT_EXECUTION_QUALITY_REASONS",
+        "stale_quote,inconsistent_quote,low_data_confidence,unverified_spread,missing_liquidity_validation",
+    ).split(",")
+    if code.strip()
+)
 DECISION_ENGINE_FEED_INVALID_MAX = float(
     os.getenv("DECISION_ENGINE_FEED_INVALID_MAX", "0.50")
 )
@@ -769,6 +785,14 @@ PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE = (
 )
 PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE = (
     os.getenv("PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE", "true").lower() == "true"
+)
+PHASE2_SOFT_EXECUTION_NOT_READY_REASON_CODES = os.getenv(
+    "PHASE2_SOFT_EXECUTION_NOT_READY_REASON_CODES",
+    "stale_quote,inconsistent_quote,low_data_confidence,unverified_spread,missing_liquidity_validation",
+)
+PHASE2_HARD_EXECUTION_NOT_READY_REASON_CODES = os.getenv(
+    "PHASE2_HARD_EXECUTION_NOT_READY_REASON_CODES",
+    "data_not_live,fallback_driven_data,missing_quote,spread_breached",
 )
 PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE = (
     os.getenv("PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", "false").lower() == "true"

@@ -35,6 +35,15 @@ def _weighted_average(parts: list[tuple[float | None, float]]) -> float:
     return _clamp01(total_score / total_weight, default=0.0) or 0.0
 
 
+def _cfg_reason_code_set(name: str, default: tuple[str, ...]) -> set[str]:
+    raw = getattr(cfg, name, default)
+    if isinstance(raw, (tuple, list, set)):
+        values = raw
+    else:
+        values = str(raw or "").split(",")
+    return {str(value or "").strip().lower() for value in values if str(value or "").strip()}
+
+
 def _get_value(candidate: Any, field: str, default: Any = None) -> Any:
     if isinstance(candidate, dict):
         return candidate.get(field, default)
@@ -471,17 +480,26 @@ def _is_execution_ready(
         reasons.append("invalid_level_geometry")
     if not bool(score_payload.get("execution_ok")):
         reason_code = str(score_payload.get("order_policy_reason") or "").strip().lower()
-        hard_execution_quality_reasons = {
-            "data_not_live",
-            "fallback_driven_data",
-            "low_data_confidence",
-            "missing_quote",
-            "stale_quote",
-            "inconsistent_quote",
-            "spread_breached",
-        }
+        hard_execution_quality_reasons = _cfg_reason_code_set(
+            "DECISION_ENGINE_HARD_EXECUTION_QUALITY_REASONS",
+            ("data_not_live", "fallback_driven_data", "missing_quote", "spread_breached"),
+        )
+        soft_execution_quality_reasons = _cfg_reason_code_set(
+            "DECISION_ENGINE_SOFT_EXECUTION_QUALITY_REASONS",
+            (
+                "stale_quote",
+                "inconsistent_quote",
+                "low_data_confidence",
+                "unverified_spread",
+                "missing_liquidity_validation",
+            ),
+        )
         if reason_code in hard_execution_quality_reasons:
             reasons.append("execution_quality_reject")
+        elif reason_code in soft_execution_quality_reasons:
+            reasons.append("execution_quality_not_ready")
+        elif reason_code:
+            reasons.append(f"execution_quality_not_ready:{reason_code}")
 
     return (len(reasons) == 0), reasons
 

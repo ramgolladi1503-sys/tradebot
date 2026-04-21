@@ -111,3 +111,25 @@ def test_degraded_feed_blocks_execute():
     )
     assert result["decision_action"] != "EXECUTE"
     assert result["feed"]["feed_state"] in {"degraded", "invalid"}
+
+
+def test_soft_execution_quality_reason_stays_not_ready_without_hard_reject():
+    result = evaluate_candidate_decision(
+        _base_candidate(
+            data_state="DATA_STALE",
+            quote_age_sec=3.5,
+        )
+    )
+    assert result["decision_action"] != "EXECUTE"
+    assert "execution_quality_reject" not in result["readiness_reasons"]
+    assert "execution_quality_not_ready" in result["readiness_reasons"]
+
+
+def test_hard_execution_quality_reason_preserves_hard_reject():
+    result = evaluate_candidate_decision(
+        _base_candidate(
+            data_state="DATA_MISSING",
+        )
+    )
+    assert result["decision_action"] != "EXECUTE"
+    assert "execution_quality_reject" in result["readiness_reasons"]

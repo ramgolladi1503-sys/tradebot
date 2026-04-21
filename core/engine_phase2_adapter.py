@@ -174,6 +174,27 @@ def _reason_codes(candidate: dict[str, Any]) -> list[str]:
     return out
 
 
+def _execution_not_ready_reason_codes(candidate: dict[str, Any]) -> set[str]:
+    codes: set[str] = set()
+    for key in (
+        "order_policy_reason",
+        "execution_block_reason",
+        "quote_validation_status",
+        "execution_quality_reason",
+        "execution_quality_reason_code",
+    ):
+        text = str(candidate.get(key) or "").strip().upper()
+        if text:
+            codes.add(text)
+    source_flags = candidate.get("source_flags")
+    if isinstance(source_flags, dict):
+        for key in ("order_policy_reason", "execution_quality_reason", "execution_quality_reason_code"):
+            text = str(source_flags.get(key) or "").strip().upper()
+            if text:
+                codes.add(text)
+    return codes
+
+
 def _is_no_signal_candidate(candidate: dict[str, Any]) -> bool:
     return any("NO_SIGNAL" in code for code in _reason_codes(candidate))
 
@@ -369,6 +390,7 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     )
     if execution_failure:
         reason_codes = set(_reason_codes(candidate))
+        execution_not_ready_reason_codes = _execution_not_ready_reason_codes(candidate)
         critical_codes = _cfg_csv_set(
             "PHASE2_CRITICAL_EXECUTION_REASON_CODES",
             "feed_stale,no_live_option_feed,unresolved_contract,missing_contract_fields,missing_option_token,no_token,missing_entry,invalid_level_geometry,hard_spread_too_wide,spread_breached,execution_quality_reject",
@@ -377,8 +399,23 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
             "PHASE2_SOFT_CONTEXT_REASON_CODES",
             "missing_rr_context,rr_estimated_context,missing_liquidity_context,missing_spread_context,missing_timing_context,missing_live_timing_context,low_data_confidence,unknown_quote_source",
         )
-        has_critical = bool(reason_codes & critical_codes) or any(code.startswith("HARD_") for code in reason_codes)
+        soft_execution_not_ready_codes = _cfg_csv_set(
+            "PHASE2_SOFT_EXECUTION_NOT_READY_REASON_CODES",
+            "stale_quote,inconsistent_quote,low_data_confidence,unverified_spread,missing_liquidity_validation",
+        )
+        hard_execution_not_ready_codes = _cfg_csv_set(
+            "PHASE2_HARD_EXECUTION_NOT_READY_REASON_CODES",
+            "data_not_live,fallback_driven_data,missing_quote,spread_breached",
+        )
+        has_critical = (
+            bool(reason_codes & critical_codes)
+            or bool(execution_not_ready_reason_codes & hard_execution_not_ready_codes)
+            or any(code.startswith("HARD_") for code in reason_codes)
+        )
         only_soft_context = bool(reason_codes) and not has_critical and not bool(reason_codes - soft_context_codes)
+        soft_execution_not_ready_reason = bool(
+            execution_not_ready_reason_codes & soft_execution_not_ready_codes
+        )
         if not reason_codes and str(candidate.get("quote_source") or "").strip().lower() in {"", "unknown", "none"}:
             reason_codes.add("UNKNOWN_QUOTE_SOURCE")
             only_soft_context = True
@@ -390,7 +427,9 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
             and (not execution_blocked)
             and (not has_critical)
             and (
-                execution_score >= min_execution_score
+                soft_execution_not_ready_reason
+                or execution_quality_low
+                or execution_score >= min_execution_score
                 or _is_borderline_execution_candidate(candidate)
                 or only_soft_context
             )
