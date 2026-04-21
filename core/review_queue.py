@@ -323,7 +323,7 @@ def _best_reject_reason(entry: dict, *, default: str = "unspecified_trade_builde
         return str(default or "unspecified_trade_builder_reject")
     generic = "unspecified_trade_builder_reject"
     quote_validation_status = str(entry.get("quote_validation_status") or "").strip().upper()
-    if quote_validation_status in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}:
+    if quote_validation_status in {"STALE_OPTION_LTP", "NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}:
         return quote_validation_status
     preferred_fields = (
         "final_blocker",

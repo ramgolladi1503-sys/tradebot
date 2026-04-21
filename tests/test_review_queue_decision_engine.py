@@ -383,6 +383,25 @@ def test_execution_ineligibility_reason_prefers_specific_blocker():
     assert review_queue._execution_ineligibility_reason(row) == "execution_quality_reject"
 
 
+def test_execution_ineligibility_reason_prefers_stale_quote_validation_status_over_contract_symptom():
+    row = {
+        "trade_id": "T-INELIGIBLE-STALE",
+        "symbol": "NIFTY",
+        "permission": "QUEUE_ONLY",
+        "final_action": "QUEUE_ONLY",
+        "execution_status": "queue_only",
+        "execution_entry": 150.0,
+        "execution_entry_status": "executable",
+        "execution_allowed": False,
+        "eligible_for_execution": False,
+        "unresolved_contract": True,
+        "quote_validation_status": "STALE_OPTION_LTP",
+        "hard_blockers": [],
+        "blockers": [],
+    }
+    assert review_queue._execution_ineligibility_reason(row) == "STALE_OPTION_LTP"
+
+
 def test_enforce_non_executable_emit_lifecycle_preserves_specific_reason_and_avoids_near_executable():
     out = review_queue._enforce_non_executable_emit_lifecycle(
         {
