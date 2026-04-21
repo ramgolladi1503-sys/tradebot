@@ -88,6 +88,7 @@ class KiteClient:
         self._active_api_key = ""
         self._active_access_token = ""
         self._instruments_cache: Dict[str, Dict[str, Any]] = {}
+        self._next_expiry_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self._last_instruments_fetch: Optional[str] = None
         self._historical_auth_cooldown_until = 0.0
         self._historical_auth_cooldown_reason = ""
@@ -130,10 +131,19 @@ class KiteClient:
         if not access_token:
             self.last_init_error = "kite_access_token_missing"
             raise RuntimeError("kite_access_token_missing")
+        reuse_session = bool(getattr(cfg, "KITE_CLIENT_REUSE_SESSION", True))
+        if (
+            reuse_session
+            and self.kite is not None
+            and self._active_api_key == api_key
+            and self._active_access_token == access_token
+        ):
+            self.last_init_error = ""
+            return self.kite
         try:
-            # Runtime auth is file-based and ensure() always rebuilds the client so
-            # auth probes, REST reads, and websocket startup cannot drift onto a
-            # stale in-memory token.
+            # Runtime auth remains file-based and credentials are checked on every
+            # ensure() call. We only reuse the in-memory client when the canonical
+            # api key and access token are unchanged.
             kite = self._create_kite(api_key=api_key, access_token=access_token)
         except Exception as exc:
             self.kite = None
@@ -612,6 +622,19 @@ class KiteClient:
         if not sym:
             return None
 
+        cache_key = (exch, sym)
+        today = date.today().isoformat()
+        cache_ttl_sec = max(0, int(getattr(cfg, "KITE_NEXT_AVAILABLE_EXPIRY_CACHE_SEC", 300) or 0))
+        if cache_ttl_sec > 0:
+            cached = self._next_expiry_cache.get(cache_key)
+            now_ts = float(time.time())
+            if (
+                isinstance(cached, dict)
+                and str(cached.get("day") or "") == today
+                and (now_ts - float(cached.get("ts_epoch") or 0.0)) <= cache_ttl_sec
+            ):
+                return cached.get("value")
+
         data = self.instruments(exchange=exch)
         expiries: List[date] = []
         matched_tradingsymbols: List[str] = []
@@ -676,6 +699,13 @@ class KiteClient:
             )
         except Exception:
             pass
+
+        if cache_ttl_sec > 0:
+            self._next_expiry_cache[cache_key] = {
+                "day": today,
+                "ts_epoch": float(time.time()),
+                "value": resolved,
+            }
 
         return resolved
 

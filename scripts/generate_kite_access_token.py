@@ -64,31 +64,48 @@ def _persist_local_token(access_token):
     return token_path
 
 
-def generate_validated_token(api_key, api_secret, request_token):
-    data = kite_client.generate_session(request_token, api_secret, api_key=api_key)
-    access_token = data.get("access_token")
-    if not access_token:
-        raise RuntimeError("no_access_token_returned")
-    kite_client.set_access_token(access_token)
-    kite_client.ensure()
+def generate_validated_token(api_key, api_secret, request_token, kite_connect_cls=None):
+    if kite_connect_cls is None:
+        data = kite_client.generate_session(request_token, api_secret, api_key=api_key)
+        access_token = data.get("access_token")
+        if not access_token:
+            raise RuntimeError("no_access_token_returned")
+        kite_client.set_access_token(access_token)
+        kite_client.ensure()
+        client = kite_client.kite
+    else:
+        client = kite_connect_cls(api_key=api_key)
+        data = client.generate_session(request_token, api_secret=api_secret)
+        access_token = data.get("access_token")
+        if not access_token:
+            raise RuntimeError("no_access_token_returned")
+        client.set_access_token(access_token)
     try:
-        profile = kite_client.kite.profile()
+        profile = client.profile()
     except Exception as exc:
         raise RuntimeError(f"Access token verification failed: {exc}")
     user_id = str((profile or {}).get("user_id") or "").strip()
     if not user_id:
         raise RuntimeError("Access token verification failed: missing user_id")
-    margins = kite_client.kite.margins()
+    margins = client.margins()
     if margins is None:
         raise RuntimeError("margins_missing")
     return access_token, margins, profile
 
 
-def generate_token_flow(api_key, api_secret, request_token, update_store, persist_fn):
+def generate_token_flow(
+    api_key,
+    api_secret,
+    request_token,
+    update_store,
+    persist_fn,
+    kite_connect_cls=None,
+):
     access_token, margins, profile = generate_validated_token(
         api_key,
         api_secret,
         request_token,
+        kite_connect_cls=kite_connect_cls,
     )
     token_path = None
     if update_store:

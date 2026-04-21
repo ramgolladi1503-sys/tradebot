@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+import time
 
 from core.kite_client import KiteClient
 
@@ -144,6 +145,52 @@ def test_next_available_expiry_returns_none_when_no_rows_match(monkeypatch):
     payload = json.loads(logs[-1])
     assert payload["matched_candidates_count"] == 0
     assert payload["resolved_expiry"] == "none"
+
+
+def test_next_available_expiry_uses_ttl_cache(monkeypatch):
+    client = KiteClient()
+    call_count = {"count": 0}
+    rows = [
+        _option_row(name="", tradingsymbol="NIFTY26MAR25000CE", expiry=date(2026, 3, 26), exchange="NFO"),
+    ]
+    now = {"ts": 1_700_000_000.0}
+
+    def _instruments(exchange=None):
+        call_count["count"] += 1
+        return list(rows)
+
+    monkeypatch.setattr(client, "instruments", _instruments)
+    monkeypatch.setattr(client, "_log_atomic", lambda msg: None)
+    monkeypatch.setattr(time, "time", lambda: now["ts"])
+
+    first = client.next_available_expiry("NIFTY", exchange="NFO")
+    second = client.next_available_expiry("NIFTY", exchange="NFO")
+
+    assert first == date(2026, 3, 26)
+    assert second == date(2026, 3, 26)
+    assert call_count["count"] == 1
+
+
+def test_next_available_expiry_cache_expires_with_ttl(monkeypatch):
+    client = KiteClient()
+    call_count = {"count": 0}
+    rows = [
+        _option_row(name="", tradingsymbol="NIFTY26MAR25000CE", expiry=date(2026, 3, 26), exchange="NFO"),
+    ]
+    now = {"ts": 1_700_000_000.0}
+
+    def _instruments(exchange=None):
+        call_count["count"] += 1
+        return list(rows)
+
+    monkeypatch.setattr(client, "instruments", _instruments)
+    monkeypatch.setattr(client, "_log_atomic", lambda msg: None)
+    monkeypatch.setattr(time, "time", lambda: now["ts"])
+
+    assert client.next_available_expiry("NIFTY", exchange="NFO") == date(2026, 3, 26)
+    now["ts"] += 301.0
+    assert client.next_available_expiry("NIFTY", exchange="NFO") == date(2026, 3, 26)
+    assert call_count["count"] == 2
 
 
 def _window_rows(

@@ -6010,6 +6010,9 @@ class Orchestrator:
     def _load_suggestion_eval(self):
         self.suggestion_eval_path = canonical_suggestion_eval_log_path()
         self.suggestion_evaluated = set()
+        self._suggestion_log_offsets = {}
+        self._last_suggestion_eval_ts = 0.0
+        self._suggestion_strategy_tracker = None
         for path in suggestion_eval_log_paths():
             if not path.exists():
                 continue
@@ -6028,17 +6031,45 @@ class Orchestrator:
             except Exception:
                 continue
 
-    def _evaluate_suggestions(self, market_data_list):
-        """
-        Evaluate suggested trades vs live option prices to see if targets/stops are hit.
-        """
-        import re
-        suggestions = []
+    def _suggestion_tracker(self) -> StrategyTracker:
+        tracker = getattr(self, "_suggestion_strategy_tracker", None)
+        if tracker is None:
+            tracker = StrategyTracker()
+            tracker.load(str(logs_dir() / "suggestion_strategy_perf.json"))
+            self._suggestion_strategy_tracker = tracker
+        return tracker
+
+    def _read_pending_suggestions(self) -> list[dict]:
+        suggestions: list[dict] = []
+        incremental = bool(getattr(cfg, "SUGGESTION_EVAL_INCREMENTAL_READ_ENABLE", True))
+        offsets = getattr(self, "_suggestion_log_offsets", None)
+        if not isinstance(offsets, dict):
+            offsets = {}
+        files_seen = 0
         for sug_path in suggestion_log_paths():
-            if not sug_path.exists():
+            path = Path(sug_path)
+            if not path.exists():
+                offsets.pop(str(path), None)
                 continue
+            files_seen += 1
+            start_offset = 0
+            inode = None
+            if incremental:
+                try:
+                    stat = path.stat()
+                    inode = getattr(stat, "st_ino", None)
+                    size = int(stat.st_size)
+                    previous = dict(offsets.get(str(path)) or {})
+                    previous_offset = max(0, int(previous.get("offset") or 0))
+                    previous_inode = previous.get("inode")
+                    if previous_inode == inode and previous_offset <= size:
+                        start_offset = previous_offset
+                except Exception:
+                    start_offset = 0
             try:
-                with sug_path.open("r") as f:
+                with path.open("r") as f:
+                    if start_offset > 0:
+                        f.seek(start_offset)
                     for line in f:
                         if not line.strip():
                             continue
@@ -6046,14 +6077,42 @@ class Orchestrator:
                             suggestions.append(json.loads(line))
                         except Exception:
                             continue
+                    end_offset = f.tell()
             except Exception:
                 continue
+            if incremental:
+                offsets[str(path)] = {"offset": end_offset, "inode": inode}
+        self._suggestion_log_offsets = offsets
+        if suggestions:
+            logger.info(
+                "suggestion_eval_scan files=%d pending=%d evaluated=%d incremental=%s",
+                files_seen,
+                len(suggestions),
+                len(getattr(self, "suggestion_evaluated", set()) or []),
+                incremental,
+            )
+        return suggestions
+
+    def _evaluate_suggestions(self, market_data_list):
+        """
+        Evaluate suggested trades vs live option prices to see if targets/stops are hit.
+        """
+        if not bool(getattr(cfg, "SUGGESTION_EVAL_ENABLE", True)):
+            return
+        interval_sec = max(0.0, float(getattr(cfg, "SUGGESTION_EVAL_INTERVAL_SEC", 0.0) or 0.0))
+        now_ts = float(now_utc_epoch())
+        last_eval_ts = float(getattr(self, "_last_suggestion_eval_ts", 0.0) or 0.0)
+        if interval_sec > 0 and last_eval_ts > 0 and (now_ts - last_eval_ts) < interval_sec:
+            return
+        self._last_suggestion_eval_ts = now_ts
+        import re
+        suggestions = self._read_pending_suggestions()
         if not suggestions:
             return
         # Build map for quick lookup
         md_map = {m.get("symbol"): m for m in market_data_list if m.get("instrument") == "OPT"}
-        tracker = StrategyTracker()
-        tracker.load(str(logs_dir() / "suggestion_strategy_perf.json"))
+        tracker = self._suggestion_tracker()
+        updates = 0
         for s in suggestions:
             tid = s.get("trade_id")
             if not tid or tid in self.suggestion_evaluated:
@@ -6135,7 +6194,14 @@ class Orchestrator:
             category = str(s.get("category") or "").strip()
             if category:
                 tracker.record(f"{category.upper()}::{strategy_name}", pnl)
+            updates += 1
+        if updates > 0:
             tracker.save(str(logs_dir() / "suggestion_strategy_perf.json"))
+            logger.info(
+                "suggestion_eval_processed pending=%d outcomes=%d",
+                len(suggestions),
+                updates,
+            )
 
     def _start_depth_ws(self):
         if not cfg.KITE_USE_DEPTH:
@@ -6147,6 +6213,19 @@ class Orchestrator:
         if not ws_client:
             detail = getattr(kite_client, "last_init_error", None) or "kite_not_initialized"
             raise RuntimeError(f"kite_depth_ws_init_failed:{detail}")
+        try:
+            profile_payload = ws_client.profile()
+        except Exception as exc:
+            raise RuntimeError(
+                f"kite_depth_ws_profile_failed:{exc} | "
+                "Check: (1) cfg/env api_key present (2) token not expired (3) token generated using same api_key."
+            ) from exc
+        user_id_direct = str((profile_payload or {}).get("user_id", "") or "").strip()
+        if not user_id_direct:
+            raise RuntimeError(
+                "kite_depth_ws_profile_failed:missing_user_id | "
+                "Check: (1) cfg/env api_key present (2) token not expired (3) token generated using same api_key."
+            )
         from core.auth_health import get_kite_auth_health
         auth_payload = get_kite_auth_health(force=True)
         if not auth_payload.get("ok"):
@@ -6154,7 +6233,7 @@ class Orchestrator:
                 f"kite_depth_ws_profile_failed:{auth_payload.get('error')} | "
                 "Check: (1) cfg/env api_key present (2) token not expired (3) token generated using same api_key."
             )
-        user_id = str((auth_payload or {}).get("user_id", "") or "")
+        user_id = str((auth_payload or {}).get("user_id", "") or user_id_direct)
         logger.info("WS: auth check passed")
         logger.info("kite_ws_profile_verified user_last4=%s", user_id[-4:] if user_id else "NONE")
         # Resolve a minimal depth subscription universe (index + ATM window).

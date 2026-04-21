@@ -26,7 +26,7 @@ def test_historical_auth_error_raises_runtime_error(monkeypatch):
         )
 
 
-def test_ensure_uses_canonical_file_token_and_recreates_client(monkeypatch):
+def test_ensure_uses_canonical_file_token_and_reuses_client_when_credentials_match(monkeypatch):
     reset_kite_runtime_credentials_guard()
     created = []
 
@@ -36,6 +36,7 @@ def test_ensure_uses_canonical_file_token_and_recreates_client(monkeypatch):
         return client
 
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
+    monkeypatch.setattr(cfg, "KITE_CLIENT_REUSE_SESSION", True, raising=False)
     monkeypatch.setenv("KITE_ACCESS_TOKEN", "env_token_should_be_ignored")
     monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: "file_token_5678")
     monkeypatch.setattr(kite_client, "_create_kite", _create_kite)
@@ -44,12 +45,36 @@ def test_ensure_uses_canonical_file_token_and_recreates_client(monkeypatch):
     first = kite_client.ensure()
     second = kite_client.ensure()
 
-    assert len(created) == 2
+    assert len(created) == 1
     assert created[0][0] == "api_key_1234"
     assert created[0][1] == "file_token_5678"
-    assert created[1][1] == "file_token_5678"
-    assert first is not second
+    assert first is second
     assert kite_client._active_access_token == "file_token_5678"
+
+
+def test_ensure_raises_when_runtime_token_changes(monkeypatch):
+    reset_kite_runtime_credentials_guard()
+    created = []
+
+    def _create_kite(api_key, access_token):
+        client = object()
+        created.append((api_key, access_token, client))
+        return client
+
+    tokens = iter(["file_token_5678", "file_token_9999"])
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
+    monkeypatch.setattr(cfg, "KITE_CLIENT_REUSE_SESSION", True, raising=False)
+    monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: next(tokens))
+    monkeypatch.setattr(kite_client, "_create_kite", _create_kite)
+    monkeypatch.setattr(kite_client, "kite", None, raising=False)
+
+    first = kite_client.ensure()
+    with pytest.raises(RuntimeError, match="CREDENTIAL_DRIFT_DETECTED"):
+        kite_client.ensure()
+
+    assert len(created) == 1
+    assert created[0][1] == "file_token_5678"
+    assert first is created[0][2]
 
 
 def test_get_kite_client_raises_on_runtime_token_mismatch(monkeypatch):
