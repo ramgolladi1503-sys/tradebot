@@ -1379,6 +1379,39 @@ def test_issue_classification_missing_enrichment_lowers_confidence_without_suppr
     assert out["entry_status"] == "OK"
 
 
+def test_issue_classification_stale_option_ltp_softens_when_executable_quote_exists():
+    entry = {
+        "trade_id": "T-STALE-SOFT",
+        "symbol": "NIFTY",
+        "permission": "EXECUTE",
+        "entry": 230.15,
+        "entry_status": "OK",
+        "execution_entry": 230.15,
+        "execution_entry_status": "executable",
+        "quote_source": "tick_store",
+        "option_ltp_source": "tick_store",
+        "quote_validation_status": "STALE_OPTION_LTP",
+        "current_ltp": 230.15,
+        "validation_reference_price": 230.15,
+        "quote_age_sec": 6.0,
+        "best_bid": 230.10,
+        "best_ask": 230.25,
+        "confidence_base": 0.74,
+        "confidence": 0.74,
+    }
+
+    out = review_queue._apply_issue_classification(
+        dict(entry),
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+    )
+
+    assert out["hard_blockers"] == []
+    assert "STALE_OPTION_LTP" in list(out["soft_penalties"] or [])
+    assert "STALE_OPTION_LTP" not in list(out["hard_blockers"] or [])
+    assert out["quote_validation_status"] == "STALE_OPTION_LTP"
+
+
 def test_issue_classification_does_not_overwrite_builder_confidence_with_final_confidence():
     entry = {
         "trade_id": "T-CONF-PRESERVE",

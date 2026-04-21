@@ -4697,6 +4697,8 @@ def _apply_issue_classification(
     quote_age_sec = _safe_float(
         _canonical_quote_age_sec(entry)
     )
+    best_bid = _safe_float(entry.get("best_bid") or entry.get("bid") or entry.get("opt_bid"))
+    best_ask = _safe_float(entry.get("best_ask") or entry.get("ask") or entry.get("opt_ask"))
     market_open_for_entry, _market_open_source = _resolve_entry_market_open(
         entry,
         mode_for_entry,
@@ -4712,6 +4714,8 @@ def _apply_issue_classification(
         "quote_source": entry.get("option_ltp_source") or entry.get("quote_source"),
         "quote_age_sec": quote_age_sec,
         "current_ltp": current_ltp,
+        "best_bid": best_bid,
+        "best_ask": best_ask,
         "reference_price": reference_price_for_mismatch,
         "price_mismatch_abs": price_mismatch_abs,
         "price_mismatch_pct": price_mismatch_pct,
@@ -4721,6 +4725,13 @@ def _apply_issue_classification(
         ),
         "price_mismatch_pct_tol": float(
             getattr(cfg, "ISSUE_POLICY_PRICE_MISMATCH_PCT_TOL", 0.03) or 0.03
+        ),
+        "has_executable_quote": bool(
+            best_bid is not None
+            and best_ask is not None
+            and float(best_bid) > 0.0
+            and float(best_ask) > 0.0
+            and float(best_ask) >= float(best_bid)
         ),
         "advisory_id": entry.get("advisory_id") or entry.get("trade_id") or entry.get("trade_key"),
         "symbol": entry.get("symbol"),
