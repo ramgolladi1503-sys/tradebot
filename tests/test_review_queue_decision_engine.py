@@ -248,6 +248,145 @@ def test_level_normalization_does_not_promote_in_strict_mode(monkeypatch):
     assert out.get("promotion_candidate") is None
 
 
+def test_enforce_non_executable_emit_lifecycle_clamps_execute_fields():
+    out = review_queue._enforce_non_executable_emit_lifecycle(
+        {
+            "trade_id": "T-EMIT-CLAMP",
+            "symbol": "NIFTY",
+            "candidate_status": "advisory_only",
+            "execution_status": "advisory_only",
+            "permission": "EXECUTE",
+            "final_action": "EXECUTE",
+            "readiness": "READY",
+            "execution_entry": None,
+            "execution_entry_status": "non_executable",
+            "execution_allowed": False,
+            "eligible_for_execution": False,
+            "tradable": True,
+            "is_executable": True,
+        }
+    )
+
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["readiness"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out["execution_allowed"] is False
+    assert out["eligible_for_execution"] is False
+
+def test_enforce_non_executable_emit_lifecycle_leaves_eligible_row_unchanged():
+    row = {
+        "trade_id": "T-EMIT-EXEC",
+        "symbol": "NIFTY",
+        "candidate_status": "executable",
+        "execution_status": "executable",
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "readiness": "READY",
+        "execution_entry": 150.0,
+        "execution_entry_status": "executable",
+        "execution_allowed": True,
+        "eligible_for_execution": True,
+        "tradable": True,
+        "is_executable": True,
+    }
+    out = review_queue._enforce_non_executable_emit_lifecycle(row)
+    assert out["permission"] == "EXECUTE"
+    assert out["final_action"] == "EXECUTE"
+    assert out["execution_status"] == "executable"
+    assert out["execution_allowed"] is True
+
+def test_is_execution_eligible_accepts_execute_intent_when_status_lags():
+    row = {
+        "trade_id": "T-EXEC-INTENT-LAG",
+        "symbol": "NIFTY",
+        "strategy_family": "breakout",
+        "instrument": "OPT",
+        "tradingsymbol": "NIFTY2642124300CE",
+        "expiry_date": "2026-04-21",
+        "option_type": "CE",
+        "instrument_token": 12345,
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "readiness": "READY",
+        "candidate_status": "near_executable",
+        "execution_status": "advisory_only",
+        "execution_entry": 150.0,
+        "execution_entry_status": "executable",
+        "execution_entry_source": "ask",
+        "execution_allowed": True,
+        "execution_blocked": False,
+        "unresolved_contract": False,
+        "hard_blockers": [],
+        "blockers": [],
+    }
+    assert review_queue._is_execution_eligible(row) is True
+
+def test_is_execution_eligible_rejects_execute_intent_with_hard_blocker():
+    row = {
+        "trade_id": "T-EXEC-INTENT-BLOCKED",
+        "symbol": "NIFTY",
+        "strategy_family": "breakout",
+        "instrument": "OPT",
+        "tradingsymbol": "NIFTY2642124300CE",
+        "expiry_date": "2026-04-21",
+        "option_type": "CE",
+        "instrument_token": 12345,
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "readiness": "READY",
+        "candidate_status": "near_executable",
+        "execution_status": "advisory_only",
+        "execution_entry": 150.0,
+        "execution_entry_status": "executable",
+        "execution_entry_source": "ask",
+        "execution_allowed": True,
+        "execution_blocked": False,
+        "unresolved_contract": False,
+        "hard_blockers": ["NO_LIVE_OPTION_FEED"],
+        "blockers": ["NO_LIVE_OPTION_FEED"],
+    }
+    assert review_queue._is_execution_eligible(row) is False
+
+def test_execution_ineligibility_reason_prefers_specific_blocker():
+    row = {
+        "trade_id": "T-INELIGIBLE-REASON",
+        "symbol": "NIFTY",
+        "permission": "QUEUE_ONLY",
+        "final_action": "QUEUE_ONLY",
+        "execution_status": "queue_only",
+        "execution_entry": 150.0,
+        "execution_entry_status": "executable",
+        "execution_block_reason": "execution_quality_reject",
+    }
+    assert review_queue._execution_ineligibility_reason(row) == "execution_quality_reject"
+
+def test_enforce_non_executable_emit_lifecycle_preserves_specific_reason_and_avoids_near_executable():
+    out = review_queue._enforce_non_executable_emit_lifecycle(
+        {
+            "trade_id": "T-EMIT-REASON",
+            "symbol": "NIFTY",
+            "candidate_status": "near_executable",
+            "execution_status": "queue_only",
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "readiness": "QUEUE_ONLY",
+            "execution_entry": 150.0,
+            "execution_entry_status": "executable",
+            "execution_allowed": True,
+            "eligible_for_execution": False,
+            "tradable": True,
+            "rank_score": 0.78,
+            "execution_block_reason": "execution_quality_reject",
+        }
+    )
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out["candidate_status"] == "advisory_only"
+    assert out["final_emit_block_reason"] == "execution_quality_reject"
+    assert out["permission_reason"] == "execution_quality_reject"
+
 def test_terminal_scoring_is_idempotent_and_bounded(monkeypatch):
     monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_ABS_DELTA", 0.15, raising=False)
     monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_MULT", 1.35, raising=False)

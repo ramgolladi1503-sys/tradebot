@@ -546,6 +546,39 @@ def test_build_candidates_phase2_quality_failure_with_critical_reason_stays_hard
     assert ranked == []
 
 
+def test_build_candidates_phase2_soft_degrades_noncritical_execution_not_ready(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE", True, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "NONCRITICAL_EXEC_NOT_READY",
+                "symbol": "BANKNIFTY",
+                "candidate_status": "executable",
+                "execution_status": "queue_only",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": False,
+                "execution_score": 0.62,
+                "execution_quality_score": 0.62,
+                "liquidity_score": 0.6,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "penalty_reasons": ["unknown_quote_source"],
+                "final_score": 0.71,
+            }
+        ]
+    )
+    assert [row["trade_id"] for row in ranked] == ["NONCRITICAL_EXEC_NOT_READY"]
+    assert "soft_execution_not_ready" in list(ranked[0].get("phase2_soft_penalties") or [])
+    assert ranked[0].get("phase2_soft_degrade_reason") == "execution_not_ready_noncritical"
+    assert ranked[0].get("max_final_action") == "QUEUE_ONLY"
+    assert float(ranked[0]["final_score"]) < 0.71
+
+
 def test_build_candidates_phase2_recomputes_zero_placeholder_final_score(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
     ranked = build_candidates_phase2(

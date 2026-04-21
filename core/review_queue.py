@@ -346,6 +346,62 @@ def _best_reject_reason(entry: dict, *, default: str = "unspecified_trade_builde
     return str(default or generic)
 
 
+
+
+def _execution_ineligibility_reason(entry: dict, *, default: str = "no_execution_candidates") -> str:
+    if not isinstance(entry, dict):
+        return str(default or "no_execution_candidates")
+    preferred_reason = str(_best_reject_reason(entry, default="") or "").strip()
+    if preferred_reason and preferred_reason.lower() not in {
+        "ok",
+        "ready",
+        "queue_only",
+        "advisory_only",
+        "no_execution_candidates",
+        "unspecified_trade_builder_reject",
+    }:
+        return preferred_reason
+    unresolved_contract = bool(entry.get("unresolved_contract"))
+    if not unresolved_contract and _requires_option_contract_identity(entry):
+        try:
+            unresolved_contract = _is_unresolved_option_contract(entry)
+        except Exception:
+            unresolved_contract = False
+    if unresolved_contract:
+        return "unresolved_contract"
+    execution_block_reason = str(entry.get("execution_block_reason") or "").strip()
+    if execution_block_reason:
+        return execution_block_reason
+    hard_blockers = _dedupe_issue_codes(list(entry.get("hard_blockers") or []))
+    if hard_blockers:
+        return hard_blockers[0]
+    blockers = _dedupe_issue_codes(
+        list(entry.get("blockers") or [])
+        + list(entry.get("gate_reasons") or [])
+        + list(entry.get("execution_blockers") or [])
+    )
+    if blockers:
+        return blockers[0]
+    execution_entry = _safe_float(entry.get("execution_entry"))
+    execution_entry_status = str(entry.get("execution_entry_status") or "").strip().lower()
+    if execution_entry is None:
+        if execution_entry_status in {"non_executable", "missing"}:
+            return f"execution_entry_{execution_entry_status}"
+        return "missing_execution_entry"
+    if execution_entry_status and execution_entry_status != "executable":
+        return f"execution_entry_{execution_entry_status}"
+    if bool(entry.get("execution_blocked")):
+        return "execution_blocked"
+    if not bool(entry.get("execution_allowed")):
+        return "execution_not_allowed"
+    if not bool(entry.get("eligible_for_execution", False)):
+        return "execution_not_eligible"
+    execution_status = str(entry.get("execution_status") or "").strip().lower()
+    if execution_status:
+        return execution_status
+    return str(default or "no_execution_candidates")
+
+
 def _is_weak_signal_candidate(entry: dict) -> bool:
     codes = _entry_reason_codes(entry)
     return bool(codes & {"weak_signal", "no_signal"})
@@ -425,6 +481,27 @@ def _mark_synthetic_advisory_entry(entry: dict, *, emit_log: bool = False) -> di
 def _is_execution_eligible(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
+    hard_blockers = _dedupe_issue_codes(list(entry.get("hard_blockers") or []))
+    permission = str(entry.get("permission") or "").strip().upper()
+    final_action = str(entry.get("final_action") or "").strip().upper()
+    execution_entry = _safe_float(entry.get("execution_entry"))
+    execution_entry_status = str(entry.get("execution_entry_status") or "").strip().lower()
+    unresolved_contract = bool(entry.get("unresolved_contract"))
+    if not unresolved_contract and _requires_option_contract_identity(entry):
+        try:
+            unresolved_contract = _is_unresolved_option_contract(entry)
+        except Exception:
+            unresolved_contract = False
+    if (
+        permission == "EXECUTE"
+        and final_action == "EXECUTE"
+        and execution_entry is not None
+        and execution_entry_status == "executable"
+        and not bool(entry.get("execution_blocked"))
+        and not unresolved_contract
+        and not hard_blockers
+    ):
+        return True
     strategy_family = str(entry.get("strategy_family") or "").strip().lower()
     execution_source = str(entry.get("execution_entry_source") or "").strip().lower()
     if strategy_family == "synthetic_advisory":
@@ -566,6 +643,44 @@ def _apply_final_queue_only_entry_promotion_block(entry: dict) -> dict:
     out["tradable"] = False
     out["is_executable"] = False
     return out
+
+
+
+
+def _enforce_non_executable_emit_lifecycle(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    if _is_execution_eligible(entry):
+        return entry
+    out = dict(entry)
+    block_reason = _execution_ineligibility_reason(out)
+    hard_block = _is_hard_execution_blocker(block_reason) or bool(out.get("unresolved_contract")) or bool(
+        out.get("execution_blocked")
+    )
+    out = _capture_queue_only_final_promotion_block(out)
+    out["final_emit_block_reason"] = block_reason
+    if hard_block:
+        out["permission"] = "BLOCK"
+        out["final_action"] = "BLOCK"
+        out["readiness"] = "BLOCKED"
+        out["execution_status"] = "blocked"
+        out["candidate_status"] = "blocked"
+        out["final_blocker"] = out.get("final_blocker") or block_reason
+    else:
+        out["permission"] = "QUEUE_ONLY"
+        out["final_action"] = "QUEUE_ONLY"
+        out["readiness"] = "QUEUE_ONLY"
+        out["execution_status"] = "queue_only"
+        out["candidate_status"] = "advisory_only"
+    out["candidate_status"] = "advisory_only"
+    out["execution_allowed"] = False
+    out["eligible_for_execution"] = False
+    out["tradable"] = False
+    out["is_executable"] = False
+    out["selected_for_execution"] = False
+    if not str(out.get("permission_reason") or "").strip():
+        out["permission_reason"] = block_reason
+    return _classify_candidate_status(out)
 
 
 def _entry_lifecycle_is_valid(lifecycle: dict) -> bool:
@@ -1113,6 +1228,14 @@ def _classify_candidate_status(entry: dict) -> dict:
     permission = str(out.get("permission") or "").strip().upper()
     final_action = str(out.get("final_action") or "").strip().upper()
     readiness = str(out.get("readiness") or "").strip().upper()
+    execution_entry = _safe_float(out.get("execution_entry"))
+    eligible_for_execution = bool(out.get("eligible_for_execution", out.get("execution_allowed", False)))
+    unresolved_contract = bool(out.get("unresolved_contract"))
+    if not unresolved_contract and _requires_option_contract_identity(out):
+        try:
+            unresolved_contract = _is_unresolved_option_contract(out)
+        except Exception:
+            unresolved_contract = False
     if (
         execution_status == "executable"
         and permission == "EXECUTE"
@@ -1135,7 +1258,16 @@ def _classify_candidate_status(entry: dict) -> dict:
         or final_action == "QUEUE_ONLY"
         or readiness == "QUEUE_ONLY"
     ):
-        if _has_candidate_ranking_context(out) or _has_candidate_scoring_context(out):
+        if (
+            (_has_candidate_ranking_context(out) or _has_candidate_scoring_context(out))
+            and execution_entry is not None
+            and execution_entry_status == "executable"
+            and eligible_for_execution
+            and not bool(out.get("execution_blocked"))
+            and not unresolved_contract
+            and not bool(out.get("hard_blockers"))
+            and not bool(out.get("blockers"))
+        ):
             out["candidate_status"] = "near_executable"
             return out
     if _has_candidate_ranking_context(out) or _has_candidate_scoring_context(out):
@@ -2219,6 +2351,26 @@ def _coerce_instrument_token(value) -> int | None:
         return None
 
 
+
+
+def _requires_option_contract_identity(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    instrument_type = str(entry.get("instrument_type") or entry.get("instrument") or "").strip().upper()
+    option_right = _coerce_option_type(entry.get("option_type") or entry.get("type") or entry.get("right"))
+    if instrument_type == "OPT":
+        return True
+    if option_right in {"CE", "PE"}:
+        return True
+    if _coerce_instrument_token(entry.get("instrument_token")) is not None:
+        return True
+    if str(entry.get("tradingsymbol") or "").strip():
+        return True
+    if _coerce_expiry(entry.get("expiry_date") or entry.get("expiry")):
+        return True
+    return False
+
+
 def _has_valid_broker_contract(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
@@ -2684,6 +2836,9 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         advisory_payload.get("permission"),
     )
     if not _is_execution_eligible(advisory_payload):
+        advisory_payload = dict(advisory_payload)
+        advisory_payload["final_emit_block_reason"] = _execution_ineligibility_reason(advisory_payload)
+        advisory_payload = _enforce_non_executable_emit_lifecycle(advisory_payload)
         print(
             "FINAL_EMIT_ABORT",
             {
@@ -2692,7 +2847,8 @@ def _emit_review_queue_logs(entry: dict) -> dict:
                 "execution_status": advisory_payload.get("execution_status"),
                 "candidate_status": advisory_payload.get("candidate_status"),
                 "strategy_family": advisory_payload.get("strategy_family"),
-                "reason": "no_execution_candidates",
+                "reason": advisory_payload.get("final_emit_block_reason") or "no_execution_candidates",
+                "emit_status": "no_execution_candidates",
             },
         )
     print(

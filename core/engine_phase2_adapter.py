@@ -320,6 +320,9 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
         getattr(cfg, "PHASE2_MIN_EXECUTION_QUALITY_SCORE", 0.30) or 0.30
     )
     allow_soft_degrade = bool(getattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True))
+    allow_soft_execution_not_ready = bool(
+        getattr(cfg, "PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE", True)
+    )
     execution_quality_score = _safe_float(candidate.get("execution_quality_score"))
     execution_quality_low = (
         execution_quality_score is not None
@@ -379,6 +382,19 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
         if not reason_codes and str(candidate.get("quote_source") or "").strip().lower() in {"", "unknown", "none"}:
             reason_codes.add("UNKNOWN_QUOTE_SOURCE")
             only_soft_context = True
+        execution_not_ready_soft_failure = (
+            allow_soft_execution_not_ready
+            and execution_allowed
+            and tradable
+            and execution_ok is False
+            and (not execution_blocked)
+            and (not has_critical)
+            and (
+                execution_score >= min_execution_score
+                or _is_borderline_execution_candidate(candidate)
+                or only_soft_context
+            )
+        )
         quality_only_failure = (
             execution_allowed
             and tradable
@@ -392,6 +408,15 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
         )
         if has_critical:
             reasons.append("hard_execution")
+        elif execution_not_ready_soft_failure:
+            soft_penalties.append("soft_execution_not_ready")
+            candidate["phase2_soft_degrade_reason"] = "execution_not_ready_noncritical"
+            candidate["execution_context_degraded"] = True
+            candidate["phase2_execution_penalty"] = max(
+                float(getattr(cfg, "PHASE2_LIQUIDITY_SOFT_PENALTY", 0.08) or 0.08),
+                float(min_execution_score - max(execution_score, 0.0)),
+            )
+            candidate["max_final_action"] = "QUEUE_ONLY"
         elif allow_soft_degrade and quality_only_failure:
             soft_penalties.append("soft_execution_degraded")
             candidate["phase2_soft_degrade_reason"] = "execution_quality_low"
