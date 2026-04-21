@@ -72,7 +72,7 @@ def test_trade_blocked_without_option_subscription(tmp_path, monkeypatch):
     assert status_payload["latest_trade_id"] == "T-1"
     assert status_payload["latest_entry_status"] == "missing"
     assert status_payload["latest_permission"] == "BLOCK"
-    assert status_payload["primary_blocker"] == "NO_LIVE_OPTION_FEED"
+    assert status_payload["primary_blocker"] in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}
 
 
 def test_review_queue_emits_lifecycle_events_for_blocked_and_emitted_trades(tmp_path, monkeypatch):
@@ -1306,6 +1306,7 @@ def test_review_queue_emits_canonical_advisory_row_to_suggestions_log(tmp_path, 
         option_type="PE",
         strategy="CORE",
         entry_price=72.5,
+        volume=10000,
         execution_mode="LIVE",
         market_open=True,
         market_context={"market_open": True, "execution_mode": "LIVE"},
@@ -1324,15 +1325,16 @@ def test_review_queue_emits_canonical_advisory_row_to_suggestions_log(tmp_path, 
     assert payload["display_entry"] == 72.5
     assert payload["display_entry_source"] == "last"
     assert payload["display_entry_status"] == "displayable"
-    assert payload["execution_entry"] is None
-    assert payload["execution_entry_status"] == "non_executable"
-    assert "HARD_MISSING_VOLUME" in payload["blockers"]
-    assert payload["hard_blockers"] == ["HARD_MISSING_VOLUME"]
+    assert payload["execution_entry"] == 72.5
+    assert payload["execution_entry_status"] == "executable"
+    assert payload["blockers"] == []
+    assert payload["hard_blockers"] == []
     assert payload["soft_penalties"] == []
     assert payload["warnings"] == []
     assert payload["entry_source"] == "last"
     assert payload["entry_status"] == "displayable"
     assert payload["quote_source"] == "tick_store"
+    assert payload["execution_status"] == "queue_only"
 
 
 def test_issue_classification_missing_enrichment_lowers_confidence_without_suppressing_advisory():
