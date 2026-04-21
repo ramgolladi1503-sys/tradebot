@@ -69,3 +69,26 @@ def test_bridge_runtime_ws_connected_but_stale_ticks_sets_degraded(monkeypatch):
     assert sm["state"] == "DEGRADED"
     assert sm["reason"] == "runtime_health_ws_connected_but_stale_ticks"
     assert fd["ws_connected"] is True
+
+
+def test_dashboard_feed_display_summary_prefers_live_runtime_health_over_idle_snapshot():
+    snapshot = {
+        "feed_freshness": {"state": "IDLE", "market_open": True},
+        "feed_debug": {"ws_connected": None},
+        "runtime_health": {
+            "feed": {
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "subscribed_option_tokens_count": 68,
+                "last_tick_age_sec": 0.4,
+                "last_depth_age_sec": 0.0,
+            }
+        },
+    }
+
+    state, reason, ltp_age, depth_age = runtime._dashboard_feed_display_summary(snapshot)
+
+    assert state == "OK"
+    assert reason == "runtime_running"
+    assert ltp_age == 0.4
+    assert depth_age == 0.0

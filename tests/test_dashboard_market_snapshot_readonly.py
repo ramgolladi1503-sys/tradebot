@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import dashboard.streamlit_app_runtime as runtime
 from core.market_snapshot_builder import build_market_snapshot, build_symbol_market_snapshot
@@ -40,7 +41,7 @@ class _FakeStreamlit:
 
 def _snapshot_payload(*, market_open: bool = True) -> dict:
     return build_market_snapshot(
-        generated_at="2026-03-08T14:00:00Z",
+        generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         market_open=market_open,
         symbols_payload={
             "NIFTY": build_symbol_market_snapshot(

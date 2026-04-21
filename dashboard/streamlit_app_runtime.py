@@ -937,6 +937,37 @@ def _load_live_suggestions_status() -> dict:
     )
 
 
+def _dashboard_feed_display_summary(snapshot: dict) -> tuple[str, str, object, object]:
+    runtime_health = snapshot.get("runtime_health") or {}
+    runtime_feed = runtime_health.get("feed") if isinstance(runtime_health.get("feed"), dict) else {}
+    runtime_state = str(runtime_feed.get("runtime_state") or "").strip().upper()
+    ws_connected = runtime_feed.get("ws_connected")
+    subscribed_count = runtime_feed.get("subscribed_option_tokens_count")
+    if subscribed_count is None:
+        subscribed_count = runtime_feed.get("subscribed_tokens_count")
+    try:
+        subscribed_count_int = int(subscribed_count) if subscribed_count is not None else None
+    except Exception:
+        subscribed_count_int = None
+
+    if runtime_state == "RUNNING" and bool(ws_connected) and (
+        subscribed_count_int is None or subscribed_count_int > 0
+    ):
+        ltp_age = runtime_feed.get("last_tick_age_sec", runtime_feed.get("last_ws_tick_age_sec"))
+        depth_age = runtime_feed.get("last_depth_age_sec")
+        return "OK", "runtime_running", ltp_age, depth_age
+
+    if runtime_state in {"SUBSCRIBE_FAILED", "AUTH_BLOCKED", "IMPORT_MISSING", "DOWN"}:
+        ltp_age = runtime_feed.get("last_tick_age_sec", runtime_feed.get("last_ws_tick_age_sec"))
+        depth_age = runtime_feed.get("last_depth_age_sec")
+        reason = str(runtime_feed.get("last_error") or runtime_state.lower()).strip() or runtime_state.lower()
+        return "DOWN", reason, ltp_age, depth_age
+
+    feed = snapshot.get("feed_freshness") or {}
+    feed_debug = snapshot.get("feed_debug") or {}
+    return _feed_status_summary(feed, feed_debug)
+
+
 def _load_freshness_latest() -> dict:
     payload = _perf_timed_load(
         "freshness_latest_json",
@@ -4296,7 +4327,26 @@ else:
     df = _perf_timed_load("trade_log_dataframe", pd.DataFrame, rows)
     df = _ensure_trade_df_schema(df)
 if df.empty:
-    st.info("No trades logged yet. Dashboard is active in empty-history mode.")
+    live_suggestions_status = _load_live_suggestions_status()
+    live_suggestions_df = _load_live_suggestions_df(limit=100)
+    visible_suggestion_count = int(
+        live_suggestions_status.get("visible_suggestion_count")
+        or len(live_suggestions_df)
+        or 0
+    )
+    visible_executable_count = int(live_suggestions_status.get("visible_executable_count") or 0)
+    if (
+        visible_suggestion_count > 0
+        or visible_executable_count > 0
+        or bool(live_suggestions_status.get("feed_ok"))
+        or bool(live_suggestions_status.get("ws_connected"))
+    ):
+        st.info(
+            "No closed trades logged yet. Live suggestion snapshots are available "
+            f"({visible_suggestion_count} visible, {visible_executable_count} executable)."
+        )
+    else:
+        st.info("No trades logged yet. Dashboard is active in empty-history mode.")
     try:
         auth_guard = load_auth_runtime_guard()
         if bool((auth_guard or {}).get("degrade_to_planning")):
@@ -4557,18 +4607,18 @@ def _feed_status_summary(feed: dict, feed_debug: dict):
 
 
 def _compute_trade_refresh_gate(snapshot: dict) -> tuple[bool, str, str]:
-    feed = snapshot.get("feed_freshness") or {}
     feed_sm = snapshot.get("feed_state_machine") or {}
-    feed_debug = snapshot.get("feed_debug") or {}
     feed_state_sm = str(feed_sm.get("state") or "").upper()
     if feed_state_sm in {"OK", "DEGRADED", "DOWN"}:
         feed_state = feed_state_sm
     else:
-        feed_state, _reason, _ltp_age, _depth_age = _feed_status_summary(feed, feed_debug)
+        feed_state, _reason, _ltp_age, _depth_age = _dashboard_feed_display_summary(snapshot)
     try:
         market_open = bool(canonical_market_open())
     except Exception:
+        feed = snapshot.get("feed_freshness") or {}
         market_open = bool(feed.get("market_open", False))
+    feed = snapshot.get("feed_freshness") or {}
     state = str(feed.get("state") or "").upper()
     market_status = "OPEN" if market_open and state != "MARKET_CLOSED" else "CLOSED"
     feed_status = "ACTIVE" if feed_state in ("OK", "DEGRADED") else "INACTIVE"
@@ -4588,7 +4638,6 @@ def _render_status_row(snapshot: dict):
         if state == "MARKET_CLOSED" and phase == "PREMARKET":
             state = "PREMARKET"
         can_trade = snapshot.get("can_trade")
-        feed = snapshot.get("feed_freshness") or {}
         feed_sm = snapshot.get("feed_state_machine") or {}
         feed_debug = snapshot.get("feed_debug") or {}
         auth_health = snapshot.get("auth_health") or {}
@@ -4600,7 +4649,7 @@ def _render_status_row(snapshot: dict):
             ltp_age = feed_sm.get("ws_msg_age_sec")
             depth_age = None
         else:
-            feed_state, feed_reason, ltp_age, depth_age = _feed_status_summary(feed, feed_debug)
+            feed_state, feed_reason, ltp_age, depth_age = _dashboard_feed_display_summary(snapshot)
         if phase == "PREMARKET" and feed_state == "DOWN" and "no_ws" in str(feed_reason).lower():
             feed_state = "IDLE"
             feed_reason = "premarket"
@@ -4954,9 +5003,7 @@ def _render_market_snapshot():
     # Feed freshness badge (canonical SLA snapshot)
     try:
         snap = st.session_state.get("readiness_snapshot") or {}
-        feed = snap.get("feed_freshness") or {}
-        feed_debug = snap.get("feed_debug") or {}
-        feed_state, feed_reason, ltp_age, depth_age = _feed_status_summary(feed, feed_debug)
+        feed_state, feed_reason, ltp_age, depth_age = _dashboard_feed_display_summary(snap)
         ltp_txt = f"{ltp_age:.1f}s" if isinstance(ltp_age, (int, float)) else "N/A"
         depth_txt = f"{depth_age:.1f}s" if isinstance(depth_age, (int, float)) else "N/A"
         st.caption(f"Feed: {feed_state} ({feed_reason}) | LTP age {ltp_txt} | Depth age {depth_txt}")
