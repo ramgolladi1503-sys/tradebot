@@ -611,6 +611,49 @@ def test_build_candidates_phase2_soft_not_ready_reason_survives_low_execution_sc
     assert ranked[0].get("max_final_action") == "QUEUE_ONLY"
 
 
+def test_build_candidates_phase2_soft_not_ready_fallbacks_on_moderate_liquidity_without_reason(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE", True, raising=False)
+    monkeypatch.setattr(
+        cfg,
+        "PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_FALLBACK_ENABLE",
+        True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cfg,
+        "PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_MIN",
+        0.5,
+        raising=False,
+    )
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "SOFT_LIQUIDITY_FALLBACK",
+                "symbol": "SENSEX",
+                "candidate_status": "executable",
+                "execution_status": "queue_only",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": False,
+                "execution_score": 0.18,
+                "execution_quality_score": 0.18,
+                "liquidity_score": 0.5,
+                "spread_pct": 0.003,
+                "quote_source": "tick_store",
+                "final_score": 0.68,
+            }
+        ]
+    )
+    assert [row["trade_id"] for row in ranked] == ["SOFT_LIQUIDITY_FALLBACK"]
+    assert "soft_execution_not_ready" in list(ranked[0].get("phase2_soft_penalties") or [])
+    assert ranked[0].get("phase2_soft_degrade_reason") == "execution_not_ready_noncritical"
+    assert ranked[0].get("max_final_action") == "QUEUE_ONLY"
+
+
 def test_build_candidates_phase2_missing_quote_not_ready_stays_hard_block(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", True, raising=False)

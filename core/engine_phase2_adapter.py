@@ -302,6 +302,32 @@ def _blocks_execute_due_to_soft_reject(candidate: dict[str, Any]) -> bool:
     return False
 
 
+def _soft_execution_not_ready_liquidity_fallback(candidate: dict[str, Any]) -> bool:
+    if not bool(getattr(cfg, "PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE", True)):
+        return False
+    if not bool(
+        getattr(cfg, "PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_FALLBACK_ENABLE", True)
+    ):
+        return False
+    candidate_status = str(candidate.get("candidate_status") or "").strip().lower()
+    if candidate_status not in {"executable", "near_executable"}:
+        return False
+    if not _safe_bool(candidate.get("execution_allowed"), default=True):
+        return False
+    if not _safe_bool(candidate.get("tradable"), default=True):
+        return False
+    if _safe_bool(candidate.get("execution_blocked"), default=False):
+        return False
+    if candidate.get("execution_ok") is not False:
+        return False
+    if bool(_soft_reject_reason(candidate)):
+        return False
+    min_liquidity_score = float(
+        getattr(cfg, "PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_MIN", 0.50) or 0.50
+    )
+    return float(_liquidity_score(candidate)) >= float(min_liquidity_score)
+
+
 def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     soft_penalties: list[str] = list(candidate.get("phase2_soft_penalties") or [])
@@ -372,6 +398,7 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     execution_score = _execution_quality_score(candidate)
     no_signal_candidate = _is_no_signal_candidate(candidate)
     latency_only_block = _is_latency_only_block(candidate)
+    liquidity_soft_fallback = _soft_execution_not_ready_liquidity_fallback(candidate)
     if no_signal_relax and no_signal_candidate:
         execution_allowed = True
         tradable = True
@@ -432,6 +459,7 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
                 or execution_score >= min_execution_score
                 or _is_borderline_execution_candidate(candidate)
                 or only_soft_context
+                or liquidity_soft_fallback
             )
         )
         quality_only_failure = (

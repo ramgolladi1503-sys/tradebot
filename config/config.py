@@ -786,6 +786,16 @@ PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE = (
 PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE = (
     os.getenv("PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE", "true").lower() == "true"
 )
+PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_FALLBACK_ENABLE = (
+    os.getenv(
+        "PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_FALLBACK_ENABLE",
+        "true",
+    ).lower()
+    == "true"
+)
+PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_MIN = float(
+    os.getenv("PHASE2_SOFT_EXECUTION_NOT_READY_LIQUIDITY_MIN", "0.50")
+)
 PHASE2_SOFT_EXECUTION_NOT_READY_REASON_CODES = os.getenv(
     "PHASE2_SOFT_EXECUTION_NOT_READY_REASON_CODES",
     "stale_quote,inconsistent_quote,low_data_confidence,unverified_spread,missing_liquidity_validation",
