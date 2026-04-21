@@ -346,8 +346,6 @@ def _best_reject_reason(entry: dict, *, default: str = "unspecified_trade_builde
     return str(default or generic)
 
 
-
-
 def _execution_ineligibility_reason(entry: dict, *, default: str = "no_execution_candidates") -> str:
     if not isinstance(entry, dict):
         return str(default or "no_execution_candidates")
@@ -643,8 +641,6 @@ def _apply_final_queue_only_entry_promotion_block(entry: dict) -> dict:
     out["tradable"] = False
     out["is_executable"] = False
     return out
-
-
 
 
 def _enforce_non_executable_emit_lifecycle(entry: dict) -> dict:
@@ -2351,8 +2347,6 @@ def _coerce_instrument_token(value) -> int | None:
         return None
 
 
-
-
 def _requires_option_contract_identity(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
@@ -2821,6 +2815,9 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         advisory_payload = _preserve_blocked_candidate_metadata(advisory_payload, terminal=False)
     advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload = _apply_level_normalization_and_promotion(advisory_payload)
+    advisory_payload = _classify_candidate_status(advisory_payload)
+    # Reconcile lifecycle truth after late normalization/promotion passes.
+    advisory_payload = _refresh_opportunity_survival_state(advisory_payload)
     advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload["row_kind"] = _derive_review_queue_row_kind(advisory_payload)
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
@@ -4635,6 +4632,27 @@ def _apply_issue_classification(
     issue_codes = _current_issue_codes(entry)
     current_ltp = _safe_float(entry.get("current_ltp"))
     validation_reference_price = _safe_float(entry.get("validation_reference_price"))
+    execution_entry = _safe_float(entry.get("execution_entry"))
+    reference_price_for_mismatch = validation_reference_price
+    if reference_price_for_mismatch is None:
+        for fallback_field in ("expected_entry", "entry_price", "entry", "display_entry"):
+            reference_price_for_mismatch = _safe_float(entry.get(fallback_field))
+            if reference_price_for_mismatch is not None:
+                break
+    mismatch_price = execution_entry if execution_entry is not None else current_ltp
+    price_mismatch_abs = None
+    price_mismatch_pct = None
+    if (
+        mismatch_price is not None
+        and reference_price_for_mismatch is not None
+        and float(reference_price_for_mismatch) > 0.0
+    ):
+        try:
+            price_mismatch_abs = abs(float(mismatch_price) - float(reference_price_for_mismatch))
+            price_mismatch_pct = float(price_mismatch_abs) / abs(float(reference_price_for_mismatch))
+        except Exception:
+            price_mismatch_abs = None
+            price_mismatch_pct = None
     confidence_raw = _safe_float(entry.get("confidence_base"))
     if confidence_raw is None:
         confidence_raw = _safe_float(entry.get("gating_base_confidence"))
@@ -4694,7 +4712,16 @@ def _apply_issue_classification(
         "quote_source": entry.get("option_ltp_source") or entry.get("quote_source"),
         "quote_age_sec": quote_age_sec,
         "current_ltp": current_ltp,
-        "reference_price": validation_reference_price,
+        "reference_price": reference_price_for_mismatch,
+        "price_mismatch_abs": price_mismatch_abs,
+        "price_mismatch_pct": price_mismatch_pct,
+        "price_mismatch_persistent": bool(entry.get("price_mismatch_persistent")),
+        "price_mismatch_abs_tol": float(
+            getattr(cfg, "ISSUE_POLICY_PRICE_MISMATCH_ABS_TOL", 5.0) or 5.0
+        ),
+        "price_mismatch_pct_tol": float(
+            getattr(cfg, "ISSUE_POLICY_PRICE_MISMATCH_PCT_TOL", 0.03) or 0.03
+        ),
         "advisory_id": entry.get("advisory_id") or entry.get("trade_id") or entry.get("trade_key"),
         "symbol": entry.get("symbol"),
     }

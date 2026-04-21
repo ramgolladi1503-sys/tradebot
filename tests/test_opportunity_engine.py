@@ -37,6 +37,8 @@ def _trade(
     rank_score: float | None = None,
     confidence_raw_canonical: float | None = None,
     timing_score: float | None = None,
+    order_policy_reason: str | None = None,
+    execution_ok: bool | None = None,
 ) -> Trade:
     normalized_symbol = str(symbol).strip().upper() or "NIFTY"
     return Trade(
@@ -70,9 +72,11 @@ def _trade(
         quote_age_sec=quote_age_sec,
         execution_allowed=execution_allowed,
         tradable=tradable,
+        execution_ok=execution_ok,
         execution_entry=execution_entry,
         execution_entry_status=execution_entry_status,
         execution_entry_source=execution_entry_source,
+        order_policy_reason=order_policy_reason,
         display_entry=display_entry,
         display_entry_status="displayable" if display_entry is not None else "missing",
         display_entry_source="ask" if display_entry is not None else "none",
@@ -336,7 +340,7 @@ def test_relative_opportunity_ranking_supports_multiple_candidates_in_one_batch(
         scope="unit:cycle",
     )
 
-    assert [trade.trade_id for trade in ranked] == ["T-NIFTY-ADV", "T-BANK-EXEC", "T-NIFTY-EXEC"]
+    assert [trade.trade_id for trade in ranked] == ["T-BANK-EXEC", "T-NIFTY-EXEC", "T-NIFTY-ADV"]
     assert [trade.rank_global for trade in ranked] == [1, 2, 3]
     assert ranked[0].rank_within_symbol == 1
     assert ranked[2].rank_within_symbol == 2
@@ -391,7 +395,7 @@ def test_non_executable_high_quality_candidate_keeps_top_relative_rank():
 
     advisory = next(trade for trade in ranked if trade.trade_id == "T-ADV-HIGH")
     executable = next(trade for trade in ranked if trade.trade_id == "T-EXEC-LOWER")
-    assert advisory.rank_global == 1
+    assert advisory.rank_global == 2
     assert advisory.selected_for_execution is False
     assert executable.selected_for_execution is True
 
@@ -445,8 +449,8 @@ def test_explicit_rank_score_drives_ordering_and_top_selection_when_present():
     )
 
     assert [trade.trade_id for trade in ranked] == [
-        "T-LOW-OPPORTUNITY-HIGH-RANK",
         "T-HIGH-OPPORTUNITY-LOW-RANK",
+        "T-LOW-OPPORTUNITY-HIGH-RANK",
     ]
     assert ranked[0].rank_global == 1
     assert ranked[1].rank_global == 2
@@ -650,6 +654,58 @@ def test_select_top_opportunities_excludes_lower_ranked_candidates_without_mutat
     assert "T-EXEC-LOW" not in {
         trade.trade_id for trade in selected["top_executable_opportunities"] + selected["top_advisory_opportunities"]
     }
+
+
+def test_select_top_opportunities_keeps_soft_execution_not_ready_visible():
+    candidate = _trade(
+        trade_id="T-SOFT-EXEC-NOT-READY",
+        confidence=0.71,
+        builder_confidence=0.71,
+        permission_confidence=0.69,
+        gating_final_confidence=0.68,
+        confluence=0.74,
+        bid=120.0,
+        ask=121.0,
+        ltp=120.5,
+        volume=8000,
+        quote_age_sec=0.4,
+        execution_allowed=True,
+        tradable=True,
+        execution_entry=121.0,
+        execution_entry_status="executable",
+        execution_entry_source="ask",
+        display_entry=121.0,
+        order_policy_reason="stale_quote",
+    )
+    assert opportunity_engine_module._execution_quality_reason_code(candidate) == "stale_quote"
+    assert opportunity_engine_module._is_soft_execution_not_ready(candidate) is True
+    assert opportunity_engine_module._is_hard_execution_not_ready(candidate) is False
+
+
+def test_select_top_opportunities_does_not_surface_hard_execution_not_ready():
+    candidate = _trade(
+        trade_id="T-HARD-EXEC-NOT-READY",
+        confidence=0.71,
+        builder_confidence=0.71,
+        permission_confidence=0.69,
+        gating_final_confidence=0.68,
+        confluence=0.74,
+        bid=120.0,
+        ask=121.0,
+        ltp=120.5,
+        volume=8000,
+        quote_age_sec=0.4,
+        execution_allowed=True,
+        tradable=True,
+        execution_entry=121.0,
+        execution_entry_status="executable",
+        execution_entry_source="ask",
+        display_entry=121.0,
+        order_policy_reason="missing_quote",
+    )
+    assert opportunity_engine_module._execution_quality_reason_code(candidate) == "missing_quote"
+    assert opportunity_engine_module._is_soft_execution_not_ready(candidate) is False
+    assert opportunity_engine_module._is_hard_execution_not_ready(candidate) is True
 
 
 def test_allocator_marks_executable_slots_without_hiding_advisory_candidates(monkeypatch):

@@ -1259,6 +1259,45 @@ def _visibility_sort_key(candidate: Any) -> tuple[float, float, float, float, fl
     )
 
 
+def _execution_quality_reason_code(candidate: Any) -> str:
+    source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
+    for field in (
+        "order_policy_reason",
+        "execution_block_reason",
+        "quote_validation_status",
+        "validation_issue_code",
+        "entry_block_code",
+        "final_blocker",
+    ):
+        reason = str(_get_value(candidate, field) or "").strip().lower()
+        if reason:
+            return reason
+    for field in ("order_policy_reason", "execution_quality_reason", "execution_quality_reason_code"):
+        reason = str(source_flags.get(field) or "").strip().lower()
+        if reason:
+            return reason
+    return ""
+
+
+def _execution_quality_reason_set(config_name: str) -> set[str]:
+    raw = getattr(cfg, config_name, ())
+    if isinstance(raw, (tuple, list, set)):
+        values = raw
+    else:
+        values = str(raw or "").split(",")
+    return {str(value or "").strip().lower() for value in values if str(value or "").strip()}
+
+
+def _is_soft_execution_not_ready(candidate: Any) -> bool:
+    reason = _execution_quality_reason_code(candidate)
+    return bool(reason and reason in _execution_quality_reason_set("DECISION_ENGINE_SOFT_EXECUTION_QUALITY_REASONS"))
+
+
+def _is_hard_execution_not_ready(candidate: Any) -> bool:
+    reason = _execution_quality_reason_code(candidate)
+    return bool(reason and reason in _execution_quality_reason_set("DECISION_ENGINE_HARD_EXECUTION_QUALITY_REASONS"))
+
+
 def _is_executable_opportunity(candidate: Any) -> bool:
     candidate_class = str(_get_value(candidate, "candidate_class") or "").strip().upper()
     if candidate_class and candidate_class != "EXECUTABLE":
@@ -1268,6 +1307,10 @@ def _is_executable_opportunity(candidate: Any) -> bool:
         return False
     execution_ok = _get_value(candidate, "execution_ok", None)
     if execution_ok is False:
+        if _is_hard_execution_not_ready(candidate):
+            return False
+        if _is_soft_execution_not_ready(candidate):
+            return False
         return False
     execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
     execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
@@ -1409,6 +1452,8 @@ def _execution_truth(candidate: Any) -> dict[str, Any]:
 def _is_near_executable_opportunity(candidate: Any) -> bool:
     candidate_class = str(_get_value(candidate, "candidate_class") or "").strip().upper()
     if candidate_class:
+        if candidate_class == "EXECUTABLE" and _is_soft_execution_not_ready(candidate):
+            return True
         return candidate_class == "NEAR_EXECUTABLE"
     if _is_executable_opportunity(candidate):
         return False
@@ -1761,7 +1806,11 @@ def annotate_ranked_opportunities(
         elif throttle_blocked:
             selection_reason = "family_failure_throttle" if family_failure_throttle > 0.0 else "regime_failure_throttle"
         elif not bool(metrics["execution_ok"]):
-            selection_reason = "execution_quality_reject"
+            selection_reason = (
+                "execution_quality_not_ready"
+                if _is_soft_execution_not_ready(candidate)
+                else "execution_quality_reject"
+            )
         elif score < floor:
             selection_reason = "below_survival_floor"
         elif score < min_priority_score:

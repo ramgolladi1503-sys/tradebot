@@ -306,6 +306,17 @@ def _decision_gate_health(now_epoch: float, market_open: bool, execution_mode: s
     max_ltp_age = None
     max_depth_age = None
     latest_explain = None
+    feed_stale_max_age_sec = max(
+        1.0,
+        float(
+            getattr(
+                cfg,
+                "READINESS_DECISION_FEED_STALE_MAX_AGE_SEC",
+                min(float(getattr(cfg, "READINESS_DECISION_MAX_AGE_SEC", 240.0) or 240.0), 45.0),
+            )
+            or 45.0
+        ),
+    )
 
     for sym, row in rows.items():
         row_blockers = [str(x) for x in (row.get("decision_blockers") or row.get("gate_reasons") or []) if str(x).strip()]
@@ -330,27 +341,48 @@ def _decision_gate_health(now_epoch: float, market_open: bool, execution_mode: s
                 max_ltp_age = ltp_age if max_ltp_age is None else max(max_ltp_age, ltp_age)
             if depth_age is not None:
                 max_depth_age = depth_age if max_depth_age is None else max(max_depth_age, depth_age)
+            is_fresh_row_for_feed = row_age_sec is not None and float(row_age_sec) <= float(feed_stale_max_age_sec)
             if market_open and (fhs.get("is_fresh") is False):
-                feed_stale_symbols.append(sym)
-                if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
-                    logger.warning(
-                        "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=feed_health_snapshot_not_fresh row_ts_epoch=%s row_age_sec=%s feed_is_fresh=%s ltp_age_sec=%s depth_age_sec=%s blockers=%s",
+                if is_fresh_row_for_feed:
+                    feed_stale_symbols.append(sym)
+                    if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+                        logger.warning(
+                            "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=feed_health_snapshot_not_fresh row_ts_epoch=%s row_age_sec=%s feed_is_fresh=%s ltp_age_sec=%s depth_age_sec=%s blockers=%s",
+                            sym,
+                            row_ts_epoch,
+                            row_age_sec,
+                            fhs.get("is_fresh"),
+                            fhs.get("ltp_age_sec"),
+                            fhs.get("depth_age_sec"),
+                            row_blockers,
+                        )
+                elif bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+                    logger.info(
+                        "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=ignored_stale_decision_row row_ts_epoch=%s row_age_sec=%s max_feed_stale_age_sec=%s blockers=%s",
                         sym,
                         row_ts_epoch,
                         row_age_sec,
-                        fhs.get("is_fresh"),
-                        fhs.get("ltp_age_sec"),
-                        fhs.get("depth_age_sec"),
+                        feed_stale_max_age_sec,
                         row_blockers,
                     )
         if market_open and any(str(reason).upper() == "FEED_STALE" for reason in row_blockers):
-            feed_stale_symbols.append(sym)
-            if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
-                logger.warning(
-                    "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=decision_blocker_feed_stale row_ts_epoch=%s row_age_sec=%s blockers=%s",
+            if row_age_sec is not None and float(row_age_sec) <= float(feed_stale_max_age_sec):
+                feed_stale_symbols.append(sym)
+                if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+                    logger.warning(
+                        "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=decision_blocker_feed_stale row_ts_epoch=%s row_age_sec=%s blockers=%s",
+                        sym,
+                        row_ts_epoch,
+                        row_age_sec,
+                        row_blockers,
+                    )
+            elif bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+                logger.info(
+                    "FEED_STALE_EVIDENCE symbol=%s source=readiness_decision_rows reason=ignored_stale_decision_row_blocker row_ts_epoch=%s row_age_sec=%s max_feed_stale_age_sec=%s blockers=%s",
                     sym,
                     row_ts_epoch,
                     row_age_sec,
+                    feed_stale_max_age_sec,
                     row_blockers,
                 )
         if latest_explain is None and row.get("decision_explain") is not None:

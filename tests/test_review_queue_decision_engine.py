@@ -28,6 +28,15 @@ def _candidate(**overrides):
         "quote_source": "tick_store",
         "quote_validation_status": "OK",
         "quote_age_sec": 0.5,
+        "best_bid": 149.8,
+        "best_ask": 150.2,
+        "opt_ltp": 150.0,
+        "current_ltp": 150.0,
+        "spread_pct": 0.002666,
+        "volume": 10000,
+        "liquidity_score": 0.8,
+        "execution_ok": True,
+        "data_state": "DATA_LIVE",
     }
     row.update(overrides)
     return row
@@ -144,6 +153,14 @@ def test_queue_only_backdoor_promotion_blocked_for_weak_signal(monkeypatch):
             "quote_source": "tick_store",
             "quote_validation_status": "OK",
             "quote_age_sec": 0.5,
+            "best_bid": 149.8,
+            "best_ask": 150.2,
+            "opt_ltp": 150.0,
+            "current_ltp": 150.0,
+            "spread_pct": 0.002666,
+            "volume": 10000,
+            "liquidity_score": 0.8,
+            "data_state": "DATA_LIVE",
             "selected_for_execution": True,
             "rank_global": 1,
         }
@@ -274,6 +291,7 @@ def test_enforce_non_executable_emit_lifecycle_clamps_execute_fields():
     assert out["execution_allowed"] is False
     assert out["eligible_for_execution"] is False
 
+
 def test_enforce_non_executable_emit_lifecycle_leaves_eligible_row_unchanged():
     row = {
         "trade_id": "T-EMIT-EXEC",
@@ -295,6 +313,7 @@ def test_enforce_non_executable_emit_lifecycle_leaves_eligible_row_unchanged():
     assert out["final_action"] == "EXECUTE"
     assert out["execution_status"] == "executable"
     assert out["execution_allowed"] is True
+
 
 def test_is_execution_eligible_accepts_execute_intent_when_status_lags():
     row = {
@@ -322,6 +341,7 @@ def test_is_execution_eligible_accepts_execute_intent_when_status_lags():
     }
     assert review_queue._is_execution_eligible(row) is True
 
+
 def test_is_execution_eligible_rejects_execute_intent_with_hard_blocker():
     row = {
         "trade_id": "T-EXEC-INTENT-BLOCKED",
@@ -348,6 +368,7 @@ def test_is_execution_eligible_rejects_execute_intent_with_hard_blocker():
     }
     assert review_queue._is_execution_eligible(row) is False
 
+
 def test_execution_ineligibility_reason_prefers_specific_blocker():
     row = {
         "trade_id": "T-INELIGIBLE-REASON",
@@ -360,6 +381,7 @@ def test_execution_ineligibility_reason_prefers_specific_blocker():
         "execution_block_reason": "execution_quality_reject",
     }
     assert review_queue._execution_ineligibility_reason(row) == "execution_quality_reject"
+
 
 def test_enforce_non_executable_emit_lifecycle_preserves_specific_reason_and_avoids_near_executable():
     out = review_queue._enforce_non_executable_emit_lifecycle(
@@ -386,6 +408,55 @@ def test_enforce_non_executable_emit_lifecycle_preserves_specific_reason_and_avo
     assert out["candidate_status"] == "advisory_only"
     assert out["final_emit_block_reason"] == "execution_quality_reject"
     assert out["permission_reason"] == "execution_quality_reject"
+
+
+def test_issue_classification_softens_minor_price_mismatch_for_execute_intent():
+    row = {
+        "trade_id": "T-MISMATCH-SOFT",
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "permission": "EXECUTE",
+        "quote_source": "tick_store",
+        "quote_validation_status": "PRICE_MISMATCH",
+        "execution_entry": 100.0,
+        "validation_reference_price": 101.5,
+        "current_ltp": 100.0,
+        "market_open": True,
+        "blockers": [],
+        "hard_blockers": [],
+    }
+    out = review_queue._apply_issue_classification(
+        row,
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+    )
+    assert "PRICE_MISMATCH" in list(out.get("soft_penalties") or [])
+    assert "PRICE_MISMATCH" not in list(out.get("hard_blockers") or [])
+
+
+def test_issue_classification_keeps_severe_price_mismatch_hard():
+    row = {
+        "trade_id": "T-MISMATCH-HARD",
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "permission": "EXECUTE",
+        "quote_source": "tick_store",
+        "quote_validation_status": "PRICE_MISMATCH",
+        "execution_entry": 100.0,
+        "validation_reference_price": 140.0,
+        "current_ltp": 100.0,
+        "quote_age_sec": 0.5,
+        "market_open": True,
+        "blockers": [],
+        "hard_blockers": [],
+    }
+    out = review_queue._apply_issue_classification(
+        row,
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+    )
+    assert "PRICE_MISMATCH" in list(out.get("hard_blockers") or [])
+
 
 def test_terminal_scoring_is_idempotent_and_bounded(monkeypatch):
     monkeypatch.setattr(cfg, "TERMINAL_SCORING_MAX_ABS_DELTA", 0.15, raising=False)

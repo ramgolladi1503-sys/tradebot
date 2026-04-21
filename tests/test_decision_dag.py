@@ -78,6 +78,25 @@ def test_feed_stale_never_emitted_when_snapshot_is_fresh(monkeypatch):
     assert "FEED_STALE" not in decision.blockers
 
 
+def test_feed_fresh_uses_latest_option_tick_when_ltp_timestamp_missing(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    now_epoch = 1_025.0
+    md = _base_market_data(now_epoch)
+    md.update(
+        {
+            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "ltp_ts_epoch": None,
+            "latest_option_tick_ts": now_epoch - 0.4,
+            "latest_option_tick_age_sec": 0.4,
+            "ws_connected": True,
+            "subscribed_option_tokens_count": 68,
+        }
+    )
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.facts["feed_health"]["is_fresh"] is True
+    assert "FEED_STALE" not in decision.blockers
+
+
 def test_feed_stale_emits_symbol_evidence_log(monkeypatch, caplog):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True, raising=False)
@@ -87,8 +106,9 @@ def test_feed_stale_emits_symbol_evidence_log(monkeypatch, caplog):
         {
             "market_context": {"execution_mode": "LIVE", "market_open": True},
             "ltp_ts_epoch": now_epoch - 30.0,
-            "latest_option_tick_ts": now_epoch - 0.4,
-            "latest_option_tick_age_sec": 0.4,
+            "latest_option_tick_ts": now_epoch - 45.0,
+            "latest_option_tick_age_sec": 45.0,
+            "option_feed_block_reason": "NO_LIVE_OPTION_FEED",
             "ws_connected": True,
             "subscribed_option_tokens_count": 70,
         }
