@@ -563,6 +563,32 @@ def _build_cycle_latency_snapshot(
     return latency_stats
 
 
+def _latency_budget_config(*, execution_mode: str | None) -> dict[str, float | int | bool | str]:
+    mode = str(execution_mode or "SIM").strip().upper()
+    is_live = mode == "LIVE"
+    if is_live:
+        return {
+            "scope": "live",
+            "max_p95_total_ms": float(getattr(cfg, "LIVE_MAX_P95_TOTAL_MS", getattr(cfg, "MAX_P95_TOTAL_MS", 120.0))),
+            "max_p95_decision_ms": float(
+                getattr(cfg, "LIVE_MAX_P95_DECISION_MS", getattr(cfg, "MAX_P95_DECISION_MS", 80.0))
+            ),
+            "sustained_windows": int(getattr(cfg, "LIVE_SUSTAINED_WINDOWS", getattr(cfg, "SUSTAINED_WINDOWS", 3))),
+            "cooldown_sec": float(
+                getattr(cfg, "LIVE_EXIT_ONLY_COOLDOWN_S", getattr(cfg, "EXIT_ONLY_COOLDOWN_S", 30.0))
+            ),
+            "halt_on_breach": bool(getattr(cfg, "LIVE_HALT_ON_BREACH", getattr(cfg, "HALT_ON_BREACH", True))),
+        }
+    return {
+        "scope": "default",
+        "max_p95_total_ms": float(getattr(cfg, "MAX_P95_TOTAL_MS", 120.0)),
+        "max_p95_decision_ms": float(getattr(cfg, "MAX_P95_DECISION_MS", 80.0)),
+        "sustained_windows": int(getattr(cfg, "SUSTAINED_WINDOWS", 3)),
+        "cooldown_sec": float(getattr(cfg, "EXIT_ONLY_COOLDOWN_S", 30.0)),
+        "halt_on_breach": bool(getattr(cfg, "HALT_ON_BREACH", True)),
+    }
+
+
 def _scan_visible_suggestions(path: Path) -> dict:
     counts = {
         "visible_suggestion_count": 0,
@@ -1639,18 +1665,30 @@ class Orchestrator:
         self.regime_monitor = get_regime_monitor()
         self._regime_monitor_enabled = bool(getattr(cfg, "REGIME_MONITOR_ENABLED", True))
         self._regime_monitor_status = {}
+        latency_budget = _latency_budget_config(
+            execution_mode=str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
+        )
         self.latency_monitor = LatencyMonitor(
             window_size=int(getattr(cfg, "LATENCY_MONITOR_WINDOW_SIZE", 120)),
-            max_p95_total_ms=float(getattr(cfg, "MAX_P95_TOTAL_MS", 120.0)),
-            max_p95_decision_ms=float(getattr(cfg, "MAX_P95_DECISION_MS", 80.0)),
-            sustained_windows=int(getattr(cfg, "SUSTAINED_WINDOWS", 3)),
+            max_p95_total_ms=float(latency_budget["max_p95_total_ms"]),
+            max_p95_decision_ms=float(latency_budget["max_p95_decision_ms"]),
+            sustained_windows=int(latency_budget["sustained_windows"]),
         )
         self.latency_guard = LatencyGuard(
-            max_p95_total_ms=float(getattr(cfg, "MAX_P95_TOTAL_MS", 120.0)),
-            max_p95_decision_ms=float(getattr(cfg, "MAX_P95_DECISION_MS", 80.0)),
-            sustained_windows=int(getattr(cfg, "SUSTAINED_WINDOWS", 3)),
-            cooldown_sec=float(getattr(cfg, "EXIT_ONLY_COOLDOWN_S", 30.0)),
-            halt_on_breach=bool(getattr(cfg, "HALT_ON_BREACH", True)),
+            max_p95_total_ms=float(latency_budget["max_p95_total_ms"]),
+            max_p95_decision_ms=float(latency_budget["max_p95_decision_ms"]),
+            sustained_windows=int(latency_budget["sustained_windows"]),
+            cooldown_sec=float(latency_budget["cooldown_sec"]),
+            halt_on_breach=bool(latency_budget["halt_on_breach"]),
+        )
+        logger.info(
+            "latency_budget_config scope=%s total_ms=%.1f decision_ms=%.1f sustained_windows=%d cooldown_sec=%.1f halt_on_breach=%s",
+            str(latency_budget["scope"]),
+            float(latency_budget["max_p95_total_ms"]),
+            float(latency_budget["max_p95_decision_ms"]),
+            int(latency_budget["sustained_windows"]),
+            float(latency_budget["cooldown_sec"]),
+            bool(latency_budget["halt_on_breach"]),
         )
         self.decision_breakers = DecisionCircuitBreakers()
         self._decision_breaker_failure_counters = {"BROKER_REJECT": 0, "NETWORK": 0}

@@ -57,3 +57,37 @@ def test_build_cycle_latency_snapshot_can_use_full_cycle_for_guard(monkeypatch):
     assert cycle["guard_total_ms"] == pytest.approx(1200.0)
     assert cycle["guard_uses_critical_path"] is False
     assert stats["stages"]["total_loop"]["p95_ms"] == pytest.approx(1200.0)
+
+
+def test_latency_budget_config_uses_live_specific_thresholds(monkeypatch):
+    monkeypatch.setattr(orch_mod.cfg, "LIVE_MAX_P95_TOTAL_MS", 8000.0, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "LIVE_MAX_P95_DECISION_MS", 3000.0, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "LIVE_SUSTAINED_WINDOWS", 5, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "LIVE_EXIT_ONLY_COOLDOWN_S", 45.0, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "LIVE_HALT_ON_BREACH", False, raising=False)
+
+    budget = orch_mod._latency_budget_config(execution_mode="LIVE")
+
+    assert budget["scope"] == "live"
+    assert budget["max_p95_total_ms"] == pytest.approx(8000.0)
+    assert budget["max_p95_decision_ms"] == pytest.approx(3000.0)
+    assert budget["sustained_windows"] == 5
+    assert budget["cooldown_sec"] == pytest.approx(45.0)
+    assert budget["halt_on_breach"] is False
+
+
+def test_latency_budget_config_preserves_default_thresholds_for_non_live(monkeypatch):
+    monkeypatch.setattr(orch_mod.cfg, "MAX_P95_TOTAL_MS", 120.0, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "MAX_P95_DECISION_MS", 80.0, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "SUSTAINED_WINDOWS", 3, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "EXIT_ONLY_COOLDOWN_S", 30.0, raising=False)
+    monkeypatch.setattr(orch_mod.cfg, "HALT_ON_BREACH", True, raising=False)
+
+    budget = orch_mod._latency_budget_config(execution_mode="SIM")
+
+    assert budget["scope"] == "default"
+    assert budget["max_p95_total_ms"] == pytest.approx(120.0)
+    assert budget["max_p95_decision_ms"] == pytest.approx(80.0)
+    assert budget["sustained_windows"] == 3
+    assert budget["cooldown_sec"] == pytest.approx(30.0)
+    assert budget["halt_on_breach"] is True
