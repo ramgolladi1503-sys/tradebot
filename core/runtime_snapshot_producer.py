@@ -5,10 +5,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from config import config as cfg
 from core.advisory_schema import AdvisorySchemaError, log_advisory_schema_error, serialize_advisory_row
 from core.learning_paths import canonical_suggestions_log_path
 from core.market_snapshot_store import DEFAULT_MARKET_SNAPSHOT_PATH, read_market_snapshot
 from core.paths import logs_dir
+from core.time_utils import is_today_local, now_ist
 from core.runtime_snapshot_store import (
     ADVISORY_LATEST_PATH,
     FEED_RUNTIME_LATEST_PATH,
@@ -49,6 +51,36 @@ def _tail_jsonl_rows(path: Path, limit: int = 200) -> list[str]:
         return []
 
 
+def _row_snapshot_timestamp(row: dict[str, Any]) -> Any:
+    if not isinstance(row, dict):
+        return None
+    for key in (
+        "display_ts_epoch",
+        "decision_ts_epoch",
+        "snapshot_ts_epoch",
+        "created_ts_epoch",
+        "last_seen_ts_epoch",
+        "timestamp_epoch",
+        "timestamp",
+        "last_seen_ts",
+        "last_seen",
+    ):
+        value = row.get(key)
+        if value not in (None, "", "None"):
+            return value
+    return None
+
+
+def _row_is_today_local(row: dict[str, Any]) -> bool:
+    ts_value = _row_snapshot_timestamp(row)
+    if ts_value in (None, "", "None"):
+        return False
+    try:
+        return is_today_local(ts_value, now=now_ist())
+    except Exception:
+        return False
+
+
 def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
     path = canonical_suggestions_log_path()
     rows: list[dict[str, Any]] = []
@@ -63,7 +95,19 @@ def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
             notes.append("row_not_object")
             continue
         try:
-            rows.append(serialize_advisory_row(payload, allow_legacy=True))
+            row = serialize_advisory_row(payload, allow_legacy=True)
+            if bool(getattr(cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True)) and not _row_is_today_local(row):
+                notes.append(
+                    f"stale_row_dropped:{str(row.get('trade_id') or row.get('advisory_id') or 'unknown')}"
+                )
+                logger.info(
+                    "[RUNTIME_SNAPSHOT_ROW_DROP] source=advisory_latest reason=stale_row trade_id=%s symbol=%s display_ts_epoch=%s",
+                    row.get("trade_id"),
+                    row.get("symbol"),
+                    row.get("display_ts_epoch"),
+                )
+                continue
+            rows.append(row)
         except AdvisorySchemaError as exc:
             log_advisory_schema_error("runtime_snapshot_producer", payload, exc)
             notes.append(f"schema_error:{exc}")

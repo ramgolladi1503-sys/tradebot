@@ -104,7 +104,13 @@ def _write_advisory_snapshot(tmp_path, rows):
     return advisory_snapshot_path
 
 
-def _write_top_opportunities_snapshot(tmp_path, top_executable, top_advisory):
+def _write_top_opportunities_snapshot(
+    tmp_path,
+    top_executable,
+    top_advisory,
+    *,
+    generated_at: str | None = None,
+):
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
     path = runtime_root / "top_opportunities_latest.json"
@@ -112,7 +118,7 @@ def _write_top_opportunities_snapshot(tmp_path, top_executable, top_advisory):
         json.dumps(
             {
                 "schema_version": 1,
-                "generated_at": _iso_now(),
+                "generated_at": generated_at or _iso_now(),
                 "producer": "test",
                 "payload": {
                     "top_executable_opportunities": list(top_executable),
@@ -320,6 +326,39 @@ def test_load_top_opportunities_frames_preserves_executable_and_advisory_lists(t
     assert str(frames["top_advisory"].iloc[0]["execution_status"]) == "advisory_only"
     assert float(frames["top_executable"].iloc[0]["entry"]) == 123.45
     assert float(frames["top_advisory"].iloc[0]["entry"]) == 72.5
+
+
+def test_load_top_opportunities_frames_filters_stale_rows_inside_fresh_snapshot(tmp_path, monkeypatch):
+    stale_row = _snapshot_row(
+        "T-TOP-STALE",
+        entry=123.45,
+        execution_entry=123.45,
+        display_entry_source="ask",
+        display_entry_status="displayable",
+        execution_entry_source="ask",
+        execution_entry_status="executable",
+        readiness="READY",
+        execution_status="executable",
+        is_executable=True,
+        status="READY",
+    )
+    stale_row["display_ts_epoch"] = 1_775_718_795.304797
+    stale_row["display_ts_ist"] = "2026-04-09 12:43:15 IST"
+    top_exec_path = _write_top_opportunities_snapshot(
+        tmp_path,
+        top_executable=[stale_row],
+        top_advisory=[],
+        generated_at="2026-04-22T06:38:05.130520Z",
+    )
+
+    monkeypatch.setattr(runtime, "TOP_OPPORTUNITIES_LATEST_PATH", top_exec_path)
+    monkeypatch.setattr(runtime, "now_local", lambda: datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(runtime.cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True, raising=False)
+
+    frames = runtime._load_top_opportunities_frames(limit=5)
+
+    assert frames["top_executable"].empty
+    assert frames["top_advisory"].empty
 
 
 def test_read_advisory_snapshot_rows_supports_top_level_rows(tmp_path):
@@ -800,8 +839,8 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "trade_id": "T-RECOVER",
         "strategy_id": "CORE",
         "advisory_id": "ADV-RECOVER",
-        "timestamp": "2026-03-08T14:30:00+00:00",
-        "last_seen_ts": "2026-03-08T14:30:00+00:00",
+        "timestamp": "2026-04-22T06:30:00+00:00",
+        "last_seen_ts": "2026-04-22T06:30:00+00:00",
         "symbol": "NIFTY",
         "instrument_type": "OPT",
         "strategy_name": "CORE",
@@ -839,8 +878,8 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "trade_id": "T-RECOVER",
         "strategy_id": "CORE",
         "advisory_id": "ADV-RECOVER",
-        "timestamp": "2026-03-08T14:31:00+00:00",
-        "last_seen_ts": "2026-03-08T14:31:00+00:00",
+        "timestamp": "2026-04-22T06:31:00+00:00",
+        "last_seen_ts": "2026-04-22T06:31:00+00:00",
         "symbol": "NIFTY",
         "instrument_type": "OPT",
         "strategy_name": "CORE",

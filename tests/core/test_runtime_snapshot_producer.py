@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from core.advisory_schema import deserialize_advisory_row, serialize_advisory_row
 from core.market_snapshot_builder import build_market_snapshot, build_symbol_market_snapshot
 import core.runtime_snapshot_producer as producer
 
 
-def _sample_advisory() -> dict:
+def _sample_advisory(*, trade_id: str = "ADV-1", timestamp: str = "2026-04-22T06:30:00Z") -> dict:
     return serialize_advisory_row(
         {
-            "trade_id": "ADV-1",
+            "trade_id": trade_id,
             "strategy_id": "core",
-            "advisory_id": "ADV-1",
+            "advisory_id": trade_id,
             "symbol": "NIFTY",
             "strategy_name": "CORE",
-            "timestamp": "2026-03-10T12:00:00Z",
+            "timestamp": timestamp,
             "instrument_type": "OPT",
             "execution_entry": 72.8,
             "execution_entry_source": "ask",
@@ -102,6 +103,40 @@ def test_runtime_snapshot_producer_writes_expected_structure(tmp_path, monkeypat
     assert advisory_wrapper["payload"]["rows"][0]["entry"] == 72.8
     assert advisory_wrapper["payload"]["rows"][0]["warnings"] == ["DISPLAY_ENTRY_FALLBACK"]
     assert json.loads((runtime_root / "feed_runtime_latest.json").read_text(encoding="utf-8"))["payload"]["ws_connected"] is True
+
+
+def test_runtime_snapshot_producer_drops_stale_advisory_rows(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    logs_root = runtime_root / "logs"
+    logs_root.mkdir(parents=True, exist_ok=True)
+    current_row = _sample_advisory(trade_id="ADV-TODAY", timestamp="2026-04-22T06:30:00Z")
+    stale_row = _sample_advisory(trade_id="ADV-STALE", timestamp="2026-04-09T07:13:15Z")
+    (logs_root / "suggestions.jsonl").write_text(
+        json.dumps(current_row) + "\n" + json.dumps(stale_row) + "\n",
+        encoding="utf-8",
+    )
+    (logs_root / "feed_runtime_latest.json").write_text(json.dumps({"ws_connected": True}), encoding="utf-8")
+    (logs_root / "token_resolution.json").write_text(json.dumps({"NIFTY": {"instrument_token": 123}}), encoding="utf-8")
+
+    monkeypatch.setattr(producer, "logs_dir", lambda: logs_root)
+    monkeypatch.setattr(producer, "canonical_suggestions_log_path", lambda: logs_root / "suggestions.jsonl")
+    monkeypatch.setattr(producer, "MARKET_SNAPSHOT_PATH", runtime_root / "market_snapshot.json")
+    monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", runtime_root / "advisory_latest.json")
+    monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", runtime_root / "feed_runtime_latest.json")
+    monkeypatch.setattr(producer, "TOKEN_RESOLUTION_LATEST_PATH", runtime_root / "token_resolution_latest.json")
+    monkeypatch.setattr(producer, "now_ist", lambda: datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(producer.cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True, raising=False)
+
+    producer.produce_and_store_runtime_snapshots(
+        market_snapshot={"missing": True},
+        producer="unit_test",
+    )
+
+    wrapped = json.loads((runtime_root / "advisory_latest.json").read_text(encoding="utf-8"))
+    rows = wrapped["payload"]["rows"]
+    assert [row["trade_id"] for row in rows] == ["ADV-TODAY"]
+    assert wrapped["payload"]["row_count"] == 1
+    assert any("stale_row_dropped:ADV-STALE" in note for note in wrapped["payload"]["notes"])
 
 
 def test_runtime_snapshot_advisory_roundtrip_preserves_required_fields(tmp_path, monkeypatch):

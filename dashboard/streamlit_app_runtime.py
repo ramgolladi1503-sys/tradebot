@@ -280,6 +280,31 @@ def _normalize_display_ts_for_rows(rows: list[dict]) -> None:
             rec["display_ts_ist"] = formatted
 
 
+def _filter_rows_today(rows, ts_key="timestamp"):
+    try:
+        if not isinstance(rows, (list, tuple)):
+            return []
+        now = now_local()
+        filtered = []
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            ts = r.get(ts_key)
+            if not ts:
+                ts = datetime.now(timezone.utc).isoformat()
+                r[ts_key] = ts
+            if isinstance(ts, (int, float)) or str(ts_key).endswith("_epoch"):
+                try:
+                    ts = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+                except Exception:
+                    continue
+            if is_today_local(ts, now=now):
+                filtered.append(r)
+        return filtered
+    except Exception:
+        return []
+
+
 def _log_read_only_block(operation: str, caller: str, detail: str = "") -> None:
     logger.warning(
         "dashboard_read_only_guard_blocked operation=%s caller=%s detail=%s",
@@ -1040,11 +1065,17 @@ def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
             ADVISORY_LATEST_PATH,
         )
         return pd.DataFrame()
-    filtered_rows = _filter_rows_today(rows, ts_key="display_ts_epoch")
-    if not filtered_rows:
-        filtered_rows = _filter_rows_today(rows, ts_key="timestamp")
-    if filtered_rows:
-        rows = filtered_rows
+    if bool(getattr(cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True)):
+        filtered_rows = _filter_rows_today(rows, ts_key="display_ts_epoch")
+        has_display_ts = any(
+            isinstance(r, dict) and r.get("display_ts_epoch") not in (None, "", "None") for r in rows
+        )
+        if not filtered_rows and not has_display_ts:
+            filtered_rows = _filter_rows_today(rows, ts_key="timestamp")
+        if filtered_rows:
+            rows = filtered_rows
+        elif has_display_ts:
+            return pd.DataFrame()
     if not rows:
         return pd.DataFrame()
 
@@ -1124,6 +1155,18 @@ def _load_top_opportunities_frames(limit: int = 25) -> dict[str, pd.DataFrame]:
                 )
         if not validated_rows:
             return pd.DataFrame()
+        if bool(getattr(cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True)):
+            filtered_rows = _filter_rows_today(validated_rows, ts_key="display_ts_epoch")
+            has_display_ts = any(
+                isinstance(r, dict) and r.get("display_ts_epoch") not in (None, "", "None")
+                for r in validated_rows
+            )
+            if not filtered_rows and not has_display_ts:
+                filtered_rows = _filter_rows_today(validated_rows, ts_key="timestamp")
+            if filtered_rows:
+                validated_rows = filtered_rows
+            elif has_display_ts:
+                return pd.DataFrame()
         _normalize_display_ts_for_rows(validated_rows)
         df = _perf_timed_load(f"{rows_key}_dataframe_build", pd.DataFrame, validated_rows)
         if df.empty:
@@ -6305,30 +6348,6 @@ def _add_entry_mismatch(df, threshold=None):
         return df
     except Exception:
         return df
-
-def _filter_rows_today(rows, ts_key="timestamp"):
-    try:
-        if not isinstance(rows, (list, tuple)):
-            return []
-        now = now_local()
-        filtered = []
-        for r in rows:
-            if not isinstance(r, dict):
-                continue
-            ts = r.get(ts_key)
-            if not ts:
-                ts = datetime.now(timezone.utc).isoformat()
-                r[ts_key] = ts
-            if isinstance(ts, (int, float)) or str(ts_key).endswith("_epoch"):
-                try:
-                    ts = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
-                except Exception:
-                    continue
-            if is_today_local(ts, now=now):
-                filtered.append(r)
-        return filtered
-    except Exception:
-        return []
 
 def _load_gpt_advice():
     path = _log_path("gpt_advice.jsonl")
