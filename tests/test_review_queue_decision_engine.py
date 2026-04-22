@@ -1,3 +1,5 @@
+import pytest
+
 from config import config as cfg
 from core import review_queue
 
@@ -84,6 +86,43 @@ def test_clean_strong_candidate_promotes_to_execute(monkeypatch):
     assert out["permission"] == "EXECUTE"
     assert out["final_action"] == "EXECUTE"
     assert out["execution_status"] == "executable"
+
+
+def test_finalize_append_payload_requires_precomputed_terminal_score(monkeypatch):
+    calls = {"count": 0}
+
+    def _boom(*args, **kwargs):
+        calls["count"] += 1
+        raise AssertionError("emit path must not rescore payloads")
+
+    monkeypatch.setattr(review_queue, "score_candidate", _boom)
+
+    payload = _candidate(
+        trade_id="T-APPEND-READY",
+        strategy_family="breakout",
+        candidate_status="executable",
+        confidence=0.71,
+        rank_score=0.64,
+        terminal_scoring_applied=True,
+    )
+
+    out = review_queue._finalize_append_payload_for_runtime_write(payload)
+
+    assert out["rank_score"] == 0.64
+    assert out["terminal_scoring_applied"] is True
+    assert calls["count"] == 0
+
+
+def test_finalize_append_payload_rejects_unscored_payload():
+    with pytest.raises(AssertionError, match="terminal scoring not applied at emit"):
+        review_queue._finalize_append_payload_for_runtime_write(
+            _candidate(
+                trade_id="T-APPEND-MISSING-SCORE",
+                strategy_family="breakout",
+                rank_score=None,
+                terminal_scoring_applied=False,
+            )
+        )
 
 
 def test_queue_only_backdoor_promotion_blocked_by_raw_rank_floor(monkeypatch):

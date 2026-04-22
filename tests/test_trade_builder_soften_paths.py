@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import replace
+from datetime import datetime
 from types import SimpleNamespace
 
 from config import config as cfg
 from core import orchestrator as orch
+from core.trade_schema import Trade
 from strategies.trade_builder import TradeBuilder
 
 
@@ -442,6 +445,89 @@ def test_borderline_candidate_resolves_contract_from_chain():
     assert cand["execution_status"] == "advisory_only"
     assert cand["candidate_status"] == "advisory_only"
     assert cand["rank_score"] is None
+
+
+def test_decorate_trade_context_downgrades_fallback_contract_to_queue_only(monkeypatch):
+    tb = TradeBuilder()
+    trade = Trade(
+        trade_id="T-FALLBACK-CONTRACT",
+        timestamp=datetime(2026, 4, 21, 10, 0, 0),
+        symbol="NIFTY",
+        instrument="OPT",
+        instrument_token=900001,
+        strike=25000,
+        expiry="2026-04-30",
+        side="BUY",
+        entry_price=100.0,
+        stop_loss=90.0,
+        target=120.0,
+        qty=1,
+        capital_at_risk=10.0,
+        expected_slippage=0.2,
+        confidence=0.72,
+        strategy="UNIT",
+        regime="TREND",
+        option_type="CE",
+        right="CE",
+        instrument_type="OPT",
+        tradingsymbol="NIFTY26APR25000CE",
+        instrument_id="NIFTY|2026-04-30|25000|CE",
+        execution_allowed=True,
+        tradable=True,
+        candidate_status="executable",
+        source_flags={
+            "decision_trace": {
+                "rank_score": 0.66,
+                "permission": "EXECUTE",
+                "permission_reason": "ok",
+                "final_action": "EXECUTE",
+                "readiness": "READY",
+                "execution_status": "executable",
+                "execution_allowed": True,
+                "execution_entry_status": "executable",
+                "candidate_status": "executable",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        tb,
+        "_apply_candidate_contract",
+        lambda cand, **_kwargs: replace(
+            cand,
+            strike=25050,
+            expiry="2026-05-07",
+            expiry_date="2026-05-07",
+            tradingsymbol="NIFTY26MAY25050CE",
+            instrument_token=900123,
+            instrument_id="NIFTY|2026-05-07|25050|CE",
+        ),
+    )
+
+    out = tb._decorate_trade_context(
+        trade,
+        {
+            **_market_data(),
+            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "market_open": True,
+            "execution_mode": "LIVE",
+        },
+        0.72,
+    )
+
+    assert out is not None
+    assert out.requested_strike == 25000
+    assert out.resolved_strike == 25050
+    assert out.requested_expiry == "2026-04-30"
+    assert out.resolved_expiry == "2026-05-07"
+    assert out.contract_exact_match is False
+    assert out.resolution_mode == "fallback"
+    assert out.fallback_used is True
+    assert out.fallback_execution_policy == "QUEUE_ONLY"
+    assert out.permission == "QUEUE_ONLY"
+    assert out.final_action == "QUEUE_ONLY"
+    assert out.readiness == "QUEUE_ONLY"
+    assert out.execution_status == "queue_only"
+    assert out.permission_reason == "nearest_contract_match"
 
 
 def test_borderline_candidate_downgrades_when_contract_unresolved(monkeypatch):
