@@ -5,7 +5,7 @@ from typing import Any
 
 from config import config as cfg
 from core.candidate_generator import generate_candidates
-from core.candidate_generator import generate_candidates
+from core.stock_option_rules import stock_option_v2_enabled
 
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 def _flags_enabled() -> dict[str, bool]:
     return {
         "ENABLE_CANDIDATE_GENERATOR_V2": bool(getattr(cfg, "ENABLE_CANDIDATE_GENERATOR_V2", False)),
+        "ENABLE_STOCK_OPTION_CANDIDATE_GENERATOR_V2": bool(stock_option_v2_enabled()),
     }
 
 
@@ -44,7 +45,7 @@ def run_v2_pipeline(
 
     candidates: list[dict[str, Any]] = []
     try:
-        if flags.get("ENABLE_CANDIDATE_GENERATOR_V2"):
+        if flags.get("ENABLE_CANDIDATE_GENERATOR_V2") or flags.get("ENABLE_STOCK_OPTION_CANDIDATE_GENERATOR_V2"):
             candidates = generate_candidates(market_data_by_symbol, ts_epoch=now_ts)
         result["candidates"] = candidates
     except Exception as exc:
@@ -52,8 +53,9 @@ def run_v2_pipeline(
         result["errors"].append(f"candidate_generator_failed:{type(exc).__name__}")
 
     logger.info(
-        "v2_pipeline_summary enabled=%s candidates=%s errors=%s",
+        "v2_pipeline_summary enabled=%s stock_options=%s candidates=%s errors=%s",
         result["enabled"],
+        flags.get("ENABLE_STOCK_OPTION_CANDIDATE_GENERATOR_V2", False),
         len(result.get("candidates") or []),
         len(result.get("errors") or []),
     )
