@@ -1563,20 +1563,8 @@ def _finalize_append_payload_for_runtime_write(payload: dict) -> dict:
             out["strategy_family"] = "forced"
         if not candidate_type or candidate_type == "unknown":
             out["candidate_type"] = "forced"
-    if not bool(out.get("terminal_scoring_applied")) or _safe_float(out.get("rank_score")) is None:
-        score = score_candidate(out, market_data={}, context={})
-        out["rank_score"] = score.get("rank_score", score.get("confidence_final"))
-        out["opportunity_score"] = score.get("opportunity_score", out.get("rank_score"))
-        out["confidence_final"] = score.get("confidence_final", out.get("confidence_final"))
-        out["score_breakdown"] = score.get("score_breakdown", score)
-        out["terminal_scoring_applied"] = True
-    print(
-        "FINAL_APPEND_PATCH",
-        out.get("rank_score"),
-        out.get("strategy_family"),
-        out.get("candidate_type"),
-    )
-    assert out.get("rank_score") is not None
+    assert bool(out.get("terminal_scoring_applied")), "terminal scoring not applied at emit"
+    assert_ranked_candidate_ready(out)
     return out
 
 
