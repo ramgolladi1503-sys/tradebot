@@ -48,6 +48,22 @@ def _normalize_runtime_mode(value: str | None) -> str | None:
     return mode
 
 
+def _resolve_orchestrator_poll_interval(exec_mode: str) -> float:
+    mode = _normalize_runtime_mode(exec_mode) or "SIM"
+    configured = getattr(cfg, "ORCHESTRATOR_POLL_INTERVAL_SEC", None)
+    if configured not in (None, "", 0, 0.0):
+        try:
+            return max(0.05, float(configured))
+        except Exception:
+            pass
+    mode_defaults = {
+        "LIVE": 0.25,
+        "PAPER": 0.50,
+        "SIM": 1.00,
+    }
+    return float(mode_defaults.get(mode, 1.00))
+
+
 def _validate_runtime_mode_config_alignment(exec_mode: str) -> None:
     env_execution_mode = os.getenv("EXECUTION_MODE")
     env_trading_mode = os.getenv("TRADING_MODE")
@@ -429,7 +445,12 @@ def main():
             )
             print(f"[Readiness] state={state}; can_trade={can_trade}; warnings={','.join(warnings)}")
 
-    orchestrator = Orchestrator(total_capital=getattr(cfg, "CAPITAL", 100000), poll_interval=30)
+    orchestrator_poll_interval = _resolve_orchestrator_poll_interval(exec_mode)
+    print(f"[BOOT] orchestrator_poll_interval_sec={orchestrator_poll_interval}")
+    orchestrator = Orchestrator(
+        total_capital=getattr(cfg, "CAPITAL", 100000),
+        poll_interval=orchestrator_poll_interval,
+    )
 
     broker_truth_reconciler = None
 
