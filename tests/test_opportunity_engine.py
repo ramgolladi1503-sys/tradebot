@@ -200,6 +200,9 @@ def test_opportunity_engine_ranks_executable_candidate_first_and_scales_size():
     assert ranked[0].opportunity_rank == 1
     assert ranked[0].selected_for_execution is True
     assert ranked[0].selection_reason == "selected_top_rank"
+    assert ranked[0].rank_score is not None
+    assert ranked[0].lifecycle_stage == "ranked_snapshot"
+    assert ranked[0].source_flags.get("lifecycle_stage") == "ranked_snapshot"
     assert ranked[0].opportunity_score is not None
     assert ranked[0].opportunity_size_multiplier is not None
     assert ranked[0].size_mult < 1.0
@@ -272,6 +275,7 @@ def test_select_best_opportunity_downgrades_non_selected_execution_allowed_trade
     assert best is not None
     assert ranked[0].selected_for_execution is False
     assert best.execution_allowed is False
+    assert best.rank_score is not None
     assert "opportunity_not_execution_eligible" in str(best.reason)
 
 

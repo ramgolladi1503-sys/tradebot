@@ -44,6 +44,7 @@ from core.strategy_lifecycle import StrategyLifecycle
 from core.instruments import select_expiry as select_registry_expiry
 from core.market_context import classify_session_mode, classify_strategy_regime_mode, derive_market_context, derive_regime_context
 from core.candidate_soft_reject import build_soft_reject_candidate, critical_reject_reasons, is_critical_reject_reason
+from core.candidate_finalization import mirror_candidate_truth, stamp_lifecycle_stage, assert_ranked_candidate_ready
 from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
 from core.reject_telemetry import append_reject_telemetry
@@ -1029,7 +1030,12 @@ class TradeBuilder:
         )
 
     def _set_last_ranked_candidates(self, candidates) -> None:
-        self._last_ranked_candidates = list(candidates or [])
+        ranked_candidates = []
+        for candidate in list(candidates or []):
+            stamped = stamp_lifecycle_stage(candidate, "ranked_snapshot")
+            assert_ranked_candidate_ready(stamped)
+            ranked_candidates.append(stamped)
+        self._last_ranked_candidates = ranked_candidates
 
     @staticmethod
     def _candidate_field(candidate, field: str, default=None):
@@ -1508,6 +1514,7 @@ class TradeBuilder:
         if trade is None:
             return trade
         trade = self._ensure_candidate_identity(trade)
+        trade = stamp_lifecycle_stage(trade, "built")
         data = market_data if isinstance(market_data, dict) else {}
         option_ok, missing_fields = self._option_identity_complete(
             instrument=getattr(trade, "instrument", None),
@@ -1661,6 +1668,65 @@ class TradeBuilder:
                 **updates,
             )
             updated_trade = self._apply_candidate_contract(updated_trade, market_data=data)
+            requested_strike = getattr(trade, "strike", None)
+            resolved_strike = getattr(updated_trade, "strike", None)
+            requested_expiry = getattr(trade, "expiry", None)
+            resolved_expiry = getattr(updated_trade, "expiry", None)
+            exact_strike_match = True
+            try:
+                if requested_strike in (None, "", "None") or resolved_strike in (None, "", "None"):
+                    exact_strike_match = False
+                else:
+                    exact_strike_match = float(requested_strike) == float(resolved_strike)
+            except Exception:
+                exact_strike_match = False
+            exact_expiry_match = str(requested_expiry or "").strip() == str(resolved_expiry or "").strip()
+            exact_match = bool(exact_strike_match and exact_expiry_match)
+            strike_delta = None
+            try:
+                if requested_strike not in (None, "", "None") and resolved_strike not in (None, "", "None"):
+                    strike_delta = abs(float(resolved_strike) - float(requested_strike))
+            except Exception:
+                strike_delta = None
+            resolution_penalty = 0.0 if exact_match else float(min(1.0, ((strike_delta or 0.0) / max(abs(float(requested_strike or resolved_strike or 1.0)), 1.0)) + (0.1 if not exact_expiry_match else 0.0)))
+            contract_resolution = {
+                "requested_strike": requested_strike,
+                "resolved_strike": resolved_strike,
+                "requested_expiry": requested_expiry,
+                "resolved_expiry": resolved_expiry,
+                "contract_exact_match": bool(exact_match),
+                "resolution_mode": "exact" if exact_match else "fallback",
+                "resolution_penalty": resolution_penalty,
+                "fallback_used": not exact_match,
+                "fallback_class": None if exact_match else "contract_fallback",
+                "fallback_reason": None if exact_match else "nearest_contract_match",
+                "fallback_execution_policy": "EXECUTE" if exact_match else "QUEUE_ONLY",
+            }
+            updated_trade = stamp_lifecycle_stage(updated_trade, "fallback_stamped" if contract_resolution["fallback_used"] else "built")
+            if contract_resolution["fallback_used"]:
+                fallback_reason = str(contract_resolution.get("fallback_reason") or "contract_resolution_fallback").strip() or "contract_resolution_fallback"
+                updates["execution_allowed"] = False
+                updates["reason"] = fallback_reason
+                decision_trace = dict(trade_source_flags.get("decision_trace", {}) or {})
+                decision_trace.update(
+                    {
+                        "permission": "QUEUE_ONLY",
+                        "permission_reason": fallback_reason,
+                        "final_action": "QUEUE_ONLY",
+                        "readiness": "QUEUE_ONLY",
+                        "execution_status": "queue_only",
+                        "execution_allowed": False,
+                    }
+                )
+                trade_source_flags["decision_trace"] = decision_trace
+            updated_trade = mirror_candidate_truth(
+                updated_trade,
+                decision_trace=trade_source_flags.get("decision_trace", {}),
+                lifecycle=lifecycle,
+                contract_resolution=contract_resolution,
+                fallback_metadata=contract_resolution,
+                lifecycle_stage="decision_finalized",
+            )
             try:
                 append_trade_lifecycle_event(
                     trade_id=str(getattr(updated_trade, "trade_id", None)),

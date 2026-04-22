@@ -124,6 +124,17 @@ class Trade:
     instrument_id: str | None = None
     tradingsymbol: str | None = None
     expiry_date: str | None = None
+    requested_strike: float | None = None
+    resolved_strike: float | None = None
+    requested_expiry: str | None = None
+    resolved_expiry: str | None = None
+    contract_exact_match: bool | None = None
+    resolution_mode: str | None = None
+    resolution_penalty: float | None = None
+    fallback_used: bool | None = None
+    fallback_class: str | None = None
+    fallback_reason: str | None = None
+    fallback_execution_policy: str | None = None
     qty_lots: int | None = None
     qty_units: int | None = None
     validity_sec: int | None = None
@@ -151,6 +162,7 @@ class Trade:
     family_gate_override_applied: bool | None = None
     setup_variant: str | None = None
     candidate_status: str | None = None
+    lifecycle_stage: str | None = None
     global_confidence: float | None = None
     builder_confidence: float | None = None
     permission_confidence: float | None = None
@@ -340,6 +352,12 @@ class Trade:
     final_qty: int | None = None
     permission: str | None = None
     permission_reason: str | None = None
+    final_action: str | None = None
+    readiness: str | None = None
+    execution_status: str | None = None
+    gates_failed: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    decision_trace: dict = field(default_factory=dict)
     countertrend: bool | None = None
     raw_signal_confidence: float | None = None
     confidence_raw_canonical: float | None = None

@@ -35,6 +35,7 @@ from core.entry_semantics import (
     should_allow_last_execution_fallback,
 )
 from core.advisory_schema import AdvisorySchemaError, QUOTE_SOURCES, deserialize_advisory_row, log_advisory_schema_error, serialize_advisory_row
+from core.candidate_finalization import assert_executable_candidate_ready, assert_ranked_candidate_ready, stamp_lifecycle_stage
 from core.advisory_row_integrity import (
     ADVISORY_ONLY_ROW_KIND,
     CANONICAL_ROW_KIND,
@@ -2824,6 +2825,10 @@ def _emit_review_queue_logs(entry: dict) -> dict:
     advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload["row_kind"] = _derive_review_queue_row_kind(advisory_payload)
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
+    advisory_payload = stamp_lifecycle_stage(advisory_payload, "final_emit_ready")
+    assert_ranked_candidate_ready(advisory_payload)
+    if _is_execution_eligible(advisory_payload):
+        assert_executable_candidate_ready(advisory_payload)
     print(
         "TRACE_PRE_FINAL_EMIT",
         advisory_payload.get("trade_id"),

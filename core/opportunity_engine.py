@@ -10,6 +10,7 @@ from typing import Any, Iterable
 from config import config as cfg
 from core.analytics.confidence_calibration import calibrate_confidence, load_latest_confidence_calibration_report
 from core.capital_allocator import allocate_capital_slots
+from core.candidate_finalization import stamp_lifecycle_stage
 from core.contextual_thresholds import get_contextual_threshold_delta as _contextual_threshold_delta
 from core.decision_authority import apply_stage_authority
 from core.execution_quality import evaluate_pretrade_execution_quality
@@ -1174,6 +1175,8 @@ def annotate_relative_opportunity_ranks(
                 "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
                 "candidate_class": metrics.get("candidate_class"),
                 "final_score": round(float(metrics.get("final_score") or 0.0), 6),
+                "rank_score": round(float(rank_score), 6),
+                "lifecycle_stage": "scored",
                 "primary_blocker": metrics.get("primary_blocker"),
                 "data_confidence": round(float(metrics.get("data_confidence") or 0.0), 6),
                 "priority_weight_signal": round(float(metrics.get("priority_weight_signal") or 0.0), 6),
@@ -1195,6 +1198,7 @@ def annotate_relative_opportunity_ranks(
                 {
                     "opportunity_score": round(float(metrics["opportunity_score"]), 6),
                     "final_score": round(float(metrics["final_score"]), 6),
+                    "rank_score": round(float(rank_score), 6),
                     "rank_global": int(index),
                     "rank_within_symbol": int(per_symbol_rank[symbol]),
                     "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
@@ -1212,6 +1216,7 @@ def annotate_relative_opportunity_ranks(
                     "strategy_weight_adjustment": round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
                     "strategy_weight_confidence": round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
                     "strategy_weight_applied": bool(metrics.get("strategy_weight_applied", False)),
+                    "lifecycle_stage": "scored",
                     "source_flags": source_flags,
                 }
             )
@@ -1220,6 +1225,7 @@ def annotate_relative_opportunity_ranks(
                 candidate,
                 opportunity_score=round(float(metrics["opportunity_score"]), 6),
                 final_score=round(float(metrics["final_score"]), 6),
+                rank_score=round(float(rank_score), 6),
                 rank_global=int(index),
                 rank_within_symbol=int(per_symbol_rank[symbol]),
                 opportunity_bucket=_opportunity_bucket(metrics.get("opportunity_score")),
@@ -1237,6 +1243,7 @@ def annotate_relative_opportunity_ranks(
                 strategy_weight_adjustment=round(float(metrics.get("strategy_weight_adjustment") or 0.0), 6),
                 strategy_weight_confidence=round(float(metrics.get("strategy_weight_confidence") or 0.0), 6),
                 strategy_weight_applied=bool(metrics.get("strategy_weight_applied", False)),
+                lifecycle_stage="scored",
                 source_flags=source_flags,
             )
         annotated.append(updated)
@@ -2180,6 +2187,7 @@ def annotate_ranked_opportunities(
             current_portfolio_exposure=current_portfolio_exposure,
         )
     annotated = _apply_trade_density_controller(annotated)
+    annotated = [stamp_lifecycle_stage(candidate, "ranked_snapshot") for candidate in annotated]
     executable_candidates_seen = sum(1 for candidate in annotated if _is_executable_opportunity(candidate))
     selected_executable = [
         candidate
