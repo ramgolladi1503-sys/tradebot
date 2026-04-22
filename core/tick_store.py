@@ -1,6 +1,8 @@
+import atexit
 import sqlite3
 import time
 import json
+import threading
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import deque
@@ -16,6 +18,13 @@ _LAST_TICK_BY_TOKEN: dict[int, dict] = {}
 _ERROR_LOG_PATH = logs_dir() / "tick_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
 _SCHEMA_LOGGED = False
+_INIT_DONE = False
+_INIT_LOCK = threading.Lock()
+_WRITE_QUEUE: deque[tuple[str, int | None, float | None, float | None, float | None, float, str]] = deque()
+_WRITE_QUEUE_LOCK = threading.Lock()
+_FLUSH_THREAD: threading.Thread | None = None
+_FLUSH_THREAD_STOP = threading.Event()
+_FLUSH_LOCK = threading.Lock()
 
 
 def _normalize_token(token: int | str | None) -> int | None:
@@ -27,9 +36,38 @@ def _normalize_token(token: int | str | None) -> int | None:
         return None
 
 
+def _db_writes_enabled() -> bool:
+    return bool(getattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True))
+
+
+def _async_db_writes_enabled() -> bool:
+    return bool(getattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True))
+
+
+def _flush_interval_sec() -> float:
+    try:
+        return max(0.05, float(getattr(cfg, "TICK_STORE_ASYNC_FLUSH_INTERVAL_SEC", 0.5) or 0.5))
+    except Exception:
+        return 0.5
+
+
+def _flush_batch_size() -> int:
+    try:
+        return max(1, int(getattr(cfg, "TICK_STORE_ASYNC_BATCH_SIZE", 1000) or 1000))
+    except Exception:
+        return 1000
+
+
 def _conn():
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
-    return sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
+    try:
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except Exception:
+        pass
+    return conn
 
 
 def _tick_columns(conn: sqlite3.Connection) -> set[str]:
@@ -96,10 +134,16 @@ def _migrate_ticks_epoch_column(conn: sqlite3.Connection) -> None:
             _log_schema_event("TICK_SCHEMA_ADD_TIMESTAMP_EPOCH_FAIL", error=f"{type(exc).__name__}:{exc}")
 
 
-def init_ticks():
-    with _conn() as conn:
-        conn.execute(
-            """
+def init_ticks() -> None:
+    global _INIT_DONE
+    if _INIT_DONE:
+        return
+    with _INIT_LOCK:
+        if _INIT_DONE:
+            return
+        with _conn() as conn:
+            conn.execute(
+                """
         CREATE TABLE IF NOT EXISTS ticks (
             timestamp TEXT,
             instrument_token INTEGER,
@@ -110,17 +154,19 @@ def init_ticks():
             timestamp_iso TEXT
         )
         """
-        )
-        _migrate_ticks_epoch_column(conn)
-        try:
-            conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_iso TEXT")
-        except Exception:
-            pass
-        cols = _tick_columns(conn)
-        if "timestamp_epoch" not in cols:
-            _log_schema_event("TICK_SCHEMA_INVALID", columns=sorted(cols))
-            raise RuntimeError("ticks schema invalid: missing timestamp_epoch")
-        _log_schema_event("TICK_SCHEMA_OK", columns=sorted(cols))
+            )
+            _migrate_ticks_epoch_column(conn)
+            try:
+                conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_iso TEXT")
+            except Exception:
+                pass
+            cols = _tick_columns(conn)
+            if "timestamp_epoch" not in cols:
+                _log_schema_event("TICK_SCHEMA_INVALID", columns=sorted(cols))
+                raise RuntimeError("ticks schema invalid: missing timestamp_epoch")
+            _log_schema_event("TICK_SCHEMA_OK", columns=sorted(cols))
+        _INIT_DONE = True
+
 
 def _to_epoch(ts):
     return normalize_epoch_seconds(ts)
@@ -330,6 +376,110 @@ def record_tick_epoch(ts_epoch):
     _tick_window.append(ts_val)
 
 
+def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]]) -> bool:
+    if not rows:
+        return True
+    try:
+        init_ticks()
+        with _conn() as conn:
+            conn.executemany(
+                """
+            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+                rows,
+            )
+            conn.commit()
+        return True
+    except Exception as exc:
+        try:
+            _ERROR_LOGGER.write(
+                {
+                    "ts_epoch": time.time(),
+                    "event": "TICK_STORE_ERROR",
+                    "row_count": len(rows),
+                    "error": str(exc),
+                }
+            )
+        except Exception:
+            pass
+        return False
+
+
+def _flush_pending_ticks(max_rows: int | None = None) -> int:
+    batch_limit = max_rows if max_rows is not None else _flush_batch_size()
+    rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]] = []
+    with _WRITE_QUEUE_LOCK:
+        while _WRITE_QUEUE and len(rows) < batch_limit:
+            rows.append(_WRITE_QUEUE.popleft())
+    if not rows:
+        return 0
+    if _write_rows(rows):
+        return len(rows)
+    with _WRITE_QUEUE_LOCK:
+        for row in reversed(rows):
+            _WRITE_QUEUE.appendleft(row)
+    return 0
+
+
+def _flush_loop() -> None:
+    while not _FLUSH_THREAD_STOP.is_set():
+        _FLUSH_THREAD_STOP.wait(_flush_interval_sec())
+        if _FLUSH_LOCK.acquire(blocking=False):
+            try:
+                while _flush_pending_ticks() > 0:
+                    pass
+            finally:
+                _FLUSH_LOCK.release()
+    if _FLUSH_LOCK.acquire(blocking=False):
+        try:
+            while _flush_pending_ticks() > 0:
+                pass
+        finally:
+            _FLUSH_LOCK.release()
+
+
+def _ensure_flush_thread() -> None:
+    global _FLUSH_THREAD
+    if _FLUSH_THREAD is not None and _FLUSH_THREAD.is_alive():
+        return
+    with _INIT_LOCK:
+        if _FLUSH_THREAD is not None and _FLUSH_THREAD.is_alive():
+            return
+        _FLUSH_THREAD_STOP.clear()
+        _FLUSH_THREAD = threading.Thread(target=_flush_loop, name="tick-store-flush", daemon=True)
+        _FLUSH_THREAD.start()
+
+
+def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
+    with _WRITE_QUEUE_LOCK:
+        _WRITE_QUEUE.append(row)
+    _ensure_flush_thread()
+    return True
+
+
+def _shutdown_flush_thread() -> None:
+    _FLUSH_THREAD_STOP.set()
+    thread = _FLUSH_THREAD
+    if thread is not None and thread.is_alive():
+        try:
+            thread.join(timeout=2.0)
+        except Exception:
+            pass
+    if _FLUSH_LOCK.acquire(blocking=False):
+        try:
+            while _flush_pending_ticks() > 0:
+                pass
+        finally:
+            _FLUSH_LOCK.release()
+
+
+aexit_registered = False
+if not aexit_registered:
+    atexit.register(_shutdown_flush_thread)
+    aexit_registered = True
+
+
 def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kwargs):
     allowed_aliases = {"ts_epoch", "instrument_token"}
     unexpected = sorted(set(kwargs.keys()) - allowed_aliases)
@@ -403,30 +553,15 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
             }
     except Exception:
         pass
-    try:
-        init_ticks()
-        with _conn() as conn:
-            conn.execute(
-                """
-            INSERT INTO ticks (timestamp, instrument_token, last_price, volume, oi, timestamp_epoch, timestamp_iso)
-            VALUES (?,?,?,?,?,?,?)
-            """,
-                (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso),
-            )
-    except Exception as exc:
-        try:
-            _ERROR_LOGGER.write(
-                {
-                    "ts_epoch": now_epoch,
-                    "event": "TICK_STORE_ERROR",
-                    "instrument_token": token,
-                    "error": str(exc),
-                }
-            )
-        except Exception:
-            pass
-        return False
-    return True
+
+    if not _db_writes_enabled():
+        return True
+
+    row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso)
+    if _async_db_writes_enabled():
+        return _enqueue_row(row)
+
+    return _write_rows([row])
 
 
 def msgs_last_min() -> int:
@@ -451,7 +586,7 @@ def get_last_tick(
         return None
 
     force_sqlite = bool(
-        decision_path and bool(getattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS", True))
+        decision_path and bool(getattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS", False))
     )
     if not force_sqlite:
         cached = _LAST_TICK_BY_TOKEN.get(token_int)
