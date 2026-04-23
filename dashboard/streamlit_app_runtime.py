@@ -1046,6 +1046,120 @@ def _add_upstox_links(df):
     return df
 
 
+def _render_trade_explorer_sidebar_filters(explorer_df: pd.DataFrame):
+    if explorer_df is None or explorer_df.empty:
+        return {}
+    with st.sidebar:
+        st.markdown("### Trade Explorer Filters")
+        date_options = sorted([d for d in explorer_df["trade_date"].dropna().unique().tolist() if d and d != "UNKNOWN"])
+        selected_dates = []
+        if len(date_options) > 1:
+            selected_dates = st.multiselect(
+                "Date",
+                options=date_options,
+                default=date_options,
+                key="explorer_filter_dates",
+            )
+
+        run_options = sorted([r for r in explorer_df["run_id"].dropna().astype(str).unique().tolist() if r and r != "UNKNOWN"])
+        selected_run_ids = []
+        if run_options:
+            selected_run_ids = st.multiselect(
+                "Run ID",
+                options=run_options,
+                default=run_options,
+                key="explorer_filter_run_ids",
+            )
+
+        def _all_multiselect(label: str, column: str, key: str):
+            options = sorted([v for v in explorer_df[column].dropna().astype(str).unique().tolist() if v])
+            if not options:
+                return []
+            selected = st.multiselect(label, options=options, default=options, key=key)
+            if len(selected) == len(options):
+                return []
+            return selected
+
+        underlyings = _all_multiselect("Underlying", "underlying", "explorer_filter_underlying")
+        option_sides = _all_multiselect("CE/PE", "option_side", "explorer_filter_option_side")
+        strategy_categories = _all_multiselect("Strategy Category", "strategy_category", "explorer_filter_strategy_category")
+        strategy_families = _all_multiselect("Strategy Family", "strategy_family", "explorer_filter_strategy_family")
+        permission_buckets = _all_multiselect("Permission Bucket", "permission_bucket", "explorer_filter_permission_bucket")
+        final_blockers = _all_multiselect("Final Blocker", "final_blocker", "explorer_filter_final_blocker")
+        feed_states = _all_multiselect("Feed State", "feed_state", "explorer_filter_feed_state")
+        symbol_query = st.text_input("Symbol Search", value="", key="explorer_filter_symbol_search")
+
+        global_range = _numeric_slider_config(explorer_df, "global_conf")
+        spread_range = _numeric_slider_config(explorer_df, "spread_pct")
+        quote_age_range = _numeric_slider_config(explorer_df, "quote_age_sec")
+
+        selected_global = None
+        if global_range is not None:
+            selected_global = st.slider(
+                "global_conf range",
+                min_value=float(global_range[0]),
+                max_value=float(global_range[1]),
+                value=(float(global_range[0]), float(global_range[1])),
+                step=0.01,
+                key="explorer_filter_global_conf",
+            )
+        selected_spread = None
+        if spread_range is not None:
+            selected_spread = st.slider(
+                "spread_pct range",
+                min_value=float(spread_range[0]),
+                max_value=float(spread_range[1]),
+                value=(float(spread_range[0]), float(spread_range[1])),
+                step=0.0005,
+                key="explorer_filter_spread_pct",
+            )
+        selected_quote_age = None
+        if quote_age_range is not None:
+            selected_quote_age = st.slider(
+                "quote_age_sec range",
+                min_value=float(quote_age_range[0]),
+                max_value=float(quote_age_range[1]),
+                value=(float(quote_age_range[0]), float(quote_age_range[1])),
+                step=0.1,
+                key="explorer_filter_quote_age_sec",
+            )
+
+        preset = st.selectbox(
+            "Column Preset",
+            options=list(EXPLORER_COLUMN_PRESETS.keys()),
+            index=0,
+            key="explorer_col_preset",
+        )
+        preset_cols = [c for c in EXPLORER_COLUMN_PRESETS[preset] if c in explorer_df.columns]
+        if st.session_state.get("explorer_col_preset_prev") != preset:
+            st.session_state["explorer_selected_cols"] = preset_cols
+            st.session_state["explorer_col_preset_prev"] = preset
+        selected_cols = st.multiselect(
+            "Columns",
+            options=list(explorer_df.columns),
+            key="explorer_selected_cols",
+        )
+        show_charts = st.checkbox("Show summary charts", value=True, key="explorer_show_charts")
+
+    return {
+        "dates": selected_dates if selected_dates and len(selected_dates) < len(date_options) else [],
+        "run_ids": selected_run_ids if selected_run_ids and len(selected_run_ids) < len(run_options) else [],
+        "underlyings": underlyings,
+        "option_sides": option_sides,
+        "strategy_categories": strategy_categories,
+        "strategy_families": strategy_families,
+        "permission_buckets": permission_buckets,
+        "final_blockers": final_blockers,
+        "feed_states": feed_states,
+        "symbol_query": symbol_query,
+        "global_conf_range": selected_global,
+        "spread_pct_range": selected_spread,
+        "quote_age_sec_range": selected_quote_age,
+        "selected_cols": selected_cols,
+        "show_charts": show_charts,
+    }
+
+
 def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
     advisory_snapshot = _perf_timed_load(
         "advisory_latest_snapshot_json",
@@ -2057,7 +2171,10 @@ def _numeric_slider_config(df: pd.DataFrame, column: str) -> tuple[float, float]
     return (lo, hi)
 
 
-def _render_trade_explorer_panel(trade_universe_df: pd.DataFrame):
+def _render_trade_explorer_panel(
+    trade_universe_df: pd.DataFrame,
+    trade_explorer_filters: dict | None = None,
+):
     section_header("Trade Explorer")
     if trade_universe_df is None or trade_universe_df.empty:
         empty_state("No rows available for explorer.")
@@ -2066,114 +2183,7 @@ def _render_trade_explorer_panel(trade_universe_df: pd.DataFrame):
     if explorer_df.empty:
         empty_state("No rows available for explorer.")
         return
-
-    with st.sidebar:
-        st.markdown("### Trade Explorer Filters")
-        date_options = sorted([d for d in explorer_df["trade_date"].dropna().unique().tolist() if d and d != "UNKNOWN"])
-        selected_dates = []
-        if len(date_options) > 1:
-            selected_dates = st.multiselect(
-                "Date",
-                options=date_options,
-                default=date_options,
-                key="explorer_filter_dates",
-            )
-
-        run_options = sorted([r for r in explorer_df["run_id"].dropna().astype(str).unique().tolist() if r and r != "UNKNOWN"])
-        selected_run_ids = []
-        if run_options:
-            selected_run_ids = st.multiselect(
-                "Run ID",
-                options=run_options,
-                default=run_options,
-                key="explorer_filter_run_ids",
-            )
-
-        def _all_multiselect(label: str, column: str, key: str):
-            options = sorted([v for v in explorer_df[column].dropna().astype(str).unique().tolist() if v])
-            if not options:
-                return []
-            selected = st.multiselect(label, options=options, default=options, key=key)
-            if len(selected) == len(options):
-                return []
-            return selected
-
-        underlyings = _all_multiselect("Underlying", "underlying", "explorer_filter_underlying")
-        option_sides = _all_multiselect("CE/PE", "option_side", "explorer_filter_option_side")
-        strategy_categories = _all_multiselect("Strategy Category", "strategy_category", "explorer_filter_strategy_category")
-        strategy_families = _all_multiselect("Strategy Family", "strategy_family", "explorer_filter_strategy_family")
-        permission_buckets = _all_multiselect("Permission Bucket", "permission_bucket", "explorer_filter_permission_bucket")
-        final_blockers = _all_multiselect("Final Blocker", "final_blocker", "explorer_filter_final_blocker")
-        feed_states = _all_multiselect("Feed State", "feed_state", "explorer_filter_feed_state")
-        symbol_query = st.text_input("Symbol Search", value="", key="explorer_filter_symbol_search")
-
-        global_range = _numeric_slider_config(explorer_df, "global_conf")
-        spread_range = _numeric_slider_config(explorer_df, "spread_pct")
-        quote_age_range = _numeric_slider_config(explorer_df, "quote_age_sec")
-
-        selected_global = None
-        if global_range is not None:
-            selected_global = st.slider(
-                "global_conf range",
-                min_value=float(global_range[0]),
-                max_value=float(global_range[1]),
-                value=(float(global_range[0]), float(global_range[1])),
-                step=0.01,
-                key="explorer_filter_global_conf",
-            )
-        selected_spread = None
-        if spread_range is not None:
-            selected_spread = st.slider(
-                "spread_pct range",
-                min_value=float(spread_range[0]),
-                max_value=float(spread_range[1]),
-                value=(float(spread_range[0]), float(spread_range[1])),
-                step=0.0005,
-                key="explorer_filter_spread_pct",
-            )
-        selected_quote_age = None
-        if quote_age_range is not None:
-            selected_quote_age = st.slider(
-                "quote_age_sec range",
-                min_value=float(quote_age_range[0]),
-                max_value=float(quote_age_range[1]),
-                value=(float(quote_age_range[0]), float(quote_age_range[1])),
-                step=0.1,
-                key="explorer_filter_quote_age_sec",
-            )
-
-        preset = st.selectbox(
-            "Column Preset",
-            options=list(EXPLORER_COLUMN_PRESETS.keys()),
-            index=0,
-            key="explorer_col_preset",
-        )
-        preset_cols = [c for c in EXPLORER_COLUMN_PRESETS[preset] if c in explorer_df.columns]
-        if st.session_state.get("explorer_col_preset_prev") != preset:
-            st.session_state["explorer_selected_cols"] = preset_cols
-            st.session_state["explorer_col_preset_prev"] = preset
-        selected_cols = st.multiselect(
-            "Columns",
-            options=list(explorer_df.columns),
-            key="explorer_selected_cols",
-        )
-        show_charts = st.checkbox("Show summary charts", value=True, key="explorer_show_charts")
-
-    filters = {
-        "dates": selected_dates if selected_dates and len(selected_dates) < len(date_options) else [],
-        "run_ids": selected_run_ids if selected_run_ids and len(selected_run_ids) < len(run_options) else [],
-        "underlyings": underlyings,
-        "option_sides": option_sides,
-        "strategy_categories": strategy_categories,
-        "strategy_families": strategy_families,
-        "permission_buckets": permission_buckets,
-        "final_blockers": final_blockers,
-        "feed_states": feed_states,
-        "symbol_query": symbol_query,
-        "global_conf_range": selected_global,
-        "spread_pct_range": selected_spread,
-        "quote_age_sec_range": selected_quote_age,
-    }
+    filters = dict(trade_explorer_filters or {})
     filtered = _apply_trade_explorer_filters(explorer_df, filters)
     filtered = filtered.sort_values("ts_sort", ascending=False, na_position="last")
 
@@ -2201,7 +2211,7 @@ def _render_trade_explorer_panel(trade_universe_df: pd.DataFrame):
     st.caption(f"Filtered rows: {len(filtered)} (showing top {len(display_df)} by latest timestamp)")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    if show_charts:
+    if bool(filters.get("show_charts", True)):
         try:
             import matplotlib.pyplot as plt
 
@@ -7116,8 +7126,10 @@ if nav == "Home":
         _perf_timed_render(label, fn)
 
     if show_active_view:
+        explorer_filters = _render_trade_explorer_sidebar_filters(trade_universe_df)
+
         def _render_active_trades_section():
-            _render_trade_explorer_panel(trade_universe_df)
+            _render_trade_explorer_panel(trade_universe_df, explorer_filters)
             section_header("Active Trades")
             try:
                 active_df = _prepare_trade_display_df(df_active_all)
