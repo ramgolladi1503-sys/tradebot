@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from config import config as cfg
 from core.depth_store import depth_store
 from core.fs_utils import ensure_parent_dir
+from core.feed.runtime_store import read_latest_runtime_snapshot
 from core.market_context import derive_market_context
 from core.freshness_policy import resolve_freshness_policy
 from core.tick_store import init_ticks as _init_ticks_schema
@@ -83,6 +84,34 @@ def _latest_depth_epoch_from_store() -> Optional[float]:
         if latest is None or ts_norm > latest:
             latest = ts_norm
     return latest
+
+
+def _runtime_snapshot_epochs(symbol: str | None) -> dict[str, Any]:
+    if not bool(getattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", True)):
+        return {}
+    try:
+        snapshot = read_latest_runtime_snapshot()
+    except Exception:
+        snapshot = None
+    if not isinstance(snapshot, dict):
+        return {}
+    symbol_norm = str(symbol).upper() if symbol else None
+    ltp_epoch = normalize_epoch_seconds(snapshot.get("last_ws_tick_epoch"))
+    depth_epoch = normalize_epoch_seconds(snapshot.get("last_depth_epoch"))
+    if symbol_norm:
+        by_symbol = snapshot.get("last_option_tick_ts_by_symbol")
+        if isinstance(by_symbol, dict):
+            symbol_epoch = normalize_epoch_seconds(by_symbol.get(symbol_norm))
+            if symbol_epoch is not None:
+                ltp_epoch = symbol_epoch
+    return {
+        "ltp_epoch": ltp_epoch,
+        "depth_epoch": depth_epoch,
+        "source": str(snapshot.get("source") or "feed_runtime_latest"),
+        "runtime_state": str(snapshot.get("runtime_state") or "").strip().upper() or None,
+        "ws_connected": snapshot.get("ws_connected"),
+        "subscribed_tokens_count": snapshot.get("subscribed_tokens_count"),
+    }
 
 
 def _depth_store_tokens() -> List[int]:
@@ -261,7 +290,7 @@ def get_freshness_status(
     stale_tokens = [int(t) for t in list(ltp_metrics.get("stale_tokens") or [])]
     max_tick_age_sec = (
         float(ltp_metrics.get("max_tick_age_sec"))
-        if ltp_metrics.get("max_tick_age_sec") is not None
+    if ltp_metrics.get("max_tick_age_sec") is not None
         else None
     )
 
@@ -283,6 +312,21 @@ def get_freshness_status(
     if depth_store_epoch is not None:
         depth_last_epoch = max(depth_last_epoch or 0.0, depth_store_epoch)
         depth_source = "depth_store"
+
+    runtime_snapshot = _runtime_snapshot_epochs(symbol_norm)
+    runtime_ltp_epoch = normalize_epoch_seconds(runtime_snapshot.get("ltp_epoch"))
+    runtime_depth_epoch = normalize_epoch_seconds(runtime_snapshot.get("depth_epoch"))
+    runtime_snapshot_used = False
+    runtime_ltp_used = False
+    if runtime_ltp_epoch is not None and (ltp_last_epoch is None or runtime_ltp_epoch > ltp_last_epoch):
+        ltp_last_epoch = runtime_ltp_epoch
+        ltp_source = str(runtime_snapshot.get("source") or "feed_runtime_latest")
+        runtime_snapshot_used = True
+        runtime_ltp_used = True
+    if runtime_depth_epoch is not None and (depth_last_epoch is None or runtime_depth_epoch > depth_last_epoch):
+        depth_last_epoch = runtime_depth_epoch
+        depth_source = str(runtime_snapshot.get("source") or "feed_runtime_latest")
+        runtime_snapshot_used = True
 
     if ltp_last_epoch is not None:
         data_available = True
@@ -310,6 +354,9 @@ def get_freshness_status(
                 reasons.append("depth_missing")
             elif depth_age > max_depth_age:
                 reasons.append(f"depth_stale age={depth_age:.2f} max={max_depth_age:.2f}")
+
+    if runtime_ltp_used:
+        stale_tokens = []
 
     if allow_stale_quotes:
         if market_open and no_ticks_yet:
@@ -376,6 +423,10 @@ def get_freshness_status(
         },
         "reasons": reasons,
     }
+    if runtime_snapshot_used and ltp_last_epoch is not None:
+        payload["ltp"]["source"] = ltp_source
+        if runtime_depth_epoch is not None:
+            payload["depth"]["source"] = depth_source
     payload["ok"] = bool(payload.get("ok")) and (not stale_tokens or allow_stale_quotes or (not market_open))
 
     if not scoped:
@@ -395,6 +446,7 @@ def get_freshness_status(
             "depth_age_sec": depth_age,
             "ltp_source": ltp_source,
             "depth_source": depth_source,
+            "runtime_snapshot_used": runtime_snapshot_used,
             "stale_tokens_count": len(stale_tokens),
             "tracked_tokens_count": len(tokens_for_ltp),
         }

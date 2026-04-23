@@ -3,6 +3,7 @@ import time
 
 from config import config as cfg
 from core import freshness_sla, tick_store
+from core.feed.runtime_store import write_runtime_snapshot
 
 
 def _init_tables(conn):
@@ -34,24 +35,43 @@ def test_feed_freshness_normalizes_ms_epochs(monkeypatch, tmp_path):
     assert abs(depth_age - 10.0) < 2.0
 
 
-def test_feed_freshness_uses_db_even_if_memory_epoch_is_newer(monkeypatch, tmp_path):
+def test_feed_freshness_prefers_runtime_snapshot_over_stale_db(monkeypatch, tmp_path):
     db_path = tmp_path / "trades.db"
     conn = sqlite3.connect(db_path)
     _init_tables(conn)
     now = time.time()
-    # DB tick is 20s old.
     conn.execute("INSERT INTO ticks (instrument_token, timestamp_epoch) VALUES (?,?)", (222, now - 20.0))
     conn.commit()
     conn.close()
 
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", True, raising=False)
     monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "ALLOW_STALE_QUOTES", False, raising=False)
-    monkeypatch.setattr(tick_store, "_LAST_TICK_EPOCH", now)  # Should be ignored by SLA path.
     freshness_sla._reset_cache_for_tests()
 
+    assert (
+        write_runtime_snapshot(
+            {
+                "ts_epoch": now,
+                "ws_connected": True,
+                "subscribed_tokens_count": 73,
+                "intended_tokens_count": 73,
+                "subscribed_tokens_sample": [222],
+                "last_ws_tick_epoch": now - 1.0,
+                "last_depth_epoch": now - 1.0,
+                "source": "unit_test_runtime",
+                "runtime_state": "RUNNING",
+                "last_error": "",
+            }
+        )
+        is True
+    )
+
     payload = freshness_sla.get_freshness_status(symbol="NIFTY", tokens=[222], force=True)
-    assert payload["stale_tokens"] == [222]
-    assert payload["ltp"]["source"] == "ticks_db_filtered"
-    assert (payload.get("max_tick_age_sec") or 0.0) >= 18.0
+    assert payload["stale_tokens"] == []
+    assert payload["ltp"]["source"] == "unit_test_runtime"
+    assert payload["depth"]["source"] == "unit_test_runtime"
+    assert payload["ok"] is True
+    assert abs((payload["ltp"]["age_sec"] or 0.0) - 1.0) < 2.5

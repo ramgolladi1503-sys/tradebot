@@ -9,8 +9,11 @@ from core import freshness_sla, tick_store
 def _setup_tick_db(monkeypatch, tmp_path):
     db_path = tmp_path / "ticks_truth.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", False, raising=False)
     tick_store._LAST_TICK_BY_TOKEN.clear()
     tick_store._LAST_TICK_EPOCH = None
+    tick_store._INIT_DONE = False
+    tick_store._SCHEMA_LOGGED = False
     freshness_sla._reset_cache_for_tests()
     return db_path
 
