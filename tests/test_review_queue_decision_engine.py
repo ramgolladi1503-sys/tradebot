@@ -125,6 +125,75 @@ def test_finalize_append_payload_rejects_unscored_payload():
         )
 
 
+def test_finalize_append_payload_allows_diagnostic_payload_without_terminal_score(monkeypatch):
+    calls = {"count": 0}
+
+    def _boom(*args, **kwargs):
+        calls["count"] += 1
+        raise AssertionError("diagnostic payload must not be rescored")
+
+    monkeypatch.setattr(review_queue, "score_candidate", _boom)
+
+    payload = _candidate(
+        trade_id="T-DIAGNOSTIC-APPEND",
+        strategy_family="breakout",
+        candidate_status="blocked",
+        confidence=None,
+        rank_score=None,
+        terminal_scoring_applied=False,
+        final_action="BLOCK",
+        permission="BLOCK",
+        readiness="BLOCKED",
+        execution_status="blocked",
+        hard_blockers=[],
+        blockers=[],
+        final_emit_block_reason="missing_execution_entry",
+    )
+
+    out = review_queue._finalize_append_payload_for_runtime_write(
+        payload,
+        require_terminal_scoring=False,
+        require_ranked_candidate_ready=False,
+    )
+
+    assert out["final_emit_block_reason"] == "missing_execution_entry"
+    assert out["terminal_scoring_applied"] is False
+    assert calls["count"] == 0
+
+
+def test_blocked_advisory_rows_backfill_hard_blockers_before_serialization():
+    payload = _candidate(
+        trade_id="T-BLOCKED-ADVISORY",
+        strategy_id="S-BLOCKED-ADVISORY",
+        strategy_name="Breakout",
+        advisory_id="A-BLOCKED-ADVISORY",
+        strategy_family="breakout",
+        candidate_status="blocked",
+        confidence=0.31,
+        rank_score=0.22,
+        terminal_scoring_applied=True,
+        final_action="BLOCK",
+        permission="BLOCK",
+        readiness="BLOCKED",
+        execution_status="blocked",
+        hard_blockers=[],
+        blockers=[],
+        final_emit_block_reason="missing_execution_entry",
+        entry_block_code=None,
+        hard_reason=None,
+        final_blocker=None,
+        execution_block_reason=None,
+        instrument_type="OPT",
+    )
+
+    out = review_queue._ensure_blocked_advisory_hard_blockers(payload)
+
+    assert "missing_execution_entry" in list(out["hard_blockers"] or [])
+    assert "missing_execution_entry" in list(out["blockers"] or [])
+    serialized = review_queue.serialize_advisory_row(out, allow_legacy=True)
+    assert "missing_execution_entry" in list(serialized["hard_blockers"] or [])
+
+
 def test_queue_only_backdoor_promotion_blocked_by_raw_rank_floor(monkeypatch):
     monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35, raising=False)
     out = review_queue._promote_queue_only_candidate(

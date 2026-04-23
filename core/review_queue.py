@@ -1542,7 +1542,87 @@ def _apply_terminal_candidate_scoring(
     return _apply_candidate_scoring_status(out)
 
 
-def _finalize_append_payload_for_runtime_write(payload: dict) -> dict:
+def _ensure_blocked_advisory_hard_blockers(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    out = dict(entry)
+    readiness = str(out.get("readiness") or "").strip().upper()
+    execution_status = str(out.get("execution_status") or "").strip().lower()
+    final_action = str(out.get("final_action") or "").strip().upper()
+    permission = str(out.get("permission") or "").strip().upper()
+    candidate_status = str(out.get("candidate_status") or "").strip().lower()
+    if not (
+        readiness == "BLOCKED"
+        or execution_status == "blocked"
+        or final_action == "BLOCK"
+        or permission == "BLOCK"
+        or candidate_status == "blocked"
+    ):
+        return out
+    hard_blockers = _dedupe_issue_codes(list(out.get("hard_blockers") or []))
+    blockers = _dedupe_issue_codes(list(out.get("blockers") or []))
+    fallback_codes = _dedupe_issue_codes(
+        [
+            out.get("final_emit_block_reason"),
+            out.get("final_blocker"),
+            out.get("execution_block_reason"),
+            out.get("hard_reason"),
+            out.get("entry_block_code"),
+            out.get("entry_block_reason"),
+            out.get("permission_reason"),
+            _best_reject_reason(out, default="blocked"),
+            _execution_ineligibility_reason(out, default="blocked"),
+        ]
+    )
+    benign_codes = {
+        "OK",
+        "READY",
+        "QUEUE_ONLY",
+        "ADVISORY_ONLY",
+        "EXECUTE",
+        "NO_EXECUTION_CANDIDATES",
+        "UNSPECIFIED_TRADE_BUILDER_REJECT",
+        "UNKNOWN",
+        "NONE",
+        "NULL",
+        "N/A",
+        "NA",
+    }
+    for code in fallback_codes:
+        if not code:
+            continue
+        normalized = str(code).strip()
+        if not normalized or normalized.upper() in benign_codes:
+            continue
+        if normalized not in hard_blockers:
+            hard_blockers.append(normalized)
+    if not hard_blockers:
+        hard_blockers = ["BLOCKED"]
+    if not blockers:
+        blockers = list(hard_blockers)
+    else:
+        blockers = _dedupe_issue_codes(blockers + hard_blockers)
+    out["hard_blockers"] = hard_blockers
+    out["blockers"] = blockers
+    if not out.get("entry_block_code"):
+        out["entry_block_code"] = hard_blockers[0]
+    if not out.get("entry_clear_reason"):
+        out["entry_clear_reason"] = hard_blockers[0]
+    if not out.get("final_blocker"):
+        out["final_blocker"] = hard_blockers[0]
+    if not out.get("hard_reason"):
+        out["hard_reason"] = hard_blockers[0]
+    if readiness == "BLOCKED" and not out.get("execution_status"):
+        out["execution_status"] = "blocked"
+    return out
+
+
+def _finalize_append_payload_for_runtime_write(
+    payload: dict,
+    *,
+    require_terminal_scoring: bool = True,
+    require_ranked_candidate_ready: bool = True,
+) -> dict:
     if not isinstance(payload, dict):
         return payload
     out = dict(payload)
@@ -1563,8 +1643,10 @@ def _finalize_append_payload_for_runtime_write(payload: dict) -> dict:
             out["strategy_family"] = "forced"
         if not candidate_type or candidate_type == "unknown":
             out["candidate_type"] = "forced"
-    assert bool(out.get("terminal_scoring_applied")), "terminal scoring not applied at emit"
-    assert_ranked_candidate_ready(out)
+    if require_terminal_scoring:
+        assert bool(out.get("terminal_scoring_applied")), "terminal scoring not applied at emit"
+    if require_ranked_candidate_ready:
+        assert_ranked_candidate_ready(out)
     return out
 
 
@@ -2862,12 +2944,20 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         )
         log_advisory_schema_error("review_queue.emit", advisory_payload, exc)
         logger.error("advisory_emit_schema_error payload=%s", json.dumps(diagnostic, sort_keys=True))
-        diagnostic = _finalize_append_payload_for_runtime_write(diagnostic)
+        diagnostic = _finalize_append_payload_for_runtime_write(
+            diagnostic,
+            require_terminal_scoring=False,
+            require_ranked_candidate_ready=False,
+        )
         _append_jsonl([logs_dir() / "advisory_emit_failures.jsonl"], diagnostic)
         rejected_payload = dict(diagnostic)
         rejected_payload.setdefault("reject_reason", "advisory_schema_error")
         rejected_payload.setdefault("reason_code", "advisory_schema_error")
-        rejected_payload = _finalize_append_payload_for_runtime_write(rejected_payload)
+        rejected_payload = _finalize_append_payload_for_runtime_write(
+            rejected_payload,
+            require_terminal_scoring=False,
+            require_ranked_candidate_ready=False,
+        )
         _append_jsonl(rejected_candidates_paths(), rejected_payload)
         _emit_trade_lifecycle_event(
             entry,
@@ -7268,6 +7358,7 @@ def _build_canonical_advisory_entry(
     advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload["row_kind"] = _derive_review_queue_row_kind(advisory_payload)
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
+    advisory_payload = _ensure_blocked_advisory_hard_blockers(advisory_payload)
     advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
     return _repair_live_feed_failure_provenance(advisory_entry)
 
@@ -7331,7 +7422,11 @@ def _record_advisory_validation_failure(
     log_advisory_schema_error("review_queue.add_to_queue", advisory_payload, exc)
     logger.warning("advisory_queue_schema_error trade_id=%s error=%s", entry.get("trade_id"), exc)
     logger.error("advisory_queue_schema_error payload=%s", json.dumps(diagnostic, sort_keys=True))
-    diagnostic = _finalize_append_payload_for_runtime_write(diagnostic)
+    diagnostic = _finalize_append_payload_for_runtime_write(
+        diagnostic,
+        require_terminal_scoring=False,
+        require_ranked_candidate_ready=False,
+    )
     _append_jsonl([logs_dir() / "advisory_emit_failures.jsonl"], diagnostic)
     _append_jsonl(rejected_candidates_paths(), diagnostic)
     return {
