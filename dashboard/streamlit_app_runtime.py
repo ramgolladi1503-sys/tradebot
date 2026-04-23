@@ -1041,6 +1041,11 @@ def _load_freshness_latest() -> dict:
     return payload
 
 
+def _add_upstox_links(df):
+    # Upstox deep links are intentionally disabled in runtime UI.
+    return df
+
+
 def _load_live_suggestions_df(limit: int = 100) -> pd.DataFrame:
     advisory_snapshot = _perf_timed_load(
         "advisory_latest_snapshot_json",
@@ -5561,11 +5566,6 @@ def _add_live_pnl_columns(df, meta_map=None):
                 df.at[idx, "pnl_cash"] = round(float(pnl_points) * float(lot_size), 2)
             else:
                 df.at[idx, "pnl_cash"] = "—"
-    return df
-
-
-def _add_upstox_links(df):
-    # Upstox deep links are intentionally disabled in runtime UI.
     return df
 
 

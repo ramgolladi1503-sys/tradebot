@@ -835,12 +835,13 @@ def test_load_live_suggestions_df_filters_queue_only_row_when_entry_missing(tmp_
 
 
 def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch):
+    now_ts = _iso_now()
     stale_row = {
         "trade_id": "T-RECOVER",
         "strategy_id": "CORE",
         "advisory_id": "ADV-RECOVER",
-        "timestamp": "2026-04-22T06:30:00+00:00",
-        "last_seen_ts": "2026-04-22T06:30:00+00:00",
+        "timestamp": now_ts,
+        "last_seen_ts": now_ts,
         "symbol": "NIFTY",
         "instrument_type": "OPT",
         "strategy_name": "CORE",
@@ -878,8 +879,8 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
         "trade_id": "T-RECOVER",
         "strategy_id": "CORE",
         "advisory_id": "ADV-RECOVER",
-        "timestamp": "2026-04-22T06:31:00+00:00",
-        "last_seen_ts": "2026-04-22T06:31:00+00:00",
+        "timestamp": now_ts,
+        "last_seen_ts": now_ts,
         "symbol": "NIFTY",
         "instrument_type": "OPT",
         "strategy_name": "CORE",
