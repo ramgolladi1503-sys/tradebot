@@ -1,22 +1,41 @@
+from __future__ import annotations
+
 import argparse
+import json
+import sys
+from pathlib import Path
 
-from core.historical_data import load_market_data
-from core.replay_backtest_v2 import ReplayBacktestEngineV2, BacktestConfigV2
-from core.trade_builder_backtest_adapter_v2 import TradeBuilderBacktestAdapterV2
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data", required=True)
+from core.replay_contract import assert_deterministic_runtime_replay
+
+
+DEPRECATION_MESSAGE = (
+    "DEPRECATED: scripts/backtest_tb_v4.py is no longer a truth engine. "
+    "Use scripts/validate_system.py or core.replay_engine.ReplayEngine."
+)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Deprecated compatibility wrapper for canonical replay validation")
+    parser.add_argument("--data", default="")
+    parser.add_argument("--symbol", default="NIFTY")
+    parser.add_argument("--start", default=None)
+    parser.add_argument("--end", default=None)
+    parser.add_argument("--runtime-root", default=None)
     args = parser.parse_args()
 
-    df = load_market_data(args.data)
-    strategy = TradeBuilderBacktestAdapterV2()
-
-    engine = ReplayBacktestEngineV2(
-        df,
-        strategy_fn=strategy,
-        config=BacktestConfigV2()
+    result = assert_deterministic_runtime_replay(
+        runtime_root=args.runtime_root,
+        symbol=args.symbol,
+        start=args.start,
+        end=args.end,
     )
+    print(DEPRECATION_MESSAGE)
+    print(json.dumps(result, indent=2, default=str))
 
-    res = engine.run()
-    print(res.tail())
+
+if __name__ == "__main__":
+    main()
