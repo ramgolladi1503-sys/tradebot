@@ -15,8 +15,6 @@ TRUTH_CAP = {
 }
 
 FALLBACK_ORIGINS = {"fallback", "fallback_min_breadth", "recovered_fallback", "rest_fallback", "synthetic_offhours"}
-# Planning and invalid snapshots are synthetic. Softened weak/no-signal candidates are not
-# synthetic by themselves; decision_engine handles them as QUEUE_ONLY so reason contracts stay stable.
 SYNTHETIC_ORIGINS = {"pre_builder_gate", "invalid_snapshot", "planning_only"}
 FALLBACK_ENTRY_SOURCES = {"recovered_fallback", "rest_fallback", "synthetic_offhours", "fallback"}
 DEGRADED_REASONS = {
@@ -123,8 +121,6 @@ def derive_truth_quality(candidate: Any) -> str:
     spread_pct = _safe_float(_get(candidate, "spread_pct", flags.get("spread_pct")))
     quote_ok = bool(_get(candidate, "quote_ok", True))
 
-    # Explicit real class in tests/controlled fixtures should not be punished only for
-    # missing quote_source when quote/spread/age are otherwise present and healthy.
     if candidate_class == "real" and quote_ok and quote_age is not None and quote_age <= 2.0 and spread_pct is not None:
         return TRUTH_REAL
 
@@ -145,6 +141,12 @@ def truth_cap(truth_quality: str) -> str:
     return TRUTH_CAP.get(str(truth_quality or "").strip().upper(), "ADVISORY_ONLY")
 
 
+def _ensure_truth_reason(out: dict[str, Any], reason: str) -> None:
+    if not str(out.get("decision_reason") or "").strip():
+        out["decision_reason"] = reason
+    out["truth_block_reason"] = reason
+
+
 def apply_truth_quality_contract(candidate: dict[str, Any]) -> dict[str, Any]:
     out = dict(candidate or {})
     truth_quality = derive_truth_quality(out)
@@ -152,6 +154,7 @@ def apply_truth_quality_contract(candidate: dict[str, Any]) -> dict[str, Any]:
     out["truth_quality"] = truth_quality
     out["truth_execution_cap"] = cap
     if cap == "ADVISORY_ONLY":
+        _ensure_truth_reason(out, f"truth_quality_{truth_quality.lower()}")
         out.update(
             {
                 "permission": "ADVISORY_ONLY",
@@ -162,10 +165,10 @@ def apply_truth_quality_contract(candidate: dict[str, Any]) -> dict[str, Any]:
                 "eligible_for_execution": False,
                 "tradable": False,
                 "is_executable": False,
-                "truth_block_reason": f"truth_quality_{truth_quality.lower()}",
             }
         )
     elif cap == "QUEUE_ONLY" and str(out.get("final_action") or "").strip().upper() == "EXECUTE":
+        _ensure_truth_reason(out, "truth_quality_degraded")
         out.update(
             {
                 "permission": "QUEUE_ONLY",
@@ -174,7 +177,6 @@ def apply_truth_quality_contract(candidate: dict[str, Any]) -> dict[str, Any]:
                 "execution_allowed": False,
                 "eligible_for_execution": False,
                 "is_executable": False,
-                "truth_block_reason": "truth_quality_degraded",
             }
         )
     return out
