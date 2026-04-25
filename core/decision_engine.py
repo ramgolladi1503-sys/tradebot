@@ -350,77 +350,20 @@ def _is_execution_ready(candidate: Any, score_payload: dict[str, Any]) -> tuple[
         )
         if reason_code in hard_reasons:
             reasons.append("execution_quality_reject")
-        elif reason_code:
-            reasons.append(f"execution_quality_not_ready:{reason_code}")
         else:
             reasons.append("execution_quality_not_ready")
     return (len(reasons) == 0), reasons
 
 
-def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
-    score_payload = build_decision_score(candidate)
-    execution_ready, readiness_reasons = _is_execution_ready(candidate, score_payload)
-
-    queue_min_score = float(getattr(cfg, "DECISION_ENGINE_QUEUE_MIN_SCORE", 0.55) or 0.55)
-    execute_min_score = float(getattr(cfg, "DECISION_ENGINE_EXECUTE_MIN_SCORE", 0.70) or 0.70)
-    promote_min_conf = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_CONF", 0.72) or 0.72)
-    promote_strong_conf = float(getattr(cfg, "PERMISSION_PROMOTION_STRONG_CONF", 0.80) or 0.80)
-    min_raw_rank = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35) or 0.35)
-
-    raw_score = float(score_payload["raw_score"])
-    final_score = float(score_payload["final_score"])
-    raw_rank_score = _safe_float(_get_value(candidate, "raw_rank_score"))
-    effective_raw_rank = float(raw_rank_score) if raw_rank_score is not None else raw_score
-    gating_confidence = float(score_payload["gating_confidence"])
-    selected_for_execution = bool(_get_value(candidate, "selected_for_execution"))
-    has_rank_context = _safe_float(_get_value(candidate, "rank_global")) is not None
-
-    decision_action = "REJECT"
-    decision_reason = "insufficient_edge"
-
-    if score_payload["truth_quality"] in {TRUTH_FALLBACK, TRUTH_SYNTHETIC}:
-        decision_reason = f"truth_quality_{score_payload['truth_quality'].lower()}"
-    elif score_payload["truth_quality"] == TRUTH_DEGRADED:
-        if max(final_score, raw_score) >= queue_min_score:
-            decision_action = "QUEUE"
-            decision_reason = "truth_quality_degraded_queue_only"
-        else:
-            decision_reason = "truth_quality_degraded_below_queue"
-    elif _blocks_execute_due_to_soft_reject(candidate):
-        if execution_ready and max(final_score, raw_score) >= queue_min_score:
-            decision_action = "QUEUE"
-            decision_reason = "soft_reject_weak_signal_blocks_execute"
-        else:
-            decision_reason = "soft_reject_not_executable"
-    elif _is_weak_signal_candidate(candidate) and not bool(getattr(cfg, "DECISION_ENGINE_WEAK_SIGNAL_EXECUTE_ENABLE", False)):
-        if execution_ready and max(final_score, raw_score) >= queue_min_score:
-            decision_action = "QUEUE"
-            decision_reason = "weak_signal_queue_only"
-        else:
-            decision_reason = "weak_signal_not_executable"
-    elif not execution_ready:
-        decision_reason = "execution_not_ready"
-    elif effective_raw_rank < min_raw_rank:
-        if max(final_score, raw_score) >= queue_min_score:
-            decision_action = "QUEUE"
-            decision_reason = "raw_rank_below_execute_floor"
-        else:
-            decision_reason = "raw_rank_too_low"
-    elif gating_confidence >= promote_strong_conf:
-        decision_action = "EXECUTE"
-        decision_reason = "strong_confidence_executable_entry"
-    elif gating_confidence >= promote_min_conf and max(final_score, raw_score) >= queue_min_score and (selected_for_execution or has_rank_context):
-        decision_action = "EXECUTE"
-        decision_reason = "ranked_top_candidate_promoted"
-    elif final_score >= max(execute_min_score, float(score_payload["adaptive_execution_threshold"])):
-        decision_action = "EXECUTE"
-        decision_reason = "strong_edge"
-    elif final_score >= queue_min_score:
-        decision_action = "QUEUE"
-        decision_reason = "borderline_edge"
-    else:
-        decision_reason = "below_queue_threshold"
-
+def _decision_payload(
+    candidate: dict[str, Any],
+    score_payload: dict[str, Any],
+    *,
+    decision_action: str,
+    decision_reason: str,
+    readiness_reasons: list[str],
+    execution_ready: bool = False,
+) -> dict[str, Any]:
     permission = "ADVISORY_ONLY"
     final_action = "ADVISORY_ONLY"
     execution_status = "advisory_only"
@@ -444,3 +387,98 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
         "execution_status": execution_status,
     }
     return apply_truth_quality_contract({**candidate, **decision})
+
+
+def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
+    score_payload = build_decision_score(candidate)
+    execution_ready, readiness_reasons = _is_execution_ready(candidate, score_payload)
+
+    queue_min_score = float(getattr(cfg, "DECISION_ENGINE_QUEUE_MIN_SCORE", 0.55) or 0.55)
+    execute_min_score = float(getattr(cfg, "DECISION_ENGINE_EXECUTE_MIN_SCORE", 0.70) or 0.70)
+    promote_min_conf = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_CONF", 0.72) or 0.72)
+    promote_strong_conf = float(getattr(cfg, "PERMISSION_PROMOTION_STRONG_CONF", 0.80) or 0.80)
+    min_raw_rank = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35) or 0.35)
+
+    raw_score = float(score_payload["raw_score"])
+    final_score = float(score_payload["final_score"])
+    raw_rank_score = _safe_float(_get_value(candidate, "raw_rank_score"))
+    effective_raw_rank = float(raw_rank_score) if raw_rank_score is not None else raw_score
+    gating_confidence = float(score_payload["gating_confidence"])
+    selected_for_execution = bool(_get_value(candidate, "selected_for_execution"))
+    has_rank_context = _safe_float(_get_value(candidate, "rank_global")) is not None
+    candidate_class = str(score_payload.get("candidate_class") or _get_value(candidate, "candidate_class") or "").strip().lower()
+
+    if _has_invalid_geometry(candidate):
+        return _decision_payload(
+            candidate,
+            score_payload,
+            decision_action="REJECT",
+            decision_reason="invalid_geometry",
+            readiness_reasons=["invalid_level_geometry"],
+            execution_ready=False,
+        )
+
+    if candidate_class == "synthetic":
+        return _decision_payload(
+            candidate,
+            score_payload,
+            decision_action="REJECT",
+            decision_reason="non_real_candidate_class",
+            readiness_reasons=["synthetic_candidate"],
+            execution_ready=False,
+        )
+
+    decision_action = "REJECT"
+    decision_reason = "insufficient_edge"
+
+    if score_payload["truth_quality"] in {TRUTH_FALLBACK, TRUTH_SYNTHETIC}:
+        decision_reason = "non_real_candidate_class" if score_payload["truth_quality"] == TRUTH_SYNTHETIC else f"truth_quality_{score_payload['truth_quality'].lower()}"
+    elif _blocks_execute_due_to_soft_reject(candidate) or (
+        _is_weak_signal_candidate(candidate)
+        and not bool(getattr(cfg, "DECISION_ENGINE_WEAK_SIGNAL_EXECUTE_ENABLE", False))
+    ):
+        if max(final_score, raw_score) >= queue_min_score:
+            decision_action = "QUEUE"
+            decision_reason = "weak_signal_queue_only"
+        else:
+            decision_reason = "weak_signal_not_executable"
+    elif score_payload["truth_quality"] == TRUTH_DEGRADED:
+        if max(final_score, raw_score) >= queue_min_score:
+            decision_action = "QUEUE"
+            decision_reason = "truth_quality_degraded_queue_only"
+        else:
+            decision_reason = "truth_quality_degraded_below_queue"
+    elif not execution_ready:
+        decision_reason = "execution_not_ready"
+    elif effective_raw_rank < min_raw_rank:
+        if max(final_score, raw_score) >= queue_min_score:
+            decision_action = "QUEUE"
+            decision_reason = "raw_rank_below_execute_floor"
+        else:
+            decision_reason = "raw_rank_too_low"
+    elif gating_confidence >= promote_strong_conf:
+        decision_action = "EXECUTE"
+        decision_reason = "strong_confidence_executable_entry"
+    elif gating_confidence >= promote_min_conf:
+        decision_action = "EXECUTE"
+        decision_reason = "strong_signal"
+    elif final_score >= max(execute_min_score, float(score_payload["adaptive_execution_threshold"])):
+        decision_action = "EXECUTE"
+        decision_reason = "strong_edge"
+    elif gating_confidence >= promote_min_conf and max(final_score, raw_score) >= queue_min_score and (selected_for_execution or has_rank_context):
+        decision_action = "EXECUTE"
+        decision_reason = "ranked_top_candidate_promoted"
+    elif final_score >= queue_min_score:
+        decision_action = "QUEUE"
+        decision_reason = "borderline_edge"
+    else:
+        decision_reason = "below_queue_threshold"
+
+    return _decision_payload(
+        candidate,
+        score_payload,
+        decision_action=decision_action,
+        decision_reason=decision_reason,
+        readiness_reasons=readiness_reasons,
+        execution_ready=execution_ready,
+    )
