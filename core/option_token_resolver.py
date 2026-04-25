@@ -177,6 +177,117 @@ def _min_option_token_count() -> int:
         return 50
 
 
+def _max_fallback_expiry_days() -> int:
+    raw = getattr(cfg, "OPTION_TOKEN_FALLBACK_MAX_EXPIRY_DAYS", 7)
+    try:
+        return max(0, int(raw))
+    except Exception:
+        return 7
+
+
+def _max_fallback_strike_distance(symbol: str) -> float:
+    attr_name = "SENSEX_OPTION_TOKEN_FALLBACK_MAX_STRIKE_DISTANCE" if str(symbol or "").upper() == "SENSEX" else "OPTION_TOKEN_FALLBACK_MAX_STRIKE_DISTANCE"
+    raw = getattr(cfg, attr_name, None)
+    if raw is None:
+        raw = 100 if str(symbol or "").upper() == "SENSEX" else 50
+    try:
+        return max(0.0, float(raw))
+    except Exception:
+        return 100.0 if str(symbol or "").upper() == "SENSEX" else 50.0
+
+
+def _safe_fallback_enabled() -> bool:
+    raw = getattr(cfg, "OPTION_TOKEN_SAFE_FALLBACK_ENABLED", True)
+    return str(raw).strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _fallback_candidate_rows(
+    registry: dict,
+    *,
+    sym: str,
+    segment: str,
+    opt_type: str,
+) -> list[tuple[tuple, dict]]:
+    rows: list[tuple[tuple, dict]] = []
+    for key, value in (registry or {}).items():
+        try:
+            key_sym, key_segment, _key_strike, key_opt_type, _key_expiry = key
+        except Exception:
+            continue
+        if key_sym != sym or key_segment != segment or key_opt_type != opt_type:
+            continue
+        if not isinstance(value, dict):
+            continue
+        token = value.get("instrument_token")
+        if token in (None, "", "None"):
+            continue
+        rows.append((key, value))
+    return rows
+
+
+def _find_safe_fallback_contract(
+    *,
+    registry: dict,
+    sym: str,
+    segment: str,
+    requested_expiry: date,
+    requested_strike: float,
+    opt_type: str,
+) -> dict | None:
+    """Find a nearby listed contract when candidate generation is slightly off.
+
+    This is intentionally conservative. It only falls back within the same
+    symbol, segment and option type, and only when expiry/strike distance remain
+    inside configured guardrails.
+    """
+    if not _safe_fallback_enabled():
+        return None
+    max_days = _max_fallback_expiry_days()
+    max_strike_distance = _max_fallback_strike_distance(sym)
+    candidates = []
+    for key, value in _fallback_candidate_rows(registry, sym=sym, segment=segment, opt_type=opt_type):
+        key_sym, key_segment, key_strike, key_opt_type, key_expiry = key
+        try:
+            strike_distance = abs(float(key_strike) - float(requested_strike))
+        except Exception:
+            continue
+        expiry_distance_days = abs((key_expiry - requested_expiry).days)
+        if expiry_distance_days > max_days:
+            continue
+        if strike_distance > max_strike_distance:
+            continue
+        candidates.append(
+            (
+                expiry_distance_days,
+                strike_distance,
+                key_expiry,
+                float(key_strike),
+                key,
+                value,
+            )
+        )
+    if not candidates:
+        return None
+    candidates.sort(key=lambda row: (row[0], row[1], row[2], row[3]))
+    expiry_distance_days, strike_distance, _exp, _strike, key, value = candidates[0]
+    token = value.get("instrument_token")
+    if token in (None, "", "None"):
+        return None
+    return {
+        "instrument_token": int(token),
+        "tradingsymbol": value.get("tradingsymbol"),
+        "exchange": "BFO" if segment == "BFO-OPT" else "NFO",
+        "segment": segment,
+        "resolved_expiry": key[4],
+        "resolved_strike": float(key[2]),
+        "requested_expiry": requested_expiry,
+        "requested_strike": float(requested_strike),
+        "expiry_distance_days": int(expiry_distance_days),
+        "strike_distance": float(strike_distance),
+        "resolution_path": "safe_nearest_contract_fallback",
+    }
+
+
 def _enforce_token_coverage_threshold(
     *,
     sym: str,
@@ -231,6 +342,15 @@ def _enforce_token_coverage_threshold(
 def _allow_exact_match_below_threshold(data_source: str) -> bool:
     source = str(data_source or "").strip().lower()
     return source in {"local_cache", "file_cache"}
+
+
+def _token_payload_from_exact_match(*, token: int, entry: dict, exchange: str, segment: str) -> dict:
+    return {
+        "instrument_token": token,
+        "tradingsymbol": entry.get("tradingsymbol"),
+        "exchange": exchange,
+        "segment": segment,
+    }
 
 
 def resolve_option_token(
@@ -291,12 +411,7 @@ def resolve_option_token(
     exact_match_exists = isinstance(entry, dict) and entry.get("instrument_token")
     if _allow_exact_match_below_threshold(data_source) and exact_match_exists:
         token = int(entry.get("instrument_token"))
-        payload = {
-            "instrument_token": token,
-            "tradingsymbol": entry.get("tradingsymbol"),
-            "exchange": exchange,
-            "segment": segment,
-        }
+        payload = _token_payload_from_exact_match(token=token, entry=entry, exchange=exchange, segment=segment)
         _LOGGER.write(
             {
                 "ts": utc_now().isoformat(),
@@ -325,12 +440,7 @@ def resolve_option_token(
     )
     if exact_match_exists:
         token = int(entry.get("instrument_token"))
-        payload = {
-            "instrument_token": token,
-            "tradingsymbol": entry.get("tradingsymbol"),
-            "exchange": exchange,
-            "segment": segment,
-        }
+        payload = _token_payload_from_exact_match(token=token, entry=entry, exchange=exchange, segment=segment)
         _LOGGER.write(
             {
                 "ts": utc_now().isoformat(),
@@ -347,6 +457,49 @@ def resolve_option_token(
             }
         )
         return payload
+
+    fallback = _find_safe_fallback_contract(
+        registry=registry,
+        sym=sym,
+        segment=segment,
+        requested_expiry=exp,
+        requested_strike=strike_val,
+        opt_type=opt_type,
+    )
+    if fallback:
+        _LOGGER.write(
+            {
+                "ts": utc_now().isoformat(),
+                "event": "OPTION_TOKEN_RESOLVED",
+                "symbol": sym,
+                "expiry": str(exp),
+                "strike": float(strike_val),
+                "option_type": opt_type,
+                "instrument_token": fallback.get("instrument_token"),
+                "tradingsymbol": fallback.get("tradingsymbol"),
+                "exchange": exchange,
+                "data_source": data_source,
+                "resolution_path": "safe_nearest_contract_fallback",
+                "requested_expiry": fallback.get("requested_expiry").isoformat() if fallback.get("requested_expiry") else None,
+                "resolved_expiry": fallback.get("resolved_expiry").isoformat() if fallback.get("resolved_expiry") else None,
+                "requested_strike": fallback.get("requested_strike"),
+                "resolved_strike": fallback.get("resolved_strike"),
+                "expiry_distance_days": fallback.get("expiry_distance_days"),
+                "strike_distance": fallback.get("strike_distance"),
+            }
+        )
+        return {
+            "instrument_token": fallback.get("instrument_token"),
+            "tradingsymbol": fallback.get("tradingsymbol"),
+            "exchange": exchange,
+            "segment": segment,
+            "resolution_path": "safe_nearest_contract_fallback",
+            "requested_expiry": fallback.get("requested_expiry"),
+            "resolved_expiry": fallback.get("resolved_expiry"),
+            "requested_strike": fallback.get("requested_strike"),
+            "resolved_strike": fallback.get("resolved_strike"),
+        }
+
     available_expiries = sorted(
         {
             k[4]
