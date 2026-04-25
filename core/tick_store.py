@@ -19,6 +19,7 @@ _ERROR_LOG_PATH = logs_dir() / "tick_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
 _SCHEMA_LOGGED = False
 _INIT_DONE = False
+_INIT_DB_PATH = None
 _INIT_LOCK = threading.Lock()
 _WRITE_QUEUE: deque[tuple[str, int | None, float | None, float | None, float | None, float, str]] = deque()
 _WRITE_QUEUE_LOCK = threading.Lock()
@@ -135,11 +136,13 @@ def _migrate_ticks_epoch_column(conn: sqlite3.Connection) -> None:
 
 
 def init_ticks() -> None:
-    global _INIT_DONE
-    if _INIT_DONE:
+    global _INIT_DONE, _INIT_DB_PATH
+    current_db_path = str(getattr(cfg, "TRADE_DB_PATH", "") or "")
+    if _INIT_DONE and _INIT_DB_PATH == current_db_path:
         return
     with _INIT_LOCK:
-        if _INIT_DONE:
+        current_db_path = str(getattr(cfg, "TRADE_DB_PATH", "") or "")
+        if _INIT_DONE and _INIT_DB_PATH == current_db_path:
             return
         with _conn() as conn:
             conn.execute(
@@ -166,6 +169,7 @@ def init_ticks() -> None:
                 raise RuntimeError("ticks schema invalid: missing timestamp_epoch")
             _log_schema_event("TICK_SCHEMA_OK", columns=sorted(cols))
         _INIT_DONE = True
+        _INIT_DB_PATH = current_db_path
 
 
 def _to_epoch(ts):
@@ -177,6 +181,10 @@ def _parse_ts_epoch(ts):
 
 
 def get_max_tick_epoch(conn: sqlite3.Connection) -> float | None:
+    try:
+        _flush_pending_ticks()
+    except Exception:
+        pass
     try:
         row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks").fetchone()
     except Exception:
