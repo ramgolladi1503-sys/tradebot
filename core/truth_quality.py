@@ -25,6 +25,7 @@ DEGRADED_REASONS = {
     "unknown_quote_source",
     "execution_context_degraded",
 }
+WEAK_SOFT_REJECT_REASONS = {"weak_signal", "no_signal", "signal_score_below_min"}
 
 
 def _safe_float(value: Any) -> float | None:
@@ -93,6 +94,7 @@ def derive_truth_quality(candidate: Any) -> str:
     candidate_type = str(_get(candidate, "candidate_type", "") or "").strip().lower()
     candidate_class = str(_get(candidate, "candidate_class", "") or "").strip().lower()
     trade_id = str(_get(candidate, "trade_id", "") or "").strip().lower()
+    soft_reject_reason = str(flags.get("soft_reject_reason") or _get(candidate, "reject_reason", "") or _get(candidate, "entry_block_code", "") or "").strip().lower()
 
     if (
         row_kind in FALLBACK_ORIGINS
@@ -104,6 +106,11 @@ def derive_truth_quality(candidate: Any) -> str:
         or bool(_get(candidate, "phase2_liquidity_fallback_used", False))
     ):
         return TRUTH_FALLBACK
+
+    # Weak/no-signal soft rejects are real decision rows that must remain queue-only,
+    # not synthetic advisory rows. This preserves the promotion_block_reason contract.
+    if candidate_class == "softened" or soft_reject_reason in WEAK_SOFT_REJECT_REASONS:
+        return TRUTH_REAL
 
     if (
         candidate_class == "synthetic"
