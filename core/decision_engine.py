@@ -437,11 +437,8 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
         _is_weak_signal_candidate(candidate)
         and not bool(getattr(cfg, "DECISION_ENGINE_WEAK_SIGNAL_EXECUTE_ENABLE", False))
     ):
-        if max(final_score, raw_score) >= queue_min_score:
-            decision_action = "QUEUE"
-            decision_reason = "weak_signal_queue_only"
-        else:
-            decision_reason = "weak_signal_not_executable"
+        decision_action = "QUEUE"
+        decision_reason = "weak_signal_queue_only"
     elif score_payload["truth_quality"] == TRUTH_DEGRADED:
         if max(final_score, raw_score) >= queue_min_score:
             decision_action = "QUEUE"
