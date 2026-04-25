@@ -1,28 +1,42 @@
+from __future__ import annotations
+
 import argparse
+import json
+import sys
+from pathlib import Path
 
-from core.historical_data import load_market_data
-from core.replay_backtest import ReplayBacktestEngine, BacktestConfig
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core.replay_contract import assert_deterministic_runtime_replay
 
 
-def simple_strategy(market):
-    price = market["close"]
-    return {
-        "entry": price,
-        "target": price * 1.01,
-        "stop": price * 0.99,
-        "qty": 1,
-        "side": "BUY",
-    }
+DEPRECATION_MESSAGE = (
+    "DEPRECATED: scripts/backtest_historical.py is no longer a truth engine. "
+    "Use scripts/validate_system.py or core.replay_engine.ReplayEngine."
+)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Deprecated compatibility wrapper for canonical replay validation")
+    parser.add_argument("--data", default="", help="Ignored legacy argument")
+    parser.add_argument("--symbol", default="NIFTY")
+    parser.add_argument("--start", default=None)
+    parser.add_argument("--end", default=None)
+    parser.add_argument("--runtime-root", default=None)
+    args = parser.parse_args()
+
+    result = assert_deterministic_runtime_replay(
+        runtime_root=args.runtime_root,
+        symbol=args.symbol,
+        start=args.start,
+        end=args.end,
+    )
+
+    print(DEPRECATION_MESSAGE)
+    print(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data", required=True, help="Path to historical data file")
-    args = parser.parse_args()
-
-    df = load_market_data(args.data)
-
-    engine = ReplayBacktestEngine(df, strategy_fn=simple_strategy, config=BacktestConfig())
-    results = engine.run()
-
-    print(results.tail())
+    main()
