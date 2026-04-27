@@ -7,7 +7,7 @@ from typing import Callable, Optional, Dict, Any
 import pandas as pd
 
 warnings.warn(
-    "core.replay_backtest_v2.ReplayBacktestEngineV2 is deprecated. "
+    "tools.legacy.replay_backtest_v2.ReplayBacktestEngineV2 is deprecated. "
     "Use core.replay_engine.ReplayEngine or scripts/validate_system.py as the canonical replay path.",
     DeprecationWarning,
     stacklevel=2,

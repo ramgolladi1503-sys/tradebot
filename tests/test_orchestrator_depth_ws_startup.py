@@ -43,6 +43,29 @@ def test_start_depth_ws_or_raise_fail_open(monkeypatch):
     )
 
 
+def test_start_depth_ws_or_raise_recoverable_network_error_degrades(monkeypatch):
+    import core.orchestrator as orchestrator_mod
+
+    class _Dummy:
+        def _start_depth_ws(self):
+            raise RuntimeError(
+                "kite_depth_ws_profile_failed:HTTPSConnectionPool(host='api.kite.trade', port=443): "
+                "Max retries exceeded with url: /user/profile (Caused by NameResolutionError("
+                "\"<urllib3.connection.HTTPSConnection object at 0x1>: Failed to resolve 'api.kite.trade' "
+                "([Errno 8] nodename nor servname provided, or not known)\"))"
+            )
+
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "DRY_RUN", False, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_FAIL_CLOSED", True, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_FAIL_OPEN_ON_RECOVERABLE_ERRORS", True, raising=False)
+
+    orchestrator_mod.Orchestrator._start_depth_ws_or_raise(
+        _Dummy(),
+        start_depth_ws_enabled=True,
+    )
+
+
 def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
     import core.auth_health as auth_health
     import core.feed.runtime_store as runtime_store
@@ -102,4 +125,3 @@ def test_start_depth_ws_ignores_stale_failed_runtime_snapshot(monkeypatch):
 
     orchestrator_mod.Orchestrator._start_depth_ws(object())
     assert start_mock.call_count == 1
-

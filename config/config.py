@@ -2375,6 +2375,10 @@ DEPTH_WS_LOCK_MAX_AGE_SEC = float(os.getenv("DEPTH_WS_LOCK_MAX_AGE_SEC", "3600")
 DEPTH_WS_SINGLETON = os.getenv("DEPTH_WS_SINGLETON", "true").lower() == "true"
 DEPTH_WS_USE_INTERNAL_RECONNECT = os.getenv("DEPTH_WS_USE_INTERNAL_RECONNECT", "true").lower() == "true"
 DEPTH_WS_STARTUP_FAIL_CLOSED = os.getenv("DEPTH_WS_STARTUP_FAIL_CLOSED", "true").lower() == "true"
+DEPTH_WS_STARTUP_FAIL_OPEN_ON_RECOVERABLE_ERRORS = os.getenv(
+    "DEPTH_WS_STARTUP_FAIL_OPEN_ON_RECOVERABLE_ERRORS",
+    "true",
+).lower() == "true"
 DEPTH_WS_STARTUP_SNAPSHOT_MAX_AGE_SEC = float(
     os.getenv("DEPTH_WS_STARTUP_SNAPSHOT_MAX_AGE_SEC", "30.0")
 )
@@ -3295,7 +3299,7 @@ def v2_flags_active() -> dict:
     return {name: value for name, value in flags.items() if value}
 
 # Entry trigger logic (buy above / sell below)
-ENTRY_TRIGGER_MODE = os.getenv("ENTRY_TRIGGER_MODE", "BREAKOUT").upper()
+ENTRY_TRIGGER_MODE = os.getenv("ENTRY_TRIGGER_MODE", "ASK").upper()
 ENTRY_PREMIUM_BUFFER = float(os.getenv("ENTRY_PREMIUM_BUFFER", "2.0"))
 ENTRY_PREMIUM_BUFFER_PCT = float(os.getenv("ENTRY_PREMIUM_BUFFER_PCT", "0.01"))
 ENTRY_TRIGGER_MAIN_ONLY = os.getenv("ENTRY_TRIGGER_MAIN_ONLY", "false").lower() == "true"

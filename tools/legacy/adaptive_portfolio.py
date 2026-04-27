@@ -5,7 +5,7 @@ from typing import Callable, Optional, Dict, Any
 
 import pandas as pd
 
-from core.multi_strategy_backtest import (
+from tools.legacy.multi_strategy_backtest import (
     MultiStrategyConfig,
     StrategyAdapter,
     MultiStrategyBacktestEngine,

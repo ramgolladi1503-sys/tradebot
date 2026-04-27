@@ -1,6 +1,6 @@
 import pandas as pd
 
-from core.replay_backtest import ReplayBacktestEngine
+from tools.legacy.replay_backtest import ReplayBacktestEngine
 
 
 def test_replay_backtest_basic():

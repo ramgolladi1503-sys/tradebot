@@ -1502,6 +1502,40 @@ def _build_min_breadth_backfill(
     return fallback_candidates, min_breadth
 
 
+def _is_recoverable_depth_ws_startup_error(exc: Exception) -> bool:
+    text = str(exc or "").strip().lower()
+    name = type(exc).__name__.strip().lower()
+    if not text and not name:
+        return False
+    network_markers = (
+        "connectionerror",
+        "maxretryerror",
+        "name resolution",
+        "failed to resolve",
+        "nodename nor servname provided",
+        "temporary failure",
+        "timeout",
+        "timed out",
+        "connection refused",
+        "connection reset",
+        "ssl",
+        "gaierror",
+    )
+    if any(marker in text for marker in network_markers) or any(marker in name for marker in network_markers):
+        return True
+    auth_markers = (
+        "tokenexception",
+        "permissionexception",
+        "authenticationerror",
+        "invalid api_key",
+        "invalid api key",
+        "invalid session",
+        "profile_failed",
+        "missing_user_id",
+    )
+    return any(marker in text for marker in auth_markers) or any(marker in name for marker in auth_markers)
+
+
 class Orchestrator:
     def __init__(self, total_capital=100000, poll_interval=30, start_depth_ws_enabled=True):
         """
@@ -1739,6 +1773,13 @@ class Orchestrator:
             self._start_depth_ws()
         except Exception as exc:
             logger.error("DEPTH_WS_FATAL: %s", exc, exc_info=True)
+            if bool(getattr(cfg, "DEPTH_WS_STARTUP_FAIL_OPEN_ON_RECOVERABLE_ERRORS", True)) and _is_recoverable_depth_ws_startup_error(exc):
+                logger.warning(
+                    "depth_ws_start_failed_recoverable err=%s fail_closed=%s",
+                    exc,
+                    bool(getattr(cfg, "DEPTH_WS_STARTUP_FAIL_CLOSED", True)),
+                )
+                return
             fail_closed = bool(getattr(cfg, "DEPTH_WS_STARTUP_FAIL_CLOSED", True))
             if fail_closed:
                 raise

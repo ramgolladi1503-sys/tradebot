@@ -194,6 +194,19 @@ def test_blocked_advisory_rows_backfill_hard_blockers_before_serialization():
     assert "missing_execution_entry" in list(serialized["hard_blockers"] or [])
 
 
+def test_current_issue_codes_preserves_stale_quote_provenance():
+    row = _candidate(
+        entry_clear_reason="stale_quote",
+        freshness_reason="quote_exceeds_threshold",
+        quote_validation_status="NO_LIVE_OPTION_FEED",
+        current_ltp=None,
+    )
+
+    issue_codes = review_queue._current_issue_codes(row)
+
+    assert "STALE_OPTION_LTP" in issue_codes
+
+
 def test_queue_only_backdoor_promotion_blocked_by_raw_rank_floor(monkeypatch):
     monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35, raising=False)
     out = review_queue._promote_queue_only_candidate(

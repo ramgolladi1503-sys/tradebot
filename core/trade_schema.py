@@ -82,6 +82,10 @@ class Trade:
     price_source: str | None = None
     price_age_sec: float | None = None
     quote_age_sec: float | None = None
+    quote_ts_epoch: float | None = None
+    quote_snapshot_id: str | None = None
+    quote_source: str | None = None
+    quote_validation_status: str | None = None
     entry_status: str | None = None
     status: str | None = None
     activated_ts: str | None = None

@@ -5,8 +5,8 @@ from typing import Callable, Optional, Dict, Any
 
 import pandas as pd
 
-from core.replay_backtest_v2 import ExecutionSimulatorV2
-from core.replay_backtest_v3 import BacktestConfigV3, PortfolioRiskManager
+from tools.legacy.replay_backtest_v2 import ExecutionSimulatorV2
+from tools.legacy.replay_backtest_v3 import BacktestConfigV3, PortfolioRiskManager
 
 
 @dataclass

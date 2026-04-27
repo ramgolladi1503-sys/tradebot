@@ -132,6 +132,29 @@ def test_trade_builder_uses_depth_proxy_and_sets_price_source(monkeypatch):
     assert trade.selection_reason is not None
 
 
+def test_trade_builder_stamps_quote_truth_snapshot(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder(monkeypatch, builder)
+
+    trade = builder.build(_market_data(), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    snapshot = trade.source_flags.get("quote_truth")
+    assert isinstance(snapshot, dict)
+    assert snapshot["quote_ts_epoch"] == 1771400000.0
+    assert snapshot["quote_source"] == "option_chain_live"
+    assert snapshot["option_ltp_source"] == "option_chain_live"
+    assert snapshot["current_ltp"] == 150.0
+    assert snapshot["best_bid"] == 100.0
+    assert snapshot["best_ask"] == 102.0
+    assert snapshot["quote_validation_status"] is not None
+    assert getattr(trade, "quote_snapshot_id", None)
+    assert getattr(trade, "quote_ts_epoch", None) == 1771400000.0
+
+
 def test_main_option_trade_applies_trigger_entry_when_enabled(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
     monkeypatch.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
@@ -352,6 +375,10 @@ def test_trade_builder_live_option_sets_canonical_executable_entry(monkeypatch):
         opt_ltp=100.5,
         quote_age_sec=1.0,
         option_ltp_source="live",
+        volume=5000,
+        current_volume=5000,
+        oi=20000,
+        oi_change=1000,
         entry_price_source="proxy",
         expected_entry=105.0,
         expected_entry_source="proxy",

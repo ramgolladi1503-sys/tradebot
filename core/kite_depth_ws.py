@@ -2251,11 +2251,24 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
         return False
 
     if _use_internal_reconnect() and _KITE_TICKER is not None:
-        _log_ws(
-            "FEED_RESTART_SOFT_PATH",
-            {"reason": reason, "detail": "internal_reconnect_enabled"},
-        )
-        return _soft_resubscribe_current(reason=reason)
+        ws_connected = _ws_connected_state()
+        if ws_connected is True:
+            _log_ws(
+                "FEED_RESTART_SOFT_PATH",
+                {"reason": reason, "detail": "internal_reconnect_enabled", "ws_connected": True},
+            )
+            soft_ok = _soft_resubscribe_current(reason=reason)
+            if soft_ok:
+                return True
+            _log_ws(
+                "FEED_RESTART_SOFT_PATH_FAILED",
+                {"reason": reason, "detail": "soft_resubscribe_failed", "ws_connected": True},
+            )
+        else:
+            _log_ws(
+                "FEED_RESTART_FALLBACK_FULL_PATH",
+                {"reason": reason, "detail": "ws_disconnected", "ws_connected": ws_connected},
+            )
 
     now = time.time()
     cooldown = float(getattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 120))
