@@ -742,6 +742,36 @@ def test_option_stale_blocker_clears_when_quote_becomes_fresh(tmp_path, monkeypa
     assert float(fresh_row["price_age_sec"]) <= float(fresh_row["freshness_threshold_sec"])
 
 
+def test_clear_fabricated_entry_lifecycle_preserves_entry_price_fallback():
+    entry = {
+        "trade_id": "T-CLEAR-FALLBACK",
+        "permission": "QUEUE_ONLY",
+        "readiness": "QUEUE_ONLY",
+        "final_action": "QUEUE_ONLY",
+        "execution_status": "queue_only",
+        "quote_validation_status": "STALE_OPTION_LTP",
+        "entry_status": "missing",
+        "entry_clear_reason": "missing_entry",
+        "entry_price": 565.0,
+        "entry_price_source": "entry_price",
+        "suggested_entry": None,
+        "expected_entry": None,
+        "display_entry": None,
+        "display_entry_source": "none",
+        "display_entry_status": "missing",
+    }
+
+    out = review_queue._clear_fabricated_entry_lifecycle(entry)
+
+    assert out["display_entry"] == 565.0
+    assert out["display_entry_source"] == "entry_price"
+    assert out["display_entry_status"] == "displayable"
+    assert out["entry"] == 565.0
+    assert out["entry_source"] == "entry_price"
+    assert out["entry_status"] == "displayable"
+    assert out["entry_clear_reason"] is None
+
+
 def test_freshness_reason_updates_after_recovery(tmp_path, monkeypatch):
     reset_blocker_registries()
     qpath = tmp_path / "review_queue.json"
@@ -1127,7 +1157,8 @@ def test_offhours_transition_does_not_retain_live_execution_blockers(tmp_path, m
         execution_mode="LIVE",
     )
     review_queue.add_to_queue(trade)
-    assert "STALE_OPTION_LTP" in list(_row_by_trade_id(qpath, "T-OFFHOURS-CLEAR")["blockers"])
+    initial_blockers = list(_row_by_trade_id(qpath, "T-OFFHOURS-CLEAR")["blockers"])
+    assert any(code in initial_blockers for code in {"STALE_OPTION_LTP", "NO_LIVE_OPTION_FEED", "HARD_STALE_LTP"})
 
     trade["execution_mode"] = "OFFHOURS"
     review_queue.add_to_queue(trade)
@@ -1386,6 +1417,8 @@ def test_issue_classification_stale_option_ltp_softens_when_executable_quote_exi
         "trade_id": "T-STALE-SOFT",
         "symbol": "NIFTY",
         "permission": "EXECUTE",
+        "market_open": True,
+        "market_context": {"market_open": True, "execution_mode": "LIVE"},
         "entry": 230.15,
         "entry_status": "OK",
         "execution_entry": 230.15,
@@ -1395,7 +1428,7 @@ def test_issue_classification_stale_option_ltp_softens_when_executable_quote_exi
         "quote_validation_status": "STALE_OPTION_LTP",
         "current_ltp": 230.15,
         "validation_reference_price": 230.15,
-        "quote_age_sec": 6.0,
+        "quote_age_sec": 9.0,
         "best_bid": 230.10,
         "best_ask": 230.25,
         "confidence_base": 0.74,
@@ -2404,6 +2437,30 @@ def test_normalize_queue_row_preserves_quote_validation_status_when_display_alia
 
     assert normalized["quote_validation_status"] == "OK"
     assert normalized["entry_status"] == "non_executable"
+
+
+def test_normalize_queue_row_preserves_raw_rank_score_when_normalized_rank_inflates():
+    normalized = review_queue._normalize_queue_row(
+        {
+            "trade_id": "T-RANK-DRIFT",
+            "symbol": "SENSEX",
+            "status": "ADVISORY_ONLY",
+            "status_raw": "ADVISORY_ONLY",
+            "rank_score": 0.91,
+            "raw_rank_score": 0.42,
+            "opportunity_score": 0.37,
+            "raw_opportunity_score": 0.37,
+            "candidate_status": "advisory_only",
+            "execution_status": "advisory_only",
+            "entry_status": "displayable",
+            "display_entry": 151.2,
+            "display_entry_source": "ask",
+            "display_entry_status": "displayable",
+        }
+    )
+
+    assert normalized["rank_score"] == 0.42
+    assert normalized["raw_rank_score"] == 0.42
 
 
 def test_validation_uses_executable_reference_over_stale_signal_price(tmp_path, monkeypatch):

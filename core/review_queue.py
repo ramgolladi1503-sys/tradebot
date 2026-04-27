@@ -54,6 +54,7 @@ from core.observability.pipeline import append_trade_lifecycle_event
 from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lifecycle
 from core.time_utils import format_ts_ist
 from core.log_writer import get_jsonl_writer
+from core.quote_truth import resolve_quote_validation_status
 
 try:
     from config import config as cfg
@@ -610,6 +611,21 @@ def _clear_fabricated_entry_lifecycle(entry: dict) -> dict:
     out = dict(entry)
     preserved_display_entry = _safe_float(out.get("display_entry"))
     preserved_display_source = str(out.get("display_entry_source") or "").strip().lower() or "none"
+    if preserved_display_entry is None:
+        for fallback_field in (
+            "pre_validation_entry",
+            "entry",
+            "suggested_entry",
+            "expected_entry",
+            "entry_price",
+        ):
+            fallback_entry = _safe_float(out.get(fallback_field))
+            if fallback_entry is not None:
+                preserved_display_entry = fallback_entry
+                fallback_source = str(out.get(f"{fallback_field}_source") or "").strip().lower()
+                if fallback_source and fallback_source not in {"", "none"}:
+                    preserved_display_source = fallback_source
+                break
     out["execution_entry"] = None
     out["execution_entry_source"] = "none"
     out["execution_entry_status"] = "non_executable"
@@ -1570,6 +1586,9 @@ def _ensure_blocked_advisory_hard_blockers(entry: dict) -> dict:
             out.get("entry_block_code"),
             out.get("entry_block_reason"),
             out.get("permission_reason"),
+            *list(out.get("blockers") or []),
+            *list(out.get("soft_penalties") or []),
+            *list(out.get("warnings") or []),
             _best_reject_reason(out, default="blocked"),
             _execution_ineligibility_reason(out, default="blocked"),
         ]
@@ -1594,7 +1613,7 @@ def _ensure_blocked_advisory_hard_blockers(entry: dict) -> dict:
         normalized = str(code).strip()
         if not normalized or normalized.upper() in benign_codes:
             continue
-        if normalized not in hard_blockers:
+        if normalized in TARGET_BLOCKER_CODES or normalized.startswith("HARD_") or normalized not in hard_blockers:
             hard_blockers.append(normalized)
     if not hard_blockers:
         hard_blockers = ["BLOCKED"]
@@ -1759,6 +1778,212 @@ def _canonical_quote_age_sec(entry: dict) -> float | None:
         if age is not None:
             return age
     return None
+
+
+def _quote_truth_snapshot_from_entry(
+    entry: dict,
+    *,
+    source: str | None = None,
+    now_epoch: float | None = None,
+) -> dict:
+    if not isinstance(entry, dict):
+        return {}
+
+    out: dict = {}
+    source_flags = entry.get("source_flags") or {}
+    if isinstance(source_flags, dict):
+        nested = source_flags.get("quote_truth") or source_flags.get("quote_truth_snapshot")
+        if isinstance(nested, dict):
+            out.update(dict(nested))
+
+    def _first_present(*values):
+        for value in values:
+            if value in (None, "", "None"):
+                continue
+            return value
+        return None
+
+    for field, aliases in (
+        ("quote_snapshot_id", ("quote_snapshot_id",)),
+        ("quote_ts_epoch", ("quote_ts_epoch", "option_ltp_timestamp", "ltp_ts_epoch", "quote_timestamp_epoch", "timestamp_epoch", "ts_epoch")),
+        ("quote_age_sec", ("quote_age_sec", "option_age_sec", "price_age_sec", "option_ltp_age_sec")),
+        ("best_bid", ("best_bid", "bid", "opt_bid")),
+        ("best_ask", ("best_ask", "ask", "opt_ask")),
+        ("current_ltp", ("current_ltp", "opt_ltp", "ltp", "last_price")),
+        ("option_ltp_source", ("option_ltp_source",)),
+        ("quote_source", ("quote_source",)),
+        ("quote_validation_status", ("quote_validation_status", "entry_status")),
+        ("execution_entry", ("execution_entry",)),
+        ("execution_entry_status", ("execution_entry_status",)),
+    ):
+        if out.get(field) in (None, "", "None"):
+            out[field] = _first_present(*(entry.get(alias) for alias in aliases))
+
+    quote_ts_epoch = _coerce_ts_epoch_seconds(out.get("quote_ts_epoch"))
+    if quote_ts_epoch is None:
+        quote_ts_epoch = _coerce_ts_epoch_seconds(
+            _first_present(
+                entry.get("option_ltp_timestamp"),
+                entry.get("ltp_ts_epoch"),
+                entry.get("quote_timestamp_epoch"),
+                entry.get("timestamp_epoch"),
+                entry.get("ts_epoch"),
+            )
+        )
+    quote_age_sec = _normalize_quote_age_value(out.get("quote_age_sec"))
+    if quote_age_sec is None:
+        quote_age_sec = _normalize_quote_age_value(
+            _first_present(
+                entry.get("quote_age_sec"),
+                entry.get("option_age_sec"),
+                entry.get("price_age_sec"),
+                entry.get("option_ltp_age_sec"),
+            )
+        )
+    if quote_ts_epoch is None and quote_age_sec is not None and now_epoch is not None:
+        quote_ts_epoch = max(0.0, float(now_epoch) - float(quote_age_sec))
+    if quote_age_sec is None and quote_ts_epoch is not None and now_epoch is not None:
+        quote_age_sec = max(0.0, float(now_epoch) - float(quote_ts_epoch))
+    if quote_ts_epoch is not None:
+        out["quote_ts_epoch"] = float(quote_ts_epoch)
+    if quote_age_sec is not None:
+        out["quote_age_sec"] = float(quote_age_sec)
+
+    max_quote_age_sec = _safe_float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0))
+    if max_quote_age_sec is None or max_quote_age_sec <= 0:
+        max_quote_age_sec = 8.0
+    current_ltp = _safe_float(out.get("current_ltp"))
+    best_bid = _safe_float(out.get("best_bid"))
+    best_ask = _safe_float(out.get("best_ask"))
+    quote_validation_status = resolve_quote_validation_status(
+        existing_status=out.get("quote_validation_status"),
+        current_ltp=current_ltp,
+        quote_age_sec=quote_age_sec,
+        best_bid=best_bid,
+        best_ask=best_ask,
+        max_quote_age_sec=max_quote_age_sec,
+    )
+    out["quote_validation_status"] = quote_validation_status
+
+    if out.get("quote_snapshot_id") in (None, "", "None"):
+        trade_id = str(_first_present(entry.get("trade_id"), out.get("trade_id")) or "")
+        symbol = str(_first_present(entry.get("symbol"), out.get("symbol")) or "")
+        out["quote_snapshot_id"] = (
+            f"{trade_id}|{symbol}|{out.get('quote_ts_epoch') if out.get('quote_ts_epoch') is not None else 'na'}|"
+            f"{out.get('quote_source') or 'unknown'}|{out.get('current_ltp') if out.get('current_ltp') is not None else 'na'}|"
+            f"{out.get('best_bid') if out.get('best_bid') is not None else 'na'}|{out.get('best_ask') if out.get('best_ask') is not None else 'na'}"
+        )
+
+    if source:
+        out["quote_truth_source"] = source
+    return {key: value for key, value in out.items() if value not in (None, "", "None")}
+
+
+def _quote_truth_is_stale(snapshot: dict, *, now_epoch: float | None = None) -> bool:
+    if not isinstance(snapshot, dict) or not snapshot:
+        return True
+    status = str(snapshot.get("quote_validation_status") or "").strip().upper()
+    if status in {"STALE_OPTION_LTP", "NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}:
+        return True
+    age = _normalize_quote_age_value(snapshot.get("quote_age_sec"))
+    if age is None:
+        return True
+    max_age = float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0) or 8.0)
+    if age > max_age:
+        return True
+    ts_epoch = _coerce_ts_epoch_seconds(snapshot.get("quote_ts_epoch"))
+    if ts_epoch is None and now_epoch is not None:
+        ts_epoch = max(0.0, float(now_epoch) - float(age))
+    if ts_epoch is None:
+        return True
+    return False
+
+
+def _merge_quote_truth(
+    entry: dict,
+    *,
+    builder_truth: dict | None,
+    queue_truth: dict | None,
+    now_epoch: float | None = None,
+) -> tuple[dict, str, dict]:
+    if not isinstance(entry, dict):
+        return entry, "preserved_builder", {}
+    out = dict(entry)
+    builder = _quote_truth_snapshot_from_entry(builder_truth or {}, source="builder", now_epoch=now_epoch)
+    queue = _quote_truth_snapshot_from_entry(queue_truth or {}, source="queue", now_epoch=now_epoch)
+    builder_ts = _coerce_ts_epoch_seconds(builder.get("quote_ts_epoch"))
+    queue_ts = _coerce_ts_epoch_seconds(queue.get("quote_ts_epoch"))
+    builder_stale = _quote_truth_is_stale(builder, now_epoch=now_epoch)
+    queue_stale = _quote_truth_is_stale(queue, now_epoch=now_epoch)
+    builder_has_quote_truth = any(
+        builder.get(field) not in (None, "", "None")
+        for field in ("current_ltp", "best_bid", "best_ask", "quote_ts_epoch", "quote_validation_status")
+    )
+    should_update_from_queue = bool(
+        queue
+        and (
+            not builder
+            or not builder_has_quote_truth
+            or (
+                not queue_stale
+                and (
+                    builder_stale
+                    or builder_ts is None
+                    or queue_ts is None
+                    or queue_ts > builder_ts
+                )
+            )
+        )
+    )
+    action = "updated_from_queue" if should_update_from_queue else "preserved_builder"
+    chosen = queue if should_update_from_queue else builder
+    if not chosen:
+        chosen = {}
+    canonical_fields = (
+        "quote_snapshot_id",
+        "quote_ts_epoch",
+        "quote_age_sec",
+        "best_bid",
+        "best_ask",
+        "current_ltp",
+        "option_ltp_source",
+        "quote_source",
+        "quote_validation_status",
+        "execution_entry",
+        "execution_entry_status",
+    )
+    for field in canonical_fields:
+        chosen_value = chosen.get(field)
+        if chosen_value not in (None, "", "None"):
+            out[field] = chosen_value
+        elif field in builder and field not in out:
+            out[field] = builder.get(field)
+    source_flags = dict(out.get("source_flags") or {})
+    source_flags["quote_truth"] = {field: out.get(field) for field in canonical_fields if out.get(field) not in (None, "", "None")}
+    source_flags["quote_truth_snapshot"] = dict(source_flags["quote_truth"])
+    out["source_flags"] = source_flags
+    drift_payload = {
+        "trade_id": out.get("trade_id"),
+        "symbol": out.get("symbol"),
+        "builder_quote_ts": builder.get("quote_ts_epoch"),
+        "queue_quote_ts": queue.get("quote_ts_epoch"),
+        "builder_quote_age_sec": builder.get("quote_age_sec"),
+        "queue_quote_age_sec": queue.get("quote_age_sec"),
+        "builder_bid": builder.get("best_bid"),
+        "queue_bid": queue.get("best_bid"),
+        "builder_ask": builder.get("best_ask"),
+        "queue_ask": queue.get("best_ask"),
+        "action": action,
+    }
+    if builder and queue and (
+        builder.get("quote_ts_epoch") != queue.get("quote_ts_epoch")
+        or builder.get("current_ltp") != queue.get("current_ltp")
+        or builder.get("best_bid") != queue.get("best_bid")
+        or builder.get("best_ask") != queue.get("best_ask")
+        or builder.get("quote_validation_status") != queue.get("quote_validation_status")
+    ):
+        logger.info("QUOTE_TRUTH_DRIFT %s", json.dumps(drift_payload, sort_keys=True))
+    return out, action, drift_payload
 
 
 def _apply_canonical_quote_age(entry: dict) -> dict:
@@ -2250,6 +2475,7 @@ def _canonicalize_entry_lifecycle(
 
     lifecycle = _entry_lifecycle_from_entry(out)
     has_valid_canonical_lifecycle = _entry_lifecycle_is_valid(lifecycle)
+    preserve_legacy_display = False
 
     if not has_valid_canonical_lifecycle:
         if mode_for_entry is None:
@@ -2333,13 +2559,23 @@ def _canonicalize_entry_lifecycle(
             entry_reason=built_state.get("entry_reason"),
         )
         display_entry_after_build = _safe_float(lifecycle.get("display_entry"))
+        preserve_legacy_display = bool(
+            legacy_entry is not None
+            and display_entry_after_build is None
+            and (
+                token_missing_identified
+                or synthetic_offhours
+                or str(out.get("quote_validation_status") or "").strip().upper() in {"NON_EXECUTABLE", "REST_FALLBACK", "OFFHOURS_SYNTHETIC", "STALE_OPTION_LTP"}
+                or legacy_entry_status.upper() in {"NON_EXECUTABLE", "REST_FALLBACK", "OFFHOURS_SYNTHETIC", "PRICE_MISMATCH", "STALE_OPTION_LTP"}
+            )
+        )
         can_retain_legacy_display = bool(
             legacy_entry is not None
             and (
                 token_missing_identified
                 or synthetic_offhours
                 or str(out.get("quote_validation_status") or "").strip().upper() in {"NON_EXECUTABLE", "REST_FALLBACK", "OFFHOURS_SYNTHETIC"}
-                or legacy_entry_status.upper() in {"NON_EXECUTABLE", "REST_FALLBACK", "OFFHOURS_SYNTHETIC", "PRICE_MISMATCH"}
+                or legacy_entry_status.upper() in {"DISPLAYABLE", "NON_EXECUTABLE", "REST_FALLBACK", "OFFHOURS_SYNTHETIC", "PRICE_MISMATCH", "STALE_OPTION_LTP"}
             )
         )
         if display_entry_after_build is None and can_retain_legacy_display:
@@ -2404,7 +2640,11 @@ def _canonicalize_entry_lifecycle(
             if bool(out.get("entry_recovered"))
             else (legacy_entry_status if not align_for_schema and legacy_entry_status else None)
         ),
-        entry_value_override=(legacy_entry if not align_for_schema and lifecycle.get("display_entry") is None else None),
+        entry_value_override=(
+            legacy_entry
+            if not align_for_schema and (lifecycle.get("display_entry") is None or preserve_legacy_display)
+            else None
+        ),
         entry_source_override=(legacy_entry_source if not align_for_schema and legacy_entry_source not in (None, "", "None") else None),
     )
 
@@ -3851,6 +4091,17 @@ def _resolve_final_entry(entry: dict) -> tuple[float | None, str]:
         final_entry = _safe_float(entry.get("display_entry"))
         final_source = str(entry.get("display_entry_source") or "").strip().lower()
     if final_entry is None:
+        for fallback_field in ("pre_validation_entry", "suggested_entry", "expected_entry", "entry_price"):
+            fallback_entry = _safe_float(entry.get(fallback_field))
+            if fallback_entry is not None:
+                final_entry = fallback_entry
+                fallback_source = str(entry.get(f"{fallback_field}_source") or "").strip().lower()
+                if fallback_source and fallback_source not in {"", "none"}:
+                    final_source = fallback_source
+                else:
+                    final_source = fallback_field
+                break
+    if final_entry is None:
         execution_entry = _safe_float(entry.get("execution_entry"))
         execution_status = str(entry.get("execution_entry_status") or "").strip().lower()
         if execution_entry is not None and execution_status == "executable":
@@ -4225,6 +4476,28 @@ def _resolve_quote_validation_status(entry: dict, proposed_status=None) -> str |
         return "OFFHOURS_SYNTHETIC"
     proposed = str(proposed_status or "").strip()
     if proposed:
+        proposed_upper = proposed.upper()
+        if proposed_upper in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}:
+            freshness_reason = str(entry.get("freshness_reason") or "").strip().lower()
+            clear_reason = str(entry.get("entry_clear_reason") or "").strip().lower()
+            price_age_sec = _safe_float(entry.get("price_age_sec"))
+            quote_age_sec = _safe_float(entry.get("quote_age_sec"))
+            stale_threshold_sec = _safe_float(entry.get("freshness_threshold_sec"))
+            age_exceeds_threshold = (
+                price_age_sec is not None
+                and stale_threshold_sec is not None
+                and float(price_age_sec) > float(stale_threshold_sec)
+            ) or (
+                quote_age_sec is not None
+                and stale_threshold_sec is not None
+                and float(quote_age_sec) > float(stale_threshold_sec)
+            )
+            if (
+                freshness_reason == "quote_exceeds_threshold"
+                or clear_reason == "stale_quote"
+                or age_exceeds_threshold
+            ):
+                return "STALE_OPTION_LTP"
         return proposed
     current = str(entry.get("quote_validation_status") or "").strip()
     return current or None
@@ -4704,6 +4977,13 @@ def _current_issue_codes(entry: dict) -> list[str]:
             continue
         if text not in issue_codes:
             issue_codes.append(text)
+    if (
+        str(entry.get("entry_clear_reason") or "").strip().lower() == "stale_quote"
+        and str(entry.get("freshness_reason") or "").strip().lower() == "quote_exceeds_threshold"
+        and not _is_synthetic_offhours_row(entry)
+        and "STALE_OPTION_LTP" not in issue_codes
+    ):
+        issue_codes.append("STALE_OPTION_LTP")
     return _dedupe_issue_codes(issue_codes)
 
 
@@ -5735,14 +6015,57 @@ def _normalize_queue_row(row: dict) -> dict:
     if quote_validation_status:
         if str(out.get("quote_validation_status") or "").strip().upper() != "OFFHOURS_SYNTHETIC":
             out["quote_validation_status"] = quote_validation_status
+    raw_rank_score = _safe_float(out.get("raw_rank_score"))
+    current_rank_score = _safe_float(out.get("rank_score"))
+    if raw_rank_score is not None:
+        if current_rank_score is None:
+            out["rank_score"] = raw_rank_score
+        elif current_rank_score > raw_rank_score:
+            logger.warning(
+                "rank_truth_drift trade_id=%s symbol=%s raw_rank_score=%s normalized_rank_score=%s action=preserved_raw",
+                out.get("trade_id"),
+                out.get("symbol"),
+                raw_rank_score,
+                current_rank_score,
+            )
+            out["rank_score"] = raw_rank_score
     if out.get("entry_recovered") and (
         str(out.get("quote_validation_status") or "").strip().upper() == "STALE_OPTION_LTP"
         or str(out.get("entry_status") or "").strip().lower() != "displayable"
     ):
-        out["entry"] = None
-        out["entry_status"] = "missing"
-        if str(out.get("entry_source") or "").strip().lower() == "recovered_fallback":
-            out["entry_source"] = "none"
+        preserved_display_entry = _safe_float(out.get("display_entry"))
+        if preserved_display_entry is None:
+            preserved_display_entry = _safe_float(out.get("pre_validation_entry"))
+        if preserved_display_entry is None:
+            preserved_display_entry = _safe_float(out.get("entry"))
+        if preserved_display_entry is None:
+            preserved_display_entry = _safe_float(out.get("suggested_entry"))
+        if preserved_display_entry is None:
+            preserved_display_entry = _safe_float(out.get("expected_entry"))
+        if preserved_display_entry is None:
+            preserved_display_entry = _safe_float(out.get("entry_price"))
+        if preserved_display_entry is not None:
+            out["entry"] = preserved_display_entry
+            out["entry_status"] = "displayable"
+            if _safe_float(out.get("display_entry")) is None:
+                out["display_entry"] = preserved_display_entry
+                if str(out.get("display_entry_source") or "").strip().lower() in {"", "none"}:
+                    out["display_entry_source"] = (
+                        out.get("pre_validation_entry_source")
+                        or out.get("suggested_entry_source")
+                        or out.get("expected_entry_source")
+                        or out.get("entry_price_source")
+                        or out.get("entry_source")
+                        or "none"
+                    )
+                out["display_entry_status"] = "displayable"
+            if str(out.get("entry_source") or "").strip().lower() in {"", "none"}:
+                out["entry_source"] = out.get("display_entry_source") or "none"
+        else:
+            out["entry"] = None
+            out["entry_status"] = "missing"
+            if str(out.get("entry_source") or "").strip().lower() == "recovered_fallback":
+                out["entry_source"] = "none"
     if _should_block_entry_recovery_for_queue_only(out):
         out = _clear_fabricated_entry_lifecycle(out)
     if (
@@ -6639,6 +6962,31 @@ def _apply_quote_and_entry_logic(
                 if live_quote_source == "tick_store":
                     entry.pop("_origin_synthetic_offhours", None)
                 synthetic_offhours = False
+            if not synthetic_offhours:
+                builder_quote_truth = _quote_truth_snapshot_from_entry(entry, source="builder", now_epoch=time.time())
+                queue_quote_truth = _quote_truth_snapshot_from_entry(
+                    {
+                        **entry,
+                        "current_ltp": current_ltp,
+                        "option_ltp_timestamp": ltp_ts_epoch,
+                        "quote_ts_epoch": ltp_ts_epoch,
+                        "quote_source": live_quote_source,
+                        "option_ltp_source": live_quote_source,
+                    },
+                    source="queue",
+                    now_epoch=time.time(),
+                )
+                entry, quote_truth_action, quote_truth_drift = _merge_quote_truth(
+                    entry,
+                    builder_truth=builder_quote_truth,
+                    queue_truth=queue_quote_truth,
+                    now_epoch=time.time(),
+                )
+                entry["source_flags"] = dict(entry.get("source_flags") or {})
+                entry["source_flags"]["quote_truth_action"] = quote_truth_action
+                entry["source_flags"]["quote_truth_drift"] = quote_truth_drift
+                current_ltp = _safe_float(entry.get("current_ltp"))
+                ltp_ts_epoch = _safe_float(entry.get("option_ltp_timestamp") or entry.get("quote_ts_epoch") or ltp_ts_epoch)
             validation_signal_price = _safe_float(entry.get("signal_price"))
             pre_validation_entry = None if live_took_over_synthetic else _safe_float(entry.get("entry"))
             if live_took_over_synthetic:
@@ -7351,6 +7699,7 @@ def _build_canonical_advisory_entry(
         market_open_for_entry=market_open_for_entry,
     )
     advisory_payload = _reconcile_locked_final_entry(advisory_payload)
+    advisory_payload = _ensure_blocked_advisory_hard_blockers(advisory_payload)
     if str(advisory_payload.get("final_action") or "").strip().upper() == "BLOCK":
         advisory_payload = _preserve_blocked_candidate_metadata(advisory_payload, terminal=False)
     advisory_payload = _classify_candidate_status(advisory_payload)
@@ -7397,6 +7746,7 @@ def _record_advisory_validation_failure(
         market_open_for_entry=market_open_for_entry,
     )
     advisory_payload = _reconcile_locked_final_entry(advisory_payload)
+    advisory_payload = _ensure_blocked_advisory_hard_blockers(advisory_payload)
     print(
         "REVIEW_QUEUE_SCORING",
         {

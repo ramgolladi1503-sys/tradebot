@@ -49,6 +49,7 @@ from core.incidents import SEV2, create_incident
 from core.reject_logger import append_reject_reasons
 from core.reject_telemetry import append_reject_telemetry
 from core.entry_semantics import EntryContractViolation, build_entry_state, should_allow_last_execution_fallback
+from core.quote_truth import resolve_quote_validation_status
 from core.execution_entry_trace import append_execution_entry_trace
 from core.issue_policy import ISSUE_CATEGORY_HARD, ISSUE_CATEGORY_SOFT, ISSUE_CATEGORY_WARNING
 from core.opportunity_engine import annotate_ranked_opportunities, select_best_opportunity
@@ -1032,7 +1033,58 @@ class TradeBuilder:
     def _set_last_ranked_candidates(self, candidates) -> None:
         ranked_candidates = []
         for candidate in list(candidates or []):
-            stamped = stamp_lifecycle_stage(candidate, "ranked_snapshot")
+            stamped = candidate
+            candidate_status = str(getattr(stamped, "candidate_status", None) or "").strip().lower()
+            if not candidate_status:
+                decision_trace = getattr(stamped, "decision_trace", {}) or {}
+                if isinstance(decision_trace, dict):
+                    candidate_status = str(decision_trace.get("candidate_status") or "").strip().lower()
+                if not candidate_status:
+                    candidate_class = str(getattr(stamped, "candidate_class", None) or "").strip().upper()
+                    candidate_status = {
+                        "EXECUTABLE": "executable",
+                        "NEAR_EXECUTABLE": "near_executable",
+                        "ADVISORY_ONLY": "advisory_only",
+                        "BLOCKED": "blocked",
+                        "BLOCKED_CONTRACT": "blocked_contract",
+                    }.get(candidate_class, "")
+                if not candidate_status:
+                    permission = str(getattr(stamped, "permission", None) or "").strip().upper()
+                    final_action = str(getattr(stamped, "final_action", None) or "").strip().upper()
+                    execution_status = str(getattr(stamped, "execution_status", None) or "").strip().lower()
+                    if permission == "BLOCK" or final_action == "BLOCK" or execution_status == "blocked":
+                        candidate_status = "blocked"
+                    elif permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY" or execution_status == "queue_only":
+                        candidate_status = "advisory_only"
+                    elif permission == "EXECUTE" or final_action == "EXECUTE" or execution_status == "executable":
+                        candidate_status = "executable"
+                    else:
+                        candidate_status = "advisory_only"
+                source_flags = dict(getattr(stamped, "source_flags", {}) or {})
+                candidate_strategy_family = str(
+                    getattr(stamped, "strategy_family", None)
+                    or source_flags.get("strategy_family")
+                    or getattr(stamped, "strategy", None)
+                    or source_flags.get("strategy")
+                    or getattr(stamped, "setup_variant", None)
+                    or source_flags.get("setup_variant")
+                    or ""
+                ).strip()
+                if candidate_strategy_family and not str(getattr(stamped, "strategy_family", None) or "").strip():
+                    if isinstance(stamped, dict):
+                        stamped = dict(stamped)
+                        stamped["strategy_family"] = candidate_strategy_family
+                    else:
+                        stamped = replace(stamped, strategy_family=candidate_strategy_family)
+                    source_flags["strategy_family"] = candidate_strategy_family
+                source_flags["candidate_status"] = candidate_status
+                if isinstance(stamped, dict):
+                    stamped = dict(stamped)
+                    stamped["candidate_status"] = candidate_status
+                    stamped["source_flags"] = source_flags
+                else:
+                    stamped = replace(stamped, candidate_status=candidate_status, source_flags=source_flags)
+            stamped = stamp_lifecycle_stage(stamped, "ranked_snapshot")
             assert_ranked_candidate_ready(stamped)
             ranked_candidates.append(stamped)
         self._last_ranked_candidates = ranked_candidates
@@ -1555,6 +1607,50 @@ class TradeBuilder:
                 "raw_signal_confidence": conf,
             }
             trade_source_flags = dict(getattr(trade, "source_flags", {}) or {})
+            try:
+                quote_truth_snapshot = self._stamp_quote_truth_snapshot(
+                    trade,
+                    market_data=data,
+                    source_flags=trade_source_flags,
+                    lifecycle=None,
+                )
+                trade_source_flags = dict(getattr(trade, "source_flags", {}) or {})
+                trade_source_flags["quote_truth"] = dict(quote_truth_snapshot)
+                trade_source_flags["quote_truth_snapshot"] = dict(quote_truth_snapshot)
+                object.__setattr__(trade, "source_flags", trade_source_flags)
+            except Exception:
+                pass
+            candidate_status = str(getattr(trade, "candidate_status", None) or "").strip().lower()
+            if not candidate_status:
+                decision_trace = dict(trade_source_flags.get("decision_trace", {}) or {})
+                candidate_status = str(decision_trace.get("candidate_status") or "").strip().lower()
+            if not candidate_status:
+                candidate_class = str(getattr(trade, "candidate_class", None) or trade_source_flags.get("candidate_class") or "").strip().upper()
+                candidate_status = {
+                    "EXECUTABLE": "executable",
+                    "NEAR_EXECUTABLE": "near_executable",
+                    "ADVISORY_ONLY": "advisory_only",
+                    "BLOCKED": "blocked",
+                    "BLOCKED_CONTRACT": "blocked_contract",
+                }.get(candidate_class, "")
+            if not candidate_status:
+                execution_status = str(getattr(trade, "execution_status", None) or trade_source_flags.get("execution_status") or "").strip().lower()
+                permission = str(getattr(trade, "permission", None) or trade_source_flags.get("permission") or "").strip().upper()
+                final_action = str(getattr(trade, "final_action", None) or trade_source_flags.get("final_action") or "").strip().upper()
+                if permission == "BLOCK" or final_action == "BLOCK" or execution_status == "blocked":
+                    candidate_status = "blocked"
+                elif permission == "QUEUE_ONLY" or final_action == "QUEUE_ONLY" or execution_status == "queue_only":
+                    candidate_status = "advisory_only"
+                elif permission == "EXECUTE" or final_action == "EXECUTE" or execution_status == "executable":
+                    candidate_status = "executable"
+                else:
+                    candidate_status = "advisory_only"
+            trade_source_flags["candidate_status"] = candidate_status
+            try:
+                object.__setattr__(trade, "candidate_status", candidate_status)
+                object.__setattr__(trade, "source_flags", trade_source_flags)
+            except Exception:
+                pass
             if str(getattr(trade, "instrument", None) or getattr(trade, "instrument_type", None) or "").upper() == "OPT":
                 lifecycle = self._build_trade_entry_lifecycle(
                     trade,
@@ -1622,6 +1718,7 @@ class TradeBuilder:
                     applied_entry_price = trigger_entry_price if use_trigger_entry else executable_entry
                     updates["entry_price"] = round(float(applied_entry_price), 2)
                     updates["entry_price_source"] = execution_source
+                    updates["execution_allowed"] = True
                     if display_entry is not None:
                         expected_entry_value = trigger_entry_price if use_trigger_entry else display_entry
                         updates["expected_entry"] = round(float(expected_entry_value), 2)
@@ -1668,6 +1765,19 @@ class TradeBuilder:
                 **updates,
             )
             updated_trade = self._apply_candidate_contract(updated_trade, market_data=data)
+            try:
+                early_quote_truth_snapshot = self._stamp_quote_truth_snapshot(
+                    updated_trade,
+                    market_data=data,
+                    source_flags=trade_source_flags,
+                    lifecycle=lifecycle,
+                )
+                trade_source_flags = dict(getattr(updated_trade, "source_flags", {}) or {})
+                trade_source_flags["quote_truth"] = dict(early_quote_truth_snapshot)
+                trade_source_flags["quote_truth_snapshot"] = dict(early_quote_truth_snapshot)
+                updated_trade = replace(updated_trade, source_flags=trade_source_flags)
+            except Exception:
+                pass
             requested_strike = getattr(trade, "strike", None)
             resolved_strike = getattr(updated_trade, "strike", None)
             requested_expiry = getattr(trade, "expiry", None)
@@ -1750,8 +1860,199 @@ class TradeBuilder:
                 )
             except Exception:
                 pass
+            try:
+                final_flags = dict(getattr(updated_trade, "source_flags", {}) or {})
+                final_quote_row = None
+                option_chain = data.get("option_chain")
+                if isinstance(option_chain, (list, tuple)):
+                    final_trade_token = self._coerce_nonnegative_float(getattr(updated_trade, "instrument_token", None))
+                    final_trade_symbol = str(getattr(updated_trade, "tradingsymbol", None) or "").strip()
+                    final_trade_strike = self._coerce_nonnegative_float(getattr(updated_trade, "strike", None))
+                    final_trade_right = str(
+                        getattr(updated_trade, "right", None)
+                        or getattr(updated_trade, "option_type", None)
+                        or ""
+                    ).strip().upper()
+                    final_trade_expiry = str(
+                        getattr(updated_trade, "expiry", None)
+                        or getattr(updated_trade, "expiry_date", None)
+                        or ""
+                    ).strip()
+                    for row in option_chain:
+                        if not isinstance(row, dict):
+                            continue
+                        row_token = self._coerce_nonnegative_float(row.get("instrument_token"))
+                        row_symbol = str(row.get("tradingsymbol") or "").strip()
+                        row_strike = self._coerce_nonnegative_float(row.get("strike"))
+                        row_right = str(
+                            row.get("right")
+                            or row.get("type")
+                            or row.get("option_type")
+                            or ""
+                        ).strip().upper()
+                        row_expiry = str(row.get("expiry") or row.get("expiry_date") or "").strip()
+                        if final_trade_token is not None and row_token is not None and int(final_trade_token) == int(row_token):
+                            final_quote_row = row
+                            break
+                        if final_trade_symbol and row_symbol and final_trade_symbol == row_symbol:
+                            final_quote_row = row
+                            break
+                        if (
+                            final_trade_strike is not None
+                            and row_strike is not None
+                            and final_trade_right
+                            and row_right
+                            and final_trade_expiry
+                            and row_expiry
+                            and float(final_trade_strike) == float(row_strike)
+                            and final_trade_right == row_right
+                            and final_trade_expiry == row_expiry
+                        ):
+                            final_quote_row = row
+                            break
+                final_quote_ts_epoch = self._coerce_nonnegative_float(
+                    final_quote_row.get("quote_ts_epoch") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("quote_timestamp_epoch") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("timestamp_epoch") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("ts_epoch") if isinstance(final_quote_row, dict) else None
+                )
+                final_quote_age_sec = self._coerce_nonnegative_float(
+                    final_quote_row.get("quote_age_sec") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("option_age_sec") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("price_age_sec") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("option_ltp_age_sec") if isinstance(final_quote_row, dict) else None
+                )
+                if final_quote_ts_epoch is None and final_quote_age_sec is not None:
+                    final_quote_ts_epoch = max(0.0, float(now_utc_epoch()) - float(final_quote_age_sec))
+                if final_quote_age_sec is None and final_quote_ts_epoch is not None:
+                    final_quote_age_sec = max(0.0, float(now_utc_epoch()) - float(final_quote_ts_epoch))
+                final_quote_source = "option_chain_live" if final_quote_row else "unknown"
+                if isinstance(final_quote_row, dict):
+                    if final_quote_row.get("quote_source") not in (None, "", "None"):
+                        final_quote_source = str(final_quote_row.get("quote_source")).strip() or final_quote_source
+                    elif bool(final_quote_row.get("quote_live", True)) or bool(final_quote_row.get("quote_ok", True)):
+                        final_quote_source = "option_chain_live"
+                final_option_ltp_source = ""
+                if isinstance(final_quote_row, dict):
+                    final_option_ltp_source = str(
+                        final_quote_row.get("option_ltp_source")
+                        or final_quote_row.get("quote_source")
+                        or ""
+                    ).strip()
+                if not final_option_ltp_source or final_option_ltp_source.lower() == "none":
+                    final_option_ltp_source = final_quote_source
+                final_quote_truth_snapshot = {
+                    "quote_snapshot_id": str(
+                        f"{getattr(updated_trade, 'trade_id', None)}|{getattr(updated_trade, 'symbol', None)}|"
+                        f"{final_quote_ts_epoch if final_quote_ts_epoch is not None else 'na'}|"
+                        f"{final_quote_source}|"
+                        f"{final_quote_row.get('ltp') if isinstance(final_quote_row, dict) and final_quote_row.get('ltp') is not None else getattr(updated_trade, 'current_ltp', None) if getattr(updated_trade, 'current_ltp', None) is not None else 'na'}|"
+                        f"{final_quote_row.get('best_bid') if isinstance(final_quote_row, dict) and final_quote_row.get('best_bid') is not None else final_quote_row.get('bid') if isinstance(final_quote_row, dict) and final_quote_row.get('bid') is not None else getattr(updated_trade, 'best_bid', None) if getattr(updated_trade, 'best_bid', None) is not None else 'na'}|"
+                        f"{final_quote_row.get('best_ask') if isinstance(final_quote_row, dict) and final_quote_row.get('best_ask') is not None else final_quote_row.get('ask') if isinstance(final_quote_row, dict) and final_quote_row.get('ask') is not None else getattr(updated_trade, 'best_ask', None) if getattr(updated_trade, 'best_ask', None) is not None else 'na'}"
+                    ),
+                    "quote_ts_epoch": final_quote_ts_epoch,
+                    "quote_age_sec": final_quote_age_sec,
+                    "best_bid": self._coerce_nonnegative_float(
+                        final_quote_row.get("best_bid") if isinstance(final_quote_row, dict) else None
+                        or final_quote_row.get("bid") if isinstance(final_quote_row, dict) else None
+                    ),
+                    "best_ask": self._coerce_nonnegative_float(
+                        final_quote_row.get("best_ask") if isinstance(final_quote_row, dict) else None
+                        or final_quote_row.get("ask") if isinstance(final_quote_row, dict) else None
+                    ),
+                    "current_ltp": self._coerce_nonnegative_float(
+                        final_quote_row.get("ltp") if isinstance(final_quote_row, dict) else None
+                        or final_quote_row.get("last_price") if isinstance(final_quote_row, dict) else None
+                    ),
+                    "option_ltp_source": final_option_ltp_source or None,
+                    "quote_source": final_quote_source or None,
+                    "quote_validation_status": resolve_quote_validation_status(
+                        existing_status=(
+                            final_quote_row.get("quote_validation_status")
+                            if isinstance(final_quote_row, dict)
+                            else getattr(updated_trade, "quote_validation_status", None)
+                        ),
+                        current_ltp=self._coerce_nonnegative_float(
+                            final_quote_row.get("ltp") if isinstance(final_quote_row, dict) else None
+                            or final_quote_row.get("last_price") if isinstance(final_quote_row, dict) else None
+                            or getattr(updated_trade, "current_ltp", None)
+                        ),
+                        quote_age_sec=final_quote_age_sec,
+                        best_bid=self._coerce_nonnegative_float(
+                            final_quote_row.get("best_bid") if isinstance(final_quote_row, dict) else None
+                            or final_quote_row.get("bid") if isinstance(final_quote_row, dict) else None
+                        ),
+                        best_ask=self._coerce_nonnegative_float(
+                            final_quote_row.get("best_ask") if isinstance(final_quote_row, dict) else None
+                            or final_quote_row.get("ask") if isinstance(final_quote_row, dict) else None
+                        ),
+                        max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0),
+                    ),
+                    "execution_entry": self._coerce_nonnegative_float(
+                        final_quote_row.get("quote_execution_entry") if isinstance(final_quote_row, dict) else None
+                        or final_quote_row.get("execution_entry") if isinstance(final_quote_row, dict) else None
+                    ),
+                    "execution_entry_status": str(
+                        final_quote_row.get("execution_entry_status") if isinstance(final_quote_row, dict) else None
+                        or ""
+                    ).strip().lower()
+                    or None,
+                }
+                final_flags["quote_truth"] = dict(final_quote_truth_snapshot)
+                final_flags["quote_truth_snapshot"] = dict(final_quote_truth_snapshot)
+                updated_trade = replace(updated_trade, source_flags=final_flags)
+                for attr, value in (
+                    ("quote_snapshot_id", final_quote_truth_snapshot.get("quote_snapshot_id")),
+                    ("quote_ts_epoch", final_quote_truth_snapshot.get("quote_ts_epoch")),
+                    ("quote_age_sec", final_quote_truth_snapshot.get("quote_age_sec")),
+                    ("best_bid", final_quote_truth_snapshot.get("best_bid")),
+                    ("best_ask", final_quote_truth_snapshot.get("best_ask")),
+                    ("current_ltp", final_quote_truth_snapshot.get("current_ltp")),
+                    ("option_ltp_source", final_quote_truth_snapshot.get("option_ltp_source")),
+                    ("quote_source", final_quote_truth_snapshot.get("quote_source")),
+                    ("quote_validation_status", final_quote_truth_snapshot.get("quote_validation_status")),
+                    ("option_ltp_timestamp", final_quote_truth_snapshot.get("quote_ts_epoch")),
+                    ("price_age_sec", final_quote_truth_snapshot.get("quote_age_sec")),
+                ):
+                    try:
+                        object.__setattr__(updated_trade, attr, value)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
             return updated_trade
         except Exception:
+            try:
+                fallback_flags = dict(getattr(trade, "source_flags", {}) or {})
+                quote_truth_snapshot = self._stamp_quote_truth_snapshot(
+                    trade,
+                    market_data=data,
+                    source_flags=fallback_flags,
+                    lifecycle=None,
+                )
+                fallback_flags = dict(getattr(trade, "source_flags", {}) or {})
+                fallback_flags["quote_truth"] = dict(quote_truth_snapshot)
+                fallback_flags["quote_truth_snapshot"] = dict(quote_truth_snapshot)
+                candidate_status = str(getattr(trade, "candidate_status", None) or "").strip().lower()
+                if not candidate_status:
+                    decision_trace = dict(fallback_flags.get("decision_trace", {}) or {})
+                    candidate_status = str(decision_trace.get("candidate_status") or "").strip().lower()
+                if not candidate_status:
+                    candidate_class = str(getattr(trade, "candidate_class", None) or fallback_flags.get("candidate_class") or "").strip().upper()
+                    candidate_status = {
+                        "EXECUTABLE": "executable",
+                        "NEAR_EXECUTABLE": "near_executable",
+                        "ADVISORY_ONLY": "advisory_only",
+                        "BLOCKED": "blocked",
+                        "BLOCKED_CONTRACT": "blocked_contract",
+                    }.get(candidate_class, "")
+                if not candidate_status:
+                    candidate_status = "advisory_only"
+                fallback_flags["candidate_status"] = candidate_status
+                object.__setattr__(trade, "candidate_status", candidate_status)
+                object.__setattr__(trade, "source_flags", fallback_flags)
+            except Exception:
+                pass
             return trade
 
     def _finalize_advisory_decision(
@@ -1817,6 +2118,285 @@ class TradeBuilder:
             "exec_allowed": exec_allowed,
         }
 
+    def _stamp_quote_truth_snapshot(
+        self,
+        trade: Trade,
+        *,
+        market_data: dict | None,
+        source_flags: dict | None,
+        lifecycle: dict | None,
+    ) -> dict:
+        data = market_data if isinstance(market_data, dict) else {}
+        flags = dict(source_flags or {})
+        lifecycle = lifecycle if isinstance(lifecycle, dict) else {}
+
+        def _first_present(*values):
+            for value in values:
+                if value in (None, "", "None"):
+                    continue
+                return value
+            return None
+
+        quote_row = None
+
+        best_bid = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "best_bid", None),
+                getattr(trade, "opt_bid", None),
+                data.get("best_bid"),
+                data.get("bid"),
+                data.get("opt_bid"),
+            )
+        )
+        best_ask = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "best_ask", None),
+                getattr(trade, "opt_ask", None),
+                data.get("best_ask"),
+                data.get("ask"),
+                data.get("opt_ask"),
+            )
+        )
+        current_ltp = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "opt_ltp", None),
+                data.get("ltp"),
+                data.get("last_price"),
+                data.get("current_ltp"),
+                getattr(trade, "current_ltp", None),
+                data.get("mark_price"),
+            )
+        )
+        quote_source = str(
+            _first_present(
+                getattr(trade, "quote_source", None),
+                getattr(trade, "option_ltp_source", None),
+                flags.get("quote_source"),
+                flags.get("option_ltp_source"),
+                quote_row.get("quote_source") if isinstance(quote_row, dict) else None,
+                data.get("quote_source"),
+                data.get("option_ltp_source"),
+                data.get("option_quote_source"),
+            )
+            or ""
+        ).strip()
+        if quote_row:
+            quote_row_live = bool(quote_row.get("quote_live", True)) or bool(quote_row.get("quote_ok", True))
+            quote_row_source = str(
+                _first_present(
+                    quote_row.get("quote_source"),
+                    quote_row.get("option_ltp_source"),
+                    "option_chain_live" if quote_row_live else None,
+                )
+                or ""
+            ).strip()
+            if quote_row_live:
+                quote_source = "option_chain_live"
+            elif quote_row_source:
+                quote_source = quote_row_source
+        if not quote_source:
+            if best_bid is not None and best_ask is not None:
+                quote_source = "live"
+            elif _first_present(getattr(trade, "mark_price", None), data.get("mark_price")) is not None:
+                quote_source = "mark"
+            elif current_ltp is not None:
+                quote_source = "last"
+            else:
+                quote_source = "unknown"
+        option_ltp_source = str(
+            _first_present(
+                getattr(trade, "option_ltp_source", None),
+                flags.get("option_ltp_source"),
+                quote_row.get("option_ltp_source") if isinstance(quote_row, dict) else None,
+                data.get("option_ltp_source"),
+                data.get("option_quote_source"),
+                quote_source,
+            )
+            or ""
+        ).strip()
+        if quote_row:
+            quote_row_live = bool(quote_row.get("quote_live", True)) or bool(quote_row.get("quote_ok", True))
+            quote_row_ltp_source = str(
+                _first_present(
+                    quote_row.get("option_ltp_source"),
+                    quote_row.get("quote_source"),
+                    "option_chain_live" if quote_row_live else None,
+                )
+                or ""
+            ).strip()
+            if quote_row_live:
+                option_ltp_source = "option_chain_live"
+            elif quote_row_ltp_source:
+                option_ltp_source = quote_row_ltp_source
+            current_ltp = self._coerce_nonnegative_float(
+                _first_present(
+                    quote_row.get("ltp"),
+                    quote_row.get("last_price"),
+                    current_ltp,
+                )
+            )
+        quote_row = None
+        option_chain = data.get("option_chain")
+        if isinstance(option_chain, (list, tuple)):
+            trade_token = self._coerce_nonnegative_float(getattr(trade, "instrument_token", None))
+            trade_symbol = str(_first_present(getattr(trade, "tradingsymbol", None), data.get("tradingsymbol")) or "").strip()
+            trade_strike = self._coerce_nonnegative_float(_first_present(getattr(trade, "strike", None), data.get("strike")))
+            trade_right = str(_first_present(getattr(trade, "right", None), getattr(trade, "option_type", None), data.get("right"), data.get("option_type")) or "").strip().upper()
+            trade_expiry = str(_first_present(getattr(trade, "expiry", None), getattr(trade, "expiry_date", None), data.get("expiry"), data.get("expiry_date")) or "").strip()
+            for row in option_chain:
+                if not isinstance(row, dict):
+                    continue
+                row_token = self._coerce_nonnegative_float(row.get("instrument_token"))
+                row_symbol = str(row.get("tradingsymbol") or "").strip()
+                row_strike = self._coerce_nonnegative_float(row.get("strike"))
+                row_right = str(_first_present(row.get("right"), row.get("type"), row.get("option_type")) or "").strip().upper()
+                row_expiry = str(_first_present(row.get("expiry"), row.get("expiry_date")) or "").strip()
+                if trade_token is not None and row_token is not None and int(trade_token) == int(row_token):
+                    quote_row = row
+                    break
+                if trade_symbol and row_symbol and trade_symbol == row_symbol:
+                    quote_row = row
+                    break
+                if (
+                    trade_strike is not None
+                    and row_strike is not None
+                    and trade_right
+                    and row_right
+                    and trade_expiry
+                    and row_expiry
+                    and float(trade_strike) == float(row_strike)
+                    and trade_right == row_right
+                    and trade_expiry == row_expiry
+                ):
+                    quote_row = row
+                    break
+        quote_ts_epoch = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "quote_ts_epoch", None),
+                getattr(trade, "option_ltp_timestamp", None),
+                flags.get("quote_ts_epoch"),
+                flags.get("option_ltp_timestamp"),
+                quote_row.get("quote_ts_epoch") if isinstance(quote_row, dict) else None,
+                quote_row.get("quote_timestamp_epoch") if isinstance(quote_row, dict) else None,
+                quote_row.get("timestamp_epoch") if isinstance(quote_row, dict) else None,
+                quote_row.get("ts_epoch") if isinstance(quote_row, dict) else None,
+                data.get("quote_ts_epoch"),
+                data.get("quote_timestamp_epoch"),
+                data.get("timestamp_epoch"),
+                data.get("ts_epoch"),
+            )
+        )
+        quote_age_sec = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "quote_age_sec", None),
+                getattr(trade, "price_age_sec", None),
+                flags.get("quote_age_sec"),
+                data.get("quote_age_sec"),
+            )
+        )
+        if quote_ts_epoch is None and quote_age_sec is not None:
+            quote_ts_epoch = max(0.0, float(now_utc_epoch()) - float(quote_age_sec))
+        if quote_age_sec is None and quote_ts_epoch is not None:
+            quote_age_sec = max(0.0, float(now_utc_epoch()) - float(quote_ts_epoch))
+
+        quote_validation_status = resolve_quote_validation_status(
+            existing_status=_first_present(
+                flags.get("quote_validation_status"),
+                getattr(trade, "quote_validation_status", None),
+                lifecycle.get("entry_status"),
+            ),
+            current_ltp=current_ltp,
+            quote_age_sec=quote_age_sec,
+            best_bid=best_bid,
+            best_ask=best_ask,
+            max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0),
+        )
+
+        trade_id = str(_first_present(getattr(trade, "trade_id", None), data.get("trade_id")) or "")
+        symbol = str(_first_present(getattr(trade, "symbol", None), data.get("symbol")) or "")
+        quote_snapshot_id = str(
+            _first_present(
+                flags.get("quote_snapshot_id"),
+                getattr(trade, "quote_snapshot_id", None),
+            )
+            or f"{trade_id}|{symbol}|{quote_ts_epoch if quote_ts_epoch is not None else 'na'}|{quote_source or 'unknown'}|{current_ltp if current_ltp is not None else 'na'}|{best_bid if best_bid is not None else 'na'}|{best_ask if best_ask is not None else 'na'}"
+        ).strip()
+
+        snapshot = {
+            "quote_snapshot_id": quote_snapshot_id,
+            "quote_ts_epoch": quote_ts_epoch,
+            "quote_age_sec": quote_age_sec,
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "current_ltp": current_ltp,
+            "option_ltp_source": option_ltp_source or None,
+            "quote_source": quote_source or None,
+            "quote_validation_status": quote_validation_status or None,
+            "execution_entry": _first_present(
+                getattr(trade, "execution_entry", None),
+                lifecycle.get("execution_entry"),
+                flags.get("execution_entry"),
+            ),
+            "execution_entry_status": str(
+                _first_present(
+                    getattr(trade, "execution_entry_status", None),
+                    lifecycle.get("execution_entry_status"),
+                    flags.get("execution_entry_status"),
+                )
+                or ""
+            ).strip().lower()
+            or None,
+        }
+        snapshot = {key: value for key, value in snapshot.items() if value not in (None, "", "None")}
+        flags["quote_truth"] = dict(snapshot)
+        flags["quote_truth_snapshot"] = dict(snapshot)
+        for attr in (
+            "quote_snapshot_id",
+            "quote_ts_epoch",
+            "quote_age_sec",
+            "best_bid",
+            "best_ask",
+            "current_ltp",
+            "option_ltp_source",
+            "option_ltp_timestamp",
+            "price_age_sec",
+            "quote_source",
+            "quote_validation_status",
+            "source_flags",
+        ):
+            value = snapshot.get(attr) if attr in snapshot else flags if attr == "source_flags" else None
+            if attr == "source_flags":
+                value = flags
+            elif attr == "option_ltp_timestamp" and snapshot.get("quote_ts_epoch") is not None:
+                value = snapshot.get("quote_ts_epoch")
+            elif attr == "price_age_sec" and snapshot.get("quote_age_sec") is not None:
+                value = snapshot.get("quote_age_sec")
+            elif value is None and attr in snapshot:
+                value = snapshot.get(attr)
+            try:
+                object.__setattr__(trade, attr, value)
+            except Exception:
+                continue
+        existing_truth = None
+        if isinstance(flags, dict):
+            existing_truth = flags.get("quote_truth") or flags.get("quote_truth_snapshot")
+        if isinstance(existing_truth, dict):
+            existing_ts = self._coerce_nonnegative_float(existing_truth.get("quote_ts_epoch"))
+            new_ts = self._coerce_nonnegative_float(snapshot.get("quote_ts_epoch"))
+            if new_ts is None or (existing_ts is not None and new_ts <= existing_ts):
+                chosen_snapshot = dict(existing_truth)
+            else:
+                chosen_snapshot = dict(snapshot)
+        else:
+            chosen_snapshot = dict(snapshot)
+        flags["quote_truth"] = dict(chosen_snapshot)
+        flags["quote_truth_snapshot"] = dict(chosen_snapshot)
+        try:
+            object.__setattr__(trade, "source_flags", flags)
+        except Exception:
+            pass
+        return chosen_snapshot
+
     def _build_trade_entry_lifecycle(
         self,
         trade: Trade,
@@ -1880,7 +2460,7 @@ class TradeBuilder:
                 quote_source = "none"
 
         try:
-            return build_entry_state(
+            decorated = build_entry_state(
                 symbol=getattr(trade, "symbol", None),
                 expiry=getattr(trade, "expiry_date", None) or getattr(trade, "expiry", None),
                 strike=getattr(trade, "strike", None),
@@ -1907,6 +2487,28 @@ class TradeBuilder:
                     }
                 ),
             )
+            decorated_execution_allowed = (
+                decorated.get("execution_allowed")
+                if isinstance(decorated, dict)
+                else getattr(decorated, "execution_allowed", False)
+            )
+            decorated_execution_status = str(
+                decorated.get("execution_entry_status")
+                if isinstance(decorated, dict)
+                else getattr(decorated, "execution_entry_status", "")
+            ).strip().lower()
+            decorated_entry_block_reason = str(
+                decorated.get("entry_block_reason")
+                if isinstance(decorated, dict)
+                else getattr(decorated, "entry_block_reason", "")
+            ).strip()
+            is_executable_entry = decorated_execution_status == "executable" and not decorated_entry_block_reason
+            if is_executable_entry and not bool(decorated_execution_allowed):
+                if isinstance(decorated, dict):
+                    decorated["execution_allowed"] = True
+                else:
+                    decorated = replace(decorated, execution_allowed=True)
+            return decorated
         except EntryContractViolation as exc:
             logger.warning(
                 "trade_entry_lifecycle_invalid trade_id=%s symbol=%s code=%s err=%s",
@@ -2541,9 +3143,9 @@ class TradeBuilder:
         opt["entry_price_proxy_buy"] = price_fields.get("entry_price_proxy_buy")
         opt["entry_price_proxy_sell"] = price_fields.get("entry_price_proxy_sell")
         opt["ltp"] = (
-            self._coerce_positive_float(opt.get("mark_price"))
-            or self._coerce_positive_float(opt.get("ltp"))
+            self._coerce_positive_float(opt.get("ltp"))
             or self._coerce_positive_float(opt.get("last_price"))
+            or self._coerce_positive_float(opt.get("mark_price"))
             or self._coerce_positive_float(opt.get("close"))
             or self._coerce_positive_float(opt.get("price"))
         )
@@ -9233,6 +9835,84 @@ class TradeBuilder:
                     "entry_price_proxy": base_entry_price,
                 }
             )
+            quote_ts_epoch = self._coerce_nonnegative_float(
+                opt.get("quote_ts_epoch")
+                or opt.get("option_ltp_timestamp")
+                or opt.get("quote_timestamp_epoch")
+                or opt.get("timestamp_epoch")
+                or opt.get("ts_epoch")
+                or market_data.get("quote_ts_epoch")
+                or market_data.get("quote_timestamp_epoch")
+                or market_data.get("timestamp_epoch")
+                or market_data.get("ts_epoch")
+            )
+            quote_age_sec = self._coerce_nonnegative_float(
+                opt.get("quote_age_sec")
+                or opt.get("option_age_sec")
+                or opt.get("price_age_sec")
+                or opt.get("option_ltp_age_sec")
+                or market_data.get("quote_age_sec")
+            )
+            if quote_ts_epoch is None and quote_age_sec is not None:
+                quote_ts_epoch = max(0.0, float(now_utc_epoch()) - float(quote_age_sec))
+            if quote_age_sec is None and quote_ts_epoch is not None:
+                quote_age_sec = max(0.0, float(now_utc_epoch()) - float(quote_ts_epoch))
+            quote_source = ""
+            if opt.get("best_bid") is not None or opt.get("best_ask") is not None:
+                quote_source = "option_chain_live"
+            elif bool(opt.get("quote_ok", True)) and (
+                opt.get("ltp") is not None or opt.get("last_price") is not None
+            ):
+                quote_source = "option_chain_live"
+            if not quote_source:
+                quote_source = str(
+                    opt.get("quote_source")
+                    or opt.get("option_ltp_source")
+                    or opt.get("price_source")
+                    or ""
+                ).strip()
+            if not quote_source:
+                if opt.get("mark_price") is not None:
+                    quote_source = "mark"
+                elif opt.get("ltp") is not None:
+                    quote_source = "last"
+                else:
+                    quote_source = "unknown"
+            option_ltp_source = str(
+                opt.get("option_ltp_source")
+                or opt.get("quote_source")
+                or quote_source
+                or ""
+            ).strip()
+            if not option_ltp_source or quote_source == "option_chain_live":
+                option_ltp_source = "option_chain_live" if quote_source == "option_chain_live" else option_ltp_source
+            quote_truth_snapshot = {
+                "quote_snapshot_id": str(
+                    f"{symbol}|{tradingsymbol}|{quote_ts_epoch if quote_ts_epoch is not None else 'na'}|"
+                    f"{quote_source}|{opt.get('ltp') if opt.get('ltp') is not None else 'na'}|"
+                    f"{opt.get('best_bid') if opt.get('best_bid') is not None else opt.get('bid', 'na')}|"
+                    f"{opt.get('best_ask') if opt.get('best_ask') is not None else opt.get('ask', 'na')}"
+                ),
+                "quote_ts_epoch": quote_ts_epoch,
+                "quote_age_sec": quote_age_sec,
+                "best_bid": self._coerce_nonnegative_float(opt.get("best_bid", opt.get("bid"))),
+                "best_ask": self._coerce_nonnegative_float(opt.get("best_ask", opt.get("ask"))),
+                "current_ltp": self._coerce_nonnegative_float(opt.get("ltp") or opt.get("last_price")),
+                "option_ltp_source": option_ltp_source or None,
+                "quote_source": quote_source or None,
+                "quote_validation_status": resolve_quote_validation_status(
+                    existing_status=opt.get("quote_validation_status"),
+                    current_ltp=self._coerce_nonnegative_float(opt.get("ltp") or opt.get("last_price")),
+                    quote_age_sec=quote_age_sec,
+                    best_bid=self._coerce_nonnegative_float(opt.get("best_bid", opt.get("bid"))),
+                    best_ask=self._coerce_nonnegative_float(opt.get("best_ask", opt.get("ask"))),
+                    max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0),
+                ),
+                "execution_entry": self._coerce_nonnegative_float(opt.get("quote_execution_entry") or opt.get("execution_entry")),
+                "execution_entry_status": str(opt.get("execution_entry_status") or "").strip().lower() or None,
+            }
+            source_flags["quote_truth"] = dict(quote_truth_snapshot)
+            source_flags["quote_truth_snapshot"] = dict(quote_truth_snapshot)
             trade = Trade(
                 trade_id=(
                     f"{symbol}-{expiry_resolved}-{int(float(opt['strike']))}-{option_right}-"
@@ -9330,6 +10010,19 @@ class TradeBuilder:
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
             if trade is not None:
+                try:
+                    loop_quote_truth_snapshot = self._stamp_quote_truth_snapshot(
+                        trade,
+                        market_data=market_data,
+                        source_flags=dict(getattr(trade, "source_flags", {}) or {}),
+                        lifecycle=None,
+                    )
+                    loop_flags = dict(getattr(trade, "source_flags", {}) or {})
+                    loop_flags["quote_truth"] = dict(loop_quote_truth_snapshot)
+                    loop_flags["quote_truth_snapshot"] = dict(loop_quote_truth_snapshot)
+                    trade = replace(trade, source_flags=loop_flags)
+                except Exception:
+                    pass
                 candidate_key = (
                     str(trade.instrument_id or ""),
                     str(trade.expiry or ""),
@@ -9797,6 +10490,25 @@ class TradeBuilder:
             top_n=int(getattr(cfg, "OPPORTUNITY_TOP_N_EXECUTABLE", 1)),
         )
         self._set_last_ranked_candidates(ranked_candidates)
+        if best_trade is not None:
+            try:
+                best_trade_source_flags = dict(getattr(best_trade, "source_flags", {}) or {})
+                if not isinstance(best_trade_source_flags.get("quote_truth"), dict):
+                    quote_truth_snapshot = self._stamp_quote_truth_snapshot(
+                        best_trade,
+                        market_data=market_data,
+                        source_flags=best_trade_source_flags,
+                        lifecycle=None,
+                    )
+                    best_trade_source_flags = dict(getattr(best_trade, "source_flags", {}) or {})
+                    best_trade_source_flags["quote_truth"] = dict(quote_truth_snapshot)
+                    best_trade_source_flags["quote_truth_snapshot"] = dict(quote_truth_snapshot)
+                    try:
+                        object.__setattr__(best_trade, "source_flags", best_trade_source_flags)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         if best_trade is None:
             # Real fallback must happen inside build(), not only in build_with_trace().
             if best_trade is None and ranked_candidates and allow_fallbacks:
