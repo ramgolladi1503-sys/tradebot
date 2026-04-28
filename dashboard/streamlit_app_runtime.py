@@ -1049,9 +1049,14 @@ def _add_upstox_links(df):
 def _render_trade_explorer_sidebar_filters(explorer_df: pd.DataFrame):
     if explorer_df is None or explorer_df.empty:
         return {}
+    if "trade_date" not in explorer_df.columns:
+        explorer_df = _derive_trade_explorer_fields(explorer_df)
+        if explorer_df.empty:
+            return {}
     with st.sidebar:
         st.markdown("### Trade Explorer Filters")
-        date_options = sorted([d for d in explorer_df["trade_date"].dropna().unique().tolist() if d and d != "UNKNOWN"])
+        trade_dates = explorer_df.get("trade_date", pd.Series(dtype="object"))
+        date_options = sorted([d for d in trade_dates.dropna().astype(str).unique().tolist() if d and d != "UNKNOWN"])
         selected_dates = []
         if len(date_options) > 1:
             selected_dates = st.multiselect(

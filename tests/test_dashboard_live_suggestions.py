@@ -507,6 +507,35 @@ class _FakeStreamlit:
     def __init__(self):
         self.session_state = {}
         self.fragment = lambda *args, **kwargs: (lambda fn: fn)
+        self.sidebar = self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def markdown(self, *args, **kwargs):
+        return None
+
+    def multiselect(self, label, options=None, default=None, key=None):
+        if default is not None:
+            return list(default)
+        return list(options or [])
+
+    def text_input(self, label, value="", key=None):
+        return value
+
+    def slider(self, *args, **kwargs):
+        return kwargs.get("value")
+
+    def selectbox(self, label, options, index=0, key=None):
+        if not options:
+            return None
+        return options[index if 0 <= index < len(options) else 0]
+
+    def checkbox(self, label, value=False, key=None):
+        return value
 
 
 def test_fetch_live_market_data_dashboard_suppresses_repeated_auth_failures(monkeypatch):
@@ -579,6 +608,29 @@ def test_get_daytype_history_uses_longer_cache_ttl(monkeypatch):
     assert first == [0.7, 0.8]
     assert second == [0.7, 0.8]
     assert calls["count"] == 1
+
+
+def test_render_trade_explorer_sidebar_filters_handles_raw_rows_without_trade_date(monkeypatch):
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(runtime, "st", fake_st)
+    raw_df = pd.DataFrame(
+        [
+            {
+                "symbol": "NIFTY",
+                "tradingsymbol": "NIFTY26APR24000CE",
+                "timestamp": _iso_now(),
+                "run_id": "RUN-1",
+                "option_type": "CE",
+                "confidence": 0.55,
+            }
+        ]
+    )
+
+    filters = runtime._render_trade_explorer_sidebar_filters(raw_df)
+
+    assert isinstance(filters, dict)
+    assert filters["selected_cols"]
+    assert filters["show_charts"] is True
 
 
 def test_fetch_live_market_data_dashboard_disables_history_seed(monkeypatch):
