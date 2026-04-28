@@ -518,6 +518,18 @@ class _FakeStreamlit:
     def markdown(self, *args, **kwargs):
         return None
 
+    def columns(self, count):
+        return [self for _ in range(int(count))]
+
+    def metric(self, *args, **kwargs):
+        return None
+
+    def dataframe(self, *args, **kwargs):
+        return None
+
+    def caption(self, *args, **kwargs):
+        return None
+
     def multiselect(self, label, options=None, default=None, key=None):
         if default is not None:
             return list(default)
@@ -631,6 +643,27 @@ def test_render_trade_explorer_sidebar_filters_handles_raw_rows_without_trade_da
     assert isinstance(filters, dict)
     assert filters["selected_cols"]
     assert filters["show_charts"] is True
+
+
+def test_render_trade_explorer_panel_handles_raw_rows_without_trade_date(monkeypatch):
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(runtime, "st", fake_st)
+    raw_df = pd.DataFrame(
+        [
+            {
+                "symbol": "NIFTY",
+                "tradingsymbol": "NIFTY26APR24000CE",
+                "timestamp": _iso_now(),
+                "run_id": "RUN-1",
+                "option_type": "CE",
+                "confidence": 0.55,
+                "permission": "EXECUTE",
+                "final_action": "EXECUTE",
+            }
+        ]
+    )
+
+    runtime._render_trade_explorer_panel(raw_df, {"show_charts": False})
 
 
 def test_fetch_live_market_data_dashboard_disables_history_seed(monkeypatch):

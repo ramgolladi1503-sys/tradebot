@@ -2209,9 +2209,34 @@ def _render_trade_explorer_panel(
         empty_state("No rows match current explorer filters.")
         return
 
-    display_cols = [col for col in selected_cols if col in filtered.columns]
+    default_cols = [
+        "timestamp",
+        "symbol",
+        "tradingsymbol",
+        "expiry_date",
+        "strike",
+        "option_type",
+        "option_side",
+        "strategy_family",
+        "permission_bucket",
+        "final_action",
+        "final_blocker",
+        "global_conf",
+        "rank_score",
+        "confidence",
+        "execution_entry",
+        "entry",
+        "best_bid",
+        "best_ask",
+        "current_ltp",
+        "quote_age_sec",
+        "entry_status",
+        "execution_entry_status",
+        "feed_state",
+    ]
+    display_cols = [col for col in default_cols if col in filtered.columns]
     if not display_cols:
-        display_cols = [c for c in EXPLORER_COLUMN_PRESETS["Minimal"] if c in filtered.columns]
+        display_cols = list(filtered.columns[:25])
     display_df = filtered[display_cols].head(500).copy()
     st.caption(f"Filtered rows: {len(filtered)} (showing top {len(display_df)} by latest timestamp)")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
