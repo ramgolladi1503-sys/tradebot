@@ -508,6 +508,7 @@ class _FakeStreamlit:
         self.session_state = {}
         self.fragment = lambda *args, **kwargs: (lambda fn: fn)
         self.sidebar = self
+        self.last_dataframe = None
 
     def __enter__(self):
         return self
@@ -525,6 +526,10 @@ class _FakeStreamlit:
         return None
 
     def dataframe(self, *args, **kwargs):
+        if args:
+            self.last_dataframe = args[0]
+        elif "data" in kwargs:
+            self.last_dataframe = kwargs["data"]
         return None
 
     def caption(self, *args, **kwargs):
@@ -652,10 +657,16 @@ def test_render_trade_explorer_panel_handles_raw_rows_without_trade_date(monkeyp
         [
             {
                 "symbol": "NIFTY",
-                "tradingsymbol": "NIFTY26APR24000CE",
+                "trading_symbol": "NIFTY26APR24000CE",
                 "timestamp": _iso_now(),
                 "run_id": "RUN-1",
-                "option_type": "CE",
+                "right": "CE",
+                "expiry": "2026-04-28",
+                "strike": 24000,
+                "entry_price": 82.1,
+                "sl": 64.04,
+                "tp": 109.19,
+                "instrument_name": "NIFTY26APR24000CE",
                 "confidence": 0.55,
                 "permission": "EXECUTE",
                 "final_action": "EXECUTE",
@@ -664,6 +675,19 @@ def test_render_trade_explorer_panel_handles_raw_rows_without_trade_date(monkeyp
     )
 
     runtime._render_trade_explorer_panel(raw_df, {"show_charts": False})
+    assert list(fake_st.last_dataframe.columns[:8]) == [
+        "timestamp",
+        "tradingsymbol",
+        "symbol",
+        "underlying",
+        "expiry_date",
+        "strike",
+        "option_type",
+        "option_side",
+    ]
+    assert "entry" in fake_st.last_dataframe.columns
+    assert "stop" in fake_st.last_dataframe.columns
+    assert "target" in fake_st.last_dataframe.columns
 
 
 def test_fetch_live_market_data_dashboard_disables_history_seed(monkeypatch):

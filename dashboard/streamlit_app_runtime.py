@@ -2211,29 +2211,47 @@ def _render_trade_explorer_panel(
 
     default_cols = [
         "timestamp",
-        "symbol",
         "tradingsymbol",
+        "symbol",
+        "underlying",
         "expiry_date",
         "strike",
         "option_type",
         "option_side",
-        "strategy_family",
-        "permission_bucket",
-        "final_action",
-        "final_blocker",
-        "global_conf",
-        "rank_score",
-        "confidence",
-        "execution_entry",
         "entry",
+        "execution_entry",
+        "stop",
+        "stop_loss",
+        "target",
         "best_bid",
         "best_ask",
         "current_ltp",
         "quote_age_sec",
+        "strategy_family",
+        "permission_bucket",
+        "final_action",
+        "final_blocker",
         "entry_status",
         "execution_entry_status",
+        "global_conf",
+        "rank_score",
+        "confidence",
         "feed_state",
     ]
+    alias_pairs = {
+        "tradingsymbol": ["trading_symbol", "instrument_name", "contract"],
+        "expiry_date": ["expiry"],
+        "option_type": ["opt_type", "right"],
+        "entry": ["entry_price", "execution_entry"],
+        "stop": ["stop_loss", "sl"],
+        "target": ["take_profit", "tp"],
+    }
+    for canonical, aliases in alias_pairs.items():
+        if canonical not in filtered.columns:
+            for alias in aliases:
+                if alias in filtered.columns:
+                    filtered[canonical] = filtered[alias]
+                    break
     display_cols = [col for col in default_cols if col in filtered.columns]
     if not display_cols:
         display_cols = list(filtered.columns[:25])
