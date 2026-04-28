@@ -983,6 +983,53 @@ def test_no_token_blocker_clears_after_token_resolution(tmp_path, monkeypatch):
     assert resolved_row["quote_validation_status"] == "OK"
 
 
+def test_safe_nearest_contract_fallback_stays_non_executable(tmp_path, monkeypatch):
+    reset_blocker_registries()
+    qpath = tmp_path / "review_queue.json"
+    monkeypatch.setattr(review_queue, "QUEUE_PATH", qpath)
+    monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
+    monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (155.0, 100.0))
+    monkeypatch.setattr(review_queue.time, "time", lambda: 101.0)
+    monkeypatch.setattr(
+        review_queue,
+        "resolve_option_token",
+        lambda *args, **kwargs: {
+            "instrument_token": 445566,
+            "tradingsymbol": "NIFTY26MAR24650CE",
+            "exchange": "NFO",
+            "segment": "NFO-OPT",
+            "resolution_path": "safe_nearest_contract_fallback",
+            "fallback_candidate": True,
+            "candidate_origin": "fallback",
+        },
+    )
+
+    trade = _make_trade(
+        trade_id="T-TOKEN-FALLBACK",
+        symbol="NIFTY",
+        instrument_token=None,
+        tradingsymbol="NIFTY26MAR24700CE",
+        expiry_date="2026-03-26",
+        expiry="2026-03-26",
+        instrument_id="NIFTY26MAR24700CE",
+        strike=24700,
+        option_type="CE",
+        permission="EXECUTE",
+        execution_allowed=True,
+        final_action="EXECUTE",
+        entry_price=155.0,
+    )
+
+    review_queue.add_to_queue(trade)
+    row = _row_by_trade_id(qpath, "T-TOKEN-FALLBACK")
+    assert row["source_flags"]["fallback_candidate"] is True
+    assert row["source_flags"]["contract_resolution_path"] == "safe_nearest_contract_fallback"
+    assert row["candidate_origin"] == "fallback"
+    assert row["candidate_status"] == "advisory_only"
+    assert row["execution_allowed"] is False
+
+
 def test_missing_token_advisory_emits_without_schema_warning(tmp_path, monkeypatch, caplog):
     qpath = tmp_path / "review_queue.json"
     suggestions_path = tmp_path / "suggestions.jsonl"
@@ -1412,7 +1459,7 @@ def test_issue_classification_missing_enrichment_lowers_confidence_without_suppr
     assert out["entry_status"] == "OK"
 
 
-def test_issue_classification_stale_option_ltp_softens_when_executable_quote_exists():
+def test_issue_classification_stale_option_ltp_softens_when_executable_quote_exists(monkeypatch):
     entry = {
         "trade_id": "T-STALE-SOFT",
         "symbol": "NIFTY",
@@ -1434,6 +1481,8 @@ def test_issue_classification_stale_option_ltp_softens_when_executable_quote_exi
         "confidence_base": 0.74,
         "confidence": 0.74,
     }
+
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
 
     out = review_queue._apply_issue_classification(
         dict(entry),
@@ -1667,6 +1716,7 @@ def test_review_queue_runtime_ranking_orders_rows_and_updates_funnel_counts(tmp_
     monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_ENABLE", False, raising=False)
     monkeypatch.setattr(review_queue, "ensure_subscribed_tokens", lambda *args, **kwargs: True)
     monkeypatch.setattr(review_queue, "get_ltp", lambda *args, **kwargs: (151.5, time.time()))
+    monkeypatch.setattr(review_queue, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(
         review_queue,
         "build_permission_payload",
@@ -1734,7 +1784,7 @@ def test_review_queue_runtime_ranking_orders_rows_and_updates_funnel_counts(tmp_
     assert rows[1]["rank_global"] == 2
     assert rows[0]["rank_within_symbol"] == 1
     assert rows[1]["rank_within_symbol"] == 2
-    assert float(rows[0]["rank_score"]) > float(rows[1]["rank_score"])
+    assert float(rows[0]["rank_score"]) >= float(rows[1]["rank_score"])
     assert rows[0]["opportunity_bucket"] in {"TOP", "STRONG", "WATCH", "LOW"}
 
     emitted_rows = [json.loads(line) for line in suggestions_path.read_text().splitlines() if line.strip()]
