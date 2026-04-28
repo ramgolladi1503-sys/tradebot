@@ -20,7 +20,7 @@ from core.tick_store import get_last_tick
 from core.time_utils import compute_age_sec, now_utc_epoch
 from core.trade_activation import should_activate, activate_trade
 from core.trade_identity import compute_trade_key, derive_strategy_id
-from core.option_token_resolver import TokenCoverageError, resolve_option_token
+from core.option_token_resolver import TokenCoverageError, is_safe_nearest_contract_fallback, resolve_option_token
 from core.sim_pnl import resolve_lot_size
 from core.entry_semantics import EntryContractViolation, enforce_entry_contract
 
@@ -102,6 +102,23 @@ def _resolve_token(row: dict) -> int | None:
         logger.warning("token coverage below threshold during trade state processing: %s evidence=%s", exc.code, exc.evidence)
         return None
     if not resolved:
+        return None
+    if is_safe_nearest_contract_fallback(resolved):
+        source_flags = dict(row.get("source_flags") or {})
+        source_flags["fallback_candidate"] = True
+        source_flags["candidate_origin"] = "fallback"
+        source_flags["contract_resolution_path"] = str(resolved.get("resolution_path") or "").strip().lower()
+        row["source_flags"] = source_flags
+        row["fallback_candidate"] = True
+        row["candidate_origin"] = "fallback"
+        row["contract_resolution_path"] = source_flags["contract_resolution_path"]
+        logger.warning(
+            "safe_nearest_contract_fallback blocked in trade state processing symbol=%s expiry=%s strike=%s option_type=%s",
+            symbol,
+            expiry,
+            strike,
+            option_type,
+        )
         return None
     token = resolved.get("instrument_token")
     if token is None:

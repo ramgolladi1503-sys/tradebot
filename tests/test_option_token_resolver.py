@@ -126,3 +126,31 @@ def test_resolver_returns_exact_contract_match_even_when_coverage_is_below_thres
     assert out is not None
     assert int(out["instrument_token"]) == 333
     assert not any(row.get("event") == "OPTION_TOKEN_COVERAGE_BELOW_THRESHOLD" for row in capture.rows)
+
+
+def test_resolver_marks_safe_nearest_contract_fallback_as_fallback_candidate(monkeypatch, tmp_path):
+    cache_path = tmp_path / "kite_instruments.json"
+    cache_path.write_text(
+        json.dumps({"NFO": [_instrument_row(token=444, strike=24650.0, opt_type="CE")]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(resolver, "data_root", lambda: tmp_path)
+    capture = _CaptureLogger()
+    monkeypatch.setattr(resolver, "_LOGGER", capture)
+    resolver._STATS_LOG_TS.clear()
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKEN_COUNT", 1, raising=False)
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 1, raising=False)
+
+    out = resolver.resolve_option_token(
+        symbol="NIFTY",
+        expiry_date="2026-03-02",
+        strike=24700.0,
+        option_type="CE",
+        exchange="NFO",
+    )
+
+    assert out is not None
+    assert int(out["instrument_token"]) == 444
+    assert out["resolution_path"] == "safe_nearest_contract_fallback"
+    assert out["fallback_candidate"] is True
+    assert out["candidate_origin"] == "fallback"

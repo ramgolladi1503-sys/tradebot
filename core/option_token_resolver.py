@@ -350,7 +350,16 @@ def _token_payload_from_exact_match(*, token: int, entry: dict, exchange: str, s
         "tradingsymbol": entry.get("tradingsymbol"),
         "exchange": exchange,
         "segment": segment,
+        "resolution_path": "exact_contract_match",
+        "fallback_candidate": False,
+        "candidate_origin": "exact_contract",
     }
+
+
+def is_safe_nearest_contract_fallback(resolution: dict | None) -> bool:
+    if not isinstance(resolution, dict):
+        return False
+    return str(resolution.get("resolution_path") or "").strip().lower() == "safe_nearest_contract_fallback"
 
 
 def resolve_option_token(
@@ -488,17 +497,19 @@ def resolve_option_token(
                 "strike_distance": fallback.get("strike_distance"),
             }
         )
-        return {
-            "instrument_token": fallback.get("instrument_token"),
-            "tradingsymbol": fallback.get("tradingsymbol"),
-            "exchange": exchange,
-            "segment": segment,
-            "resolution_path": "safe_nearest_contract_fallback",
-            "requested_expiry": fallback.get("requested_expiry"),
-            "resolved_expiry": fallback.get("resolved_expiry"),
-            "requested_strike": fallback.get("requested_strike"),
-            "resolved_strike": fallback.get("resolved_strike"),
-        }
+    return {
+        "instrument_token": fallback.get("instrument_token"),
+        "tradingsymbol": fallback.get("tradingsymbol"),
+        "exchange": exchange,
+        "segment": segment,
+        "resolution_path": "safe_nearest_contract_fallback",
+        "fallback_candidate": True,
+        "candidate_origin": "fallback",
+        "requested_expiry": fallback.get("requested_expiry"),
+        "resolved_expiry": fallback.get("resolved_expiry"),
+        "requested_strike": fallback.get("requested_strike"),
+        "resolved_strike": fallback.get("resolved_strike"),
+    }
 
     available_expiries = sorted(
         {

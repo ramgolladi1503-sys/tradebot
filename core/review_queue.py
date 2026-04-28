@@ -19,7 +19,7 @@ from core.trade_permission import (
     resolve_confidence_thresholds,
 )
 from core.trade_identity import compute_trade_key, derive_strategy_id, infer_candidate_identity
-from core.option_token_resolver import TokenCoverageError, resolve_option_token
+from core.option_token_resolver import TokenCoverageError, is_safe_nearest_contract_fallback, resolve_option_token
 from core.option_liquidity_cache import hydrate_option_liquidity_fields
 from core.option_entry import get_option_ltp_sla_sec, validate_live_entry
 from core.opportunity_engine import annotate_ranked_opportunities
@@ -2847,13 +2847,32 @@ def _enrich_contract_identity(entry: dict) -> dict:
             entry.setdefault("token_coverage_error_code", exc.code)
             entry.setdefault("token_coverage_evidence", exc.evidence)
         if resolved:
+            resolution_path = str(resolved.get("resolution_path") or "").strip().lower()
+            source_flags = dict(entry.get("source_flags") or {})
+            source_flags["fallback_candidate"] = bool(resolved.get("fallback_candidate"))
+            source_flags["candidate_origin"] = str(resolved.get("candidate_origin") or source_flags.get("candidate_origin") or "").strip().lower() or source_flags.get("candidate_origin") or None
+            source_flags["contract_resolution_path"] = resolution_path or source_flags.get("contract_resolution_path")
+            entry["source_flags"] = source_flags
+            entry["fallback_candidate"] = bool(resolved.get("fallback_candidate"))
+            if resolved.get("candidate_origin"):
+                entry["candidate_origin"] = str(resolved.get("candidate_origin") or "").strip().lower()
+            entry["contract_resolution_path"] = resolution_path or entry.get("contract_resolution_path")
             resolved_token = _coerce_instrument_token(resolved.get("instrument_token"))
             if resolved_token is not None:
                 entry["instrument_token"] = resolved_token
             tradingsymbol = str(resolved.get("tradingsymbol") or "").strip()
             if tradingsymbol and not entry.get("tradingsymbol"):
                 entry["tradingsymbol"] = tradingsymbol
-    liquidity_meta = {}
+            if is_safe_nearest_contract_fallback(resolved):
+                logger.warning(
+                    "safe_nearest_contract_fallback propagated as fallback candidate symbol=%s expiry=%s strike=%s option_type=%s token=%s",
+                    entry.get("symbol"),
+                    entry.get("expiry_date") or entry.get("expiry"),
+                    entry.get("strike"),
+                    entry.get("option_type") or entry.get("type") or entry.get("right"),
+                    resolved_token,
+                )
+        liquidity_meta = {}
     token_value = _coerce_instrument_token(entry.get("instrument_token"))
     if chain_meta:
         if token_value is not None:

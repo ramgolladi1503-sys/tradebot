@@ -117,3 +117,38 @@ def test_dedup_trade_key_updates_last_seen_not_insert():
     rows = engine.dedupe_rows([base, newer])
     assert len(rows) == 1
     assert rows[0].get("last_seen") == "2026-02-26T10:05:00Z"
+
+
+def test_safe_nearest_contract_fallback_is_not_used_for_state_processing(monkeypatch):
+    trade = {
+        "symbol": "NIFTY",
+        "expiry_date": "2026-03-02",
+        "strike": 24700.0,
+        "option_type": "CE",
+        "side": "BUY",
+        "entry": 104.55,
+        "status": "PLANNING",
+        "instrument_token": None,
+    }
+
+    monkeypatch.setattr(
+        engine,
+        "resolve_option_token",
+        lambda *args, **kwargs: {
+            "instrument_token": 991234,
+            "tradingsymbol": "NIFTY26MAR24650CE",
+            "exchange": "NFO",
+            "segment": "NFO-OPT",
+            "resolution_path": "safe_nearest_contract_fallback",
+            "fallback_candidate": True,
+            "candidate_origin": "fallback",
+        },
+    )
+
+    updated, update = engine.process_trade_state([trade], now_ts=time.time())
+    row = updated[0]
+    assert update.invalid == 1
+    assert row["invalidation_reason"] == "NO_TOKEN"
+    assert row["status"] == "PLANNING"
+    assert row["fallback_candidate"] is True
+    assert row["contract_resolution_path"] == "safe_nearest_contract_fallback"
