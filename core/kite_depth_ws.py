@@ -10,6 +10,7 @@ import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 from core.auth import get_kite_ticker
+from core.events import write_json_atomic
 from core.kite_client import kite_client
 from core.depth_store import depth_store
 from core.tick_store import get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
@@ -769,7 +770,6 @@ def _write_feed_runtime_snapshot(
     last_error: str | None = None,
 ) -> None:
     path = logs_dir() / "feed_runtime_latest.json"
-    tmp = path.with_suffix(path.suffix + ".tmp")
     payload = {
         "ts_epoch": float(now_epoch),
         "ws_connected": ws_connected,
@@ -801,9 +801,7 @@ def _write_feed_runtime_snapshot(
         "last_error": str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000],
     }
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps(payload, sort_keys=True))
-        tmp.replace(path)
+        write_json_atomic(path, payload)
     except Exception as exc:
         _log_ws("FEED_RUNTIME_SNAPSHOT_ERROR", {"error": str(exc), "path": str(path)})
 

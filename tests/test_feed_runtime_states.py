@@ -87,6 +87,52 @@ def test_persist_runtime_snapshot_row_updates_json_artifact(monkeypatch, tmp_pat
     assert payload["option_feed_block_reason_by_symbol"] == {"NIFTY": "OK"}
 
 
+def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    captured = {}
+
+    def fake_write_json_atomic(path, payload):
+        captured["path"] = path
+        captured["payload"] = payload
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"payload": payload}), encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(depth_ws, "write_json_atomic", fake_write_json_atomic)
+    monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+
+    depth_ws._write_feed_runtime_snapshot(
+        now_epoch=200.0,
+        ws_connected=True,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=199.0,
+        last_db_tick_age_sec=1.0,
+        last_ws_tick_epoch=199.0,
+        last_tick_age_sec=1.0,
+        last_depth_epoch=199.0,
+        last_depth_age_sec=1.0,
+        market_open=True,
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    assert captured["path"] == logs_path / "feed_runtime_latest.json"
+    assert captured["payload"]["ws_connected"] is True
+    assert (logs_path / "feed_runtime_latest.json").exists()
+
+
 def test_persist_runtime_snapshot_uses_latest_option_tick_for_symbol_freshness(monkeypatch, tmp_path):
     db_path = tmp_path / "runtime.sqlite"
     logs_path = tmp_path / "logs"

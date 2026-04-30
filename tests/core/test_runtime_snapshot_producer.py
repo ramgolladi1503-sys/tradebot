@@ -89,6 +89,7 @@ def test_runtime_snapshot_producer_writes_expected_structure(tmp_path, monkeypat
     monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", runtime_root / "advisory_latest.json")
     monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", runtime_root / "feed_runtime_latest.json")
     monkeypatch.setattr(producer, "TOKEN_RESOLUTION_LATEST_PATH", runtime_root / "token_resolution_latest.json")
+    monkeypatch.setattr(producer.cfg, "UI_LIVE_ROW_REQUIRE_TODAY", False, raising=False)
 
     outputs = producer.produce_and_store_runtime_snapshots(
         market_snapshot=market_snapshot,
@@ -154,6 +155,7 @@ def test_runtime_snapshot_advisory_roundtrip_preserves_required_fields(tmp_path,
     monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", runtime_root / "advisory_latest.json")
     monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", runtime_root / "feed_runtime_latest.json")
     monkeypatch.setattr(producer, "TOKEN_RESOLUTION_LATEST_PATH", runtime_root / "token_resolution_latest.json")
+    monkeypatch.setattr(producer.cfg, "UI_LIVE_ROW_REQUIRE_TODAY", False, raising=False)
 
     producer.produce_and_store_runtime_snapshots(
         market_snapshot={"missing": True},
