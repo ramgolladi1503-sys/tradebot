@@ -1797,6 +1797,7 @@ def _maybe_trigger_silent_reconnect(
     confirm_needed: int,
     backoff_min_sec: float,
     backoff_max_sec: float,
+    force_full_restart_after_sec: float | None,
     restart_cb,
 ) -> bool:
     action = _compute_silent_reconnect_action(
@@ -1840,8 +1841,23 @@ def _maybe_trigger_silent_reconnect(
         f"silent_feed age={float(action.get('global_age_sec') or 0.0):.2f}s "
         f"stale={int(action.get('stale_tokens') or 0)}/{int(action.get('tracked_tokens') or 0)}"
     )
+    force_full_restart = False
+    if isinstance(force_full_restart_after_sec, (int, float)):
+        force_full_restart = float(action.get("global_age_sec") or 0.0) >= float(force_full_restart_after_sec)
+    if force_full_restart:
+        _log_ws(
+            "FEED_SILENT_FORCE_FULL_RESTART",
+            {
+                "reason": reason,
+                "global_age_sec": action.get("global_age_sec"),
+                "tracked_tokens": action.get("tracked_tokens"),
+                "stale_tokens": action.get("stale_tokens"),
+                "confirm_hits": state.get("confirm_hits", 0),
+                "force_full_restart_after_sec": float(force_full_restart_after_sec),
+            },
+        )
     try:
-        restart_cb(reason=reason, ignore_cooldown=True)
+        restart_cb(reason=reason, ignore_cooldown=True, force_full_restart=force_full_restart)
     except TypeError:
         restart_cb(reason=reason)
     return True
@@ -2230,7 +2246,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
     )
 
 
-def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
+def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, force_full_restart: bool = False):
     """
     Full restart: close existing ticker and recreate with last known tokens.
     Rate-limited to avoid restart storms.
@@ -2250,7 +2266,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
         )
         return False
 
-    if _use_internal_reconnect() and _KITE_TICKER is not None:
+    if _use_internal_reconnect() and _KITE_TICKER is not None and not bool(force_full_restart):
         ws_connected = _ws_connected_state()
         if ws_connected is True:
             _log_ws(
@@ -2269,6 +2285,12 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False):
                 "FEED_RESTART_FALLBACK_FULL_PATH",
                 {"reason": reason, "detail": "ws_disconnected", "ws_connected": ws_connected},
             )
+    elif bool(force_full_restart) and _KITE_TICKER is not None:
+        ws_connected = _ws_connected_state()
+        _log_ws(
+            "FEED_RESTART_FORCE_FULL_PATH",
+            {"reason": reason, "detail": "forced_full_restart", "ws_connected": ws_connected},
+        )
 
     now = time.time()
     cooldown = float(getattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 120))
@@ -2874,6 +2896,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         silent_confirm_cycles = int(getattr(cfg, "FEED_SILENT_CONFIRM_CYCLES", 2))
         silent_backoff_min_sec = float(getattr(cfg, "FEED_SILENT_RECONNECT_BACKOFF_MIN_SEC", 1.0))
         silent_backoff_max_sec = float(getattr(cfg, "FEED_SILENT_RECONNECT_BACKOFF_MAX_SEC", 10.0))
+        silent_force_full_restart_sec = float(getattr(cfg, "FEED_SILENT_FORCE_FULL_RESTART_SEC", 12.0))
         no_ticks_sec = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_SEC", 10.0))
         no_ticks_base_backoff = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_BACKOFF_SEC", 15.0))
         last_soft = 0.0
@@ -3041,6 +3064,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 confirm_needed=silent_confirm_cycles,
                 backoff_min_sec=silent_backoff_min_sec,
                 backoff_max_sec=silent_backoff_max_sec,
+                force_full_restart_after_sec=silent_force_full_restart_sec,
                 restart_cb=restart_depth_ws,
             )
             if silent_triggered:

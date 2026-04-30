@@ -174,6 +174,43 @@ def test_restart_uses_soft_path_when_internal_reconnect_enabled(monkeypatch):
     assert calls["soft"] == 1
 
 
+def test_restart_forces_full_path_when_explicitly_requested(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    class _ConnectedTicker:
+        def is_connected(self):
+            return True
+
+    monkeypatch.setattr(ws, "_KITE_TICKER", _ConnectedTicker(), raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+
+    calls = {"soft": 0, "start": 0, "stop": 0}
+
+    monkeypatch.setattr(
+        ws,
+        "_soft_resubscribe_current",
+        lambda reason: calls.__setitem__("soft", calls["soft"] + 1) or True,
+    )
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "stop_depth_ws",
+        lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
+    )
+
+    assert ws.restart_depth_ws(reason="unit_force_full_path", force_full_restart=True) is True
+    assert calls == {"soft": 0, "start": 1, "stop": 1}
+
+
 def test_restart_falls_back_to_full_restart_when_ticker_is_disconnected(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
