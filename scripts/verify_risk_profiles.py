@@ -20,9 +20,12 @@ def _print_state(label, rs):
 
 def main():
     # Guard: pilot limits must remain conservative.
-    assert cfg.RISK_PROFILE in ("PILOT", "NORMAL", "AGGRESSIVE")
+    assert cfg.RISK_PROFILE in ("PILOT", "NORMAL", "AGGRESSIVE", "CONSERVATIVE")
     if cfg.RISK_PROFILE == "PILOT":
         assert cfg.MAX_DAILY_LOSS_PCT <= 0.02, "PILOT must not exceed 2% daily loss"
+    if cfg.RISK_PROFILE == "CONSERVATIVE":
+        assert cfg.MAX_DAILY_LOSS_PCT <= 0.012, "CONSERVATIVE must not exceed 1.2% daily loss"
+        assert abs(cfg.MAX_DRAWDOWN_PCT) <= 0.03, "CONSERVATIVE must not exceed 3% drawdown"
 
     rs = RiskState(start_capital=100000)
     portfolio = {

@@ -6,6 +6,7 @@ runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
 import json
 import pandas as pd
+from core.time_utils import format_ts_ist
 
 input_path = str(data_root() / "trade_log.json")
 output_path = str(data_root() / "trade_log.csv")
@@ -21,6 +22,7 @@ df = pd.DataFrame(rows)
 required_cols = [
     "trade_id",
     "timestamp",
+    "timestamp_ist",
     "symbol",
     "underlying",
     "instrument",
@@ -47,6 +49,7 @@ required_cols = [
 for col in required_cols:
     if col not in df.columns:
         df[col] = None
+df["timestamp_ist"] = df["timestamp"].apply(lambda v: format_ts_ist(v) or None)
 df = df[required_cols + [c for c in df.columns if c not in required_cols]]
 df.to_csv(output_path, index=False)
 print(f"Exported {len(df)} rows to {output_path}")

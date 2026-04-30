@@ -14,6 +14,7 @@ from typing import Iterable
 import pandas as pd
 
 from core.trade_identity import compute_trade_key, derive_strategy_id
+from core.time_utils import format_ts_ist
 from dashboard.ui.utils.derive_fields import parse_option_side
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ _ENTRY_STATUSES_WITH_QUOTE_BACKFILL = {
 
 REQUIRED_COLUMNS = [
     "timestamp",
+    "timestamp_ist",
     "trade_key",
     "trade_status",
     "first_seen",
@@ -204,6 +206,7 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
                 ts = datetime.now(timezone.utc).isoformat()
                 row_warn.append("timestamp_fallback")
             norm.at[idx, "timestamp"] = str(ts)
+            norm.at[idx, "timestamp_ist"] = format_ts_ist(ts) or format_ts_ist(datetime.now(timezone.utc))
 
             conf = _to_float(row.get("confidence"))
             norm.at[idx, "confidence"] = conf if conf is not None else None

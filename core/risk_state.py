@@ -55,6 +55,33 @@ class RiskState:
         self.cvar_alpha = float(getattr(cfg, "RISK_CVAR_ALPHA", 0.95))
         self.trade_pnls = deque(maxlen=int(getattr(cfg, "RISK_CVAR_WINDOW", 200)))
         self.cvar = 0.0
+        self.conservative_profit_capture_active = False
+        self.effective_daily_loss_pct = float(getattr(cfg, "MAX_DAILY_LOSS_PCT", 0.02))
+        self.effective_drawdown_pct = abs(float(getattr(cfg, "MAX_DRAWDOWN_PCT", -0.06)))
+        self.effective_soft_fraction = float(getattr(cfg, "RISK_SOFT_HALT_FRACTION", 0.7))
+
+    def _refresh_halt_caps(self):
+        max_daily_loss_pct = float(getattr(cfg, "MAX_DAILY_LOSS_PCT", 0.02))
+        max_drawdown_pct = abs(float(getattr(cfg, "MAX_DRAWDOWN_PCT", -0.06)))
+        soft_fraction = float(getattr(cfg, "RISK_SOFT_HALT_FRACTION", 0.7))
+        self.conservative_profit_capture_active = False
+
+        if bool(getattr(cfg, "CONSERVATIVE_PROFIT_CAPTURE_ENABLE", False)):
+            soft_fraction = min(
+                soft_fraction,
+                float(getattr(cfg, "CONSERVATIVE_PROFIT_CAPTURE_SOFT_HALT_FRACTION", soft_fraction)),
+            )
+            trigger_pct = float(getattr(cfg, "CONSERVATIVE_PROFIT_CAPTURE_LOCKIN_TRIGGER_PCT", 0.0))
+            lockin_drawdown_pct = abs(float(getattr(cfg, "CONSERVATIVE_PROFIT_CAPTURE_LOCKIN_DRAWDOWN_PCT", -0.01)))
+            if self.daily_pnl_pct >= trigger_pct:
+                self.conservative_profit_capture_active = True
+                max_drawdown_pct = min(max_drawdown_pct, lockin_drawdown_pct)
+                max_daily_loss_pct = min(max_daily_loss_pct, lockin_drawdown_pct)
+
+        self.effective_daily_loss_pct = max(0.0, max_daily_loss_pct)
+        self.effective_drawdown_pct = max(0.0, max_drawdown_pct)
+        self.effective_soft_fraction = max(0.0, min(soft_fraction, 1.0))
+        return self.effective_daily_loss_pct, self.effective_drawdown_pct, self.effective_soft_fraction
 
     def update_portfolio(self, portfolio):
         self._reset_daily_if_needed()
@@ -178,6 +205,7 @@ class RiskState:
         self.last_mode_reason = reason or self.last_mode_reason
 
     def risk_budget_multiplier(self):
+        self._refresh_halt_caps()
         mult = 1.0
         if self.current_regime == "EVENT" or self.current_shock_score >= float(getattr(cfg, "RISK_SHOCK_SCORE_SOFT", 0.65)):
             mult *= float(getattr(cfg, "EVENT_REGIME_RISK_MULT", 0.5))
@@ -189,6 +217,8 @@ class RiskState:
             mult *= float(getattr(cfg, "RECOVERY_MODE_MULT", 0.4))
         if self.loss_streak >= int(getattr(cfg, "LOSS_STREAK_DOWNSIZE", 3)):
             mult *= float(getattr(cfg, "LOSS_STREAK_RISK_MULT", 0.6))
+        if self.conservative_profit_capture_active:
+            mult *= float(getattr(cfg, "CONSERVATIVE_PROFIT_CAPTURE_RISK_MULT", 0.5))
         return max(0.0, min(mult, 1.0))
 
     def _reset_daily_if_needed(self):
@@ -227,9 +257,7 @@ class RiskState:
         self.cvar = round(sum(tail) / len(tail), 6)
 
     def _evaluate_halts(self):
-        max_daily_loss_pct = float(getattr(cfg, "MAX_DAILY_LOSS_PCT", 0.02))
-        max_drawdown_pct = abs(float(getattr(cfg, "MAX_DRAWDOWN_PCT", -0.06)))
-        soft_fraction = float(getattr(cfg, "RISK_SOFT_HALT_FRACTION", 0.7))
+        max_daily_loss_pct, max_drawdown_pct, soft_fraction = self._refresh_halt_caps()
         cvar_limit = float(getattr(cfg, "RISK_CVAR_LIMIT", -0.02))
         fill_min = float(getattr(cfg, "RISK_MIN_FILL_RATIO", 0.5))
         vol_shock = float(getattr(cfg, "RISK_VOL_SHOCK", 2.0))
@@ -285,6 +313,10 @@ class RiskState:
             "model_drift_metrics": self.model_drift_metrics,
             "strategy_heat": self.strategy_heat,
             "cvar": self.cvar,
+            "conservative_profit_capture_active": self.conservative_profit_capture_active,
+            "effective_daily_loss_pct": self.effective_daily_loss_pct,
+            "effective_drawdown_pct": self.effective_drawdown_pct,
+            "effective_soft_fraction": self.effective_soft_fraction,
             "quarantined": list(self.quarantined),
             "risk_budget_multiplier": self.risk_budget_multiplier(),
         }

@@ -34,6 +34,7 @@ def test_normalize_trade_df_adds_missing_columns():
     for col in REQUIRED_COLUMNS:
         assert col in norm.columns
     assert norm.loc[0, "status"] == "PLANNING"
+    assert "timestamp_ist" in norm.columns
 
 
 def test_normalize_trade_df_does_not_use_signal_price_as_entry_when_stale():
@@ -180,3 +181,18 @@ def test_normalize_trade_df_preserves_blockers():
     assert row["hard_blockers"] == ["NO_TOKEN"]
     assert row["soft_penalties"] == ["SPREAD_WARN"]
     assert row["warnings"] == ["LTP_STALE"]
+
+
+def test_normalize_trade_df_adds_ist_timestamp_column():
+    df = pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-04-30T00:30:00+00:00",
+                "symbol": "NIFTY",
+            }
+        ]
+    )
+    norm = normalize_trade_df(df)
+    row = norm.iloc[0]
+    assert row["timestamp"] == "2026-04-30T00:30:00+00:00"
+    assert row["timestamp_ist"] == "2026-04-30 06:00:00 IST"

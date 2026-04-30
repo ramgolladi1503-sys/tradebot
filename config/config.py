@@ -163,6 +163,17 @@ RISK_PROFILE_LIMITS = {
         "HIGH_ENTROPY_RISK_MULT": float(os.getenv("PILOT_HIGH_ENTROPY_RISK_MULT", "0.6")),
         "RECOVERY_MODE_MULT": float(os.getenv("PILOT_RECOVERY_MODE_MULT", "0.4")),
     },
+    "CONSERVATIVE": {
+        "MAX_DAILY_LOSS_PCT": float(os.getenv("CONSERVATIVE_MAX_DAILY_LOSS_PCT", "0.012")),
+        "MAX_DRAWDOWN_PCT": float(os.getenv("CONSERVATIVE_MAX_DRAWDOWN_PCT", "-0.03")),
+        "MAX_RISK_PER_TRADE_PCT": float(os.getenv("CONSERVATIVE_MAX_RISK_PER_TRADE_PCT", "0.0025")),
+        "MAX_OPEN_RISK_PCT": float(os.getenv("CONSERVATIVE_MAX_OPEN_RISK_PCT", "0.01")),
+        "MAX_TRADES_PER_DAY": int(os.getenv("CONSERVATIVE_MAX_TRADES_PER_DAY", "2")),
+        "LOSS_STREAK_DOWNSIZE": int(os.getenv("CONSERVATIVE_LOSS_STREAK_DOWNSIZE", "2")),
+        "EVENT_REGIME_RISK_MULT": float(os.getenv("CONSERVATIVE_EVENT_REGIME_RISK_MULT", "0.45")),
+        "HIGH_ENTROPY_RISK_MULT": float(os.getenv("CONSERVATIVE_HIGH_ENTROPY_RISK_MULT", "0.5")),
+        "RECOVERY_MODE_MULT": float(os.getenv("CONSERVATIVE_RECOVERY_MODE_MULT", "0.35")),
+    },
     "NORMAL": {
         "MAX_DAILY_LOSS_PCT": float(os.getenv("NORMAL_MAX_DAILY_LOSS_PCT", "0.025")),
         "MAX_DRAWDOWN_PCT": float(os.getenv("NORMAL_MAX_DRAWDOWN_PCT", "-0.08")),
@@ -192,6 +203,17 @@ _active_risk_limits = dict(RISK_PROFILE_LIMITS[RISK_PROFILE])
 # Hard guard: pilot must remain conservative regardless of env overrides.
 if _active_risk_limits["MAX_DAILY_LOSS_PCT"] > 0.02:
     _active_risk_limits["MAX_DAILY_LOSS_PCT"] = 0.02
+if RISK_PROFILE == "CONSERVATIVE":
+    if _active_risk_limits["MAX_DAILY_LOSS_PCT"] > 0.012:
+        _active_risk_limits["MAX_DAILY_LOSS_PCT"] = 0.012
+    if abs(float(_active_risk_limits["MAX_DRAWDOWN_PCT"])) > 0.03:
+        _active_risk_limits["MAX_DRAWDOWN_PCT"] = -0.03
+    if _active_risk_limits["MAX_RISK_PER_TRADE_PCT"] > 0.0025:
+        _active_risk_limits["MAX_RISK_PER_TRADE_PCT"] = 0.0025
+    if _active_risk_limits["MAX_OPEN_RISK_PCT"] > 0.01:
+        _active_risk_limits["MAX_OPEN_RISK_PCT"] = 0.01
+    if _active_risk_limits["MAX_TRADES_PER_DAY"] > 2:
+        _active_risk_limits["MAX_TRADES_PER_DAY"] = 2
 MAX_DAILY_LOSS_PCT = float(_active_risk_limits["MAX_DAILY_LOSS_PCT"])
 MAX_DRAWDOWN_PCT = float(_active_risk_limits["MAX_DRAWDOWN_PCT"])
 MAX_RISK_PER_TRADE_PCT = float(_active_risk_limits["MAX_RISK_PER_TRADE_PCT"])
@@ -201,6 +223,22 @@ LOSS_STREAK_DOWNSIZE = int(_active_risk_limits["LOSS_STREAK_DOWNSIZE"])
 EVENT_REGIME_RISK_MULT = float(_active_risk_limits["EVENT_REGIME_RISK_MULT"])
 HIGH_ENTROPY_RISK_MULT = float(_active_risk_limits["HIGH_ENTROPY_RISK_MULT"])
 RECOVERY_MODE_MULT = float(_active_risk_limits["RECOVERY_MODE_MULT"])
+CONSERVATIVE_PROFIT_CAPTURE_ENABLE = os.getenv(
+    "CONSERVATIVE_PROFIT_CAPTURE_ENABLE",
+    "true" if RISK_PROFILE == "CONSERVATIVE" else "false",
+).lower() == "true"
+CONSERVATIVE_PROFIT_CAPTURE_LOCKIN_TRIGGER_PCT = float(
+    os.getenv("CONSERVATIVE_PROFIT_CAPTURE_LOCKIN_TRIGGER_PCT", "0.006")
+)
+CONSERVATIVE_PROFIT_CAPTURE_LOCKIN_DRAWDOWN_PCT = float(
+    os.getenv("CONSERVATIVE_PROFIT_CAPTURE_LOCKIN_DRAWDOWN_PCT", "-0.01")
+)
+CONSERVATIVE_PROFIT_CAPTURE_RISK_MULT = float(
+    os.getenv("CONSERVATIVE_PROFIT_CAPTURE_RISK_MULT", "0.5")
+)
+CONSERVATIVE_PROFIT_CAPTURE_SOFT_HALT_FRACTION = float(
+    os.getenv("CONSERVATIVE_PROFIT_CAPTURE_SOFT_HALT_FRACTION", "0.55")
+)
 # Deterministic regime-aware risk clamps (used by RiskEngine)
 REGIME_EVENT_DAILY_LOSS_MULT = float(os.getenv("REGIME_EVENT_DAILY_LOSS_MULT", "0.5"))
 REGIME_EVENT_OPEN_RISK_MULT = float(os.getenv("REGIME_EVENT_OPEN_RISK_MULT", "0.6"))
