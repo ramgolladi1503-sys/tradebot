@@ -12,7 +12,11 @@ from core.analytics.schema import (
     validate_trade_intent_event_payload,
     validate_trade_outcome_payload,
 )
-from core.analytics.store import load_decision_telemetry_events, load_review_queue_events
+from core.analytics.store import (
+    load_decision_telemetry_events,
+    load_executable_review_queue_events,
+    load_review_queue_events,
+)
 
 
 def test_schema_roundtrip_serialize_deserialize():
@@ -142,3 +146,57 @@ def test_load_review_queue_preserves_predicted_confidence_metrics(tmp_path):
     assert metrics["predicted_confidence_source"] == "confidence_raw_canonical"
     assert metrics["predicted_confidence_final"] == 0.58
     assert metrics["predicted_confidence_final_source"] == "confidence_after_soft_veto"
+
+
+def test_load_executable_review_queue_events_marks_executable_rows_accepted(tmp_path):
+    queue_path = tmp_path / "review_queue.json"
+    payload = [
+        {
+            "trade_key": "SENSEX|2026-04-23|77700|PE|BUY|ENSEMBLE_OPT",
+            "symbol": "SENSEX",
+            "timestamp_epoch_ms": 1_771_056_600_000,
+            "candidate_class": "EXECUTABLE",
+            "final_action": "EXECUTE",
+            "execution_allowed": False,
+            "status": "BLOCKED_APPROVAL",
+            "permission": "EXECUTE",
+            "candidate_status": "advisory_only",
+            "entry_price": 100.0,
+            "target_price": 104.0,
+            "stop_price": 97.0,
+            "side": "BUY",
+            "option_type": "PE",
+            "expiry_date": "2026-04-23",
+            "strike": 77700.0,
+            "quote_validation_status": "STALE_OPTION_LTP",
+            "primary_blocker": "missing_execution_entry",
+            "selection_reason": "not_execution_eligible",
+            "current_ltp": 100.0,
+        },
+        {
+            "trade_key": "SENSEX|2026-04-23|77800|PE|BUY|ENSEMBLE_OPT",
+            "symbol": "SENSEX",
+            "timestamp_epoch_ms": 1_771_056_600_000,
+            "candidate_class": "ADVISORY_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "execution_allowed": False,
+            "status": "BLOCKED_APPROVAL",
+            "permission": "QUEUE_ONLY",
+            "candidate_status": "queue_only",
+            "entry_price": 90.0,
+            "target_price": 94.0,
+            "stop_price": 87.0,
+            "side": "BUY",
+            "option_type": "PE",
+            "expiry_date": "2026-04-23",
+            "strike": 77800.0,
+        },
+    ]
+    queue_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    events = load_executable_review_queue_events(paths=[queue_path])
+    assert len(events) == 1
+    assert events[0].intent == "accepted"
+    assert events[0].symbol == "SENSEX"
+    assert events[0].metrics_snapshot["candidate_class"] == "EXECUTABLE"
+    assert events[0].metrics_snapshot["execution_allowed"] is False

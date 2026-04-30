@@ -7,7 +7,11 @@ import pandas as pd
 import pytest
 
 from core.analytics.schema import TradeIntentEvent
-from core.analytics.shadow_portfolio import build_shadow_portfolio_report, simulate_shadow_trade
+from core.analytics.shadow_portfolio import (
+    build_executable_shadow_portfolio_report,
+    build_shadow_portfolio_report,
+    simulate_shadow_trade,
+)
 
 
 def _ts_ms_ist(day: str, hh: int, mm: int, ss: int = 0) -> int:
@@ -224,3 +228,70 @@ def test_build_shadow_portfolio_report_include_rejected_toggle(tmp_path) -> None
     assert payload["counts"]["simulated_trades"] == 1
     assert payload["rows"][0]["intent"] == "rejected"
     assert payload["rows"][0]["exit_reason"] == "TARGET_HIT"
+
+
+def test_build_executable_shadow_portfolio_report_includes_executable_review_queue_rows(tmp_path) -> None:
+    date_key = "2026-04-22"
+    ts_ms = _ts_ms_ist(date_key, 10, 10)
+    review_queue_path = tmp_path / "review_queue.json"
+    review_queue_path.write_text(
+        json.dumps(
+            [
+                {
+                    "trade_key": "SENSEX|2026-04-23|77700|PE|BUY|ENSEMBLE_OPT",
+                    "event_id": "evt_exec_1",
+                    "symbol": "SENSEX",
+                    "timestamp_epoch_ms": ts_ms,
+                    "candidate_class": "EXECUTABLE",
+                    "final_action": "EXECUTE",
+                    "execution_allowed": False,
+                    "status": "BLOCKED_APPROVAL",
+                    "permission": "EXECUTE",
+                    "candidate_status": "advisory_only",
+                    "entry_price": 100.0,
+                    "target_price": 104.0,
+                    "stop_price": 97.0,
+                    "side": "BUY",
+                    "option_type": "PE",
+                    "expiry_date": "2026-04-23",
+                    "strike": 77700.0,
+                    "current_ltp": 100.0,
+                    "quote_validation_status": "STALE_OPTION_LTP",
+                    "primary_blocker": "missing_execution_entry",
+                    "selection_reason": "not_execution_eligible",
+                    "quote_age_sec": 1.2,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def _provider(trade: dict, start_ms: int, end_ms: int, interval: str) -> pd.DataFrame:
+        del trade, start_ms, end_ms, interval
+        return _candles(
+            (ts_ms, 100.0, 100.2, 99.8, 100.0),
+            (ts_ms + 60_000, 100.1, 104.1, 100.0, 103.9),
+        )
+
+    output_path = tmp_path / "runtime" / "analytics" / "reports" / date_key / "executable_shadow_portfolio.json"
+    payload = build_executable_shadow_portfolio_report(
+        date_key,
+        review_queue_paths=[review_queue_path],
+        lookahead_minutes=15,
+        slippage_model="bps",
+        slippage_bps=0.0,
+        spread_slippage_mult=0.0,
+        starting_equity=1000.0,
+        candle_provider=_provider,
+        output_path=output_path,
+    )
+
+    assert payload["counts"]["scanned_events"] == 1
+    assert payload["counts"]["eligible_events"] == 1
+    assert payload["counts"]["simulated_trades"] == 1
+    assert payload["rows"][0]["intent"] == "accepted"
+    assert payload["rows"][0]["fill_kind"] == "simulated_entry"
+    assert payload["rows"][0]["exit_reason"] == "TARGET_HIT"
+    assert payload["summary"]["total_pnl_points"] == pytest.approx(4.0)
+    assert payload["summary"]["ending_equity"] == pytest.approx(1004.0)
+    assert output_path.exists()

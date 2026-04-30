@@ -17,6 +17,7 @@ from .schema import (
 )
 from .store import (
     load_decision_telemetry_events,
+    load_executable_review_queue_events,
     load_outcome_files,
     load_outcomes_from_trade_tables,
     load_review_queue_events,
@@ -47,6 +48,7 @@ __all__ = [
     "validate_trade_intent_event_payload",
     "validate_trade_outcome_payload",
     "load_decision_telemetry_events",
+    "load_executable_review_queue_events",
     "load_outcome_files",
     "load_outcomes_from_trade_tables",
     "load_review_queue_events",

@@ -232,6 +232,72 @@ def _confidence_metrics_snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
     return metrics
 
 
+def _executable_review_queue_metrics_snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
+    metrics = _confidence_metrics_snapshot(row)
+    for key in (
+        "candidate_class",
+        "final_action",
+        "execution_allowed",
+        "status",
+        "permission",
+        "candidate_status",
+        "primary_blocker",
+        "selection_reason",
+        "quote_validation_status",
+        "truth_allows_execution",
+        "class_blocks_execution",
+        "entry_block_reason",
+        "execution_entry_status",
+        "trade_lifecycle_state",
+        "trade_state_v1",
+        "quote_age_sec",
+        "option_ltp_timestamp",
+        "current_ltp",
+        "entry_price",
+        "target_price",
+        "stop_price",
+        "execution_entry",
+        "fill_entry",
+        "expected_entry",
+        "entry_price_proxy",
+        "execution_entry_source",
+        "expected_entry_source",
+    ):
+        if key in row and row.get(key) is not None:
+            metrics[key] = row.get(key)
+
+    review_packet = row.get("review_packet")
+    if isinstance(review_packet, Mapping):
+        summary = review_packet.get("summary")
+        if isinstance(summary, Mapping):
+            metrics["review_packet_summary"] = dict(summary)
+        liquidity = review_packet.get("liquidity")
+        if isinstance(liquidity, Mapping):
+            liq = dict(liquidity)
+            for key in ("bid", "ask", "spread_pct", "volume", "oi"):
+                if key in liq and liq.get(key) is not None:
+                    metrics[key] = liq.get(key)
+            metrics["review_packet_liquidity"] = liq
+        context = review_packet.get("context")
+        if isinstance(context, Mapping):
+            metrics["review_packet_context"] = dict(context)
+
+    if metrics.get("ltp") is None:
+        for key in ("current_ltp", "option_ltp", "last_price"):
+            value = _safe_float(row.get(key))
+            if value is not None:
+                metrics["ltp"] = value
+                break
+
+    if metrics.get("mark_price") is None:
+        bid = _safe_float(metrics.get("bid"))
+        ask = _safe_float(metrics.get("ask"))
+        if bid is not None and ask is not None and ask >= bid:
+            metrics["mark_price"] = (bid + ask) / 2.0
+
+    return metrics
+
+
 def _event_ts_ms(row: dict) -> int | None:
     return (
         _coerce_epoch_ms(row.get("ts_epoch_ms"))
@@ -327,6 +393,45 @@ def _int_event_from_review_row(row: dict, *, source: str) -> TradeIntentEvent | 
         return TradeIntentEvent.from_dict(payload)
     except Exception as exc:
         logger.warning("analytics_store_skip_invalid_review_event source=%s err=%s", source, exc)
+        return None
+
+
+def _int_event_from_executable_review_row(row: dict, *, source: str) -> TradeIntentEvent | None:
+    ts_ms = _event_ts_ms(row)
+    symbol = _text(row.get("symbol")).upper()
+    if ts_ms is None or not symbol:
+        return None
+    candidate_class = _text(row.get("candidate_class")).upper()
+    if candidate_class != "EXECUTABLE":
+        return None
+
+    trade_key = _build_trade_key_from_row(row)
+    event_id = build_event_id(
+        trade_key=trade_key,
+        event_kind="accepted",
+        ts_epoch_ms=ts_ms,
+        source=source,
+        discriminator=_text(row.get("primary_blocker")) or _text(row.get("selection_reason")),
+    )
+    payload = {
+        "trade_key": trade_key,
+        "event_id": event_id,
+        "intent": "accepted",
+        "ts_epoch_ms": int(ts_ms),
+        "symbol": symbol,
+        "expiry": row.get("expiry_date") or row.get("expiry"),
+        "strike": _safe_float(row.get("strike")),
+        "option_type": _normalize_option_type(row.get("option_type") or row.get("type") or row.get("right")),
+        "side": _text(row.get("side") or row.get("direction")).upper() or None,
+        "source": source,
+        "reject_reason": None,
+        "gate_decisions": [],
+        "metrics_snapshot": _executable_review_queue_metrics_snapshot(row),
+    }
+    try:
+        return TradeIntentEvent.from_dict(payload)
+    except Exception as exc:
+        logger.warning("analytics_store_skip_invalid_executable_review_event source=%s err=%s", source, exc)
         return None
 
 
@@ -466,6 +571,17 @@ def load_review_queue_events(paths: Iterable[Path] | None = None) -> list[TradeI
     for path in _unique_paths(list(paths or _default_review_queue_paths())):
         for row in _read_json_array(path):
             event = _int_event_from_review_row(row, source=f"review_queue:{path.name}")
+            if event is not None:
+                events.append(event)
+    events.sort(key=lambda e: e.ts_epoch_ms)
+    return events
+
+
+def load_executable_review_queue_events(paths: Iterable[Path] | None = None) -> list[TradeIntentEvent]:
+    events: list[TradeIntentEvent] = []
+    for path in _unique_paths(list(paths or _default_review_queue_paths())):
+        for row in _read_json_array(path):
+            event = _int_event_from_executable_review_row(row, source=f"review_queue_executable:{path.name}")
             if event is not None:
                 events.append(event)
     events.sort(key=lambda e: e.ts_epoch_ms)

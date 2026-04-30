@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from collections import Counter
 import json
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -13,7 +14,7 @@ from config import config as cfg
 from core.paths import repo_root
 
 from .schema import TradeIntentEvent, build_trade_key
-from .store import load_trade_intent_events
+from .store import load_executable_review_queue_events, load_trade_intent_events
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -59,6 +60,13 @@ def _default_report_path(date_key: str) -> Path:
     if base:
         return Path(base) / date_key / "shadow_portfolio.json"
     return repo_root() / "runtime" / "analytics" / "reports" / date_key / "shadow_portfolio.json"
+
+
+def _default_executable_report_path(date_key: str) -> Path:
+    base = str(getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_REPORT_DIR", "") or "").strip()
+    if base:
+        return Path(base) / date_key / "executable_shadow_portfolio.json"
+    return repo_root() / "runtime" / "analytics" / "reports" / date_key / "executable_shadow_portfolio.json"
 
 
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -539,12 +547,11 @@ def _stats(rows: Sequence[Mapping[str, Any]]) -> dict:
     }
 
 
-def build_shadow_portfolio_report(
-    date: Any,
+def _build_shadow_portfolio_report_payload(
+    date_key: str,
     *,
-    events: Sequence[TradeIntentEvent | Mapping[str, Any]] | None = None,
-    include_advisory: bool = True,
-    include_rejected: bool = False,
+    event_rows: Sequence[TradeIntentEvent | Mapping[str, Any]],
+    scanned_events: int,
     lookahead_minutes: int | None = None,
     interval: str | None = None,
     entry_mode: str | None = None,
@@ -554,9 +561,8 @@ def build_shadow_portfolio_report(
     starting_equity: float | None = None,
     candle_provider: Callable[[Mapping[str, Any], int, int, str], pd.DataFrame] | None = None,
     output_path: Path | None = None,
+    scope: str = "trade_intent",
 ) -> dict:
-    date_key = _parse_date_key(date)
-    event_rows = list(events) if events is not None else list(load_trade_intent_events())
     lookahead = max(1, int(lookahead_minutes if lookahead_minutes is not None else getattr(cfg, "SHADOW_PORTFOLIO_LOOKAHEAD_MINUTES", 30)))
     iv = str(interval or getattr(cfg, "SHADOW_PORTFOLIO_INTERVAL", "minute")).strip() or "minute"
     entry_px_mode = str(entry_mode or getattr(cfg, "SHADOW_PORTFOLIO_ENTRY_MODE", "MARK")).strip().upper()
@@ -571,7 +577,6 @@ def build_shadow_portfolio_report(
     provider = candle_provider or _default_candle_provider
 
     rows: list[dict] = []
-    scanned_events = 0
     eligible_events = 0
 
     for item in event_rows:
@@ -580,12 +585,6 @@ def build_shadow_portfolio_report(
             continue
         event, raw = coerced
         if _to_day_key(int(event.ts_epoch_ms)) != date_key:
-            continue
-        scanned_events += 1
-
-        intent = str(event.intent or "").strip().lower()
-        allowed = (include_advisory and intent == "advisory") or (include_rejected and intent == "rejected")
-        if not allowed:
             continue
 
         trade = _extract_trade_context(event, raw)
@@ -599,6 +598,9 @@ def build_shadow_portfolio_report(
                     "status": "SKIPPED",
                     "skip_reason": "missing_trade_levels",
                     "ts_epoch_ms": int(event.ts_epoch_ms),
+                    "intent": event.intent,
+                    "fill_kind": "simulated_entry",
+                    "simulation_scope": scope,
                 }
             )
             continue
@@ -642,6 +644,8 @@ def build_shadow_portfolio_report(
             "pnl_points": sim.get("pnl_points"),
             "pnl_value": sim.get("pnl_value"),
             "exit_ts_ms": sim.get("exit_ts_ms"),
+            "fill_kind": "simulated_entry",
+            "simulation_scope": scope,
         }
         rows.append(row)
 
@@ -652,6 +656,11 @@ def build_shadow_portfolio_report(
     summary["ending_equity"] = float(dd["ending_equity"])
     summary["max_drawdown_points"] = float(dd["max_drawdown_points"])
     summary["max_drawdown_pct"] = float(dd["max_drawdown_pct"])
+    skip_reasons = Counter(
+        str(row.get("skip_reason") or "unknown")
+        for row in rows
+        if str(row.get("status") or "") != "SIMULATED"
+    )
 
     by_strategy: dict[str, list[dict]] = {}
     for row in rows:
@@ -667,9 +676,9 @@ def build_shadow_portfolio_report(
     report = {
         "date": date_key,
         "generated_ts_epoch": datetime.now(tz=timezone.utc).timestamp(),
+        "scope": scope,
         "params": {
-            "include_advisory": bool(include_advisory),
-            "include_rejected": bool(include_rejected),
+            "scope": scope,
             "lookahead_minutes": int(lookahead),
             "interval": iv,
             "entry_mode": entry_px_mode,
@@ -685,6 +694,7 @@ def build_shadow_portfolio_report(
             "skipped_events": int(len([row for row in rows if str(row.get("status")) != "SIMULATED"])),
         },
         "summary": summary,
+        "skip_reasons": dict(sorted(skip_reasons.items())),
         "equity_curve": equity_curve,
         "per_strategy": strategy_breakdown,
         "rows": rows,
@@ -694,6 +704,118 @@ def build_shadow_portfolio_report(
     _atomic_write_json(out_path, report)
     report["output_path"] = str(out_path)
     return report
+
+
+def build_shadow_portfolio_report(
+    date: Any,
+    *,
+    events: Sequence[TradeIntentEvent | Mapping[str, Any]] | None = None,
+    include_advisory: bool = True,
+    include_rejected: bool = False,
+    lookahead_minutes: int | None = None,
+    interval: str | None = None,
+    entry_mode: str | None = None,
+    slippage_model: str | None = None,
+    slippage_bps: float | None = None,
+    spread_slippage_mult: float | None = None,
+    starting_equity: float | None = None,
+    candle_provider: Callable[[Mapping[str, Any], int, int, str], pd.DataFrame] | None = None,
+    output_path: Path | None = None,
+) -> dict:
+    date_key = _parse_date_key(date)
+    event_rows = list(events) if events is not None else list(load_trade_intent_events())
+    scanned_events = 0
+    selected_events: list[TradeIntentEvent | Mapping[str, Any]] = []
+    for item in event_rows:
+        coerced = _coerce_event(item)
+        if coerced is None:
+            continue
+        event, _ = coerced
+        if _to_day_key(int(event.ts_epoch_ms)) != date_key:
+            continue
+        scanned_events += 1
+        intent = str(event.intent or "").strip().lower()
+        allowed = (include_advisory and intent == "advisory") or (include_rejected and intent == "rejected")
+        if allowed:
+            selected_events.append(item)
+
+    return _build_shadow_portfolio_report_payload(
+        date_key,
+        event_rows=selected_events,
+        scanned_events=scanned_events,
+        lookahead_minutes=lookahead_minutes,
+        interval=interval,
+        entry_mode=entry_mode,
+        slippage_model=slippage_model,
+        slippage_bps=slippage_bps,
+        spread_slippage_mult=spread_slippage_mult,
+        starting_equity=starting_equity,
+        candle_provider=candle_provider,
+        output_path=output_path,
+        scope="trade_intent",
+    )
+
+
+def build_executable_shadow_portfolio_report(
+    date: Any,
+    *,
+    review_queue_paths: Sequence[Path] | None = None,
+    lookahead_minutes: int | None = None,
+    interval: str | None = None,
+    entry_mode: str | None = None,
+    slippage_model: str | None = None,
+    slippage_bps: float | None = None,
+    spread_slippage_mult: float | None = None,
+    starting_equity: float | None = None,
+    candle_provider: Callable[[Mapping[str, Any], int, int, str], pd.DataFrame] | None = None,
+    output_path: Path | None = None,
+) -> dict:
+    date_key = _parse_date_key(date)
+    event_rows = list(load_executable_review_queue_events(paths=review_queue_paths))
+    scanned_events = 0
+    selected_events: list[TradeIntentEvent | Mapping[str, Any]] = []
+    for item in event_rows:
+        coerced = _coerce_event(item)
+        if coerced is None:
+            continue
+        event, _ = coerced
+        if _to_day_key(int(event.ts_epoch_ms)) != date_key:
+            continue
+        scanned_events += 1
+        selected_events.append(item)
+
+    effective_entry_mode = entry_mode or getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_ENTRY_MODE", "SIDE_QUOTE")
+    effective_lookahead = lookahead_minutes if lookahead_minutes is not None else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_LOOKAHEAD_MINUTES", 30)
+    effective_interval = interval or getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_INTERVAL", None) or getattr(cfg, "SHADOW_PORTFOLIO_INTERVAL", "minute")
+    effective_slippage_model = slippage_model or getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_SLIPPAGE_MODEL", "spread")
+    effective_slippage_bps = slippage_bps if slippage_bps is not None else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_SLIPPAGE_BPS", 0.0)
+    effective_spread_mult = (
+        spread_slippage_mult
+        if spread_slippage_mult is not None
+        else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_SPREAD_SLIPPAGE_MULT", 0.5)
+    )
+    effective_starting_equity = (
+        starting_equity if starting_equity is not None else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_STARTING_EQUITY", 100000.0)
+    )
+    out_path = output_path
+    if out_path is None:
+        base = str(getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_REPORT_DIR", "") or "").strip()
+        out_path = Path(base) / date_key / "executable_shadow_portfolio.json" if base else _default_executable_report_path(date_key)
+    return _build_shadow_portfolio_report_payload(
+        date_key,
+        event_rows=selected_events,
+        scanned_events=scanned_events,
+        lookahead_minutes=effective_lookahead,
+        interval=effective_interval,
+        entry_mode=effective_entry_mode,
+        slippage_model=effective_slippage_model,
+        slippage_bps=effective_slippage_bps,
+        spread_slippage_mult=effective_spread_mult,
+        starting_equity=effective_starting_equity,
+        candle_provider=candle_provider,
+        output_path=out_path,
+        scope="executable_review_queue",
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
