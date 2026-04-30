@@ -1639,7 +1639,19 @@ class Orchestrator:
 
         # Phase F: Strategy tracking + Auto-retraining
         self.strategy_tracker = StrategyTracker()
-        self.strategy_tracker.load(str(logs_dir() / "strategy_perf.json"))
+        live_strategy_perf_path = logs_dir() / "strategy_perf.json"
+        shadow_strategy_perf_path = logs_dir() / "suggestion_strategy_perf.json"
+        perf_paths = [str(live_strategy_perf_path)]
+        if bool(getattr(cfg, "LIVE_STRATEGY_PERF_SHADOW_FALLBACK_ENABLE", True)):
+            perf_paths.append(str(shadow_strategy_perf_path))
+        selected_strategy_perf_path = self.strategy_tracker.load_first_available(perf_paths)
+        if selected_strategy_perf_path and selected_strategy_perf_path != str(live_strategy_perf_path):
+            logger.warning(
+                "strategy_perf_shadow_fallback_used primary=%s fallback=%s selected=%s",
+                live_strategy_perf_path,
+                shadow_strategy_perf_path,
+                selected_strategy_perf_path,
+            )
         self.trade_builder = TradeBuilder(self.predictor, self.execution_engine, strategy_tracker=self.strategy_tracker)
         self.retrainer = AutoRetrain(self.predictor, risk_state=self.risk_state, strategy_tracker=self.strategy_tracker)
         self.strategy_allocator = StrategyAllocator(self.strategy_tracker, risk_state=self.risk_state)

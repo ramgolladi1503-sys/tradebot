@@ -6,18 +6,40 @@ from core.strategy_lifecycle import StrategyLifecycle
 from core.paths import logs_dir
 
 class StrategyTracker:
-    def __init__(self, max_len=200):
-        self.results = defaultdict(lambda: deque(maxlen=max_len))
-        self.pnl_history = defaultdict(lambda: deque(maxlen=max_len))
-        self.exec_history = defaultdict(lambda: deque(maxlen=max_len))
+    def __init__(self, max_len=200, load_sidecars: bool = True):
+        self.max_len = int(max_len or 200)
+        self.results = defaultdict(lambda: deque(maxlen=self.max_len))
+        self.pnl_history = defaultdict(lambda: deque(maxlen=self.max_len))
+        self.exec_history = defaultdict(lambda: deque(maxlen=self.max_len))
         self.stats = defaultdict(lambda: {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0})
         self.degraded = {}
         self.decay_probs = {}
         self.decay_state = {}
         self.soft_disabled = {}
         self.lifecycle = StrategyLifecycle()
-        self._load_degraded()
-        self._load_decay_state()
+        if load_sidecars:
+            self._load_degraded()
+            self._load_decay_state()
+
+    def _write_json(self, filename: str, payload: dict) -> None:
+        try:
+            path = logs_dir() / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, indent=2))
+        except Exception:
+            pass
+
+    def _has_perf_data(self) -> bool:
+        return bool(self.results or self.pnl_history or self.exec_history or self.stats or self.decay_probs)
+
+    def _copy_perf_state_from(self, other: "StrategyTracker") -> None:
+        self.results = other.results
+        self.pnl_history = other.pnl_history
+        self.exec_history = other.exec_history
+        self.stats = other.stats
+        self.decay_probs = other.decay_probs
+        self.decay_state = other.decay_state
+        self.soft_disabled = other.soft_disabled
 
     def _load_degraded(self):
         try:
@@ -40,19 +62,27 @@ class StrategyTracker:
 
     def set_degraded(self, degraded: dict):
         self.degraded = degraded or {}
-        try:
-            logs_dir().mkdir(exist_ok=True)
-            logs_dir() / "strategy_degradation.json".write_text(json.dumps({"degraded": self.degraded}, indent=2))
-        except Exception:
-            pass
+        self._write_json("strategy_degradation.json", {"degraded": self.degraded})
 
     def set_decay(self, decay_probs: dict):
         self.decay_probs = decay_probs or {}
-        try:
-            logs_dir().mkdir(exist_ok=True)
-            logs_dir() / "strategy_decay_probs.json".write_text(json.dumps(self.decay_probs, indent=2))
-        except Exception:
-            pass
+        self._write_json("strategy_decay_probs.json", self.decay_probs)
+
+    def load_first_available(self, paths) -> str | None:
+        """
+        Load the first perf snapshot that actually contains performance data.
+
+        This intentionally starts from a sidecar-free snapshot so a missing perf
+        file does not appear "loaded" just because decay/quarantine sidecars are
+        present in the runtime logs directory.
+        """
+        for path in paths or []:
+            candidate = StrategyTracker(max_len=self.max_len, load_sidecars=False)
+            candidate.load(path)
+            if candidate._has_perf_data():
+                self._copy_perf_state_from(candidate)
+                return str(path)
+        return None
 
     def apply_decay_probs(self, decay_probs: dict):
         """
@@ -95,11 +125,13 @@ class StrategyTracker:
             pass
         # persist state
         try:
-            logs_dir().mkdir(exist_ok=True)
-            logs_dir() / "strategy_decay_state.json".write_text(json.dumps({
-                "decay_state": self.decay_state,
-                "soft_disabled": self.soft_disabled,
-            }, indent=2))
+            self._write_json(
+                "strategy_decay_state.json",
+                {
+                    "decay_state": self.decay_state,
+                    "soft_disabled": self.soft_disabled,
+                },
+            )
         except Exception:
             pass
 

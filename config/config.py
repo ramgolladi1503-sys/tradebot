@@ -223,6 +223,10 @@ RISK_ENTROPY_SOFT = float(os.getenv("RISK_ENTROPY_SOFT", "1.3"))
 # -------------------------------
 LIVE_PILOT_MODE = os.getenv("LIVE_PILOT_MODE", "false").lower() == "true"
 LIVE_STRATEGY_WHITELIST = [s.strip() for s in os.getenv("LIVE_STRATEGY_WHITELIST", "").split(",") if s.strip()]
+LIVE_STRATEGY_PERF_SHADOW_FALLBACK_ENABLE = os.getenv(
+    "LIVE_STRATEGY_PERF_SHADOW_FALLBACK_ENABLE",
+    "true",
+).lower() == "true"
 LIVE_MAX_LOTS = int(os.getenv("LIVE_MAX_LOTS", "1"))
 LIVE_MAX_TRADES_PER_DAY = int(os.getenv("LIVE_MAX_TRADES_PER_DAY", "2"))
 LIVE_MAX_SPREAD_PCT = float(os.getenv("LIVE_MAX_SPREAD_PCT", "0.02"))

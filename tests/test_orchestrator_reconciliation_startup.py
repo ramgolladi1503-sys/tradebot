@@ -26,6 +26,10 @@ def test_orchestrator_starts_reconciliation_daemon(monkeypatch):
         def load(self, *args, **kwargs):
             return None
 
+        def load_first_available(self, paths):
+            self.load_first_available_paths = list(paths)
+            return paths[-1] if paths else None
+
     class DummyTradeBuilder(Dummy):
         pass
 
@@ -58,3 +62,7 @@ def test_orchestrator_starts_reconciliation_daemon(monkeypatch):
     ee = orch.execution_engine
     assert ee.start_called is True
     assert ee.reconcile_called is True
+    assert orch.strategy_tracker.load_first_available_paths == [
+        str(orch_mod.logs_dir() / "strategy_perf.json"),
+        str(orch_mod.logs_dir() / "suggestion_strategy_perf.json"),
+    ]
