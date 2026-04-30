@@ -1901,6 +1901,35 @@ def test_review_queue_normalizes_canonical_quote_age_before_gating_and_emit():
     assert out["option_age_sec"] == 0.0
 
 
+def test_review_queue_canonical_quote_age_refreshes_stale_freshness_metadata():
+    entry = {
+        "trade_id": "T-AGE-REFRESH",
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "quote_age_sec": 0.0,
+        "price_age_sec": 0.0,
+        "option_age_sec": None,
+        "current_ltp": 327.4,
+        "best_bid": 323.5,
+        "best_ask": 324.45,
+        "quote_validation_status": "STALE_OPTION_LTP",
+        "freshness_reason": "quote_exceeds_threshold",
+        "freshness_selected_age_sec": 3.1768689155578613,
+        "freshness_threshold_sec": 2.0,
+        "freshness_selected_source": "option_ltp_timestamp",
+    }
+
+    out = review_queue._apply_canonical_quote_age(dict(entry))
+
+    assert out["quote_age_sec"] == 0.0
+    assert out["price_age_sec"] == 0.0
+    assert out["option_age_sec"] == 0.0
+    assert out["quote_validation_status"] == "OK"
+    assert out["freshness_reason"] == "quote_within_threshold"
+    assert abs(float(out["freshness_selected_age_sec"]) - 0.0) < 1e-6
+    assert out["freshness_selected_source"] == "quote_age_sec"
+
+
 def test_review_queue_drops_internal_stale_age_sentinel_from_emitted_fields():
     entry = {
         "trade_id": "T-AGE-SENTINEL",

@@ -1992,6 +1992,53 @@ def _apply_canonical_quote_age(entry: dict) -> dict:
     out["quote_age_sec"] = canonical_age
     out["price_age_sec"] = canonical_age
     out["option_age_sec"] = canonical_age
+    if canonical_age is None:
+        return out
+
+    current_ltp = _safe_float(out.get("current_ltp"))
+    if current_ltp is None:
+        return out
+
+    freshness_reason = str(out.get("freshness_reason") or "").strip().lower()
+    freshness_reason_refreshable = freshness_reason in {"", "quote_exceeds_threshold", "quote_within_threshold"}
+    max_quote_age_sec = _safe_float(out.get("freshness_threshold_sec"))
+    if max_quote_age_sec is None:
+        max_quote_age_sec = _safe_float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0))
+    if max_quote_age_sec is None or max_quote_age_sec <= 0:
+        max_quote_age_sec = 8.0
+
+    old_status = str(out.get("quote_validation_status") or "").strip().upper() or None
+    new_status = resolve_quote_validation_status(
+        existing_status=old_status,
+        current_ltp=current_ltp,
+        quote_age_sec=canonical_age,
+        best_bid=_safe_float(out.get("best_bid")),
+        best_ask=_safe_float(out.get("best_ask")),
+        max_quote_age_sec=max_quote_age_sec,
+    )
+    if new_status:
+        out["quote_validation_status"] = new_status
+
+    if freshness_reason_refreshable:
+        out["freshness_threshold_sec"] = float(max_quote_age_sec)
+        out["freshness_selected_age_sec"] = float(canonical_age)
+        out["freshness_selected_source"] = "quote_age_sec"
+        out["freshness_reason"] = (
+            "quote_within_threshold"
+            if float(canonical_age) <= float(max_quote_age_sec)
+            else "quote_exceeds_threshold"
+        )
+        if old_status != new_status or freshness_reason != out["freshness_reason"]:
+            logger.info(
+                "QUOTE_TRUTH_CANONICALIZED trade_id=%s symbol=%s old_status=%s new_status=%s canonical_age_sec=%s threshold_sec=%s freshness_reason=%s",
+                out.get("trade_id"),
+                out.get("symbol"),
+                old_status,
+                new_status,
+                canonical_age,
+                max_quote_age_sec,
+                out.get("freshness_reason"),
+            )
     return out
 
 
