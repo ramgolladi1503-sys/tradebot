@@ -82,7 +82,8 @@ def test_invalidated_allows_new_row(tmp_path, monkeypatch):
     review_queue.add_to_queue(trade)
     rows = _read_queue(qpath)
     assert len(rows) == 2
-    assert rows[-1]["trade_status"] == "NEW"
+    assert any(row["trade_status"] == "NEW" for row in rows)
+    assert any(row["trade_status"] == "INVALIDATED" for row in rows)
 
 
 def test_ui_unique_trade_key(tmp_path):
