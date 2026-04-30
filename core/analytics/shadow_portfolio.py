@@ -56,17 +56,26 @@ def _to_day_key(epoch_ms: int) -> str:
 
 
 def _default_report_path(date_key: str) -> Path:
-    base = str(getattr(cfg, "SHADOW_PORTFOLIO_REPORT_DIR", "") or "").strip()
-    if base:
-        return Path(base) / date_key / "shadow_portfolio.json"
-    return repo_root() / "runtime" / "analytics" / "reports" / date_key / "shadow_portfolio.json"
+    return _report_path_for_scope(
+        date_key,
+        report_dir_key="SHADOW_PORTFOLIO_REPORT_DIR",
+        filename="shadow_portfolio.json",
+    )
 
 
 def _default_executable_report_path(date_key: str) -> Path:
-    base = str(getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_REPORT_DIR", "") or "").strip()
+    return _report_path_for_scope(
+        date_key,
+        report_dir_key="EXECUTABLE_SHADOW_PORTFOLIO_REPORT_DIR",
+        filename="executable_shadow_portfolio.json",
+    )
+
+
+def _report_path_for_scope(date_key: str, *, report_dir_key: str, filename: str) -> Path:
+    base = str(getattr(cfg, report_dir_key, "") or "").strip()
     if base:
-        return Path(base) / date_key / "executable_shadow_portfolio.json"
-    return repo_root() / "runtime" / "analytics" / "reports" / date_key / "executable_shadow_portfolio.json"
+        return Path(base) / date_key / filename
+    return repo_root() / "runtime" / "analytics" / "reports" / date_key / filename
 
 
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -486,6 +495,40 @@ def _default_candle_provider(trade: Mapping[str, Any], start_ms: int, end_ms: in
     return get_option_candles_or_snapshots(trade_row, interval, int(start_ms), int(end_ms))
 
 
+def _shadow_portfolio_runtime_params(
+    *,
+    lookahead_minutes: int | None,
+    interval: str | None,
+    entry_mode: str | None,
+    slippage_model: str | None,
+    slippage_bps: float | None,
+    spread_slippage_mult: float | None,
+    starting_equity: float | None,
+    lookahead_key: str = "SHADOW_PORTFOLIO_LOOKAHEAD_MINUTES",
+    interval_key: str = "SHADOW_PORTFOLIO_INTERVAL",
+    entry_mode_key: str = "SHADOW_PORTFOLIO_ENTRY_MODE",
+    slippage_model_key: str = "SHADOW_PORTFOLIO_SLIPPAGE_MODEL",
+    slippage_bps_key: str = "SHADOW_PORTFOLIO_SLIPPAGE_BPS",
+    spread_mult_key: str = "SHADOW_PORTFOLIO_SPREAD_SLIPPAGE_MULT",
+    starting_equity_key: str = "SHADOW_PORTFOLIO_STARTING_EQUITY",
+) -> dict[str, float | int | str]:
+    return {
+        "lookahead": max(1, int(lookahead_minutes if lookahead_minutes is not None else getattr(cfg, lookahead_key, 30))),
+        "interval": str(interval or getattr(cfg, interval_key, "minute")).strip() or "minute",
+        "entry_mode": str(entry_mode or getattr(cfg, entry_mode_key, "MARK")).strip().upper(),
+        "slippage_model": str(slippage_model or getattr(cfg, slippage_model_key, "bps")).strip().lower(),
+        "slippage_bps": float(slippage_bps if slippage_bps is not None else getattr(cfg, slippage_bps_key, 0.0)),
+        "spread_mult": float(
+            spread_slippage_mult
+            if spread_slippage_mult is not None
+            else getattr(cfg, spread_mult_key, 0.5)
+        ),
+        "starting_equity": float(
+            starting_equity if starting_equity is not None else getattr(cfg, starting_equity_key, 100000.0)
+        ),
+    }
+
+
 def _equity_summary(rows: Sequence[Mapping[str, Any]], *, starting_equity: float) -> tuple[list[dict], dict]:
     ordered = sorted(
         [row for row in rows if str(row.get("status") or "") == "SIMULATED"],
@@ -563,17 +606,22 @@ def _build_shadow_portfolio_report_payload(
     output_path: Path | None = None,
     scope: str = "trade_intent",
 ) -> dict:
-    lookahead = max(1, int(lookahead_minutes if lookahead_minutes is not None else getattr(cfg, "SHADOW_PORTFOLIO_LOOKAHEAD_MINUTES", 30)))
-    iv = str(interval or getattr(cfg, "SHADOW_PORTFOLIO_INTERVAL", "minute")).strip() or "minute"
-    entry_px_mode = str(entry_mode or getattr(cfg, "SHADOW_PORTFOLIO_ENTRY_MODE", "MARK")).strip().upper()
-    slip_model = str(slippage_model or getattr(cfg, "SHADOW_PORTFOLIO_SLIPPAGE_MODEL", "bps")).strip().lower()
-    slip_bps = float(slippage_bps if slippage_bps is not None else getattr(cfg, "SHADOW_PORTFOLIO_SLIPPAGE_BPS", 0.0))
-    spread_mult = float(
-        spread_slippage_mult
-        if spread_slippage_mult is not None
-        else getattr(cfg, "SHADOW_PORTFOLIO_SPREAD_SLIPPAGE_MULT", 0.5)
+    params = _shadow_portfolio_runtime_params(
+        lookahead_minutes=lookahead_minutes,
+        interval=interval,
+        entry_mode=entry_mode,
+        slippage_model=slippage_model,
+        slippage_bps=slippage_bps,
+        spread_slippage_mult=spread_slippage_mult,
+        starting_equity=starting_equity,
     )
-    initial_equity = float(starting_equity if starting_equity is not None else getattr(cfg, "SHADOW_PORTFOLIO_STARTING_EQUITY", 100000.0))
+    lookahead = int(params["lookahead"])
+    iv = str(params["interval"])
+    entry_px_mode = str(params["entry_mode"])
+    slip_model = str(params["slippage_model"])
+    slip_bps = float(params["slippage_bps"])
+    spread_mult = float(params["spread_mult"])
+    initial_equity = float(params["starting_equity"])
     provider = candle_provider or _default_candle_provider
 
     rows: list[dict] = []
@@ -784,34 +832,34 @@ def build_executable_shadow_portfolio_report(
         scanned_events += 1
         selected_events.append(item)
 
-    effective_entry_mode = entry_mode or getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_ENTRY_MODE", "SIDE_QUOTE")
-    effective_lookahead = lookahead_minutes if lookahead_minutes is not None else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_LOOKAHEAD_MINUTES", 30)
-    effective_interval = interval or getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_INTERVAL", None) or getattr(cfg, "SHADOW_PORTFOLIO_INTERVAL", "minute")
-    effective_slippage_model = slippage_model or getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_SLIPPAGE_MODEL", "spread")
-    effective_slippage_bps = slippage_bps if slippage_bps is not None else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_SLIPPAGE_BPS", 0.0)
-    effective_spread_mult = (
-        spread_slippage_mult
-        if spread_slippage_mult is not None
-        else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_SPREAD_SLIPPAGE_MULT", 0.5)
+    params = _shadow_portfolio_runtime_params(
+        lookahead_minutes=lookahead_minutes,
+        interval=interval,
+        entry_mode=entry_mode,
+        slippage_model=slippage_model,
+        slippage_bps=slippage_bps,
+        spread_slippage_mult=spread_slippage_mult,
+        starting_equity=starting_equity,
+        lookahead_key="EXECUTABLE_SHADOW_PORTFOLIO_LOOKAHEAD_MINUTES",
+        interval_key="EXECUTABLE_SHADOW_PORTFOLIO_INTERVAL",
+        entry_mode_key="EXECUTABLE_SHADOW_PORTFOLIO_ENTRY_MODE",
+        slippage_model_key="EXECUTABLE_SHADOW_PORTFOLIO_SLIPPAGE_MODEL",
+        slippage_bps_key="EXECUTABLE_SHADOW_PORTFOLIO_SLIPPAGE_BPS",
+        spread_mult_key="EXECUTABLE_SHADOW_PORTFOLIO_SPREAD_SLIPPAGE_MULT",
+        starting_equity_key="EXECUTABLE_SHADOW_PORTFOLIO_STARTING_EQUITY",
     )
-    effective_starting_equity = (
-        starting_equity if starting_equity is not None else getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_STARTING_EQUITY", 100000.0)
-    )
-    out_path = output_path
-    if out_path is None:
-        base = str(getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_REPORT_DIR", "") or "").strip()
-        out_path = Path(base) / date_key / "executable_shadow_portfolio.json" if base else _default_executable_report_path(date_key)
+    out_path = output_path or _default_executable_report_path(date_key)
     return _build_shadow_portfolio_report_payload(
         date_key,
         event_rows=selected_events,
         scanned_events=scanned_events,
-        lookahead_minutes=effective_lookahead,
-        interval=effective_interval,
-        entry_mode=effective_entry_mode,
-        slippage_model=effective_slippage_model,
-        slippage_bps=effective_slippage_bps,
-        spread_slippage_mult=effective_spread_mult,
-        starting_equity=effective_starting_equity,
+        lookahead_minutes=int(params["lookahead"]),
+        interval=str(params["interval"]),
+        entry_mode=str(params["entry_mode"]),
+        slippage_model=str(params["slippage_model"]),
+        slippage_bps=float(params["slippage_bps"]),
+        spread_slippage_mult=float(params["spread_mult"]),
+        starting_equity=float(params["starting_equity"]),
         candle_provider=candle_provider,
         output_path=out_path,
         scope="executable_review_queue",
