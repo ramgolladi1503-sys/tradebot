@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from core.analytics.daily_report import build_daily_intelligence_report
 from core.analytics.schema import GateDecision, TradeIntentEvent, TradeOutcome
 
@@ -97,3 +99,51 @@ def test_daily_report_contains_required_sections(tmp_path):
     assert "## Section 5: Feed quality impact" in markdown
     assert "## Action list" in markdown
 
+
+def test_daily_report_includes_executable_shadow_section(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    date_key = "2025-02-28"
+
+    def _fake_exec_shadow(date, **kwargs):
+        assert date == date_key
+        out = Path(str(kwargs["output_path"]))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "date": date_key,
+            "scope": "executable_review_queue",
+            "counts": {
+                "scanned_events": 4,
+                "eligible_events": 3,
+                "simulated_trades": 2,
+                "skipped_events": 1,
+            },
+            "summary": {
+                "trades": 2,
+                "wins": 1,
+                "losses": 1,
+                "total_pnl_value": 125.0,
+                "ending_equity": 100125.0,
+                "max_drawdown_points": 40.0,
+            },
+            "skip_reasons": {"no_candles": 1},
+            "output_path": str(out),
+        }
+        out.write_text(json.dumps(payload), encoding="utf-8")
+        return payload
+
+    monkeypatch.setattr("core.analytics.daily_report.build_executable_shadow_portfolio_report", _fake_exec_shadow)
+
+    output_dir = tmp_path / "runtime" / "analytics" / "reports" / date_key
+    payload = build_daily_intelligence_report(
+        date_key,
+        events=[],
+        outcomes=[],
+        attempt_outcome_replay=False,
+        output_dir=output_dir,
+    )
+
+    markdown = Path(str(payload["daily_report_markdown_path"])).read_text(encoding="utf-8")
+    assert "## Section 6: Executable shadow portfolio" in markdown
+    assert "simulated_trades=2" in markdown
+    assert "skip_reasons={'no_candles': 1}" in markdown
+    assert payload["sections"]["executable_shadow_portfolio"]["simulated_trades"] == 2
+    assert payload["analytics_outputs"]["executable_shadow_portfolio"].endswith("executable_shadow_portfolio.json")

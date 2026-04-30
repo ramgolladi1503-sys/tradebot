@@ -15,6 +15,7 @@ from core.paths import repo_root
 from .feed_quality_correlation import build_feed_quality_correlation_report
 from .gate_scorecard import build_gate_scorecard
 from .missed_opportunity import analyze_missed_opportunity
+from .shadow_portfolio import build_executable_shadow_portfolio_report
 from .regime_analysis import build_regime_analysis
 from .schema import TradeIntentEvent, TradeOutcome
 from .target_sl_calibration import build_target_sl_calibration_report
@@ -277,6 +278,23 @@ def _feed_quality_section(payload: Mapping[str, Any]) -> dict:
     }
 
 
+def _executable_shadow_section(payload: Mapping[str, Any]) -> dict:
+    counts = payload.get("counts") if isinstance(payload.get("counts"), Mapping) else {}
+    summary = payload.get("summary") if isinstance(payload.get("summary"), Mapping) else {}
+    return {
+        "scanned_events": int(counts.get("scanned_events") or 0),
+        "eligible_events": int(counts.get("eligible_events") or 0),
+        "simulated_trades": int(counts.get("simulated_trades") or 0),
+        "skipped_events": int(counts.get("skipped_events") or 0),
+        "wins": int(summary.get("wins") or 0),
+        "losses": int(summary.get("losses") or 0),
+        "total_pnl_value": _safe_float(summary.get("total_pnl_value")),
+        "ending_equity": _safe_float(summary.get("ending_equity")),
+        "max_drawdown_points": _safe_float(summary.get("max_drawdown_points")),
+        "skip_reasons": dict(payload.get("skip_reasons") or {}),
+    }
+
+
 def _build_action_list(
     *,
     feed_section: Mapping[str, Any],
@@ -367,6 +385,7 @@ def _compose_markdown(
     regime_notes: Sequence[Mapping[str, Any]],
     target_sl: Mapping[str, Any],
     feed_quality: Mapping[str, Any],
+    executable_shadow: Mapping[str, Any],
     action_list: Sequence[Mapping[str, Any]],
     warnings: Sequence[str],
 ) -> str:
@@ -468,6 +487,24 @@ def _compose_markdown(
         lines.append("- spread: no strong threshold identified")
     lines.append("")
 
+    lines.append("## Section 6: Executable shadow portfolio")
+    lines.append(
+        "- "
+        f"scanned={int(executable_shadow.get('scanned_events') or 0)}, "
+        f"eligible={int(executable_shadow.get('eligible_events') or 0)}, "
+        f"simulated_trades={int(executable_shadow.get('simulated_trades') or 0)}, "
+        f"skipped={int(executable_shadow.get('skipped_events') or 0)}"
+    )
+    lines.append(
+        "- "
+        f"wins={int(executable_shadow.get('wins') or 0)}, "
+        f"losses={int(executable_shadow.get('losses') or 0)}, "
+        f"total_pnl_value={_safe_float(executable_shadow.get('total_pnl_value'))}, "
+        f"max_drawdown_points={_safe_float(executable_shadow.get('max_drawdown_points'))}"
+    )
+    lines.append(f"- skip_reasons={dict(executable_shadow.get('skip_reasons') or {})}")
+    lines.append("")
+
     lines.append("## Action list")
     for idx, row in enumerate(list(action_list or [])[:3], start=1):
         lines.append(f"{idx}. [{_norm_text(row.get('status'))}] {_norm_text(row.get('suggestion'))}")
@@ -506,6 +543,7 @@ def build_daily_intelligence_report(
     regime_path = base_dir / "regime_analysis.json"
     tsl_path = base_dir / "target_sl_calibration.json"
     feed_path = base_dir / "feed_quality_correlation.json"
+    executable_shadow_path = base_dir / "executable_shadow_portfolio.json"
 
     gate_payload = _safe_builder_call(
         "gate_scorecard",
@@ -553,12 +591,24 @@ def build_daily_intelligence_report(
         quote_rows=quote_rows,
         output_path=feed_path,
     )
+    executable_shadow_payload = {}
+    if bool(getattr(cfg, "DAILY_REPORT_INCLUDE_EXECUTABLE_SHADOW", True)) and bool(
+        getattr(cfg, "EXECUTABLE_SHADOW_PORTFOLIO_ENABLE", True)
+    ):
+        executable_shadow_payload = _safe_builder_call(
+            "executable_shadow_portfolio",
+            build_executable_shadow_portfolio_report,
+            warnings=warnings,
+            date=date_key,
+            output_path=executable_shadow_path,
+        )
 
     blocked_edge = _blocked_edge_section(gate_payload, missed_payload)
     protective = _protective_section(gate_payload)
     regime_notes = _regime_notes_section(regime_payload)
     target_sl = _target_sl_section(tsl_payload)
     feed_quality = _feed_quality_section(feed_payload)
+    executable_shadow = _executable_shadow_section(executable_shadow_payload)
     action_list = _build_action_list(feed_section=feed_quality, target_section=target_sl)
 
     symbols: set[str] = set()
@@ -602,6 +652,7 @@ def build_daily_intelligence_report(
         regime_notes=regime_notes,
         target_sl=target_sl,
         feed_quality=feed_quality,
+        executable_shadow=executable_shadow,
         action_list=action_list,
         warnings=warnings,
     )
@@ -622,6 +673,7 @@ def build_daily_intelligence_report(
             "regime_notes": regime_notes,
             "target_sl_calibration": target_sl,
             "feed_quality_impact": feed_quality,
+            "executable_shadow_portfolio": executable_shadow,
         },
         "action_list": action_list,
         "analytics_outputs": {
@@ -630,6 +682,7 @@ def build_daily_intelligence_report(
             "regime_analysis": str(regime_path),
             "target_sl_calibration": str(tsl_path),
             "feed_quality_correlation": str(feed_path),
+            "executable_shadow_portfolio": str(executable_shadow_path),
         },
         "warnings": warnings,
     }

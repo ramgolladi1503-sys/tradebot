@@ -235,6 +235,14 @@ def _confidence_metrics_snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
 def _executable_review_queue_metrics_snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
     metrics = _confidence_metrics_snapshot(row)
     for key in (
+        "tradingsymbol",
+        "instrument_token",
+        "exchange",
+        "expiry",
+        "expiry_date",
+        "strike",
+        "option_type",
+        "right",
         "candidate_class",
         "final_action",
         "execution_allowed",
@@ -308,6 +316,15 @@ def _event_ts_ms(row: dict) -> int | None:
         or _coerce_epoch_ms(row.get("timestamp_iso"))
         or _coerce_epoch_ms(row.get("timestamp"))
         or _coerce_epoch_ms(row.get("ts_ist"))
+    )
+
+
+def _executable_event_ts_ms(row: dict) -> int | None:
+    return (
+        _coerce_epoch_ms(row.get("snapshot_ts_epoch"))
+        or _coerce_epoch_ms(row.get("quote_ts_epoch"))
+        or _coerce_epoch_ms(row.get("display_ts_epoch"))
+        or _event_ts_ms(row)
     )
 
 
@@ -397,7 +414,7 @@ def _int_event_from_review_row(row: dict, *, source: str) -> TradeIntentEvent | 
 
 
 def _int_event_from_executable_review_row(row: dict, *, source: str) -> TradeIntentEvent | None:
-    ts_ms = _event_ts_ms(row)
+    ts_ms = _executable_event_ts_ms(row)
     symbol = _text(row.get("symbol")).upper()
     if ts_ms is None or not symbol:
         return None

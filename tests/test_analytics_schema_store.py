@@ -155,6 +155,7 @@ def test_load_executable_review_queue_events_marks_executable_rows_accepted(tmp_
             "trade_key": "SENSEX|2026-04-23|77700|PE|BUY|ENSEMBLE_OPT",
             "symbol": "SENSEX",
             "timestamp_epoch_ms": 1_771_056_600_000,
+            "snapshot_ts_epoch": 1_771_036_800.0,
             "candidate_class": "EXECUTABLE",
             "final_action": "EXECUTE",
             "execution_allowed": False,
@@ -168,6 +169,8 @@ def test_load_executable_review_queue_events_marks_executable_rows_accepted(tmp_
             "option_type": "PE",
             "expiry_date": "2026-04-23",
             "strike": 77700.0,
+            "tradingsymbol": "SENSEX2642377700PE",
+            "instrument_token": 225460997,
             "quote_validation_status": "STALE_OPTION_LTP",
             "primary_blocker": "missing_execution_entry",
             "selection_reason": "not_execution_eligible",
@@ -198,5 +201,8 @@ def test_load_executable_review_queue_events_marks_executable_rows_accepted(tmp_
     assert len(events) == 1
     assert events[0].intent == "accepted"
     assert events[0].symbol == "SENSEX"
+    assert events[0].ts_epoch_ms == 1_771_036_800_000
     assert events[0].metrics_snapshot["candidate_class"] == "EXECUTABLE"
     assert events[0].metrics_snapshot["execution_allowed"] is False
+    assert events[0].metrics_snapshot["tradingsymbol"] == "SENSEX2642377700PE"
+    assert events[0].metrics_snapshot["instrument_token"] == 225460997
