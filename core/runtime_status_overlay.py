@@ -79,6 +79,10 @@ def _primary_feed_blocker(feed_payload: dict[str, Any]) -> str:
     return "FEED_UNHEALTHY"
 
 
+def _is_feed_runtime_overlay(payload: dict[str, Any]) -> bool:
+    return str(payload.get("overlay_source") or "").strip() == "feed_runtime_overlay"
+
+
 def publish_feed_unhealthy_status_overlay(
     *,
     feed_payload: dict[str, Any],
@@ -94,18 +98,112 @@ def publish_feed_unhealthy_status_overlay(
 
     effective_ws_connected = derive_effective_ws_connected(feed_payload)
     feed_ok = derive_feed_ok(feed_payload)
-    if feed_ok and effective_ws_connected is not False:
-        return False
 
     target_logs_root = Path(logs_root) if logs_root is not None else logs_dir()
     target_logs_root.mkdir(parents=True, exist_ok=True)
     ts_epoch = float(now_epoch if now_epoch is not None else time.time())
     ts_local = time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(ts_epoch))
     auth = runtime_auth_snapshot()
-    blocker = _primary_feed_blocker(feed_payload)
 
     suggestions_path = target_logs_root / "suggestions_status.json"
     current_suggestions = _read_json(suggestions_path)
+    engine_path = target_logs_root / "engine_cycle_status.json"
+    current_engine = _read_json(engine_path)
+    runtime_health_path = target_logs_root / "runtime_health_latest.json"
+    current_health = _read_json(runtime_health_path)
+    runtime_state = str(feed_payload.get("runtime_state") or "").strip().upper() or "UNKNOWN"
+    subscribed_option_tokens_count = int(feed_payload.get("subscribed_option_tokens_count") or 0)
+    missing_option_tokens_count = int(feed_payload.get("missing_option_tokens_count") or 0)
+    subscribed_tokens_count = int(feed_payload.get("subscribed_tokens_count") or 0)
+
+    if feed_ok and effective_ws_connected is not False:
+        should_heal = _is_feed_runtime_overlay(current_suggestions) or _is_feed_runtime_overlay(current_engine)
+        if not should_heal:
+            return False
+
+        suggestions_payload = dict(current_suggestions)
+        suggestions_payload.update(
+            {
+                "ts_epoch": ts_epoch,
+                "ts_local": ts_local,
+                "status": "blocked",
+                "reason": "feed_recovered_waiting_cycle_refresh",
+                "subreason": "",
+                "primary_blocker": None,
+                "visible_suggestion_count": 0,
+                "visible_advisory_count": 0,
+                "visible_queue_only_count": 0,
+                "visible_executable_count": 0,
+                "suggestion_count": 0,
+                "feed_ok": True,
+                "ws_connected": effective_ws_connected,
+                "auth_ok": bool(auth.get("auth_ok", True)),
+                "auth_state": str(auth.get("auth_state") or "UNKNOWN"),
+                "auth_reason": str(auth.get("auth_reason") or ""),
+                "subscribed_option_tokens_count": subscribed_option_tokens_count,
+                "missing_option_tokens_count": missing_option_tokens_count,
+                "overlay_source": "feed_runtime_overlay",
+                "overlay_state": "feed_recovered_waiting_cycle_refresh",
+            }
+        )
+        write_json_atomic(suggestions_path, suggestions_payload)
+
+        engine_payload = dict(current_engine)
+        engine_payload.update(
+            {
+                "ts_epoch": ts_epoch,
+                "cycle_ok": False,
+                "cycle_stage": "waiting_cycle_refresh",
+                "reason": "feed_recovered_waiting_cycle_refresh",
+                "subreason": "",
+                "primary_blocker": None,
+                "visible_suggestion_count": 0,
+                "visible_advisory_count": 0,
+                "visible_queue_only_count": 0,
+                "visible_executable_count": 0,
+                "feed_ok": True,
+                "ws_connected": effective_ws_connected,
+                "auth_ok": bool(auth.get("auth_ok", True)),
+                "auth_state": str(auth.get("auth_state") or "UNKNOWN"),
+                "auth_reason": str(auth.get("auth_reason") or ""),
+                "subscribed_option_tokens_count": subscribed_option_tokens_count,
+                "missing_option_tokens_count": missing_option_tokens_count,
+                "last_error": str(feed_payload.get("last_error") or ""),
+                "overlay_source": "feed_runtime_overlay",
+                "overlay_state": "feed_recovered_waiting_cycle_refresh",
+            }
+        )
+        write_json_atomic(engine_path, engine_payload)
+
+        health_payload = dict(current_health)
+        health_payload.update(
+            {
+                "ts_epoch": ts_epoch,
+                "snapshot_ts_epoch": ts_epoch,
+                "snapshot_age_sec": 0.0,
+                "market_open": bool(feed_payload.get("market_open", False)),
+                "mode": "LIVE",
+                "feed": {
+                    "runtime_state": runtime_state,
+                    "ws_connected": effective_ws_connected,
+                    "sla_status": "OK",
+                    "sla_state": "LIVE",
+                    "allow_stale_quotes": False,
+                    "blockers": [],
+                    "reasons": [],
+                    "ltp_required": True,
+                    "depth_required": True,
+                    "subscribed_option_tokens_count": subscribed_option_tokens_count,
+                    "subscribed_tokens_count": subscribed_tokens_count,
+                    "subscriptions_count": subscribed_tokens_count,
+                    "missing_option_tokens_count": missing_option_tokens_count,
+                },
+            }
+        )
+        write_json_atomic(runtime_health_path, health_payload)
+        return True
+
+    blocker = _primary_feed_blocker(feed_payload)
     suggestions_payload = dict(current_suggestions)
     suggestions_payload.update(
         {
@@ -125,14 +223,14 @@ def publish_feed_unhealthy_status_overlay(
             "auth_ok": bool(auth.get("auth_ok", True)),
             "auth_state": str(auth.get("auth_state") or "UNKNOWN"),
             "auth_reason": str(auth.get("auth_reason") or ""),
-            "subscribed_option_tokens_count": int(feed_payload.get("subscribed_option_tokens_count") or 0),
-            "missing_option_tokens_count": int(feed_payload.get("missing_option_tokens_count") or 0),
+            "subscribed_option_tokens_count": subscribed_option_tokens_count,
+            "missing_option_tokens_count": missing_option_tokens_count,
+            "overlay_source": "feed_runtime_overlay",
+            "overlay_state": "feed_unhealthy",
         }
     )
     write_json_atomic(suggestions_path, suggestions_payload)
 
-    engine_path = target_logs_root / "engine_cycle_status.json"
-    current_engine = _read_json(engine_path)
     engine_payload = dict(current_engine)
     engine_payload.update(
         {
@@ -151,15 +249,15 @@ def publish_feed_unhealthy_status_overlay(
             "auth_ok": bool(auth.get("auth_ok", True)),
             "auth_state": str(auth.get("auth_state") or "UNKNOWN"),
             "auth_reason": str(auth.get("auth_reason") or ""),
-            "subscribed_option_tokens_count": int(feed_payload.get("subscribed_option_tokens_count") or 0),
-            "missing_option_tokens_count": int(feed_payload.get("missing_option_tokens_count") or 0),
+            "subscribed_option_tokens_count": subscribed_option_tokens_count,
+            "missing_option_tokens_count": missing_option_tokens_count,
             "last_error": str(feed_payload.get("last_error") or ""),
+            "overlay_source": "feed_runtime_overlay",
+            "overlay_state": "feed_unhealthy",
         }
     )
     write_json_atomic(engine_path, engine_payload)
 
-    runtime_health_path = target_logs_root / "runtime_health_latest.json"
-    current_health = _read_json(runtime_health_path)
     health_payload = dict(current_health)
     health_payload.update(
         {
@@ -169,7 +267,7 @@ def publish_feed_unhealthy_status_overlay(
             "market_open": bool(feed_payload.get("market_open", False)),
             "mode": "LIVE",
             "feed": {
-                "runtime_state": str(feed_payload.get("runtime_state") or "").strip().upper() or "UNKNOWN",
+                "runtime_state": runtime_state,
                 "ws_connected": effective_ws_connected,
                 "sla_status": "FAIL",
                 "sla_state": "LIVE",
@@ -178,10 +276,10 @@ def publish_feed_unhealthy_status_overlay(
                 "reasons": [blocker],
                 "ltp_required": True,
                 "depth_required": True,
-                "subscribed_option_tokens_count": int(feed_payload.get("subscribed_option_tokens_count") or 0),
-                "subscribed_tokens_count": int(feed_payload.get("subscribed_tokens_count") or 0),
-                "subscriptions_count": int(feed_payload.get("subscribed_tokens_count") or 0),
-                "missing_option_tokens_count": int(feed_payload.get("missing_option_tokens_count") or 0),
+                "subscribed_option_tokens_count": subscribed_option_tokens_count,
+                "subscribed_tokens_count": subscribed_tokens_count,
+                "subscriptions_count": subscribed_tokens_count,
+                "missing_option_tokens_count": missing_option_tokens_count,
             },
         }
     )

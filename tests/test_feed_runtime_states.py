@@ -259,3 +259,64 @@ def test_write_feed_runtime_snapshot_publishes_fail_closed_status_overlay(monkey
     assert engine["visible_executable_count"] == 0
     assert health["feed"]["sla_status"] == "FAIL"
     assert health["feed"]["ws_connected"] is False
+
+
+def test_write_feed_runtime_snapshot_heals_stale_feed_overlay_after_recovery(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", True, raising=False)
+
+    depth_ws._write_feed_runtime_snapshot(
+        now_epoch=200.0,
+        ws_connected=True,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=180.0,
+        last_db_tick_age_sec=20.0,
+        last_ws_tick_epoch=180.0,
+        last_tick_age_sec=20.0,
+        last_depth_epoch=190.0,
+        last_depth_age_sec=10.0,
+        market_open=True,
+        state_machine={"state": "DOWN", "reason": "no_ws_messages"},
+        subscribed_option_tokens_count=1,
+        option_feed_block_reason_by_symbol={"NIFTY": "NO_LIVE_OPTION_FEED"},
+        option_active_blockers_by_symbol={"NIFTY": ["NO_LIVE_OPTION_FEED"]},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    depth_ws._write_feed_runtime_snapshot(
+        now_epoch=205.0,
+        ws_connected=True,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=204.0,
+        last_db_tick_age_sec=1.0,
+        last_ws_tick_epoch=204.0,
+        last_tick_age_sec=1.0,
+        last_depth_epoch=204.0,
+        last_depth_age_sec=1.0,
+        market_open=True,
+        state_machine={"state": "LIVE", "reason": "ticks_flowing"},
+        subscribed_option_tokens_count=1,
+        option_feed_block_reason_by_symbol={"NIFTY": "OK"},
+        option_active_blockers_by_symbol={"NIFTY": []},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    suggestions = json.loads((logs_path / "suggestions_status.json").read_text())
+    engine = json.loads((logs_path / "engine_cycle_status.json").read_text())
+    health = json.loads((logs_path / "runtime_health_latest.json").read_text())
+
+    assert suggestions["reason"] == "feed_recovered_waiting_cycle_refresh"
+    assert suggestions["feed_ok"] is True
+    assert suggestions["visible_executable_count"] == 0
+    assert suggestions["overlay_state"] == "feed_recovered_waiting_cycle_refresh"
+    assert engine["reason"] == "feed_recovered_waiting_cycle_refresh"
+    assert engine["cycle_stage"] == "waiting_cycle_refresh"
+    assert engine["feed_ok"] is True
+    assert health["feed"]["sla_status"] == "OK"
+    assert health["feed"]["ws_connected"] is True
