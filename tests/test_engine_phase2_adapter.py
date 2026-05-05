@@ -60,6 +60,31 @@ def test_build_candidates_phase2_applies_hard_filters(monkeypatch):
     assert ranked[0]["phase2_hard_filters"]["liquidity_ok"] is True
 
 
+def test_build_candidates_phase2_aggregates_invalid_candidate_logging(monkeypatch, caplog):
+    monkeypatch.setattr(cfg, "PHASE2_INVALID_CANDIDATE_LOG_SAMPLE_LIMIT", 2, raising=False)
+    with caplog.at_level(logging.WARNING):
+        ranked = build_candidates_phase2(
+            [
+                {},
+                {"trade_id": "BAD-1"},
+                {
+                    "trade_id": "GOOD",
+                    "symbol": "NIFTY",
+                    "final_score": 0.81,
+                    "spread_pct": 0.01,
+                    "execution_allowed": True,
+                    "tradable": True,
+                    "execution_ok": True,
+                    "liquidity_score": 0.9,
+                },
+            ]
+        )
+
+    assert [row["trade_id"] for row in ranked] == ["GOOD"]
+    assert "PHASE2: invalid candidates skipped count=2" in caplog.text
+    assert "PHASE2: invalid candidate skipped trade_id=" not in caplog.text
+
+
 def test_run_engine_phase2_enters_top_ranked_candidate(monkeypatch):
     monkeypatch.setattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.7, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
@@ -418,6 +443,60 @@ def test_build_candidates_phase2_applies_market_context_fallbacks(monkeypatch):
     assert ranked[0]["liquidity_score"] == 0.5
     assert ranked[0]["quote_source"] == "unknown"
     assert "unknown_quote_source" in list(ranked[0].get("phase2_soft_penalties") or [])
+
+
+def test_build_candidates_phase2_derives_liquidity_from_book_when_missing(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_MAX_SPREAD_PCT", 0.03, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "CTX_LIQ_BOOK",
+                "symbol": "NIFTY",
+                "final_score": 0.8,
+                "spread_pct": None,
+                "best_bid": 99.0,
+                "best_ask": 100.0,
+                "current_ltp": 99.5,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.7,
+                "liquidity_score": None,
+                "quote_source": "tick_store",
+            }
+        ]
+    )
+    assert len(ranked) == 1
+    assert ranked[0]["phase2_liquidity_derived_from_book"] is True
+    assert float(ranked[0]["liquidity_score"]) > 0.0
+    assert "phase2_liquidity_fallback_used" not in ranked[0]
+
+
+def test_build_candidates_phase2_caps_precomputed_liquidity_on_split_brain_quote_bundle(monkeypatch):
+    monkeypatch.setattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.5, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_MAX_SPREAD_PCT", 0.03, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_MIN_LIQUIDITY_SCORE", 0.35, raising=False)
+    ranked = build_candidates_phase2(
+        [
+            {
+                "trade_id": "CTX_LIQ_SPLIT_BRAIN",
+                "symbol": "NIFTY",
+                "final_score": 0.8,
+                "spread_pct": 0.001,
+                "best_bid": 389.05,
+                "best_ask": 390.2,
+                "current_ltp": 1.7,
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "execution_score": 0.7,
+                "liquidity_score": 1.0,
+                "quote_source": "tick_store",
+            }
+        ]
+    )
+    assert ranked == []
 
 
 def test_build_candidates_phase2_soft_degrades_noncritical_execution_context(monkeypatch):

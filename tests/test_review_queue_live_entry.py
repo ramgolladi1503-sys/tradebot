@@ -75,6 +75,106 @@ def test_trade_blocked_without_option_subscription(tmp_path, monkeypatch):
     assert status_payload["primary_blocker"] in {"NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}
 
 
+def test_update_suggestions_status_latest_replaces_stale_visible_counts(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    logs_root = Path(cfg.LOGS_ROOT)
+    logs_root.mkdir(parents=True, exist_ok=True)
+    (logs_root / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "feed_ok": True,
+                "ws_connected": True,
+                "subscribed_option_tokens_count": 70,
+                "missing_option_tokens_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (logs_root / "suggestions_status.json").write_text(
+        json.dumps(
+            {
+                "visible_suggestion_count": 214,
+                "visible_advisory_count": 32,
+                "visible_queue_only_count": 117,
+                "visible_executable_count": 65,
+            }
+        ),
+        encoding="utf-8",
+    )
+    entry = {
+        "trade_id": "T-STATUS-FRESH",
+        "entry_status": "ok",
+        "permission": "ADVISORY_ONLY",
+        "final_action": "ADVISORY_ONLY",
+        "execution_status": "advisory_only",
+        "execution_allowed": False,
+        "candidate_status": "advisory_only",
+        "quote_validation_status": "PRICE_MISMATCH",
+        "hard_blockers": ["PRICE_MISMATCH"],
+        "blockers": ["PRICE_MISMATCH"],
+    }
+
+    review_queue._update_suggestions_status_latest(
+        entry,
+        queue_rows=[entry],
+    )
+
+    status_payload = json.loads((logs_root / "suggestions_status.json").read_text())
+    assert status_payload["visible_suggestion_count"] == 1
+    assert status_payload["visible_advisory_count"] == 1
+    assert status_payload["visible_queue_only_count"] == 0
+    assert status_payload["visible_executable_count"] == 0
+    assert status_payload["feed_ok"] is True
+    assert status_payload["ws_connected"] is True
+    assert status_payload["subscribed_option_tokens_count"] == 70
+
+
+def test_update_suggestions_status_latest_derives_feed_ok_from_runtime_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    logs_root = Path(cfg.LOGS_ROOT)
+    logs_root.mkdir(parents=True, exist_ok=True)
+    (logs_root / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "last_tick_age_sec": 0.0,
+                "last_depth_age_sec": 0.0,
+                "option_feed_block_reason_by_symbol": {
+                    "NIFTY": "OK",
+                    "BANKNIFTY": "OK",
+                    "SENSEX": "OK",
+                },
+                "subscribed_option_tokens_count": 70,
+                "missing_option_tokens_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    entry = {
+        "trade_id": "T-STATUS-DERIVE-FEED-OK",
+        "entry_status": "ok",
+        "permission": "ADVISORY_ONLY",
+        "final_action": "ADVISORY_ONLY",
+        "execution_status": "advisory_only",
+        "execution_allowed": False,
+        "candidate_status": "advisory_only",
+        "quote_validation_status": "PRICE_MISMATCH",
+        "hard_blockers": ["PRICE_MISMATCH"],
+        "blockers": ["PRICE_MISMATCH"],
+    }
+
+    review_queue._update_suggestions_status_latest(
+        entry,
+        queue_rows=[entry],
+    )
+
+    status_payload = json.loads((logs_root / "suggestions_status.json").read_text())
+    assert status_payload["feed_ok"] is True
+    assert status_payload["ws_connected"] is True
+    assert status_payload["subscribed_option_tokens_count"] == 70
+
+
 def test_review_queue_emits_lifecycle_events_for_blocked_and_emitted_trades(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     lifecycle_path = tmp_path / "observability" / "trade_lifecycle.jsonl"
@@ -1846,6 +1946,46 @@ def test_executable_claim_with_only_display_entry_is_downgraded_during_review_fi
     assert out["display_entry_status"] == "displayable"
 
 
+def test_enforce_final_execution_state_consistency_demotes_permission_for_advisory_rows():
+    entry = {
+        "trade_id": "T-FINAL-STATE-PERM",
+        "symbol": "NIFTY",
+        "permission": "EXECUTE",
+        "permission_reason": "aligned_high_conf",
+        "readiness": "ADVISORY_ONLY",
+        "final_action": "ADVISORY_ONLY",
+        "execution_status": "advisory_only",
+        "status": "ADVISORY_ONLY",
+        "entry": 230.15,
+        "entry_source": "ask",
+        "entry_status": "displayable",
+        "display_entry": 230.15,
+        "display_entry_source": "ask",
+        "display_entry_status": "displayable",
+        "execution_entry": 230.15,
+        "execution_entry_source": "ask",
+        "execution_entry_status": "executable",
+        "execution_allowed": False,
+        "execution_ok": False,
+        "execution_blocked": False,
+        "approval_blocked": False,
+        "hard_blockers": [],
+        "blockers": [],
+        "candidate_status": "advisory_only",
+        "primary_blocker": "aligned_high_conf",
+    }
+
+    out = review_queue._enforce_final_execution_state_consistency(entry)
+
+    assert out["permission"] == "ADVISORY_ONLY"
+    assert out["permission_downgraded_from"] == "EXECUTE"
+    assert out["permission_downgrade_reason"] == "final_execution_state_consistency"
+    assert out["permission_reason"] == "aligned_high_conf"
+    assert out["final_action"] == "ADVISORY_ONLY"
+    assert out["execution_status"] == "advisory_only"
+    assert out["execution_allowed"] is False
+
+
 def test_review_queue_syncs_final_confidence_and_derives_sizing_telemetry():
     entry = {
         "trade_id": "T-CONF-SIZE",
@@ -2540,6 +2680,168 @@ def test_normalize_queue_row_preserves_raw_rank_score_when_normalized_rank_infla
 
     assert normalized["rank_score"] == 0.42
     assert normalized["raw_rank_score"] == 0.42
+
+
+def test_normalize_queue_row_promotes_terminal_rank_for_non_soft_reject_rows():
+    normalized = review_queue._normalize_queue_row(
+        {
+            "trade_id": "T-RANK-TERMINAL-PROMOTE",
+            "symbol": "NIFTY",
+            "status": "BLOCKED_APPROVAL",
+            "candidate_status": "advisory_only",
+            "execution_status": "advisory_only",
+            "permission": "ADVISORY_ONLY",
+            "final_action": "ADVISORY_ONLY",
+            "rank_score": 0.390264,
+            "raw_rank_score": 0.746802,
+            "terminal_rank_score": 0.67724,
+            "opportunity_score": 0.577888,
+            "raw_opportunity_score": 0.595536,
+            "terminal_opportunity_score": 0.654476,
+            "terminal_scoring_applied": True,
+            "score_breakdown": {"rank_score": 0.67724, "opportunity_score": 0.654476},
+        }
+    )
+
+    assert normalized["rank_score"] == 0.67724
+    assert normalized["raw_rank_score"] == 0.746802
+    assert normalized["terminal_rank_score"] == 0.67724
+    assert normalized["opportunity_score"] == 0.654476
+    assert normalized["terminal_opportunity_score"] == 0.654476
+    assert normalized["rank_truth_source"] == "terminal_candidate_scoring"
+    assert normalized["rank_truth_action"] == "promoted_terminal_rank"
+
+
+def test_normalize_queue_row_preserves_seeded_soft_reject_rank_even_with_terminal_rank():
+    normalized = review_queue._normalize_queue_row(
+        {
+            "trade_id": "tbsoft_NIFTY_123",
+            "symbol": "NIFTY",
+            "status": "BLOCKED_APPROVAL",
+            "candidate_status": "near_executable",
+            "execution_status": "queue_only",
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "rank_score": 0.24,
+            "raw_rank_score": 0.24,
+            "terminal_rank_score": 0.61,
+            "opportunity_score": 0.31,
+            "terminal_opportunity_score": 0.52,
+            "terminal_scoring_applied": True,
+            "candidate_origin": "softened_builder_path",
+            "source_flags": {"recoverable_soft_reject": True},
+            "score_breakdown": {"rank_score": 0.61, "opportunity_score": 0.52},
+        }
+    )
+
+    assert normalized["rank_score"] == 0.24
+    assert normalized["terminal_rank_score"] == 0.61
+    assert normalized["opportunity_score"] == 0.31
+    assert normalized["terminal_opportunity_score"] == 0.52
+    assert normalized["rank_truth_source"] == "persisted_rank"
+    assert normalized["rank_truth_action"] == "preserved_seeded_soft_reject_rank"
+
+
+def test_normalize_queue_row_demotes_split_brain_quote_bundle_from_execution():
+    normalized = review_queue._normalize_queue_row(
+        {
+            "trade_id": "T-SPLIT-BRAIN",
+            "symbol": "NIFTY",
+            "status": "READY",
+            "permission": "EXECUTE",
+            "final_action": "EXECUTE",
+            "execution_status": "executable",
+            "execution_allowed": True,
+            "current_ltp": 1.7,
+            "best_bid": 389.05,
+            "best_ask": 390.2,
+            "quote_age_sec": 0.4,
+            "quote_validation_status": "STALE_OPTION_LTP",
+            "execution_entry": 390.2,
+            "execution_entry_source": "ask",
+            "execution_entry_status": "executable",
+            "display_entry": 390.2,
+            "display_entry_source": "ask",
+            "display_entry_status": "displayable",
+            "entry": 390.2,
+            "entry_status": "displayable",
+            "validation_reference_price": 394.1,
+        }
+    )
+
+    assert normalized["quote_validation_status"] == "PRICE_MISMATCH"
+    assert normalized["quote_consistency_score"] == 0.0
+    assert normalized["liquidity_score"] == 0.0
+    assert normalized["execution_entry"] is None
+    assert normalized["execution_entry_status"] == "non_executable"
+    assert "PRICE_MISMATCH" in list(normalized.get("hard_blockers") or [])
+    assert normalized["execution_status"] == "blocked"
+    assert normalized["final_action"] == "BLOCK"
+    assert normalized["permission"] == "BLOCK"
+
+
+def test_final_execution_state_consistency_demotes_execute_labels_when_execution_not_allowed():
+    normalized = review_queue._enforce_final_execution_state_consistency(
+        {
+            "trade_id": "T-EXECUTE-DRIFT",
+            "symbol": "SENSEX",
+            "status": "READY",
+            "permission": "EXECUTE",
+            "final_action": "EXECUTE",
+            "readiness": "READY",
+            "execution_status": "advisory_only",
+            "execution_allowed": False,
+            "execution_ok": False,
+            "primary_blocker": "missing_execution_entry",
+            "execution_entry": 182.0,
+            "execution_entry_source": "ask",
+            "execution_entry_status": "executable",
+            "display_entry": 182.0,
+            "display_entry_source": "ask",
+            "display_entry_status": "displayable",
+            "entry": 182.0,
+            "entry_status": "displayable",
+            "current_ltp": 181.9,
+            "best_bid": 181.8,
+            "best_ask": 182.0,
+            "candidate_status": "executable",
+            "rank_score": 0.72,
+            "final_score": 0.74,
+        }
+    )
+
+    assert normalized["execution_status"] == "advisory_only"
+    assert normalized["final_action"] == "ADVISORY_ONLY"
+    assert normalized["permission"] == "ADVISORY_ONLY"
+    assert normalized["permission_downgraded_from"] == "EXECUTE"
+    assert normalized["permission_downgrade_reason"] == "final_execution_state_consistency"
+    assert normalized["readiness"] == "ADVISORY_ONLY"
+    assert normalized["status"] == "ADVISORY_ONLY"
+    assert normalized["primary_blocker"] is None
+    assert normalized["execution_entry"] == 182.0
+    assert normalized["execution_entry_status"] == "executable"
+
+
+def test_split_brain_quote_guard_logs_once_per_trade_within_rate_limit(monkeypatch):
+    review_queue._SPLIT_BRAIN_LOGGED_AT_BY_KEY.clear()
+    monkeypatch.setattr(cfg, "QUOTE_SPLIT_BRAIN_LOG_RATE_LIMIT_SEC", 60.0, raising=False)
+    warnings: list[tuple] = []
+    monkeypatch.setattr(review_queue.logger, "warning", lambda *args, **kwargs: warnings.append(args))
+    base = {
+        "trade_id": "T-SPLIT-LOG-ONCE",
+        "symbol": "NIFTY",
+        "current_ltp": 1.7,
+        "best_bid": 389.05,
+        "best_ask": 390.2,
+        "execution_entry": 390.2,
+        "execution_entry_source": "ask",
+        "execution_entry_status": "executable",
+    }
+
+    review_queue._apply_split_brain_quote_guard(base)
+    review_queue._apply_split_brain_quote_guard(base)
+
+    assert len(warnings) == 1
 
 
 def test_validation_uses_executable_reference_over_stale_signal_price(tmp_path, monkeypatch):
@@ -3253,13 +3555,13 @@ def test_high_confidence_permission_downgrade_records_hard_gate_provenance(tmp_p
     rows = json.loads(qpath.read_text())
     assert rows[0]["permission_base"] == "EXECUTE"
     assert rows[0]["permission_reason_base"] == "aligned_high_conf"
-    assert rows[0]["permission"] == "EXECUTE"
+    assert rows[0]["permission"] == "BLOCK"
     assert rows[0]["permission_reason"] == "aligned_high_conf"
-    assert rows[0].get("permission_downgraded_from") in (None, "")
-    assert rows[0].get("permission_downgrade_reason") in (None, "")
-    assert rows[0]["readiness"] == "ADVISORY_ONLY"
-    assert rows[0]["execution_status"] == "advisory_only"
-    assert rows[0]["final_action"] == "ADVISORY_ONLY"
+    assert rows[0]["permission_downgraded_from"] == "EXECUTE"
+    assert rows[0]["permission_downgrade_reason"] == "final_execution_state_consistency"
+    assert rows[0]["readiness"] == "BLOCKED"
+    assert rows[0]["execution_status"] == "blocked"
+    assert rows[0]["final_action"] == "BLOCK"
     assert rows[0]["final_blocker"] == "HARD_SPREAD_TOO_WIDE"
     assert rows[0]["confidence_vs_threshold_reason"] == "hard_blocker_overrides_threshold"
 

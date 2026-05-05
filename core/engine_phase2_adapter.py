@@ -10,6 +10,7 @@ from config import config as cfg
 from core.playbook_selector import select_playbook
 from core.setup_breakout_continuation import evaluate_breakout_continuation_setup
 from core.setup_profile_rejection import evaluate_profile_rejection_setup
+from core.quote_truth import quote_consistency_score
 from core.trade_scoring import compute_final_score
 
 logger = logging.getLogger("phase2")
@@ -126,16 +127,64 @@ def _spread_pct(candidate: dict[str, Any]) -> float | None:
     return max(0.0, float(ask - bid) / max(float(ltp), 1e-9))
 
 
+def _effective_max_spread_pct(candidate: dict[str, Any]) -> float:
+    base_spread = float(
+        getattr(cfg, "PHASE2_MAX_SPREAD_PCT", getattr(cfg, "MAX_SPREAD_PCT", 0.02))
+        or getattr(cfg, "MAX_SPREAD_PCT", 0.02)
+    )
+    high_vol_spread = float(getattr(cfg, "PHASE2_MAX_SPREAD_PCT_HIGH_VOL", 0.02) or 0.02)
+    vol_cutoff = float(getattr(cfg, "PHASE2_VOLATILITY_HIGH_CUTOFF", 0.7) or 0.7)
+    volatility = max(
+        safe_get(candidate, "volatility", 0.0),
+        safe_get(candidate, "volatility_score", 0.0),
+        safe_get(candidate, "vol_z", 0.0),
+    )
+    max_spread = high_vol_spread if volatility > vol_cutoff else base_spread
+    market_start_hour = int(getattr(cfg, "PHASE2_MARKET_START_HOUR", 9) or 9)
+    market_end_hour = int(getattr(cfg, "PHASE2_MARKET_END_HOUR", 15) or 15)
+    offhours_mult = float(getattr(cfg, "PHASE2_SPREAD_OFFHOURS_MULT", 1.5) or 1.5)
+    hour = _candidate_hour(candidate)
+    if hour < market_start_hour or hour > market_end_hour:
+        max_spread *= offhours_mult
+    return max(float(max_spread), 1e-6)
+
+
 def _liquidity_score(candidate: dict[str, Any]) -> float:
     score = _safe_float(candidate.get("liquidity_score"))
+    spread_pct = _spread_pct(candidate)
+    consistency_score = _safe_float(candidate.get("quote_consistency_score"))
+    if consistency_score is None:
+        consistency_score = quote_consistency_score(
+            current_ltp=_safe_float(candidate.get("opt_ltp")) or _safe_float(candidate.get("current_ltp")),
+            best_bid=_safe_float(candidate.get("best_bid")),
+            best_ask=_safe_float(candidate.get("best_ask")),
+        )
+    if consistency_score is not None:
+        consistency_score = max(0.0, min(1.0, float(consistency_score)))
+        candidate["quote_consistency_score"] = float(consistency_score)
     if score is not None:
-        return max(0.0, min(1.0, score))
+        bounded = max(0.0, min(1.0, score))
+        if consistency_score is not None and bool(getattr(cfg, "PHASE2_CAP_LIQUIDITY_WITH_QUOTE_CONSISTENCY", True)):
+            bounded = min(bounded, float(consistency_score))
+        return bounded
+    if spread_pct is not None:
+        max_spread = _effective_max_spread_pct(candidate)
+        spread_quality = max(0.0, 1.0 - min(float(spread_pct) / max_spread, 1.0))
+        if consistency_score is not None:
+            spread_quality = min(spread_quality, float(consistency_score))
+        return spread_quality
     liquidity_ok = candidate.get("liquidity_ok")
     if liquidity_ok is not None:
-        return 1.0 if _safe_bool(liquidity_ok, default=False) else 0.0
+        bounded = 1.0 if _safe_bool(liquidity_ok, default=False) else 0.0
+        if consistency_score is not None and bool(getattr(cfg, "PHASE2_CAP_LIQUIDITY_WITH_QUOTE_CONSISTENCY", True)):
+            bounded = min(bounded, float(consistency_score))
+        return bounded
     volume = _safe_float(candidate.get("volume")) or _safe_float(candidate.get("current_volume")) or 0.0
     min_volume = max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)
-    return max(0.0, min(1.0, float(volume) / min_volume))
+    bounded = max(0.0, min(1.0, float(volume) / min_volume))
+    if consistency_score is not None and bool(getattr(cfg, "PHASE2_CAP_LIQUIDITY_WITH_QUOTE_CONSISTENCY", True)):
+        bounded = min(bounded, float(consistency_score))
+    return bounded
 
 
 def _execution_quality_score(candidate: dict[str, Any]) -> float:
@@ -336,24 +385,7 @@ def _hard_filter_reasons(candidate: dict[str, Any]) -> list[str]:
     no_signal_relax = bool(getattr(cfg, "PHASE2_RELAX_NO_SIGNAL", True)) and allow_relax
     latency_relax = bool(getattr(cfg, "PHASE2_DISABLE_LATENCY_BLOCK", True)) and allow_relax
 
-    base_spread = float(
-        getattr(cfg, "PHASE2_MAX_SPREAD_PCT", getattr(cfg, "MAX_SPREAD_PCT", 0.02))
-        or getattr(cfg, "MAX_SPREAD_PCT", 0.02)
-    )
-    high_vol_spread = float(getattr(cfg, "PHASE2_MAX_SPREAD_PCT_HIGH_VOL", 0.02) or 0.02)
-    vol_cutoff = float(getattr(cfg, "PHASE2_VOLATILITY_HIGH_CUTOFF", 0.7) or 0.7)
-    volatility = max(
-        safe_get(candidate, "volatility", 0.0),
-        safe_get(candidate, "volatility_score", 0.0),
-        safe_get(candidate, "vol_z", 0.0),
-    )
-    max_spread = high_vol_spread if volatility > vol_cutoff else base_spread
-    market_start_hour = int(getattr(cfg, "PHASE2_MARKET_START_HOUR", 9) or 9)
-    market_end_hour = int(getattr(cfg, "PHASE2_MARKET_END_HOUR", 15) or 15)
-    offhours_mult = float(getattr(cfg, "PHASE2_SPREAD_OFFHOURS_MULT", 1.5) or 1.5)
-    hour = _candidate_hour(candidate)
-    if hour < market_start_hour or hour > market_end_hour:
-        max_spread *= offhours_mult
+    max_spread = _effective_max_spread_pct(candidate)
     spread_pct = _spread_pct(candidate)
     if spread_pct is not None and spread_pct >= max_spread:
         reasons.append("hard_spread")
@@ -633,8 +665,13 @@ def _apply_data_fallbacks(candidate: dict[str, Any]) -> None:
         candidate["spread_pct"] = float(getattr(cfg, "PHASE2_SPREAD_FALLBACK_PCT", 0.003) or 0.003)
         candidate["phase2_spread_fallback_used"] = True
     if _safe_float(candidate.get("liquidity_score")) is None:
-        candidate["liquidity_score"] = float(getattr(cfg, "PHASE2_LIQUIDITY_FALLBACK_SCORE", 0.5) or 0.5)
-        candidate["phase2_liquidity_fallback_used"] = True
+        derived_liquidity_score = _liquidity_score(candidate)
+        if _safe_float(candidate.get("best_bid")) is not None and _safe_float(candidate.get("best_ask")) is not None:
+            candidate["liquidity_score"] = float(derived_liquidity_score)
+            candidate["phase2_liquidity_derived_from_book"] = True
+        else:
+            candidate["liquidity_score"] = float(getattr(cfg, "PHASE2_LIQUIDITY_FALLBACK_SCORE", 0.5) or 0.5)
+            candidate["phase2_liquidity_fallback_used"] = True
     quote_source = str(candidate.get("quote_source") or "").strip().lower()
     if not quote_source:
         candidate["quote_source"] = "unknown"
@@ -784,34 +821,49 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
         return []
     ranked_candidates: list[dict[str, Any]] = []
     drop_reason_counts: dict[str, int] = {}
+    drop_debug_samples: list[dict[str, Any]] = []
+    invalid_candidate_count = 0
+    invalid_candidate_samples: list[dict[str, Any]] = []
+    invalid_sample_limit = max(
+        0,
+        int(getattr(cfg, "PHASE2_INVALID_CANDIDATE_LOG_SAMPLE_LIMIT", 5) or 5),
+    )
     drop_debug_budget = int(getattr(cfg, "PHASE2_FILTER_DROP_DEBUG_LIMIT", 25) or 25)
+    drop_sample_limit = max(
+        0,
+        int(getattr(cfg, "PHASE2_FILTER_DROP_DEBUG_SAMPLE_LIMIT", 5) or 5),
+    )
     for raw in raw_list:
         candidate = _candidate_to_dict(raw)
         if not validate_candidate(candidate):
-            logger.warning(
-                "PHASE2: invalid candidate skipped trade_id=%s symbol=%s",
-                candidate.get("trade_id"),
-                candidate.get("symbol"),
-            )
+            invalid_candidate_count += 1
+            if len(invalid_candidate_samples) < invalid_sample_limit:
+                invalid_candidate_samples.append(
+                    {
+                        "trade_id": candidate.get("trade_id"),
+                        "symbol": candidate.get("symbol"),
+                    }
+                )
             continue
         strict_drop_reason = _strict_mode_drop_reason(candidate)
         if strict_drop_reason:
             drop_reason_counts[strict_drop_reason] = int(drop_reason_counts.get(strict_drop_reason, 0)) + 1
             if drop_debug_budget > 0:
-                print(
-                    "DEBUG_FILTER_DROP",
-                    {
-                        "trade_id": candidate.get("trade_id"),
-                        "symbol": candidate.get("symbol"),
-                        "reasons": [strict_drop_reason],
-                        "candidate_status": candidate.get("candidate_status"),
-                        "execution_status": candidate.get("execution_status"),
-                        "candidate_origin": candidate.get("candidate_origin"),
-                    },
-                )
+                if len(drop_debug_samples) < drop_sample_limit:
+                    drop_debug_samples.append(
+                        {
+                            "trade_id": candidate.get("trade_id"),
+                            "symbol": candidate.get("symbol"),
+                            "reasons": [strict_drop_reason],
+                            "candidate_status": candidate.get("candidate_status"),
+                            "execution_status": candidate.get("execution_status"),
+                            "candidate_origin": candidate.get("candidate_origin"),
+                        }
+                    )
                 drop_debug_budget -= 1
             continue
         _apply_data_fallbacks(candidate)
+        candidate["liquidity_score"] = float(_liquidity_score(candidate))
         _apply_profile_rejection_setup(candidate)
         if bool(getattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False)):
             _apply_breakout_setup(candidate)
@@ -834,17 +886,17 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
             if playbook_drop_reason is not None:
                 drop_reason_counts[playbook_drop_reason] = int(drop_reason_counts.get(playbook_drop_reason, 0)) + 1
                 if drop_debug_budget > 0:
-                    print(
-                        "DEBUG_FILTER_DROP",
-                        {
-                            "trade_id": candidate.get("trade_id"),
-                            "symbol": candidate.get("symbol"),
-                            "reasons": [playbook_drop_reason],
-                            "selected_playbook": selected_playbook,
-                            "profile_rejection_detected": candidate.get("profile_rejection_detected"),
-                            "breakout_detected": candidate.get("breakout_detected"),
-                        },
-                    )
+                    if len(drop_debug_samples) < drop_sample_limit:
+                        drop_debug_samples.append(
+                            {
+                                "trade_id": candidate.get("trade_id"),
+                                "symbol": candidate.get("symbol"),
+                                "reasons": [playbook_drop_reason],
+                                "selected_playbook": selected_playbook,
+                                "profile_rejection_detected": candidate.get("profile_rejection_detected"),
+                                "breakout_detected": candidate.get("breakout_detected"),
+                            }
+                        )
                     drop_debug_budget -= 1
                 continue
 
@@ -854,20 +906,20 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
             for reason in hard_reasons:
                 drop_reason_counts[reason] = int(drop_reason_counts.get(reason, 0)) + 1
             if drop_debug_budget > 0:
-                print(
-                    "DEBUG_FILTER_DROP",
-                    {
-                        "trade_id": candidate.get("trade_id"),
-                        "symbol": candidate.get("symbol"),
-                        "reasons": hard_reasons,
-                        "execution_allowed": candidate.get("execution_allowed"),
-                        "execution_ok": candidate.get("execution_ok"),
-                        "liquidity_score": candidate.get("liquidity_score"),
-                        "candidate_status": candidate.get("candidate_status"),
-                        "execution_status": candidate.get("execution_status"),
-                        "candidate_origin": candidate.get("candidate_origin"),
-                    },
-                )
+                if len(drop_debug_samples) < drop_sample_limit:
+                    drop_debug_samples.append(
+                        {
+                            "trade_id": candidate.get("trade_id"),
+                            "symbol": candidate.get("symbol"),
+                            "reasons": hard_reasons,
+                            "execution_allowed": candidate.get("execution_allowed"),
+                            "execution_ok": candidate.get("execution_ok"),
+                            "liquidity_score": candidate.get("liquidity_score"),
+                            "candidate_status": candidate.get("candidate_status"),
+                            "execution_status": candidate.get("execution_status"),
+                            "candidate_origin": candidate.get("candidate_origin"),
+                        }
+                    )
                 drop_debug_budget -= 1
             continue
         final_score, score_detail = _compute_phase2_final_score(candidate)
@@ -880,6 +932,20 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
             "liquidity_ok": "hard_liquidity" not in hard_reasons,
         }
         ranked_candidates.append(candidate)
+
+    if invalid_candidate_count:
+        logger.warning(
+            "PHASE2: invalid candidates skipped count=%s sample=%s",
+            invalid_candidate_count,
+            invalid_candidate_samples,
+        )
+    if drop_reason_counts and drop_debug_samples:
+        logger.info(
+            "PHASE2_FILTER_DROP_SUMMARY count=%s reasons=%s sample=%s",
+            sum(int(v or 0) for v in drop_reason_counts.values()),
+            drop_reason_counts,
+            drop_debug_samples,
+        )
 
     if not ranked_candidates:
         logger.warning(

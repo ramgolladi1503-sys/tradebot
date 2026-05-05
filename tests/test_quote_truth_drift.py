@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from config import config as cfg
-from core.quote_truth import resolve_quote_validation_status
+from core.quote_truth import quote_consistency_score, resolve_quote_validation_status
 from core import review_queue
 from strategies.trade_builder import TradeBuilder
 
@@ -34,6 +34,25 @@ def test_resolve_quote_validation_status_keeps_price_mismatch_passthrough():
         )
         == "PRICE_MISMATCH"
     )
+
+
+def test_resolve_quote_validation_status_flags_split_brain_quote_bundle():
+    assert (
+        resolve_quote_validation_status(
+            existing_status="STALE_OPTION_LTP",
+            current_ltp=1.7,
+            quote_age_sec=0.6,
+            best_bid=389.05,
+            best_ask=390.2,
+            max_quote_age_sec=8.0,
+        )
+        == "PRICE_MISMATCH"
+    )
+
+
+def test_quote_consistency_score_collapses_for_split_brain_quote_bundle():
+    assert quote_consistency_score(current_ltp=1.7, best_bid=389.05, best_ask=390.2) == 0.0
+    assert quote_consistency_score(current_ltp=390.1, best_bid=389.05, best_ask=390.2) == 1.0
 
 
 def test_review_queue_quote_truth_snapshot_recomputes_fresh_status():

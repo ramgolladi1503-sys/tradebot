@@ -1,6 +1,8 @@
 import json
+import os
 from collections import Counter
 from pathlib import Path
+import time
 
 import core.orchestrator as orch_mod
 from config import config as cfg
@@ -31,6 +33,13 @@ def _write_suggestions_rows(tmp_path, rows):
         for row in rows:
             handle.write(json.dumps(row))
             handle.write("\n")
+    return path
+
+
+def _write_review_queue_rows(tmp_path, rows):
+    path = Path(cfg.LOGS_ROOT) / "review_queue.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows), encoding="utf-8")
     return path
 
 
@@ -248,3 +257,129 @@ def test_visible_suggestions_override_no_candidates_runtime_status(monkeypatch, 
     assert engine["current_cycle_candidates_enqueued"] == 0
     assert engine["current_cycle_suggestion_count"] == 0
     assert engine["visible_suggestion_count"] == 1
+
+
+def test_visible_counts_follow_review_queue_snapshot_over_stale_suggestions_log(monkeypatch, tmp_path):
+    orch = _stub_orchestrator(monkeypatch, tmp_path)
+    _write_suggestions_rows(
+        tmp_path,
+        [
+            {
+                "trade_id": "T-STALE-EXEC-1",
+                "advisory_visible": True,
+                "final_action": "EXECUTE",
+                "execution_status": "advisory_only",
+                "readiness": "READY",
+                "hard_blockers": [],
+                "soft_penalties": ["STALE_OPTION_LTP"],
+                "warnings": [],
+                "blockers": ["STALE_OPTION_LTP"],
+            }
+        ],
+    )
+    _write_review_queue_rows(
+        tmp_path,
+        [
+            {
+                "trade_id": "T-STALE-EXEC-1",
+                "advisory_visible": True,
+                "final_action": "ADVISORY_ONLY",
+                "execution_status": "advisory_only",
+                "execution_allowed": False,
+                "quote_validation_status": "PRICE_MISMATCH",
+                "hard_blockers": ["PRICE_MISMATCH"],
+                "soft_penalties": ["PRICE_MISMATCH"],
+                "warnings": [],
+                "blockers": ["PRICE_MISMATCH"],
+            }
+        ],
+    )
+
+    orch._write_cycle_status_files(
+        cycle_ok=True,
+        cycle_stage="cycle_complete",
+        cycle_reason="cycle_complete",
+        last_error="",
+        market_mode="LIVE",
+        market_open=True,
+        symbols_scanned=3,
+        candidates_seen=0,
+        candidates_blocked=0,
+        candidates_enqueued=0,
+        blocker_counts=Counter(),
+        suggestion_count=0,
+    )
+
+    suggestions = json.loads((Path(cfg.LOGS_ROOT) / "suggestions_status.json").read_text())
+    engine = json.loads((Path(cfg.LOGS_ROOT) / "engine_cycle_status.json").read_text())
+    assert suggestions["status"] == "ok"
+    assert suggestions["suggestion_count"] == 1
+    assert suggestions["visible_suggestion_count"] == 1
+    assert suggestions["visible_executable_count"] == 0
+    assert suggestions["visible_advisory_count"] == 1
+    assert suggestions["primary_blocker"] == "PRICE_MISMATCH"
+    assert suggestions["reason"] == "visible_suggestions_present"
+    assert engine["visible_executable_count"] == 0
+
+
+def test_stale_visible_sources_are_ignored_for_runtime_status(monkeypatch, tmp_path):
+    orch = _stub_orchestrator(monkeypatch, tmp_path)
+    monkeypatch.setattr(cfg, "STATUS_VISIBLE_SOURCE_MAX_AGE_SEC", 30.0, raising=False)
+    suggestions_path = _write_suggestions_rows(
+        tmp_path,
+        [
+            {
+                "trade_id": "T-STALE-VISIBLE-1",
+                "advisory_visible": True,
+                "final_action": "QUEUE_ONLY",
+                "execution_status": "queue_only",
+                "hard_blockers": [],
+                "soft_penalties": ["STALE_OPTION_LTP"],
+                "warnings": [],
+                "blockers": ["STALE_OPTION_LTP"],
+            }
+        ],
+    )
+    review_queue_path = _write_review_queue_rows(
+        tmp_path,
+        [
+            {
+                "trade_id": "T-STALE-VISIBLE-1",
+                "advisory_visible": True,
+                "final_action": "QUEUE_ONLY",
+                "execution_status": "queue_only",
+                "execution_allowed": False,
+                "quote_validation_status": "STALE_OPTION_LTP",
+                "hard_blockers": [],
+                "soft_penalties": ["STALE_OPTION_LTP"],
+                "warnings": [],
+                "blockers": ["STALE_OPTION_LTP"],
+            }
+        ],
+    )
+    stale_epoch = time.time() - 600.0
+    os.utime(suggestions_path, (stale_epoch, stale_epoch))
+    os.utime(review_queue_path, (stale_epoch, stale_epoch))
+
+    orch._write_cycle_status_files(
+        cycle_ok=True,
+        cycle_stage="cycle_complete",
+        cycle_reason="cycle_complete",
+        last_error="",
+        market_mode="LIVE",
+        market_open=True,
+        symbols_scanned=3,
+        candidates_seen=0,
+        candidates_blocked=0,
+        candidates_enqueued=0,
+        blocker_counts=Counter(),
+        suggestion_count=0,
+    )
+
+    suggestions = json.loads((Path(cfg.LOGS_ROOT) / "suggestions_status.json").read_text())
+    engine = json.loads((Path(cfg.LOGS_ROOT) / "engine_cycle_status.json").read_text())
+    assert suggestions["status"] == "no_candidates"
+    assert suggestions["visible_suggestion_count"] == 0
+    assert suggestions["visible_executable_count"] == 0
+    assert suggestions["primary_blocker"] == "NO_CANDIDATES"
+    assert engine["visible_suggestion_count"] == 0

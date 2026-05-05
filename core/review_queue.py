@@ -54,7 +54,7 @@ from core.observability.pipeline import append_trade_lifecycle_event
 from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lifecycle
 from core.time_utils import format_ts_ist
 from core.log_writer import get_jsonl_writer
-from core.quote_truth import resolve_quote_validation_status
+from core.quote_truth import quote_bundle_is_consistent, quote_consistency_score, resolve_quote_validation_status
 
 try:
     from config import config as cfg
@@ -138,6 +138,7 @@ _LIFECYCLE_IMMUTABLE_FIELDS = (
     "entry_reason",
     "entry_clear_reason",
 )
+_SPLIT_BRAIN_LOGGED_AT_BY_KEY: dict[str, float] = {}
 
 
 def _entry_lifecycle_payload(
@@ -994,6 +995,66 @@ def _should_backfill_candidate_score(
     return float(numeric) < min_rank
 
 
+def _is_seeded_soft_reject_artifact(entry: dict | None) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    source_flags = entry.get("source_flags") if isinstance(entry.get("source_flags"), dict) else {}
+    candidate_origin = str(entry.get("candidate_origin") or "").strip().lower()
+    trade_id = str(entry.get("trade_id") or "").strip().lower()
+    return bool(source_flags.get("recoverable_soft_reject")) or candidate_origin in {"softened_builder_path", "softened"} or trade_id.startswith("tbsoft_")
+
+
+def _apply_terminal_rank_truth(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    out = dict(entry)
+    terminal_rank = _safe_float(out.get("terminal_rank_score"))
+    if terminal_rank is None:
+        terminal_rank = _safe_float((out.get("score_breakdown") or {}).get("rank_score"))
+        if terminal_rank is not None:
+            out["terminal_rank_score"] = terminal_rank
+    terminal_opportunity = _safe_float(out.get("terminal_opportunity_score"))
+    if terminal_opportunity is None:
+        terminal_opportunity = _safe_float((out.get("score_breakdown") or {}).get("opportunity_score"))
+        if terminal_opportunity is not None:
+            out["terminal_opportunity_score"] = terminal_opportunity
+
+    persisted_rank = _safe_float(out.get("rank_score"))
+    persisted_opportunity = _safe_float(out.get("opportunity_score"))
+    if not bool(out.get("terminal_scoring_applied")) or terminal_rank is None:
+        if out.get("rank_truth_source") in (None, "", "None"):
+            out["rank_truth_source"] = "persisted_rank"
+        if out.get("rank_truth_action") in (None, "", "None"):
+            out["rank_truth_action"] = "no_terminal_rank"
+        return out
+
+    if _is_seeded_soft_reject_artifact(out):
+        out["rank_truth_source"] = "persisted_rank"
+        out["rank_truth_action"] = "preserved_seeded_soft_reject_rank"
+        return out
+
+    terminal_is_differentiated = (
+        persisted_rank is None
+        or abs(float(terminal_rank) - float(persisted_rank)) > 1e-6
+    )
+    if terminal_is_differentiated:
+        out["rank_score"] = round(float(terminal_rank), 6)
+        if terminal_opportunity is not None:
+            out["opportunity_score"] = round(float(terminal_opportunity), 6)
+        out["rank_truth_source"] = "terminal_candidate_scoring"
+        out["rank_truth_action"] = "promoted_terminal_rank"
+        out["rank_truth_drift"] = {
+            "persisted_rank_score": persisted_rank,
+            "terminal_rank_score": round(float(terminal_rank), 6),
+            "persisted_opportunity_score": persisted_opportunity,
+            "terminal_opportunity_score": round(float(terminal_opportunity), 6) if terminal_opportunity is not None else None,
+        }
+    else:
+        out["rank_truth_source"] = "persisted_rank"
+        out["rank_truth_action"] = "terminal_rank_matches_persisted"
+    return out
+
+
 _CANDIDATE_STATUS_VALUES = {
     "scored",
     "ranked",
@@ -1156,6 +1217,34 @@ def _candidate_funnel_counts(rows: list[dict]) -> dict[str, int]:
             counts["candidates_advisory_only"] += 1
         elif status == "blocked_contract":
             counts["candidates_blocked_contract"] += 1
+    return counts
+
+
+def _candidate_visibility_counts(rows: list[dict]) -> dict[str, int]:
+    counts = {
+        "visible_suggestion_count": 0,
+        "visible_advisory_count": 0,
+        "visible_queue_only_count": 0,
+        "visible_executable_count": 0,
+    }
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        if row.get("advisory_visible") is False:
+            continue
+        counts["visible_suggestion_count"] += 1
+        execution_status = str(row.get("execution_status") or "").strip().lower()
+        final_action = str(row.get("final_action") or "").strip().upper()
+        readiness = str(row.get("readiness") or "").strip().upper()
+        execution_allowed = bool(row.get("execution_allowed"))
+        if execution_status == "executable" or (
+            execution_allowed and (final_action == "EXECUTE" or readiness == "READY")
+        ):
+            counts["visible_executable_count"] += 1
+        elif execution_status == "queue_only" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
+            counts["visible_queue_only_count"] += 1
+        else:
+            counts["visible_advisory_count"] += 1
     return counts
 
 
@@ -1521,13 +1610,12 @@ def _apply_terminal_candidate_scoring(
         out["raw_rank_score"] = float(raw_rank)
     final_rank = scored_rank
     if raw_rank is not None and scored_rank is not None:
-        max_abs_delta = float(getattr(cfg, "TERMINAL_SCORING_MAX_ABS_DELTA", 0.15) or 0.15)
-        max_mult = float(getattr(cfg, "TERMINAL_SCORING_MAX_MULT", 1.35) or 1.35)
-        max_rank = max(float(raw_rank) + max_abs_delta, float(raw_rank) * max_mult)
-        final_rank = min(float(scored_rank), float(max_rank))
+        final_rank = min(float(scored_rank), float(raw_rank))
     out["rank_score"] = _safe_float(final_rank)
     assert out.get("rank_score") is not None, "SCORING NOT APPLIED IN REVIEW_QUEUE"
+    out["terminal_rank_score"] = _safe_float(final_rank)
     out["opportunity_score"] = _safe_float(scored.get("opportunity_score"))
+    out["terminal_opportunity_score"] = _safe_float(scored.get("opportunity_score"))
     out["confidence_raw"] = _safe_float(scored.get("confidence_raw"))
     out["confidence_final"] = _safe_float(scored.get("confidence_final"))
     if out.get("confidence_final") is not None:
@@ -1864,6 +1952,13 @@ def _quote_truth_snapshot_from_entry(
         max_quote_age_sec=max_quote_age_sec,
     )
     out["quote_validation_status"] = quote_validation_status
+    consistency_score = quote_consistency_score(
+        current_ltp=current_ltp,
+        best_bid=best_bid,
+        best_ask=best_ask,
+    )
+    if consistency_score is not None:
+        out["quote_consistency_score"] = round(float(consistency_score), 6)
 
     if out.get("quote_snapshot_id") in (None, "", "None"):
         trade_id = str(_first_present(entry.get("trade_id"), out.get("trade_id")) or "")
@@ -1949,6 +2044,7 @@ def _merge_quote_truth(
         "option_ltp_source",
         "quote_source",
         "quote_validation_status",
+        "quote_consistency_score",
         "execution_entry",
         "execution_entry_status",
     )
@@ -2016,13 +2112,24 @@ def _apply_canonical_quote_age(entry: dict) -> dict:
         best_ask=_safe_float(out.get("best_ask")),
         max_quote_age_sec=max_quote_age_sec,
     )
+    consistency_score = quote_consistency_score(
+        current_ltp=current_ltp,
+        best_bid=_safe_float(out.get("best_bid")),
+        best_ask=_safe_float(out.get("best_ask")),
+    )
     if new_status:
         out["quote_validation_status"] = new_status
+    if consistency_score is not None:
+        out["quote_consistency_score"] = round(float(consistency_score), 6)
 
     if freshness_reason_refreshable:
+        existing_selected_source = str(out.get("freshness_selected_source") or "").strip().lower()
         out["freshness_threshold_sec"] = float(max_quote_age_sec)
         out["freshness_selected_age_sec"] = float(canonical_age)
-        out["freshness_selected_source"] = "quote_age_sec"
+        if existing_selected_source in {"quote", "candle", "none"}:
+            out["freshness_selected_source"] = existing_selected_source
+        else:
+            out["freshness_selected_source"] = "quote_age_sec"
         out["freshness_reason"] = (
             "quote_within_threshold"
             if float(canonical_age) <= float(max_quote_age_sec)
@@ -3388,6 +3495,77 @@ def _enforce_executable_entry_integrity(entry: dict) -> dict:
         blockers.append(_ENTRY_INTEGRITY_REASON)
     entry["tradable_reasons_blocking"] = blockers
     return entry
+
+
+def _apply_split_brain_quote_guard(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    out = dict(entry)
+    current_ltp = _safe_float(out.get("current_ltp"))
+    best_bid = _safe_float(out.get("best_bid") or out.get("bid") or out.get("opt_bid"))
+    best_ask = _safe_float(out.get("best_ask") or out.get("ask") or out.get("opt_ask"))
+    if quote_bundle_is_consistent(
+        current_ltp=current_ltp,
+        best_bid=best_bid,
+        best_ask=best_ask,
+    ):
+        consistency_score = quote_consistency_score(
+            current_ltp=current_ltp,
+            best_bid=best_bid,
+            best_ask=best_ask,
+        )
+        if consistency_score is not None:
+            out["quote_consistency_score"] = round(float(consistency_score), 6)
+        return out
+    consistency_score = quote_consistency_score(
+        current_ltp=current_ltp,
+        best_bid=best_bid,
+        best_ask=best_ask,
+    )
+    out["quote_validation_status"] = "PRICE_MISMATCH"
+    out["quote_consistency_score"] = 0.0 if consistency_score is None else round(float(consistency_score), 6)
+    existing_liquidity_score = _safe_float(out.get("liquidity_score"))
+    if existing_liquidity_score is None:
+        out["liquidity_score"] = 0.0
+    else:
+        out["liquidity_score"] = round(min(float(existing_liquidity_score), float(out["quote_consistency_score"])), 6)
+    out["execution_entry"] = None
+    out["execution_entry_source"] = "none"
+    out["execution_entry_status"] = "non_executable"
+    out["execution_allowed"] = False
+    out["execution_ok"] = False
+    out["is_executable"] = False
+    out["execution_blocked"] = True
+    out["execution_block_reason"] = "PRICE_MISMATCH"
+    out["entry_block_code"] = "PRICE_MISMATCH"
+    out["entry_block_reason"] = "PRICE_MISMATCH"
+    out["hard_reason"] = "PRICE_MISMATCH"
+    out["final_blocker"] = "PRICE_MISMATCH"
+    out["blockers"] = _dedupe_issue_codes(list(out.get("blockers") or []) + ["PRICE_MISMATCH"])
+    out["hard_blockers"] = _dedupe_issue_codes(list(out.get("hard_blockers") or []) + ["PRICE_MISMATCH"])
+    out["tradable_reasons_blocking"] = _dedupe_issue_codes(
+        list(out.get("tradable_reasons_blocking") or []) + ["PRICE_MISMATCH"]
+    )
+    try:
+        rate_limit_sec = max(0.0, float(getattr(cfg, "QUOTE_SPLIT_BRAIN_LOG_RATE_LIMIT_SEC", 60.0)))
+    except Exception:
+        rate_limit_sec = 60.0
+    trade_key = str(out.get("trade_id") or out.get("tradingsymbol") or out.get("symbol") or "").strip()
+    if not trade_key:
+        trade_key = f"{out.get('symbol')}|{best_bid}|{best_ask}|{current_ltp}"
+    now_ts = float(time.time())
+    last_logged_at = float(_SPLIT_BRAIN_LOGGED_AT_BY_KEY.get(trade_key) or 0.0)
+    if rate_limit_sec <= 0.0 or (now_ts - last_logged_at) >= rate_limit_sec:
+        _SPLIT_BRAIN_LOGGED_AT_BY_KEY[trade_key] = now_ts
+        logger.warning(
+            "quote_truth_split_brain_reject trade_id=%s symbol=%s current_ltp=%s best_bid=%s best_ask=%s",
+            out.get("trade_id"),
+            out.get("symbol"),
+            current_ltp,
+            best_bid,
+            best_ask,
+        )
+    return out
 
 
 def _log_low_global_conf_once_per_symbol_minute(
@@ -5512,6 +5690,80 @@ def _decision_defaults(permission: str | None) -> tuple[str, str, str]:
     return "ADVISORY_ONLY", "advisory_only", "ADVISORY_ONLY"
 
 
+def _enforce_final_execution_state_consistency(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    out = dict(entry)
+    permission = str(out.get("permission") or "").strip().upper()
+    final_action = str(out.get("final_action") or "").strip().upper()
+    readiness = str(out.get("readiness") or "").strip().upper()
+    execution_status = str(out.get("execution_status") or "").strip().lower()
+    row_status = str(out.get("status") or "").strip().upper()
+    unresolved_contract = bool(out.get("unresolved_contract")) or row_status == "BLOCKED_CONTRACT"
+    hard_blockers = _dedupe_issue_codes(list(out.get("hard_blockers") or []))
+    blockers = _dedupe_issue_codes(list(out.get("blockers") or []))
+    execution_entry = _safe_float(out.get("execution_entry"))
+    execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    executable_entry_ready = execution_entry is not None and execution_entry_status == "executable"
+
+    primary_blocker = str(out.get("primary_blocker") or "").strip()
+    if primary_blocker.lower() == "missing_execution_entry" and executable_entry_ready:
+        replacement = (
+            str(out.get("entry_block_reason") or "").strip()
+            or str(out.get("final_blocker") or "").strip()
+            or str(out.get("hard_reason") or "").strip()
+            or str(out.get("permission_reason") or "").strip()
+        )
+        if replacement.lower() == "missing_execution_entry":
+            replacement = ""
+        out["primary_blocker"] = replacement or None
+        out["final_emit_block_reason"] = replacement or None
+
+    execution_blocked = bool(out.get("execution_blocked"))
+    approval_blocked = bool(out.get("approval_blocked"))
+    must_demote_execute = (
+        final_action == "EXECUTE"
+        or readiness == "READY"
+        or execution_status == "executable"
+        or permission == "EXECUTE"
+    ) and (
+        not bool(out.get("execution_allowed", False))
+        or execution_status != "executable"
+        or not executable_entry_ready
+        or approval_blocked
+        or execution_blocked
+        or unresolved_contract
+        or bool(hard_blockers)
+    )
+    if not must_demote_execute:
+        return out
+
+    if unresolved_contract or bool(hard_blockers) or execution_status == "blocked":
+        target_permission = "BLOCK"
+    elif execution_status == "queue_only":
+        target_permission = "QUEUE_ONLY"
+    else:
+        target_permission = "ADVISORY_ONLY"
+
+    out = _apply_permission_state(
+        out,
+        target_permission,
+        str(out.get("permission_reason") or out.get("primary_blocker") or "").strip() or None,
+        downgrade_reason="final_execution_state_consistency",
+    )
+    next_readiness, next_execution_status, next_final_action = _decision_defaults(target_permission)
+    out["final_action"] = next_final_action
+    out["readiness"] = next_readiness
+    if row_status in {"READY", "QUEUE_ONLY", "ADVISORY_ONLY", "BLOCKED", "INVALID", ""}:
+        out["status"] = next_readiness if next_readiness != "BLOCKED" else "INVALID"
+    out["execution_status"] = next_execution_status
+    out["execution_allowed"] = False
+    out["execution_ok"] = False if out.get("execution_ok") is False or target_permission != "EXECUTE" else out.get("execution_ok")
+    out["eligible_for_execution"] = target_permission == "QUEUE_ONLY" and not unresolved_contract and not bool(hard_blockers)
+    out["is_executable"] = False
+    return out
+
+
 def _refresh_opportunity_survival_state(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
@@ -5870,6 +6122,35 @@ def _write_json(path: Path, payload):
     os.replace(tmp_path, path)
 
 
+def _runtime_feed_status_snapshot() -> dict:
+    payload = _read_json(logs_dir() / "feed_runtime_latest.json", {})
+    if not isinstance(payload, dict):
+        return {}
+    feed_ok = payload.get("feed_ok")
+    if not isinstance(feed_ok, bool):
+        runtime_state = str(payload.get("runtime_state") or "").strip().upper()
+        ws_connected = payload.get("ws_connected")
+        last_tick_age_sec = _safe_float(payload.get("last_tick_age_sec"))
+        last_depth_age_sec = _safe_float(payload.get("last_depth_age_sec"))
+        option_blockers = payload.get("option_feed_block_reason_by_symbol") or {}
+        option_ok = True
+        if isinstance(option_blockers, dict) and option_blockers:
+            option_ok = all(str(v or "").strip().upper() == "OK" for v in option_blockers.values())
+        feed_ok = bool(
+            ws_connected is True
+            and runtime_state == "RUNNING"
+            and (last_tick_age_sec is None or last_tick_age_sec <= float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)))
+            and (last_depth_age_sec is None or last_depth_age_sec <= float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)))
+            and option_ok
+        )
+    return {
+        "feed_ok": feed_ok,
+        "ws_connected": payload.get("ws_connected"),
+        "subscribed_option_tokens_count": int(payload.get("subscribed_option_tokens_count") or 0),
+        "missing_option_tokens_count": int(payload.get("missing_option_tokens_count") or 0),
+    }
+
+
 def _update_suggestions_status_latest(
     entry: dict,
     emission_result: dict | None = None,
@@ -5881,6 +6162,9 @@ def _update_suggestions_status_latest(
             return
         status_entry = dict(entry)
         funnel_counts = _candidate_funnel_counts(
+            queue_rows if isinstance(queue_rows, list) and queue_rows else [status_entry]
+        )
+        visibility_counts = _candidate_visibility_counts(
             queue_rows if isinstance(queue_rows, list) and queue_rows else [status_entry]
         )
         if not status_entry.get("quote_validation_status"):
@@ -5929,6 +6213,7 @@ def _update_suggestions_status_latest(
             if isinstance(emission_result, dict) and isinstance(emission_result.get("diagnostic"), dict)
             else {}
         )
+        feed_snapshot = _runtime_feed_status_snapshot()
         if not emission_ok:
             status = "error"
         payload = dict(current)
@@ -5948,6 +6233,8 @@ def _update_suggestions_status_latest(
                 "latest_emit_target": emission_target or None,
                 "latest_emit_reason": emission_diagnostic.get("failure_reason"),
                 **funnel_counts,
+                **visibility_counts,
+                **feed_snapshot,
             }
         )
         write_json_atomic(path, payload)
@@ -5972,6 +6259,8 @@ def _update_suggestions_status_latest(
                     "latest_emit_reason": emission_diagnostic.get("failure_reason"),
                     "primary_blocker": primary_blocker or rejected_current.get("primary_blocker"),
                     **funnel_counts,
+                    **visibility_counts,
+                    **feed_snapshot,
                 }
             )
             write_json_atomic(rejected_status_path, rejected_payload)
@@ -5992,6 +6281,8 @@ def _update_suggestions_status_latest(
                     "latest_emit_status": "ok" if emission_ok else "schema_failed",
                     "latest_emit_target": emission_target or None,
                     **funnel_counts,
+                    **visibility_counts,
+                    **feed_snapshot,
                 }
             )
             write_json_atomic(engine_path, engine_payload)
@@ -6081,6 +6372,7 @@ def _normalize_queue_row(row: dict) -> dict:
     if quote_validation_status:
         if str(out.get("quote_validation_status") or "").strip().upper() != "OFFHOURS_SYNTHETIC":
             out["quote_validation_status"] = quote_validation_status
+    out = _apply_split_brain_quote_guard(out)
     raw_rank_score = _safe_float(out.get("raw_rank_score"))
     current_rank_score = _safe_float(out.get("rank_score"))
     if raw_rank_score is not None:
@@ -6095,6 +6387,7 @@ def _normalize_queue_row(row: dict) -> dict:
                 current_rank_score,
             )
             out["rank_score"] = raw_rank_score
+    out = _apply_terminal_rank_truth(out)
     if out.get("entry_recovered") and (
         str(out.get("quote_validation_status") or "").strip().upper() == "STALE_OPTION_LTP"
         or str(out.get("entry_status") or "").strip().lower() != "displayable"
@@ -6302,6 +6595,7 @@ def _normalize_queue_row(row: dict) -> dict:
     out = _repair_live_feed_failure_provenance(out)
     if locked_final_promotion:
         out = _apply_locked_final_entry_projection(out)
+    out = _enforce_final_execution_state_consistency(out)
     return _classify_candidate_status(out)
 
 
@@ -7719,6 +8013,7 @@ def _finalize_review_queue_entry(
         merged_flags = dict(source_flags)
         merged_flags["decision_trace"] = decision_trace
         entry["source_flags"] = merged_flags
+    entry = _enforce_final_execution_state_consistency(entry)
     return _classify_candidate_status(entry)
 
 

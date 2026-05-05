@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from datetime import date as _date
+from dataclasses import asdict, is_dataclass
 from typing import Any, Iterable
 
 from config import config as cfg
@@ -451,9 +452,14 @@ def apply_latency_penalty(
     latency_action: str | None,
     execution_mode: str | None = None,
 ) -> dict[str, Any]:
-    if not isinstance(candidate, dict):
+    if isinstance(candidate, dict):
+        out = dict(candidate)
+    elif is_dataclass(candidate):
+        out = asdict(candidate)
+    elif hasattr(candidate, "__dict__"):
+        out = dict(vars(candidate))
+    else:
         return {}
-    out = dict(candidate)
     action = _normalize_text(latency_action).lower()
     penalty = _safe_float(getattr(cfg, "LATENCY_SOFT_PENALTY", 0.25)) or 0.0
     min_conf = _soft_reject_confidence_min()
@@ -514,29 +520,24 @@ def apply_latency_penalty(
             "confidence_final": confidence_after,
         }
     )
-    out["execution_allowed"] = bool(soft_status == "scored")
-    out["execution_ok"] = bool(soft_status == "scored")
-    out["execution_status"] = soft_status
+    recoverable_queue_only = bool(soft_status == "scored")
+    out["execution_allowed"] = False
+    out["execution_ok"] = False
+    out["execution_status"] = "queue_only" if recoverable_queue_only else "advisory_only"
     out["order_policy"] = "reject"
     out["order_policy_reason"] = warning_code
-    out["execution_blocked"] = bool(soft_status != "scored")
-    out["execution_block_reason"] = warning_code if soft_status != "scored" else None
+    out["execution_blocked"] = True
+    out["execution_block_reason"] = warning_code
     if was_executable:
         out["candidate_status"] = "near_executable"
     else:
-        out.setdefault("candidate_status", "near_executable" if soft_status == "scored" else "advisory_only")
-    out["eligible_for_execution"] = bool(soft_status == "scored")
+        out.setdefault("candidate_status", "near_executable" if recoverable_queue_only else "advisory_only")
+    out["eligible_for_execution"] = False
+    out["permission"] = "QUEUE_ONLY" if recoverable_queue_only else "ADVISORY_ONLY"
+    out["final_action"] = "QUEUE_ONLY" if recoverable_queue_only else "ADVISORY_ONLY"
+    out["readiness"] = "QUEUE_ONLY" if recoverable_queue_only else "ADVISORY_ONLY"
 
-    out.setdefault("row_kind", "near_executable" if soft_status == "scored" else "advisory_only")
-    print(
-        "SOFT_REJECT_WATCHLIST_ONLY",
-        {
-            "trade_id": out.get("trade_id"),
-            "symbol": out.get("symbol"),
-            "status": out.get("candidate_status"),
-            "subreason": subreason,
-        },
-    )
+    out["row_kind"] = "queue_only" if recoverable_queue_only else "advisory_only"
     preserve_strategy = bool(getattr(cfg, "LATENCY_SOFTEN_PRESERVE_STRATEGY_FAMILY", True))
     if not preserve_strategy and not out.get("strategy_family"):
         out["strategy_family"] = "unknown"

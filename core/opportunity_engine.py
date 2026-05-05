@@ -430,6 +430,25 @@ def _candidate_primary_blocker(candidate: Any, *, metrics: dict[str, Any] | None
     return None
 
 
+def _effective_risk_budget_reason(candidate: Any, risk_assessment: Any, *, risk_budget_ok: bool) -> str:
+    candidate_reason = str(_get_value(candidate, "risk_budget_reason") or "").strip()
+    assessment_reason = str(getattr(risk_assessment, "risk_budget_reason", "") or "").strip()
+    candidate_flag = _get_value(candidate, "risk_budget_ok", None)
+    assessment_flag = bool(getattr(risk_assessment, "risk_budget_ok", True))
+    if risk_budget_ok:
+        if candidate_reason and candidate_reason.lower() != "ok":
+            return candidate_reason
+        if assessment_reason and assessment_reason.lower() != "ok":
+            return assessment_reason
+        return "ok"
+    for reason in (candidate_reason, assessment_reason):
+        if reason and reason.lower() != "ok":
+            return reason
+    if candidate_flag is False and assessment_flag is True:
+        return "candidate_risk_budget_reject"
+    return "risk_budget_reject"
+
+
 def _soft_threshold_probability(value: float, threshold: float, band: float) -> float:
     width = max(float(band), 1e-6)
     return _clamp01(0.5 + (((float(value) - float(threshold)) / width) * 0.5), default=0.0) or 0.0
@@ -745,6 +764,11 @@ def build_opportunity_score(
         if _get_value(candidate, "risk_budget_ok", None) is not None
         else risk_assessment.risk_budget_ok
     )
+    risk_budget_reason = _effective_risk_budget_reason(
+        candidate,
+        risk_assessment,
+        risk_budget_ok=risk_budget_ok,
+    )
     daily_kill_switch_active = bool(
         _get_value(candidate, "daily_kill_switch_active", None)
         if _get_value(candidate, "daily_kill_switch_active", None) is not None
@@ -925,11 +949,7 @@ def build_opportunity_score(
         "adaptive_threshold_key": final_score_contract.get("adaptive_threshold_key"),
         "adaptive_threshold_count": int(final_score_contract.get("adaptive_threshold_count") or 0),
         "risk_budget_ok": bool(risk_budget_ok),
-        "risk_budget_reason": str(
-            _get_value(candidate, "risk_budget_reason")
-            or risk_assessment.risk_budget_reason
-            or "ok"
-        ),
+        "risk_budget_reason": str(risk_budget_reason),
         "position_size_estimate": int(
             _get_value(candidate, "position_size_estimate")
             if _get_value(candidate, "position_size_estimate", None) is not None
@@ -959,7 +979,7 @@ def build_opportunity_score(
             "daily_kill_switch_active"
             if daily_kill_switch_active
             else (
-                f"risk_budget_{_get_value(candidate, 'risk_budget_reason') or risk_assessment.risk_budget_reason}"
+                f"risk_budget_{risk_budget_reason}"
                 if not risk_budget_ok
                 else (
                     exposure_blocker

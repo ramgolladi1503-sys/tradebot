@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
+from math import log1p
+
+from core.quote_truth import quote_consistency_score as canonical_quote_consistency_score
 
 try:
     from config import config as cfg
@@ -201,6 +204,10 @@ def _liquidity_score(candidate: dict[str, Any], market_data: dict[str, Any], sco
     quote_ok = candidate.get("quote_ok")
     target_volume = max(_cfg_float("CANDIDATE_SCORING_LIQUIDITY_TARGET_VOLUME", 25000.0), 1.0)
     target_oi = max(_cfg_float("CANDIDATE_SCORING_LIQUIDITY_TARGET_OI", 50000.0), 1.0)
+    volume_cap_mult = max(_cfg_float("CANDIDATE_SCORING_LIQUIDITY_VOLUME_CAP_MULT", 40.0), 1.0)
+    oi_cap_mult = max(_cfg_float("CANDIDATE_SCORING_LIQUIDITY_OI_CAP_MULT", 40.0), 1.0)
+    flow_weight = max(0.0, _cfg_float("CANDIDATE_SCORING_LIQUIDITY_FLOW_WEIGHT", 0.60))
+    book_weight = max(0.0, _cfg_float("CANDIDATE_SCORING_LIQUIDITY_BOOK_WEIGHT", 0.40))
     reasons: list[str] = []
 
     if volume <= 0.0 and oi <= 0.0:
@@ -208,15 +215,46 @@ def _liquidity_score(candidate: dict[str, Any], market_data: dict[str, Any], sco
         reasons.append("missing_liquidity_context")
         return 0.5, reasons
 
-    volume_score = min(1.0, (volume / target_volume) ** 0.5) if volume > 0.0 else 0.45
-    oi_score = min(1.0, (oi / target_oi) ** 0.5) if oi > 0.0 else 0.5
-    score = _weighted_average([(volume_score, 0.7), (oi_score, 0.3)], default=0.5)
+    volume_score = (
+        min(1.0, log1p(max(volume, 0.0)) / log1p(target_volume * volume_cap_mult))
+        if volume > 0.0
+        else 0.45
+    )
+    oi_score = (
+        min(1.0, log1p(max(oi, 0.0)) / log1p(target_oi * oi_cap_mult))
+        if oi > 0.0
+        else 0.5
+    )
+    flow_score = _weighted_average([(volume_score, 0.7), (oi_score, 0.3)], default=0.5)
+    quote_consistency = _first_float(
+        candidate.get("quote_consistency_score"),
+        market_data.get("quote_consistency_score"),
+    )
+    if quote_consistency is None:
+        quote_consistency = canonical_quote_consistency_score(
+            current_ltp=_first_float(candidate.get("current_ltp"), market_data.get("current_ltp")),
+            best_bid=_first_float(candidate.get("best_bid"), candidate.get("bid"), candidate.get("opt_bid"), market_data.get("best_bid")),
+            best_ask=_first_float(candidate.get("best_ask"), candidate.get("ask"), candidate.get("opt_ask"), market_data.get("best_ask")),
+        )
+    quote_consistency = _clamp01(quote_consistency, default=0.5)
+    book_score = quote_consistency
+    total_weight = max(flow_weight + book_weight, 1e-6)
+    score = _weighted_average(
+        [
+            (flow_score, flow_weight / total_weight),
+            (book_score, book_weight / total_weight),
+        ],
+        default=0.5,
+    )
     if quote_ok is False:
         score *= 0.8
         reasons.append("quote_not_ok")
 
     score_inputs_used["volume"] = volume if volume > 0.0 else None
     score_inputs_used["oi"] = oi if oi > 0.0 else None
+    score_inputs_used["quote_consistency_score"] = quote_consistency
+    score_inputs_used["liquidity_flow_score"] = _round_score(flow_score)
+    score_inputs_used["liquidity_book_score"] = _round_score(book_score)
     return _clamp01(score, default=0.5), reasons
 
 

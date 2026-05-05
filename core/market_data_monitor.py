@@ -264,6 +264,8 @@ class FeedHealth:
             snap = self.snapshot(now_epoch=now)
             if snap.state != FeedState.DOWN:
                 return False
+            if self._silent_down_reconnect_delegated(snap):
+                return False
             if (now - self._last_reconnect_epoch) < self.reconnect_cooldown_sec:
                 return False
             self._last_reconnect_epoch = now
@@ -274,6 +276,23 @@ class FeedHealth:
             return bool(handler(f"{reason_prefix}:{snap.reason}"))
         except Exception:
             return False
+
+    def _silent_down_reconnect_delegated(self, snap: FeedSnapshot) -> bool:
+        """
+        Silent websocket outages are handled by the dedicated watchdog path
+        in kite_depth_ws, which applies confirmation cycles, backoff, and
+        full-restart escalation. The generic feed-health reconnect hook must
+        not race that path by issuing an earlier soft reconnect unless the
+        operator explicitly opts in.
+        """
+        allow_generic = bool(
+            getattr(cfg, "FEED_HEALTH_RECONNECT_ON_SILENT_DOWN", False)
+        )
+        if allow_generic:
+            return False
+        reason = str(getattr(snap, "reason", "") or "")
+        reason_parts = [part.strip() for part in reason.split(";") if str(part).strip()]
+        return any(part.startswith("no_ws_messages") for part in reason_parts)
 
     def _prune_symbol_rates_locked(self, now_epoch: float) -> None:
         cutoff = float(now_epoch) - self.tick_rate_window_sec

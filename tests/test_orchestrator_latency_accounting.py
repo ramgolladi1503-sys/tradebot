@@ -91,3 +91,27 @@ def test_latency_budget_config_preserves_default_thresholds_for_non_live(monkeyp
     assert budget["sustained_windows"] == 3
     assert budget["cooldown_sec"] == pytest.approx(30.0)
     assert budget["halt_on_breach"] is True
+
+
+def test_latency_skip_trade_builder_enabled_for_live_guard(monkeypatch):
+    monkeypatch.setattr(orch_mod.cfg, "LATENCY_GUARD_LIVE_SKIP_TRADE_BUILDER", True, raising=False)
+
+    assert (
+        orch_mod._should_skip_trade_builder_for_latency_guard(
+            latency_soften_active=True,
+            execution_mode="LIVE",
+        )
+        is True
+    )
+
+
+def test_latency_skip_trade_builder_disabled_for_paper(monkeypatch):
+    monkeypatch.setattr(orch_mod.cfg, "LATENCY_GUARD_LIVE_SKIP_TRADE_BUILDER", True, raising=False)
+
+    assert (
+        orch_mod._should_skip_trade_builder_for_latency_guard(
+            latency_soften_active=True,
+            execution_mode="PAPER",
+        )
+        is False
+    )

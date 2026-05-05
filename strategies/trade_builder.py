@@ -10,6 +10,7 @@ from pathlib import Path
 import hashlib
 import json
 import logging
+import inspect
 import os
 import sys
 import pandas as pd
@@ -1032,8 +1033,28 @@ class TradeBuilder:
 
     def _set_last_ranked_candidates(self, candidates) -> None:
         ranked_candidates = []
+        invalid_samples = []
+        type_histogram = {}
+        sample_limit = max(
+            0,
+            int(getattr(cfg, "TRADE_BUILDER_INVALID_RANKED_CANDIDATE_SAMPLE_LIMIT", 5) or 5),
+        )
         for candidate in list(candidates or []):
+            type_name = type(candidate).__name__ if candidate is not None else "NoneType"
+            type_histogram[type_name] = int(type_histogram.get(type_name, 0)) + 1
             stamped = candidate
+            if stamped is None:
+                if len(invalid_samples) < sample_limit:
+                    invalid_samples.append(
+                        {
+                            "type": type_name,
+                            "trade_id": None,
+                            "symbol": None,
+                            "candidate_status": None,
+                            "execution_status": None,
+                        }
+                    )
+                continue
             candidate_status = str(getattr(stamped, "candidate_status", None) or "").strip().lower()
             if not candidate_status:
                 decision_trace = getattr(stamped, "decision_trace", {}) or {}
@@ -1085,8 +1106,37 @@ class TradeBuilder:
                 else:
                     stamped = replace(stamped, candidate_status=candidate_status, source_flags=source_flags)
             stamped = stamp_lifecycle_stage(stamped, "ranked_snapshot")
-            assert_ranked_candidate_ready(stamped)
+            try:
+                assert_ranked_candidate_ready(stamped)
+            except AssertionError:
+                if len(invalid_samples) < sample_limit:
+                    invalid_samples.append(
+                        {
+                            "type": type_name,
+                            "trade_id": getattr(stamped, "trade_id", None) if not isinstance(stamped, dict) else stamped.get("trade_id"),
+                            "symbol": getattr(stamped, "symbol", None) if not isinstance(stamped, dict) else stamped.get("symbol"),
+                            "candidate_status": getattr(stamped, "candidate_status", None) if not isinstance(stamped, dict) else stamped.get("candidate_status"),
+                            "execution_status": getattr(stamped, "execution_status", None) if not isinstance(stamped, dict) else stamped.get("execution_status"),
+                        }
+                    )
+                continue
             ranked_candidates.append(stamped)
+        if invalid_samples:
+            caller = None
+            try:
+                stack = inspect.stack(context=0)
+                if len(stack) > 1:
+                    frame = stack[1]
+                    caller = f"{frame.function}:{frame.lineno}"
+            except Exception:
+                caller = None
+            logger.warning(
+                "trade_builder_invalid_ranked_candidates caller=%s count=%s type_hist=%s sample=%s",
+                caller,
+                max(0, len(list(candidates or [])) - len(ranked_candidates)),
+                type_histogram,
+                invalid_samples,
+            )
         self._last_ranked_candidates = ranked_candidates
 
     @staticmethod
@@ -2848,6 +2898,13 @@ class TradeBuilder:
                     "orb_factor": meta.get("orb_factor") if isinstance(meta, dict) else None,
                     "reg_penalty": meta.get("reg_penalty") if isinstance(meta, dict) else None,
                     "global_conf": meta.get("global_conf") if isinstance(meta, dict) else None,
+                    "liquidity_score": rec.get("liquidity_score"),
+                    "quote_consistency_score": rec.get("quote_consistency_score"),
+                    "quote_validation_status": rec.get("quote_validation_status"),
+                    "rank_score": rec.get("rank_score"),
+                    "raw_rank_score": rec.get("raw_rank_score"),
+                    "terminal_rank_score": rec.get("terminal_rank_score"),
+                    "opportunity_score": rec.get("opportunity_score"),
                     "permission": meta.get("permission") if isinstance(meta, dict) else "ADVISORY_ONLY",
                     "permission_reason": meta.get("permission_reason") if isinstance(meta, dict) else str(reason_code),
                     "entry_status": meta.get("entry_status") if isinstance(meta, dict) else "INTENT_BLOCKED",
@@ -10648,6 +10705,12 @@ class TradeBuilder:
                         "builder_confidence": getattr(cand, "builder_confidence", None),
                         "permission_confidence": getattr(cand, "permission_confidence", None),
                         "gating_final_confidence": getattr(cand, "gating_final_confidence", None),
+                        "liquidity_score": getattr(cand, "liquidity_score", None),
+                        "quote_consistency_score": getattr(cand, "quote_consistency_score", None),
+                        "quote_validation_status": getattr(cand, "quote_validation_status", None),
+                        "rank_score": getattr(cand, "rank_score", None),
+                        "raw_rank_score": getattr(cand, "raw_rank_score", None),
+                        "terminal_rank_score": getattr(cand, "terminal_rank_score", None),
                         "opportunity_score": getattr(cand, "opportunity_score", None),
                         "opportunity_rank": getattr(cand, "opportunity_rank", None),
                         "rank_global": getattr(cand, "rank_global", None),

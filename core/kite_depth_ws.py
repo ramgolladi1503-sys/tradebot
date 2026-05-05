@@ -59,6 +59,8 @@ _SYMBOL_LAST_OPTION_TICK_TS: dict[str, float] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
 _RESTART_LOCK = threading.Lock()
+_RESTART_ASYNC_LOCK = threading.Lock()
+_RESTART_ASYNC_THREAD = None
 _LAST_FULL_RESTART_EPOCH = 0.0
 _FULL_RESTARTS = []
 _STALE_STRIKES = 0
@@ -2009,6 +2011,64 @@ def _join_ticker_threads(instance, timeout_sec: float) -> None:
         _join_thread_safe(ws_thread, timeout_sec)
 
 
+def _schedule_restart_depth_ws(
+    *,
+    reason: str,
+    ignore_cooldown: bool = False,
+    force_full_restart: bool = False,
+    source: str,
+) -> bool:
+    global _RESTART_ASYNC_THREAD
+
+    with _RESTART_ASYNC_LOCK:
+        existing = _RESTART_ASYNC_THREAD
+        if existing is not None:
+            try:
+                if existing.is_alive():
+                    _log_ws(
+                        "FEED_RESTART_ASYNC_ALREADY_SCHEDULED",
+                        {
+                            "reason": reason,
+                            "source": source,
+                            "force_full_restart": bool(force_full_restart),
+                        },
+                    )
+                    return True
+            except Exception:
+                pass
+
+        thread_ref = {"thread": None}
+
+        def _runner():
+            try:
+                restart_depth_ws(
+                    reason=reason,
+                    ignore_cooldown=ignore_cooldown,
+                    force_full_restart=force_full_restart,
+                )
+            finally:
+                global _RESTART_ASYNC_THREAD
+                with _RESTART_ASYNC_LOCK:
+                    if _RESTART_ASYNC_THREAD is thread_ref["thread"]:
+                        _RESTART_ASYNC_THREAD = None
+
+        thread_obj = threading.Thread(target=_runner, daemon=True)
+        thread_ref["thread"] = thread_obj
+        _RESTART_ASYNC_THREAD = thread_obj
+
+    _log_ws(
+        "FEED_RESTART_ASYNC_SCHEDULED",
+        {
+            "reason": reason,
+            "source": source,
+            "force_full_restart": bool(force_full_restart),
+            "ignore_cooldown": bool(ignore_cooldown),
+        },
+    )
+    thread_obj.start()
+    return True
+
+
 def on_ticks(ws, ticks):
     global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
     _ = ws
@@ -2828,10 +2888,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
             if _use_internal_reconnect():
                 _log_ws(
-                    "FEED_INTERNAL_RECONNECT_WAIT",
+                    "FEED_INTERNAL_RECONNECT_FORCE_FULL",
                     {"source": "on_error", "code": code, "reason": reason_text},
                 )
-                _soft_resubscribe_current(reason=f"on_error:{code}")
+                _schedule_restart_depth_ws(
+                    reason=f"ws_error:{code}",
+                    force_full_restart=True,
+                    source="on_error",
+                )
                 return
             restart_depth_ws(reason=f"ws_error:{code}")
 
@@ -2869,11 +2933,34 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             last_error=_LAST_RUNTIME_ERROR,
         )
         logger.warning("kite_ws_close code=%s reason=%s", code, reason)
+        code_int = None
+        try:
+            code_int = int(code) if code is not None else None
+        except Exception:
+            code_int = None
+        reason_text = str(reason)
+        reason_lower = reason_text.lower()
+        fatal = False
+        if code_int in (1006, 1011, 1012):
+            fatal = True
+        if "connection" in reason_lower and "closed" in reason_lower:
+            fatal = True
         if is_market_open_ist():
             if _use_internal_reconnect():
+                if fatal:
+                    _log_ws(
+                        "FEED_INTERNAL_RECONNECT_FORCE_FULL",
+                        {"source": "on_close", "code": code, "reason": reason_text},
+                    )
+                    _schedule_restart_depth_ws(
+                        reason=f"ws_close:{code}",
+                        force_full_restart=True,
+                        source="on_close",
+                    )
+                    return
                 _log_ws(
                     "FEED_INTERNAL_RECONNECT_WAIT",
-                    {"source": "on_close", "code": code, "reason": str(reason)},
+                    {"source": "on_close", "code": code, "reason": reason_text},
                 )
                 _soft_resubscribe_current(reason=f"on_close:{code}")
                 return

@@ -78,6 +78,7 @@ def test_execution_router_blocks_live_entries_when_degraded_or_down(monkeypatch,
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", True, raising=False)
     monkeypatch.setattr(cfg, "APPROVAL_REQUIRED_MODES", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "LIVE_REQUIRE_ARMED_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_HEALTH_RECONNECT_ON_SILENT_DOWN", True, raising=False)
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "feed_health.db"), raising=False)
     monkeypatch.setenv("LIVE_TRADING_ENABLED", "true")
 
@@ -199,3 +200,68 @@ def test_advisory_only_allowed_in_degraded(monkeypatch):
     blocked_down, _, _ = feed.gate_live_entries(advisory_only=True, now_epoch=base + 4.0)
     assert blocked_down is False
     assert feed.advisory_allowed(now_epoch=base + 4.0) is False
+
+
+def test_feed_health_reconnect_delegates_silent_down_to_watchdog(monkeypatch):
+    monkeypatch.setattr(cfg, "FEED_HEALTH_RECONNECT_ON_SILENT_DOWN", False, raising=False)
+
+    feed = FeedHealth(
+        index_ok_age_sec=1.0,
+        option_ok_age_sec=2.5,
+        index_down_no_msg_sec=3.0,
+        option_down_no_msg_sec=5.0,
+        reconnect_cooldown_sec=1.0,
+    )
+    calls: list[str] = []
+    feed.set_reconnect_handler(lambda reason: calls.append(str(reason)) or True)
+
+    base = 1000.0
+    feed.on_tick(
+        token=111,
+        symbol="NIFTY",
+        ts_epoch=base,
+        has_depth=True,
+        is_index=True,
+        now_epoch=base,
+    )
+
+    triggered = feed.maybe_trigger_reconnect(
+        reason_prefix="watchdog_down",
+        now_epoch=base + 4.0,
+    )
+
+    assert triggered is False
+    assert calls == []
+
+
+def test_feed_health_reconnect_can_opt_in_for_silent_down(monkeypatch):
+    monkeypatch.setattr(cfg, "FEED_HEALTH_RECONNECT_ON_SILENT_DOWN", True, raising=False)
+
+    feed = FeedHealth(
+        index_ok_age_sec=1.0,
+        option_ok_age_sec=2.5,
+        index_down_no_msg_sec=3.0,
+        option_down_no_msg_sec=5.0,
+        reconnect_cooldown_sec=1.0,
+    )
+    calls: list[str] = []
+    feed.set_reconnect_handler(lambda reason: calls.append(str(reason)) or True)
+
+    base = 1000.0
+    feed.on_tick(
+        token=111,
+        symbol="NIFTY",
+        ts_epoch=base,
+        has_depth=True,
+        is_index=True,
+        now_epoch=base,
+    )
+
+    triggered = feed.maybe_trigger_reconnect(
+        reason_prefix="watchdog_down",
+        now_epoch=base + 4.0,
+    )
+
+    assert triggered is True
+    assert calls
+    assert str(calls[0]).startswith("watchdog_down:no_ws_messages")

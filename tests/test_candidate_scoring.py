@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from config import config as cfg
 from core.candidate_scoring import score_candidate
 
 
@@ -149,3 +150,99 @@ def test_score_candidate_weak_setup_is_penalized_without_zeroing_everything():
     assert "NO_LIVE_OPTION_FEED" in scored["penalty_reasons"]
     assert "wide_spread" in scored["penalty_reasons"]
     assert "weak_risk_reward" in scored["penalty_reasons"]
+
+
+def test_score_candidate_quote_consistency_degrades_liquidity_for_quote_valid_rows(monkeypatch):
+    monkeypatch.setattr(cfg, "CANDIDATE_SCORING_LIQUIDITY_TARGET_VOLUME", 25000.0, raising=False)
+    monkeypatch.setattr(cfg, "CANDIDATE_SCORING_LIQUIDITY_TARGET_OI", 50000.0, raising=False)
+    base_candidate = {
+        "trade_id": "T-LIQ-QUOTE-CONSISTENCY",
+        "trade_score": 72.0,
+        "trade_alignment": 0.70,
+        "builder_confidence": 0.68,
+        "instrument_token": 99123,
+        "entry_price": 100.0,
+        "stop_loss": 96.0,
+        "target": 108.0,
+        "volume": 250000,
+        "oi": 350000,
+        "spread_pct": 0.0015,
+        "quote_ok": True,
+    }
+    market_data = {
+        "regime": "TREND",
+        "market_open": True,
+        "quote_age_sec": 0.8,
+        "quote_source": "tick_store",
+        "current_ltp": 100.2,
+    }
+    context = {"mode": "LIVE", "market_open": True, "blockers": [], "hard_blockers": [], "soft_penalties": [], "warnings": []}
+
+    weak_quote = score_candidate(
+        {
+            **base_candidate,
+            "quote_consistency_score": 0.25,
+            "best_bid": 100.0,
+            "best_ask": 100.15,
+            "current_ltp": 99.2,
+        },
+        {**market_data, "quote_consistency_score": 0.25},
+        context,
+    )
+    strong_quote = score_candidate(
+        {
+            **base_candidate,
+            "quote_consistency_score": 1.0,
+            "best_bid": 100.0,
+            "best_ask": 100.15,
+            "current_ltp": 100.1,
+        },
+        {**market_data, "quote_consistency_score": 1.0},
+        context,
+    )
+
+    assert weak_quote["liquidity_score"] < strong_quote["liquidity_score"]
+    assert weak_quote["confidence_final"] < strong_quote["confidence_final"]
+    assert weak_quote["rank_score"] < strong_quote["rank_score"]
+
+
+def test_score_candidate_liquidity_does_not_flatten_all_high_volume_rows(monkeypatch):
+    monkeypatch.setattr(cfg, "CANDIDATE_SCORING_LIQUIDITY_TARGET_VOLUME", 25000.0, raising=False)
+    monkeypatch.setattr(cfg, "CANDIDATE_SCORING_LIQUIDITY_TARGET_OI", 50000.0, raising=False)
+    base_candidate = {
+        "trade_id": "T-LIQ-SATURATION",
+        "trade_score": 70.0,
+        "trade_alignment": 0.68,
+        "builder_confidence": 0.66,
+        "instrument_token": 99123,
+        "entry_price": 100.0,
+        "stop_loss": 96.0,
+        "target": 108.0,
+        "spread_pct": 0.0012,
+        "quote_consistency_score": 1.0,
+        "quote_ok": True,
+    }
+    market_data = {
+        "regime": "TREND",
+        "market_open": True,
+        "quote_age_sec": 0.6,
+        "quote_source": "tick_store",
+        "current_ltp": 100.05,
+        "quote_consistency_score": 1.0,
+    }
+    context = {"mode": "LIVE", "market_open": True, "blockers": [], "hard_blockers": [], "soft_penalties": [], "warnings": []}
+
+    moderate = score_candidate(
+        {**base_candidate, "volume": 100000, "oi": 150000},
+        market_data,
+        context,
+    )
+    extreme = score_candidate(
+        {**base_candidate, "volume": 1000000000, "oi": 5000000},
+        market_data,
+        context,
+    )
+
+    assert moderate["liquidity_score"] < 1.0
+    assert extreme["liquidity_score"] <= 1.0
+    assert moderate["liquidity_score"] < extreme["liquidity_score"]

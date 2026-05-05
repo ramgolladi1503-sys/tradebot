@@ -52,3 +52,31 @@ def test_trade_builder_strict_mode_drops_no_signal_candidate(monkeypatch):
     }
     out = tb.build(md)
     assert out is None
+
+
+def test_set_last_ranked_candidates_drops_invalid_rows(monkeypatch):
+    monkeypatch.setattr(cfg, "TRADE_BUILDER_INVALID_RANKED_CANDIDATE_SAMPLE_LIMIT", 2, raising=False)
+    tb = TradeBuilder()
+    tb._set_last_ranked_candidates(
+        [
+            None,
+            {
+                "trade_id": "BAD-1",
+                "strategy_family": "breakout",
+                "candidate_status": "executable",
+                "confidence": 0.7,
+                "rank_score": 0.6,
+            },
+            {
+                "trade_id": "GOOD-1",
+                "symbol": "NIFTY",
+                "strategy_family": "breakout",
+                "candidate_status": "executable",
+                "confidence": 0.7,
+                "rank_score": 0.6,
+            },
+        ]
+    )
+
+    assert len(tb._last_ranked_candidates) == 1
+    assert tb._last_ranked_candidates[0]["trade_id"] == "GOOD-1"

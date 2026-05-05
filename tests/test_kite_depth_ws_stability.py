@@ -69,6 +69,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(ws, "_WARMUP_PENDING", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_RESTART_ASYNC_THREAD", None, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
     monkeypatch.setattr(ws, "_LAST_FEED_HEALTH_STATE", None, raising=False)
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
@@ -141,6 +142,76 @@ def test_on_close_does_not_restart_after_stop(monkeypatch):
     ticker.on_close(ticker, 1000, "normal")
 
     assert restarts["count"] == 0
+
+
+def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    scheduled = []
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: scheduled.append(dict(kwargs)) or True,
+    )
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_error(
+        ticker,
+        1006,
+        "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
+    )
+
+    assert scheduled == [
+        {
+            "reason": "ws_error:1006",
+            "force_full_restart": True,
+            "source": "on_error",
+        }
+    ]
+
+
+def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    scheduled = []
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: scheduled.append(dict(kwargs)) or True,
+    )
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_close(
+        ticker,
+        1006,
+        "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
+    )
+
+    assert scheduled == [
+        {
+            "reason": "ws_close:1006",
+            "force_full_restart": True,
+            "source": "on_close",
+        }
+    ]
 
 
 def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
@@ -500,10 +571,10 @@ def test_network_error_restarts_without_auth_required(monkeypatch):
     assert ws._AUTH_REQUIRED_LATCH is False
 
 
-def test_network_error_uses_internal_reconnect_when_enabled(monkeypatch):
+def test_network_error_forces_full_restart_when_enabled(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
-    restarts = {"count": 0}
+    scheduled = []
     soft = {"count": 0}
 
     def _factory(api_key, access_token, debug=True):
@@ -514,7 +585,11 @@ def test_network_error_uses_internal_reconnect_when_enabled(monkeypatch):
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
-    monkeypatch.setattr(ws, "restart_depth_ws", lambda reason="unknown": restarts.__setitem__("count", restarts["count"] + 1) or True)
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: scheduled.append(dict(kwargs)) or True,
+    )
     monkeypatch.setattr(
         ws,
         "_soft_resubscribe_current",
@@ -525,5 +600,11 @@ def test_network_error_uses_internal_reconnect_when_enabled(monkeypatch):
     ticker = captured["ticker"]
     ticker.on_error(ticker, 1006, "connection closed by peer")
 
-    assert restarts["count"] == 0
-    assert soft["count"] == 1
+    assert scheduled == [
+        {
+            "reason": "ws_error:1006",
+            "force_full_restart": True,
+            "source": "on_error",
+        }
+    ]
+    assert soft["count"] == 0

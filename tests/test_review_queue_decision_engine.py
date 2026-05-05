@@ -647,7 +647,7 @@ def test_terminal_scoring_is_idempotent_and_bounded(monkeypatch):
         market_open_for_entry=True,
     )
 
-    assert round(float(out1["rank_score"]), 6) == 0.33
+    assert round(float(out1["rank_score"]), 6) == 0.18
     assert out1["terminal_scoring_applied"] is True
     assert float(out2["rank_score"]) == float(out1["rank_score"])
     assert calls["count"] == 2

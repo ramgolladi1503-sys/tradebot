@@ -2,7 +2,14 @@ from types import SimpleNamespace
 
 from config import config as cfg
 import core.orchestrator as orchestrator_module
-from core.orchestrator import Orchestrator, _is_reportable_executable_candidate, _trade_attr
+from core.orchestrator import (
+    Orchestrator,
+    _augment_ranked_candidates_with_soft_reject,
+    _build_top_opportunities_payload,
+    _filter_invalid_cycle_candidates,
+    _is_reportable_executable_candidate,
+    _trade_attr,
+)
 from core.time_utils import now_utc_epoch
 
 
@@ -188,6 +195,92 @@ def test_candidate_pool_counts_handle_trade_objects_without_dict_get():
 
     assert softened == 1
     assert fallback == 1
+
+
+def test_filter_invalid_cycle_candidates_drops_none_and_symbol_less(monkeypatch):
+    monkeypatch.setattr(cfg, "ORCHESTRATOR_INVALID_CYCLE_CANDIDATE_SAMPLE_LIMIT", 2, raising=False)
+    valid, invalid = _filter_invalid_cycle_candidates(
+        [
+            None,
+            {"trade_id": "BAD-1"},
+            {
+                "trade_id": "GOOD-1",
+                "symbol": "NIFTY",
+                "strategy_family": "breakout",
+                "candidate_status": "executable",
+                "rank_score": 0.5,
+            },
+        ],
+        symbol="NIFTY",
+    )
+
+    assert [row["trade_id"] for row in valid] == ["GOOD-1"]
+    assert len(invalid) == 2
+
+
+def test_build_top_opportunities_payload_filters_invalid_candidates_before_phase2(monkeypatch):
+    captured = {}
+
+    def _fake_phase2(candidates, **kwargs):
+        captured["candidates"] = list(candidates)
+        return {
+            "state": "NO_TRADE",
+            "reason": "noop",
+            "selected": None,
+            "ranked": [],
+            "next_active_trade": None,
+        }
+
+    monkeypatch.setattr(orchestrator_module, "run_engine_phase2", _fake_phase2)
+
+    _build_top_opportunities_payload(
+        candidates=[
+            None,
+            {"trade_id": "BAD-1"},
+            {
+                "trade_id": "GOOD-1",
+                "symbol": "NIFTY",
+                "strategy_family": "breakout",
+                "candidate_status": "executable",
+                "rank_score": 0.5,
+            },
+        ],
+        executable_top_n=1,
+        advisory_top_n=1,
+        active_trade=None,
+    )
+
+    assert [row.get("trade_id") for row in captured["candidates"]] == ["GOOD-1"]
+
+
+def test_augment_ranked_candidates_with_soft_reject_keeps_unrankable_soft_rows_out_of_ranked_pool(monkeypatch):
+    class _Builder:
+        _reject_ctx = {"reason": "latency_guard_cooldown", "gate_reasons": ["latency_guard_cooldown"]}
+
+        def _attach_softened_candidate_contract(self, candidate, market_data=None):
+            return dict(candidate)
+
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False, raising=False)
+    monkeypatch.setattr(cfg, "CANDIDATE_SOFT_REJECT_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "CANDIDATE_SOFT_REJECT_ALLOW_LIVE", True, raising=False)
+    monkeypatch.setattr(cfg, "CANDIDATE_SOFT_REJECT_MAX_PER_SYMBOL", 3, raising=False)
+    monkeypatch.setattr(orchestrator_module, "is_critical_reject_reason", lambda *args, **kwargs: False)
+
+    ranked, soft, reject_reason, gate_reasons = _augment_ranked_candidates_with_soft_reject(
+        trade_builder=_Builder(),
+        ranked_candidates=[],
+        market_data={"symbol": "NIFTY", "execution_mode": "LIVE"},
+        execution_mode="LIVE",
+        symbol="NIFTY",
+    )
+
+    assert ranked == []
+    assert len(soft) == 1
+    assert soft[0]["symbol"] == "NIFTY"
+    assert soft[0]["trade_id"].startswith("tbsoft_NIFTY_")
+    assert soft[0]["rank_score"] is None
+    assert reject_reason == "latency_guard_cooldown"
+    assert gate_reasons == ["latency_guard_cooldown"]
 
 
 def test_reportable_executable_candidate_allows_status_fallback_when_enabled(monkeypatch):

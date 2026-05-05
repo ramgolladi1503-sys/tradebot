@@ -73,6 +73,7 @@ def test_delayed_but_within_threshold_does_not_reconnect(monkeypatch):
         confirm_needed=1,
         backoff_min_sec=1.0,
         backoff_max_sec=10.0,
+        force_full_restart_after_sec=12.0,
         restart_cb=lambda **kwargs: restart_calls.append(kwargs) or True,
     )
 

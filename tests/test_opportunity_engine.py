@@ -150,6 +150,62 @@ def test_timing_score_contributes_to_opportunity_score(monkeypatch):
     assert float(timed_metrics["opportunity_score"]) > float(base_metrics["opportunity_score"])
 
 
+def test_build_opportunity_score_never_emits_risk_budget_ok_as_blocker(monkeypatch):
+    trade = _trade(
+        trade_id="T-RISK-BLOCKER",
+        confidence=0.58,
+        builder_confidence=0.58,
+        permission_confidence=0.54,
+        gating_final_confidence=0.52,
+        confluence=0.63,
+        bid=120.0,
+        ask=120.6,
+        ltp=120.3,
+        volume=9000,
+        quote_age_sec=0.4,
+        execution_allowed=True,
+        tradable=True,
+        execution_entry=120.6,
+        execution_entry_status="executable",
+        execution_entry_source="ask",
+        display_entry=120.6,
+    )
+    object.__setattr__(trade, "risk_budget_ok", False)
+    object.__setattr__(trade, "risk_budget_reason", "ok")
+
+    monkeypatch.setattr(
+        opportunity_engine_module,
+        "evaluate_candidate_risk",
+        lambda candidate, portfolio_state=None, selected_candidates=None: type(
+            "RiskAssessmentStub",
+            (),
+            {
+                "risk_budget_ok": True,
+                "risk_budget_reason": "ok",
+                "daily_kill_switch_active": False,
+                "exposure_blocker": None,
+                "correlation_penalty": 0.0,
+                "regime_failure_throttle": 0.0,
+                "family_failure_throttle": 0.0,
+                "risk_learning_adjustment": 0.0,
+                "risk_learning_confidence": 0.0,
+                "position_size_estimate": 1,
+                "portfolio_heat_score": 0.0,
+                "rejected_at_stage": None,
+                "rejection_reason_code": None,
+                "rejection_bucket": None,
+                "rejection_severity": None,
+            },
+        )(),
+    )
+
+    metrics = opportunity_engine_module.build_opportunity_score(trade)
+
+    assert metrics["risk_budget_ok"] is False
+    assert metrics["risk_budget_reason"] != "ok"
+    assert metrics["primary_blocker"] != "risk_budget_ok"
+
+
 def test_opportunity_engine_ranks_executable_candidate_first_and_scales_size():
     ranked = annotate_ranked_opportunities(
         [

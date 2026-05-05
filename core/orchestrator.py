@@ -394,6 +394,53 @@ def _candidate_trace_payload(candidate) -> dict:
     }
 
 
+def _is_structurally_valid_cycle_candidate(candidate) -> bool:
+    if candidate is None:
+        return False
+    required_fields = (
+        "trade_id",
+        "symbol",
+        "strategy_family",
+        "candidate_status",
+        "rank_score",
+    )
+    for field in required_fields:
+        if _trade_attr(candidate, field) in (None, "", "None"):
+            return False
+    return True
+
+
+def _filter_invalid_cycle_candidates(candidates, *, symbol: str | None = None) -> tuple[list, list[dict]]:
+    valid: list = []
+    invalid_samples: list[dict] = []
+    sample_limit = max(
+        0,
+        int(getattr(cfg, "ORCHESTRATOR_INVALID_CYCLE_CANDIDATE_SAMPLE_LIMIT", 5) or 5),
+    )
+    for candidate in list(candidates or []):
+        if _is_structurally_valid_cycle_candidate(candidate):
+            valid.append(candidate)
+            continue
+        if len(invalid_samples) < sample_limit:
+            invalid_samples.append(
+                {
+                    "type": type(candidate).__name__ if candidate is not None else "NoneType",
+                    "symbol": _trade_attr(candidate, "symbol"),
+                    "trade_id": _trade_attr(candidate, "trade_id"),
+                    "candidate_status": _trade_attr(candidate, "candidate_status"),
+                    "execution_status": _trade_attr(candidate, "execution_status"),
+                }
+            )
+    if invalid_samples:
+        logger.warning(
+            "orchestrator_invalid_cycle_candidates symbol=%s count=%s sample=%s",
+            str(symbol or "").strip().upper() or None,
+            max(0, len(list(candidates or [])) - len(valid)),
+            invalid_samples,
+        )
+    return valid, invalid_samples
+
+
 def _replace_trade_fields(trade, updates: dict):
     if not updates:
         return trade
@@ -589,6 +636,18 @@ def _latency_budget_config(*, execution_mode: str | None) -> dict[str, float | i
     }
 
 
+def _should_skip_trade_builder_for_latency_guard(
+    *,
+    latency_soften_active: bool,
+    execution_mode: str | None,
+) -> bool:
+    if not bool(latency_soften_active):
+        return False
+    if str(execution_mode or "").strip().upper() != "LIVE":
+        return False
+    return bool(getattr(cfg, "LATENCY_GUARD_LIVE_SKIP_TRADE_BUILDER", True))
+
+
 def _scan_visible_suggestions(path: Path) -> dict:
     counts = {
         "visible_suggestion_count": 0,
@@ -600,8 +659,70 @@ def _scan_visible_suggestions(path: Path) -> dict:
         "primary_blocker": None,
     }
     blocker_counts: Counter = Counter()
+
+    def _source_is_fresh(source_path: Path) -> bool:
+        max_age_sec = float(getattr(cfg, "STATUS_VISIBLE_SOURCE_MAX_AGE_SEC", 180.0) or 180.0)
+        if max_age_sec <= 0.0:
+            return True
+        try:
+            age_sec = max(0.0, time.time() - float(source_path.stat().st_mtime))
+        except Exception:
+            return False
+        return bool(age_sec <= max_age_sec)
+
+    def _ingest_row(row: dict) -> None:
+        if not isinstance(row, dict):
+            return
+        if row.get("advisory_visible") is False:
+            return
+        counts["visible_suggestion_count"] += 1
+        execution_status = str(row.get("execution_status") or "").strip().lower()
+        final_action = str(row.get("final_action") or "").strip().upper()
+        readiness = str(row.get("readiness") or "").strip().upper()
+        execution_allowed = bool(row.get("execution_allowed"))
+        if readiness == "READY":
+            counts["visible_ready_count"] += 1
+        if execution_status == "executable":
+            counts["visible_executable_status_count"] += 1
+        executable_visible = bool(
+            execution_status == "executable"
+            or (
+                execution_allowed
+                and (final_action == "EXECUTE" or readiness == "READY")
+            )
+        )
+        if executable_visible:
+            counts["visible_executable_count"] += 1
+        elif execution_status == "queue_only" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
+            counts["visible_queue_only_count"] += 1
+        else:
+            counts["visible_advisory_count"] += 1
+        for field in ("hard_blockers", "blockers", "soft_penalties", "warnings"):
+            for blocker in list(row.get(field) or []):
+                text = str(blocker or "").strip()
+                if text:
+                    blocker_counts[text] += 1
+        for field in ("hard_reason", "final_blocker"):
+            text = str(row.get(field) or "").strip()
+            if text:
+                blocker_counts[text] += 1
+
     try:
-        if not path.exists():
+        use_review_queue_snapshot = bool(
+            getattr(cfg, "STATUS_VISIBLE_COUNTS_USE_REVIEW_QUEUE_SNAPSHOT", True)
+        )
+        review_queue_path = Path(
+            str(getattr(cfg, "REVIEW_QUEUE_PATH", logs_dir() / "review_queue.json"))
+        ).expanduser()
+        if use_review_queue_snapshot and review_queue_path.exists() and _source_is_fresh(review_queue_path):
+            review_rows = json.loads(review_queue_path.read_text(encoding="utf-8"))
+            if isinstance(review_rows, list):
+                for row in review_rows:
+                    _ingest_row(row)
+                if blocker_counts:
+                    counts["primary_blocker"] = str(blocker_counts.most_common(1)[0][0])
+                return counts
+        if not path.exists() or not _source_is_fresh(path):
             return counts
         with path.open("r", encoding="utf-8") as handle:
             for raw_line in handle:
@@ -612,33 +733,7 @@ def _scan_visible_suggestions(path: Path) -> dict:
                     row = json.loads(line)
                 except Exception:
                     continue
-                if not isinstance(row, dict):
-                    continue
-                if row.get("advisory_visible") is False:
-                    continue
-                counts["visible_suggestion_count"] += 1
-                execution_status = str(row.get("execution_status") or "").strip().lower()
-                final_action = str(row.get("final_action") or "").strip().upper()
-                readiness = str(row.get("readiness") or "").strip().upper()
-                if readiness == "READY":
-                    counts["visible_ready_count"] += 1
-                if execution_status == "executable":
-                    counts["visible_executable_status_count"] += 1
-                if execution_status == "executable" or final_action == "EXECUTE" or readiness == "READY":
-                    counts["visible_executable_count"] += 1
-                elif execution_status == "queue_only" or final_action == "QUEUE_ONLY" or readiness == "QUEUE_ONLY":
-                    counts["visible_queue_only_count"] += 1
-                else:
-                    counts["visible_advisory_count"] += 1
-                for field in ("hard_blockers", "blockers", "soft_penalties", "warnings"):
-                    for blocker in list(row.get(field) or []):
-                        text = str(blocker or "").strip()
-                        if text:
-                            blocker_counts[text] += 1
-                for field in ("hard_reason", "final_blocker"):
-                    text = str(row.get(field) or "").strip()
-                    if text:
-                        blocker_counts[text] += 1
+                _ingest_row(row)
         if blocker_counts:
             counts["primary_blocker"] = str(blocker_counts.most_common(1)[0][0])
         return counts
@@ -677,6 +772,7 @@ def _build_top_opportunities_payload(
     advisory_top_n: int | None = None,
     active_trade: dict | None = None,
 ) -> dict:
+    candidates, _ = _filter_invalid_cycle_candidates(candidates, symbol="GLOBAL")
     exec_limit = max(0, int(executable_top_n if executable_top_n is not None else getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)))
     advisory_limit = max(0, int(advisory_top_n if advisory_top_n is not None else getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)))
     phase2_top_n = max(1, int(getattr(cfg, "PHASE2_TOP_N", max(exec_limit, advisory_limit, 1)) or max(exec_limit, advisory_limit, 1)))
@@ -1308,6 +1404,7 @@ def _augment_ranked_candidates_with_soft_reject(
         return False
 
     soft_reject_candidates: list[dict] = []
+    rankable_soft_reject_candidates: list[dict] = []
     soft_enabled = soft_reject_enabled(execution_mode)
     critical_reasons = critical_reject_reasons()
     is_critical = is_critical_reject_reason(reject_reason, critical_reasons)
@@ -1413,6 +1510,8 @@ def _augment_ranked_candidates_with_soft_reject(
                     source_flags["soft_blockers"] = [str(code) for code in candidate_reasons if str(code).strip()]
                     soft_candidate["source_flags"] = source_flags
                 soft_reject_candidates.append(soft_candidate)
+                if _is_structurally_valid_cycle_candidate(soft_candidate):
+                    rankable_soft_reject_candidates.append(soft_candidate)
         if soft_reject_candidates:
             for soft_candidate in soft_reject_candidates:
                 logger.info(
@@ -1421,7 +1520,16 @@ def _augment_ranked_candidates_with_soft_reject(
                     soft_candidate.get("trade_id"),
                     soft_candidate.get("rank_score"),
                 )
-            ranked.extend(soft_reject_candidates)
+            ranked.extend(rankable_soft_reject_candidates)
+            dropped_soft_candidates = max(0, len(soft_reject_candidates) - len(rankable_soft_reject_candidates))
+            if dropped_soft_candidates > 0:
+                logger.info(
+                    "soft_reject_unrankable_filtered symbol=%s dropped=%s kept=%s reason=%s",
+                    symbol,
+                    dropped_soft_candidates,
+                    len(rankable_soft_reject_candidates),
+                    reject_reason or "trade_builder_reject",
+                )
             logger.warning(
                 "soft_reject_triggered symbol=%s count=%s reason=%s gate_reasons=%s",
                 symbol,
@@ -1444,6 +1552,8 @@ def _apply_latency_soften_to_candidates(
         return candidates, 0
     softened: list[dict] = []
     softened_count = 0
+    sample_limit = max(0, int(getattr(cfg, "LATENCY_SOFTEN_LOG_SAMPLE_LIMIT", 5) or 5))
+    softened_samples: list[dict] = []
     for candidate in candidates:
         confidence_before = _trade_attr(candidate, "confidence_final") or _trade_attr(candidate, "confidence")
         updated = apply_latency_penalty(
@@ -1452,17 +1562,27 @@ def _apply_latency_soften_to_candidates(
             execution_mode=execution_mode,
         )
         confidence_after = _trade_attr(updated, "confidence_final") or _trade_attr(updated, "confidence")
-        logger.info(
-            "LATENCY_SOFTEN_APPLIED symbol=%s strategy_family=%s option_type=%s direction=%s confidence_before=%s confidence_after=%s",
-            symbol,
-            _trade_attr(updated, "strategy_family"),
-            _trade_attr(updated, "option_type"),
-            _trade_attr(updated, "direction"),
-            confidence_before,
-            confidence_after,
-        )
+        if len(softened_samples) < sample_limit:
+            softened_samples.append(
+                {
+                    "trade_id": _trade_attr(updated, "trade_id"),
+                    "symbol": _trade_attr(updated, "symbol"),
+                    "strategy_family": _trade_attr(updated, "strategy_family"),
+                    "candidate_status": _trade_attr(updated, "candidate_status"),
+                    "execution_status": _trade_attr(updated, "execution_status"),
+                    "confidence_before": confidence_before,
+                    "confidence_after": confidence_after,
+                }
+            )
         softened.append(updated)
         softened_count += 1
+    logger.info(
+        "LATENCY_SOFTEN_APPLIED symbol=%s action=%s count=%s sample=%s",
+        symbol,
+        latency_action,
+        softened_count,
+        softened_samples,
+    )
     return softened, softened_count
 
 
@@ -4141,6 +4261,49 @@ class Orchestrator:
                     last_t = self.last_trade_time.get(sym)
                     if last_t and time.time() - last_t < cooldown:
                         continue
+                    execution_mode = str(
+                        market_data.get("execution_mode")
+                        or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
+                        or getattr(cfg, "EXECUTION_MODE", "")
+                    ).strip().upper()
+                    if _should_skip_trade_builder_for_latency_guard(
+                        latency_soften_active=latency_soften_active,
+                        execution_mode=execution_mode,
+                    ):
+                        skip_reason = f"latency_guard_{latency_action}_prebuild_skip" if latency_action else "latency_guard_prebuild_skip"
+                        cycle_candidates_blocked += 1
+                        cycle_blockers[skip_reason] += 1
+                        logger.warning(
+                            "latency_guard_prebuild_skip symbol=%s action=%s execution_mode=%s",
+                            sym,
+                            latency_action or "unknown",
+                            execution_mode,
+                        )
+                        try:
+                            audit_append(
+                                {
+                                    "event": "LATENCY_GUARD_PREBUILD_SKIP",
+                                    "symbol": sym,
+                                    "action": latency_action or "unknown",
+                                    "execution_mode": execution_mode,
+                                    "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                                }
+                            )
+                        except Exception:
+                            pass
+                        self._log_cycle_symbol_summary(
+                            symbol=sym,
+                            snapshot_ok=bool(market_snapshot),
+                            gate_allowed=False,
+                            quote_age_gate_pass=True,
+                            trade_build_attempted=False,
+                            trade_generated=False,
+                            permission="QUEUE_ONLY",
+                            final_action="QUEUE_ONLY",
+                            reject_reason=skip_reason,
+                            top_gate_reasons=[skip_reason],
+                        )
+                        continue
                     # Phase C: Build trade suggestion
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
                     trade = None
@@ -4324,11 +4487,6 @@ class Orchestrator:
                             continue
                     decision_stage_start = time.perf_counter()
                     cycle_trade_build_attempts += 1
-                    execution_mode = str(
-                        market_data.get("execution_mode")
-                        or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
-                        or getattr(cfg, "EXECUTION_MODE", "")
-                    ).strip().upper()
                     allow_builder_fallbacks = execution_mode in {"SIM", "PAPER"}
                     allow_builder_baseline = execution_mode in {"SIM", "PAPER"}
                     logger.debug(
@@ -4444,7 +4602,7 @@ class Orchestrator:
                             post_latency_real,
                             latency_action,
                         )
-                    all_candidates = list(ranked_candidates or [])
+                    all_candidates, _ = _filter_invalid_cycle_candidates(ranked_candidates, symbol=sym)
                     real_candidates = [cand for cand in all_candidates if not _is_synthetic_candidate(cand)]
                     synthetic_candidates = [cand for cand in all_candidates if _is_synthetic_candidate(cand)]
                     ranked_candidates = list(real_candidates)
