@@ -130,11 +130,11 @@ def assess_liquidity_quality(
         if volume_value > 0.0
         else 0.45
     )
-    oi_score = (
-        min(1.0, log1p(oi_value) / log1p(target_oi_value * oi_cap))
-        if oi_value > 0.0
-        else 0.50
-    )
+    if oi_value > 0.0:
+        oi_score = min(1.0, log1p(oi_value) / log1p(target_oi_value * oi_cap))
+    else:
+        oi_score = _cfg_float("CANDIDATE_SCORING_LIQUIDITY_OI_MISSING_SCORE", 0.25)
+        reasons.append("missing_oi_context")
     flow_score = _weighted_average([(volume_score, 0.7), (oi_score, 0.3)], default=0.5)
     book_score = _clamp01(quote_consistency_score, default=0.5)
     spread_value = _safe_float(spread_pct)

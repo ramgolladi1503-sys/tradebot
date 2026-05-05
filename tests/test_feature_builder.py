@@ -261,6 +261,45 @@ def test_liquidity_quality_has_a_spread_sensitive_gradient_for_quote_valid_rows(
     assert low["liquidity_book_score"] == high["liquidity_book_score"] == 1.0
 
 
+def test_missing_oi_context_lowers_liquidity_for_quote_valid_rows(monkeypatch):
+    monkeypatch.setattr(cfg, "OPTION_LTP_SLA_SEC", 2.0, raising=False)
+    rich_oi = assess_trade_feature_quality(
+        {"execution_mode": "LIVE", "market_open": True},
+        {
+            "ltp": 100.0,
+            "bid": 99.9,
+            "ask": 100.1,
+            "quote_ok": True,
+            "ltp_age_sec": 0.2,
+            "bid_age_sec": 0.2,
+            "ask_age_sec": 0.2,
+            "quote_age_sec": 0.2,
+            "volume": 200_000,
+            "oi": 500_000,
+            "spread_stability_score": 0.95,
+        },
+    )
+    missing_oi = assess_trade_feature_quality(
+        {"execution_mode": "LIVE", "market_open": True},
+        {
+            "ltp": 100.0,
+            "bid": 99.9,
+            "ask": 100.1,
+            "quote_ok": True,
+            "ltp_age_sec": 0.2,
+            "bid_age_sec": 0.2,
+            "ask_age_sec": 0.2,
+            "quote_age_sec": 0.2,
+            "volume": 200_000,
+            "spread_stability_score": 0.95,
+        },
+    )
+
+    assert rich_oi["liquidity_quality"] > missing_oi["liquidity_quality"]
+    assert rich_oi["liquidity_quality"] - missing_oi["liquidity_quality"] >= 0.08
+    assert missing_oi["liquidity_oi_score"] < 0.4
+
+
 def test_liquidity_quality_penalizes_wider_spread_for_quote_valid_rows(monkeypatch):
     monkeypatch.setattr(cfg, "OPTION_LTP_SLA_SEC", 2.0, raising=False)
     tight = assess_trade_feature_quality(
