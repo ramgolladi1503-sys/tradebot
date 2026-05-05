@@ -194,20 +194,46 @@ def _prune_stale_option_subscription_tokens(
             "enabled": True,
             "max_age_sec": _stale_option_subscription_max_age_sec(),
             "grace_sec": grace_sec,
+            "require_session_tick": bool(
+                getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
+            ),
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
             "pruned_by_symbol": {},
+            "session_tick_skipped_by_symbol": {},
         }
 
     max_age_sec = _stale_option_subscription_max_age_sec()
+    require_session_tick = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True))
     db_rows = get_latest_tick_rows_db(option_tokens)
     pruned_tokens: list[int] = []
     kept_option_tokens: list[int] = []
     pruned_by_symbol: dict[str, int] = {}
+    session_tick_skipped_by_symbol: dict[str, int] = {}
     stale_samples: list[dict[str, object]] = []
 
     for token in option_tokens:
+        symbol = str(token_to_symbol.get(int(token)) or "").upper() or "UNKNOWN"
+        if require_session_tick:
+            session_tick_epoch = _coerce_epoch(_SYMBOL_LAST_OPTION_TICK_TS.get(symbol))
+            if session_tick_epoch is None or session_tick_epoch < float(start_epoch):
+                kept_option_tokens.append(int(token))
+                session_tick_skipped_by_symbol[symbol] = int(session_tick_skipped_by_symbol.get(symbol, 0)) + 1
+                if len(stale_samples) < 10:
+                    stale_samples.append(
+                        {
+                            "token": int(token),
+                            "symbol": symbol,
+                            "age_sec": None,
+                            "db_epoch": None,
+                            "memory_epoch": None,
+                            "session_tick_epoch": session_tick_epoch,
+                            "session_tick_required": True,
+                            "session_tick_skipped": True,
+                        }
+                    )
+                continue
         db_row = db_rows.get(token) or {}
         db_epoch = _coerce_epoch(db_row.get("ts_epoch"))
         memory_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
@@ -221,7 +247,6 @@ def _prune_stale_option_subscription_tokens(
         age_sec = None if effective_epoch is None else max(0.0, float(now_epoch) - float(effective_epoch))
         if age_sec is None or age_sec > max_age_sec:
             pruned_tokens.append(int(token))
-            symbol = str(token_to_symbol.get(int(token)) or "").upper() or "UNKNOWN"
             pruned_by_symbol[symbol] = int(pruned_by_symbol.get(symbol, 0)) + 1
             if len(stale_samples) < 10:
                 stale_samples.append(
@@ -241,10 +266,12 @@ def _prune_stale_option_subscription_tokens(
             "enabled": True,
             "max_age_sec": max_age_sec,
             "grace_sec": grace_sec,
+            "require_session_tick": require_session_tick,
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
             "pruned_by_symbol": {},
+            "session_tick_skipped_by_symbol": session_tick_skipped_by_symbol,
         }
 
     pruned_set = set(pruned_tokens)
@@ -256,10 +283,12 @@ def _prune_stale_option_subscription_tokens(
         "enabled": True,
         "max_age_sec": max_age_sec,
         "grace_sec": grace_sec,
+        "require_session_tick": require_session_tick,
         "pruned_count": len(pruned_tokens_out),
         "kept_count": len(retained_tokens),
         "pruned_tokens": pruned_tokens_out,
         "pruned_by_symbol": pruned_by_symbol,
+        "session_tick_skipped_by_symbol": session_tick_skipped_by_symbol,
         "stale_samples": stale_samples,
     }
 
@@ -2122,7 +2151,11 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         row["stale_option_pruned_count"] = int((prune_meta.get("pruned_by_symbol") or {}).get(symbol, 0) or 0)
         row["stale_option_prune_enabled"] = bool(prune_meta.get("enabled"))
         row["stale_option_prune_max_age_sec"] = float(prune_meta.get("max_age_sec") or 0.0)
+        row["stale_option_prune_require_session_tick"] = bool(prune_meta.get("require_session_tick"))
         row["stale_option_pruned_sample_tokens"] = [int(t) for t in list(prune_meta.get("pruned_tokens") or [])[:10]]
+        row["stale_option_session_tick_skipped_count_by_symbol"] = dict(
+            prune_meta.get("session_tick_skipped_by_symbol") or {}
+        )
         row["option_drop_reason"] = row.get("option_fail_reason")
         if not row.get("option_drop_reason") and final_option_count < int(row.get("resolved_option_count") or 0):
             row["option_drop_reason"] = (

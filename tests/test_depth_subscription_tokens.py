@@ -216,8 +216,10 @@ def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_an
 
     monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True, raising=False)
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: 200.0)
     monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"NIFTY": 150.0}, raising=False)
 
     def _fake_latest_tick_rows_db(tokens):
         rows = {}
@@ -253,6 +255,50 @@ def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_an
     assert row.get("option_fail_reason") in (None, "")
     assert row.get("stale_option_prune_enabled") is True
     assert float(row.get("stale_option_prune_max_age_sec") or 0.0) == 2.5
+    assert row.get("stale_option_prune_require_session_tick") is True
+    assert int((row.get("stale_option_session_tick_skipped_count_by_symbol") or {}).get("NIFTY") or 0) == 0
+
+
+def test_build_depth_subscription_tokens_requires_session_tick_before_pruning_stale_options(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    atm = int(ctx["atm_by_symbol"]["NIFTY"])
+
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True, raising=False)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 200.0)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {}, raising=False)
+
+    def _fake_latest_tick_rows_db(tokens):
+        rows = {}
+        for token in list(tokens or []):
+            meta = token_meta.get(int(token)) or {}
+            if str(meta.get("symbol") or "").upper() != "NIFTY":
+                continue
+            strike = int(float(meta.get("strike") or 0))
+            age_sec = 1.0 if abs(strike - atm) <= 150 else 20.0
+            rows[int(token)] = {"ts_epoch": 200.0 - age_sec, "ltp": 100.0}
+        return rows
+
+    monkeypatch.setattr(ws, "get_latest_tick_rows_db", _fake_latest_tick_rows_db)
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=200)
+
+    index_token = ctx["index_tokens"]["NIFTY"]
+    assert index_token in tokens
+    option_tokens = [t for t in tokens if token_meta.get(t, {}).get("symbol") == "NIFTY"]
+    kept_strikes = {int(token_meta[t]["strike"]) for t in option_tokens}
+    assert kept_strikes == {atm + (off * 50) for off in range(-6, 7)}
+    assert len(option_tokens) == 26
+    row = resolution[0]
+    assert int(row.get("stale_option_pruned_count") or 0) == 0
+    assert row.get("option_drop_reason") in (None, "")
+    assert row.get("stale_option_prune_enabled") is True
+    assert row.get("stale_option_prune_require_session_tick") is True
+    skipped = row.get("stale_option_session_tick_skipped_count_by_symbol") or {}
+    assert int(skipped.get("NIFTY") or 0) == 26
 
 
 def test_maybe_refresh_stale_option_subscription_universe_applies_delta(monkeypatch):
