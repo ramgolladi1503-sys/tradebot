@@ -48,6 +48,17 @@ def _safe_json_list(value: Any) -> list[str]:
     return []
 
 
+def _telemetry_value(payload: dict[str, Any], field: str, default: Any = None) -> Any:
+    value = payload.get(field)
+    if value is None:
+        for nested_key in ("score_inputs_used", "score_breakdown", "source_flags", "decision_trace"):
+            nested = payload.get(nested_key)
+            if isinstance(nested, dict) and field in nested:
+                value = nested.get(field)
+                break
+    return default if value is None else value
+
+
 def _mode_key(raw_mode: Any | None = None) -> str:
     mode = str(raw_mode or getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).strip().upper()
     if mode in {"LIVE", "PAPER", "SIM", "OFFHOURS"}:
@@ -342,13 +353,18 @@ def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
         "orb_factor": _safe_float(payload.get("orb_factor")),
         "reg_penalty": _safe_float(payload.get("reg_penalty")),
         "global_conf": _safe_float(payload.get("global_conf")),
-        "liquidity_score": _safe_float(payload.get("liquidity_score")),
-        "quote_consistency_score": _safe_float(payload.get("quote_consistency_score")),
-        "quote_validation_status": str(payload.get("quote_validation_status") or "").strip() or None,
-        "rank_score": _safe_float(payload.get("rank_score")),
-        "raw_rank_score": _safe_float(payload.get("raw_rank_score")),
-        "terminal_rank_score": _safe_float(payload.get("terminal_rank_score")),
-        "opportunity_score": _safe_float(payload.get("opportunity_score")),
+        "liquidity_score": _safe_float(_telemetry_value(payload, "liquidity_score")),
+        "quote_consistency_score": _safe_float(_telemetry_value(payload, "quote_consistency_score")),
+        "quote_validation_status": str(_telemetry_value(payload, "quote_validation_status") or "").strip() or None,
+        "liquidity_flow_score": _safe_float(_telemetry_value(payload, "liquidity_flow_score")),
+        "liquidity_book_score": _safe_float(_telemetry_value(payload, "liquidity_book_score")),
+        "liquidity_spread_score": _safe_float(_telemetry_value(payload, "liquidity_spread_score")),
+        "liquidity_volume_score": _safe_float(_telemetry_value(payload, "liquidity_volume_score")),
+        "liquidity_oi_score": _safe_float(_telemetry_value(payload, "liquidity_oi_score")),
+        "rank_score": _safe_float(_telemetry_value(payload, "rank_score")),
+        "raw_rank_score": _safe_float(_telemetry_value(payload, "raw_rank_score")),
+        "terminal_rank_score": _safe_float(_telemetry_value(payload, "terminal_rank_score")),
+        "opportunity_score": _safe_float(_telemetry_value(payload, "opportunity_score")),
         "permission": payload.get("permission"),
         "permission_reason": payload.get("permission_reason"),
         "entry_status": payload.get("entry_status"),

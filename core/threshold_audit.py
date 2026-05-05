@@ -59,6 +59,22 @@ def _source_flags(candidate: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _candidate_telemetry_value(candidate: Any, field: str, default: Any = None) -> Any:
+    value = _candidate_get(candidate, field, None)
+    if value is None:
+        source_flags = _source_flags(candidate)
+        value = source_flags.get(field)
+    if value is None:
+        score_inputs_used = _candidate_get(candidate, "score_inputs_used", {})
+        if isinstance(score_inputs_used, Mapping):
+            value = score_inputs_used.get(field)
+    if value is None:
+        score_breakdown = _candidate_get(candidate, "score_breakdown", {})
+        if isinstance(score_breakdown, Mapping):
+            value = score_breakdown.get(field)
+    return default if value is None else value
+
+
 def threshold_audit_dir() -> Path:
     return ensure_dir(runtime_dir() / "analytics")
 
@@ -267,6 +283,18 @@ def build_candidate_decision_record(
         "priority_score": _safe_float(_candidate_get(candidate, "priority_score")),
         "final_score": _safe_float(_candidate_get(candidate, "final_score")),
         "selection_probability": _safe_float(_candidate_get(candidate, "selection_probability")),
+        "rank_score": _safe_float(_candidate_telemetry_value(candidate, "rank_score")),
+        "raw_rank_score": _safe_float(_candidate_telemetry_value(candidate, "raw_rank_score")),
+        "terminal_rank_score": _safe_float(_candidate_telemetry_value(candidate, "terminal_rank_score")),
+        "opportunity_score": _safe_float(_candidate_telemetry_value(candidate, "opportunity_score")),
+        "quote_validation_status": str(_candidate_telemetry_value(candidate, "quote_validation_status") or "").strip() or None,
+        "liquidity_score": _safe_float(_candidate_telemetry_value(candidate, "liquidity_score")),
+        "quote_consistency_score": _safe_float(_candidate_telemetry_value(candidate, "quote_consistency_score")),
+        "liquidity_flow_score": _safe_float(_candidate_telemetry_value(candidate, "liquidity_flow_score")),
+        "liquidity_book_score": _safe_float(_candidate_telemetry_value(candidate, "liquidity_book_score")),
+        "liquidity_spread_score": _safe_float(_candidate_telemetry_value(candidate, "liquidity_spread_score")),
+        "liquidity_volume_score": _safe_float(_candidate_telemetry_value(candidate, "liquidity_volume_score")),
+        "liquidity_oi_score": _safe_float(_candidate_telemetry_value(candidate, "liquidity_oi_score")),
         "rejected_at_stage": reason_meta["rejected_at_stage"],
         "rejection_reason_code": reason_meta["rejection_reason_code"],
         "rejection_bucket": reason_meta["rejection_bucket"],
@@ -443,6 +471,18 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         "priority_score": _safe_float(source.get("priority_score")),
         "final_score": _safe_float(source.get("final_score")),
         "selection_probability": _safe_float(source.get("selection_probability")),
+        "rank_score": _safe_float(source.get("rank_score")),
+        "raw_rank_score": _safe_float(source.get("raw_rank_score")),
+        "terminal_rank_score": _safe_float(source.get("terminal_rank_score")),
+        "opportunity_score": _safe_float(source.get("opportunity_score")),
+        "quote_validation_status": str(source.get("quote_validation_status") or "").strip() or None,
+        "liquidity_score": _safe_float(source.get("liquidity_score")),
+        "quote_consistency_score": _safe_float(source.get("quote_consistency_score")),
+        "liquidity_flow_score": _safe_float(source.get("liquidity_flow_score")),
+        "liquidity_book_score": _safe_float(source.get("liquidity_book_score")),
+        "liquidity_spread_score": _safe_float(source.get("liquidity_spread_score")),
+        "liquidity_volume_score": _safe_float(source.get("liquidity_volume_score")),
+        "liquidity_oi_score": _safe_float(source.get("liquidity_oi_score")),
         "rejected_at_stage": reason_meta["rejected_at_stage"],
         "rejection_reason_code": reason_meta["rejection_reason_code"],
         "rejection_bucket": reason_meta["rejection_bucket"],

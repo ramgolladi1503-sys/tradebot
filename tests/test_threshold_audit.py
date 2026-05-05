@@ -5,6 +5,7 @@ from core.adaptive_thresholds import adjust_threshold
 from core.threshold_audit import (
     compute_starvation_diagnostics,
     rank_rejection_impact,
+    normalize_candidate_decision,
     summarize_rejection_impact,
     summarize_rejections_by_stage,
     summarize_score_distributions,
@@ -205,6 +206,43 @@ def test_rejection_impact_identifies_bad_filters():
     assert row["count"] == 2
     assert row["missed_win"] >= 1
     assert float(row["impact_score"]) > 0.0
+
+
+def test_threshold_audit_normalize_preserves_liquidity_telemetry():
+    normalized = normalize_candidate_decision(
+        {
+            "timestamp": "2026-05-04T14:11:00+05:30",
+            "decision_phase": "selector",
+            "decision_scope": "unit:audit",
+            "symbol": "NIFTY",
+            "market_mode": "SIM",
+            "liquidity_score": 0.8125,
+            "quote_consistency_score": 0.91,
+            "liquidity_flow_score": 0.74,
+            "liquidity_book_score": 0.88,
+            "liquidity_spread_score": 0.81,
+            "liquidity_volume_score": 0.77,
+            "liquidity_oi_score": 0.69,
+            "rank_score": 0.578174,
+            "raw_rank_score": 0.746802,
+            "terminal_rank_score": 0.578174,
+            "opportunity_score": 0.654476,
+            "quote_validation_status": "OK",
+        }
+    )
+
+    assert normalized["liquidity_score"] == 0.8125
+    assert normalized["quote_consistency_score"] == 0.91
+    assert normalized["liquidity_flow_score"] == 0.74
+    assert normalized["liquidity_book_score"] == 0.88
+    assert normalized["liquidity_spread_score"] == 0.81
+    assert normalized["liquidity_volume_score"] == 0.77
+    assert normalized["liquidity_oi_score"] == 0.69
+    assert normalized["rank_score"] == 0.578174
+    assert normalized["raw_rank_score"] == 0.746802
+    assert normalized["terminal_rank_score"] == 0.578174
+    assert normalized["opportunity_score"] == 0.654476
+    assert normalized["quote_validation_status"] == "OK"
 
 
 def test_threshold_adjustment_is_bounded(monkeypatch):

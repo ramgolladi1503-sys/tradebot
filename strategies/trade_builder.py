@@ -1145,6 +1145,23 @@ class TradeBuilder:
             return candidate.get(field, default)
         return getattr(candidate, field, default)
 
+    @staticmethod
+    def _candidate_telemetry_field(candidate, source_flags: dict | None, decision_trace: dict | None, field: str, default=None):
+        value = TradeBuilder._candidate_field(candidate, field, None)
+        if value is None and isinstance(source_flags, dict):
+            value = source_flags.get(field)
+        if value is None and isinstance(decision_trace, dict):
+            value = decision_trace.get(field)
+        if value is None:
+            score_inputs_used = TradeBuilder._candidate_field(candidate, "score_inputs_used", {})
+            if isinstance(score_inputs_used, dict):
+                value = score_inputs_used.get(field)
+        if value is None:
+            score_breakdown = TradeBuilder._candidate_field(candidate, "score_breakdown", {})
+            if isinstance(score_breakdown, dict):
+                value = score_breakdown.get(field)
+        return default if value is None else value
+
     def _candidate_feature_quality(self, candidate, market_data: dict | None) -> dict:
         data = market_data if isinstance(market_data, dict) else {}
         opt_like = {
@@ -2868,6 +2885,8 @@ class TradeBuilder:
                 raw_soft = meta.get("soft_veto_codes")
                 if isinstance(raw_soft, (list, tuple)):
                     soft_vetos = [str(x) for x in raw_soft if str(x)]
+            rec_sf = dict(rec.get("source_flags", {}) or {}) if isinstance(rec, dict) else {}
+            rec_trace = dict(meta.get("decision_trace", {}) or {}) if isinstance(meta, dict) else {}
             record_candidate_decision(
                 {
                     "candidate_id": rec.get("candidate_id"),
@@ -2901,6 +2920,11 @@ class TradeBuilder:
                     "liquidity_score": rec.get("liquidity_score"),
                     "quote_consistency_score": rec.get("quote_consistency_score"),
                     "quote_validation_status": rec.get("quote_validation_status"),
+                    "liquidity_flow_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_flow_score"),
+                    "liquidity_book_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_book_score"),
+                    "liquidity_spread_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_spread_score"),
+                    "liquidity_volume_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_volume_score"),
+                    "liquidity_oi_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_oi_score"),
                     "rank_score": rec.get("rank_score"),
                     "raw_rank_score": rec.get("raw_rank_score"),
                     "terminal_rank_score": rec.get("terminal_rank_score"),
@@ -10678,6 +10702,11 @@ class TradeBuilder:
                 decision_trace = dict(sf.get("decision_trace", {}) or {})
                 gates_failed = list(dict.fromkeys(sf.get("gates_failed") or getattr(cand, "tradable_reasons_blocking", []) or []))
                 soft_vetos = list(dict.fromkeys(sf.get("soft_veto_codes") or []))
+                liquidity_flow_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_flow_score")
+                liquidity_book_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_book_score")
+                liquidity_spread_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_spread_score")
+                liquidity_volume_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_volume_score")
+                liquidity_oi_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_oi_score")
                 record_candidate_decision(
                     {
                         "candidate_id": getattr(cand, "trade_id", None),
@@ -10716,6 +10745,11 @@ class TradeBuilder:
                         "liquidity_oi_score": getattr(cand, "liquidity_oi_score", None),
                         "quote_consistency_score": getattr(cand, "quote_consistency_score", None),
                         "quote_validation_status": getattr(cand, "quote_validation_status", None),
+                        "liquidity_flow_score": liquidity_flow_score,
+                        "liquidity_book_score": liquidity_book_score,
+                        "liquidity_spread_score": liquidity_spread_score,
+                        "liquidity_volume_score": liquidity_volume_score,
+                        "liquidity_oi_score": liquidity_oi_score,
                         "rank_score": getattr(cand, "rank_score", None),
                         "raw_rank_score": getattr(cand, "raw_rank_score", None),
                         "terminal_rank_score": getattr(cand, "terminal_rank_score", None),
@@ -11313,6 +11347,13 @@ class TradeBuilder:
         except Exception:
             pass
         try:
+            trade_sf = dict(getattr(trade, "source_flags", {}) or {})
+            trade_trace = dict(trade_sf.get("decision_trace", {}) or {})
+            liquidity_flow_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_flow_score")
+            liquidity_book_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_book_score")
+            liquidity_spread_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_spread_score")
+            liquidity_volume_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_volume_score")
+            liquidity_oi_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_oi_score")
             record_candidate_decision(
                 {
                     "candidate_id": trade.trade_id,
@@ -11337,6 +11378,11 @@ class TradeBuilder:
                     "liquidity_oi_score": getattr(trade, "liquidity_oi_score", None),
                     "regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),
                     "orb_bias": market_data.get("orb_bias"),
+                    "liquidity_flow_score": liquidity_flow_score,
+                    "liquidity_book_score": liquidity_book_score,
+                    "liquidity_spread_score": liquidity_spread_score,
+                    "liquidity_volume_score": liquidity_volume_score,
+                    "liquidity_oi_score": liquidity_oi_score,
                     "permission": "ADVISORY_ONLY",
                     "permission_reason": "PAPER_ONLY",
                     "entry_status": (

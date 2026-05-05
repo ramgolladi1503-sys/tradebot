@@ -243,9 +243,9 @@ def _prune_stale_option_subscription_tokens(
                             "memory_epoch": None,
                             "session_tick_epoch": session_tick_epoch,
                             "session_tick_required": True,
-                            "session_tick_skipped": True,
-                        }
-                    )
+                        "session_tick_skipped": True,
+                    }
+                )
                 continue
         db_row = db_rows.get(token) or {}
         db_epoch = _coerce_epoch(db_row.get("ts_epoch"))
