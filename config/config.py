@@ -2522,6 +2522,13 @@ FEED_SILENT_RECONNECT_BACKOFF_MIN_SEC = float(os.getenv("FEED_SILENT_RECONNECT_B
 FEED_SILENT_RECONNECT_BACKOFF_MAX_SEC = float(os.getenv("FEED_SILENT_RECONNECT_BACKOFF_MAX_SEC", "10.0"))
 # Escalate a silent websocket to a full reconnect after this many seconds.
 FEED_SILENT_FORCE_FULL_RESTART_SEC = float(os.getenv("FEED_SILENT_FORCE_FULL_RESTART_SEC", "12.0"))
+FEED_SOFT_RESUBSCRIBE_MAX_TICK_AGE_SEC = float(
+    os.getenv("FEED_SOFT_RESUBSCRIBE_MAX_TICK_AGE_SEC", "2.0")
+)
+FEED_SOFT_RESUBSCRIBE_HARD_BLOCK_MARKERS = os.getenv(
+    "FEED_SOFT_RESUBSCRIBE_HARD_BLOCK_MARKERS",
+    "no_ws_messages,watchdog_down,market_open_option_subscriptions_missing,ltp_stale,option_quote_missing,option_quote_not_live,no_live_option_feed",
+)
 # Keep generic feed-health reconnects from racing the dedicated silent-feed
 # watchdog unless the operator explicitly opts in.
 FEED_HEALTH_RECONNECT_ON_SILENT_DOWN = (

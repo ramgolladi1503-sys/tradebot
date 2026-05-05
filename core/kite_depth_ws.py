@@ -190,6 +190,36 @@ def _soft_resubscribe_current(reason: str) -> bool:
             return False
 
 
+def _soft_resubscribe_hard_block_markers() -> tuple[str, ...]:
+    raw = str(getattr(cfg, "FEED_SOFT_RESUBSCRIBE_HARD_BLOCK_MARKERS", "") or "")
+    markers = tuple(part.strip().lower() for part in raw.split(",") if part.strip())
+    return markers
+
+
+def _soft_resubscribe_eligibility(reason: str, now_epoch: float | None = None) -> tuple[bool, str]:
+    reason_text = str(reason or "")
+    reason_lower = reason_text.lower()
+    for marker in _soft_resubscribe_hard_block_markers():
+        if marker and marker in reason_lower:
+            return False, f"hard_reason_marker:{marker}"
+
+    ws_connected = _ws_connected_state()
+    if ws_connected is not True:
+        return False, "ws_disconnected"
+
+    last_tick_epoch = float(_LAST_WS_TICK_EPOCH or 0.0)
+    if last_tick_epoch <= 0.0:
+        return False, "no_recent_ws_tick"
+
+    now_ts = float(now_epoch if isinstance(now_epoch, (int, float)) else time.time())
+    tick_age_sec = max(0.0, now_ts - last_tick_epoch)
+    max_tick_age_sec = float(getattr(cfg, "FEED_SOFT_RESUBSCRIBE_MAX_TICK_AGE_SEC", 2.0))
+    if tick_age_sec > max_tick_age_sec:
+        return False, f"ws_tick_stale:{tick_age_sec:.2f}s"
+
+    return True, "eligible"
+
+
 def _auth_error_text(code, reason) -> str:
     parts = []
     if code is not None:
@@ -2336,9 +2366,11 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         )
         return False
 
+    now = time.time()
     if _use_internal_reconnect() and _KITE_TICKER is not None and not bool(force_full_restart):
         ws_connected = _ws_connected_state()
-        if ws_connected is True:
+        soft_allowed, soft_reason = _soft_resubscribe_eligibility(reason=reason, now_epoch=now)
+        if soft_allowed:
             _log_ws(
                 "FEED_RESTART_SOFT_PATH",
                 {"reason": reason, "detail": "internal_reconnect_enabled", "ws_connected": True},
@@ -2353,7 +2385,11 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         else:
             _log_ws(
                 "FEED_RESTART_FALLBACK_FULL_PATH",
-                {"reason": reason, "detail": "ws_disconnected", "ws_connected": ws_connected},
+                {
+                    "reason": reason,
+                    "detail": soft_reason if ws_connected is True else "ws_disconnected",
+                    "ws_connected": ws_connected,
+                },
             )
     elif bool(force_full_restart) and _KITE_TICKER is not None:
         ws_connected = _ws_connected_state()
@@ -2362,7 +2398,6 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             {"reason": reason, "detail": "forced_full_restart", "ws_connected": ws_connected},
         )
 
-    now = time.time()
     cooldown = float(getattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 120))
     max_per_hour = int(getattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6))
     storm_trip = int(getattr(cfg, "FEED_RESTART_STORM_TRIP", max_per_hour))
@@ -3141,7 +3176,10 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         },
                         throttle_key="FEED_OPTION_SUBSCRIPTIONS_MISSING",
                     )
-                    _soft_resubscribe_current(reason="market_open_option_subscriptions_missing")
+                    restart_depth_ws(
+                        reason="market_open_option_subscriptions_missing",
+                        ignore_cooldown=True,
+                    )
             try:
                 get_feed_health_monitor().maybe_trigger_reconnect(
                     reason_prefix="watchdog_down",
