@@ -56,6 +56,17 @@ def _telemetry_value(payload: dict[str, Any], field: str, default: Any = None) -
             if isinstance(nested, dict) and field in nested:
                 value = nested.get(field)
                 break
+    if value is None and field == "raw_rank_score":
+        for fallback_field in ("ranking_score", "rank_score"):
+            value = payload.get(fallback_field)
+            if value is None:
+                for nested_key in ("score_inputs_used", "score_breakdown", "source_flags", "decision_trace"):
+                    nested = payload.get(nested_key)
+                    if isinstance(nested, dict) and fallback_field in nested:
+                        value = nested.get(fallback_field)
+                        break
+            if value is not None:
+                break
     return default if value is None else value
 
 

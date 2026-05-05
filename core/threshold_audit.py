@@ -64,6 +64,14 @@ def _candidate_telemetry_value(candidate: Any, field: str, default: Any = None) 
     if value is None:
         source_flags = _source_flags(candidate)
         value = source_flags.get(field)
+    if value is None and field == "raw_rank_score":
+        for fallback_field in ("ranking_score", "rank_score"):
+            value = _candidate_get(candidate, fallback_field, None)
+            if value is None:
+                source_flags = _source_flags(candidate)
+                value = source_flags.get(fallback_field)
+            if value is not None:
+                break
     if value is None:
         score_inputs_used = _candidate_get(candidate, "score_inputs_used", {})
         if isinstance(score_inputs_used, Mapping):
@@ -284,7 +292,7 @@ def build_candidate_decision_record(
         "final_score": _safe_float(_candidate_get(candidate, "final_score")),
         "selection_probability": _safe_float(_candidate_get(candidate, "selection_probability")),
         "rank_score": _safe_float(_candidate_telemetry_value(candidate, "rank_score")),
-        "raw_rank_score": _safe_float(_candidate_telemetry_value(candidate, "raw_rank_score")),
+        "raw_rank_score": _safe_float(_candidate_telemetry_value(source, "raw_rank_score")),
         "terminal_rank_score": _safe_float(_candidate_telemetry_value(candidate, "terminal_rank_score")),
         "opportunity_score": _safe_float(_candidate_telemetry_value(candidate, "opportunity_score")),
         "quote_validation_status": str(_candidate_telemetry_value(candidate, "quote_validation_status") or "").strip() or None,
@@ -472,7 +480,7 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         "final_score": _safe_float(source.get("final_score")),
         "selection_probability": _safe_float(source.get("selection_probability")),
         "rank_score": _safe_float(source.get("rank_score")),
-        "raw_rank_score": _safe_float(source.get("raw_rank_score")),
+        "raw_rank_score": _safe_float(_candidate_telemetry_value(source, "raw_rank_score")),
         "terminal_rank_score": _safe_float(source.get("terminal_rank_score")),
         "opportunity_score": _safe_float(source.get("opportunity_score")),
         "quote_validation_status": str(source.get("quote_validation_status") or "").strip() or None,

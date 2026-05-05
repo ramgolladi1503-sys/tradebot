@@ -1152,6 +1152,15 @@ class TradeBuilder:
             value = source_flags.get(field)
         if value is None and isinstance(decision_trace, dict):
             value = decision_trace.get(field)
+        if value is None and field == "raw_rank_score":
+            for fallback_field in ("ranking_score", "rank_score"):
+                value = TradeBuilder._candidate_field(candidate, fallback_field, None)
+                if value is None and isinstance(source_flags, dict):
+                    value = source_flags.get(fallback_field)
+                if value is None and isinstance(decision_trace, dict):
+                    value = decision_trace.get(fallback_field)
+                if value is not None:
+                    break
         if value is None:
             score_inputs_used = TradeBuilder._candidate_field(candidate, "score_inputs_used", {})
             if isinstance(score_inputs_used, dict):

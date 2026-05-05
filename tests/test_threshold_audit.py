@@ -245,6 +245,28 @@ def test_threshold_audit_normalize_preserves_liquidity_telemetry():
     assert normalized["quote_validation_status"] == "OK"
 
 
+def test_threshold_audit_normalize_backfills_raw_rank_from_rank():
+    normalized = normalize_candidate_decision(
+        {
+            "timestamp": "2026-05-04T14:11:00+05:30",
+            "decision_phase": "selector",
+            "decision_scope": "unit:audit",
+            "symbol": "NIFTY",
+            "market_mode": "SIM",
+            "rank_score": 0.578174,
+            "terminal_rank_score": 0.578174,
+            "opportunity_score": 0.654476,
+            "quote_validation_status": "OK",
+        }
+    )
+
+    assert normalized["rank_score"] == 0.578174
+    assert normalized["raw_rank_score"] == 0.578174
+    assert normalized["terminal_rank_score"] == 0.578174
+    assert normalized["opportunity_score"] == 0.654476
+    assert normalized["quote_validation_status"] == "OK"
+
+
 def test_threshold_adjustment_is_bounded(monkeypatch):
     monkeypatch.setattr(cfg, "OFFLINE_THRESHOLD_LEARNING_MAX_STEP_PCT", 0.02, raising=False)
 
