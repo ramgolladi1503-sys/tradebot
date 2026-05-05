@@ -332,6 +332,70 @@ def _option_subscription_freshness_stats(
     }
 
 
+def _option_subscription_freshness_by_symbol_stats(
+    *,
+    now_epoch: float,
+    tokens: list[int],
+) -> dict[str, dict[str, object]]:
+    by_symbol: dict[str, dict[str, object]] = {}
+    for tok in list(tokens or []):
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        if tok_int <= 0 or _is_underlying_token(tok_int):
+            continue
+        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
+        if not symbol or symbol == "STICKY":
+            continue
+        stats = by_symbol.setdefault(
+            symbol,
+            {
+                "option_count": 0,
+                "fresh_count": 0,
+                "stale_count": 0,
+                "fresh_ratio": 1.0,
+                "max_age_sec": 0.0,
+                "urgent_max_age_sec": float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 2.0)),
+                "stale_samples": [],
+            },
+        )
+        db_row = (get_latest_tick_rows_db([tok_int]) or {}).get(tok_int) or {}
+        db_epoch = _coerce_epoch(db_row.get("ts_epoch"))
+        memory_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(tok_int))
+        effective_epoch = None
+        if db_epoch is not None and memory_epoch is not None:
+            effective_epoch = max(float(db_epoch), float(memory_epoch))
+        elif db_epoch is not None:
+            effective_epoch = float(db_epoch)
+        elif memory_epoch is not None:
+            effective_epoch = float(memory_epoch)
+        age_sec = None if effective_epoch is None else max(0.0, float(now_epoch) - float(effective_epoch))
+        stats["option_count"] = int(stats.get("option_count") or 0) + 1
+        if age_sec is None or age_sec > float(stats.get("urgent_max_age_sec") or 0.0):
+            stats["stale_count"] = int(stats.get("stale_count") or 0) + 1
+            stale_samples = list(stats.get("stale_samples") or [])
+            if len(stale_samples) < 10:
+                stale_samples.append(
+                    {
+                        "token": tok_int,
+                        "symbol": symbol,
+                        "age_sec": age_sec,
+                        "db_epoch": db_epoch,
+                        "memory_epoch": memory_epoch,
+                    }
+                )
+            stats["stale_samples"] = stale_samples
+        else:
+            stats["fresh_count"] = int(stats.get("fresh_count") or 0) + 1
+        if age_sec is not None and float(age_sec) > float(stats.get("max_age_sec") or 0.0):
+            stats["max_age_sec"] = float(age_sec)
+        option_count = int(stats.get("option_count") or 0)
+        fresh_count = int(stats.get("fresh_count") or 0)
+        stats["fresh_ratio"] = float(fresh_count / option_count) if option_count > 0 else 1.0
+    return by_symbol
+
+
 def _maybe_refresh_stale_option_subscription_universe(
     *,
     now_epoch: float,
@@ -342,49 +406,108 @@ def _maybe_refresh_stale_option_subscription_universe(
     refresh_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_REFRESH_SEC", 20.0))
     drift_refresh_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 5.0))
     min_fresh_ratio = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8))
+    symbol_scope_enabled = bool(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_SYMBOL_SCOPE_ENABLE", True))
     last_refresh = float(refresh_state.get("last_refresh_epoch") or 0.0)
 
     desired_tokens_raw, resolution = build_subscription_tokens(list(getattr(cfg, "SYMBOLS", []) or []))
     desired_tokens = _normalize_positive_tokens(desired_tokens_raw)
     current_tokens = _normalize_positive_tokens(_LAST_TOKENS)
+    subscribe_tokens: list[int] = []
+    unsubscribe_tokens: list[int] = []
+    refresh_tokens: list[int] = []
     freshness = _option_subscription_freshness_stats(now_epoch=float(now_epoch), tokens=current_tokens)
-    freshness_urgent = bool(
-        int(freshness.get("option_count") or 0) > 0
+    freshness_by_symbol = _option_subscription_freshness_by_symbol_stats(now_epoch=float(now_epoch), tokens=current_tokens)
+    stale_symbols = [
+        sym
+        for sym, stats in sorted(freshness_by_symbol.items())
+        if int(stats.get("option_count") or 0) > 0
         and (
-            float(freshness.get("fresh_ratio") or 1.0) < float(min_fresh_ratio)
-            or float(freshness.get("max_age_sec") or 0.0)
-            > float(freshness.get("urgent_max_age_sec") or 0.0)
+            float(stats.get("fresh_ratio") or 1.0) < float(min_fresh_ratio)
+            or float(stats.get("max_age_sec") or 0.0) > float(stats.get("urgent_max_age_sec") or 0.0)
         )
-    )
+    ]
+    freshness_urgent = bool(stale_symbols)
     freshness_cooldown_elapsed = (float(now_epoch) - float(refresh_state.get("last_freshness_refresh_epoch") or 0.0)) >= drift_refresh_sec
+    desired_set = set(int(t) for t in desired_tokens)
+    current_set = set(int(t) for t in current_tokens)
+    subscribe_tokens = sorted(desired_set - current_set)
+    unsubscribe_tokens = sorted(current_set - desired_set)
+    refresh_tokens: list[int] = []
+
+    def _resolution_tokens_for_symbols(symbols: list[str], rows: list[dict] | None = None) -> list[int]:
+        symbol_set = {str(sym or "").upper() for sym in list(symbols or []) if str(sym or "").strip()}
+        selected: list[int] = []
+        for row in list(rows or resolution or []):
+            sym = str(row.get("symbol") or "").upper()
+            if sym not in symbol_set:
+                continue
+            for tok in list(row.get("tokens") or []):
+                try:
+                    tok_int = int(tok)
+                except Exception:
+                    continue
+                if tok_int > 0 and not _is_underlying_token(tok_int):
+                    selected.append(tok_int)
+        return _normalize_positive_tokens(selected)
+
+    if freshness_urgent and freshness_cooldown_elapsed:
+        if symbol_scope_enabled and stale_symbols:
+            desired_symbol_tokens = _resolution_tokens_for_symbols(stale_symbols)
+            current_symbol_tokens = _normalize_positive_tokens(
+                [
+                    tok
+                    for tok in current_tokens
+                    if str(_TOKEN_TO_SYMBOL.get(int(tok)) or "").upper() in set(stale_symbols)
+                    and not _is_underlying_token(int(tok))
+                ]
+            )
+            desired_symbol_set = set(int(t) for t in desired_symbol_tokens)
+            current_symbol_set = set(int(t) for t in current_symbol_tokens)
+            subscribe_tokens = sorted(desired_symbol_set - current_symbol_set)
+            unsubscribe_tokens = sorted(current_symbol_set - desired_symbol_set)
+            refresh_tokens = sorted(desired_symbol_set) if not subscribe_tokens and not unsubscribe_tokens else []
+        else:
+            subscribe_tokens = sorted(desired_set - current_set)
+            unsubscribe_tokens = sorted(current_set - desired_set)
+            refresh_tokens = []
+        refresh_state["last_refresh_epoch"] = float(now_epoch)
+        refresh_state["last_freshness_refresh_epoch"] = float(now_epoch)
+        return bool(subscribe_tokens or unsubscribe_tokens or refresh_tokens or bool(stale_symbols)), {
+            "reason": "freshness_drift",
+            "refresh_mode": (
+                "symbol_freshness_refresh"
+                if symbol_scope_enabled and stale_symbols and refresh_tokens
+                else ("symbol_freshness" if symbol_scope_enabled and stale_symbols else "freshness")
+            ),
+            "refresh_sec": refresh_sec,
+            "drift_refresh_sec": drift_refresh_sec,
+            "previous_count": len(current_tokens),
+            "desired_count": len(desired_tokens),
+            "subscribe_count": len(subscribe_tokens),
+            "unsubscribe_count": len(unsubscribe_tokens),
+            "refresh_token_count": len(refresh_tokens),
+            "subscribe_tokens": subscribe_tokens,
+            "unsubscribe_tokens": unsubscribe_tokens,
+            "refresh_tokens": refresh_tokens,
+            "refresh_applied": False,
+            "force_resubscribe_current": bool(
+                freshness_urgent and not subscribe_tokens and not unsubscribe_tokens and not symbol_scope_enabled
+            ),
+            "freshness_urgent": True,
+            "freshness_urgent_symbols": list(stale_symbols),
+            "freshness_by_symbol": freshness_by_symbol,
+            **freshness,
+            "pruned_stale_option_count_by_symbol": {
+                str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
+                for row in list(resolution or [])
+                if str(row.get("symbol") or "").strip()
+            },
+        }
+
     if desired_tokens == current_tokens:
-        if freshness_urgent and freshness_cooldown_elapsed:
-            refresh_state["last_refresh_epoch"] = float(now_epoch)
-            refresh_state["last_freshness_refresh_epoch"] = float(now_epoch)
-            return True, {
-                "reason": "freshness_drift",
-                "refresh_mode": "freshness",
-                "refresh_sec": refresh_sec,
-                "drift_refresh_sec": drift_refresh_sec,
-                "previous_count": len(current_tokens),
-                "desired_count": len(desired_tokens),
-                "subscribe_count": 0,
-                "unsubscribe_count": 0,
-                "subscribe_tokens": [],
-                "unsubscribe_tokens": [],
-                "refresh_applied": False,
-                "force_resubscribe_current": True,
-                "freshness_urgent": True,
-                **freshness,
-                "pruned_stale_option_count_by_symbol": {
-                    str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
-                    for row in list(resolution or [])
-                    if str(row.get("symbol") or "").strip()
-                },
-            }
         return False, {
             "reason": "no_delta" if not freshness_urgent else "freshness_cooldown",
-            "refresh_mode": "freshness" if freshness_urgent else "delta",
+            "refresh_mode": "symbol_freshness" if symbol_scope_enabled and freshness_urgent else "delta",
             "refresh_sec": refresh_sec,
             "drift_refresh_sec": drift_refresh_sec,
             "previous_count": len(current_tokens),
@@ -393,9 +516,12 @@ def _maybe_refresh_stale_option_subscription_universe(
             "unsubscribe_count": 0,
             "subscribe_tokens": [],
             "unsubscribe_tokens": [],
+            "refresh_tokens": [],
             "refresh_applied": False,
             "force_resubscribe_current": False,
             "freshness_urgent": freshness_urgent,
+            "freshness_urgent_symbols": list(stale_symbols),
+            "freshness_by_symbol": freshness_by_symbol,
             **freshness,
             "pruned_stale_option_count_by_symbol": {
                 str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
@@ -404,29 +530,6 @@ def _maybe_refresh_stale_option_subscription_universe(
             },
         }
 
-    if desired_tokens == current_tokens:
-        return False, {
-            "reason": "no_delta",
-            "refresh_sec": refresh_sec,
-            "previous_count": len(current_tokens),
-            "desired_count": len(desired_tokens),
-            "subscribe_count": 0,
-            "unsubscribe_count": 0,
-            "refresh_applied": False,
-            "force_resubscribe_current": False,
-            "freshness_urgent": freshness_urgent,
-            **freshness,
-            "pruned_stale_option_count_by_symbol": {
-                str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
-                for row in list(resolution or [])
-                if str(row.get("symbol") or "").strip()
-            },
-        }
-
-    desired_set = set(int(t) for t in desired_tokens)
-    current_set = set(int(t) for t in current_tokens)
-    subscribe_tokens = sorted(desired_set - current_set)
-    unsubscribe_tokens = sorted(current_set - desired_set)
     if not freshness_urgent and (float(now_epoch) - last_refresh) < refresh_sec:
         return False, {
             "reason": "refresh_cooldown",
@@ -439,9 +542,12 @@ def _maybe_refresh_stale_option_subscription_universe(
             "unsubscribe_count": len(unsubscribe_tokens),
             "subscribe_tokens": subscribe_tokens,
             "unsubscribe_tokens": unsubscribe_tokens,
+            "refresh_tokens": [],
             "refresh_applied": False,
             "force_resubscribe_current": False,
             "freshness_urgent": False,
+            "freshness_urgent_symbols": list(stale_symbols),
+            "freshness_by_symbol": freshness_by_symbol,
             **freshness,
             "pruned_stale_option_count_by_symbol": {
                 str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
@@ -461,9 +567,14 @@ def _maybe_refresh_stale_option_subscription_universe(
         "unsubscribe_count": len(unsubscribe_tokens),
         "subscribe_tokens": subscribe_tokens,
         "unsubscribe_tokens": unsubscribe_tokens,
+        "refresh_tokens": [],
         "refresh_applied": False,
-        "force_resubscribe_current": bool(freshness_urgent and not subscribe_tokens and not unsubscribe_tokens),
+        "force_resubscribe_current": bool(
+            freshness_urgent and not subscribe_tokens and not unsubscribe_tokens and not symbol_scope_enabled
+        ),
         "freshness_urgent": freshness_urgent,
+        "freshness_urgent_symbols": list(stale_symbols),
+        "freshness_by_symbol": freshness_by_symbol,
         **freshness,
         "pruned_stale_option_count_by_symbol": {
             str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
@@ -522,6 +633,47 @@ def _soft_resubscribe_current(reason: str) -> bool:
             _log_ws(
                 "FEED_SOFT_RESUBSCRIBE_ERROR",
                 {**log_payload, "tokens": len(tokens), "error": str(exc)},
+            )
+            return False
+
+
+def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
+    refresh_tokens = _normalize_positive_tokens(tokens)
+    if not refresh_tokens:
+        return False
+    with _KITE_TICKER_LOCK:
+        ws_obj = _KITE_TICKER
+        if ws_obj is None:
+            _log_ws(
+                "FEED_REFRESH_SKIPPED",
+                {"reason": reason, "detail": "ws_or_tokens_missing", "token_count": len(refresh_tokens)},
+            )
+            return False
+        try:
+            if hasattr(ws_obj, "unsubscribe"):
+                ws_obj.unsubscribe(refresh_tokens)
+        except Exception as exc:
+            _log_ws(
+                "FEED_REFRESH_UNSUBSCRIBE_ERROR",
+                {"reason": reason, "tokens": len(refresh_tokens), "error": str(exc)},
+            )
+            return False
+        try:
+            ws_obj.subscribe(refresh_tokens)
+            ws_obj.set_mode(ws_obj.MODE_FULL, refresh_tokens)
+            _log_ws(
+                "FEED_REFRESH_OK",
+                {
+                    "reason": reason,
+                    "tokens": len(refresh_tokens),
+                    "sample_tokens": list(refresh_tokens[:10]),
+                },
+            )
+            return True
+        except Exception as exc:
+            _log_ws(
+                "FEED_REFRESH_ERROR",
+                {"reason": reason, "tokens": len(refresh_tokens), "error": str(exc)},
             )
             return False
 
@@ -3554,6 +3706,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     refresh_mode = str(refresh_payload.get("refresh_mode") or "delta")
                     refresh_reason = str(refresh_payload.get("reason") or "stale_option_prune_refresh")
                     refresh_ok = False
+                    refresh_tokens = _normalize_positive_tokens(list(refresh_payload.get("refresh_tokens") or []))
+                    if refresh_tokens:
+                        refresh_ok = _refresh_subscription_tokens(
+                            refresh_tokens,
+                            reason="stale_option_symbol_freshness_refresh",
+                        )
                     if list(refresh_payload.get("subscribe_tokens") or []) or list(
                         refresh_payload.get("unsubscribe_tokens") or []
                     ):
@@ -3566,6 +3724,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     if bool(refresh_payload.get("force_resubscribe_current")):
                         restart_reason = f"stale_option_freshness_drift:{refresh_reason}"
                         refresh_ok = restart_depth_ws(reason=restart_reason, ignore_cooldown=True) or refresh_ok
+                    if bool(refresh_payload.get("freshness_urgent")) and not refresh_ok:
+                        restart_reason = f"stale_option_freshness_drift_failed:{refresh_reason}"
+                        refresh_ok = restart_depth_ws(reason=restart_reason, ignore_cooldown=True) or refresh_ok
                     _log_ws(
                         "FEED_OPTION_PRUNE_REFRESH",
                         {
@@ -3577,6 +3738,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             "desired_count": int(refresh_payload.get("desired_count") or 0),
                             "subscribe_count": int(refresh_payload.get("subscribe_count") or 0),
                             "unsubscribe_count": int(refresh_payload.get("unsubscribe_count") or 0),
+                            "refresh_token_count": int(refresh_payload.get("refresh_token_count") or len(refresh_tokens)),
                             "refresh_applied": bool(refresh_ok),
                             "force_resubscribe_current": bool(refresh_payload.get("force_resubscribe_current")),
                             "freshness_urgent": bool(refresh_payload.get("freshness_urgent")),

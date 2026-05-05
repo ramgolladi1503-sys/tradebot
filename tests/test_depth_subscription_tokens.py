@@ -259,7 +259,8 @@ def test_maybe_refresh_stale_option_subscription_universe_applies_delta(monkeypa
     refresh_state = {"last_refresh_epoch": 0.0}
 
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101, 102], raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102], raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY", 102: "NIFTY"}, raising=False)
     monkeypatch.setattr(ws, "_normalize_positive_tokens", lambda values: [int(v) for v in values if int(v) > 0])
     monkeypatch.setattr(
         ws,
@@ -269,7 +270,7 @@ def test_maybe_refresh_stale_option_subscription_universe_applies_delta(monkeypa
     monkeypatch.setattr(
         ws,
         "build_subscription_tokens",
-        lambda symbols: ([1, 101], [{"symbol": "NIFTY", "stale_option_pruned_count": 1}]),
+        lambda symbols: ([101], [{"symbol": "NIFTY", "stale_option_pruned_count": 1, "tokens": [101, 102]}]),
     )
 
     should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(
@@ -282,8 +283,8 @@ def test_maybe_refresh_stale_option_subscription_universe_applies_delta(monkeypa
     assert payload["refresh_mode"] == "delta"
     assert payload["subscribe_tokens"] == []
     assert payload["unsubscribe_tokens"] == [102]
-    assert payload["desired_count"] == 2
-    assert payload["previous_count"] == 3
+    assert payload["desired_count"] == 1
+    assert payload["previous_count"] == 2
     assert payload["force_resubscribe_current"] is False
 
 
@@ -291,7 +292,8 @@ def test_maybe_refresh_stale_option_subscription_universe_triggers_freshness_ref
     refresh_state = {"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0}
 
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
-    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101, 102], raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102], raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY", 102: "NIFTY"}, raising=False)
     monkeypatch.setattr(ws, "_normalize_positive_tokens", lambda values: [int(v) for v in values if int(v) > 0])
     monkeypatch.setattr(
         ws,
@@ -301,7 +303,7 @@ def test_maybe_refresh_stale_option_subscription_universe_triggers_freshness_ref
     monkeypatch.setattr(
         ws,
         "build_subscription_tokens",
-        lambda symbols: ([1, 101, 102], [{"symbol": "NIFTY", "stale_option_pruned_count": 0}]),
+        lambda symbols: ([1, 101, 102], [{"symbol": "NIFTY", "stale_option_pruned_count": 0, "tokens": [101, 102]}]),
     )
 
     should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(
@@ -311,12 +313,62 @@ def test_maybe_refresh_stale_option_subscription_universe_triggers_freshness_ref
 
     assert should_refresh is True
     assert refresh_state["last_freshness_refresh_epoch"] == 200.0
-    assert payload["refresh_mode"] == "freshness"
-    assert payload["force_resubscribe_current"] is True
+    assert payload["refresh_mode"] == "symbol_freshness_refresh"
+    assert payload["refresh_tokens"] == [101, 102]
+    assert payload["refresh_token_count"] == 2
+    assert payload["force_resubscribe_current"] is False
     assert payload["freshness_urgent"] is True
     assert payload["fresh_count"] == 0
-    assert payload["stale_count"] == 3
+    assert payload["stale_count"] == 2
     assert payload["fresh_ratio"] == 0.0
+
+
+def test_maybe_refresh_stale_option_subscription_universe_refreshes_only_stale_symbol_family(monkeypatch):
+    refresh_state = {"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0}
+
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102, 201, 202], raising=False)
+    monkeypatch.setattr(
+        ws,
+        "_TOKEN_TO_SYMBOL",
+        {101: "NIFTY", 102: "NIFTY", 201: "BANKNIFTY", 202: "BANKNIFTY"},
+        raising=False,
+    )
+    monkeypatch.setattr(ws, "_normalize_positive_tokens", lambda values: [int(v) for v in values if int(v) > 0])
+
+    def _fake_latest_tick_rows_db(tokens):
+        rows = {}
+        for tok in list(tokens or []):
+            tok_int = int(tok)
+            rows[tok_int] = {"ts_epoch": 180.0 if tok_int in (101, 102) else 199.5, "ltp": 100.0}
+        return rows
+
+    monkeypatch.setattr(ws, "get_latest_tick_rows_db", _fake_latest_tick_rows_db)
+    monkeypatch.setattr(
+        ws,
+        "build_subscription_tokens",
+        lambda symbols: (
+            [1, 101, 102, 201, 202],
+            [
+                {"symbol": "NIFTY", "stale_option_pruned_count": 0, "tokens": [101, 102]},
+                {"symbol": "BANKNIFTY", "stale_option_pruned_count": 0, "tokens": [201, 202]},
+            ],
+        ),
+    )
+
+    should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=200.0,
+        refresh_state=refresh_state,
+    )
+
+    assert should_refresh is True
+    assert payload["refresh_mode"] == "symbol_freshness_refresh"
+    assert payload["refresh_tokens"] == [101, 102]
+    assert payload["refresh_token_count"] == 2
+    assert payload["freshness_urgent"] is True
+    assert payload["freshness_urgent_symbols"] == ["NIFTY"]
+    assert payload["fresh_count"] == 2
+    assert payload["stale_count"] == 2
 
 
 def test_option_expiry_unavailable_sets_fail_reason(monkeypatch):
