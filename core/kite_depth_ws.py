@@ -91,6 +91,7 @@ _LAST_OPTION_TOKEN_INCIDENT_TS: dict[str, float] = {}
 _LAST_ATM_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_COUNTS_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL: dict[str, int] = {}
+_DEPTH_WS_START_EPOCH: float = 0.0
 logger = logging.getLogger(__name__)
 _WS_LOGGER = get_rotating_logger("depth_ws_watchdog", _LOG_PATH)
 _WS_LOG_THROTTLE_SEC = 5.0
@@ -158,6 +159,20 @@ def _prune_stale_option_subscription_tokens(
         return list(tokens), {
             "enabled": False,
             "max_age_sec": _stale_option_subscription_max_age_sec(),
+            "grace_sec": float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0)),
+            "pruned_count": 0,
+            "kept_count": len(tokens),
+            "pruned_tokens": [],
+            "pruned_by_symbol": {},
+        }
+
+    grace_sec = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0))
+    start_epoch = float(_DEPTH_WS_START_EPOCH or 0.0)
+    if start_epoch > 0.0 and (float(now_utc_epoch()) - start_epoch) < grace_sec:
+        return list(tokens), {
+            "enabled": True,
+            "max_age_sec": _stale_option_subscription_max_age_sec(),
+            "grace_sec": grace_sec,
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
@@ -173,6 +188,7 @@ def _prune_stale_option_subscription_tokens(
         return list(tokens), {
             "enabled": True,
             "max_age_sec": _stale_option_subscription_max_age_sec(),
+            "grace_sec": grace_sec,
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
@@ -220,6 +236,7 @@ def _prune_stale_option_subscription_tokens(
         return list(tokens), {
             "enabled": True,
             "max_age_sec": max_age_sec,
+            "grace_sec": grace_sec,
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
@@ -234,6 +251,7 @@ def _prune_stale_option_subscription_tokens(
     return retained_tokens, {
         "enabled": True,
         "max_age_sec": max_age_sec,
+        "grace_sec": grace_sec,
         "pruned_count": len(pruned_tokens_out),
         "kept_count": len(retained_tokens),
         "pruned_tokens": pruned_tokens_out,
@@ -2608,7 +2626,8 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False):
-    global _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    _DEPTH_WS_START_EPOCH = float(now_utc_epoch())
     _RUNTIME_STATE = "STARTING"
     _LAST_RUNTIME_ERROR = ""
     _INTENDED_TOKEN_COUNT = len(list(dict.fromkeys(instrument_tokens or [])))
