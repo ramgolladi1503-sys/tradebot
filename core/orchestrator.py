@@ -3227,14 +3227,13 @@ class Orchestrator:
         market_open = bool(is_market_open_ist())
         if not market_open:
             return True, []
-        if not decision_rows:
+
+        def _runtime_health_feed_reasons() -> tuple[bool, list[str], bool]:
             now_epoch = float(now_utc_epoch())
             stale_reasons: list[str] = []
             health_evidence_found = False
             runtime_health_path = logs_dir() / "runtime_health_latest.json"
-            feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
             runtime_health_max_age_sec = float(getattr(cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 30.0))
-            feed_tick_stale_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 5.0))
 
             def _safe_float(value):
                 try:
@@ -3252,10 +3251,17 @@ class Orchestrator:
                     runtime_payload = {}
             if runtime_payload:
                 health_evidence_found = True
+
             snapshot_ts = _safe_float(runtime_payload.get("snapshot_ts_epoch") or runtime_payload.get("ts_epoch"))
             snapshot_age = (now_epoch - snapshot_ts) if snapshot_ts is not None else None
             if snapshot_age is not None and snapshot_age > runtime_health_max_age_sec:
                 stale_reasons.append("feed_stale:RUNTIME_HEALTH_STALE")
+
+            execution_payload = runtime_payload.get("execution") if isinstance(runtime_payload.get("execution"), dict) else {}
+            decision_breakers = execution_payload.get("decision_breakers") if isinstance(execution_payload.get("decision_breakers"), dict) else {}
+            blocked_reasons = [str(x).strip().upper() for x in (decision_breakers.get("blocked_reasons") or []) if str(x).strip()]
+            if bool(decision_breakers.get("blocked")) and any(reason in {"STALE_FEED", "FEED_STALE"} for reason in blocked_reasons):
+                stale_reasons.append("feed_stale:DECISION_BREAKER_STALE_FEED")
 
             feed_payload = runtime_payload.get("feed") if isinstance(runtime_payload.get("feed"), dict) else {}
             if feed_payload:
@@ -3270,6 +3276,27 @@ class Orchestrator:
                 sla_status = str(feed_payload.get("sla_status") or "").upper()
                 if sla_status in {"FAIL", "STALE"}:
                     stale_reasons.append("feed_stale:SLA_FAIL")
+                blockers = [str(x).strip() for x in (feed_payload.get("blockers") or []) if str(x).strip()]
+                stale_reasons.extend([f"feed_stale:{reason}" for reason in blockers])
+
+            if runtime_payload:
+                state_machine = runtime_payload.get("state_machine")
+                if isinstance(state_machine, dict):
+                    state = str(state_machine.get("state") or "").upper()
+                    reason = str(state_machine.get("reason") or "").strip()
+                    if state == "DOWN":
+                        stale_reasons.append(f"feed_stale:STATE_{reason or 'DOWN'}")
+
+            return health_evidence_found, sorted(set(stale_reasons)), bool(stale_reasons)
+
+        health_evidence_found, stale_reasons, runtime_health_stale = _runtime_health_feed_reasons()
+        if runtime_health_stale:
+            return False, stale_reasons
+
+        if not decision_rows:
+            runtime_health_path = logs_dir() / "runtime_health_latest.json"
+            feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
+            feed_tick_stale_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 5.0))
 
             if (not stale_reasons) and feed_runtime_path.exists():
                 try:
