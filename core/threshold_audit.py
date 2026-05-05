@@ -292,7 +292,7 @@ def build_candidate_decision_record(
         "final_score": _safe_float(_candidate_get(candidate, "final_score")),
         "selection_probability": _safe_float(_candidate_get(candidate, "selection_probability")),
         "rank_score": _safe_float(_candidate_telemetry_value(candidate, "rank_score")),
-        "raw_rank_score": _safe_float(_candidate_telemetry_value(source, "raw_rank_score")),
+        "raw_rank_score": _safe_float(_candidate_telemetry_value(candidate, "raw_rank_score")),
         "terminal_rank_score": _safe_float(_candidate_telemetry_value(candidate, "terminal_rank_score")),
         "opportunity_score": _safe_float(_candidate_telemetry_value(candidate, "opportunity_score")),
         "quote_validation_status": str(_candidate_telemetry_value(candidate, "quote_validation_status") or "").strip() or None,
