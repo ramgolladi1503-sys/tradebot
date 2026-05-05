@@ -5,6 +5,7 @@ from pathlib import Path
 
 from config import config as cfg
 from core.feed.runtime_store import read_latest_runtime_snapshot, write_runtime_snapshot
+import core.feed.runtime_store as runtime_store
 import core.kite_depth_ws as depth_ws
 from core.runtime_status_overlay import derive_effective_ws_connected, derive_feed_ok
 
@@ -33,6 +34,36 @@ def test_runtime_store_roundtrip_with_state_fields(monkeypatch, tmp_path):
     assert payload["intended_tokens_count"] == 12
     assert payload["last_error"] == "unit-test"
     assert payload["subscribed_tokens_sample"] == [1, 2, 3]
+
+
+def test_runtime_store_connection_uses_busy_tolerant_settings(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    captured = {}
+    real_connect = runtime_store.sqlite3.connect
+
+    def fake_connect(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(runtime_store.sqlite3, "connect", fake_connect, raising=False)
+
+    ok = write_runtime_snapshot(
+        {
+            "ts_epoch": 123.0,
+            "ws_connected": True,
+            "subscribed_tokens_count": 0,
+            "intended_tokens_count": 0,
+            "subscribed_tokens_sample": [],
+            "source": "unit-test",
+            "runtime_state": "RUNNING",
+        }
+    )
+
+    assert ok is True
+    assert captured["kwargs"]["timeout"] == 30.0
+    assert captured["kwargs"]["check_same_thread"] is False
 
 
 def test_start_depth_ws_writes_import_missing_state(monkeypatch, tmp_path):

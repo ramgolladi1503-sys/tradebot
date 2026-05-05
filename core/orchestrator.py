@@ -649,6 +649,21 @@ def _should_skip_trade_builder_for_latency_guard(
     return bool(getattr(cfg, "LATENCY_GUARD_LIVE_SKIP_TRADE_BUILDER", True))
 
 
+def _should_skip_background_maintenance_for_latency_guard(
+    *,
+    latency_action: str | None,
+    execution_mode: str | None,
+    feed_ok: bool | None,
+) -> bool:
+    if str(execution_mode or "").strip().upper() != "LIVE":
+        return False
+    if not bool(getattr(cfg, "LATENCY_GUARD_LIVE_SKIP_BACKGROUND_MAINTENANCE", True)):
+        return False
+    if feed_ok is False:
+        return True
+    return str(latency_action or ACTION_OK).strip().upper() != ACTION_OK
+
+
 def _scan_visible_suggestions(path: Path) -> dict:
     counts = {
         "visible_suggestion_count": 0,
@@ -6052,13 +6067,45 @@ class Orchestrator:
                 latency_critical_path_end_perf = time.perf_counter()
 
                 # Phase F: Check and retrain model if needed
-                self.retrainer.update_model()
-
-                # Evaluate blocked paper trades
+                execution_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).strip().upper()
                 try:
-                    self.blocked_tracker.update(self.predictor)
+                    feed_ok, feed_reasons = self._pilot_feed_ok()
                 except Exception:
-                    pass
+                    feed_ok, feed_reasons = False, ["feed_status_unavailable"]
+                latency_action = self._latency_guard_action()
+                skip_background_maintenance = _should_skip_background_maintenance_for_latency_guard(
+                    latency_action=latency_action,
+                    execution_mode=execution_mode,
+                    feed_ok=feed_ok,
+                )
+                if skip_background_maintenance:
+                    skip_reason = {
+                        "event": "LATENCY_GUARD_BACKGROUND_MAINTENANCE_SKIP",
+                        "action": latency_action,
+                        "execution_mode": execution_mode,
+                        "feed_ok": bool(feed_ok),
+                        "feed_reasons": list(feed_reasons or []),
+                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                    }
+                    logger.warning(
+                        "latency_guard_background_maintenance_skip action=%s execution_mode=%s feed_ok=%s feed_reasons=%s",
+                        latency_action or "unknown",
+                        execution_mode,
+                        bool(feed_ok),
+                        ",".join(str(x) for x in (feed_reasons or [])[:5]),
+                    )
+                    try:
+                        audit_append(skip_reason)
+                    except Exception:
+                        pass
+                else:
+                    self.retrainer.update_model()
+
+                    # Evaluate blocked paper trades
+                    try:
+                        self.blocked_tracker.update(self.predictor)
+                    except Exception:
+                        pass
                 cycle_stage = "cycle_complete"
 
             except Exception as e:

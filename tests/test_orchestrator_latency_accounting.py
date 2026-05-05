@@ -115,3 +115,39 @@ def test_latency_skip_trade_builder_disabled_for_paper(monkeypatch):
         )
         is False
     )
+
+
+def test_latency_skip_background_maintenance_for_live_guard(monkeypatch):
+    monkeypatch.setattr(
+        orch_mod.cfg,
+        "LATENCY_GUARD_LIVE_SKIP_BACKGROUND_MAINTENANCE",
+        True,
+        raising=False,
+    )
+
+    assert (
+        orch_mod._should_skip_background_maintenance_for_latency_guard(
+            latency_action="halt_all",
+            execution_mode="LIVE",
+            feed_ok=True,
+        )
+        is True
+    )
+
+
+def test_latency_skip_background_maintenance_disabled_for_sim(monkeypatch):
+    monkeypatch.setattr(
+        orch_mod.cfg,
+        "LATENCY_GUARD_LIVE_SKIP_BACKGROUND_MAINTENANCE",
+        True,
+        raising=False,
+    )
+
+    assert (
+        orch_mod._should_skip_background_maintenance_for_latency_guard(
+            latency_action="halt_all",
+            execution_mode="SIM",
+            feed_ok=False,
+        )
+        is False
+    )

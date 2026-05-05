@@ -20,7 +20,14 @@ def _db_path() -> Path:
 
 
 def _conn() -> sqlite3.Connection:
-    return sqlite3.connect(str(_db_path()))
+    conn = sqlite3.connect(str(_db_path()), timeout=30.0, check_same_thread=False)
+    try:
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except Exception:
+        pass
+    return conn
 
 
 def init_feed_runtime_table() -> None:
