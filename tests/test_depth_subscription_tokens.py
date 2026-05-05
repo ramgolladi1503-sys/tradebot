@@ -255,6 +255,31 @@ def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_an
     assert float(row.get("stale_option_prune_max_age_sec") or 0.0) == 2.5
 
 
+def test_maybe_refresh_stale_option_subscription_universe_applies_delta(monkeypatch):
+    refresh_state = {"last_refresh_epoch": 0.0}
+
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101, 102], raising=False)
+    monkeypatch.setattr(ws, "_normalize_positive_tokens", lambda values: [int(v) for v in values if int(v) > 0])
+    monkeypatch.setattr(
+        ws,
+        "build_subscription_tokens",
+        lambda symbols: ([1, 101], [{"symbol": "NIFTY", "stale_option_pruned_count": 1}]),
+    )
+
+    should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=200.0,
+        refresh_state=refresh_state,
+    )
+
+    assert should_refresh is True
+    assert refresh_state["last_refresh_epoch"] == 200.0
+    assert payload["subscribe_tokens"] == []
+    assert payload["unsubscribe_tokens"] == [102]
+    assert payload["desired_count"] == 2
+    assert payload["previous_count"] == 3
+
+
 def test_option_expiry_unavailable_sets_fail_reason(monkeypatch):
     ctx = _setup_depth_window_mocks(monkeypatch)
     incidents: list[dict] = []

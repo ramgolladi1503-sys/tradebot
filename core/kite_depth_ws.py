@@ -264,6 +264,59 @@ def _prune_stale_option_subscription_tokens(
     }
 
 
+def _maybe_refresh_stale_option_subscription_universe(
+    *,
+    now_epoch: float,
+    refresh_state: dict[str, float],
+) -> tuple[bool, dict[str, object]]:
+    if not bool(is_market_open_ist()):
+        return False, {"reason": "market_closed"}
+    refresh_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_REFRESH_SEC", 20.0))
+    last_refresh = float(refresh_state.get("last_refresh_epoch") or 0.0)
+    if (float(now_epoch) - last_refresh) < refresh_sec:
+        return False, {"reason": "refresh_cooldown", "refresh_sec": refresh_sec}
+
+    desired_tokens_raw, resolution = build_subscription_tokens(list(getattr(cfg, "SYMBOLS", []) or []))
+    desired_tokens = _normalize_positive_tokens(desired_tokens_raw)
+    current_tokens = _normalize_positive_tokens(_LAST_TOKENS)
+    refresh_state["last_refresh_epoch"] = float(now_epoch)
+
+    if desired_tokens == current_tokens:
+        return False, {
+            "reason": "no_delta",
+            "refresh_sec": refresh_sec,
+            "previous_count": len(current_tokens),
+            "desired_count": len(desired_tokens),
+            "subscribe_count": 0,
+            "unsubscribe_count": 0,
+            "refresh_applied": False,
+            "pruned_stale_option_count_by_symbol": {
+                str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
+                for row in list(resolution or [])
+                if str(row.get("symbol") or "").strip()
+            },
+        }
+
+    desired_set = set(int(t) for t in desired_tokens)
+    current_set = set(int(t) for t in current_tokens)
+    subscribe_tokens = sorted(desired_set - current_set)
+    unsubscribe_tokens = sorted(current_set - desired_set)
+    return bool(subscribe_tokens or unsubscribe_tokens), {
+        "refresh_sec": refresh_sec,
+        "previous_count": len(current_tokens),
+        "desired_count": len(desired_tokens),
+        "subscribe_count": len(subscribe_tokens),
+        "unsubscribe_count": len(unsubscribe_tokens),
+        "subscribe_tokens": subscribe_tokens,
+        "unsubscribe_tokens": unsubscribe_tokens,
+        "pruned_stale_option_count_by_symbol": {
+            str(row.get("symbol") or "").upper(): int(row.get("stale_option_pruned_count") or 0)
+            for row in list(resolution or [])
+            if str(row.get("symbol") or "").strip()
+        },
+    }
+
+
 def _resubscribe_token_selection() -> tuple[list[int], dict[str, int | bool | str]]:
     desired_tokens = _normalize_positive_tokens(_LAST_DESIRED_TOKENS)
     fallback_tokens = _normalize_positive_tokens(_LAST_TOKENS)
@@ -3211,6 +3264,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         silent_state = {"confirm_hits": 0, "last_reconnect_epoch": 0.0}
         market_was_open: bool | None = None
         last_option_subscribe_retry = 0.0
+        last_option_prune_refresh_state = {"last_refresh_epoch": 0.0}
 
         def _emit_snapshot(now_epoch: float) -> None:
             sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
@@ -3332,6 +3386,37 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
             )
             subscribed_option_tokens = int(option_state.get("option_count") or 0)
+            try:
+                should_refresh, refresh_payload = _maybe_refresh_stale_option_subscription_universe(
+                    now_epoch=now_loop,
+                    refresh_state=last_option_prune_refresh_state,
+                )
+                last_option_prune_refresh_epoch = float(
+                    last_option_prune_refresh_state.get("last_refresh_epoch") or 0.0
+                )
+                if should_refresh:
+                    ok = _apply_subscription_delta(
+                        kws,
+                        subscribe_tokens=list(refresh_payload.get("subscribe_tokens") or []),
+                        unsubscribe_tokens=list(refresh_payload.get("unsubscribe_tokens") or []),
+                        reason="stale_option_prune_refresh",
+                    )
+                    _log_ws(
+                        "FEED_OPTION_PRUNE_REFRESH",
+                        {
+                            "refresh_sec": float(refresh_payload.get("refresh_sec") or 0.0),
+                            "previous_count": int(refresh_payload.get("previous_count") or 0),
+                            "desired_count": int(refresh_payload.get("desired_count") or 0),
+                            "subscribe_count": int(refresh_payload.get("subscribe_count") or 0),
+                            "unsubscribe_count": int(refresh_payload.get("unsubscribe_count") or 0),
+                            "refresh_applied": bool(ok),
+                            "pruned_stale_option_count_by_symbol": dict(
+                                refresh_payload.get("pruned_stale_option_count_by_symbol") or {}
+                            ),
+                        },
+                    )
+            except Exception:
+                pass
             if expected_option_tokens > 0 and subscribed_option_tokens <= 0:
                 if (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
                     last_option_subscribe_retry = now_loop
