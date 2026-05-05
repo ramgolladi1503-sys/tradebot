@@ -217,6 +217,7 @@ def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_an
     monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5, raising=False)
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: 200.0)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 100.0, raising=False)
 
     def _fake_latest_tick_rows_db(tokens):
         rows = {}

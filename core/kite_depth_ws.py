@@ -155,6 +155,7 @@ def _prune_stale_option_subscription_tokens(
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]],
     token_to_symbol: dict[int, str],
 ) -> tuple[list[int], dict[str, object]]:
+    global _DEPTH_WS_START_EPOCH
     if not _stale_option_subscription_prune_enabled():
         return list(tokens), {
             "enabled": False,
@@ -167,8 +168,12 @@ def _prune_stale_option_subscription_tokens(
         }
 
     grace_sec = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0))
+    now_epoch = float(now_utc_epoch())
     start_epoch = float(_DEPTH_WS_START_EPOCH or 0.0)
-    if start_epoch > 0.0 and (float(now_utc_epoch()) - start_epoch) < grace_sec:
+    if start_epoch <= 0.0:
+        _DEPTH_WS_START_EPOCH = now_epoch
+        start_epoch = now_epoch
+    if (now_epoch - start_epoch) < grace_sec:
         return list(tokens), {
             "enabled": True,
             "max_age_sec": _stale_option_subscription_max_age_sec(),
@@ -195,7 +200,6 @@ def _prune_stale_option_subscription_tokens(
             "pruned_by_symbol": {},
         }
 
-    now_epoch = float(now_utc_epoch())
     max_age_sec = _stale_option_subscription_max_age_sec()
     db_rows = get_latest_tick_rows_db(option_tokens)
     pruned_tokens: list[int] = []
