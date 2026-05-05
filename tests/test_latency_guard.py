@@ -68,6 +68,48 @@ def test_latency_guard_halt_on_severe_breach():
     assert out.blocks_non_emergency_exits is True
 
 
+def test_latency_guard_halt_remains_sticky_until_recovery_windows():
+    _monitor, breach_stats = _build_monitor_with_samples(total_ms=310.0, decision_ms=180.0)
+    guard = LatencyGuard(
+        max_p95_total_ms=120.0,
+        max_p95_decision_ms=80.0,
+        sustained_windows=3,
+        cooldown_sec=10.0,
+        halt_on_breach=True,
+    )
+
+    out1 = guard.evaluate(breach_stats, market_open=True, now_ts=100.0)
+    out2 = guard.evaluate(breach_stats, market_open=True, now_ts=105.0)
+    out3 = guard.evaluate(breach_stats, market_open=True, now_ts=111.0)
+
+    assert out1.action == ACTION_HALT_ALL
+    assert out2.action == ACTION_HALT_ALL
+    assert out3.action == ACTION_HALT_ALL
+    assert out3.blocks_non_emergency_exits is True
+
+
+def test_latency_guard_clears_halt_only_after_consecutive_healthy_recovery_windows():
+    _monitor, breach_stats = _build_monitor_with_samples(total_ms=310.0, decision_ms=180.0)
+    _healthy_monitor, healthy_stats = _build_monitor_with_samples(total_ms=42.0, decision_ms=24.0)
+    guard = LatencyGuard(
+        max_p95_total_ms=120.0,
+        max_p95_decision_ms=80.0,
+        sustained_windows=3,
+        cooldown_sec=10.0,
+        halt_on_breach=True,
+    )
+
+    out1 = guard.evaluate(breach_stats, market_open=True, now_ts=100.0)
+    out2 = guard.evaluate(healthy_stats, market_open=True, now_ts=111.0)
+    out3 = guard.evaluate(healthy_stats, market_open=True, now_ts=112.0)
+    out4 = guard.evaluate(healthy_stats, market_open=True, now_ts=113.0)
+
+    assert out1.action == ACTION_HALT_ALL
+    assert out2.action == ACTION_HALT_ALL
+    assert out3.action == ACTION_HALT_ALL
+    assert out4.action == ACTION_OK
+
+
 def test_latency_guard_cooldown_on_transient_breach():
     monitor = LatencyMonitor(
         window_size=32,
