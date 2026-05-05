@@ -259,3 +259,42 @@ def test_liquidity_quality_has_a_spread_sensitive_gradient_for_quote_valid_rows(
     assert 0.0 <= low["liquidity_quality"] < high["liquidity_quality"] < 1.0
     assert low["liquidity_flow_score"] < high["liquidity_flow_score"]
     assert low["liquidity_book_score"] == high["liquidity_book_score"] == 1.0
+
+
+def test_liquidity_quality_penalizes_wider_spread_for_quote_valid_rows(monkeypatch):
+    monkeypatch.setattr(cfg, "OPTION_LTP_SLA_SEC", 2.0, raising=False)
+    tight = assess_trade_feature_quality(
+        {"execution_mode": "LIVE", "market_open": True},
+        {
+            "ltp": 100.0,
+            "bid": 99.98,
+            "ask": 100.02,
+            "quote_ok": True,
+            "ltp_age_sec": 0.2,
+            "bid_age_sec": 0.2,
+            "ask_age_sec": 0.2,
+            "quote_age_sec": 0.2,
+            "volume": 250_000,
+            "oi": 400_000,
+            "spread_stability_score": 0.95,
+        },
+    )
+    wide = assess_trade_feature_quality(
+        {"execution_mode": "LIVE", "market_open": True},
+        {
+            "ltp": 100.0,
+            "bid": 99.0,
+            "ask": 101.0,
+            "quote_ok": True,
+            "ltp_age_sec": 0.2,
+            "bid_age_sec": 0.2,
+            "ask_age_sec": 0.2,
+            "quote_age_sec": 0.2,
+            "volume": 250_000,
+            "oi": 400_000,
+            "spread_stability_score": 0.95,
+        },
+    )
+
+    assert tight["liquidity_quality"] > wide["liquidity_quality"]
+    assert tight["liquidity_spread_score"] > wide["liquidity_spread_score"]

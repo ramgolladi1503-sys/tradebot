@@ -48,6 +48,7 @@ def assess_liquidity_quality(
     *,
     volume: Any = None,
     oi: Any = None,
+    spread_pct: Any = None,
     quote_consistency_score: Any = None,
     quote_ok: Any = True,
     target_volume: float | None = None,
@@ -56,6 +57,7 @@ def assess_liquidity_quality(
     oi_cap_mult: float | None = None,
     flow_weight: float | None = None,
     book_weight: float | None = None,
+    spread_weight: float | None = None,
 ) -> dict[str, Any]:
     """
     Smooth liquidity quality that avoids hard saturation on normal live volume.
@@ -102,6 +104,13 @@ def assess_liquidity_quality(
         if book_weight is None
         else float(book_weight),
     )
+    spread_weight_value = max(
+        0.0,
+        _cfg_float("CANDIDATE_SCORING_LIQUIDITY_SPREAD_WEIGHT", 0.20)
+        if spread_weight is None
+        else float(spread_weight),
+    )
+    max_spread_pct = max(_cfg_float("MAX_SPREAD_PCT", 0.03), 1e-6)
 
     reasons: list[str] = []
     if volume_value <= 0.0 and oi_value <= 0.0:
@@ -110,6 +119,7 @@ def assess_liquidity_quality(
             "liquidity_score": 0.5,
             "liquidity_flow_score": None,
             "liquidity_book_score": _clamp01(quote_consistency_score, default=0.5),
+            "liquidity_spread_score": 0.5,
             "liquidity_volume_score": None,
             "liquidity_oi_score": None,
             "liquidity_reasons": reasons,
@@ -127,10 +137,16 @@ def assess_liquidity_quality(
     )
     flow_score = _weighted_average([(volume_score, 0.7), (oi_score, 0.3)], default=0.5)
     book_score = _clamp01(quote_consistency_score, default=0.5)
+    spread_value = _safe_float(spread_pct)
+    if spread_value is None:
+        spread_score = 0.5
+    else:
+        spread_score = _clamp01(1.0 - min(max(spread_value, 0.0) / max_spread_pct, 1.0), default=0.0)
     score = _weighted_average(
         [
             (flow_score, flow_weight_value),
             (book_score, book_weight_value),
+            (spread_score, spread_weight_value),
         ],
         default=0.5,
     )
@@ -142,6 +158,7 @@ def assess_liquidity_quality(
         "liquidity_score": _clamp01(score, default=0.5),
         "liquidity_flow_score": _clamp01(flow_score, default=0.5),
         "liquidity_book_score": _clamp01(book_score, default=0.5),
+        "liquidity_spread_score": _clamp01(spread_score, default=0.5),
         "liquidity_volume_score": _clamp01(volume_score, default=0.5),
         "liquidity_oi_score": _clamp01(oi_score, default=0.5),
         "liquidity_reasons": reasons,

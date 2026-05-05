@@ -660,6 +660,55 @@ def test_build_opportunity_score_keeps_liquidity_gradients_for_quote_valid_rows(
     assert low["final_score"] != high["final_score"]
 
 
+def test_build_opportunity_score_penalizes_wider_spread_for_quote_valid_rows():
+    tight = opportunity_engine_module.build_opportunity_score(
+        _trade(
+            trade_id="T-SPREAD-TIGHT",
+            confidence=0.66,
+            builder_confidence=0.66,
+            permission_confidence=0.63,
+            gating_final_confidence=0.61,
+            confluence=0.70,
+            bid=120.0,
+            ask=120.04,
+            ltp=120.02,
+            volume=250_000,
+            quote_age_sec=0.3,
+            execution_allowed=True,
+            tradable=True,
+            execution_entry=120.04,
+            execution_entry_status="executable",
+            execution_entry_source="ask",
+            display_entry=120.04,
+        )
+    )
+    wide = opportunity_engine_module.build_opportunity_score(
+        _trade(
+            trade_id="T-SPREAD-WIDE",
+            confidence=0.66,
+            builder_confidence=0.66,
+            permission_confidence=0.63,
+            gating_final_confidence=0.61,
+            confluence=0.70,
+            bid=120.0,
+            ask=121.2,
+            ltp=120.6,
+            volume=250_000,
+            quote_age_sec=0.3,
+            execution_allowed=True,
+            tradable=True,
+            execution_entry=121.2,
+            execution_entry_status="executable",
+            execution_entry_source="ask",
+            display_entry=121.2,
+        )
+    )
+
+    assert tight["liquidity_quality"] > wide["liquidity_quality"]
+    assert tight["liquidity_flow_score"] == wide["liquidity_flow_score"]
+    assert tight["liquidity_spread_score"] > wide["liquidity_spread_score"]
+
+
 def test_relative_opportunity_ranking_is_stable_for_deterministic_inputs():
     candidates = [
         _trade(

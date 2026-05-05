@@ -246,9 +246,13 @@ def _liquidity_quality(candidate: Any) -> float:
     quote_consistency = _safe_float(_get_value(candidate, "quote_consistency_score"))
     if quote_consistency is None:
         quote_consistency = _safe_float((_get_value(candidate, "source_flags", {}) or {}).get("quote_consistency_score"))
+    spread_pct = _safe_float(_get_value(candidate, "spread_pct"))
+    if spread_pct is None:
+        spread_pct = _safe_float((_get_value(candidate, "source_flags", {}) or {}).get("spread_pct"))
     payload = assess_liquidity_quality(
         volume=volume,
         oi=oi,
+        spread_pct=spread_pct,
         quote_consistency_score=quote_consistency,
         quote_ok=_get_value(candidate, "quote_ok", True),
     )
@@ -882,6 +886,7 @@ def build_opportunity_score(
         "liquidity_quality": liquidity_quality,
         "liquidity_flow_score": float(feature_quality.get("liquidity_flow_score") or 0.0),
         "liquidity_book_score": float(feature_quality.get("liquidity_book_score") or 0.0),
+        "liquidity_spread_score": float(feature_quality.get("liquidity_spread_score") or 0.0),
         "liquidity_volume_score": float(feature_quality.get("liquidity_volume_score") or 0.0),
         "liquidity_oi_score": float(feature_quality.get("liquidity_oi_score") or 0.0),
         "spread_quality": spread_quality,

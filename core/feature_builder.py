@@ -469,12 +469,14 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
     liquidity_quality_payload = assess_liquidity_quality(
         volume=volume,
         oi=oi,
+        spread_pct=spread_pct,
         quote_consistency_score=quote_consistency_score,
         quote_ok=quote_ok,
     )
     liquidity_quality = float(liquidity_quality_payload["liquidity_score"])
     liquidity_flow_score = float(liquidity_quality_payload["liquidity_flow_score"] or 0.0)
     liquidity_book_score = float(liquidity_quality_payload["liquidity_book_score"] or 0.0)
+    liquidity_spread_score = float(liquidity_quality_payload["liquidity_spread_score"] or 0.0)
     liquidity_volume_score = float(liquidity_quality_payload["liquidity_volume_score"] or 0.0)
     liquidity_oi_score = float(liquidity_quality_payload["liquidity_oi_score"] or 0.0)
 
@@ -524,6 +526,7 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
         "liquidity_quality": liquidity_quality,
         "liquidity_flow_score": liquidity_flow_score,
         "liquidity_book_score": liquidity_book_score,
+        "liquidity_spread_score": liquidity_spread_score,
         "liquidity_volume_score": liquidity_volume_score,
         "liquidity_oi_score": liquidity_oi_score,
         "spread_quality": spread_quality,
