@@ -270,6 +270,7 @@ def get_freshness_status(
     max_ltp_age = float(policy.ltp_max_age_sec)
     max_depth_age = float(policy.depth_max_age_sec)
     depth_required = bool(policy.depth_required and getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
+    max_stale_token_ratio = float(getattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.30))
 
     ltp_last_epoch = None
     depth_last_epoch = None
@@ -338,13 +339,15 @@ def get_freshness_status(
 
     ltp_ok = ltp_age is not None and ltp_age <= max_ltp_age
     depth_ok = depth_age is not None and depth_age <= max_depth_age
+    stale_ratio = float(len(stale_tokens)) / float(max(1, len(tokens_for_ltp)))
+    stale_ratio_exceeded = bool(stale_tokens and tokens_for_ltp and stale_ratio > max_stale_token_ratio)
 
     no_ticks_yet = ltp_last_epoch is None
 
     if market_open and (not allow_stale_quotes):
         if no_ticks_yet:
             reasons.append("no_ticks_yet")
-        elif stale_tokens and tokens_for_ltp:
+        elif stale_tokens and tokens_for_ltp and stale_ratio_exceeded:
             reasons.append(f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)}")
         elif ltp_age > max_ltp_age:
             reasons.append(f"ltp_stale:NIFTY age={ltp_age:.2f} max={max_ltp_age:.2f}")
@@ -427,7 +430,14 @@ def get_freshness_status(
         payload["ltp"]["source"] = ltp_source
         if runtime_depth_epoch is not None:
             payload["depth"]["source"] = depth_source
-    payload["ok"] = bool(payload.get("ok")) and (not stale_tokens or allow_stale_quotes or (not market_open))
+    payload["stale_token_ratio"] = stale_ratio if tokens_for_ltp else 0.0
+    payload["max_stale_token_ratio"] = max_stale_token_ratio
+    payload["ok"] = bool(payload.get("ok")) and (
+        (not stale_tokens)
+        or allow_stale_quotes
+        or (not market_open)
+        or (not stale_ratio_exceeded)
+    )
 
     if not scoped:
         _CACHE["ts_epoch"] = now_epoch

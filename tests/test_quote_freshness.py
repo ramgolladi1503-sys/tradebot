@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+import core.freshness_sla as freshness_sla
 from strategies.trade_builder import TradeBuilder
 from config import config as cfg
 
@@ -55,3 +58,81 @@ def test_fresh_quote_not_blocked(monkeypatch):
     trade = tb.build(md, quick_mode=True)
     # Signal or other filters may still block, but stale-quote veto must not.
     assert trade is None or trade is not None
+
+
+def test_freshness_status_tolerates_partial_stale_universe(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.30, raising=False)
+    monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 100.0)
+    monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(freshness_sla, "_resolve_ltp_tokens", lambda symbol, tokens: list(range(1, 71)))
+    monkeypatch.setattr(
+        freshness_sla,
+        "_ltp_metrics_from_db",
+        lambda **kwargs: {
+            "last_epoch": 100.0,
+            "source": "ticks_db_filtered",
+            "stale_tokens": list(range(1, 19)),
+            "max_tick_age_sec": 0.0,
+            "tracked_tokens": list(range(1, 71)),
+        },
+    )
+    monkeypatch.setattr(freshness_sla, "_query_max_epoch", lambda conn, table: None)
+    monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: 100.0)
+    monkeypatch.setattr(
+        freshness_sla,
+        "_runtime_snapshot_epochs",
+        lambda symbol: {
+            "ltp_epoch": 100.0,
+            "depth_epoch": 100.0,
+            "source": "feed_runtime_latest",
+            "runtime_state": "RUNNING",
+            "ws_connected": True,
+            "subscribed_tokens_count": 70,
+        },
+    )
+
+    payload = freshness_sla.get_freshness_status(force=True)
+
+    assert payload["ok"] is True
+    assert payload["reasons"] == []
+    assert payload["stale_token_ratio"] == 18 / 70
+
+
+def test_freshness_status_blocks_when_stale_ratio_is_excessive(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.30, raising=False)
+    monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 100.0)
+    monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(freshness_sla, "_resolve_ltp_tokens", lambda symbol, tokens: list(range(1, 71)))
+    monkeypatch.setattr(
+        freshness_sla,
+        "_ltp_metrics_from_db",
+        lambda **kwargs: {
+            "last_epoch": 100.0,
+            "source": "ticks_db_filtered",
+            "stale_tokens": list(range(1, 43)),
+            "max_tick_age_sec": 0.0,
+            "tracked_tokens": list(range(1, 71)),
+        },
+    )
+    monkeypatch.setattr(freshness_sla, "_query_max_epoch", lambda conn, table: None)
+    monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: 100.0)
+    monkeypatch.setattr(
+        freshness_sla,
+        "_runtime_snapshot_epochs",
+        lambda symbol: {
+            "ltp_epoch": 100.0,
+            "depth_epoch": 100.0,
+            "source": "feed_runtime_latest",
+            "runtime_state": "RUNNING",
+            "ws_connected": True,
+            "subscribed_tokens_count": 70,
+        },
+    )
+
+    payload = freshness_sla.get_freshness_status(force=True)
+
+    assert payload["ok"] is False
+    assert "ltp_stale_tokens:42/70" in payload["reasons"]
+    assert payload["stale_token_ratio"] == 42 / 70
