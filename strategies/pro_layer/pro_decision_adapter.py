@@ -56,10 +56,11 @@ def pro_signal_to_candidate(signal: ProSignal, market_data: dict[str, Any]) -> d
         and liquidity_ok
         and spread_ok
     )
-
-    strategy_family = str(getattr(signal, "family", None) or "unknown").strip().lower() or "unknown"
+    strategy_family = str(getattr(signal, "family", None) or "pro_layer").strip().lower() or "pro_layer"
     regime_tags = list(getattr(signal, "regime_tags", []) or [])
-    strategy_regime_mode = str(regime_tags[0] if regime_tags else market_data.get("regime") or "UNKNOWN").strip().upper() or "UNKNOWN"
+    strategy_regime_mode = str(
+        regime_tags[0] if regime_tags else (market_data.get("regime") or "UNKNOWN")
+    ).strip().upper() or "UNKNOWN"
     return {
         "symbol": market_data.get("symbol"),
         "instrument_id": market_data.get("instrument_id"),
