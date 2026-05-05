@@ -187,7 +187,7 @@ def get_kite_auth_health(force: bool = False) -> Dict[str, Any]:
     """
     now_epoch = time.time()
     ttl_sec = float(getattr(cfg, "AUTH_HEALTH_TTL_SEC", 60))
-    if _skip_auth_probe_in_sim():
+    if (not force) and _skip_auth_probe_in_sim():
         payload = {
             "ok": True,
             "auth_state": "SKIPPED_SIM_MODE",

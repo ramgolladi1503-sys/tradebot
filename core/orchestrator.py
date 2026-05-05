@@ -109,6 +109,7 @@ from core.telemetry_streams import (
 from core.trade_log_paths import ensure_trade_log_exists
 from core.runtime_health import write_runtime_health_snapshot
 from core.paths import logs_dir
+from core.auth_manager import runtime_auth_snapshot
 from core.observability.pipeline import write_pipeline_funnel
 from core.outcome_labels import attach_candidate_outcome_labels
 from core.engine_phase2_adapter import run_engine_phase2
@@ -739,6 +740,17 @@ def _scan_visible_suggestions(path: Path) -> dict:
         return counts
     except Exception:
         return counts
+
+
+def _zero_visible_counts(counts: dict) -> dict:
+    out = dict(counts or {})
+    out["visible_suggestion_count"] = 0
+    out["visible_advisory_count"] = 0
+    out["visible_queue_only_count"] = 0
+    out["visible_executable_count"] = 0
+    out["visible_ready_count"] = 0
+    out["visible_executable_status_count"] = 0
+    return out
 
 
 def _build_pipeline_funnel_payload(
@@ -3571,9 +3583,13 @@ class Orchestrator:
             feed_ok, _ = self._pilot_feed_ok()
         except Exception:
             feed_ok = False
+        auth_snapshot = runtime_auth_snapshot()
         return {
             "feed_ok": bool(feed_ok),
             "ws_connected": payload.get("ws_connected"),
+            "auth_ok": bool(auth_snapshot.get("auth_ok", True)),
+            "auth_state": str(auth_snapshot.get("auth_state") or "UNKNOWN"),
+            "auth_reason": str(auth_snapshot.get("auth_reason") or ""),
             "subscribed_option_tokens_count": int(payload.get("subscribed_option_tokens_count") or 0),
             "missing_option_tokens_count": int(payload.get("missing_option_tokens_count") or 0),
         }
@@ -3614,10 +3630,34 @@ class Orchestrator:
         visible_queue_only_count = int(visible_counts.get("visible_queue_only_count") or 0)
         visible_executable_count = int(visible_counts.get("visible_executable_count") or 0)
         visible_primary_blocker = str(visible_counts.get("primary_blocker") or "").strip() or None
+        if bool(getattr(cfg, "STATUS_ZERO_VISIBLE_COUNTS_WHEN_UNHEALTHY", True)):
+            auth_ok = bool(feed_status.get("auth_ok", True))
+            ws_connected = feed_status.get("ws_connected")
+            if (not bool(feed_status.get("feed_ok"))) or (ws_connected is False) or (not auth_ok):
+                visible_counts = _zero_visible_counts(visible_counts)
+                visible_suggestion_count = 0
+                visible_advisory_count = 0
+                visible_queue_only_count = 0
+                visible_executable_count = 0
+                if not auth_ok:
+                    visible_primary_blocker = str(feed_status.get("auth_state") or "AUTH_REQUIRED").strip() or "AUTH_REQUIRED"
         suggestions_status = str(cycle_status.get("semantic_state") or "no_candidates")
         suggestions_reason = cycle_status.get("dominant_reason")
         suggestions_subreason = cycle_status.get("subreason")
         suggestions_primary_blocker = cycle_status.get("primary_blocker")
+        if bool(getattr(cfg, "STATUS_ZERO_VISIBLE_COUNTS_WHEN_UNHEALTHY", True)):
+            auth_ok = bool(feed_status.get("auth_ok", True))
+            ws_connected = feed_status.get("ws_connected")
+            if not auth_ok:
+                suggestions_status = "blocked"
+                suggestions_reason = "auth_blocked"
+                suggestions_subreason = str(feed_status.get("auth_reason") or "")
+                suggestions_primary_blocker = str(feed_status.get("auth_state") or "AUTH_REQUIRED").strip() or "AUTH_REQUIRED"
+            elif (not bool(feed_status.get("feed_ok"))) or (ws_connected is False):
+                suggestions_status = "blocked"
+                suggestions_reason = "feed_unhealthy"
+                suggestions_subreason = str(cycle_status.get("primary_blocker") or "")
+                suggestions_primary_blocker = cycle_status.get("primary_blocker") or visible_primary_blocker or "FEED_UNHEALTHY"
         if visible_suggestion_count > 0 and suggestions_status == "no_candidates":
             if visible_executable_count > 0 or visible_queue_only_count > 0 or visible_advisory_count > 0:
                 suggestions_status = "ok"
@@ -3648,6 +3688,9 @@ class Orchestrator:
             "visible_executable_count": visible_executable_count,
             "feed_ok": bool(feed_status.get("feed_ok")),
             "ws_connected": feed_status.get("ws_connected"),
+            "auth_ok": bool(feed_status.get("auth_ok", True)),
+            "auth_state": str(feed_status.get("auth_state") or "UNKNOWN"),
+            "auth_reason": str(feed_status.get("auth_reason") or ""),
             "subscribed_option_tokens_count": int(feed_status.get("subscribed_option_tokens_count") or 0),
             "missing_option_tokens_count": int(feed_status.get("missing_option_tokens_count") or 0),
         }
@@ -3675,6 +3718,9 @@ class Orchestrator:
             "primary_blocker": cycle_status.get("primary_blocker"),
             "feed_ok": bool(feed_status.get("feed_ok")),
             "ws_connected": feed_status.get("ws_connected"),
+            "auth_ok": bool(feed_status.get("auth_ok", True)),
+            "auth_state": str(feed_status.get("auth_state") or "UNKNOWN"),
+            "auth_reason": str(feed_status.get("auth_reason") or ""),
             "subscribed_option_tokens_count": int(feed_status.get("subscribed_option_tokens_count") or 0),
             "missing_option_tokens_count": int(feed_status.get("missing_option_tokens_count") or 0),
             "last_error": str(last_error or ""),

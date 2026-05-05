@@ -383,3 +383,117 @@ def test_stale_visible_sources_are_ignored_for_runtime_status(monkeypatch, tmp_p
     assert suggestions["visible_executable_count"] == 0
     assert suggestions["primary_blocker"] == "NO_CANDIDATES"
     assert engine["visible_suggestion_count"] == 0
+
+
+def test_unhealthy_feed_zeroes_visible_counts_even_with_stale_visible_rows(monkeypatch, tmp_path):
+    orch = _stub_orchestrator(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        orch,
+        "_feed_status_for_heartbeat",
+        lambda: {
+            "feed_ok": False,
+            "ws_connected": False,
+            "auth_ok": True,
+            "auth_state": "OK",
+            "subscribed_option_tokens_count": 0,
+            "missing_option_tokens_count": 0,
+        },
+    )
+    _write_review_queue_rows(
+        tmp_path,
+        [
+            {
+                "trade_id": "T-UNHEALTHY-FEED-EXEC",
+                "advisory_visible": True,
+                "final_action": "EXECUTE",
+                "execution_status": "executable",
+                "execution_allowed": True,
+                "hard_blockers": [],
+                "soft_penalties": [],
+                "warnings": [],
+                "blockers": [],
+            }
+        ],
+    )
+
+    orch._write_cycle_status_files(
+        cycle_ok=False,
+        cycle_stage="blocked",
+        cycle_reason="feed_stale",
+        last_error="feed_stale",
+        market_mode="LIVE",
+        market_open=True,
+        symbols_scanned=0,
+        candidates_seen=0,
+        candidates_blocked=1,
+        candidates_enqueued=0,
+        blocker_counts=Counter({"NO_LIVE_OPTION_FEED": 1}),
+        suggestion_count=0,
+    )
+
+    suggestions = json.loads((Path(cfg.LOGS_ROOT) / "suggestions_status.json").read_text())
+    engine = json.loads((Path(cfg.LOGS_ROOT) / "engine_cycle_status.json").read_text())
+    assert suggestions["feed_ok"] is False
+    assert suggestions["ws_connected"] is False
+    assert suggestions["visible_suggestion_count"] == 0
+    assert suggestions["visible_executable_count"] == 0
+    assert engine["visible_suggestion_count"] == 0
+    assert engine["visible_executable_count"] == 0
+
+
+def test_auth_blocked_zeroes_visible_counts_even_with_visible_review_queue(monkeypatch, tmp_path):
+    orch = _stub_orchestrator(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        orch,
+        "_feed_status_for_heartbeat",
+        lambda: {
+            "feed_ok": True,
+            "ws_connected": True,
+            "auth_ok": False,
+            "auth_state": "AUTH_REQUIRED",
+            "subscribed_option_tokens_count": 70,
+            "missing_option_tokens_count": 0,
+        },
+    )
+    _write_review_queue_rows(
+        tmp_path,
+        [
+            {
+                "trade_id": "T-AUTH-BLOCKED-EXEC",
+                "advisory_visible": True,
+                "final_action": "EXECUTE",
+                "execution_status": "executable",
+                "execution_allowed": True,
+                "hard_blockers": [],
+                "soft_penalties": [],
+                "warnings": [],
+                "blockers": [],
+            }
+        ],
+    )
+
+    orch._write_cycle_status_files(
+        cycle_ok=False,
+        cycle_stage="blocked",
+        cycle_reason="auth_blocked",
+        last_error="auth_blocked",
+        market_mode="LIVE",
+        market_open=True,
+        symbols_scanned=0,
+        candidates_seen=0,
+        candidates_blocked=1,
+        candidates_enqueued=0,
+        blocker_counts=Counter({"AUTH_REQUIRED": 1}),
+        suggestion_count=0,
+    )
+
+    suggestions = json.loads((Path(cfg.LOGS_ROOT) / "suggestions_status.json").read_text())
+    engine = json.loads((Path(cfg.LOGS_ROOT) / "engine_cycle_status.json").read_text())
+    assert suggestions["auth_ok"] is False
+    assert suggestions["auth_state"] == "AUTH_REQUIRED"
+    assert suggestions["visible_suggestion_count"] == 0
+    assert suggestions["visible_executable_count"] == 0
+    assert engine["auth_ok"] is False
+    assert engine["auth_state"] == "AUTH_REQUIRED"
+    assert engine["visible_suggestion_count"] == 0
+    assert engine["visible_executable_count"] == 0

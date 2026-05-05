@@ -55,6 +55,7 @@ from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lif
 from core.time_utils import format_ts_ist
 from core.log_writer import get_jsonl_writer
 from core.quote_truth import quote_bundle_is_consistent, quote_consistency_score, resolve_quote_validation_status
+from core.auth_manager import runtime_auth_snapshot
 
 try:
     from config import config as cfg
@@ -6125,7 +6126,8 @@ def _write_json(path: Path, payload):
 def _runtime_feed_status_snapshot() -> dict:
     payload = _read_json(logs_dir() / "feed_runtime_latest.json", {})
     if not isinstance(payload, dict):
-        return {}
+        payload = {}
+    auth_snapshot = runtime_auth_snapshot()
     feed_ok = payload.get("feed_ok")
     if not isinstance(feed_ok, bool):
         runtime_state = str(payload.get("runtime_state") or "").strip().upper()
@@ -6146,9 +6148,16 @@ def _runtime_feed_status_snapshot() -> dict:
     return {
         "feed_ok": feed_ok,
         "ws_connected": payload.get("ws_connected"),
+        "auth_ok": bool(auth_snapshot.get("auth_ok", True)),
+        "auth_state": str(auth_snapshot.get("auth_state") or "UNKNOWN"),
+        "auth_reason": str(auth_snapshot.get("auth_reason") or ""),
         "subscribed_option_tokens_count": int(payload.get("subscribed_option_tokens_count") or 0),
         "missing_option_tokens_count": int(payload.get("missing_option_tokens_count") or 0),
     }
+
+
+def _runtime_auth_status_snapshot() -> dict:
+    return runtime_auth_snapshot()
 
 
 def _update_suggestions_status_latest(
@@ -6214,8 +6223,23 @@ def _update_suggestions_status_latest(
             else {}
         )
         feed_snapshot = _runtime_feed_status_snapshot()
+        auth_snapshot = _runtime_auth_status_snapshot()
+        runtime_healthy = True
+        if bool(getattr(cfg, "STATUS_ZERO_VISIBLE_COUNTS_WHEN_UNHEALTHY", True)):
+            runtime_healthy = bool(feed_snapshot.get("feed_ok")) and feed_snapshot.get("ws_connected") is not False and bool(auth_snapshot.get("auth_ok", True))
+            if not runtime_healthy:
+                visibility_counts.update(
+                    {
+                        "visible_suggestion_count": 0,
+                        "visible_advisory_count": 0,
+                        "visible_queue_only_count": 0,
+                        "visible_executable_count": 0,
+                    }
+                )
         if not emission_ok:
             status = "error"
+        elif not runtime_healthy:
+            status = "blocked"
         payload = dict(current)
         payload.update(
             {
@@ -6235,6 +6259,7 @@ def _update_suggestions_status_latest(
                 **funnel_counts,
                 **visibility_counts,
                 **feed_snapshot,
+                **auth_snapshot,
             }
         )
         write_json_atomic(path, payload)
@@ -6261,6 +6286,7 @@ def _update_suggestions_status_latest(
                     **funnel_counts,
                     **visibility_counts,
                     **feed_snapshot,
+                    **auth_snapshot,
                 }
             )
             write_json_atomic(rejected_status_path, rejected_payload)
@@ -6283,6 +6309,7 @@ def _update_suggestions_status_latest(
                     **funnel_counts,
                     **visibility_counts,
                     **feed_snapshot,
+                    **auth_snapshot,
                 }
             )
             write_json_atomic(engine_path, engine_payload)

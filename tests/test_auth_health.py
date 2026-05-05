@@ -23,6 +23,7 @@ def _setup_fake_kite(monkeypatch, counter):
 
 def test_auth_health_cache_and_force(monkeypatch):
     auth_health._reset_cache_for_tests()
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "abc123KEY")
     monkeypatch.setattr(auth_health, "get_kite_credentials", lambda **kwargs: ("abc123KEY", "token1234"))
 
@@ -41,6 +42,7 @@ def test_auth_health_cache_and_force(monkeypatch):
 
 def test_auth_health_whitespace_token(monkeypatch):
     auth_health._reset_cache_for_tests()
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "abc123KEY")
     monkeypatch.setattr(auth_health, "get_kite_credentials", lambda **kwargs: ("abc123KEY", "  tok_xx91pk  "))
 
@@ -54,6 +56,7 @@ def test_auth_health_whitespace_token(monkeypatch):
 
 def test_auth_health_profile_probe_uses_fresh_client_from_ensure(monkeypatch):
     auth_health._reset_cache_for_tests()
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
 
     class _StaleClient:
         def profile(self):
@@ -71,6 +74,7 @@ def test_auth_health_profile_probe_uses_fresh_client_from_ensure(monkeypatch):
 
 def test_auth_health_clears_db_write_halt(tmp_path, monkeypatch):
     auth_health._reset_cache_for_tests()
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "KITE_API_KEY", "abc123KEY")
     monkeypatch.setattr(auth_health, "get_kite_credentials", lambda **kwargs: ("abc123KEY", "token1234"))
 

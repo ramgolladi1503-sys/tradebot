@@ -55,6 +55,43 @@ echo "[RUN_LIVE] Project: $ROOT_DIR"
 echo "[RUN_LIVE] Token file: $TOKEN_PATH"
 ensure_runtime_dirs
 
+repair_stale_runtime_locks() {
+  python - <<'PY'
+from core.startup_recovery import reap_stale_runtime_locks
+
+payload = reap_stale_runtime_locks()
+print(f"[RUN_LIVE] stale_lock_recovery reaped={int(payload.get('reaped_count') or 0)}")
+for item in list(payload.get("stale_locks") or []):
+    print(
+        "[RUN_LIVE] stale_lock_reaped "
+        f"name={item.get('lock_name')} "
+        f"pid={item.get('pid')} "
+        f"action={item.get('action')}"
+    )
+PY
+}
+
+publish_auth_blocked_startup_state() {
+  local startup_reason="$1"
+  python - <<PY
+from core.startup_recovery import publish_auth_blocked_startup_state
+
+payload = publish_auth_blocked_startup_state(
+    reason=${startup_reason@Q},
+    source="run_live.validate_token",
+)
+print(
+    "[RUN_LIVE] startup_auth_blocked "
+    f"auth_state={payload.get('auth_state')} "
+    f"runtime_state={payload.get('runtime_state')}"
+)
+PY
+}
+
+if [[ "${STARTUP_STALE_LOCK_RECOVERY_ENABLE:-true}" =~ ^([Tt][Rr][Uu][Ee]|1|[Yy][Ee]?[Ss])$ ]]; then
+  repair_stale_runtime_locks
+fi
+
 configure_openmp_runtime() {
   local py_arch=""
   local conda_lib=""
@@ -254,7 +291,17 @@ fi
 
 
 echo "[RUN_LIVE] Final token validation..."
-validate_token
+if ! validate_token; then
+  startup_auth_reason="$(python - <<'PY'
+from core.auth_health import get_kite_auth_health
+
+payload = get_kite_auth_health(force=True)
+print(str(payload.get("error") or payload.get("auth_state") or "auth_required").strip())
+PY
+)"
+  publish_auth_blocked_startup_state "$startup_auth_reason"
+  exit 12
+fi
 
 if [[ "$VALIDATE_ONLY" -eq 1 ]]; then
   echo "[RUN_LIVE] --validate-only complete. Exiting."

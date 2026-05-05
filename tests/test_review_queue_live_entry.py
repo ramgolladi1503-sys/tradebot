@@ -175,6 +175,57 @@ def test_update_suggestions_status_latest_derives_feed_ok_from_runtime_snapshot(
     assert status_payload["subscribed_option_tokens_count"] == 70
 
 
+def test_update_suggestions_status_latest_zeroes_visible_counts_when_runtime_unhealthy(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    logs_root = Path(cfg.LOGS_ROOT)
+    logs_root.mkdir(parents=True, exist_ok=True)
+    (logs_root / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "runtime_state": "AUTH_BLOCKED",
+                "ws_connected": False,
+                "feed_ok": False,
+                "subscribed_option_tokens_count": 0,
+                "missing_option_tokens_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        review_queue,
+        "_runtime_auth_status_snapshot",
+        lambda: {
+            "auth_ok": False,
+            "auth_state": "AUTH_REQUIRED",
+            "auth_reason": "profile_error:TokenException",
+        },
+    )
+    executable_entry = {
+        "trade_id": "T-STATUS-UNHEALTHY-EXEC",
+        "entry_status": "ok",
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "execution_status": "executable",
+        "execution_allowed": True,
+        "candidate_status": "executable",
+        "quote_validation_status": "OK",
+        "hard_blockers": [],
+        "blockers": [],
+    }
+
+    review_queue._update_suggestions_status_latest(
+        executable_entry,
+        queue_rows=[executable_entry],
+    )
+
+    status_payload = json.loads((logs_root / "suggestions_status.json").read_text())
+    assert status_payload["feed_ok"] is False
+    assert status_payload["auth_ok"] is False
+    assert status_payload["auth_state"] == "AUTH_REQUIRED"
+    assert status_payload["visible_suggestion_count"] == 0
+    assert status_payload["visible_executable_count"] == 0
+
+
 def test_review_queue_emits_lifecycle_events_for_blocked_and_emitted_trades(tmp_path, monkeypatch):
     qpath = tmp_path / "review_queue.json"
     lifecycle_path = tmp_path / "observability" / "trade_lifecycle.jsonl"

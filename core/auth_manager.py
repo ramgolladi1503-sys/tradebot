@@ -184,6 +184,33 @@ def auth_state_path(repo_root_path: Path | str | None = None) -> Path:
     return (root / ".runtime" / "auth_state.json").resolve()
 
 
+def load_auth_state(*, repo_root_path: Path | str | None = None) -> dict[str, Any]:
+    path = auth_state_path(repo_root_path=repo_root_path)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def runtime_auth_snapshot(*, repo_root_path: Path | str | None = None) -> dict[str, Any]:
+    payload = load_auth_state(repo_root_path=repo_root_path)
+    state = str(payload.get("status") or payload.get("auth_state") or "").strip().upper()
+    if not state:
+        return {
+            "auth_ok": True,
+            "auth_state": "UNKNOWN",
+            "auth_reason": "",
+        }
+    return {
+        "auth_ok": state == "OK",
+        "auth_state": state,
+        "auth_reason": str(payload.get("reason") or payload.get("error") or "").strip(),
+    }
+
+
 def set_auth_required_state(
     *,
     reason: str,
