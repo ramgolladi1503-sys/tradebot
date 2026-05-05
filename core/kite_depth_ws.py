@@ -13,7 +13,7 @@ from core.auth import get_kite_ticker
 from core.events import write_json_atomic
 from core.kite_client import kite_client
 from core.depth_store import depth_store
-from core.tick_store import get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
+from core.tick_store import get_latest_tick_rows_db, get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.auth_manager import (
     clear_auth_required_state,
@@ -135,6 +135,111 @@ def _normalize_positive_tokens(token_source) -> list[int]:
 
 def _use_desired_tokens_for_resubscribe() -> bool:
     return str(os.getenv("FEED_USE_DESIRED_TOKENS", "") or "").strip() == "1"
+
+
+def _stale_option_subscription_prune_enabled() -> bool:
+    return bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True))
+
+
+def _stale_option_subscription_max_age_sec() -> float:
+    try:
+        return float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5))
+    except Exception:
+        return 2.5
+
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens: list[int],
+    option_rank_by_token: dict[int, tuple[float, int, float, int, int]],
+    token_to_symbol: dict[int, str],
+) -> tuple[list[int], dict[str, object]]:
+    if not _stale_option_subscription_prune_enabled():
+        return list(tokens), {
+            "enabled": False,
+            "max_age_sec": _stale_option_subscription_max_age_sec(),
+            "pruned_count": 0,
+            "kept_count": len(tokens),
+            "pruned_tokens": [],
+            "pruned_by_symbol": {},
+        }
+
+    option_tokens = [
+        int(tok)
+        for tok in list(tokens or [])
+        if int(tok) > 0 and int(tok) in option_rank_by_token and not _is_underlying_token(int(tok))
+    ]
+    if not option_tokens:
+        return list(tokens), {
+            "enabled": True,
+            "max_age_sec": _stale_option_subscription_max_age_sec(),
+            "pruned_count": 0,
+            "kept_count": len(tokens),
+            "pruned_tokens": [],
+            "pruned_by_symbol": {},
+        }
+
+    now_epoch = float(now_utc_epoch())
+    max_age_sec = _stale_option_subscription_max_age_sec()
+    db_rows = get_latest_tick_rows_db(option_tokens)
+    pruned_tokens: list[int] = []
+    kept_option_tokens: list[int] = []
+    pruned_by_symbol: dict[str, int] = {}
+    stale_samples: list[dict[str, object]] = []
+
+    for token in option_tokens:
+        db_row = db_rows.get(token) or {}
+        db_epoch = _coerce_epoch(db_row.get("ts_epoch"))
+        memory_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
+        effective_epoch = None
+        if db_epoch is not None and memory_epoch is not None:
+            effective_epoch = max(float(db_epoch), float(memory_epoch))
+        elif db_epoch is not None:
+            effective_epoch = float(db_epoch)
+        elif memory_epoch is not None:
+            effective_epoch = float(memory_epoch)
+        age_sec = None if effective_epoch is None else max(0.0, float(now_epoch) - float(effective_epoch))
+        if age_sec is None or age_sec > max_age_sec:
+            pruned_tokens.append(int(token))
+            symbol = str(token_to_symbol.get(int(token)) or "").upper() or "UNKNOWN"
+            pruned_by_symbol[symbol] = int(pruned_by_symbol.get(symbol, 0)) + 1
+            if len(stale_samples) < 10:
+                stale_samples.append(
+                    {
+                        "token": int(token),
+                        "symbol": symbol,
+                        "age_sec": age_sec,
+                        "db_epoch": db_epoch,
+                        "memory_epoch": memory_epoch,
+                    }
+                )
+        else:
+            kept_option_tokens.append(int(token))
+
+    if not pruned_tokens:
+        return list(tokens), {
+            "enabled": True,
+            "max_age_sec": max_age_sec,
+            "pruned_count": 0,
+            "kept_count": len(tokens),
+            "pruned_tokens": [],
+            "pruned_by_symbol": {},
+        }
+
+    pruned_set = set(pruned_tokens)
+    pruned_tokens_out = [int(tok) for tok in tokens if int(tok) in pruned_set]
+    retained_tokens = [int(tok) for tok in tokens if int(tok) not in pruned_set]
+    # Preserve order and avoid duplicates; underlyings and sticky tokens are never pruned here.
+    retained_tokens = list(dict.fromkeys(retained_tokens + kept_option_tokens))
+    return retained_tokens, {
+        "enabled": True,
+        "max_age_sec": max_age_sec,
+        "pruned_count": len(pruned_tokens_out),
+        "kept_count": len(retained_tokens),
+        "pruned_tokens": pruned_tokens_out,
+        "pruned_by_symbol": pruned_by_symbol,
+        "stale_samples": stale_samples,
+    }
 
 
 def _resubscribe_token_selection() -> tuple[list[int], dict[str, int | bool | str]]:
@@ -1515,6 +1620,26 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     preserve_tokens.update(int(t) for t in sticky_tokens if t is not None)
     preserve_tokens.update(int(t) for t in option_rank_by_token.keys())
 
+    tokens, prune_meta = _prune_stale_option_subscription_tokens(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+    )
+    pruned_tokens = [int(t) for t in list(prune_meta.get("pruned_tokens") or [])]
+    if pruned_tokens:
+        _log_ws(
+            "FEED_OPTION_SUBSCRIPTIONS_PRUNED_STALE",
+            {
+                "pruned_count": int(prune_meta.get("pruned_count") or 0),
+                "kept_count": int(prune_meta.get("kept_count") or 0),
+                "max_age_sec": float(prune_meta.get("max_age_sec") or 0.0),
+                "pruned_by_symbol": dict(prune_meta.get("pruned_by_symbol") or {}),
+                "stale_samples": list(prune_meta.get("stale_samples") or [])[:10],
+            },
+        )
+        for tok in pruned_tokens:
+            option_rank_by_token.pop(int(tok), None)
+
     if validate_tokens:
         def _count_by_exchange(token_list: list[int]) -> dict[str, int]:
             counts: dict[str, int] = {}
@@ -1611,13 +1736,34 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         row["final_count"] = len(final_tokens_for_symbol)
         row["option_count"] = final_option_count
         row["final_option_count"] = final_option_count
+        row["stale_option_pruned_count"] = int((prune_meta.get("pruned_by_symbol") or {}).get(symbol, 0) or 0)
+        row["stale_option_prune_enabled"] = bool(prune_meta.get("enabled"))
+        row["stale_option_prune_max_age_sec"] = float(prune_meta.get("max_age_sec") or 0.0)
+        row["stale_option_pruned_sample_tokens"] = [int(t) for t in list(prune_meta.get("pruned_tokens") or [])[:10]]
         row["option_drop_reason"] = row.get("option_fail_reason")
         if not row.get("option_drop_reason") and final_option_count < int(row.get("resolved_option_count") or 0):
             row["option_drop_reason"] = (
-                "subscription_budget_truncated"
-                if bool(truncated)
-                else "option_tokens_filtered"
+                "stale_option_subscription_pruned"
+                if bool(prune_meta.get("pruned_count"))
+                else (
+                    "subscription_budget_truncated"
+                    if bool(truncated)
+                    else "option_tokens_filtered"
+                )
             )
+        min_required = int(row.get("option_min_required") or 0)
+        if min_required > 0 and final_option_count < min_required and not row.get("option_fail_reason"):
+            row["option_fail_reason"] = (
+                "option_tokens_pruned_below_min"
+                if bool(prune_meta.get("pruned_count"))
+                else "option_tokens_under_min"
+            )
+            if not row.get("option_drop_reason"):
+                row["option_drop_reason"] = (
+                    "stale_option_subscription_pruned"
+                    if bool(prune_meta.get("pruned_count"))
+                    else "option_tokens_under_min"
+                )
     _LAST_OPTION_COUNTS_BY_SYMBOL = {
         str(row.get("symbol") or "").upper(): int(row.get("option_count") or 0)
         for row in resolution

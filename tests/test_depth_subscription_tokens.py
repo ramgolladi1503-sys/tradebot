@@ -97,6 +97,7 @@ def _setup_depth_window_mocks(monkeypatch):
     monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", dict(around_by_symbol), raising=False)
     monkeypatch.setattr(cfg, "STRIKE_STEP_BY_SYMBOL", dict(step_by_symbol), raising=False)
     monkeypatch.setattr(cfg, "STRIKE_STEP", 50, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False, raising=False)
 
     monkeypatch.setattr(ws, "get_sticky_tokens", lambda: set())
     monkeypatch.setattr(ws, "_underlying_ltp", lambda symbol: float(atm_by_symbol[str(symbol).upper()]))
@@ -206,6 +207,51 @@ def test_option_tokens_under_min_are_blocked(monkeypatch):
     assert row.get("option_fail_reason") == "option_tokens_under_min"
     assert int(row.get("option_count") or 0) == 0
     assert incidents and incidents[-1]["symbol"] == "NIFTY"
+
+
+def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_and_underlying(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    atm = int(ctx["atm_by_symbol"]["NIFTY"])
+
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5, raising=False)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 200.0)
+
+    def _fake_latest_tick_rows_db(tokens):
+        rows = {}
+        for token in list(tokens or []):
+            meta = token_meta.get(int(token)) or {}
+            if str(meta.get("symbol") or "").upper() != "NIFTY":
+                continue
+            strike = int(float(meta.get("strike") or 0))
+            age_sec = 1.0 if abs(strike - atm) <= 150 else 20.0
+            rows[int(token)] = {"ts_epoch": 200.0 - age_sec, "ltp": 100.0}
+        return rows
+
+    monkeypatch.setattr(ws, "get_latest_tick_rows_db", _fake_latest_tick_rows_db)
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=200)
+
+    index_token = ctx["index_tokens"]["NIFTY"]
+    assert index_token in tokens
+
+    sticky_tokens = {990001}
+    monkeypatch.setattr(ws, "get_sticky_tokens", lambda: set(sticky_tokens))
+    # Rebuild once more to prove sticky tokens survive the prune path as well.
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=200)
+
+    assert 990001 in tokens
+    option_tokens = [t for t in tokens if token_meta.get(t, {}).get("symbol") == "NIFTY"]
+    kept_strikes = {int(token_meta[t]["strike"]) for t in option_tokens}
+    assert all(abs(strike - atm) <= 150 for strike in kept_strikes)
+    assert len(option_tokens) == 14
+    row = resolution[0]
+    assert int(row.get("stale_option_pruned_count") or 0) > 0
+    assert row.get("option_drop_reason") == "stale_option_subscription_pruned"
+    assert row.get("option_fail_reason") in (None, "")
+    assert row.get("stale_option_prune_enabled") is True
+    assert float(row.get("stale_option_prune_max_age_sec") or 0.0) == 2.5
 
 
 def test_option_expiry_unavailable_sets_fail_reason(monkeypatch):
