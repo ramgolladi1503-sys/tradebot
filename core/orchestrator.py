@@ -3872,45 +3872,54 @@ class Orchestrator:
             ]
             transitions = []
             if option_rows:
-                fresh_count = 0
-                max_tick_age = float(
-                    getattr(
-                        cfg,
-                        "BREAKER_STALE_FEED_MAX_TICK_AGE_SEC",
-                        getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5),
+                min_option_rows = max(1, int(getattr(cfg, "BREAKER_STALE_FEED_MIN_OPTION_ROWS", 8)))
+                if len(option_rows) < min_option_rows:
+                    logger.info(
+                        "STALE_FEED_DECISION_SAMPLE_SKIPPED option_rows=%s min_option_rows=%s",
+                        len(option_rows),
+                        min_option_rows,
                     )
-                )
-                for row in option_rows:
-                    feed_health = (row or {}).get("feed_health")
-                    feed_is_fresh = (
-                        feed_health.get("is_fresh")
-                        if isinstance(feed_health, dict) and ("is_fresh" in feed_health)
-                        else None
+                else:
+                    fresh_count = 0
+                    max_tick_age = float(
+                        getattr(
+                            cfg,
+                            "BREAKER_STALE_FEED_MAX_TICK_AGE_SEC",
+                            getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5),
+                        )
                     )
-                    if feed_is_fresh is None:
-                        quote_age = (row or {}).get("quote_age_sec")
-                        if quote_age is None:
-                            quote_age = self._quote_age_sec((row or {}).get("quote_ts"))
-                        try:
-                            feed_is_fresh = float(quote_age) <= float(max_tick_age)
-                        except Exception:
-                            feed_is_fresh = False
-                    if bool(feed_is_fresh):
-                        fresh_count += 1
-                fresh_ratio = float(fresh_count) / float(max(1, len(option_rows)))
-                min_fresh_ratio = float(getattr(cfg, "BREAKER_STALE_FEED_MIN_FRESH_RATIO", 0.5))
-                transitions.extend(
-                    self.decision_breakers.observe_stale_feed(
-                        fresh_ratio < min_fresh_ratio,
-                        now_ts=now_ts,
-                        evidence={
-                            "option_rows": len(option_rows),
-                            "fresh_count": fresh_count,
-                            "fresh_ratio": fresh_ratio,
-                            "min_fresh_ratio": min_fresh_ratio,
-                        },
+                    for row in option_rows:
+                        feed_health = (row or {}).get("feed_health")
+                        feed_is_fresh = (
+                            feed_health.get("is_fresh")
+                            if isinstance(feed_health, dict) and ("is_fresh" in feed_health)
+                            else None
+                        )
+                        if feed_is_fresh is None:
+                            quote_age = (row or {}).get("quote_age_sec")
+                            if quote_age is None:
+                                quote_age = self._quote_age_sec((row or {}).get("quote_ts"))
+                            try:
+                                feed_is_fresh = float(quote_age) <= float(max_tick_age)
+                            except Exception:
+                                feed_is_fresh = False
+                        if bool(feed_is_fresh):
+                            fresh_count += 1
+                    fresh_ratio = float(fresh_count) / float(max(1, len(option_rows)))
+                    min_fresh_ratio = float(getattr(cfg, "BREAKER_STALE_FEED_MIN_FRESH_RATIO", 0.5))
+                    transitions.extend(
+                        self.decision_breakers.observe_stale_feed(
+                            fresh_ratio < min_fresh_ratio,
+                            now_ts=now_ts,
+                            evidence={
+                                "option_rows": len(option_rows),
+                                "fresh_count": fresh_count,
+                                "fresh_ratio": fresh_ratio,
+                                "min_fresh_ratio": min_fresh_ratio,
+                                "min_option_rows": min_option_rows,
+                            },
+                        )
                     )
-                )
             failure_snapshot = self.execution_engine.get_failure_snapshot(now_epoch=now_ts)
             counters = dict((failure_snapshot or {}).get("counters") or {})
             broker_rejects = int(counters.get("BROKER_REJECT") or 0)

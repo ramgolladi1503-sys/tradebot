@@ -73,3 +73,48 @@ def test_pilot_feed_ok_respects_runtime_health_stale_breaker(monkeypatch, tmp_pa
     ok, reasons = orch._pilot_feed_ok()
     assert ok is False
     assert "feed_stale:DECISION_BREAKER_STALE_FEED" in reasons
+
+
+def test_update_decision_breakers_skips_stale_feed_on_tiny_option_sample(monkeypatch):
+    monkeypatch.setattr(orchestrator_module, "now_utc_epoch", lambda: 1772800000.0)
+    monkeypatch.setattr(orchestrator_module.cfg, "BREAKER_STALE_FEED_MIN_OPTION_ROWS", 8, raising=False)
+
+    class _DummyBreakers:
+        def __init__(self):
+            self.calls = []
+
+        def observe_stale_feed(self, unhealthy, *, evidence=None, now_ts=None):
+            self.calls.append((bool(unhealthy), dict(evidence or {}), float(now_ts or 0.0)))
+            return []
+
+        def observe_price_mismatch(self, unhealthy, *, evidence=None, now_ts=None):
+            return []
+
+        def observe_broker_failure(self, unhealthy, *, evidence=None, now_ts=None):
+            return []
+
+        def snapshot(self, *, now_ts=None):
+            return {"enabled": True, "blocked": False, "blocked_reasons": [], "breakers": {}}
+
+        def should_block_decisions(self, *, now_ts=None):
+            return False, []
+
+    class _DummyEngine:
+        def get_failure_snapshot(self, now_epoch=None):
+            return {"counters": {}}
+
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.decision_breakers = _DummyBreakers()
+    orch.execution_engine = _DummyEngine()
+    orch._decision_breaker_failure_counters = {}
+
+    market_data_list = [
+        {"instrument": "OPT", "feed_health": {"is_fresh": False}},
+        {"instrument": "OPT", "feed_health": {"is_fresh": False}},
+        {"instrument": "OPT", "feed_health": {"is_fresh": True}},
+        {"instrument": "EQ", "feed_health": {"is_fresh": False}},
+    ]
+
+    orch._update_decision_breakers(market_data_list)
+
+    assert orch.decision_breakers.calls == []
