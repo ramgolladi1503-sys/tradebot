@@ -3584,9 +3584,12 @@ class Orchestrator:
         except Exception:
             feed_ok = False
         auth_snapshot = runtime_auth_snapshot()
+        effective_ws_connected = payload.get("effective_ws_connected")
+        if effective_ws_connected is None:
+            effective_ws_connected = payload.get("ws_connected")
         return {
             "feed_ok": bool(feed_ok),
-            "ws_connected": payload.get("ws_connected"),
+            "ws_connected": effective_ws_connected,
             "auth_ok": bool(auth_snapshot.get("auth_ok", True)),
             "auth_state": str(auth_snapshot.get("auth_state") or "UNKNOWN"),
             "auth_reason": str(auth_snapshot.get("auth_reason") or ""),

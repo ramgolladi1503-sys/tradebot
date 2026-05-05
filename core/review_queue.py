@@ -6147,7 +6147,7 @@ def _runtime_feed_status_snapshot() -> dict:
         )
     return {
         "feed_ok": feed_ok,
-        "ws_connected": payload.get("ws_connected"),
+        "ws_connected": payload.get("effective_ws_connected", payload.get("ws_connected")),
         "auth_ok": bool(auth_snapshot.get("auth_ok", True)),
         "auth_state": str(auth_snapshot.get("auth_state") or "UNKNOWN"),
         "auth_reason": str(auth_snapshot.get("auth_reason") or ""),

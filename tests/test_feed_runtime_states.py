@@ -6,6 +6,7 @@ from pathlib import Path
 from config import config as cfg
 from core.feed.runtime_store import read_latest_runtime_snapshot, write_runtime_snapshot
 import core.kite_depth_ws as depth_ws
+from core.runtime_status_overlay import derive_effective_ws_connected, derive_feed_ok
 
 
 def test_runtime_store_roundtrip_with_state_fields(monkeypatch, tmp_path):
@@ -201,3 +202,60 @@ def test_persist_runtime_snapshot_keeps_symbol_ok_with_fresh_option_tick_cache(m
     assert payload["last_option_tick_ts_by_symbol"]["NIFTY"] == 199.0
     assert payload["option_last_tick_age_by_symbol"]["NIFTY"] == 1.0
     assert payload["option_feed_block_reason_by_symbol"]["NIFTY"] == "OK"
+
+
+def test_runtime_status_overlay_derives_silent_feed_as_not_connected():
+    payload = {
+        "ws_connected": True,
+        "state_machine": {"state": "DOWN", "reason": "no_ws_messages"},
+        "runtime_state": "RUNNING",
+        "option_feed_block_reason_by_symbol": {"NIFTY": "NO_LIVE_OPTION_FEED"},
+        "last_tick_age_sec": 18.0,
+        "last_depth_age_sec": 10.0,
+    }
+    assert derive_effective_ws_connected(payload) is False
+    assert derive_feed_ok(payload) is False
+
+
+def test_write_feed_runtime_snapshot_publishes_fail_closed_status_overlay(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", True, raising=False)
+
+    depth_ws._write_feed_runtime_snapshot(
+        now_epoch=200.0,
+        ws_connected=True,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=180.0,
+        last_db_tick_age_sec=20.0,
+        last_ws_tick_epoch=180.0,
+        last_tick_age_sec=20.0,
+        last_depth_epoch=190.0,
+        last_depth_age_sec=10.0,
+        market_open=True,
+        state_machine={"state": "DOWN", "reason": "no_ws_messages"},
+        subscribed_option_tokens_count=1,
+        option_feed_block_reason_by_symbol={"NIFTY": "NO_LIVE_OPTION_FEED"},
+        option_active_blockers_by_symbol={"NIFTY": ["NO_LIVE_OPTION_FEED", "STALE_OPTION_LTP"]},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    feed = json.loads((logs_path / "feed_runtime_latest.json").read_text())
+    suggestions = json.loads((logs_path / "suggestions_status.json").read_text())
+    engine = json.loads((logs_path / "engine_cycle_status.json").read_text())
+    health = json.loads((logs_path / "runtime_health_latest.json").read_text())
+
+    assert feed["feed_ok"] is False
+    assert feed["effective_ws_connected"] is False
+    assert suggestions["status"] == "blocked"
+    assert suggestions["reason"] == "feed_unhealthy"
+    assert suggestions["visible_executable_count"] == 0
+    assert suggestions["ws_connected"] is False
+    assert engine["cycle_stage"] == "blocked"
+    assert engine["reason"] == "feed_unhealthy"
+    assert engine["visible_executable_count"] == 0
+    assert health["feed"]["sla_status"] == "FAIL"
+    assert health["feed"]["ws_connected"] is False

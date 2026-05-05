@@ -26,6 +26,11 @@ from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
+from core.runtime_status_overlay import (
+    derive_effective_ws_connected,
+    derive_feed_ok,
+    publish_feed_unhealthy_status_overlay,
+)
 from core import risk_halt
 from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer, get_rotating_logger
@@ -802,8 +807,15 @@ def _write_feed_runtime_snapshot(
         "runtime_state": str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper(),
         "last_error": str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000],
     }
+    payload["effective_ws_connected"] = derive_effective_ws_connected(payload)
+    payload["feed_ok"] = derive_feed_ok(payload)
     try:
         write_json_atomic(path, payload)
+        publish_feed_unhealthy_status_overlay(
+            feed_payload=payload,
+            logs_root=logs_dir(),
+            now_epoch=float(now_epoch),
+        )
     except Exception as exc:
         _log_ws("FEED_RUNTIME_SNAPSHOT_ERROR", {"error": str(exc), "path": str(path)})
 
