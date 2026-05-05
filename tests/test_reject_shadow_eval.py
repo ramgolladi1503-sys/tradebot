@@ -108,6 +108,17 @@ def test_reject_shadow_persists_score_telemetry_to_live_decision_stream(tmp_path
         {
             "liquidity_score": 0.8125,
             "quote_consistency_score": 0.91,
+            "setup_score": 0.62,
+            "setup_regime_alignment_score": 0.35,
+            "setup_structure_score": 0.55,
+            "setup_thesis_score": 0.62,
+            "trigger_score": 0.54,
+            "trigger_base_score": 0.61,
+            "entry_quality_score": 0.57,
+            "entry_invalidation_score": 0.66,
+            "entry_overextension_score": 0.58,
+            "entry_timing_quality_score": 0.63,
+            "execution_quality_score": 0.49,
             "rank_score": 0.578174,
             "raw_rank_score": 0.746802,
             "terminal_rank_score": 0.578174,
@@ -124,6 +135,17 @@ def test_reject_shadow_persists_score_telemetry_to_live_decision_stream(tmp_path
     latest = rows[-1]
     assert latest["liquidity_score"] == 0.8125
     assert latest["quote_consistency_score"] == 0.91
+    assert latest["setup_score"] == 0.62
+    assert latest["setup_regime_alignment_score"] == 0.35
+    assert latest["setup_structure_score"] == 0.55
+    assert latest["setup_thesis_score"] == 0.62
+    assert latest["trigger_score"] == 0.54
+    assert latest["trigger_base_score"] == 0.61
+    assert latest["entry_quality_score"] == 0.57
+    assert latest["entry_invalidation_score"] == 0.66
+    assert latest["entry_overextension_score"] == 0.58
+    assert latest["entry_timing_quality_score"] == 0.63
+    assert latest["execution_quality_score"] == 0.49
     assert latest["rank_score"] == 0.578174
     assert latest["raw_rank_score"] == 0.746802
     assert latest["terminal_rank_score"] == 0.578174
@@ -143,6 +165,17 @@ def test_reject_shadow_backfills_nested_liquidity_telemetry(tmp_path, monkeypatc
             "score_breakdown": {
                 "liquidity_score": 0.8125,
                 "quote_consistency_score": 0.91,
+                "setup_score": 0.62,
+                "setup_regime_alignment_score": 0.35,
+                "setup_structure_score": 0.55,
+                "setup_thesis_score": 0.62,
+                "trigger_score": 0.54,
+                "trigger_base_score": 0.61,
+                "entry_quality_score": 0.57,
+                "entry_invalidation_score": 0.66,
+                "entry_overextension_score": 0.58,
+                "entry_timing_quality_score": 0.63,
+                "execution_quality_score": 0.49,
                 "liquidity_flow_score": 0.74,
                 "liquidity_book_score": 0.88,
                 "liquidity_spread_score": 0.81,
@@ -156,6 +189,10 @@ def test_reject_shadow_backfills_nested_liquidity_telemetry(tmp_path, monkeypatc
             },
             "source_flags": {
                 "decision_trace": {
+                    "setup_score": 0.62,
+                    "trigger_score": 0.54,
+                    "entry_quality_score": 0.57,
+                    "execution_quality_score": 0.49,
                     "liquidity_flow_score": 0.74,
                     "liquidity_book_score": 0.88,
                     "liquidity_spread_score": 0.81,
@@ -174,6 +211,17 @@ def test_reject_shadow_backfills_nested_liquidity_telemetry(tmp_path, monkeypatc
     latest = rows[-1]
     assert latest["liquidity_score"] == 0.8125
     assert latest["quote_consistency_score"] == 0.91
+    assert latest["setup_score"] == 0.62
+    assert latest["setup_regime_alignment_score"] == 0.35
+    assert latest["setup_structure_score"] == 0.55
+    assert latest["setup_thesis_score"] == 0.62
+    assert latest["trigger_score"] == 0.54
+    assert latest["trigger_base_score"] == 0.61
+    assert latest["entry_quality_score"] == 0.57
+    assert latest["entry_invalidation_score"] == 0.66
+    assert latest["entry_overextension_score"] == 0.58
+    assert latest["entry_timing_quality_score"] == 0.63
+    assert latest["execution_quality_score"] == 0.49
     assert latest["liquidity_flow_score"] == 0.74
     assert latest["liquidity_book_score"] == 0.88
     assert latest["liquidity_spread_score"] == 0.81

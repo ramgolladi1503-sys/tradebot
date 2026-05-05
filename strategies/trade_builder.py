@@ -2896,6 +2896,17 @@ class TradeBuilder:
                     soft_vetos = [str(x) for x in raw_soft if str(x)]
             rec_sf = dict(rec.get("source_flags", {}) or {}) if isinstance(rec, dict) else {}
             rec_trace = dict(meta.get("decision_trace", {}) or {}) if isinstance(meta, dict) else {}
+            setup_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_score")
+            setup_regime_alignment_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_regime_alignment_score")
+            setup_structure_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_structure_score")
+            setup_thesis_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_thesis_score")
+            trigger_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "trigger_score")
+            trigger_base_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "trigger_base_score")
+            entry_quality_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_quality_score")
+            entry_invalidation_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_invalidation_score")
+            entry_overextension_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_overextension_score")
+            entry_timing_quality_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_timing_quality_score")
+            execution_quality_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "execution_quality_score")
             record_candidate_decision(
                 {
                     "candidate_id": rec.get("candidate_id"),
@@ -2934,6 +2945,17 @@ class TradeBuilder:
                     "liquidity_spread_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_spread_score"),
                     "liquidity_volume_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_volume_score"),
                     "liquidity_oi_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_oi_score"),
+                    "setup_score": setup_score,
+                    "setup_regime_alignment_score": setup_regime_alignment_score,
+                    "setup_structure_score": setup_structure_score,
+                    "setup_thesis_score": setup_thesis_score,
+                    "trigger_score": trigger_score,
+                    "trigger_base_score": trigger_base_score,
+                    "entry_quality_score": entry_quality_score,
+                    "entry_invalidation_score": entry_invalidation_score,
+                    "entry_overextension_score": entry_overextension_score,
+                    "entry_timing_quality_score": entry_timing_quality_score,
+                    "execution_quality_score": execution_quality_score,
                     "rank_score": rec.get("rank_score"),
                     "raw_rank_score": rec.get("raw_rank_score"),
                     "terminal_rank_score": rec.get("terminal_rank_score"),
@@ -5261,9 +5283,16 @@ class TradeBuilder:
                     "candidate_quality_score": candidate_quality_score,
                     "execution_feasibility_score": round(float(execution_feasibility_score), 6),
                     "setup_score": round(float(setup_score), 6),
+                    "setup_regime_alignment_score": round(float(regime_alignment_component), 6),
+                    "setup_structure_score": round(float(structure_component), 6),
+                    "setup_thesis_score": round(float(candidate_quality_score), 6),
                     "trigger_score": round(float(trigger_score), 6),
+                    "trigger_base_score": round(float(trigger_score_raw), 6),
                     "entry_quality_score": round(float(entry_quality_score), 6),
                     "entry_quality_reason": entry_quality_reason,
+                    "entry_invalidation_score": round(float(invalidation_score), 6),
+                    "entry_overextension_score": round(float(overextension_score), 6),
+                    "entry_timing_quality_score": round(float(timing_quality), 6),
                     "overextension_score": round(float(overextension_score), 6),
                     "overextension_penalty": round(float(overextension_penalty), 6),
                     "entry_distance_to_invalidation": entry_distance_to_invalidation,
@@ -5375,9 +5404,16 @@ class TradeBuilder:
                 opportunity_score=round(float(candidate_quality_score), 6),
                 rank_score=ranking_score,
                 setup_score=round(float(setup_score), 6),
+                setup_regime_alignment_score=round(float(regime_alignment_component), 6),
+                setup_structure_score=round(float(structure_component), 6),
+                setup_thesis_score=round(float(candidate_quality_score), 6),
                 trigger_score=round(float(trigger_score), 6),
+                trigger_base_score=round(float(trigger_score_raw), 6),
                 entry_quality_score=round(float(entry_quality_score), 6),
                 entry_quality_reason=entry_quality_reason,
+                entry_invalidation_score=round(float(invalidation_score), 6),
+                entry_overextension_score=round(float(overextension_score), 6),
+                entry_timing_quality_score=round(float(timing_quality), 6),
                 overextension_score=round(float(overextension_score), 6),
                 overextension_penalty=round(float(overextension_penalty), 6),
                 entry_distance_to_invalidation=entry_distance_to_invalidation,
@@ -10716,6 +10752,17 @@ class TradeBuilder:
                 liquidity_spread_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_spread_score")
                 liquidity_volume_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_volume_score")
                 liquidity_oi_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_oi_score")
+                setup_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_score")
+                setup_regime_alignment_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_regime_alignment_score")
+                setup_structure_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_structure_score")
+                setup_thesis_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_thesis_score")
+                trigger_score = self._candidate_telemetry_field(cand, sf, decision_trace, "trigger_score")
+                trigger_base_score = self._candidate_telemetry_field(cand, sf, decision_trace, "trigger_base_score")
+                entry_quality_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_quality_score")
+                entry_invalidation_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_invalidation_score")
+                entry_overextension_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_overextension_score")
+                entry_timing_quality_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_timing_quality_score")
+                execution_quality_score = self._candidate_telemetry_field(cand, sf, decision_trace, "execution_quality_score")
                 record_candidate_decision(
                     {
                         "candidate_id": getattr(cand, "trade_id", None),
@@ -10759,6 +10806,17 @@ class TradeBuilder:
                         "liquidity_spread_score": liquidity_spread_score,
                         "liquidity_volume_score": liquidity_volume_score,
                         "liquidity_oi_score": liquidity_oi_score,
+                        "setup_score": setup_score,
+                        "setup_regime_alignment_score": setup_regime_alignment_score,
+                        "setup_structure_score": setup_structure_score,
+                        "setup_thesis_score": setup_thesis_score,
+                        "trigger_score": trigger_score,
+                        "trigger_base_score": trigger_base_score,
+                        "entry_quality_score": entry_quality_score,
+                        "entry_invalidation_score": entry_invalidation_score,
+                        "entry_overextension_score": entry_overextension_score,
+                        "entry_timing_quality_score": entry_timing_quality_score,
+                        "execution_quality_score": execution_quality_score,
                         "rank_score": getattr(cand, "rank_score", None),
                         "raw_rank_score": getattr(cand, "raw_rank_score", None),
                         "terminal_rank_score": getattr(cand, "terminal_rank_score", None),
@@ -11363,6 +11421,17 @@ class TradeBuilder:
             liquidity_spread_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_spread_score")
             liquidity_volume_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_volume_score")
             liquidity_oi_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_oi_score")
+            setup_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_score")
+            setup_regime_alignment_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_regime_alignment_score")
+            setup_structure_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_structure_score")
+            setup_thesis_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_thesis_score")
+            trigger_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "trigger_score")
+            trigger_base_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "trigger_base_score")
+            entry_quality_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_quality_score")
+            entry_invalidation_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_invalidation_score")
+            entry_overextension_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_overextension_score")
+            entry_timing_quality_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_timing_quality_score")
+            execution_quality_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "execution_quality_score")
             record_candidate_decision(
                 {
                     "candidate_id": trade.trade_id,
@@ -11392,6 +11461,17 @@ class TradeBuilder:
                     "liquidity_spread_score": liquidity_spread_score,
                     "liquidity_volume_score": liquidity_volume_score,
                     "liquidity_oi_score": liquidity_oi_score,
+                    "setup_score": setup_score,
+                    "setup_regime_alignment_score": setup_regime_alignment_score,
+                    "setup_structure_score": setup_structure_score,
+                    "setup_thesis_score": setup_thesis_score,
+                    "trigger_score": trigger_score,
+                    "trigger_base_score": trigger_base_score,
+                    "entry_quality_score": entry_quality_score,
+                    "entry_invalidation_score": entry_invalidation_score,
+                    "entry_overextension_score": entry_overextension_score,
+                    "entry_timing_quality_score": entry_timing_quality_score,
+                    "execution_quality_score": execution_quality_score,
                     "permission": "ADVISORY_ONLY",
                     "permission_reason": "PAPER_ONLY",
                     "entry_status": (

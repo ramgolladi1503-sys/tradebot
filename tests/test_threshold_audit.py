@@ -218,6 +218,17 @@ def test_threshold_audit_normalize_preserves_liquidity_telemetry():
             "market_mode": "SIM",
             "liquidity_score": 0.8125,
             "quote_consistency_score": 0.91,
+            "setup_score": 0.62,
+            "setup_regime_alignment_score": 0.35,
+            "setup_structure_score": 0.55,
+            "setup_thesis_score": 0.62,
+            "trigger_score": 0.54,
+            "trigger_base_score": 0.61,
+            "entry_quality_score": 0.57,
+            "entry_invalidation_score": 0.66,
+            "entry_overextension_score": 0.58,
+            "entry_timing_quality_score": 0.63,
+            "execution_quality_score": 0.49,
             "liquidity_flow_score": 0.74,
             "liquidity_book_score": 0.88,
             "liquidity_spread_score": 0.81,
@@ -233,6 +244,17 @@ def test_threshold_audit_normalize_preserves_liquidity_telemetry():
 
     assert normalized["liquidity_score"] == 0.8125
     assert normalized["quote_consistency_score"] == 0.91
+    assert normalized["setup_score"] == 0.62
+    assert normalized["setup_regime_alignment_score"] == 0.35
+    assert normalized["setup_structure_score"] == 0.55
+    assert normalized["setup_thesis_score"] == 0.62
+    assert normalized["trigger_score"] == 0.54
+    assert normalized["trigger_base_score"] == 0.61
+    assert normalized["entry_quality_score"] == 0.57
+    assert normalized["entry_invalidation_score"] == 0.66
+    assert normalized["entry_overextension_score"] == 0.58
+    assert normalized["entry_timing_quality_score"] == 0.63
+    assert normalized["execution_quality_score"] == 0.49
     assert normalized["liquidity_flow_score"] == 0.74
     assert normalized["liquidity_book_score"] == 0.88
     assert normalized["liquidity_spread_score"] == 0.81
