@@ -15,6 +15,7 @@ from core.contextual_thresholds import get_contextual_threshold_delta as _contex
 from core.decision_authority import apply_stage_authority
 from core.execution_quality import evaluate_pretrade_execution_quality
 from core.feature_builder import assess_trade_feature_quality
+from core.liquidity_truth import assess_liquidity_quality
 from core.learning_state import load_learning_state, save_learning_state
 from core.portfolio_optimizer import optimize_portfolio_selection
 from core.risk_engine import adjust_system_aggressiveness, evaluate_candidate_risk
@@ -234,13 +235,24 @@ def _bool_from_candidate(candidate: Any, field: str, fallback: Any = False) -> b
 
 
 def _liquidity_quality(candidate: Any) -> float:
-    volume = max(_safe_float(_get_value(candidate, "volume")) or 0.0, _safe_float(_get_value(candidate, "current_volume")) or 0.0)
-    min_volume = max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)
-    volume_score = min(1.0, volume / min_volume) if volume > 0 else 0.35
-    quote_ok = bool(_get_value(candidate, "quote_ok", True))
-    if not quote_ok:
-        volume_score *= 0.65
-    return _clamp01(volume_score, default=0.35) or 0.35
+    volume = max(
+        _safe_float(_get_value(candidate, "volume")) or 0.0,
+        _safe_float(_get_value(candidate, "current_volume")) or 0.0,
+    )
+    oi = max(
+        _safe_float(_get_value(candidate, "oi")) or 0.0,
+        _safe_float(_get_value(candidate, "oi_change")) or 0.0,
+    )
+    quote_consistency = _safe_float(_get_value(candidate, "quote_consistency_score"))
+    if quote_consistency is None:
+        quote_consistency = _safe_float((_get_value(candidate, "source_flags", {}) or {}).get("quote_consistency_score"))
+    payload = assess_liquidity_quality(
+        volume=volume,
+        oi=oi,
+        quote_consistency_score=quote_consistency,
+        quote_ok=_get_value(candidate, "quote_ok", True),
+    )
+    return float(payload["liquidity_score"])
 
 
 def _spread_quality(candidate: Any) -> float:
@@ -328,6 +340,10 @@ def _candidate_feature_quality(candidate: Any) -> dict[str, Any]:
         "quote_completeness_score",
         "quote_consistency_score",
         "spread_change_ratio",
+        "liquidity_flow_score",
+        "liquidity_book_score",
+        "liquidity_volume_score",
+        "liquidity_oi_score",
     ):
         explicit_value = _get_value(candidate, field_name, None)
         if explicit_value is None and isinstance(source_flags, dict):
@@ -864,6 +880,10 @@ def build_opportunity_score(
         "timing_score": timing_score,
         "regime_alignment": regime_alignment,
         "liquidity_quality": liquidity_quality,
+        "liquidity_flow_score": float(feature_quality.get("liquidity_flow_score") or 0.0),
+        "liquidity_book_score": float(feature_quality.get("liquidity_book_score") or 0.0),
+        "liquidity_volume_score": float(feature_quality.get("liquidity_volume_score") or 0.0),
+        "liquidity_oi_score": float(feature_quality.get("liquidity_oi_score") or 0.0),
         "spread_quality": spread_quality,
         "freshness_quality": freshness_quality,
         "data_confidence": data_confidence,
@@ -1236,6 +1256,10 @@ def annotate_relative_opportunity_ranks(
                 "terminal_rank_score": _safe_float(metrics.get("terminal_rank_score")),
                 "quote_consistency_score": _safe_float(metrics.get("quote_consistency_score")),
                 "liquidity_score": _safe_float(metrics.get("liquidity_score")),
+                "liquidity_flow_score": _safe_float(metrics.get("liquidity_flow_score")),
+                "liquidity_book_score": _safe_float(metrics.get("liquidity_book_score")),
+                "liquidity_volume_score": _safe_float(metrics.get("liquidity_volume_score")),
+                "liquidity_oi_score": _safe_float(metrics.get("liquidity_oi_score")),
                 "liquidity_score_source": metrics.get("liquidity_score_source"),
                 "lifecycle_stage": "scored",
                 "primary_blocker": metrics.get("primary_blocker"),
@@ -1264,6 +1288,10 @@ def annotate_relative_opportunity_ranks(
                     "terminal_rank_score": _safe_float(metrics.get("terminal_rank_score")),
                     "quote_consistency_score": _safe_float(metrics.get("quote_consistency_score")),
                     "liquidity_score": _safe_float(metrics.get("liquidity_score")),
+                    "liquidity_flow_score": _safe_float(metrics.get("liquidity_flow_score")),
+                    "liquidity_book_score": _safe_float(metrics.get("liquidity_book_score")),
+                    "liquidity_volume_score": _safe_float(metrics.get("liquidity_volume_score")),
+                    "liquidity_oi_score": _safe_float(metrics.get("liquidity_oi_score")),
                     "rank_global": int(index),
                     "rank_within_symbol": int(per_symbol_rank[symbol]),
                     "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),

@@ -219,3 +219,43 @@ def test_data_state_and_data_confidence_can_diverge_reasonably(monkeypatch):
     assert stable["data_state"] == "DATA_OK"
     assert unstable["data_state"] == "DATA_OK"
     assert stable["data_confidence"] > unstable["data_confidence"]
+
+
+def test_liquidity_quality_has_a_spread_sensitive_gradient_for_quote_valid_rows(monkeypatch):
+    monkeypatch.setattr(cfg, "OPTION_LTP_SLA_SEC", 2.0, raising=False)
+    low = assess_trade_feature_quality(
+        {"execution_mode": "LIVE", "market_open": True},
+        {
+            "ltp": 100.0,
+            "bid": 99.9,
+            "ask": 100.1,
+            "quote_ok": True,
+            "ltp_age_sec": 0.2,
+            "bid_age_sec": 0.2,
+            "ask_age_sec": 0.2,
+            "quote_age_sec": 0.2,
+            "volume": 1_000,
+            "oi": 5_000,
+            "spread_stability_score": 0.95,
+        },
+    )
+    high = assess_trade_feature_quality(
+        {"execution_mode": "LIVE", "market_open": True},
+        {
+            "ltp": 100.0,
+            "bid": 99.9,
+            "ask": 100.1,
+            "quote_ok": True,
+            "ltp_age_sec": 0.2,
+            "bid_age_sec": 0.2,
+            "ask_age_sec": 0.2,
+            "quote_age_sec": 0.2,
+            "volume": 250_000,
+            "oi": 400_000,
+            "spread_stability_score": 0.95,
+        },
+    )
+
+    assert 0.0 <= low["liquidity_quality"] < high["liquidity_quality"] < 1.0
+    assert low["liquidity_flow_score"] < high["liquidity_flow_score"]
+    assert low["liquidity_book_score"] == high["liquidity_book_score"] == 1.0

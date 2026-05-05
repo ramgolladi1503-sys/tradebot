@@ -1,6 +1,7 @@
 import pandas as pd
 from config import config as cfg
 from core.market_context import derive_market_context
+from core.liquidity_truth import assess_liquidity_quality
 from core.option_entry import get_option_ltp_sla_sec
 from core.time_utils import now_ist
 from core.feature_contract import FeatureContract
@@ -238,6 +239,11 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
         _safe_float(opt.get("current_volume")) or 0.0,
         _safe_float(opt.get("volume")) or 0.0,
     )
+    oi = max(
+        _safe_float(opt.get("oi")) or 0.0,
+        _safe_float(opt.get("open_interest")) or 0.0,
+        _safe_float(market_data.get("oi")) or 0.0,
+    )
     issues: list[str] = []
     require_book_for_fresh = bool(getattr(cfg, "DATA_TRUTH_REQUIRE_BOOK_FOR_FRESH", True))
     max_chain_age_sec = max(
@@ -377,7 +383,6 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
         and float(oldest_critical_age) <= float(max_age_sec)
     )
 
-    min_volume = max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)
     liquidity_validation_mode = "NONE"
     if bid is not None and ask is not None:
         liquidity_validation_mode = "CHAIN_CACHE" if opt.get("liquidity_cache_hit") else "LIVE_BOOK"
@@ -385,7 +390,7 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
         liquidity_validation_mode = "LTP_ONLY"
 
     liquidity_ok = bool(
-        volume >= min_volume
+        volume >= max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)
         and data_state == "DATA_OK"
         and (chain_snapshot_age_sec is None or max_chain_age_sec <= 0 or float(chain_snapshot_age_sec) <= float(max_chain_age_sec))
     )
@@ -433,7 +438,6 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
 
     book_freshness_score = _age_quality(oldest_critical_age, max_age_sec)
     freshness_quality = float(book_freshness_score)
-    liquidity_quality = _clamp01(min(volume / min_volume, 1.0) if volume > 0 else 0.0, default=0.0)
     quote_completeness_score = {
         "FULL": 1.0,
         "PARTIAL": 0.65,
@@ -444,15 +448,12 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
     quote_consistency_score = 1.0 if quote_consistency_ok else 0.05
     if data_state == "DATA_PARTIAL":
         freshness_quality *= 0.45
-        liquidity_quality *= 0.6
         spread_quality *= 0.6
     elif data_state == "DATA_STALE":
         freshness_quality = 0.0
-        liquidity_quality *= 0.25
         spread_quality *= 0.25
     elif data_state in {"DATA_INCONSISTENT", "DATA_MISSING"}:
         freshness_quality = 0.0
-        liquidity_quality = 0.0
         spread_quality = 0.0
     if data_state == "DATA_PARTIAL":
         spread_stability_score *= 0.75
@@ -464,6 +465,18 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
         spread_stability_score *= 0.2
         quote_completeness_score *= 0.2
         quote_consistency_score = min(float(quote_consistency_score), 0.05)
+
+    liquidity_quality_payload = assess_liquidity_quality(
+        volume=volume,
+        oi=oi,
+        quote_consistency_score=quote_consistency_score,
+        quote_ok=quote_ok,
+    )
+    liquidity_quality = float(liquidity_quality_payload["liquidity_score"])
+    liquidity_flow_score = float(liquidity_quality_payload["liquidity_flow_score"] or 0.0)
+    liquidity_book_score = float(liquidity_quality_payload["liquidity_book_score"] or 0.0)
+    liquidity_volume_score = float(liquidity_quality_payload["liquidity_volume_score"] or 0.0)
+    liquidity_oi_score = float(liquidity_quality_payload["liquidity_oi_score"] or 0.0)
 
     data_confidence = _clamp01(
         (
@@ -509,6 +522,10 @@ def assess_trade_feature_quality(market_data, opt) -> dict:
         "liquidity_validation_mode": liquidity_validation_mode,
         "freshness_quality": freshness_quality,
         "liquidity_quality": liquidity_quality,
+        "liquidity_flow_score": liquidity_flow_score,
+        "liquidity_book_score": liquidity_book_score,
+        "liquidity_volume_score": liquidity_volume_score,
+        "liquidity_oi_score": liquidity_oi_score,
         "spread_quality": spread_quality,
         "data_confidence": data_confidence,
         "spread_stability_score": spread_stability_score,

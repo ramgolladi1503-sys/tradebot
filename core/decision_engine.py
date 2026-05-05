@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from config import config as cfg
+from core.liquidity_truth import assess_liquidity_quality
 from core.execution_quality import evaluate_pretrade_execution_quality
 from core.opportunity_engine_score_cap_helper import apply_candidate_class_score_cap
 from core.truth_quality import (
@@ -134,11 +135,20 @@ def _liquidity_quality(candidate: Any) -> float:
         _safe_float(_get_value(candidate, "volume")) or 0.0,
         _safe_float(_get_value(candidate, "current_volume")) or 0.0,
     )
-    min_volume = max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)
-    volume_score = min(1.0, volume / min_volume) if volume > 0 else 0.35
-    if not bool(_get_value(candidate, "quote_ok", True)):
-        volume_score *= 0.65
-    return _clamp01(volume_score, default=0.35) or 0.35
+    oi = max(
+        _safe_float(_get_value(candidate, "oi")) or 0.0,
+        _safe_float(_get_value(candidate, "oi_change")) or 0.0,
+    )
+    quote_consistency = _safe_float(_get_value(candidate, "quote_consistency_score"))
+    if quote_consistency is None:
+        quote_consistency = _safe_float((_get_value(candidate, "source_flags", {}) or {}).get("quote_consistency_score"))
+    payload = assess_liquidity_quality(
+        volume=volume,
+        oi=oi,
+        quote_consistency_score=quote_consistency,
+        quote_ok=_get_value(candidate, "quote_ok", True),
+    )
+    return float(payload["liquidity_score"])
 
 
 def _spread_quality(candidate: Any) -> float:

@@ -13,6 +13,7 @@ def _base_candidate(**overrides):
         "display_entry": 150.0,
         "display_entry_status": "displayable",
         "entry": 150.0,
+        "entry_price": 150.0,
         "entry_status": "displayable",
         "stop_loss": 120.0,
         "target": 210.0,
@@ -111,6 +112,13 @@ def test_degraded_feed_blocks_execute():
     )
     assert result["decision_action"] != "EXECUTE"
     assert result["feed"]["feed_state"] in {"degraded", "invalid"}
+
+
+def test_feed_liquidity_quality_is_not_flat_for_quote_valid_rows():
+    low = evaluate_candidate_decision(_base_candidate(volume=1_000))
+    high = evaluate_candidate_decision(_base_candidate(volume=250_000))
+
+    assert low["feed"]["liquidity_quality"] < high["feed"]["liquidity_quality"] < 1.0
 
 
 def test_soft_execution_quality_reason_stays_not_ready_without_hard_reject():

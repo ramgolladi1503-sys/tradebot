@@ -610,6 +610,56 @@ def test_relative_ranking_backfills_quote_consistency_and_liquidity_telemetry():
     assert trade.source_flags.get("terminal_rank_score") == trade.terminal_rank_score
 
 
+def test_build_opportunity_score_keeps_liquidity_gradients_for_quote_valid_rows():
+    low = opportunity_engine_module.build_opportunity_score(
+        _trade(
+            trade_id="T-LIQ-LOW",
+            confidence=0.66,
+            builder_confidence=0.66,
+            permission_confidence=0.63,
+            gating_final_confidence=0.61,
+            confluence=0.70,
+            bid=120.0,
+            ask=120.5,
+            ltp=120.2,
+            volume=1_000,
+            quote_age_sec=0.3,
+            execution_allowed=True,
+            tradable=True,
+            execution_entry=120.5,
+            execution_entry_status="executable",
+            execution_entry_source="ask",
+            display_entry=120.5,
+        )
+    )
+    high = opportunity_engine_module.build_opportunity_score(
+        _trade(
+            trade_id="T-LIQ-HIGH",
+            confidence=0.66,
+            builder_confidence=0.66,
+            permission_confidence=0.63,
+            gating_final_confidence=0.61,
+            confluence=0.70,
+            bid=120.0,
+            ask=120.5,
+            ltp=120.2,
+            volume=250_000,
+            quote_age_sec=0.3,
+            execution_allowed=True,
+            tradable=True,
+            execution_entry=120.5,
+            execution_entry_status="executable",
+            execution_entry_source="ask",
+            display_entry=120.5,
+        )
+    )
+
+    assert low["liquidity_quality"] < high["liquidity_quality"] < 1.0
+    assert low["liquidity_flow_score"] < high["liquidity_flow_score"]
+    assert low["liquidity_book_score"] == high["liquidity_book_score"] == 1.0
+    assert low["final_score"] != high["final_score"]
+
+
 def test_relative_opportunity_ranking_is_stable_for_deterministic_inputs():
     candidates = [
         _trade(

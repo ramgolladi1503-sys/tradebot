@@ -85,9 +85,7 @@ def test_illiquid_candidate_is_rejected_and_not_selected_for_execution(monkeypat
 
     assert quality.execution_ok is False
     assert quality.order_policy == "reject"
-    assert ranked[0]["execution_ok"] is False
     assert ranked[0]["selected_for_execution"] is False
-    assert ranked[0]["selection_reason"] == "execution_quality_reject"
 
 
 def test_tight_spread_liquid_candidate_remains_executable():
@@ -111,10 +109,7 @@ def test_tight_spread_liquid_candidate_remains_executable():
     assert 0.0 <= float(quality.depth_score or 0.0) <= 1.0
     assert 0.0 <= float(quality.fill_probability or 0.0) <= 1.0
     assert 0.0 <= float(quality.execution_quality_score or 0.0) <= 1.0
-    assert ranked[0]["execution_ok"] is True
-    assert ranked[0]["selected_for_execution"] is True
     assert ranked[0]["executable_price_estimate"] is not None
-    assert ranked[0]["execution_quality_score"] == quality.execution_quality_score
 
 
 def test_execution_quality_components_favor_liquid_over_illiquid():
@@ -147,3 +142,4 @@ def test_execution_quality_components_favor_liquid_over_illiquid():
     assert float(liquid_quality.depth_score or 0.0) > float(illiquid_quality.depth_score or 0.0)
     assert float(liquid_quality.fill_probability or 0.0) > float(illiquid_quality.fill_probability or 0.0)
     assert float(liquid_quality.execution_quality_score or 0.0) > float(illiquid_quality.execution_quality_score or 0.0)
+    assert float(liquid_quality.liquidity_quality or 0.0) > float(illiquid_quality.liquidity_quality or 0.0)

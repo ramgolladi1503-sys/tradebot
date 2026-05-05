@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from config import config as cfg
+from core.liquidity_truth import assess_liquidity_quality
 from core.order_policy import choose_order_policy
 from core.slippage_model import estimate_slippage
 
@@ -72,12 +73,20 @@ def _liquidity_quality(candidate: Any) -> float:
         _safe_float(_candidate_get(candidate, "volume")) or 0.0,
         _safe_float(_candidate_get(candidate, "current_volume")) or 0.0,
     )
-    min_volume = max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)
-    volume_score = min(1.0, volume / min_volume) if volume > 0 else 0.35
-    quote_ok = bool(_candidate_get(candidate, "quote_ok", True))
-    if not quote_ok:
-        volume_score *= 0.65
-    return max(0.0, min(1.0, float(volume_score)))
+    oi = max(
+        _safe_float(_candidate_get(candidate, "oi")) or 0.0,
+        _safe_float(_candidate_get(candidate, "oi_change")) or 0.0,
+    )
+    quote_consistency = _safe_float(_candidate_get(candidate, "quote_consistency_score"))
+    if quote_consistency is None:
+        quote_consistency = _safe_float((_candidate_get(candidate, "source_flags", {}) or {}).get("quote_consistency_score"))
+    payload = assess_liquidity_quality(
+        volume=volume,
+        oi=oi,
+        quote_consistency_score=quote_consistency,
+        quote_ok=_candidate_get(candidate, "quote_ok", True),
+    )
+    return float(payload["liquidity_score"])
 
 
 def _spread_quality_from_penalty(spread_penalty: float | None) -> float:
