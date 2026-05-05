@@ -154,6 +154,7 @@ def _prune_stale_option_subscription_tokens(
     tokens: list[int],
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]],
     token_to_symbol: dict[int, str],
+    min_required_by_symbol: dict[str, int] | None = None,
 ) -> tuple[list[int], dict[str, object]]:
     global _DEPTH_WS_START_EPOCH
     if not _stale_option_subscription_prune_enabled():
@@ -161,6 +162,9 @@ def _prune_stale_option_subscription_tokens(
             "enabled": False,
             "max_age_sec": _stale_option_subscription_max_age_sec(),
             "grace_sec": float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0)),
+            "min_required_by_symbol": dict(min_required_by_symbol or {}),
+            "min_required_blocked_by_symbol": {},
+            "protected_stale_by_symbol": {},
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
@@ -178,6 +182,9 @@ def _prune_stale_option_subscription_tokens(
             "enabled": True,
             "max_age_sec": _stale_option_subscription_max_age_sec(),
             "grace_sec": grace_sec,
+            "min_required_by_symbol": dict(min_required_by_symbol or {}),
+            "min_required_blocked_by_symbol": {},
+            "protected_stale_by_symbol": {},
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
@@ -197,6 +204,9 @@ def _prune_stale_option_subscription_tokens(
             "require_session_tick": bool(
                 getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
             ),
+            "min_required_by_symbol": dict(min_required_by_symbol or {}),
+            "min_required_blocked_by_symbol": {},
+            "protected_stale_by_symbol": {},
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
@@ -211,7 +221,10 @@ def _prune_stale_option_subscription_tokens(
     kept_option_tokens: list[int] = []
     pruned_by_symbol: dict[str, int] = {}
     session_tick_skipped_by_symbol: dict[str, int] = {}
+    min_required_blocked_by_symbol: dict[str, int] = {}
+    protected_stale_by_symbol: dict[str, int] = {}
     stale_samples: list[dict[str, object]] = []
+    symbol_rows: dict[str, list[dict[str, object]]] = {}
 
     for token in option_tokens:
         symbol = str(token_to_symbol.get(int(token)) or "").upper() or "UNKNOWN"
@@ -245,21 +258,52 @@ def _prune_stale_option_subscription_tokens(
         elif memory_epoch is not None:
             effective_epoch = float(memory_epoch)
         age_sec = None if effective_epoch is None else max(0.0, float(now_epoch) - float(effective_epoch))
-        if age_sec is None or age_sec > max_age_sec:
-            pruned_tokens.append(int(token))
+        symbol_rows.setdefault(symbol, []).append(
+            {
+                "token": int(token),
+                "age_sec": age_sec,
+                "db_epoch": db_epoch,
+                "memory_epoch": memory_epoch,
+                "stale": bool(age_sec is None or age_sec > max_age_sec),
+                "rank": option_rank_by_token.get(int(token)),
+            }
+        )
+
+    for symbol, rows in list(symbol_rows.items()):
+        min_required = max(0, int((min_required_by_symbol or {}).get(symbol, 0) or 0))
+        fresh_rows = [row for row in rows if not bool(row.get("stale"))]
+        stale_rows = [row for row in rows if bool(row.get("stale"))]
+        keep_rows = list(fresh_rows)
+        if len(keep_rows) < min_required:
+            stale_rows.sort(
+                key=lambda row: (
+                    float(row.get("age_sec") if row.get("age_sec") is not None else float("inf")),
+                    tuple(row.get("rank") or (float("inf"), 1, float("inf"), 2, int(row.get("token") or 0))),
+                )
+            )
+            extra_needed = min_required - len(keep_rows)
+            keep_rows.extend(stale_rows[:extra_needed])
+            if extra_needed > 0:
+                protected_stale_by_symbol[symbol] = int(min(extra_needed, len(stale_rows)))
+            if len(keep_rows) < min_required:
+                min_required_blocked_by_symbol[symbol] = int(min_required - len(keep_rows))
+        prune_rows = [row for row in rows if row not in keep_rows]
+        for row in prune_rows:
+            token = int(row.get("token") or 0)
+            pruned_tokens.append(token)
             pruned_by_symbol[symbol] = int(pruned_by_symbol.get(symbol, 0)) + 1
             if len(stale_samples) < 10:
                 stale_samples.append(
                     {
-                        "token": int(token),
+                        "token": token,
                         "symbol": symbol,
-                        "age_sec": age_sec,
-                        "db_epoch": db_epoch,
-                        "memory_epoch": memory_epoch,
+                        "age_sec": row.get("age_sec"),
+                        "db_epoch": row.get("db_epoch"),
+                        "memory_epoch": row.get("memory_epoch"),
                     }
                 )
-        else:
-            kept_option_tokens.append(int(token))
+        for row in keep_rows:
+            kept_option_tokens.append(int(row.get("token") or 0))
 
     if not pruned_tokens:
         return list(tokens), {
@@ -267,6 +311,9 @@ def _prune_stale_option_subscription_tokens(
             "max_age_sec": max_age_sec,
             "grace_sec": grace_sec,
             "require_session_tick": require_session_tick,
+            "min_required_by_symbol": dict(min_required_by_symbol or {}),
+            "min_required_blocked_by_symbol": {},
+            "protected_stale_by_symbol": {},
             "pruned_count": 0,
             "kept_count": len(tokens),
             "pruned_tokens": [],
@@ -284,6 +331,9 @@ def _prune_stale_option_subscription_tokens(
         "max_age_sec": max_age_sec,
         "grace_sec": grace_sec,
         "require_session_tick": require_session_tick,
+        "min_required_by_symbol": dict(min_required_by_symbol or {}),
+        "min_required_blocked_by_symbol": min_required_blocked_by_symbol,
+        "protected_stale_by_symbol": protected_stale_by_symbol,
         "pruned_count": len(pruned_tokens_out),
         "kept_count": len(retained_tokens),
         "pruned_tokens": pruned_tokens_out,
@@ -2036,6 +2086,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         tokens=tokens,
         option_rank_by_token=option_rank_by_token,
         token_to_symbol=token_to_symbol,
+        min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
     )
     pruned_tokens = [int(t) for t in list(prune_meta.get("pruned_tokens") or [])]
     if pruned_tokens:
