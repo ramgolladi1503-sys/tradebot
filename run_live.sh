@@ -73,11 +73,12 @@ PY
 
 publish_auth_blocked_startup_state() {
   local startup_reason="$1"
-  python - <<PY
+  python - "$startup_reason" <<'PY'
+import sys
 from core.startup_recovery import publish_auth_blocked_startup_state
 
 payload = publish_auth_blocked_startup_state(
-    reason=${startup_reason@Q},
+    reason=str(sys.argv[1]),
     source="run_live.validate_token",
 )
 print(
