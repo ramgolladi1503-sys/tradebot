@@ -175,6 +175,8 @@ class Trade:
     confidence_shadow: float | None = None
     sizing_confluence_score: float | None = None
     rank_score: float | None = None
+    raw_rank_score: float | None = None
+    terminal_rank_score: float | None = None
     setup_strength: float | None = None
     setup_score: float | None = None
     trigger_score: float | None = None
@@ -526,8 +528,16 @@ class Trade:
             object.__setattr__(self, "book_freshness_score", self.source_flags.get("book_freshness_score"))
         if self.quote_completeness_score is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "quote_completeness_score", self.source_flags.get("quote_completeness_score"))
+        if self.liquidity_score is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "liquidity_score", self.source_flags.get("liquidity_score"))
         if self.quote_consistency_score is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "quote_consistency_score", self.source_flags.get("quote_consistency_score"))
+        if self.quote_validation_status is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "quote_validation_status", self.source_flags.get("quote_validation_status"))
+        if self.raw_rank_score is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "raw_rank_score", self.source_flags.get("raw_rank_score"))
+        if self.terminal_rank_score is None and isinstance(self.source_flags, dict):
+            object.__setattr__(self, "terminal_rank_score", self.source_flags.get("terminal_rank_score"))
         if self.quote_completeness is None and isinstance(self.source_flags, dict):
             object.__setattr__(self, "quote_completeness", self.source_flags.get("quote_completeness"))
         if self.quote_consistency_ok is None and isinstance(self.source_flags, dict):
