@@ -519,6 +519,97 @@ def test_explicit_rank_score_drives_ordering_and_top_selection_when_present():
     assert ranked[1].selected_for_execution is False
 
 
+def test_relative_ranking_stamps_per_candidate_terminal_rank_and_preserves_raw_rank():
+    ranked = annotate_relative_opportunity_ranks(
+        [
+            _trade(
+                trade_id="T-RAW-RANK-LOW",
+                confidence=0.61,
+                builder_confidence=0.61,
+                permission_confidence=0.58,
+                gating_final_confidence=0.56,
+                confluence=0.64,
+                bid=120.0,
+                ask=121.0,
+                ltp=120.5,
+                volume=7000,
+                quote_age_sec=0.9,
+                execution_allowed=True,
+                tradable=True,
+                execution_entry=121.0,
+                execution_entry_status="executable",
+                execution_entry_source="ask",
+                display_entry=121.0,
+                rank_score=0.32,
+            ),
+            _trade(
+                trade_id="T-RAW-RANK-HIGH",
+                confidence=0.88,
+                builder_confidence=0.88,
+                permission_confidence=0.85,
+                gating_final_confidence=0.83,
+                confluence=0.90,
+                bid=121.0,
+                ask=121.5,
+                ltp=121.2,
+                volume=16000,
+                quote_age_sec=0.2,
+                execution_allowed=True,
+                tradable=True,
+                execution_entry=121.5,
+                execution_entry_status="executable",
+                execution_entry_source="ask",
+                display_entry=121.5,
+                rank_score=0.91,
+            ),
+        ],
+        scope="unit:terminal_rank_truth",
+    )
+
+    by_id = {trade.trade_id: trade for trade in ranked}
+    low = by_id["T-RAW-RANK-LOW"]
+    high = by_id["T-RAW-RANK-HIGH"]
+
+    assert low.raw_rank_score == 0.32
+    assert high.raw_rank_score == 0.91
+    assert low.terminal_rank_score == low.rank_score
+    assert high.terminal_rank_score == high.rank_score
+    assert low.terminal_rank_score != high.terminal_rank_score
+
+
+def test_relative_ranking_backfills_quote_consistency_and_liquidity_telemetry():
+    ranked = annotate_relative_opportunity_ranks(
+        [
+            _trade(
+                trade_id="T-TELEMETRY",
+                confidence=0.62,
+                builder_confidence=0.62,
+                permission_confidence=0.58,
+                gating_final_confidence=0.57,
+                confluence=0.70,
+                bid=120.0,
+                ask=120.5,
+                ltp=120.2,
+                volume=9000,
+                quote_age_sec=0.4,
+                execution_allowed=True,
+                tradable=True,
+                execution_entry=120.5,
+                execution_entry_status="executable",
+                execution_entry_source="ask",
+                display_entry=120.5,
+            ),
+        ],
+        scope="unit:telemetry_truth",
+    )
+
+    trade = ranked[0]
+    assert trade.quote_consistency_score is not None
+    assert trade.liquidity_score is not None
+    assert trade.source_flags.get("quote_consistency_score") == trade.quote_consistency_score
+    assert trade.source_flags.get("terminal_rank_score") == trade.terminal_rank_score
+
+
 def test_relative_opportunity_ranking_is_stable_for_deterministic_inputs():
     candidates = [
         _trade(

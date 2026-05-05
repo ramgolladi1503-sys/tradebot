@@ -1151,6 +1151,26 @@ def annotate_relative_opportunity_ranks(
     for candidate in candidate_list:
         metrics = build_opportunity_score(candidate)
         rank_score = _ranking_score(candidate, metrics)
+        existing_rank_score = _safe_float(_get_value(candidate, "rank_score"))
+        existing_raw_rank_score = _safe_float(_get_value(candidate, "raw_rank_score"))
+        existing_terminal_rank_score = _safe_float(_get_value(candidate, "terminal_rank_score"))
+        existing_liquidity_score = _safe_float(_get_value(candidate, "liquidity_score"))
+        existing_quote_consistency_score = _safe_float(_get_value(candidate, "quote_consistency_score"))
+        telemetry_liquidity_score = (
+            existing_liquidity_score
+            if existing_liquidity_score is not None
+            else _safe_float(metrics.get("liquidity_quality"))
+        )
+        telemetry_quote_consistency_score = (
+            existing_quote_consistency_score
+            if existing_quote_consistency_score is not None
+            else _safe_float(metrics.get("quote_consistency_score"))
+        )
+        telemetry_raw_rank_score = (
+            existing_raw_rank_score
+            if existing_raw_rank_score is not None
+            else existing_rank_score
+        )
         scored.append(
             (
                 (
@@ -1166,7 +1186,23 @@ def annotate_relative_opportunity_ranks(
                     str(_get_value(candidate, "trade_id") or ""),
                 ),
                 candidate,
-                metrics,
+                {
+                    **metrics,
+                    "ranking_score": float(rank_score),
+                    "raw_rank_score": telemetry_raw_rank_score,
+                    "terminal_rank_score": (
+                        existing_terminal_rank_score
+                        if existing_terminal_rank_score is not None
+                        else float(rank_score)
+                    ),
+                    "quote_consistency_score": telemetry_quote_consistency_score,
+                    "liquidity_score": telemetry_liquidity_score,
+                    "liquidity_score_source": (
+                        "candidate_attr"
+                        if existing_liquidity_score is not None
+                        else ("opportunity_metrics.liquidity_quality" if telemetry_liquidity_score is not None else None)
+                    ),
+                },
             )
         )
     scored.sort(
@@ -1195,7 +1231,12 @@ def annotate_relative_opportunity_ranks(
                 "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
                 "candidate_class": metrics.get("candidate_class"),
                 "final_score": round(float(metrics.get("final_score") or 0.0), 6),
-                "rank_score": round(float(rank_score), 6),
+                "rank_score": round(float(metrics.get("ranking_score") or 0.0), 6),
+                "raw_rank_score": _safe_float(metrics.get("raw_rank_score")),
+                "terminal_rank_score": _safe_float(metrics.get("terminal_rank_score")),
+                "quote_consistency_score": _safe_float(metrics.get("quote_consistency_score")),
+                "liquidity_score": _safe_float(metrics.get("liquidity_score")),
+                "liquidity_score_source": metrics.get("liquidity_score_source"),
                 "lifecycle_stage": "scored",
                 "primary_blocker": metrics.get("primary_blocker"),
                 "data_confidence": round(float(metrics.get("data_confidence") or 0.0), 6),
@@ -1218,7 +1259,11 @@ def annotate_relative_opportunity_ranks(
                 {
                     "opportunity_score": round(float(metrics["opportunity_score"]), 6),
                     "final_score": round(float(metrics["final_score"]), 6),
-                    "rank_score": round(float(rank_score), 6),
+                    "rank_score": round(float(metrics.get("ranking_score") or 0.0), 6),
+                    "raw_rank_score": _safe_float(metrics.get("raw_rank_score")),
+                    "terminal_rank_score": _safe_float(metrics.get("terminal_rank_score")),
+                    "quote_consistency_score": _safe_float(metrics.get("quote_consistency_score")),
+                    "liquidity_score": _safe_float(metrics.get("liquidity_score")),
                     "rank_global": int(index),
                     "rank_within_symbol": int(per_symbol_rank[symbol]),
                     "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
@@ -1245,7 +1290,11 @@ def annotate_relative_opportunity_ranks(
                 candidate,
                 opportunity_score=round(float(metrics["opportunity_score"]), 6),
                 final_score=round(float(metrics["final_score"]), 6),
-                rank_score=round(float(rank_score), 6),
+                rank_score=round(float(metrics.get("ranking_score") or 0.0), 6),
+                raw_rank_score=_safe_float(metrics.get("raw_rank_score")),
+                terminal_rank_score=_safe_float(metrics.get("terminal_rank_score")),
+                quote_consistency_score=_safe_float(metrics.get("quote_consistency_score")),
+                liquidity_score=_safe_float(metrics.get("liquidity_score")),
                 rank_global=int(index),
                 rank_within_symbol=int(per_symbol_rank[symbol]),
                 opportunity_bucket=_opportunity_bucket(metrics.get("opportunity_score")),
