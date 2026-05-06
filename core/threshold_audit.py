@@ -64,6 +64,27 @@ def _candidate_telemetry_value(candidate: Any, field: str, default: Any = None) 
     if value is None:
         source_flags = _source_flags(candidate)
         value = source_flags.get(field)
+    if value is None:
+        for nested in (
+            _candidate_get(candidate, "quality_detail", {}),
+            _source_flags(candidate).get("quality_detail"),
+            _candidate_get(candidate, "decision_trace", {}).get("quality_detail") if isinstance(_candidate_get(candidate, "decision_trace", {}), Mapping) else {},
+        ):
+            if isinstance(nested, Mapping) and field in nested:
+                value = nested.get(field)
+                break
+    if value is None:
+        for nested in (
+            _candidate_get(candidate, "score_inputs_used", {}),
+            _candidate_get(candidate, "score_breakdown", {}),
+            _source_flags(candidate),
+            _candidate_get(candidate, "decision_trace", {}),
+        ):
+            if isinstance(nested, Mapping):
+                qd = nested.get("quality_detail")
+                if isinstance(qd, Mapping) and field in qd:
+                    value = qd.get(field)
+                    break
     if value is None and field == "raw_rank_score":
         for fallback_field in ("ranking_score", "rank_score"):
             value = _candidate_get(candidate, fallback_field, None)
@@ -81,6 +102,24 @@ def _candidate_telemetry_value(candidate: Any, field: str, default: Any = None) 
         if isinstance(score_breakdown, Mapping):
             value = score_breakdown.get(field)
     return default if value is None else value
+
+
+def _candidate_telemetry_block(candidate: Any, field: str) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    direct = _candidate_get(candidate, field, {})
+    if isinstance(direct, Mapping):
+        merged.update(direct)
+    for nested in (
+        _candidate_get(candidate, "score_inputs_used", {}),
+        _candidate_get(candidate, "score_breakdown", {}),
+        _source_flags(candidate),
+        _candidate_get(candidate, "decision_trace", {}),
+    ):
+        if isinstance(nested, Mapping):
+            nested_value = nested.get(field)
+            if isinstance(nested_value, Mapping):
+                merged.update(nested_value)
+    return merged
 
 
 def threshold_audit_dir() -> Path:
@@ -479,33 +518,42 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         "market_mode": str(source.get("market_mode") or "LIVE").strip().upper() or "LIVE",
         "session_mode": str(source.get("session_mode") or "UNKNOWN").strip().upper() or "UNKNOWN",
         "strategy_regime_mode": str(source.get("strategy_regime_mode") or "UNKNOWN").strip().upper() or "UNKNOWN",
-        "setup_score": _safe_float(source.get("setup_score")),
-        "setup_regime_alignment_score": _safe_float(source.get("setup_regime_alignment_score")),
-        "setup_structure_score": _safe_float(source.get("setup_structure_score")),
-        "setup_thesis_score": _safe_float(source.get("setup_thesis_score")),
-        "trigger_score": _safe_float(source.get("trigger_score")),
-        "trigger_base_score": _safe_float(source.get("trigger_base_score")),
-        "entry_quality_score": _safe_float(source.get("entry_quality_score")),
-        "entry_invalidation_score": _safe_float(source.get("entry_invalidation_score")),
-        "entry_overextension_score": _safe_float(source.get("entry_overextension_score")),
-        "entry_timing_quality_score": _safe_float(source.get("entry_timing_quality_score")),
-        "execution_quality_score": _safe_float(source.get("execution_quality_score")),
-        "family_survival_score": _safe_float(source.get("family_survival_score")),
+        "source_flags": dict(_candidate_get(source, "source_flags", {}) or {}) if isinstance(_candidate_get(source, "source_flags", {}), Mapping) else {},
+        "score_breakdown": dict(_candidate_get(source, "score_breakdown", {}) or {}) if isinstance(_candidate_get(source, "score_breakdown", {}), Mapping) else {},
+        "decision_trace": dict(_candidate_get(source, "decision_trace", {}) or {}) if isinstance(_candidate_get(source, "decision_trace", {}), Mapping) else {},
+        "quality_detail": _candidate_telemetry_block(source, "quality_detail"),
+        "quality_detail_source": str(_candidate_get(source, "quality_detail_source") or "").strip() or None,
+        "candidate_quality_score": _safe_float(_candidate_telemetry_value(source, "candidate_quality_score")),
+        "family_consensus_score": _safe_float(_candidate_telemetry_value(source, "family_consensus_score")),
+        "family_consensus_components": _candidate_telemetry_value(source, "family_consensus_components", {}),
+        "family_survival_score": _safe_float(_candidate_telemetry_value(source, "family_survival_score")),
+        "family_survival_components": _candidate_telemetry_value(source, "family_survival_components", {}),
+        "setup_score": _safe_float(_candidate_telemetry_value(source, "setup_score")),
+        "setup_regime_alignment_score": _safe_float(_candidate_telemetry_value(source, "setup_regime_alignment_score")),
+        "setup_structure_score": _safe_float(_candidate_telemetry_value(source, "setup_structure_score")),
+        "setup_thesis_score": _safe_float(_candidate_telemetry_value(source, "setup_thesis_score")),
+        "trigger_score": _safe_float(_candidate_telemetry_value(source, "trigger_score")),
+        "trigger_base_score": _safe_float(_candidate_telemetry_value(source, "trigger_base_score")),
+        "entry_quality_score": _safe_float(_candidate_telemetry_value(source, "entry_quality_score")),
+        "entry_invalidation_score": _safe_float(_candidate_telemetry_value(source, "entry_invalidation_score")),
+        "entry_overextension_score": _safe_float(_candidate_telemetry_value(source, "entry_overextension_score")),
+        "entry_timing_quality_score": _safe_float(_candidate_telemetry_value(source, "entry_timing_quality_score")),
+        "execution_quality_score": _safe_float(_candidate_telemetry_value(source, "execution_quality_score")),
         "priority_score": _safe_float(source.get("priority_score")),
         "final_score": _safe_float(source.get("final_score")),
         "selection_probability": _safe_float(source.get("selection_probability")),
-        "rank_score": _safe_float(source.get("rank_score")),
+        "rank_score": _safe_float(_candidate_telemetry_value(source, "rank_score")),
         "raw_rank_score": _safe_float(_candidate_telemetry_value(source, "raw_rank_score")),
-        "terminal_rank_score": _safe_float(source.get("terminal_rank_score")),
-        "opportunity_score": _safe_float(source.get("opportunity_score")),
+        "terminal_rank_score": _safe_float(_candidate_telemetry_value(source, "terminal_rank_score")),
+        "opportunity_score": _safe_float(_candidate_telemetry_value(source, "opportunity_score")),
         "quote_validation_status": str(source.get("quote_validation_status") or "").strip() or None,
-        "liquidity_score": _safe_float(source.get("liquidity_score")),
-        "quote_consistency_score": _safe_float(source.get("quote_consistency_score")),
-        "liquidity_flow_score": _safe_float(source.get("liquidity_flow_score")),
-        "liquidity_book_score": _safe_float(source.get("liquidity_book_score")),
-        "liquidity_spread_score": _safe_float(source.get("liquidity_spread_score")),
-        "liquidity_volume_score": _safe_float(source.get("liquidity_volume_score")),
-        "liquidity_oi_score": _safe_float(source.get("liquidity_oi_score")),
+        "liquidity_score": _safe_float(_candidate_telemetry_value(source, "liquidity_score")),
+        "quote_consistency_score": _safe_float(_candidate_telemetry_value(source, "quote_consistency_score")),
+        "liquidity_flow_score": _safe_float(_candidate_telemetry_value(source, "liquidity_flow_score")),
+        "liquidity_book_score": _safe_float(_candidate_telemetry_value(source, "liquidity_book_score")),
+        "liquidity_spread_score": _safe_float(_candidate_telemetry_value(source, "liquidity_spread_score")),
+        "liquidity_volume_score": _safe_float(_candidate_telemetry_value(source, "liquidity_volume_score")),
+        "liquidity_oi_score": _safe_float(_candidate_telemetry_value(source, "liquidity_oi_score")),
         "rejected_at_stage": reason_meta["rejected_at_stage"],
         "rejection_reason_code": reason_meta["rejection_reason_code"],
         "rejection_bucket": reason_meta["rejection_bucket"],

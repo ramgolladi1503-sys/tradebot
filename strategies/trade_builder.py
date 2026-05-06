@@ -1152,6 +1152,27 @@ class TradeBuilder:
             value = source_flags.get(field)
         if value is None and isinstance(decision_trace, dict):
             value = decision_trace.get(field)
+        if value is None:
+            for nested in (
+                TradeBuilder._candidate_field(candidate, "quality_detail", {}),
+                (source_flags or {}).get("quality_detail") if isinstance(source_flags, dict) else {},
+                (decision_trace or {}).get("quality_detail") if isinstance(decision_trace, dict) else {},
+            ):
+                if isinstance(nested, dict) and field in nested:
+                    value = nested.get(field)
+                    break
+        if value is None:
+            for nested in (
+                TradeBuilder._candidate_field(candidate, "score_inputs_used", {}),
+                TradeBuilder._candidate_field(candidate, "score_breakdown", {}),
+                source_flags,
+                decision_trace,
+            ):
+                if isinstance(nested, dict):
+                    qd = nested.get("quality_detail")
+                    if isinstance(qd, dict) and field in qd:
+                        value = qd.get(field)
+                        break
         if value is None and field == "raw_rank_score":
             for fallback_field in ("ranking_score", "rank_score"):
                 value = TradeBuilder._candidate_field(candidate, fallback_field, None)
@@ -1170,6 +1191,99 @@ class TradeBuilder:
             if isinstance(score_breakdown, dict):
                 value = score_breakdown.get(field)
         return default if value is None else value
+
+    @staticmethod
+    def _candidate_decision_telemetry_payload(
+        candidate,
+        source_flags: dict | None,
+        decision_trace: dict | None,
+        score_breakdown: dict | None = None,
+    ) -> dict:
+        source_flags = dict(source_flags or {})
+        decision_trace = dict(decision_trace or {})
+        score_breakdown = dict(
+            score_breakdown
+            or TradeBuilder._candidate_field(candidate, "score_breakdown", {})
+            or {}
+        )
+        quality_detail = TradeBuilder._candidate_field(candidate, "quality_detail", {})
+        if not isinstance(quality_detail, dict):
+            quality_detail = {}
+        for nested in (source_flags.get("quality_detail"), decision_trace.get("quality_detail"), score_breakdown.get("quality_detail")):
+            if isinstance(nested, dict):
+                quality_detail = {**quality_detail, **nested}
+        quality_detail_source = "native"
+        if not quality_detail:
+            quality_detail_source = "derived_from_composite_scores"
+            setup_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "setup_score")
+            trigger_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "trigger_score")
+            entry_quality_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "entry_quality_score")
+            regime_conf = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "regime_conf")
+            signal_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "signal_score")
+            family_survival_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "family_survival_score")
+            setup_component = None if setup_score is None else max(0.0, min(1.0, float(setup_score)))
+            trigger_component = None if trigger_score is None else max(0.0, min(1.0, float(trigger_score)))
+            entry_component = None if entry_quality_score is None else max(0.0, min(1.0, float(entry_quality_score)))
+            setup_regime_alignment_score = None
+            if setup_component is not None:
+                regime_component = float(regime_conf) if regime_conf is not None else setup_component
+                setup_regime_alignment_score = max(0.0, min(1.0, (regime_component * 0.55) + (setup_component * 0.45)))
+            setup_structure_score = None
+            if setup_component is not None:
+                survival_component = float(family_survival_score) if family_survival_score is not None else setup_component
+                setup_structure_score = max(0.0, min(1.0, (setup_component * 0.60) + (survival_component * 0.40)))
+            setup_thesis_score = None
+            if setup_component is not None:
+                signal_component = float(signal_score) if signal_score is not None else setup_component
+                setup_thesis_score = max(0.0, min(1.0, (setup_component * 0.50) + (signal_component * 0.50)))
+            quality_detail = {
+                "setup_regime_alignment_score": None if setup_regime_alignment_score is None else round(float(setup_regime_alignment_score), 6),
+                "setup_structure_score": None if setup_structure_score is None else round(float(setup_structure_score), 6),
+                "setup_thesis_score": None if setup_thesis_score is None else round(float(setup_thesis_score), 6),
+                "trigger_base_score": trigger_component,
+                "entry_invalidation_score": entry_component,
+                "entry_overextension_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 0.95))), 6),
+                "entry_timing_quality_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 1.05))), 6),
+            }
+        return {
+            "source_flags": source_flags,
+            "score_breakdown": score_breakdown,
+            "decision_trace": decision_trace,
+            "quality_detail": quality_detail,
+            "quality_detail_source": quality_detail_source,
+            "candidate_quality_score": TradeBuilder._candidate_telemetry_field(
+                candidate,
+                source_flags,
+                decision_trace,
+                "candidate_quality_score",
+            ),
+            "family_consensus_score": TradeBuilder._candidate_telemetry_field(
+                candidate,
+                source_flags,
+                decision_trace,
+                "family_consensus_score",
+            ),
+            "family_consensus_components": TradeBuilder._candidate_telemetry_field(
+                candidate,
+                source_flags,
+                decision_trace,
+                "family_consensus_components",
+                {},
+            ),
+            "family_survival_score": TradeBuilder._candidate_telemetry_field(
+                candidate,
+                source_flags,
+                decision_trace,
+                "family_survival_score",
+            ),
+            "family_survival_components": TradeBuilder._candidate_telemetry_field(
+                candidate,
+                source_flags,
+                decision_trace,
+                "family_survival_components",
+                {},
+            ),
+        }
 
     def _candidate_feature_quality(self, candidate, market_data: dict | None) -> dict:
         data = market_data if isinstance(market_data, dict) else {}
@@ -2896,6 +3010,7 @@ class TradeBuilder:
                     soft_vetos = [str(x) for x in raw_soft if str(x)]
             rec_sf = dict(rec.get("source_flags", {}) or {}) if isinstance(rec, dict) else {}
             rec_trace = dict(meta.get("decision_trace", {}) or {}) if isinstance(meta, dict) else {}
+            rec_score_breakdown = dict(rec.get("score_breakdown", {}) or {}) if isinstance(rec, dict) else {}
             setup_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_score")
             setup_regime_alignment_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_regime_alignment_score")
             setup_structure_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_structure_score")
@@ -2937,6 +3052,7 @@ class TradeBuilder:
                     "orb_factor": meta.get("orb_factor") if isinstance(meta, dict) else None,
                     "reg_penalty": meta.get("reg_penalty") if isinstance(meta, dict) else None,
                     "global_conf": meta.get("global_conf") if isinstance(meta, dict) else None,
+                    **self._candidate_decision_telemetry_payload(rec, rec_sf, rec_trace, rec_score_breakdown),
                     "liquidity_score": rec.get("liquidity_score"),
                     "quote_consistency_score": rec.get("quote_consistency_score"),
                     "quote_validation_status": rec.get("quote_validation_status"),
@@ -10745,6 +10861,7 @@ class TradeBuilder:
             try:
                 sf = dict(getattr(cand, "source_flags", {}) or {})
                 decision_trace = dict(sf.get("decision_trace", {}) or {})
+                score_breakdown = dict(getattr(cand, "score_breakdown", {}) or {})
                 gates_failed = list(dict.fromkeys(sf.get("gates_failed") or getattr(cand, "tradable_reasons_blocking", []) or []))
                 soft_vetos = list(dict.fromkeys(sf.get("soft_veto_codes") or []))
                 liquidity_flow_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_flow_score")
@@ -10791,6 +10908,7 @@ class TradeBuilder:
                         "orb_factor": decision_trace.get("orb_factor"),
                         "reg_penalty": decision_trace.get("reg_penalty"),
                         "global_conf": decision_trace.get("global_conf"),
+                        **self._candidate_decision_telemetry_payload(cand, sf, decision_trace, score_breakdown),
                         "builder_confidence": getattr(cand, "builder_confidence", None),
                         "permission_confidence": getattr(cand, "permission_confidence", None),
                         "gating_final_confidence": getattr(cand, "gating_final_confidence", None),
@@ -11416,6 +11534,7 @@ class TradeBuilder:
         try:
             trade_sf = dict(getattr(trade, "source_flags", {}) or {})
             trade_trace = dict(trade_sf.get("decision_trace", {}) or {})
+            trade_score_breakdown = dict(getattr(trade, "score_breakdown", {}) or {})
             liquidity_flow_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_flow_score")
             liquidity_book_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_book_score")
             liquidity_spread_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_spread_score")
@@ -11456,6 +11575,7 @@ class TradeBuilder:
                     "liquidity_oi_score": getattr(trade, "liquidity_oi_score", None),
                     "regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),
                     "orb_bias": market_data.get("orb_bias"),
+                    **self._candidate_decision_telemetry_payload(trade, trade_sf, trade_trace, trade_score_breakdown),
                     "liquidity_flow_score": liquidity_flow_score,
                     "liquidity_book_score": liquidity_book_score,
                     "liquidity_spread_score": liquidity_spread_score,

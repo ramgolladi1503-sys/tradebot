@@ -109,21 +109,23 @@ def test_reject_shadow_persists_score_telemetry_to_live_decision_stream(tmp_path
             "liquidity_score": 0.8125,
             "quote_consistency_score": 0.91,
             "setup_score": 0.62,
-            "setup_regime_alignment_score": 0.35,
-            "setup_structure_score": 0.55,
-            "setup_thesis_score": 0.62,
             "trigger_score": 0.54,
-            "trigger_base_score": 0.61,
             "entry_quality_score": 0.57,
-            "entry_invalidation_score": 0.66,
-            "entry_overextension_score": 0.58,
-            "entry_timing_quality_score": 0.63,
             "execution_quality_score": 0.49,
             "rank_score": 0.578174,
             "raw_rank_score": 0.746802,
             "terminal_rank_score": 0.578174,
             "opportunity_score": 0.654476,
             "quote_validation_status": "OK",
+            "quality_detail": {
+                "setup_regime_alignment_score": 0.35,
+                "setup_structure_score": 0.55,
+                "setup_thesis_score": 0.62,
+                "trigger_base_score": 0.61,
+                "entry_invalidation_score": 0.66,
+                "entry_overextension_score": 0.58,
+                "entry_timing_quality_score": 0.63,
+            },
         }
     )
 
@@ -163,18 +165,25 @@ def test_reject_shadow_backfills_nested_liquidity_telemetry(tmp_path, monkeypatc
     event.update(
         {
             "score_breakdown": {
+                "candidate_quality_score": 0.61,
+                "family_consensus_score": 0.47,
+                "family_consensus_components": {"regime_alignment": 0.5},
+                "family_survival_score": 0.52,
+                "family_survival_components": {"setup_score": 0.61},
+                "quality_detail": {
+                    "setup_regime_alignment_score": 0.35,
+                    "setup_structure_score": 0.55,
+                    "setup_thesis_score": 0.62,
+                    "trigger_base_score": 0.61,
+                    "entry_invalidation_score": 0.66,
+                    "entry_overextension_score": 0.58,
+                    "entry_timing_quality_score": 0.63,
+                },
                 "liquidity_score": 0.8125,
                 "quote_consistency_score": 0.91,
                 "setup_score": 0.62,
-                "setup_regime_alignment_score": 0.35,
-                "setup_structure_score": 0.55,
-                "setup_thesis_score": 0.62,
                 "trigger_score": 0.54,
-                "trigger_base_score": 0.61,
                 "entry_quality_score": 0.57,
-                "entry_invalidation_score": 0.66,
-                "entry_overextension_score": 0.58,
-                "entry_timing_quality_score": 0.63,
                 "execution_quality_score": 0.49,
                 "liquidity_flow_score": 0.74,
                 "liquidity_book_score": 0.88,
@@ -188,7 +197,24 @@ def test_reject_shadow_backfills_nested_liquidity_telemetry(tmp_path, monkeypatc
                 "quote_validation_status": "OK",
             },
             "source_flags": {
+                "candidate_quality_score": 0.61,
+                "family_consensus_score": 0.47,
+                "family_consensus_components": {"regime_alignment": 0.5},
+                "family_survival_score": 0.52,
+                "family_survival_components": {"setup_score": 0.61},
+                "quality_detail": {
+                    "setup_regime_alignment_score": 0.35,
+                    "setup_structure_score": 0.55,
+                    "setup_thesis_score": 0.62,
+                    "trigger_base_score": 0.61,
+                    "entry_invalidation_score": 0.66,
+                    "entry_overextension_score": 0.58,
+                    "entry_timing_quality_score": 0.63,
+                },
                 "decision_trace": {
+                    "candidate_quality_score": 0.61,
+                    "family_consensus_score": 0.47,
+                    "family_survival_score": 0.52,
                     "setup_score": 0.62,
                     "trigger_score": 0.54,
                     "entry_quality_score": 0.57,
@@ -227,6 +253,12 @@ def test_reject_shadow_backfills_nested_liquidity_telemetry(tmp_path, monkeypatc
     assert latest["liquidity_spread_score"] == 0.81
     assert latest["liquidity_volume_score"] == 0.77
     assert latest["liquidity_oi_score"] == 0.69
+    assert latest["candidate_quality_score"] == 0.61
+    assert latest["family_consensus_score"] == 0.47
+    assert latest["family_consensus_components"] == {"regime_alignment": 0.5}
+    assert latest["family_survival_score"] == 0.52
+    assert latest["family_survival_components"] == {"setup_score": 0.61}
+    assert latest["quality_detail"]["setup_regime_alignment_score"] == 0.35
     assert latest["rank_score"] == 0.578174
     assert latest["raw_rank_score"] == 0.746802
     assert latest["terminal_rank_score"] == 0.578174

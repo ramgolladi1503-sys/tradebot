@@ -6996,6 +6996,8 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "priority_score": _trade_attr(trade, "priority_score", None),
         "priority_weight_signal": _trade_attr(trade, "priority_weight_signal", None),
         "priority_weight_execution": _trade_attr(trade, "priority_weight_execution", None),
+        "source_flags": _trade_attr(trade, "source_flags", None),
+        "decision_trace": _trade_attr(trade, "decision_trace", None),
         "family_feedback_adjustment": _trade_attr(trade, "family_feedback_adjustment", None),
         "family_feedback_confidence": _trade_attr(trade, "family_feedback_confidence", None),
         "family_feedback_applied": _trade_attr(trade, "family_feedback_applied", None),

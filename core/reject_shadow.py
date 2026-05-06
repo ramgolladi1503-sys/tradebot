@@ -56,6 +56,20 @@ def _telemetry_value(payload: dict[str, Any], field: str, default: Any = None) -
             if isinstance(nested, dict) and field in nested:
                 value = nested.get(field)
                 break
+    if value is None:
+        for nested_key in ("score_inputs_used", "score_breakdown", "source_flags", "decision_trace", "quality_detail"):
+            nested = payload.get(nested_key)
+            if isinstance(nested, dict) and field in nested:
+                value = nested.get(field)
+                break
+    if value is None:
+        for nested_key in ("score_inputs_used", "score_breakdown", "source_flags", "decision_trace"):
+            nested = payload.get(nested_key)
+            if isinstance(nested, dict):
+                qd = nested.get("quality_detail")
+                if isinstance(qd, dict) and field in qd:
+                    value = qd.get(field)
+                    break
     if value is None and field == "raw_rank_score":
         for fallback_field in ("ranking_score", "rank_score"):
             value = payload.get(fallback_field)
@@ -68,6 +82,20 @@ def _telemetry_value(payload: dict[str, Any], field: str, default: Any = None) -
             if value is not None:
                 break
     return default if value is None else value
+
+
+def _telemetry_block(payload: dict[str, Any], field: str) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    direct = payload.get(field)
+    if isinstance(direct, dict):
+        merged.update(direct)
+    for nested_key in ("score_inputs_used", "score_breakdown", "source_flags", "decision_trace"):
+        nested = payload.get(nested_key)
+        if isinstance(nested, dict):
+            nested_value = nested.get(field)
+            if isinstance(nested_value, dict):
+                merged.update(nested_value)
+    return merged
 
 
 def _mode_key(raw_mode: Any | None = None) -> str:
@@ -364,6 +392,16 @@ def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
         "orb_factor": _safe_float(payload.get("orb_factor")),
         "reg_penalty": _safe_float(payload.get("reg_penalty")),
         "global_conf": _safe_float(payload.get("global_conf")),
+        "source_flags": payload.get("source_flags") if isinstance(payload.get("source_flags"), dict) else {},
+        "score_breakdown": payload.get("score_breakdown") if isinstance(payload.get("score_breakdown"), dict) else {},
+        "decision_trace": payload.get("decision_trace") if isinstance(payload.get("decision_trace"), dict) else {},
+        "quality_detail": _telemetry_block(payload, "quality_detail"),
+        "quality_detail_source": str(payload.get("quality_detail_source") or "").strip() or None,
+        "candidate_quality_score": _safe_float(_telemetry_value(payload, "candidate_quality_score")),
+        "family_consensus_score": _safe_float(_telemetry_value(payload, "family_consensus_score")),
+        "family_consensus_components": _telemetry_value(payload, "family_consensus_components", {}),
+        "family_survival_score": _safe_float(_telemetry_value(payload, "family_survival_score")),
+        "family_survival_components": _telemetry_value(payload, "family_survival_components", {}),
         "liquidity_score": _safe_float(_telemetry_value(payload, "liquidity_score")),
         "quote_consistency_score": _safe_float(_telemetry_value(payload, "quote_consistency_score")),
         "quote_validation_status": str(_telemetry_value(payload, "quote_validation_status") or "").strip() or None,
