@@ -70,6 +70,36 @@ def test_feed_health_state_transitions_with_synthetic_ticks():
     assert "no_ws_messages" in down.reason
 
 
+def test_feed_health_tolerates_short_option_gap_before_degrading():
+    feed = FeedHealth(
+        index_ok_age_sec=5.0,
+        option_ok_age_sec=8.0,
+        index_down_no_msg_sec=10.0,
+        option_down_no_msg_sec=15.0,
+    )
+
+    base = 100.0
+    feed.on_tick(
+        token=111,
+        symbol="NIFTY",
+        ts_epoch=base,
+        has_depth=True,
+        is_index=True,
+        now_epoch=base,
+    )
+
+    ok = feed.snapshot(now_epoch=base + 4.0)
+    assert ok.state == FeedState.OK
+
+    degraded = feed.snapshot(now_epoch=base + 9.0)
+    assert degraded.state == FeedState.DEGRADED
+    assert "stale_tokens" in degraded.reason
+
+    down = feed.snapshot(now_epoch=base + 16.0)
+    assert down.state == FeedState.DOWN
+    assert "no_ws_messages" in down.reason
+
+
 def test_execution_router_blocks_live_entries_when_degraded_or_down(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "ALLOW_LIVE_PLACEMENT", True, raising=False)

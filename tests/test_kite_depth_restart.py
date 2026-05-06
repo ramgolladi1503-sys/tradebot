@@ -214,6 +214,38 @@ def test_restart_skips_soft_path_when_ws_tick_is_stale_even_if_socket_connected(
     assert calls == {"soft": 0, "start": 1, "stop": 1}
 
 
+def test_silent_reconnect_waits_for_relaxed_live_thresholds(monkeypatch):
+    monkeypatch.setattr(cfg, "FEED_SILENT_INDEX_THRESHOLD_SEC", 5.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_SILENT_OPTION_THRESHOLD_SEC", 8.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_SILENT_CONFIRM_CYCLES", 3, raising=False)
+    monkeypatch.setattr(cfg, "FEED_SILENT_FORCE_FULL_RESTART_SEC", 20.0, raising=False)
+
+    calls = {"soft": 0, "start": 0, "stop": 0}
+    def restart_cb(**kwargs):
+        calls["start"] += 1
+
+    state = {"confirm_hits": 0, "last_reconnect_epoch": 0.0}
+    triggered = ws._maybe_trigger_silent_reconnect(
+        now_epoch=20.0,
+        current_tokens={123, 456},
+        underlying_tokens={123},
+        last_global_msg_epoch=16.0,
+        last_msg_by_token={123: 16.0, 456: 16.0},
+        state=state,
+        index_threshold_sec=5.0,
+        option_threshold_sec=8.0,
+        confirm_needed=3,
+        backoff_min_sec=1.0,
+        backoff_max_sec=10.0,
+        force_full_restart_after_sec=20.0,
+        restart_cb=restart_cb,
+    )
+
+    assert triggered is False
+    assert state["confirm_hits"] == 0
+    assert calls == {"soft": 0, "start": 0, "stop": 0}
+
+
 def test_restart_skips_soft_path_for_hard_feed_repair_reason(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 19.5, raising=False)
