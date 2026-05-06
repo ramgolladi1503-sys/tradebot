@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, architecture, runtime health, and portfolio quality gate
+    name: Documentation, architecture, runtime health, contract guard, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,9 @@ jobs:
           test -f docs/one-pagers/fintech-qa-trading-systems.md
           test -f docs/test-reports/README.md
           test -f core/runtime_health_eval.py
+          test -f core/contract_resolution_guard.py
           test -f tests/test_runtime_health_eval.py
+          test -f tests/test_contract_resolution_guard.py
 
       - name: Check README sections
         run: |
@@ -45,8 +47,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest
 
-      - name: Run real offline runtime health tests
-        run: pytest -q tests/test_runtime_health_eval.py
+      - name: Run real offline runtime health and contract-resolution tests
+        run: pytest -q tests/test_runtime_health_eval.py tests/test_contract_resolution_guard.py
 
       - name: Generate portfolio test report
         run: |
@@ -56,7 +58,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing fintech QA/SDET portfolio and runs a safe offline runtime-health unit test slice.
+          This CI gate validates the repository as a recruiter-facing fintech QA/SDET portfolio and runs safe offline runtime-health plus contract-resolution guard tests.
 
           ## Checks
 
@@ -67,10 +69,11 @@ jobs:
           - README includes problem statement, architecture, test strategy, failure modes, and roadmap.
           - Runtime health evaluator source exists.
           - Runtime health unit tests run for valid snapshots, stale feed, low contract coverage, memory-only source, feed disconnection, DB failure, and missing contract fields.
+          - Contract-resolution guard tests run for unresolved contracts, missing tokens, exact matches, safe fallbacks, expiry-distance violations, strike-distance violations, and unknown resolution paths.
 
           ## Current honest limitation
 
-          This workflow intentionally avoids full broker/runtime tests. It tests the pure offline readiness logic first, without Kite secrets, market sessions, TensorFlow, or Streamlit startup risk.
+          This workflow intentionally avoids full broker/runtime tests. It tests pure offline readiness and contract safety logic first, without Kite secrets, market sessions, TensorFlow, or Streamlit startup risk.
           REPORT
 
       - name: Upload portfolio report
