@@ -51,6 +51,23 @@ def _tail_jsonl_rows(path: Path, limit: int = 200) -> list[str]:
         return []
 
 
+def _safe_float(value: Any, default: float | None = None) -> float | None:
+    try:
+        if value in (None, "", "None"):
+            return default
+        out = float(value)
+    except Exception:
+        return default
+    if out != out:
+        return default
+    return float(out)
+
+
+def _candidate_decisions_log_path() -> Path:
+    desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT").strip() or "DEFAULT"
+    return logs_dir() / "desks" / desk_id / "candidate_decisions.jsonl"
+
+
 def _row_snapshot_timestamp(row: dict[str, Any]) -> Any:
     if not isinstance(row, dict):
         return None
@@ -111,12 +128,160 @@ def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
         except AdvisorySchemaError as exc:
             log_advisory_schema_error("runtime_snapshot_producer", payload, exc)
             notes.append(f"schema_error:{exc}")
+    if rows:
+        return {
+            "rows": rows,
+            "row_count": int(len(rows)),
+            "source_path": str(path),
+            "notes": notes,
+        }
+    if not bool(getattr(cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_ENABLE", True)):
+        return {
+            "rows": rows,
+            "row_count": int(len(rows)),
+            "source_path": str(path),
+            "notes": notes,
+        }
+
+    fallback_path = _candidate_decisions_log_path()
+    fallback_rows: list[dict[str, Any]] = []
+    fallback_notes: list[str] = []
+    for raw_line in _tail_jsonl_rows(fallback_path, limit=max(1, int(getattr(cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_LIMIT", limit)))):
+        try:
+            payload = json.loads(raw_line)
+        except Exception as exc:
+            fallback_notes.append(f"fallback_parse_error:{type(exc).__name__}")
+            continue
+        if not isinstance(payload, dict):
+            fallback_notes.append("fallback_row_not_object")
+            continue
+        try:
+            row = _candidate_decision_to_advisory_row(payload)
+            if row is None:
+                fallback_notes.append(
+                    f"fallback_row_dropped:{str(payload.get('candidate_id') or payload.get('trade_id') or 'unknown')}"
+                )
+                continue
+            if bool(getattr(cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True)) and not _row_is_today_local(row):
+                fallback_notes.append(
+                    f"fallback_stale_row_dropped:{str(row.get('trade_id') or row.get('advisory_id') or 'unknown')}"
+                )
+                logger.info(
+                    "[RUNTIME_SNAPSHOT_ROW_DROP] source=advisory_latest reason=fallback_stale_row trade_id=%s symbol=%s display_ts_epoch=%s",
+                    row.get("trade_id"),
+                    row.get("symbol"),
+                    row.get("display_ts_epoch"),
+                )
+                continue
+            fallback_rows.append(row)
+        except AdvisorySchemaError as exc:
+            log_advisory_schema_error("runtime_snapshot_producer.candidate_decisions", payload, exc)
+            fallback_notes.append(f"fallback_schema_error:{exc}")
+    notes.append(f"fallback_source:{fallback_path}")
+    notes.extend(fallback_notes)
     return {
-        "rows": rows,
-        "row_count": int(len(rows)),
-        "source_path": str(path),
+        "rows": fallback_rows,
+        "row_count": int(len(fallback_rows)),
+        "source_path": str(fallback_path),
         "notes": notes,
     }
+
+
+def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    candidate_id = str(payload.get("candidate_id") or payload.get("trade_id") or "").strip()
+    symbol = str(payload.get("symbol") or "").strip().upper()
+    ts_epoch = _row_snapshot_timestamp(payload)
+    entry = _safe_float(payload.get("entry"))
+    if not candidate_id or not symbol or entry is None:
+        return None
+    source_flags = payload.get("source_flags") if isinstance(payload.get("source_flags"), dict) else {}
+    candidate_origin = source_flags.get("candidate_origin") if isinstance(source_flags, dict) and isinstance(source_flags.get("candidate_origin"), dict) else {}
+    strategy_id = (
+        str(candidate_origin.get("setup_family") or candidate_origin.get("strategy") or payload.get("strategy_id") or "LIVE_CANDIDATE")
+        .strip()
+        or "LIVE_CANDIDATE"
+    )
+    strategy_name = (
+        str(payload.get("strategy_name") or candidate_origin.get("setup_family") or payload.get("strategy_id") or "LIVE_CANDIDATE")
+        .strip()
+        or "LIVE_CANDIDATE"
+    )
+    execution_allowed = bool(payload.get("execution_allowed"))
+    permission = str(payload.get("permission") or ("EXECUTE" if execution_allowed else "ADVISORY_ONLY")).strip().upper() or "ADVISORY_ONLY"
+    final_action = str(payload.get("final_action") or ("EXECUTE" if execution_allowed else "QUEUE_ONLY")).strip().upper() or "QUEUE_ONLY"
+    if execution_allowed:
+        execution_entry = entry
+        execution_entry_source = "last"
+        execution_entry_status = "executable"
+        readiness = "READY"
+        execution_status = "executable"
+    else:
+        execution_entry = None
+        execution_entry_source = "none"
+        execution_entry_status = "non_executable"
+        readiness = "QUEUE_ONLY" if permission != "ADVISORY_ONLY" else "ADVISORY_ONLY"
+        execution_status = final_action.lower()
+        if execution_status not in {"blocked", "advisory_only", "queue_only", "executable", "scored"}:
+            execution_status = "queue_only"
+    advisory_payload = dict(payload)
+    advisory_payload.update(
+        {
+            "trade_id": candidate_id,
+            "advisory_id": candidate_id,
+            "strategy_id": strategy_id,
+            "strategy_name": strategy_name,
+            "timestamp": payload.get("ts_ist") or payload.get("timestamp") or payload.get("ts_epoch") or "",
+            "instrument_type": "OPT",
+            "entry": entry,
+            "entry_source": "last",
+            "execution_entry": execution_entry,
+            "execution_entry_source": execution_entry_source,
+            "execution_entry_status": execution_entry_status,
+            "display_entry": entry,
+            "display_entry_source": "last",
+            "display_entry_status": "displayable",
+            "entry_reason": str(payload.get("permission_reason") or payload.get("entry_block_reason") or payload.get("first_blocking_gate") or payload.get("final_action") or "candidate_decision"),
+            "entry_clear_reason": str(payload.get("entry_block_reason") or payload.get("quote_validation_status") or payload.get("first_blocking_gate") or "candidate_decision"),
+            "entry_status": "displayable",
+            "readiness": readiness,
+            "blockers": list(payload.get("gates_failed") or ([] if execution_allowed else [payload.get("first_blocking_gate") or payload.get("permission_reason") or "candidate_decision"])),
+            "hard_blockers": list(payload.get("gates_failed") or []),
+            "soft_penalties": list(payload.get("soft_vetos") or []),
+            "warnings": list(payload.get("gates_failed") or []),
+            "quote_source": str(source_flags.get("ltp_source") or "live"),
+            "quote_age_sec": _safe_float(source_flags.get("quote_age_sec")),
+            "decision_explain": [
+                str(value)
+                for value in (
+                    payload.get("first_blocking_gate"),
+                    payload.get("permission_reason"),
+                    payload.get("quote_validation_status"),
+                    payload.get("final_action"),
+                )
+                if str(value or "").strip()
+            ],
+            "market_open": bool(source_flags.get("market_open", True)),
+            "execution_status": execution_status,
+            "permission": permission,
+            "final_action": final_action,
+        }
+    )
+    advisory_payload.setdefault("display_ts_epoch", ts_epoch)
+    advisory_payload.setdefault("display_ts_ist", payload.get("ts_ist"))
+    advisory_payload.setdefault("last_seen_ts", payload.get("ts_ist") or payload.get("timestamp"))
+    advisory_payload.setdefault("last_seen", payload.get("ts_ist") or payload.get("timestamp"))
+    advisory_payload.setdefault("trade_key", payload.get("candidate_id"))
+    advisory_payload.setdefault("instrument", "OPT")
+    advisory_payload.setdefault("status", "ADVISORY_ONLY" if not execution_allowed else "READY")
+    advisory_payload.setdefault("candidate_status", payload.get("candidate_status") or "LIVE_CANDIDATE")
+    advisory_payload.setdefault("candidate_type", payload.get("candidate_type") or "options")
+    advisory_payload.setdefault("strategy", strategy_name)
+    advisory_payload.setdefault("source_bucket", "candidate_decisions")
+    advisory_payload.setdefault("row_kind", "canonical_suggestion")
+    advisory_payload.setdefault("non_canonical_levels", False)
+    return serialize_advisory_row(advisory_payload, allow_legacy=True)
 
 
 def produce_and_store_runtime_snapshots(

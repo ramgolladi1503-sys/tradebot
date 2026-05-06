@@ -140,6 +140,75 @@ def test_runtime_snapshot_producer_drops_stale_advisory_rows(tmp_path, monkeypat
     assert any("stale_row_dropped:ADV-STALE" in note for note in wrapped["payload"]["notes"])
 
 
+def test_runtime_snapshot_producer_falls_back_to_candidate_decisions_when_suggestions_are_stale(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    logs_root = runtime_root / "logs"
+    desk_log_root = logs_root / "desks" / "DEFAULT"
+    desk_log_root.mkdir(parents=True, exist_ok=True)
+    current_row = {
+        "candidate_id": "LIVE-CAND-1",
+        "ts_epoch": 1778047800.0,
+        "ts_ist": "2026-05-06T12:00:00+05:30",
+        "symbol": "NIFTY",
+        "side": "BUY_CALL",
+        "mode": "LIVE",
+        "execution_allowed": False,
+        "permission": "ADVISORY_ONLY",
+        "permission_reason": "quote_not_ok",
+        "first_blocking_gate": "premium_sanity",
+        "entry_block_reason": "execution_from_ask",
+        "gates_failed": ["premium_sanity", "stale_option_quote"],
+        "soft_vetos": ["premium_sanity", "trade_score"],
+        "entry": 123.45,
+        "stop": 120.0,
+        "target": 130.0,
+        "confidence_score": 0.37,
+        "quote_validation_status": "STALE_OPTION_LTP",
+        "source_flags": {
+            "ltp_source": "live",
+            "quote_age_sec": 0.4,
+            "market_open": True,
+            "candidate_origin": {"setup_family": "breakout"},
+        },
+        "final_action": "QUEUE_ONLY",
+        "rank_score": 0.48,
+        "raw_rank_score": 0.48,
+        "terminal_rank_score": 0.48,
+        "liquidity_score": 0.79,
+        "setup_score": 0.52,
+        "trigger_score": 0.41,
+    }
+    (desk_log_root / "candidate_decisions.jsonl").write_text(json.dumps(current_row) + "\n", encoding="utf-8")
+    stale_row = _sample_advisory(trade_id="ADV-STALE", timestamp="2026-04-09T07:13:15Z")
+    (logs_root / "suggestions.jsonl").write_text(json.dumps(stale_row) + "\n", encoding="utf-8")
+    (logs_root / "feed_runtime_latest.json").write_text(json.dumps({"ws_connected": True}), encoding="utf-8")
+    (logs_root / "token_resolution.json").write_text(json.dumps({"NIFTY": {"instrument_token": 123}}), encoding="utf-8")
+
+    monkeypatch.setattr(producer, "logs_dir", lambda: logs_root)
+    monkeypatch.setattr(producer, "canonical_suggestions_log_path", lambda: logs_root / "suggestions.jsonl")
+    monkeypatch.setattr(producer, "MARKET_SNAPSHOT_PATH", runtime_root / "market_snapshot.json")
+    monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", runtime_root / "advisory_latest.json")
+    monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", runtime_root / "feed_runtime_latest.json")
+    monkeypatch.setattr(producer, "TOKEN_RESOLUTION_LATEST_PATH", runtime_root / "token_resolution_latest.json")
+    monkeypatch.setattr(producer, "now_ist", lambda: datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(producer.cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True, raising=False)
+    monkeypatch.setattr(producer.cfg, "RUNTIME_SNAPSHOT_ADVISORY_FALLBACK_CANDIDATE_DECISIONS_ENABLE", True, raising=False)
+
+    producer.produce_and_store_runtime_snapshots(
+        market_snapshot={"missing": True},
+        producer="unit_test",
+    )
+
+    wrapped = json.loads((runtime_root / "advisory_latest.json").read_text(encoding="utf-8"))
+    rows = wrapped["payload"]["rows"]
+    assert [row["trade_id"] for row in rows] == ["LIVE-CAND-1"]
+    assert wrapped["payload"]["row_count"] == 1
+    assert wrapped["payload"]["source_path"].endswith("candidate_decisions.jsonl")
+    assert any("fallback_source:" in note for note in wrapped["payload"]["notes"])
+    assert rows[0]["quote_source"] == "live"
+    assert rows[0]["execution_status"] == "queue_only"
+
+
 def test_runtime_snapshot_advisory_roundtrip_preserves_required_fields(tmp_path, monkeypatch):
     runtime_root = tmp_path / "runtime"
     logs_root = runtime_root / "logs"
