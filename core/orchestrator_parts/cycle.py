@@ -1,8 +1,12 @@
+import logging
 import time
 
 from config import config as cfg
 from core.execution_core_fast import FastExecutionCore
 from core.execution_engine_fast import FastExecutionEngine
+
+
+logger = logging.getLogger(__name__)
 
 
 def _fast_loop_enabled() -> bool:
@@ -27,6 +31,13 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
 
         decision = engine.evaluate()
         result = engine.execute(decision)
+
+        try:
+            if bool(getattr(cfg, "ENABLE_PRO_STRATEGY_SHADOW", False)):
+                shadow_rows = list((getattr(orch, "_cycle_market_snapshot_by_symbol", {}) or {}).values())
+                orch._run_pro_shadow_pipeline(shadow_rows)
+        except Exception as exc:
+            logger.warning("pro_shadow_pipeline_cycle_error err=%s", exc)
 
         core.last_cycle_mono = float(clock.monotonic())
         if feed_epoch > 0.0:

@@ -161,6 +161,8 @@ def test_restart_uses_soft_path_when_internal_reconnect_enabled(monkeypatch):
     monkeypatch.setattr(ws, "_KITE_TICKER", _ConnectedTicker(), raising=False)
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws.time, "time", lambda: 101.0)
 
     calls = {"soft": 0}
     monkeypatch.setattr(

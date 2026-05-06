@@ -177,6 +177,7 @@ def test_silent_ws_for_n_seconds_triggers_reconnect_and_feed_down_blocks_activat
         confirm_needed=1,
         backoff_min_sec=1.0,
         backoff_max_sec=10.0,
+        force_full_restart_after_sec=12.0,
         restart_cb=lambda **kwargs: restart_calls.append(dict(kwargs)) or True,
     )
     assert triggered is True

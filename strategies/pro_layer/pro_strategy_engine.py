@@ -8,8 +8,12 @@ engine candidates by pro_decision_adapter.py.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -64,6 +68,18 @@ def _direction_from_delta(delta: float) -> str:
     return "BUY_CALL" if float(delta) > 0 else "BUY_PUT"
 
 
+def _quote_age_sec(market_data: dict[str, Any]) -> float:
+    return _safe_float(market_data.get("quote_age_sec"), 999.0)
+
+
+def _spread_pct(market_data: dict[str, Any]) -> float:
+    return _safe_float(market_data.get("spread_pct"), 999.0)
+
+
+def _fresh_and_tight(market_data: dict[str, Any], *, max_age_sec: float = 6.0, max_spread_pct: float = 0.02) -> bool:
+    return _quote_age_sec(market_data) <= max_age_sec and _spread_pct(market_data) <= max_spread_pct
+
+
 def _make_signal(name: str, direction: str, edge: float, confidence: float, reason: str, *, family: str, regime: str, evidence: dict[str, Any]) -> ProSignal:
     return ProSignal(
         name=name,
@@ -85,13 +101,13 @@ class VolatilityExpansionStrategy(StrategyBase):
         atr = _safe_float(market_data.get("atr"))
         ltp_change = _safe_float(market_data.get("ltp_change_window", market_data.get("ltp_change")))
         vol_z = _safe_float(market_data.get("vol_z"))
-        if atr <= 0:
+        if atr <= 0 or not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):
             return None
         move_atr = abs(ltp_change) / max(atr, 1e-6)
-        if move_atr < 0.55 and vol_z < 0.8:
+        if move_atr < 0.75 and vol_z < 1.0:
             return None
-        edge = 0.52 + min(0.28, move_atr * 0.16) + min(0.12, max(vol_z, 0.0) * 0.04)
-        confidence = 0.48 + min(0.30, move_atr * 0.18) + min(0.12, max(vol_z, 0.0) * 0.05)
+        edge = 0.54 + min(0.24, move_atr * 0.14) + min(0.10, max(vol_z, 0.0) * 0.04)
+        confidence = 0.52 + min(0.26, move_atr * 0.16) + min(0.10, max(vol_z, 0.0) * 0.05)
         return _make_signal(
             "vol_expansion",
             _direction_from_delta(ltp_change),
@@ -111,18 +127,18 @@ class LiquidityImbalanceStrategy(StrategyBase):
     def generate(self, market_data):
         bid_qty = _safe_float(market_data.get("bid_qty"))
         ask_qty = _safe_float(market_data.get("ask_qty"))
-        spread_pct = _safe_float(market_data.get("spread_pct"), 999.0)
+        spread_pct = _spread_pct(market_data)
         if bid_qty <= 0 or ask_qty <= 0:
             return None
         imbalance = (bid_qty - ask_qty) / max(bid_qty + ask_qty, 1.0)
-        if abs(imbalance) < 0.25:
+        if abs(imbalance) < 0.35:
             return None
-        if spread_pct > 0.025:
+        if not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):
             return None
         direction = "BUY_CALL" if imbalance > 0 else "BUY_PUT"
         strength = abs(imbalance)
-        edge = 0.50 + min(0.30, strength * 0.55)
-        confidence = 0.45 + min(0.35, strength * 0.60)
+        edge = 0.53 + min(0.26, strength * 0.45)
+        confidence = 0.50 + min(0.30, strength * 0.50)
         return _make_signal(
             "liquidity_imbalance",
             direction,
@@ -143,18 +159,18 @@ class VWAPMeanReversionStrategy(StrategyBase):
         ltp = _safe_float(market_data.get("ltp"))
         vwap = _safe_float(market_data.get("vwap"))
         rsi = _safe_float(market_data.get("rsi", market_data.get("rsi_mom")))
-        if ltp <= 0 or vwap <= 0:
+        if ltp <= 0 or vwap <= 0 or not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):
             return None
         dev = (ltp - vwap) / vwap
-        if abs(dev) < 0.0025:
+        if abs(dev) < 0.0045:
             return None
-        if dev > 0 and rsi < 0.15:
+        if dev > 0 and rsi < 0.35:
             return None
-        if dev < 0 and rsi > -0.15:
+        if dev < 0 and rsi > -0.35:
             return None
         direction = "BUY_PUT" if dev > 0 else "BUY_CALL"
-        edge = 0.48 + min(0.30, abs(dev) * 55)
-        confidence = 0.46 + min(0.25, abs(dev) * 45)
+        edge = 0.51 + min(0.24, abs(dev) * 42)
+        confidence = 0.49 + min(0.22, abs(dev) * 36)
         return _make_signal(
             "vwap_mean_reversion",
             direction,
@@ -176,16 +192,18 @@ class OptionsFlowStrategy(StrategyBase):
         put_oi_delta = _safe_float(market_data.get("put_oi_delta"))
         iv_change = _safe_float(market_data.get("iv_change"))
         price_delta = _safe_float(market_data.get("ltp_change_window", market_data.get("ltp_change")))
+        if not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):
+            return None
         oi_pressure = put_oi_delta - call_oi_delta
-        if abs(oi_pressure) < 1 and abs(iv_change) < 0.02:
+        if abs(oi_pressure) < 1 and abs(iv_change) < 0.03:
             return None
         aligned = (oi_pressure > 0 and price_delta > 0) or (oi_pressure < 0 and price_delta < 0)
         if not aligned:
             return None
         direction = "BUY_CALL" if price_delta > 0 else "BUY_PUT"
         strength = min(1.0, abs(oi_pressure) / max(abs(call_oi_delta) + abs(put_oi_delta), 1.0))
-        edge = 0.50 + min(0.25, strength * 0.35) + min(0.12, abs(iv_change) * 2.0)
-        confidence = 0.45 + min(0.25, strength * 0.35) + min(0.10, abs(iv_change) * 1.5)
+        edge = 0.53 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.5)
+        confidence = 0.50 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.2)
         return _make_signal(
             "options_flow_alignment",
             direction,
@@ -213,8 +231,8 @@ class TimeWindowStrategy(StrategyBase):
         is_close = (14 * 60 + 15) <= mins <= (15 * 60 + 10)
         if not (is_open or is_close):
             return None
-        edge = 0.54 if is_open else 0.57
-        confidence = 0.52 if is_open else 0.55
+        edge = 0.44 if is_open else 0.47
+        confidence = 0.40 if is_open else 0.43
         return _make_signal(
             "time_window_momentum",
             _direction_from_delta(ltp_change),
@@ -232,22 +250,46 @@ class ProSignalAggregator:
         signals = list(signals or [])
         if not signals:
             return []
-        call_strength = sum(s.score * s.confidence for s in signals if s.direction == "BUY_CALL")
-        put_strength = sum(s.score * s.confidence for s in signals if s.direction == "BUY_PUT")
+        primary = [s for s in signals if s.family != "time_window"]
+        boosters = [s for s in signals if s.family == "time_window"]
+        if not primary:
+            return []
+
+        call_strength = sum(s.score * s.confidence for s in primary if s.direction == "BUY_CALL")
+        put_strength = sum(s.score * s.confidence for s in primary if s.direction == "BUY_PUT")
         if call_strength and put_strength:
             stronger = "BUY_CALL" if call_strength > put_strength else "BUY_PUT"
             weaker_strength = min(call_strength, put_strength)
             stronger_strength = max(call_strength, put_strength)
             conflict_ratio = weaker_strength / max(stronger_strength, 1e-6)
-            if conflict_ratio > 0.70:
+            if conflict_ratio >= 0.55:
                 return []
             kept: list[ProSignal] = []
-            for sig in signals:
+            for sig in primary:
                 if sig.direction == stronger:
                     sig.evidence = {**sig.evidence, "conflict_ratio": round(conflict_ratio, 4)}
                     kept.append(sig)
-            return sorted(kept, key=lambda s: s.score * s.confidence, reverse=True)
-        return sorted(signals, key=lambda s: s.score * s.confidence, reverse=True)
+            primary = kept
+
+        if boosters and primary:
+            booster = max(boosters, key=lambda s: s.score * s.confidence)
+            for sig in primary:
+                if sig.direction == booster.direction:
+                    sig.evidence = {
+                        **sig.evidence,
+                        "time_window_boost": round(booster.score * booster.confidence, 4),
+                    }
+
+        kept = [sig for sig in primary if sig.score >= 0.64 and sig.confidence >= 0.60]
+        if not kept:
+            return []
+        ranked = sorted(kept, key=lambda s: (s.score * s.confidence, s.score, s.confidence, s.name), reverse=True)
+        top = ranked[0]
+        top_strength = top.score * top.confidence
+        next_strength = ranked[1].score * ranked[1].confidence if len(ranked) > 1 else 0.0
+        if len(ranked) > 1 and (top_strength - next_strength) < 0.04:
+            return []
+        return [top]
 
 
 class ProStrategyEngine:
@@ -260,10 +302,12 @@ class ProStrategyEngine:
             TimeWindowStrategy(),
         ]
         self.aggregator = ProSignalAggregator()
+        self.last_errors: list[str] = []
 
-    def run(self, market_data: dict) -> List[ProSignal]:
+    def run(self, market_data: dict, *, error_sink: list[str] | None = None) -> List[ProSignal]:
         regime = _norm_regime(market_data.get("regime"))
         signals: list[ProSignal] = []
+        self.last_errors = []
         for strat in self.strategies:
             if regime not in getattr(strat, "regimes", {regime}) and "NEUTRAL" not in getattr(strat, "regimes", set()):
                 continue
@@ -271,6 +315,11 @@ class ProStrategyEngine:
                 sig = strat.generate(market_data)
                 if sig:
                     signals.append(sig)
-            except Exception:
+            except Exception as exc:
+                err = f"strategy_failed:{getattr(strat, 'family', 'unknown')}:{type(exc).__name__}:{exc}"
+                self.last_errors.append(err)
+                if error_sink is not None:
+                    error_sink.append(err)
+                logger.exception("pro_strategy_engine_strategy_failed family=%s err=%s", getattr(strat, "family", "unknown"), exc)
                 continue
         return self.aggregator.aggregate(signals)

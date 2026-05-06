@@ -115,6 +115,14 @@ ENABLE_TELEGRAM = os.getenv("ENABLE_TELEGRAM", "true").lower() == "true"
 # intentionally omitted here to avoid false signals.
 # ----------------------------------------------------
 ENABLE_CANDIDATE_GENERATOR_V2 = os.getenv("ENABLE_CANDIDATE_GENERATOR_V2", "false").lower() == "true"
+ENABLE_PRO_STRATEGY_LAYER = os.getenv("ENABLE_PRO_STRATEGY_LAYER", "false").lower() == "true"
+ENABLE_PRO_STRATEGY_SHADOW = os.getenv("ENABLE_PRO_STRATEGY_SHADOW", "false").lower() == "true"
+PRO_STRATEGY_LAYER_STRICT_MODE = os.getenv("PRO_STRATEGY_LAYER_STRICT_MODE", "true").lower() == "true"
+PRO_STRATEGY_SHADOW_THREAD_TTL_SEC = _float_env("PRO_STRATEGY_SHADOW_THREAD_TTL_SEC", 30.0)
+PRO_STRATEGY_SHADOW_WORKER_TTL_SEC = _float_env(
+    "PRO_STRATEGY_SHADOW_WORKER_TTL_SEC",
+    PRO_STRATEGY_SHADOW_THREAD_TTL_SEC,
+)
 
 # Candidate generator v2 defaults (shadow mode only).
 V2_CANDIDATE_SYMBOLS = os.getenv("V2_CANDIDATE_SYMBOLS", "NIFTY,BANKNIFTY")
@@ -3490,6 +3498,21 @@ def v2_flags_snapshot() -> dict:
 
 def v2_flags_active() -> dict:
     flags = v2_flags_snapshot()
+    return {name: value for name, value in flags.items() if value}
+
+
+def pro_strategy_flags_snapshot() -> dict:
+    return {
+        "ENABLE_PRO_STRATEGY_LAYER": ENABLE_PRO_STRATEGY_LAYER,
+        "ENABLE_PRO_STRATEGY_SHADOW": ENABLE_PRO_STRATEGY_SHADOW,
+        "PRO_STRATEGY_LAYER_STRICT_MODE": PRO_STRATEGY_LAYER_STRICT_MODE,
+        "PRO_STRATEGY_SHADOW_THREAD_TTL_SEC": PRO_STRATEGY_SHADOW_THREAD_TTL_SEC,
+        "PRO_STRATEGY_SHADOW_WORKER_TTL_SEC": PRO_STRATEGY_SHADOW_WORKER_TTL_SEC,
+    }
+
+
+def pro_strategy_flags_active() -> dict:
+    flags = pro_strategy_flags_snapshot()
     return {name: value for name, value in flags.items() if value}
 
 # Entry trigger logic (buy above / sell below)

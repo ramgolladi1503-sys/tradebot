@@ -3,8 +3,10 @@ import json
 import argparse
 import copy
 import logging
+import multiprocessing
 import os
 from collections import Counter
+from collections.abc import Mapping
 from types import MappingProxyType
 from pathlib import Path
 import pandas as pd
@@ -67,6 +69,7 @@ from core.candidate_soft_reject import (
     soft_reject_max_per_symbol,
 )
 from core.v2_pipeline import run_v2_pipeline
+from core.pro_strategy_pipeline import run_pro_strategy_pipeline
 from core.blocked_tracker import BlockedTradeTracker
 from core.trade_store import (
     fetch_open_positions_dict,
@@ -191,6 +194,108 @@ def _log_freshness_debug(message: str, *args) -> None:
 def _log_advisory_debug(message: str, *args) -> None:
     if _env_debug_enabled("TRADEBOT_DEBUG_ADVISORY"):
         logger.debug(message, *args)
+
+
+def _pro_shadow_report_path(loop_id: str) -> Path:
+    return logs_dir() / f"pro_strategy_shadow_{loop_id or 'latest'}.json"
+
+
+def _sanitize_pro_shadow_rows(market_data_list: list[dict] | None) -> list[dict]:
+    safe_rows: list[dict] = []
+    for raw in list(market_data_list or []):
+        try:
+            if isinstance(raw, Mapping):
+                safe_rows.append(dict(raw))
+            elif isinstance(raw, dict):
+                safe_rows.append(dict(raw))
+            else:
+                safe_rows.append({"value": str(raw)})
+        except Exception:
+            if isinstance(raw, Mapping):
+                safe_rows.append(dict(raw))
+            elif isinstance(raw, dict):
+                safe_rows.append(dict(raw))
+            else:
+                safe_rows.append({"value": str(raw)})
+    return safe_rows
+
+
+def _build_pro_shadow_report(report: dict, *, loop_id: str, started_at: float) -> dict:
+    candidate_preview = []
+    for candidate in list(report.get("candidates") or [])[:3]:
+        if not isinstance(candidate, dict):
+            continue
+        candidate_preview.append(
+            {
+                "symbol": str(candidate.get("symbol") or "UNKNOWN").upper(),
+                "family": str(
+                    candidate.get("strategy_family")
+                    or candidate.get("signal_family")
+                    or candidate.get("family")
+                    or candidate.get("strategy")
+                    or candidate.get("source")
+                    or ""
+                ).strip()[:24],
+                "score": candidate.get("final_score"),
+            }
+        )
+    error_preview = [str(err)[:120] for err in list(report.get("errors") or [])[:3]]
+    return {
+        "loop_id": loop_id,
+        "started_at": started_at,
+        "enabled": bool(report.get("enabled", False)),
+        "strict_mode": bool(getattr(cfg, "PRO_STRATEGY_LAYER_STRICT_MODE", True)),
+        "candidate_count": len(report.get("candidates") or []),
+        "error_count": len(report.get("errors") or []),
+        "candidate_preview": candidate_preview,
+        "error_preview": error_preview,
+        "report": report,
+    }
+
+
+def _run_pro_shadow_pipeline_worker_entry(market_data_list: list[dict] | None, loop_id: str, started_at: float) -> None:
+    report: dict[str, object] = {
+        "enabled": True,
+        "flags": {},
+        "candidates": [],
+        "errors": [],
+    }
+    try:
+        report = run_pro_strategy_pipeline(market_data_list, now_ts=started_at)
+    except Exception as exc:
+        logger.exception("pro_shadow_pipeline_failed err=%s", exc)
+        report = {
+            "enabled": True,
+            "flags": {},
+            "candidates": [],
+            "errors": [f"pro_shadow_pipeline_failed:{type(exc).__name__}:{exc}"],
+        }
+    shadow_report = _build_pro_shadow_report(report, loop_id=loop_id, started_at=started_at)
+    try:
+        write_json_atomic(_pro_shadow_report_path(loop_id), shadow_report)
+    except Exception as exc:
+        logger.warning("pro_shadow_report_write_failed err=%s", exc)
+    finally:
+        logger.info(
+            "pro_strategy_shadow_summary enabled=%s candidates=%s errors=%s strict_mode=%s loop_id=%s candidate_preview=%s error_preview=%s",
+            bool(report.get("enabled", False)),
+            len(report.get("candidates") or []),
+            len(report.get("errors") or []),
+            bool(getattr(cfg, "PRO_STRATEGY_LAYER_STRICT_MODE", True)),
+            loop_id,
+            shadow_report.get("candidate_preview"),
+            shadow_report.get("error_preview"),
+        )
+
+
+def _create_pro_shadow_process(market_data_list: list[dict] | None, loop_id: str, started_at: float):
+    ctx = multiprocessing.get_context("spawn")
+    return ctx.Process(
+        target=_run_pro_shadow_pipeline_worker_entry,
+        args=(market_data_list, loop_id, started_at),
+        name=f"pro-shadow-{loop_id or 'cycle'}",
+        daemon=True,
+    )
 
 
 def resolve_global_halt_reason(circuit_breaker) -> str | None:
@@ -2726,6 +2831,87 @@ class Orchestrator:
         except Exception as exc:
             logger.exception("v2_shadow_pipeline_failed err=%s", exc)
 
+    def _run_pro_shadow_pipeline(self, market_data_list: list[dict] | None) -> None:
+        if not bool(getattr(cfg, "ENABLE_PRO_STRATEGY_SHADOW", False)):
+            return
+
+        loop_id = str(getattr(self, "_gate_status_cycle_id", "") or "")
+        try:
+            existing = getattr(self, "_pro_shadow_process", None)
+            if existing is not None:
+                try:
+                    alive = bool(existing.is_alive())
+                except Exception:
+                    alive = False
+                started_at = float(getattr(self, "_pro_shadow_process_started_at", 0.0) or 0.0)
+                ttl_sec = max(
+                    0.0,
+                    float(
+                        getattr(
+                            cfg,
+                            "PRO_STRATEGY_SHADOW_WORKER_TTL_SEC",
+                            getattr(cfg, "PRO_STRATEGY_SHADOW_THREAD_TTL_SEC", 30.0),
+                        )
+                    ),
+                )
+                age_sec = max(0.0, time.time() - started_at) if started_at > 0.0 else 0.0
+                if alive:
+                    if age_sec <= ttl_sec:
+                        logger.info(
+                            "pro_shadow_pipeline_skipped reason=worker_active loop_id=%s age_sec=%.3f ttl_sec=%.3f",
+                            loop_id,
+                            age_sec,
+                            ttl_sec,
+                        )
+                        return
+                    logger.warning(
+                        "pro_shadow_pipeline_worker_stale loop_id=%s age_sec=%.3f ttl_sec=%.3f",
+                        loop_id,
+                        age_sec,
+                        ttl_sec,
+                    )
+                    try:
+                        existing.terminate()
+                    except Exception as exc:
+                        logger.warning("pro_shadow_pipeline_worker_terminate_failed err=%s", exc)
+                    try:
+                        existing.join(timeout=2.0)
+                    except Exception as exc:
+                        logger.warning("pro_shadow_pipeline_worker_join_failed err=%s", exc)
+                else:
+                    try:
+                        existing.join(timeout=0.0)
+                    except Exception:
+                        pass
+                exitcode = getattr(existing, "exitcode", None)
+                if exitcode not in (None, 0):
+                    logger.warning(
+                        "pro_shadow_pipeline_worker_exitcode loop_id=%s exitcode=%s age_sec=%.3f",
+                        loop_id,
+                        exitcode,
+                        age_sec,
+                    )
+                try:
+                    self._pro_shadow_process = None
+                    self._pro_shadow_process_started_at = 0.0
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            started_at = time.time()
+            worker = _create_pro_shadow_process(_sanitize_pro_shadow_rows(market_data_list), loop_id, started_at)
+            self._pro_shadow_process = worker
+            self._pro_shadow_process_started_at = started_at
+            worker.start()
+        except Exception as exc:
+            logger.exception("pro_shadow_pipeline_dispatch_failed err=%s", exc)
+            try:
+                self._pro_shadow_process = None
+                self._pro_shadow_process_started_at = 0.0
+            except Exception:
+                pass
+
     def _immutable_cycle_snapshot(self, market_data: dict):
         symbol = str((market_data or {}).get("symbol") or "").upper()
         snap_map = getattr(self, "_cycle_market_snapshot_by_symbol", None)
@@ -3714,12 +3900,12 @@ class Orchestrator:
         if bool(getattr(cfg, "STATUS_ZERO_VISIBLE_COUNTS_WHEN_UNHEALTHY", True)):
             auth_ok = bool(feed_status.get("auth_ok", True))
             ws_connected = feed_status.get("ws_connected")
-            if not auth_ok:
+            if suggestions_status != "error" and not auth_ok:
                 suggestions_status = "blocked"
                 suggestions_reason = "auth_blocked"
                 suggestions_subreason = str(feed_status.get("auth_reason") or "")
                 suggestions_primary_blocker = str(feed_status.get("auth_state") or "AUTH_REQUIRED").strip() or "AUTH_REQUIRED"
-            elif (not bool(feed_status.get("feed_ok"))) or (ws_connected is False):
+            elif suggestions_status != "error" and ((not bool(feed_status.get("feed_ok"))) or (ws_connected is False)):
                 suggestions_status = "blocked"
                 suggestions_reason = "feed_unhealthy"
                 suggestions_subreason = str(cycle_status.get("primary_blocker") or "")
