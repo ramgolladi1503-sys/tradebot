@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, architecture, runtime health, contract guard, and portfolio quality gate
+    name: Documentation, architecture, runtime health, contract guard, stale feed, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -25,8 +25,10 @@ jobs:
           test -f docs/test-reports/README.md
           test -f core/runtime_health_eval.py
           test -f core/contract_resolution_guard.py
+          test -f core/stale_feed_simulator.py
           test -f tests/test_runtime_health_eval.py
           test -f tests/test_contract_resolution_guard.py
+          test -f tests/test_stale_feed_simulator.py
 
       - name: Check README sections
         run: |
@@ -47,8 +49,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest
 
-      - name: Run real offline runtime health and contract-resolution tests
-        run: pytest -q tests/test_runtime_health_eval.py tests/test_contract_resolution_guard.py
+      - name: Run real offline runtime health, contract-resolution, and stale-feed tests
+        run: pytest -q tests/test_runtime_health_eval.py tests/test_contract_resolution_guard.py tests/test_stale_feed_simulator.py
 
       - name: Generate portfolio test report
         run: |
@@ -58,7 +60,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing fintech QA/SDET portfolio and runs safe offline runtime-health plus contract-resolution guard tests.
+          This CI gate validates the repository as a recruiter-facing fintech QA/SDET portfolio and runs safe offline runtime-health, contract-resolution, and stale-feed tests.
 
           ## Checks
 
@@ -70,10 +72,11 @@ jobs:
           - Runtime health evaluator source exists.
           - Runtime health unit tests run for valid snapshots, stale feed, low contract coverage, memory-only source, feed disconnection, DB failure, and missing contract fields.
           - Contract-resolution guard tests run for unresolved contracts, missing tokens, exact matches, safe fallbacks, expiry-distance violations, strike-distance violations, and unknown resolution paths.
+          - Stale-feed simulator tests run for fresh ticks, stale ticks, future ticks, missing LTP, and mixed-symbol feed blocking.
 
           ## Current honest limitation
 
-          This workflow intentionally avoids full broker/runtime tests. It tests pure offline readiness and contract safety logic first, without Kite secrets, market sessions, TensorFlow, or Streamlit startup risk.
+          This workflow intentionally avoids full broker/runtime tests. It tests pure offline readiness, contract safety, and feed-freshness logic first, without Kite secrets, market sessions, TensorFlow, or Streamlit startup risk.
           REPORT
 
       - name: Upload portfolio report
