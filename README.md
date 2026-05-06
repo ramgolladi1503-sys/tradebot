@@ -1,17 +1,143 @@
+# Tradebot
+
+**Real-time financial decision, risk, and execution-monitoring system for options trading workflows.**
+
+Tradebot is a production-style portfolio project for testing real-time fintech systems. It demonstrates market-data validation, contract resolution, signal processing, execution gating, risk controls, reconciliation, dashboarding, reporting, data governance, and automated health checks.
+
+This repository should be read as a QA/SDET + fintech reliability project, not as a promise of trading profitability.
+
+---
+
+## Problem statement
+
+Trading systems fail for reasons that simple demos never expose:
+
+- Market data becomes stale.
+- Strategy output does not map to a real tradable contract.
+- Risk gates silently block execution.
+- Broker auth expires.
+- Dashboards show incomplete symbols.
+- Logs disagree with execution state.
+- Backtests do not match live runtime behavior.
+- Operators cannot quickly explain why a trade was blocked.
+
+Tradebot is built to make those failure modes visible, testable, and auditable.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Market Data / Broker Feed] --> B[Feed Validation]
+    B --> C[Strategy Engine]
+    C --> D[Contract Resolver]
+    D --> E[Execution Gate]
+    E --> F{Decision}
+    F -->|execute| G[Execution Router]
+    F -->|queue| H[Review Queue]
+    F -->|advisory| I[Advisory Output]
+    G --> J[Trade Log]
+    H --> J
+    I --> J
+    J --> K[Reconciliation]
+    J --> L[Dashboard]
+    J --> M[Reports]
+    K --> N[Risk Monitor]
+    N --> O[Kill Switch / Halt]
+```
+
+---
+
+## Core capabilities
+
+### Market-data validation
+
+- Kite auth/session checks.
+- Feed self-tests without broker dependency.
+- Depth websocket support.
+- Tick and depth persistence in SQLite.
+- Data QC and SLA checks.
+
+### Contract resolution
+
+- Maps strategy outputs to real broker instruments.
+- Designed to catch contract-resolution failures before execution.
+- Supports instrument download and validation flows.
+
+### Execution lifecycle visibility
+
+- Decision logging into SQLite.
+- Manual approval flow.
+- Execution intent logs.
+- Live fills sync.
+- Reconciliation of fills vs trade logs.
+
+### Risk and safety controls
+
+- Risk monitor.
+- Resettable risk halt.
+- Kill switch script.
+- Soft-kill thresholds for daily PF, Sharpe, and performance-alert days.
+
+### ML / RL experimentation scaffold
+
+- Dataset building.
+- Model training scripts.
+- Walk-forward training.
+- Tick-based training.
+- RL stub and PPO/DDPG training entrypoints.
+
+### Reporting and dashboarding
+
+- Daily reports.
+- Scorecards.
+- Daily ops bundle.
+- Streamlit dashboard.
+- Execution analytics.
+
+### Data governance
+
+- Trade-log hashing.
+- Data manifests.
+- Dataset freezing.
+- SQLite persistence for long-horizon labeling.
+
+---
+
+## Tech stack
+
+- Python
+- Pytest
+- SQLite
+- Streamlit
+- Broker API integration patterns
+- WebSocket feed patterns
+- ML/RL experiment scaffolding
+- Shell scripts for operations
+- JSON/CSV logs
+- Telegram/email reporting hooks
+
+---
+
 ## Setup
 
 Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
+
 After pulling changes, run the same command again to sync new dependencies.
 
 Create a `.env` file using the provided template:
+
 ```bash
 cp .env.example .env
 ```
 
 Example `.env` values:
+
 ```env
 KITE_API_KEY=your_kite_api_key
 KITE_API_SECRET=your_kite_api_secret
@@ -33,99 +159,86 @@ SMTP_PASSWORD=
 SMTP_TO=
 ```
 
-## Run
+---
+
+## Run locally
 
 Start the live bot:
+
 ```bash
 python main.py
 ```
 
-## Decision Logging
+Start the Streamlit dashboard:
 
-Decision logging can be enabled to persist Decision objects into a SQLite table.
+```bash
+streamlit run dashboard/streamlit_app.py
+```
 
-- Enable with: `DECISION_LOG_ENABLED=true`
-- Database path: `DECISION_DB_PATH` (defaults to `TRADE_DB_PATH`)
-- Table: `decision_log` with columns `decision_id, ts_epoch, run_id, symbol, status, decision_json`
+Depth websocket is optional:
 
-Depth websocket (optional):
 ```bash
 python scripts/start_depth_ws.py
 ```
-Depth snapshots are stored in SQLite `depth_snapshots`.
-Tick data is stored in SQLite `ticks`.
 
-Check Kite auth:
+---
+
+## Operational commands
+
+### Broker/session validation
+
 ```bash
 python scripts/check_kite_auth.py
-```
-
-Feed self-test (no broker required):
-```bash
-python -m core.feed_self_test
-```
-
-Validate Kite session from .env (safe):
-```bash
 python scripts/validate_kite_session.py
-```
-
-Generate a fresh access token from request token:
-```bash
 python scripts/generate_kite_access_token.py
 python scripts/generate_kite_access_token.py --update-env
 ```
 
-Download instruments (fallback CSV):
+### Instrument data
+
 ```bash
 python scripts/download_instruments.py
-```
-
-Fetch Upstox instruments (for dashboard deep links/search):
-```bash
 python scripts/fetch_upstox_instruments.py --url <upstox_instruments_url>
 ```
-Upstox config keys (defaults in `config/config.py`):
-- `UPSTOX_ENABLE_DEEPLINK` (default false)
-- `UPSTOX_CONTRACT_URL_TEMPLATE`
-- `UPSTOX_SEARCH_URL_TEMPLATE`
-- `UPSTOX_INSTRUMENTS_PATH`
 
-Manual approval (when enabled):
+### Manual approval
+
 ```bash
 python scripts/approve_trade.py <trade_id>
 ```
 
-Long-horizon labeling storage is persisted in SQLite:
-```
-data/trades.db
-```
+### Backtest
 
-## RL Scaffold
-
-Run RL environment stub:
 ```bash
-python rl/train_stub.py
+python core/run_backtest.py
 ```
 
-Train PPO or DDPG:
+### Testing
+
 ```bash
-python rl/train_ppo.py
-python rl/train_ddpg.py
+pytest -q
+./scripts/run_tests.sh
 ```
 
-Train/validate RL with split:
+### Deterministic offline health gate
+
 ```bash
-python rl/train_validate_rl.py
+python -m core.health_gate --desk DEFAULT --strict
 ```
 
-RL metrics are logged to `logs/rl_metrics.csv`.
-RL metrics are also logged to `logs/rl_metrics.json` and sent to Telegram if enabled.
-Micro rolling window and alert threshold can be set in `config/config.py`.
+Outputs:
 
-## ML Training & Evaluation
+- `logs_dir()/events.jsonl`
+- `logs_dir()/recon.json`
+- `logs_dir()/health_gate_report.json`
+- `logs_dir()/health_gate_report.md`
 
-Build dataset, train model, and evaluate walk-forward:
+---
+
+## ML and data workflows
+
+### Build, train, and evaluate
+
 ```bash
 python models/build_ml_dataset.py
 python models/train_live_model.py
@@ -133,196 +246,187 @@ python models/train_deep_model.py
 python models/train_micro_model.py
 python models/walk_forward_train.py
 ```
-Register and activate model after training:
+
+### Register and activate model
+
 ```bash
 python models/train_live_model.py --register
 python scripts/activate_model.py --type xgb --path models/xgb_live_model.pkl
 ```
 
-## Tick Training
+### Tick-based training
 
-Build a tick-based dataset from SQLite and optionally join nearest depth snapshots:
 ```bash
 python models/train_from_ticks.py --out data/tick_features.csv
 python models/train_from_ticks.py --from-depth --depth-tolerance-sec 2 --train-micro
-```
-Audit tick/depth dataset:
-```bash
 python scripts/audit_market_data.py
 ```
 
-## TradingView Alerts
+### RL scaffold
 
-Start webhook server:
 ```bash
-python scripts/tradingview_webhook.py
+python rl/train_stub.py
+python rl/train_ppo.py
+python rl/train_ddpg.py
+python rl/train_validate_rl.py
 ```
 
-Alerts are queued in `logs/tv_queue.json`.
-Alerts with trade fields are also added to `logs/review_queue.json`.
-Signature verification uses `X-Signature` header with HMAC-SHA256 and `TV_SHARED_SECRET`.
-Signature example (GET):
-```
-http://localhost:8000/signature_example
-```
+---
 
-Test TradingView client:
-```bash
-python scripts/tv_test_client.py
-```
+## Trade outcome labeling
 
-## Excel Integration
-
-Export trades to Excel:
-```bash
-python scripts/export_trades_excel.py
-```
-
-Import signals from Excel:
-```bash
-python scripts/import_signals_excel.py
-```
-
-Microstructure model live accuracy:
-```bash
-python scripts/micro_accuracy.py
-```
-
-Auto-run with best params from grid search:
-```bash
-python models/optimize_ml_params.py
-python models/best_params_train.py
-```
-
-## Backtest
-
-Run a backtest on sample data:
-```bash
-python core/run_backtest.py
-```
-
-## Testing
-
-Run unit tests:
-```bash
-pytest -q
-```
-
-Deterministic offline health gate (no network, no real broker):
-```bash
-python -m core.health_gate --desk DEFAULT --strict
-```
-Outputs:
-- `logs_dir()/events.jsonl`
-- `logs_dir()/recon.json`
-- `logs_dir()/health_gate_report.json`
-- `logs_dir()/health_gate_report.md`
-
-Automation script (logs to `logs/test_runs.log`):
-```bash
-./scripts/run_tests.sh
-```
-
-## Trade Outcome Labeling (for ML retraining)
-
-Update a trade outcome (after exit):
 ```bash
 python scripts/update_trade_outcome.py <trade_id> <exit_price> [actual(1/0)]
-```
-
-Export JSON log to CSV for retraining:
-```bash
 python scripts/export_trade_log_csv.py
 ```
 
-Strategy performance tracking (auto-disables underperformers):
-- Outcomes are recorded when you run `scripts/update_trade_outcome.py`
-- Strategy scores persist in `logs/strategy_perf.json`
+Strategy performance tracking persists in:
 
-## Reports & Dashboard
+```text
+logs/strategy_perf.json
+```
 
-Daily report (JSON + CSV):
+---
+
+## Reporting and governance
+
 ```bash
 python scripts/daily_report.py
-```
-
-Risk monitor (independent check):
-```bash
-python scripts/risk_monitor.py
-python scripts/reset_risk_halt.py
-./scripts/kill_switch.sh
-```
-
-Scorecard (top-1% readiness):
-```bash
 python scripts/update_scorecard.py
-```
-
-Daily scorecard + Telegram summary:
-```bash
 python scripts/daily_scorecard.py
-```
-
-Streamlit dashboard:
-```bash
-streamlit run dashboard/streamlit_app.py
-```
-
-Execution analytics:
-```bash
 python scripts/run_execution_analytics.py
-```
-
-Data governance helpers:
-```bash
 python scripts/hash_trade_log.py
 python scripts/data_manifest.py
 python scripts/freeze_dataset.py
-```
-
-Daily ops bundle:
-```bash
 python scripts/daily_ops.py
+python scripts/data_qc.py
+python scripts/sla_check.py
+python scripts/daily_rollup.py
+python scripts/reconcile_fills.py
 ```
 
-Live fills sync (run every 5 minutes):
+Live fills sync:
+
 ```bash
 python scripts/live_fills_sync.py
 ```
 
-Data QC / SLA checks:
-```bash
-python scripts/data_qc.py
-python scripts/sla_check.py
-python scripts/daily_rollup.py
-```
-
-Reconcile fills vs trade log:
-```bash
-python scripts/reconcile_fills.py
-```
-
 Execution router live intent log:
+
 ```bash
 cat logs/execution_intents.jsonl
 ```
 
-Soft-kill thresholds (config):
-- `MIN_DAILY_PF`
-- `MIN_DAILY_SHARPE`
-- `PERF_ALERT_DAYS`
+---
 
-Generate sample trades (for testing dashboard):
-```bash
-python scripts/generate_sample_trades.py
-```
+## Test strategy
 
-Email/Telegram delivery:
-- Telegram uses `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
-- Email uses SMTP env vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_TO`)
+### Unit tests
+
+- Contract resolution.
+- Feed validation.
+- Gating logic.
+- Risk controls.
+- Decision normalization.
+- Persistence helpers.
+
+### Integration tests
+
+- Strategy output to contract resolver.
+- Resolver to execution gate.
+- Decision persistence to dashboard.
+- Trade log to reconciliation.
+- Broker/session validation with safe mocks.
+
+### Offline deterministic checks
+
+- `core.health_gate` validates system health without real broker/network dependency.
+- Useful for CI and pre-live readiness.
+
+### Data quality tests
+
+- Stale LTP detection.
+- Missing symbol/strike detection.
+- Tick/depth dataset audit.
+- SLA checks.
+
+### Runtime safety tests
+
+- Risk halt.
+- Kill switch.
+- Manual approval.
+- Non-executable decision states.
+
+---
+
+## Failure modes handled
+
+- Broker session/auth failure.
+- Missing or stale market data.
+- Stale option LTP.
+- Contract-resolution failure.
+- Strategy emits a signal that cannot be safely executed.
+- Risk gate blocks trade.
+- Manual approval required.
+- No trades generated due to missing trained model or unavailable market data.
+- Dashboard rendering issues caused by missing runtime fields.
+- Reconciliation mismatch between fills and trade log.
+- Underperforming strategy auto-disable workflow.
+
+---
+
+## Screenshots / demo
+
+- Screenshots: not added yet.
+- Demo video: not recorded yet.
+
+Planned recruiter demo:
+
+1. Run offline health gate.
+2. Show generated health report.
+3. Run sample trades/dashboard data.
+4. Show execution states: executable, queue-only, advisory-only, blocked.
+5. Show stale-data and contract-resolution failure handling.
+6. Show risk monitor and reconciliation outputs.
+
+---
+
+## Roadmap
+
+### Phase 1 — Portfolio hardening
+
+- Add architecture screenshots.
+- Add demo dataset.
+- Add CI workflow for tests and health gate.
+- Add sample dashboard screenshots.
+- Add recruiter demo video.
+
+### Phase 2 — Testing depth
+
+- Expand unit coverage for resolver/gating/risk.
+- Add golden-file tests for decision logs.
+- Add contract tests for dashboard data schema.
+- Add deterministic stale-feed simulations.
+
+### Phase 3 — Runtime reliability
+
+- Improve feed failover behavior.
+- Add richer observability events.
+- Add incident reports.
+- Add operator runbook.
+- Add stricter reconciliation gates.
+
+---
+
+## Portfolio value
+
+This repo demonstrates how I approach QA/SDET work for real-time fintech systems: reliability, observability, failure handling, data correctness, risk controls, automated checks, and production-style debugging.
+
+---
 
 ## Troubleshooting
 
-- Missing env vars warning: ensure your `.env` file is present and filled, or export the variables in your shell.
+- Missing env vars warning: ensure `.env` exists and required variables are filled.
 - `ModuleNotFoundError`: run `pip install -r requirements.txt`.
-- If no trades are generated, check that market data is available and your ML model has been trained.
+- No trades generated: check market data availability, model training state, contract resolution, and gate blockers.
+- Dashboard mismatch: verify runtime logs and persisted decision fields before assuming a frontend issue.
