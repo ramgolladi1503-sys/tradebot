@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="Tradebot architecture diagram">
+  <defs>
+    <style>
+      .title{font:700 30px Arial,Helvetica,sans-serif;fill:#0f172a}.sub{font:400 16px Arial,Helvetica,sans-serif;fill:#475569}.box{fill:#f8fafc;stroke:#334155;stroke-width:2;rx:16}.box2{fill:#eef2ff;stroke:#4338ca;stroke-width:2;rx:16}.box3{fill:#ecfdf5;stroke:#047857;stroke-width:2;rx:16}.box4{fill:#fff7ed;stroke:#c2410c;stroke-width:2;rx:16}.text{font:700 16px Arial,Helvetica,sans-serif;fill:#111827}.small{font:400 13px Arial,Helvetica,sans-serif;fill:#374151}.arrow{stroke:#334155;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker>
+  </defs>
+  <rect width="1280" height="720" fill="#ffffff"/>
+  <text x="60" y="58" class="title">Tradebot — Real-Time Financial Decision, Risk &amp; Monitoring System</text>
+  <text x="60" y="86" class="sub">Portfolio architecture for fintech QA, SDET automation, data quality, execution visibility, and production-style failure handling.</text>
+
+  <rect x="60" y="145" width="180" height="92" class="box"/><text x="90" y="178" class="text">Market Feed</text><text x="86" y="204" class="small">Broker API / ticks</text><text x="87" y="222" class="small">depth snapshots</text>
+  <rect x="290" y="145" width="180" height="92" class="box2"/><text x="324" y="178" class="text">Feed Validation</text><text x="322" y="204" class="small">freshness checks</text><text x="326" y="222" class="small">SLA / QC gates</text>
+  <rect x="520" y="145" width="180" height="92" class="box"/><text x="554" y="178" class="text">Strategy Engine</text><text x="553" y="204" class="small">signals / scores</text><text x="558" y="222" class="small">candidate output</text>
+  <rect x="750" y="145" width="180" height="92" class="box2"/><text x="779" y="178" class="text">Contract Resolver</text><text x="781" y="204" class="small">real instruments</text><text x="784" y="222" class="small">strike validation</text>
+  <rect x="980" y="145" width="180" height="92" class="box4"/><text x="1022" y="178" class="text">Execution Gate</text><text x="1021" y="204" class="small">risk + approval</text><text x="1015" y="222" class="small">blocker reasons</text>
+
+  <path d="M240 191 H290" class="arrow"/><path d="M470 191 H520" class="arrow"/><path d="M700 191 H750" class="arrow"/><path d="M930 191 H980" class="arrow"/>
+
+  <rect x="330" y="330" width="180" height="92" class="box3"/><text x="373" y="363" class="text">Execute</text><text x="360" y="389" class="small">router + intents</text><text x="365" y="407" class="small">live fills sync</text>
+  <rect x="550" y="330" width="180" height="92" class="box4"/><text x="591" y="363" class="text">Queue Only</text><text x="591" y="389" class="small">manual review</text><text x="588" y="407" class="small">approval flow</text>
+  <rect x="770" y="330" width="180" height="92" class="box"/><text x="813" y="363" class="text">Advisory</text><text x="805" y="389" class="small">operator view</text><text x="805" y="407" class="small">no execution</text>
+
+  <path d="M1070 237 C1070 295 420 285 420 330" class="arrow"/><path d="M1070 237 C1070 298 640 290 640 330" class="arrow"/><path d="M1070 237 C1070 300 860 300 860 330" class="arrow"/>
+
+  <rect x="180" y="520" width="190" height="96" class="box2"/><text x="225" y="553" class="text">Trade Log</text><text x="220" y="579" class="small">decision records</text><text x="218" y="597" class="small">SQLite / JSONL</text>
+  <rect x="430" y="520" width="190" height="96" class="box"/><text x="477" y="553" class="text">Reconciliation</text><text x="468" y="579" class="small">fills vs log</text><text x="455" y="597" class="small">mismatch detection</text>
+  <rect x="680" y="520" width="190" height="96" class="box3"/><text x="733" y="553" class="text">Dashboard</text><text x="720" y="579" class="small">runtime visibility</text><text x="731" y="597" class="small">scorecards</text>
+  <rect x="930" y="520" width="190" height="96" class="box4"/><text x="974" y="553" class="text">Risk Monitor</text><text x="971" y="579" class="small">halt / kill switch</text><text x="964" y="597" class="small">soft-kill thresholds</text>
+
+  <path d="M420 422 C420 470 275 470 275 520" class="arrow"/><path d="M640 422 C640 470 275 470 275 520" class="arrow"/><path d="M860 422 C860 470 275 470 275 520" class="arrow"/>
+  <path d="M370 568 H430" class="arrow"/><path d="M620 568 H680" class="arrow"/><path d="M870 568 H930" class="arrow"/>
+</svg>
