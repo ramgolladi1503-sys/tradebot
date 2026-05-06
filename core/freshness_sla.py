@@ -104,6 +104,9 @@ def _runtime_snapshot_epochs(symbol: str | None) -> dict[str, Any]:
             symbol_epoch = normalize_epoch_seconds(by_symbol.get(symbol_norm))
             if symbol_epoch is not None:
                 ltp_epoch = symbol_epoch
+    option_age_by_symbol = snapshot.get("option_last_tick_age_by_symbol")
+    option_block_reason_by_symbol = snapshot.get("option_feed_block_reason_by_symbol")
+    subscribed_option_tokens_count_by_symbol = snapshot.get("option_tokens_subscribed_count_by_symbol")
     return {
         "ltp_epoch": ltp_epoch,
         "depth_epoch": depth_epoch,
@@ -111,6 +114,13 @@ def _runtime_snapshot_epochs(symbol: str | None) -> dict[str, Any]:
         "runtime_state": str(snapshot.get("runtime_state") or "").strip().upper() or None,
         "ws_connected": snapshot.get("ws_connected"),
         "subscribed_tokens_count": snapshot.get("subscribed_tokens_count"),
+        "option_last_tick_age_by_symbol": dict(option_age_by_symbol or {}) if isinstance(option_age_by_symbol, dict) else {},
+        "option_feed_block_reason_by_symbol": dict(option_block_reason_by_symbol or {})
+        if isinstance(option_block_reason_by_symbol, dict)
+        else {},
+        "option_tokens_subscribed_count_by_symbol": dict(subscribed_option_tokens_count_by_symbol or {})
+        if isinstance(subscribed_option_tokens_count_by_symbol, dict)
+        else {},
     }
 
 
@@ -148,6 +158,15 @@ def _normalize_tokens(tokens: Sequence[int] | None) -> list[int]:
         except Exception:
             continue
     return out
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
 
 
 def _resolve_ltp_tokens(symbol: str | None, tokens: Sequence[int] | None) -> list[int]:
@@ -317,6 +336,12 @@ def get_freshness_status(
     runtime_snapshot = _runtime_snapshot_epochs(symbol_norm)
     runtime_ltp_epoch = normalize_epoch_seconds(runtime_snapshot.get("ltp_epoch"))
     runtime_depth_epoch = normalize_epoch_seconds(runtime_snapshot.get("depth_epoch"))
+    runtime_option_age_by_symbol = {}
+    runtime_option_block_reason_by_symbol = {}
+    runtime_option_age_values: list[float] = []
+    runtime_option_stale_symbols: list[str] = []
+    runtime_option_all_fresh = False
+    runtime_option_data_present = False
     runtime_snapshot_used = False
     runtime_ltp_used = False
     if runtime_ltp_epoch is not None and (ltp_last_epoch is None or runtime_ltp_epoch > ltp_last_epoch):
@@ -328,6 +353,50 @@ def get_freshness_status(
         depth_last_epoch = runtime_depth_epoch
         depth_source = str(runtime_snapshot.get("source") or "feed_runtime_latest")
         runtime_snapshot_used = True
+    runtime_option_age_raw = runtime_snapshot.get("option_last_tick_age_by_symbol")
+    if isinstance(runtime_option_age_raw, dict):
+        runtime_option_data_present = True
+        runtime_option_age_by_symbol = {
+            str(sym).upper(): _safe_float(age)
+            for sym, age in dict(runtime_option_age_raw or {}).items()
+            if str(sym).strip()
+        }
+        runtime_option_age_values = [
+            float(age)
+            for age in runtime_option_age_by_symbol.values()
+            if age is not None
+        ]
+    runtime_option_block_reason_raw = runtime_snapshot.get("option_feed_block_reason_by_symbol")
+    if isinstance(runtime_option_block_reason_raw, dict):
+        runtime_option_data_present = True
+        runtime_option_block_reason_by_symbol = {
+            str(sym).upper(): str(reason or "").strip().upper() or "OK"
+            for sym, reason in dict(runtime_option_block_reason_raw or {}).items()
+            if str(sym).strip()
+        }
+    prefer_runtime_option_ages = bool(
+        getattr(cfg, "FEED_FRESHNESS_PREFER_RUNTIME_OPTION_AGES_ENABLE", True)
+    )
+    runtime_option_all_fresh = bool(
+        prefer_runtime_option_ages
+        and runtime_option_data_present
+        and runtime_option_age_values
+        and all(float(age) <= max_ltp_age for age in runtime_option_age_values)
+        and all(reason == "OK" for reason in runtime_option_block_reason_by_symbol.values())
+    )
+    if runtime_option_data_present and not runtime_option_all_fresh:
+        runtime_option_stale_symbols = sorted(
+            {
+                sym
+                for sym, age in runtime_option_age_by_symbol.items()
+                if age is not None and float(age) > max_ltp_age
+            }
+            | {
+                sym
+                for sym, reason in runtime_option_block_reason_by_symbol.items()
+                if reason and reason != "OK"
+            }
+        )
 
     if ltp_last_epoch is not None:
         data_available = True
@@ -341,12 +410,21 @@ def get_freshness_status(
     depth_ok = depth_age is not None and depth_age <= max_depth_age
     stale_ratio = float(len(stale_tokens)) / float(max(1, len(tokens_for_ltp)))
     stale_ratio_exceeded = bool(stale_tokens and tokens_for_ltp and stale_ratio > max_stale_token_ratio)
+    db_stale_ratio = stale_ratio
+    effective_stale_ratio = stale_ratio
+    if runtime_option_all_fresh:
+        stale_tokens = []
+        stale_ratio = 0.0
+        stale_ratio_exceeded = False
+        effective_stale_ratio = 0.0
 
     no_ticks_yet = ltp_last_epoch is None
 
     if market_open and (not allow_stale_quotes):
         if no_ticks_yet:
             reasons.append("no_ticks_yet")
+        elif runtime_option_stale_symbols:
+            reasons.append(f"option_runtime_stale:{','.join(runtime_option_stale_symbols)}")
         elif stale_tokens and tokens_for_ltp and stale_ratio_exceeded:
             reasons.append(f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)}")
         elif ltp_age > max_ltp_age:
@@ -425,12 +503,17 @@ def get_freshness_status(
             "required": bool(market_open and depth_required),
         },
         "reasons": reasons,
+        "runtime_option_ages": runtime_option_age_by_symbol,
+        "runtime_option_block_reasons": runtime_option_block_reason_by_symbol,
+        "runtime_option_freshness_applied": bool(runtime_option_all_fresh),
     }
     if runtime_snapshot_used and ltp_last_epoch is not None:
         payload["ltp"]["source"] = ltp_source
         if runtime_depth_epoch is not None:
             payload["depth"]["source"] = depth_source
-    payload["stale_token_ratio"] = stale_ratio if tokens_for_ltp else 0.0
+    payload["db_stale_token_ratio"] = db_stale_ratio if tokens_for_ltp else 0.0
+    payload["stale_token_ratio"] = effective_stale_ratio if tokens_for_ltp else 0.0
+    payload["stale_token_ratio_source"] = "runtime_option_ages" if runtime_option_all_fresh else "db_ticks"
     payload["max_stale_token_ratio"] = max_stale_token_ratio
     payload["ok"] = bool(payload.get("ok")) and (
         (not stale_tokens)
@@ -457,6 +540,8 @@ def get_freshness_status(
             "ltp_source": ltp_source,
             "depth_source": depth_source,
             "runtime_snapshot_used": runtime_snapshot_used,
+            "runtime_option_freshness_applied": bool(runtime_option_all_fresh),
+            "runtime_option_stale_symbols": runtime_option_stale_symbols,
             "stale_tokens_count": len(stale_tokens),
             "tracked_tokens_count": len(tokens_for_ltp),
         }
