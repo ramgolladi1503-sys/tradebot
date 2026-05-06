@@ -84,6 +84,45 @@ def _telemetry_value(payload: dict[str, Any], field: str, default: Any = None) -
     return default if value is None else value
 
 
+def _quote_freshness_state(*, quote_validation_status: Any, quote_age_sec: Any) -> str | None:
+    status = str(quote_validation_status or "").strip().upper()
+    age = _safe_float(quote_age_sec)
+    max_age = _safe_float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0))
+    if max_age is None or max_age <= 0:
+        max_age = 8.0
+    if status in {"STALE_OPTION_LTP", "NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}:
+        return "stale"
+    if age is None:
+        return "unknown"
+    return "fresh" if float(age) <= float(max_age) else "stale"
+
+
+def _setup_score_telemetry(payload: dict[str, Any]) -> tuple[float | None, float | None, str | None]:
+    native_setup_score = _safe_float(_telemetry_value(payload, "setup_score"))
+    quality_detail = _telemetry_block(payload, "quality_detail")
+    setup_values = [
+        float(value)
+        for value in (
+            quality_detail.get("setup_regime_alignment_score"),
+            quality_detail.get("setup_structure_score"),
+            quality_detail.get("setup_thesis_score"),
+        )
+        if isinstance(value, (int, float))
+    ]
+    quality_detail_source = str(payload.get("quality_detail_source") or "").strip() or ""
+    if (
+        not bool(getattr(cfg, "CANDIDATE_DECISION_SETUP_SCORE_DERIVE_FROM_PROXY_ENABLE", True))
+        or not setup_values
+    ):
+        return native_setup_score, native_setup_score, (quality_detail_source or "native")
+    derived_setup_score = round(sum(setup_values) / float(len(setup_values)), 6)
+    if quality_detail_source and quality_detail_source != "native":
+        return native_setup_score, derived_setup_score, quality_detail_source
+    if native_setup_score is None:
+        return native_setup_score, derived_setup_score, "derived_from_setup_proxies"
+    return native_setup_score, native_setup_score, "native"
+
+
 def _telemetry_block(payload: dict[str, Any], field: str) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     direct = payload.get(field)
@@ -364,6 +403,9 @@ def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
     )
     exec_allowed = bool(payload.get("execution_allowed", False))
     trade_date = _trade_date(ts)
+    native_setup_score, derived_setup_score, setup_score_source = _setup_score_telemetry(payload)
+    quote_truth_block = _telemetry_block(payload, "quote_truth")
+    quote_truth_snapshot_block = _telemetry_block(payload, "quote_truth_snapshot")
 
     decision_event = {
         "candidate_id": candidate_id,
@@ -405,12 +447,27 @@ def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
         "liquidity_score": _safe_float(_telemetry_value(payload, "liquidity_score")),
         "quote_consistency_score": _safe_float(_telemetry_value(payload, "quote_consistency_score")),
         "quote_validation_status": str(_telemetry_value(payload, "quote_validation_status") or "").strip() or None,
+        "quote_age_sec": _safe_float(_telemetry_value(payload, "quote_age_sec")),
+        "quote_truth_source": str(
+            _telemetry_value(payload, "quote_truth_source")
+            or quote_truth_block.get("quote_source")
+            or quote_truth_snapshot_block.get("quote_source")
+            or (payload.get("source_flags") or {}).get("ltp_source")
+            or payload.get("quote_source")
+            or "live"
+        ).strip() or None,
+        "quote_freshness_state": _quote_freshness_state(
+            quote_validation_status=_telemetry_value(payload, "quote_validation_status"),
+            quote_age_sec=_telemetry_value(payload, "quote_age_sec"),
+        ),
         "liquidity_flow_score": _safe_float(_telemetry_value(payload, "liquidity_flow_score")),
         "liquidity_book_score": _safe_float(_telemetry_value(payload, "liquidity_book_score")),
         "liquidity_spread_score": _safe_float(_telemetry_value(payload, "liquidity_spread_score")),
         "liquidity_volume_score": _safe_float(_telemetry_value(payload, "liquidity_volume_score")),
         "liquidity_oi_score": _safe_float(_telemetry_value(payload, "liquidity_oi_score")),
-        "setup_score": _safe_float(_telemetry_value(payload, "setup_score")),
+        "native_setup_score": native_setup_score,
+        "setup_score": derived_setup_score,
+        "setup_score_source": setup_score_source,
         "setup_regime_alignment_score": _safe_float(_telemetry_value(payload, "setup_regime_alignment_score")),
         "setup_structure_score": _safe_float(_telemetry_value(payload, "setup_structure_score")),
         "setup_thesis_score": _safe_float(_telemetry_value(payload, "setup_thesis_score")),

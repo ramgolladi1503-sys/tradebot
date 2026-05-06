@@ -122,6 +122,45 @@ def _candidate_telemetry_block(candidate: Any, field: str) -> dict[str, Any]:
     return merged
 
 
+def _candidate_quote_freshness_state(*, quote_validation_status: Any, quote_age_sec: Any) -> str | None:
+    status = str(quote_validation_status or "").strip().upper()
+    age = _safe_float(quote_age_sec)
+    max_age = _safe_float(getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0))
+    if max_age is None or max_age <= 0:
+        max_age = 8.0
+    if status in {"STALE_OPTION_LTP", "NO_LIVE_OPTION_FEED", "MISSING_OPTION_TOKEN"}:
+        return "stale"
+    if age is None:
+        return "unknown"
+    return "fresh" if float(age) <= float(max_age) else "stale"
+
+
+def _candidate_setup_score(candidate: Mapping[str, Any]) -> tuple[float | None, float | None, str | None]:
+    native_setup_score = _safe_float(_candidate_telemetry_value(candidate, "setup_score"))
+    quality_detail = _candidate_telemetry_block(candidate, "quality_detail")
+    setup_values = [
+        float(value)
+        for value in (
+            quality_detail.get("setup_regime_alignment_score"),
+            quality_detail.get("setup_structure_score"),
+            quality_detail.get("setup_thesis_score"),
+        )
+        if isinstance(value, (int, float))
+    ]
+    quality_detail_source = str(_candidate_get(candidate, "quality_detail_source") or "").strip() or ""
+    if (
+        not bool(getattr(cfg, "CANDIDATE_DECISION_SETUP_SCORE_DERIVE_FROM_PROXY_ENABLE", True))
+        or not setup_values
+    ):
+        return native_setup_score, native_setup_score, (quality_detail_source or "native")
+    derived_setup_score = round(sum(setup_values) / float(len(setup_values)), 6)
+    if quality_detail_source and quality_detail_source != "native":
+        return native_setup_score, derived_setup_score, quality_detail_source
+    if native_setup_score is None:
+        return native_setup_score, derived_setup_score, "derived_from_setup_proxies"
+    return native_setup_score, native_setup_score, "native"
+
+
 def threshold_audit_dir() -> Path:
     return ensure_dir(runtime_dir() / "analytics")
 
@@ -500,6 +539,9 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         source.get("rejection_reason_code") or source.get("selection_reason") or source.get("family_reject_reason"),
         rejected_at_stage=source.get("rejected_at_stage"),
     )
+    native_setup_score, derived_setup_score, setup_score_source = _candidate_setup_score(source)
+    quote_truth_block = _candidate_telemetry_block(source, "quote_truth")
+    quote_truth_snapshot_block = _candidate_telemetry_block(source, "quote_truth_snapshot")
     return {
         "timestamp": str(source.get("timestamp") or ""),
         "decision_phase": str(source.get("decision_phase") or "selector").strip().lower() or "selector",
@@ -528,7 +570,9 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         "family_consensus_components": _candidate_telemetry_value(source, "family_consensus_components", {}),
         "family_survival_score": _safe_float(_candidate_telemetry_value(source, "family_survival_score")),
         "family_survival_components": _candidate_telemetry_value(source, "family_survival_components", {}),
-        "setup_score": _safe_float(_candidate_telemetry_value(source, "setup_score")),
+        "native_setup_score": native_setup_score,
+        "setup_score": derived_setup_score,
+        "setup_score_source": setup_score_source,
         "setup_regime_alignment_score": _safe_float(_candidate_telemetry_value(source, "setup_regime_alignment_score")),
         "setup_structure_score": _safe_float(_candidate_telemetry_value(source, "setup_structure_score")),
         "setup_thesis_score": _safe_float(_candidate_telemetry_value(source, "setup_thesis_score")),
@@ -539,6 +583,19 @@ def normalize_candidate_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         "entry_overextension_score": _safe_float(_candidate_telemetry_value(source, "entry_overextension_score")),
         "entry_timing_quality_score": _safe_float(_candidate_telemetry_value(source, "entry_timing_quality_score")),
         "execution_quality_score": _safe_float(_candidate_telemetry_value(source, "execution_quality_score")),
+        "quote_age_sec": _safe_float(_candidate_telemetry_value(source, "quote_age_sec")),
+        "quote_truth_source": str(
+            _candidate_telemetry_value(source, "quote_truth_source")
+            or quote_truth_block.get("quote_source")
+            or quote_truth_snapshot_block.get("quote_source")
+            or _candidate_get(_candidate_get(source, "source_flags", {}), "ltp_source")
+            or _candidate_get(source, "quote_source")
+            or "live"
+        ).strip() or None,
+        "quote_freshness_state": _candidate_quote_freshness_state(
+            quote_validation_status=_candidate_telemetry_value(source, "quote_validation_status"),
+            quote_age_sec=_candidate_telemetry_value(source, "quote_age_sec"),
+        ),
         "priority_score": _safe_float(source.get("priority_score")),
         "final_score": _safe_float(source.get("final_score")),
         "selection_probability": _safe_float(source.get("selection_probability")),

@@ -310,6 +310,39 @@ def test_threshold_audit_normalize_preserves_liquidity_telemetry():
     assert normalized["terminal_rank_score"] == 0.578174
     assert normalized["opportunity_score"] == 0.654476
     assert normalized["quote_validation_status"] == "OK"
+    assert normalized["quote_age_sec"] is None
+    assert normalized["quote_freshness_state"] == "unknown"
+    assert normalized["native_setup_score"] == 0.62
+    assert normalized["setup_score_source"] == "native"
+
+
+def test_threshold_audit_normalize_derives_setup_score_from_proxies():
+    normalized = normalize_candidate_decision(
+        {
+            "timestamp": "2026-05-04T14:11:00+05:30",
+            "decision_phase": "selector",
+            "decision_scope": "unit:audit",
+            "symbol": "NIFTY",
+            "market_mode": "SIM",
+            "quality_detail_source": "derived_from_setup_proxies",
+            "quality_detail": {
+                "setup_regime_alignment_score": 0.35,
+                "setup_structure_score": 0.55,
+                "setup_thesis_score": 0.62,
+            },
+            "setup_score": 0.358,
+            "quote_age_sec": 1.25,
+            "quote_truth_source": "live",
+            "quote_validation_status": "OK",
+        }
+    )
+
+    assert normalized["native_setup_score"] == 0.358
+    assert normalized["setup_score_source"] == "derived_from_setup_proxies"
+    assert normalized["setup_score"] == round((0.35 + 0.55 + 0.62) / 3.0, 6)
+    assert normalized["quote_age_sec"] == 1.25
+    assert normalized["quote_truth_source"] == "live"
+    assert normalized["quote_freshness_state"] == "fresh"
 
 
 def test_threshold_audit_normalize_backfills_raw_rank_from_rank():

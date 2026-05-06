@@ -5,6 +5,8 @@ import json
 import sqlite3
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from config import config as cfg
 import core.reject_shadow as reject_shadow
 
@@ -108,6 +110,8 @@ def test_reject_shadow_persists_score_telemetry_to_live_decision_stream(tmp_path
         {
             "liquidity_score": 0.8125,
             "quote_consistency_score": 0.91,
+            "quote_age_sec": 1.25,
+            "quote_truth_source": "live",
             "setup_score": 0.62,
             "trigger_score": 0.54,
             "entry_quality_score": 0.57,
@@ -137,7 +141,11 @@ def test_reject_shadow_persists_score_telemetry_to_live_decision_stream(tmp_path
     latest = rows[-1]
     assert latest["liquidity_score"] == 0.8125
     assert latest["quote_consistency_score"] == 0.91
+    assert latest["quote_age_sec"] == 1.25
+    assert latest["quote_truth_source"] == "live"
+    assert latest["native_setup_score"] == 0.62
     assert latest["setup_score"] == 0.62
+    assert latest["setup_score_source"] == "native"
     assert latest["setup_regime_alignment_score"] == 0.35
     assert latest["setup_structure_score"] == 0.55
     assert latest["setup_thesis_score"] == 0.62
@@ -153,6 +161,43 @@ def test_reject_shadow_persists_score_telemetry_to_live_decision_stream(tmp_path
     assert latest["terminal_rank_score"] == 0.578174
     assert latest["opportunity_score"] == 0.654476
     assert latest["quote_validation_status"] == "OK"
+    assert latest["quote_freshness_state"] == "fresh"
+
+
+def test_reject_shadow_derives_setup_score_from_setup_proxies(tmp_path, monkeypatch):
+    db_path = tmp_path / "shadow_derived_setup.sqlite"
+    logs_root = tmp_path / "logs"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(reject_shadow, "LOGS_ROOT", str(logs_root), raising=False)
+
+    event = _base_event("NIFTY", _ts_ist(2026, 5, 4, 14, 13))
+    event.update(
+        {
+            "setup_score": 0.358,
+            "quote_validation_status": "OK",
+            "quote_age_sec": 1.25,
+            "quote_truth_source": "live",
+            "quality_detail_source": "derived_from_setup_proxies",
+            "quality_detail": {
+                "setup_regime_alignment_score": 0.35,
+                "setup_structure_score": 0.55,
+                "setup_thesis_score": 0.62,
+            },
+        }
+    )
+
+    payload = reject_shadow.record_candidate_decision(event)
+
+    assert payload["status"] == "ok"
+    decision_path = logs_root / "desks" / "DEFAULT" / "candidate_decisions.jsonl"
+    rows = [json.loads(line) for line in decision_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    latest = rows[-1]
+    assert latest["native_setup_score"] == 0.358
+    assert latest["setup_score_source"] == "derived_from_setup_proxies"
+    assert latest["setup_score"] == pytest.approx((0.35 + 0.55 + 0.62) / 3.0, rel=1e-6)
+    assert latest["quote_age_sec"] == 1.25
+    assert latest["quote_truth_source"] == "live"
+    assert latest["quote_freshness_state"] == "fresh"
 
 
 def test_reject_shadow_backfills_nested_liquidity_telemetry(tmp_path, monkeypatch):
