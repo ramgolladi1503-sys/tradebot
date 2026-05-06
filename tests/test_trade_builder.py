@@ -149,7 +149,7 @@ def test_candidate_decision_payload_preserves_nested_provenance():
     assert payload["quality_detail"]["setup_regime_alignment_score"] == 0.35
 
 
-def test_candidate_decision_payload_derives_setup_quality_when_quality_detail_missing():
+def test_candidate_decision_payload_enriches_flat_native_setup_quality_detail():
     candidate = SimpleNamespace(
         setup_score=0.35,
         trigger_score=0.52,
@@ -157,6 +157,15 @@ def test_candidate_decision_payload_derives_setup_quality_when_quality_detail_mi
         regime_conf=0.90,
         signal_score=0.68,
         family_survival_score=0.50,
+        quality_detail={
+            "setup_regime_alignment_score": 0.358,
+            "setup_structure_score": 0.358,
+            "setup_thesis_score": 0.358,
+            "trigger_base_score": 0.5374,
+            "entry_invalidation_score": 0.90266,
+            "entry_overextension_score": 0.90266,
+            "entry_timing_quality_score": 0.90266,
+        },
         score_breakdown={},
     )
     source_flags = {
@@ -169,11 +178,11 @@ def test_candidate_decision_payload_derives_setup_quality_when_quality_detail_mi
     }
     payload = TradeBuilder._candidate_decision_telemetry_payload(candidate, source_flags, {}, {})
 
-    assert payload["quality_detail_source"] == "derived_from_setup_proxies"
-    assert payload["quality_detail"]["setup_regime_alignment_score"] == 0.645
-    assert payload["quality_detail"]["setup_structure_score"] == 0.5175
-    assert payload["quality_detail"]["setup_thesis_score"] == 0.575
+    assert payload["quality_detail_source"] == "native_setup_enriched"
+    assert payload["quality_detail"]["setup_regime_alignment_score"] == 0.635
+    assert payload["quality_detail"]["setup_structure_score"] == 0.5474
+    assert payload["quality_detail"]["setup_thesis_score"] == 0.59
     assert payload["quality_detail"]["trigger_base_score"] == 0.52
-    assert payload["quality_detail"]["entry_invalidation_score"] == 0.171
-    assert payload["quality_detail"]["entry_overextension_score"] == 0.162
-    assert payload["quality_detail"]["entry_timing_quality_score"] == 0.198
+    assert payload["quality_detail"]["entry_invalidation_score"] == 0.90266
+    assert payload["quality_detail"]["entry_overextension_score"] == 0.90266
+    assert payload["quality_detail"]["entry_timing_quality_score"] == 0.90266
