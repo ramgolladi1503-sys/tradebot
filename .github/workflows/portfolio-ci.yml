@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, architecture, and portfolio quality gate
+    name: Documentation, architecture, runtime health, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +22,9 @@ jobs:
           test -f README.md
           test -f docs/architecture/tradebot-architecture.svg
           test -f docs/one-pagers/fintech-qa-trading-systems.md
+          test -f docs/test-reports/README.md
+          test -f core/runtime_health_eval.py
+          test -f tests/test_runtime_health_eval.py
 
       - name: Check README sections
         run: |
@@ -32,6 +35,19 @@ jobs:
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install safe test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+
+      - name: Run real offline runtime health tests
+        run: pytest -q tests/test_runtime_health_eval.py
+
       - name: Generate portfolio test report
         run: |
           mkdir -p reports
@@ -40,18 +56,21 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing fintech QA/SDET portfolio.
+          This CI gate validates the repository as a recruiter-facing fintech QA/SDET portfolio and runs a safe offline runtime-health unit test slice.
 
           ## Checks
 
           - README exists.
           - Architecture SVG exists.
           - Fintech QA one-pager exists.
+          - Test reports guide exists.
           - README includes problem statement, architecture, test strategy, failure modes, and roadmap.
+          - Runtime health evaluator source exists.
+          - Runtime health unit tests run for valid snapshots, stale feed, low contract coverage, memory-only source, feed disconnection, DB failure, and missing contract fields.
 
-          ## Next testing upgrade
+          ## Current honest limitation
 
-          Add a separate runtime CI workflow for safe pytest subsets, offline health gate, and schema validation after dependency stability is confirmed.
+          This workflow intentionally avoids full broker/runtime tests. It tests the pure offline readiness logic first, without Kite secrets, market sessions, TensorFlow, or Streamlit startup risk.
           REPORT
 
       - name: Upload portfolio report
