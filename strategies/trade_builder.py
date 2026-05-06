@@ -1214,36 +1214,53 @@ class TradeBuilder:
                 quality_detail = {**quality_detail, **nested}
         quality_detail_source = "native"
         if not quality_detail:
-            quality_detail_source = "derived_from_composite_scores"
+            quality_detail_source = "derived_from_setup_proxies"
             setup_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "setup_score")
             trigger_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "trigger_score")
             entry_quality_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "entry_quality_score")
             regime_conf = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "regime_conf")
             signal_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "signal_score")
             family_survival_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "family_survival_score")
+            strike_offset = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "strike_offset")
+            orb_state = source_flags.get("orb_state") if isinstance(source_flags, dict) else None
+            orb_progress = 0.0
+            if isinstance(orb_state, dict):
+                try:
+                    window_bars = float(orb_state.get("window_bars") or 0.0)
+                    required_bars = max(float(orb_state.get("required_bars") or 0.0), 1.0)
+                    orb_progress = max(0.0, min(1.0, window_bars / required_bars))
+                except Exception:
+                    orb_progress = 0.0
+            strike_factor = 0.0
+            try:
+                if strike_offset is not None:
+                    strike_scale = max(float(getattr(cfg, "SETUP_FALLBACK_STRIKE_OFFSET_SCALE", 20.0) or 20.0), 1.0)
+                    strike_factor = max(0.0, min(1.0, 1.0 - (abs(float(strike_offset)) / strike_scale)))
+            except Exception:
+                strike_factor = 0.0
             setup_component = None if setup_score is None else max(0.0, min(1.0, float(setup_score)))
             trigger_component = None if trigger_score is None else max(0.0, min(1.0, float(trigger_score)))
             entry_component = None if entry_quality_score is None else max(0.0, min(1.0, float(entry_quality_score)))
             setup_regime_alignment_score = None
             if setup_component is not None:
                 regime_component = float(regime_conf) if regime_conf is not None else setup_component
-                setup_regime_alignment_score = max(0.0, min(1.0, (regime_component * 0.55) + (setup_component * 0.45)))
+                setup_regime_alignment_score = max(0.0, min(1.0, (regime_component * 0.30) + (setup_component * 0.30) + (orb_progress * 0.20) + (strike_factor * 0.20)))
             setup_structure_score = None
             if setup_component is not None:
                 survival_component = float(family_survival_score) if family_survival_score is not None else setup_component
-                setup_structure_score = max(0.0, min(1.0, (setup_component * 0.60) + (survival_component * 0.40)))
+                setup_structure_score = max(0.0, min(1.0, (setup_component * 0.35) + (survival_component * 0.25) + (orb_progress * 0.20) + (strike_factor * 0.20)))
             setup_thesis_score = None
             if setup_component is not None:
                 signal_component = float(signal_score) if signal_score is not None else setup_component
-                setup_thesis_score = max(0.0, min(1.0, (setup_component * 0.50) + (signal_component * 0.50)))
+                setup_thesis_score = max(0.0, min(1.0, (setup_component * 0.30) + (signal_component * 0.25) + (orb_progress * 0.25) + (strike_factor * 0.20)))
             quality_detail = {
                 "setup_regime_alignment_score": None if setup_regime_alignment_score is None else round(float(setup_regime_alignment_score), 6),
                 "setup_structure_score": None if setup_structure_score is None else round(float(setup_structure_score), 6),
                 "setup_thesis_score": None if setup_thesis_score is None else round(float(setup_thesis_score), 6),
                 "trigger_base_score": trigger_component,
-                "entry_invalidation_score": entry_component,
-                "entry_overextension_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 0.95))), 6),
-                "entry_timing_quality_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 1.05))), 6),
+                "entry_invalidation_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 0.95))), 6),
+                "entry_overextension_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 0.90))), 6),
+                "entry_timing_quality_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 1.10))), 6),
             }
         return {
             "source_flags": source_flags,

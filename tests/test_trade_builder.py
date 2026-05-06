@@ -159,13 +159,21 @@ def test_candidate_decision_payload_derives_setup_quality_when_quality_detail_mi
         family_survival_score=0.50,
         score_breakdown={},
     )
-    payload = TradeBuilder._candidate_decision_telemetry_payload(candidate, {}, {}, {})
+    source_flags = {
+        "orb_state": {
+            "window_bars": 3,
+            "required_bars": 5,
+        }
+        ,
+        "strike_offset": 5,
+    }
+    payload = TradeBuilder._candidate_decision_telemetry_payload(candidate, source_flags, {}, {})
 
-    assert payload["quality_detail_source"] == "derived_from_composite_scores"
-    assert payload["quality_detail"]["setup_regime_alignment_score"] == 0.6525
-    assert payload["quality_detail"]["setup_structure_score"] == 0.41
-    assert payload["quality_detail"]["setup_thesis_score"] == 0.515
+    assert payload["quality_detail_source"] == "derived_from_setup_proxies"
+    assert payload["quality_detail"]["setup_regime_alignment_score"] == 0.645
+    assert payload["quality_detail"]["setup_structure_score"] == 0.5175
+    assert payload["quality_detail"]["setup_thesis_score"] == 0.575
     assert payload["quality_detail"]["trigger_base_score"] == 0.52
-    assert payload["quality_detail"]["entry_invalidation_score"] == 0.18
-    assert payload["quality_detail"]["entry_overextension_score"] == 0.171
-    assert payload["quality_detail"]["entry_timing_quality_score"] == 0.189
+    assert payload["quality_detail"]["entry_invalidation_score"] == 0.171
+    assert payload["quality_detail"]["entry_overextension_score"] == 0.162
+    assert payload["quality_detail"]["entry_timing_quality_score"] == 0.198
