@@ -1,10 +1,27 @@
 # Tradebot
 
+[![Portfolio CI](https://github.com/ramgolladi1503-sys/tradebot/actions/workflows/portfolio-ci.yml/badge.svg)](https://github.com/ramgolladi1503-sys/tradebot/actions/workflows/portfolio-ci.yml)
+
 **Real-time financial decision, risk, and execution-monitoring system for options trading workflows.**
 
 Tradebot is a production-style portfolio project for testing real-time fintech systems. It demonstrates market-data validation, contract resolution, signal processing, execution gating, risk controls, reconciliation, dashboarding, reporting, data governance, and automated health checks.
 
 This repository should be read as a QA/SDET + fintech reliability project, not as a promise of trading profitability.
+
+---
+
+## Portfolio assets
+
+- [Architecture image](docs/architecture/tradebot-architecture.svg)
+- [Fintech QA one-pager](docs/one-pagers/fintech-qa-trading-systems.md)
+- [Test reports guide](docs/test-reports/README.md)
+- LinkedIn: https://www.linkedin.com/in/ram-golladi
+
+---
+
+## Architecture image
+
+![Tradebot architecture](docs/architecture/tradebot-architecture.svg)
 
 ---
 
@@ -233,6 +250,8 @@ Outputs:
 - `logs_dir()/health_gate_report.json`
 - `logs_dir()/health_gate_report.md`
 
+See: [Test reports guide](docs/test-reports/README.md)
+
 ---
 
 ## ML and data workflows
@@ -377,7 +396,7 @@ cat logs/execution_intents.jsonl
 
 ## Screenshots / demo
 
-- Screenshots: not added yet.
+- Screenshots: architecture image added.
 - Demo video: not recorded yet.
 
 Planned recruiter demo:
