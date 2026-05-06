@@ -2906,7 +2906,17 @@ class Orchestrator:
         result["quote_refreshed"] = quote_refreshed
 
         trigger_strikes = max(1, int(getattr(cfg, "FEED_AUTO_REPAIR_TRIGGER_STRIKES", 2)))
-        if int(state["streak"]) < trigger_strikes:
+        ltp_stale_trigger_strikes = max(
+            trigger_strikes,
+            int(getattr(cfg, "FEED_AUTO_REPAIR_LTP_STALE_TRIGGER_STRIKES", trigger_strikes)),
+        )
+        effective_trigger_strikes = (
+            ltp_stale_trigger_strikes if "LTP_STALE" in normalized else trigger_strikes
+        )
+        result["trigger_strikes"] = int(effective_trigger_strikes)
+        if "LTP_STALE" in normalized:
+            result["ltp_stale_trigger_strikes"] = int(ltp_stale_trigger_strikes)
+        if int(state["streak"]) < effective_trigger_strikes:
             result["action"] = "waiting_streak"
             return result
 

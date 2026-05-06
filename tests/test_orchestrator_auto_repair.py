@@ -51,6 +51,41 @@ def test_auto_repair_waits_for_streak_then_restarts(monkeypatch):
     assert restart_calls, "expected restart_depth_ws to be called"
 
 
+def test_auto_repair_requires_longer_streak_for_ltp_stale(monkeypatch):
+    orch = _orch_stub()
+    restart_calls = []
+    monkeypatch.setattr(cfg, "FEED_AUTO_REPAIR_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_AUTO_REPAIR_TRIGGER_STRIKES", 2, raising=False)
+    monkeypatch.setattr(cfg, "FEED_AUTO_REPAIR_LTP_STALE_TRIGGER_STRIKES", 4, raising=False)
+    monkeypatch.setattr(cfg, "FEED_AUTO_REPAIR_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_AUTO_REPAIR_MAX_RETRIES", 3, raising=False)
+    monkeypatch.setattr(cfg, "FEED_AUTO_REPAIR_AUTH_RECHECK_SEC", 10_000.0, raising=False)
+    monkeypatch.setattr(orchestrator_mod, "refresh_index_quote_from_rest", lambda symbol, force=False: True)
+    monkeypatch.setattr(
+        orchestrator_mod,
+        "restart_depth_ws",
+        lambda reason="unknown": restart_calls.append(reason) or True,
+    )
+    monkeypatch.setattr(orchestrator_mod, "now_utc_epoch", lambda: 1000.0)
+
+    market_data = {
+        "symbol": "SENSEX",
+        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "quote_ok": False,
+    }
+    first = orch._maybe_auto_repair_live_feed(market_data, gate_reasons=["LTP_STALE"])
+    second = orch._maybe_auto_repair_live_feed(market_data, gate_reasons=["LTP_STALE"])
+    third = orch._maybe_auto_repair_live_feed(market_data, gate_reasons=["LTP_STALE"])
+    fourth = orch._maybe_auto_repair_live_feed(market_data, gate_reasons=["LTP_STALE"])
+
+    assert first["action"] == "waiting_streak"
+    assert second["action"] == "waiting_streak"
+    assert third["action"] == "waiting_streak"
+    assert fourth["action"] == "restart_attempted"
+    assert fourth["restarted"] is True
+    assert restart_calls, "expected restart_depth_ws to be called"
+
+
 def test_auto_repair_halts_on_auth_required(monkeypatch):
     orch = _orch_stub()
     restart_calls = []
