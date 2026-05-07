@@ -216,6 +216,8 @@ def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_an
 
     monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5, raising=False)
+    # This test expects immediate pruning once a token is stale beyond max_age_sec.
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1, raising=False)
     monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True, raising=False)
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: 200.0)
     monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 100.0, raising=False)

@@ -2282,6 +2282,10 @@ FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE = (
 FEED_FRESHNESS_PREFER_TICKSTORE_MEMORY = (
     os.getenv("FEED_FRESHNESS_PREFER_TICKSTORE_MEMORY", "true").lower() == "true"
 )
+# Freshness SLA should not fail closed just because some subscribed option tokens are sparse.
+# We treat the feed as unhealthy only when a large fraction of tracked tokens are stale.
+FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO = float(os.getenv("FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", "0.5"))
+FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT = int(os.getenv("FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT", "5"))
 # Stale option subscription pruning must never starve the decision engine.
 # When enabled, we keep at least the full resolved window size per symbol (ATM +/- strikes).
 FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_USE_RESOLVED_COUNT = (
@@ -2293,6 +2297,19 @@ FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR = int(
 FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR_BY_SYMBOL = json.loads(
     os.getenv("FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR_BY_SYMBOL", "{}")
     or "{}"
+)
+# Prune policy: avoid churn when ticks are merely sparse (3-6s is common intraday on some strikes).
+# This impacts only the subscription universe; execution still requires fresh quotes via decision gates.
+FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC = float(
+    os.getenv("FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", "12.0")
+)
+# Require a token to be stale for N consecutive prune evaluations before pruning it.
+FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS = int(
+    os.getenv("FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", "3")
+)
+# Stale-subscription refresh considers a symbol urgent when its max age exceeds this threshold.
+FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC = float(
+    os.getenv("FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", "8.0")
 )
 FEED_BREAKER_MAX_BLOCK_TIME_SEC = float(os.getenv("FEED_BREAKER_MAX_BLOCK_TIME_SEC", "30"))
 CHAIN_MAX_MISSING_IV_PCT = float(os.getenv("CHAIN_MAX_MISSING_IV_PCT", "0.2"))

@@ -375,12 +375,27 @@ def get_freshness_status(
     depth_ok = depth_age is not None and depth_age <= max_depth_age
 
     no_ticks_yet = ltp_last_epoch is None
+    stale_ratio = (
+        (float(len(stale_tokens)) / float(len(tokens_for_ltp)))
+        if stale_tokens and tokens_for_ltp
+        else 0.0
+    )
+    max_stale_ratio = float(getattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.5))
+    stale_min_count = int(getattr(cfg, "FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT", 5))
+    stale_tokens_violation = bool(
+        stale_tokens
+        and tokens_for_ltp
+        and len(stale_tokens) >= stale_min_count
+        and stale_ratio > max_stale_ratio
+    )
 
     if market_open and (not allow_stale_quotes):
         if no_ticks_yet:
             reasons.append("no_ticks_yet")
-        elif stale_tokens and tokens_for_ltp:
-            reasons.append(f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)}")
+        elif stale_tokens_violation:
+            reasons.append(
+                f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)} ratio={stale_ratio:.2f} max_ratio={max_stale_ratio:.2f}"
+            )
         elif ltp_age > max_ltp_age:
             reasons.append(f"ltp_stale:NIFTY age={ltp_age:.2f} max={max_ltp_age:.2f}")
 
@@ -462,7 +477,12 @@ def get_freshness_status(
         payload["ltp"]["source"] = ltp_source
         if runtime_depth_epoch is not None:
             payload["depth"]["source"] = depth_source
-    payload["ok"] = bool(payload.get("ok")) and (not stale_tokens or allow_stale_quotes or (not market_open))
+    # Do not fail closed just because some tracked tokens are sparse; fail only when staleness is widespread.
+    if market_open and (not allow_stale_quotes) and stale_tokens_violation:
+        payload["ok"] = False
+        if payload.get("state") == "OK":
+            payload["state"] = "DEGRADED"
+    payload["ok"] = bool(payload.get("ok"))
 
     if not scoped:
         _CACHE["ts_epoch"] = now_epoch

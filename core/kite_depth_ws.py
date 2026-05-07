@@ -85,6 +85,9 @@ _UNDERLYING_LOGGED_MISSING = False
 _SYMBOL_LAST_LTP_TS: dict[str, float] = {}
 _SYMBOL_LAST_DEPTH_TS: dict[str, float] = {}
 _SYMBOL_LAST_OPTION_TICK_TS: dict[str, float] = {}
+# Token-level hysteresis for subscription pruning. This is intentionally in-memory only:
+# if the process restarts, we will re-learn staleness from live ticks.
+_STALE_PRUNE_STRIKES_BY_TOKEN: dict[int, int] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
 _RESTART_LOCK = threading.Lock()
@@ -168,9 +171,18 @@ def _stale_option_subscription_prune_enabled() -> bool:
 
 def _stale_option_subscription_max_age_sec() -> float:
     try:
-        return float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5))
+        return float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 12.0))
     except Exception:
-        return 2.5
+        return 12.0
+
+
+def _stale_option_subscription_consecutive_windows_required() -> int:
+    try:
+        n = int(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 3) or 3)
+    except Exception:
+        n = 3
+    # Defensive clamp to keep behavior conservative and predictable.
+    return max(1, min(10, n))
 
 
 def _prune_stale_option_subscription_tokens(
@@ -193,6 +205,7 @@ def _prune_stale_option_subscription_tokens(
             "kept_count": len(tokens),
             "pruned_tokens": [],
             "pruned_by_symbol": {},
+            "consecutive_stale_windows_required": _stale_option_subscription_consecutive_windows_required(),
         }
 
     grace_sec = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0))
@@ -213,6 +226,7 @@ def _prune_stale_option_subscription_tokens(
             "kept_count": len(tokens),
             "pruned_tokens": [],
             "pruned_by_symbol": {},
+            "consecutive_stale_windows_required": _stale_option_subscription_consecutive_windows_required(),
         }
 
     option_tokens = [
@@ -236,9 +250,11 @@ def _prune_stale_option_subscription_tokens(
             "pruned_tokens": [],
             "pruned_by_symbol": {},
             "session_tick_skipped_by_symbol": {},
+            "consecutive_stale_windows_required": _stale_option_subscription_consecutive_windows_required(),
         }
 
     max_age_sec = _stale_option_subscription_max_age_sec()
+    stale_windows_required = _stale_option_subscription_consecutive_windows_required()
     require_session_tick = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True))
     db_rows = get_latest_tick_rows_db(option_tokens)
     pruned_tokens: list[int] = []
@@ -249,6 +265,12 @@ def _prune_stale_option_subscription_tokens(
     protected_stale_by_symbol: dict[str, int] = {}
     stale_samples: list[dict[str, object]] = []
     symbol_rows: dict[str, list[dict[str, object]]] = {}
+
+    # Track strikes only for the currently considered universe to avoid unbounded growth.
+    option_token_set = set(int(t) for t in option_tokens)
+    for old_tok in list(_STALE_PRUNE_STRIKES_BY_TOKEN.keys()):
+        if int(old_tok) not in option_token_set:
+            _STALE_PRUNE_STRIKES_BY_TOKEN.pop(int(old_tok), None)
 
     for token in option_tokens:
         symbol = str(token_to_symbol.get(int(token)) or "").upper() or "UNKNOWN"
@@ -282,13 +304,19 @@ def _prune_stale_option_subscription_tokens(
         elif memory_epoch is not None:
             effective_epoch = float(memory_epoch)
         age_sec = None if effective_epoch is None else max(0.0, float(now_epoch) - float(effective_epoch))
+        is_stale = bool(age_sec is None or age_sec > max_age_sec)
+        if is_stale:
+            _STALE_PRUNE_STRIKES_BY_TOKEN[int(token)] = int(_STALE_PRUNE_STRIKES_BY_TOKEN.get(int(token), 0) or 0) + 1
+        else:
+            _STALE_PRUNE_STRIKES_BY_TOKEN[int(token)] = 0
         symbol_rows.setdefault(symbol, []).append(
             {
                 "token": int(token),
                 "age_sec": age_sec,
                 "db_epoch": db_epoch,
                 "memory_epoch": memory_epoch,
-                "stale": bool(age_sec is None or age_sec > max_age_sec),
+                "stale": is_stale,
+                "stale_windows": int(_STALE_PRUNE_STRIKES_BY_TOKEN.get(int(token), 0) or 0),
                 "rank": option_rank_by_token.get(int(token)),
             }
         )
@@ -297,21 +325,27 @@ def _prune_stale_option_subscription_tokens(
         min_required = max(0, int((min_required_by_symbol or {}).get(symbol, 0) or 0))
         fresh_rows = [row for row in rows if not bool(row.get("stale"))]
         stale_rows = [row for row in rows if bool(row.get("stale"))]
-        keep_rows = list(fresh_rows)
+        # Hysteresis: do not prune a stale token until it has been stale for N consecutive evaluations.
+        keep_rows = list(fresh_rows) + [
+            row for row in stale_rows if int(row.get("stale_windows") or 0) < int(stale_windows_required)
+        ]
+        candidate_prune_rows = [
+            row for row in stale_rows if int(row.get("stale_windows") or 0) >= int(stale_windows_required)
+        ]
         if len(keep_rows) < min_required:
-            stale_rows.sort(
+            candidate_prune_rows.sort(
                 key=lambda row: (
                     float(row.get("age_sec") if row.get("age_sec") is not None else float("inf")),
                     tuple(row.get("rank") or (float("inf"), 1, float("inf"), 2, int(row.get("token") or 0))),
                 )
             )
             extra_needed = min_required - len(keep_rows)
-            keep_rows.extend(stale_rows[:extra_needed])
+            keep_rows.extend(candidate_prune_rows[:extra_needed])
             if extra_needed > 0:
-                protected_stale_by_symbol[symbol] = int(min(extra_needed, len(stale_rows)))
+                protected_stale_by_symbol[symbol] = int(min(extra_needed, len(candidate_prune_rows)))
             if len(keep_rows) < min_required:
                 min_required_blocked_by_symbol[symbol] = int(min_required - len(keep_rows))
-        prune_rows = [row for row in rows if row not in keep_rows]
+        prune_rows = [row for row in candidate_prune_rows if row not in keep_rows]
         for row in prune_rows:
             token = int(row.get("token") or 0)
             pruned_tokens.append(token)
@@ -343,6 +377,7 @@ def _prune_stale_option_subscription_tokens(
             "pruned_tokens": [],
             "pruned_by_symbol": {},
             "session_tick_skipped_by_symbol": session_tick_skipped_by_symbol,
+            "consecutive_stale_windows_required": stale_windows_required,
         }
 
     pruned_set = set(pruned_tokens)
@@ -364,6 +399,7 @@ def _prune_stale_option_subscription_tokens(
         "pruned_by_symbol": pruned_by_symbol,
         "session_tick_skipped_by_symbol": session_tick_skipped_by_symbol,
         "stale_samples": stale_samples,
+        "consecutive_stale_windows_required": stale_windows_required,
     }
 
 
@@ -377,7 +413,7 @@ def _option_subscription_freshness_stats(
         for tok in list(tokens or [])
         if int(tok) > 0 and not _is_underlying_token(int(tok))
     ]
-    urgent_max_age_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 2.0))
+    urgent_max_age_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0))
     if not option_tokens:
         return {
             "option_count": 0,
@@ -459,7 +495,7 @@ def _option_subscription_freshness_by_symbol_stats(
                 "stale_count": 0,
                 "fresh_ratio": 1.0,
                 "max_age_sec": 0.0,
-                "urgent_max_age_sec": float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 2.0)),
+                "urgent_max_age_sec": float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0)),
                 "stale_samples": [],
             },
         )
