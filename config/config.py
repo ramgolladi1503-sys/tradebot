@@ -2289,6 +2289,11 @@ FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT = int(os.getenv("FEED_FRESHNESS_STALE_TOKEN
 # By default, the unscoped/global feed freshness check uses only index/underlying tokens.
 # Option tokens are naturally sparse and should not drive a global fail-closed decision.
 FEED_FRESHNESS_UNSCOPED_INDEX_ONLY = os.getenv("FEED_FRESHNESS_UNSCOPED_INDEX_ONLY", "true").lower() == "true"
+
+# Index REST quote refresh (kite.quote) can stall and must never block the LIVE decision loop.
+# When enabled, REST refresh is best-effort in a background thread; market data uses WS/synthetic quotes immediately.
+INDEX_REST_QUOTE_REFRESH_ASYNC = os.getenv("INDEX_REST_QUOTE_REFRESH_ASYNC", "true").lower() == "true"
+INDEX_REST_QUOTE_REFRESH_ASYNC_MAX_WORKERS = int(os.getenv("INDEX_REST_QUOTE_REFRESH_ASYNC_MAX_WORKERS", "1"))
 # Stale option subscription pruning must never starve the decision engine.
 # When enabled, we keep at least the full resolved window size per symbol (ATM +/- strikes).
 FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_USE_RESOLVED_COUNT = (

@@ -9,6 +9,7 @@ import math
 import logging
 import sqlite3
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timezone
 from datetime import datetime, timedelta
 from config import config as cfg
@@ -69,6 +70,8 @@ _INSUFFICIENT_OHLC_WARNED = set()
 _INDEX_REST_QUOTE_REFRESH_TS = {}
 _INDEX_QUOTE_REQUEST_LOG_TS = {}
 _LIVE_QUOTE_ERROR_LAST_TS = {}
+_INDEX_REST_QUOTE_EXECUTOR: ThreadPoolExecutor | None = None
+_INDEX_REST_QUOTE_INFLIGHT: set[str] = set()
 
 _REGIME_MODEL = None
 _NEWS_ENCODER = None
@@ -80,6 +83,15 @@ _STARTUP_WARMUP_ROWS = []
 _WARMUP_SEED_ATTEMPTS = {}
 _WARMUP_SEED_DETAILS = {}
 logger = logging.getLogger(__name__)
+
+
+def _index_rest_quote_executor() -> ThreadPoolExecutor:
+    global _INDEX_REST_QUOTE_EXECUTOR
+    if _INDEX_REST_QUOTE_EXECUTOR is None:
+        max_workers = int(getattr(cfg, "INDEX_REST_QUOTE_REFRESH_ASYNC_MAX_WORKERS", 1) or 1)
+        # Keep this tiny. Purpose is to avoid blocking LIVE decision loop on REST.
+        _INDEX_REST_QUOTE_EXECUTOR = ThreadPoolExecutor(max_workers=max(1, min(4, max_workers)))
+    return _INDEX_REST_QUOTE_EXECUTOR
 
 # -------------------------------
 # Market Data Functions
@@ -823,6 +835,25 @@ def _refresh_index_quote_from_rest(symbol: str, force: bool = False) -> bool:
     if (not force) and last_refresh and last_refresh_age is not None and last_refresh_age < min_interval:
         return has_cached_bidask
     if not bool(getattr(cfg, "KITE_USE_API", True)):
+        return has_cached_bidask
+
+    # In LIVE, never block the decision loop on REST quote refresh. WS depth/ltp + synthetic index quotes
+    # are sufficient for gating; REST is best-effort to improve bid/ask quality.
+    if (not force) and bool(getattr(cfg, "INDEX_REST_QUOTE_REFRESH_ASYNC", True)):
+        sym_key = sym
+        if sym_key not in _INDEX_REST_QUOTE_INFLIGHT:
+            _INDEX_REST_QUOTE_INFLIGHT.add(sym_key)
+
+            def _task() -> None:
+                try:
+                    _refresh_index_quote_from_rest(sym_key, force=True)
+                finally:
+                    _INDEX_REST_QUOTE_INFLIGHT.discard(sym_key)
+
+            try:
+                _index_rest_quote_executor().submit(_task)
+            except Exception:
+                _INDEX_REST_QUOTE_INFLIGHT.discard(sym_key)
         return has_cached_bidask
     try:
         kite_client.ensure()
