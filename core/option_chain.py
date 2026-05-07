@@ -6,6 +6,7 @@ import logging
 import os
 from config import config as cfg
 from core.paths import data_root
+from core.paths import logs_dir
 from core.market_calendar import (
     choose_nearest_available_expiry,
 )
@@ -27,6 +28,38 @@ from core.time_utils import compute_age_sec, now_utc_epoch
 
 
 logger = logging.getLogger(__name__)
+_OPTION_CHAIN_ERROR_LAST_TS: dict[str, float] = {}
+
+
+def _log_option_chain_error(symbol: str, *, stage: str, error: Exception) -> None:
+    """
+    Always-on, rate-limited error breadcrumb for LIVE chain failures.
+    Without this, LIVE failures silently become empty chains and trip non_live_option_chain gates.
+    """
+    try:
+        now = float(now_utc_epoch())
+        sym = str(symbol or "").upper() or "UNKNOWN"
+        key = f"{sym}:{stage}"
+        last = float(_OPTION_CHAIN_ERROR_LAST_TS.get(key) or 0.0)
+        if last and (now - last) < 30.0:
+            return
+        _OPTION_CHAIN_ERROR_LAST_TS[key] = now
+        import json as _json
+        p = logs_dir() / "option_chain_errors.jsonl"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "ts_epoch": now,
+            "ts_ist": datetime.fromtimestamp(now).isoformat(),
+            "symbol": sym,
+            "stage": str(stage),
+            "error_type": type(error).__name__,
+            "error": str(error),
+            "execution_mode": str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper(),
+        }
+        with p.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        return
 
 
 def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dict:
@@ -411,7 +444,11 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
 
         # Try live Kite option chain (unless forced synthetic)
         if not force_synthetic:
-            kite_client.ensure()
+            try:
+                kite_client.ensure()
+            except Exception as exc:
+                # Best-effort: we may still be able to build from cached instruments without a live client.
+                _log_option_chain_error(symbol, stage="kite_client_ensure", error=exc)
         if (not force_synthetic) and cfg.KITE_USE_API and kite_client.kite:
             instruments = kite_client.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
             if not instruments:
@@ -724,6 +761,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         _write_chain_snapshot(chain, symbol=symbol)
         return chain
     except Exception as e:
+        _log_option_chain_error(symbol, stage="fetch_option_chain", error=e)
         try:
             if getattr(cfg, "REQUIRE_LIVE_QUOTES", True) and not force_synthetic:
                 return []
