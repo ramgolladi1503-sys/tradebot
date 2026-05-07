@@ -2106,11 +2106,30 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     preserve_tokens.update(int(t) for t in sticky_tokens if t is not None)
     preserve_tokens.update(int(t) for t in option_rank_by_token.keys())
 
+    min_required_by_symbol = dict(_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL or {})
+    # Prevent prune starvation: enforce a per-symbol minimum floor, but still allow
+    # pruning far/illiquid strikes so the band stays ATM-focused.
+    try:
+        floor_default = int(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR", 14) or 14)
+    except Exception:
+        floor_default = 14
+    floor_by_symbol = getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR_BY_SYMBOL", {}) or {}
+    for sym, resolved_count in dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}).items():
+        sym_key = str(sym or "").upper()
+        try:
+            floor = int(floor_by_symbol.get(sym_key, floor_default) or floor_default)
+        except Exception:
+            floor = floor_default
+        # Never demand more than the resolved window for this cycle.
+        floor = max(0, min(int(floor), int(resolved_count or 0)))
+        current = int(min_required_by_symbol.get(sym_key, 0) or 0)
+        min_required_by_symbol[sym_key] = max(current, floor)
+
     tokens, prune_meta = _prune_stale_option_subscription_tokens(
         tokens=tokens,
         option_rank_by_token=option_rank_by_token,
         token_to_symbol=token_to_symbol,
-        min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        min_required_by_symbol=min_required_by_symbol,
     )
     pruned_tokens = [int(t) for t in list(prune_meta.get("pruned_tokens") or [])]
     if pruned_tokens:
