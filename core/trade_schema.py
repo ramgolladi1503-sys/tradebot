@@ -179,9 +179,16 @@ class Trade:
     terminal_rank_score: float | None = None
     setup_strength: float | None = None
     setup_score: float | None = None
+    setup_regime_alignment_score: float | None = None
+    setup_structure_score: float | None = None
+    setup_thesis_score: float | None = None
     trigger_score: float | None = None
+    trigger_base_score: float | None = None
     entry_quality_score: float | None = None
     entry_quality_reason: str | None = None
+    entry_invalidation_score: float | None = None
+    entry_overextension_score: float | None = None
+    entry_timing_quality_score: float | None = None
     overextension_score: float | None = None
     overextension_penalty: float | None = None
     entry_distance_to_invalidation: float | None = None
