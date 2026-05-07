@@ -18,6 +18,7 @@ def test_freshness_sla_does_not_fail_on_small_fraction_stale_tokens(monkeypatch)
     monkeypatch.setattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.5, raising=False)
     monkeypatch.setattr(cfg, "FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT", 5, raising=False)
     monkeypatch.setattr(cfg, "FEED_FRESHNESS_PREFER_TICKSTORE_MEMORY", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_UNSCOPED_INDEX_ONLY", False, raising=False)
 
     # Stable time.
     monkeypatch.setattr(fs, "now_utc_epoch", lambda: 1000.0, raising=False)
@@ -41,4 +42,3 @@ def test_freshness_sla_does_not_fail_on_small_fraction_stale_tokens(monkeypatch)
     assert int(status.get("ltp", {}).get("stale_tokens_count") or 0) == 20
     # 20% stale < 50% threshold, should be ok.
     assert bool(status.get("ok")) is True
-

@@ -157,6 +157,13 @@ def _resolve_ltp_tokens(symbol: str | None, tokens: Sequence[int] | None) -> lis
     if explicit:
         return explicit
 
+    # Global/unscoped freshness should never key off option subscription sets.
+    # Options can be sparse even when the feed is healthy; use index tokens instead.
+    if not symbol and bool(getattr(cfg, "FEED_FRESHNESS_UNSCOPED_INDEX_ONLY", True)):
+        idx = _fallback_index_tokens()
+        if idx:
+            return idx
+
     token_map = _load_token_map()
     if symbol:
         mapped = _normalize_tokens(token_map.get(str(symbol).upper()) or [])
