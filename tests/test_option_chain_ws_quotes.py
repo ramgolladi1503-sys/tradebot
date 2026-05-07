@@ -26,4 +26,3 @@ def test_ws_quotes_for_instruments_builds_kite_like_payload(monkeypatch):
     assert q.get("depth", {}).get("buy")
     assert q.get("depth", {}).get("sell")
     assert q.get("timestamp") == 1000.0
-

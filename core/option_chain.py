@@ -46,7 +46,8 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
             tok_int = None
         if not tok_int or tok_int <= 0:
             continue
-        tick = get_last_tick(tok_int, allow_db=True) or {}
+        # LIVE chain quotes should be memory-first and non-blocking; DB fallback can stall under contention.
+        tick = get_last_tick(tok_int, allow_db=False) or {}
         ltp = tick.get("ltp")
         ts_epoch = tick.get("ts_epoch")
         book = depth_store.get(tok_int) or {}
