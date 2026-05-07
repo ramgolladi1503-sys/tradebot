@@ -21,10 +21,47 @@ from config.profile import get_option_filter_profile
 from core.kite_client import kite_client
 from core.option_liquidity_cache import update_option_liquidity_cache
 from core.greeks import implied_vol, greeks
+from core.tick_store import get_last_tick
+from core.depth_store import depth_store
 from core.time_utils import compute_age_sec, now_utc_epoch
 
 
 logger = logging.getLogger(__name__)
+
+
+def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dict:
+    """
+    Build a kite.quote-like payload from WS tick/depth stores.
+    This avoids blocking LIVE cycles on REST quote latency.
+    """
+    out: dict = {}
+    for inst in list(instruments or []):
+        tsym = inst.get("tradingsymbol")
+        if not tsym:
+            continue
+        tok = inst.get("instrument_token") or inst.get("instrumentToken") or inst.get("token")
+        try:
+            tok_int = int(tok) if tok is not None else None
+        except Exception:
+            tok_int = None
+        if not tok_int or tok_int <= 0:
+            continue
+        tick = get_last_tick(tok_int, allow_db=True) or {}
+        ltp = tick.get("ltp")
+        ts_epoch = tick.get("ts_epoch")
+        book = depth_store.get(tok_int) or {}
+        depth = book.get("depth") or {}
+        if ts_epoch is None:
+            ts_epoch = book.get("ts_epoch")
+        out[f"{exchange}:{tsym}"] = {
+            "last_price": ltp,
+            "depth": depth,
+            # keep as epoch seconds; downstream tries float conversion
+            "timestamp": ts_epoch,
+            "oi": None,
+            "volume": None,
+        }
+    return out
 
 
 def _env_flag_enabled(name: str) -> bool:
@@ -444,7 +481,13 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                         continue
                     next_candidates.append(inst)
                 tradingsymbols += [f"{exchange}:{c['tradingsymbol']}" for c in next_candidates]
-            quotes = kite_client.quote(tradingsymbols) if tradingsymbols else {}
+
+            exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM").strip().upper()
+            use_ws_quotes = exec_mode == "LIVE" and bool(getattr(cfg, "OPTION_CHAIN_LIVE_USE_WS_QUOTES", True))
+            if use_ws_quotes:
+                quotes = _ws_quotes_for_instruments(exchange=exchange, instruments=list(opt_rows) + list(next_candidates))
+            else:
+                quotes = kite_client.quote(tradingsymbols) if tradingsymbols else {}
             if not opt_rows or not quotes:
                 raise ValueError("No option quotes available")
             chain = []

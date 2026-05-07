@@ -2294,6 +2294,9 @@ FEED_FRESHNESS_UNSCOPED_INDEX_ONLY = os.getenv("FEED_FRESHNESS_UNSCOPED_INDEX_ON
 # When enabled, REST refresh is best-effort in a background thread; market data uses WS/synthetic quotes immediately.
 INDEX_REST_QUOTE_REFRESH_ASYNC = os.getenv("INDEX_REST_QUOTE_REFRESH_ASYNC", "true").lower() == "true"
 INDEX_REST_QUOTE_REFRESH_ASYNC_MAX_WORKERS = int(os.getenv("INDEX_REST_QUOTE_REFRESH_ASYNC_MAX_WORKERS", "1"))
+
+# Option-chain should use WS ticks/depth instead of synchronous REST quote calls in LIVE.
+OPTION_CHAIN_LIVE_USE_WS_QUOTES = os.getenv("OPTION_CHAIN_LIVE_USE_WS_QUOTES", "true").lower() == "true"
 # Stale option subscription pruning must never starve the decision engine.
 # When enabled, we keep at least the full resolved window size per symbol (ATM +/- strikes).
 FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_USE_RESOLVED_COUNT = (
