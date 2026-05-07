@@ -142,6 +142,48 @@ def _to_float_or_none(value):
         return None
 
 
+def _normalize_strike_step(symbol: str, raw_step) -> int | None:
+    """
+    Strike step is used for ATM rounding and strike ladder construction.
+    Production requirement: must never throw, and must be strictly positive.
+    """
+    try:
+        sym = str(symbol or "").strip().upper()
+    except Exception:
+        sym = ""
+
+    # Prefer per-symbol step first, but tolerate bad/None values.
+    try:
+        step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}
+    except Exception:
+        step_map = {}
+
+    step_val = None
+    if sym and isinstance(step_map, dict):
+        step_val = step_map.get(sym)
+
+    if step_val is None:
+        step_val = raw_step
+    if step_val is None:
+        step_val = getattr(cfg, "STRIKE_STEP", 50)
+
+    try:
+        step_f = float(step_val)
+    except Exception:
+        return None
+    if not (step_f > 0.0):
+        return None
+
+    # Keep as int for strike arithmetic (range, multiplication).
+    try:
+        step_i = int(round(step_f))
+    except Exception:
+        return None
+    if step_i <= 0:
+        return None
+    return step_i
+
+
 def _top_depth_price(depth: dict, side: str):
     if not isinstance(depth, dict):
         return None
@@ -215,9 +257,11 @@ def _derive_option_price_fields(last_price, best_bid, best_ask, quote_age_sec, m
 
 
 def _infer_atm_strike(ltp, step):
-    if not ltp or step <= 0:
+    ltp_val = _to_pos_float(ltp)
+    step_val = _to_float_or_none(step)
+    if ltp_val is None or step_val is None or not (step_val > 0.0):
         return None
-    return int(round(ltp / step) * step)
+    return int(round(float(ltp_val) / float(step_val)) * float(step_val))
 
 _PREV_OI = {}
 _PREV_LTP = {}
@@ -421,8 +465,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
         # Keep strict behavior only during live market hours.
         if strict_live_market_open and force_synthetic:
             return []
-        step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {})
-        step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))
+        step = _normalize_strike_step(symbol, getattr(cfg, "STRIKE_STEP", 50))
         if strikes_around is None:
             per_sym = getattr(cfg, "STRIKES_AROUND_BY_SYMBOL", {})
             strikes_around = per_sym.get(symbol, getattr(cfg, "STRIKES_AROUND", 6))
@@ -770,8 +813,7 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 return []
             if not getattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False):
                 return []
-            step_map = getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {})
-            step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))
+            step = _normalize_strike_step(symbol, getattr(cfg, "STRIKE_STEP", 50))
             atm = _infer_atm_strike(ltp, step)
             if atm is None:
                 return []
