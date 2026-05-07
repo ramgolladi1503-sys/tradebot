@@ -619,7 +619,9 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
 
     feed_runtime_snapshot = _load_fresh_feed_runtime_snapshot(now_epoch=float(checks["ts_epoch"]))
     feed_runtime_reasons = _feed_runtime_block_reasons(feed_runtime_snapshot)
-    if market_open and feed_runtime_reasons:
+    # Feed runtime snapshots are a secondary/bootstrapping signal. Once the decision
+    # engine is active, the decision DAG is the source of truth for feed gating.
+    if market_open and feed_runtime_reasons and (not decision_engine_active):
         feed_ok = False
         feed_reasons = list(dict.fromkeys(feed_runtime_reasons + feed_reasons))
 

@@ -89,7 +89,8 @@ def _infer_strategy_family(payload: dict[str, Any], market_data: dict[str, Any])
     )
     if explicit:
         return explicit
-    return "breakout"
+    fallback = _normalize_text(getattr(cfg, "SOFT_REJECT_STRATEGY_FAMILY_FALLBACK", "breakout"))
+    return fallback or "breakout"
 
 
 def _parse_expiry(value: Any) -> _date | None:

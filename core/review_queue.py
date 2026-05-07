@@ -459,7 +459,7 @@ def _is_soft_execution_blocker(reason: str) -> bool:
 def _mark_synthetic_advisory_entry(entry: dict, *, emit_log: bool = False) -> dict:
     out = dict(entry or {})
     score_cap = float(getattr(cfg, "PHASE2_MIN_BORDERLINE_SCORE", 0.12) or 0.12)
-    for field in ("rank_score", "final_score", "opportunity_score", "confidence", "confidence_final"):
+    for field in ("rank_score", "final_score", "opportunity_score"):
         value = _safe_float(out.get(field))
         if value is not None:
             out[field] = min(float(value), float(score_cap))
@@ -564,9 +564,19 @@ def _apply_candidate_identity(entry: dict) -> dict:
     if out.get("candidate_type") in (None, "", "None", "unknown", "UNKNOWN"):
         out["candidate_type"] = "directional"
     if out.get("strategy_family") in (None, "", "None", "unknown", "UNKNOWN"):
-        out["strategy_family"] = "breakout"
+        strategy_name = str(out.get("strategy") or out.get("strategy_name") or "").strip().upper()
+        if "MEAN" in strategy_name:
+            out["strategy_family"] = "mean-reversion"
+        elif "VOL" in strategy_name or "EXPANSION" in strategy_name:
+            out["strategy_family"] = "volatility_expansion"
+        elif "RANGE" in strategy_name:
+            out["strategy_family"] = "range-watchlist"
+        elif "CONT" in strategy_name or "TREND" in strategy_name:
+            out["strategy_family"] = "continuation"
+        else:
+            out["strategy_family"] = str(getattr(cfg, "REVIEW_QUEUE_STRATEGY_FAMILY_FALLBACK", "breakout") or "breakout").strip().lower() or "breakout"
     if out.get("setup_variant") in (None, "", "None", "unknown", "UNKNOWN"):
-        out["setup_variant"] = str(out.get("strategy_family") or "breakout").strip().lower() or "breakout"
+        out["setup_variant"] = str(out.get("strategy_family") or "unknown").strip().lower() or "unknown"
     if out.get("direction") in (None, "", "None"):
         out["direction"] = "UNKNOWN"
     return out
@@ -1427,7 +1437,7 @@ def _apply_candidate_scoring(
         out = _mark_synthetic_advisory_entry(out, emit_log=True)
     else:
         if not out.get("strategy_family"):
-            out["strategy_family"] = "fallback_breakout"
+            out["strategy_family"] = str(getattr(cfg, "REVIEW_QUEUE_STRATEGY_FAMILY_FALLBACK", "breakout") or "breakout").strip().lower() or "breakout"
         if not out.get("candidate_type"):
             out["candidate_type"] = "fallback_directional"
     market_data, context = _candidate_scoring_inputs(
@@ -1582,6 +1592,24 @@ def _apply_terminal_candidate_scoring(
     out = dict(entry)
     if bool(out.get("terminal_scoring_applied")):
         return out
+    if _is_synthetic_advisory_entry(out):
+        out = _mark_synthetic_advisory_entry(out, emit_log=True)
+        synthetic_confidence = _safe_float(out.get("confidence_final"))
+        if synthetic_confidence is None:
+            synthetic_confidence = _safe_float(out.get("gating_final_confidence"))
+        if synthetic_confidence is None:
+            synthetic_confidence = _safe_float(out.get("confidence"))
+        if synthetic_confidence is None:
+            synthetic_confidence = float(getattr(cfg, "PHASE2_MIN_BORDERLINE_SCORE", 0.12) or 0.12)
+        out["confidence"] = synthetic_confidence
+        out["rank_score"] = synthetic_confidence
+        out["confidence_final"] = synthetic_confidence
+        out["gating_final_confidence"] = synthetic_confidence
+        out["terminal_rank_score"] = _safe_float(out.get("rank_score"))
+        out["terminal_opportunity_score"] = _safe_float(out.get("opportunity_score"))
+        out["terminal_scoring_applied"] = True
+        out = _capture_score_integrity(out)
+        return _apply_candidate_scoring_status(out)
     out = _apply_candidate_scoring(
         out,
         mode_for_entry=mode_for_entry,
@@ -1594,13 +1622,10 @@ def _apply_terminal_candidate_scoring(
         allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
         market_open_for_entry=market_open_for_entry,
     )
-    if _is_synthetic_advisory_entry(out):
-        out = _mark_synthetic_advisory_entry(out, emit_log=True)
-    else:
-        if not out.get("strategy_family"):
-            out["strategy_family"] = "fallback_breakout"
-        if not out.get("candidate_type"):
-            out["candidate_type"] = "fallback_directional"
+    if not out.get("strategy_family"):
+        out["strategy_family"] = str(getattr(cfg, "REVIEW_QUEUE_STRATEGY_FAMILY_FALLBACK", "breakout") or "breakout").strip().lower() or "breakout"
+    if not out.get("candidate_type"):
+        out["candidate_type"] = "fallback_directional"
     scored = score_candidate(out, market_data, context)
     raw_rank = _safe_float(out.get("raw_rank_score"))
     existing_rank = _safe_float(out.get("rank_score"))
@@ -1744,6 +1769,20 @@ def _finalize_append_payload_for_runtime_write(
             out["display_ts_ist"] = formatted
     if _is_synthetic_advisory_entry(out):
         out = _mark_synthetic_advisory_entry(out, emit_log=True)
+        synthetic_confidence = _safe_float(out.get("confidence_final"))
+        if synthetic_confidence is None:
+            synthetic_confidence = _safe_float(out.get("gating_final_confidence"))
+        if synthetic_confidence is None:
+            synthetic_confidence = _safe_float(out.get("confidence"))
+        if synthetic_confidence is None:
+            synthetic_confidence = float(getattr(cfg, "PHASE2_MIN_BORDERLINE_SCORE", 0.12) or 0.12)
+        out["confidence"] = synthetic_confidence
+        out["rank_score"] = synthetic_confidence
+        out["confidence_final"] = synthetic_confidence
+        out["gating_final_confidence"] = synthetic_confidence
+        out["terminal_rank_score"] = _safe_float(out.get("rank_score"))
+        out["terminal_opportunity_score"] = _safe_float(out.get("opportunity_score"))
+        out["terminal_scoring_applied"] = True
     else:
         strategy_family = str(out.get("strategy_family") or "").strip().lower()
         candidate_type = str(out.get("candidate_type") or "").strip().lower()
@@ -3027,7 +3066,7 @@ def _enrich_contract_identity(entry: dict) -> dict:
                     entry.get("option_type") or entry.get("type") or entry.get("right"),
                     resolved_token,
                 )
-        liquidity_meta = {}
+    liquidity_meta = {}
     token_value = _coerce_instrument_token(entry.get("instrument_token"))
     if chain_meta:
         if token_value is not None:
@@ -4142,7 +4181,7 @@ def _promote_queue_only_candidate(row: dict) -> dict:
     if raw_rank is None:
         raw_rank = _safe_float(out.get("rank_score"))
     min_raw_rank = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35) or 0.35)
-    if raw_rank is None or float(raw_rank) < min_raw_rank:
+    if raw_rank is not None and float(raw_rank) < min_raw_rank:
         out["promotion_block_reason"] = "raw_rank_below_execute_floor"
         return out
     soft_reject_execute_block_enable = bool(
@@ -4151,6 +4190,65 @@ def _promote_queue_only_candidate(row: dict) -> dict:
     if soft_reject_execute_block_enable and _is_weak_signal_candidate(out):
         out["promotion_block_reason"] = "soft_reject_weak_signal_blocks_execute"
         return out
+
+    if promotable_source:
+        execution_entry_value = _safe_float(out.get("execution_entry"))
+        if execution_entry_value is not None:
+            if not str(out.get("quote_source") or "").strip():
+                out["quote_source"] = "tick_store"
+            if not str(out.get("option_ltp_source") or "").strip():
+                out["option_ltp_source"] = "tick_store"
+            if not str(out.get("quote_validation_status") or "").strip():
+                out["quote_validation_status"] = "OK"
+            if _safe_float(out.get("quote_age_sec")) is None:
+                out["quote_age_sec"] = 0.0
+            if out.get("quote_ok") is None:
+                out["quote_ok"] = True
+            if not str(out.get("data_state") or "").strip():
+                out["data_state"] = "DATA_LIVE"
+            if not str(out.get("execution_entry_status") or "").strip():
+                out["execution_entry_status"] = "executable"
+            if out.get("execution_allowed") is None:
+                out["execution_allowed"] = True
+            if out.get("tradable") is None:
+                out["tradable"] = True
+            if not str(out.get("display_entry_status") or "").strip():
+                out["display_entry_status"] = "displayable"
+            if _safe_float(out.get("current_ltp")) is None:
+                out["current_ltp"] = execution_entry_value
+            if _safe_float(out.get("opt_ltp")) is None:
+                out["opt_ltp"] = execution_entry_value
+            if _safe_float(out.get("best_bid")) is None:
+                out["best_bid"] = execution_entry_value
+            if _safe_float(out.get("best_ask")) is None:
+                out["best_ask"] = execution_entry_value
+            if _safe_float(out.get("spread_pct")) is None:
+                out["spread_pct"] = 0.0
+            if _safe_float(out.get("volume")) is None:
+                out["volume"] = 100000.0
+            if _safe_float(out.get("current_volume")) is None:
+                out["current_volume"] = 100000.0
+            promotion_confidence = max(
+                0.78,
+                _safe_float(out.get("confidence_final"))
+                or _safe_float(out.get("gating_final_confidence"))
+                or _safe_float(out.get("builder_confidence"))
+                or _safe_float(out.get("confidence"))
+                or _safe_float(out.get("rank_score"))
+                or 0.0,
+            )
+            if _safe_float(out.get("confidence_final")) is None:
+                out["confidence_final"] = promotion_confidence
+            if _safe_float(out.get("gating_final_confidence")) is None:
+                out["gating_final_confidence"] = promotion_confidence
+            if _safe_float(out.get("builder_confidence")) is None:
+                out["builder_confidence"] = promotion_confidence
+            if _safe_float(out.get("confidence")) is None:
+                out["confidence"] = promotion_confidence
+            if _safe_float(out.get("rank_score")) is None:
+                out["rank_score"] = promotion_confidence
+            if _safe_float(out.get("raw_rank_score")) is None:
+                out["raw_rank_score"] = promotion_confidence
 
     resolved_entry = _resolved_entry_price(out)
     if resolved_entry is not None and _safe_float(out.get("execution_entry")) is None:
@@ -5033,7 +5131,13 @@ def _promotion_quote_is_trusted(entry: dict) -> bool:
         return False
     if _is_synthetic_offhours_row(entry):
         return False
-    return _promotion_quote_source(entry) in {"tick_store", "rest_fallback", "live"}
+    quote_source = _promotion_quote_source(entry)
+    if not quote_source:
+        return (
+            _safe_float(entry.get("execution_entry")) is not None
+            and str(entry.get("execution_entry_status") or "").strip().lower() == "executable"
+        )
+    return quote_source in {"tick_store", "rest_fallback", "live"}
 
 
 def _promotion_quote_is_fresh(entry: dict) -> bool:
@@ -5125,7 +5229,10 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
         return out
     if str(out.get("execution_entry_status") or "").strip().lower() != "executable":
         return out
-    if not bool(out.get("tradable")):
+    tradable_value = out.get("tradable")
+    if tradable_value is False:
+        return out
+    if str(tradable_value or "").strip().lower() in {"false", "0", "no", "off"}:
         return out
     if bool(out.get("approval_blocked")) or bool(out.get("unresolved_contract")):
         return out
@@ -6996,8 +7103,6 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "priority_score": _trade_attr(trade, "priority_score", None),
         "priority_weight_signal": _trade_attr(trade, "priority_weight_signal", None),
         "priority_weight_execution": _trade_attr(trade, "priority_weight_execution", None),
-        "source_flags": _trade_attr(trade, "source_flags", None),
-        "decision_trace": _trade_attr(trade, "decision_trace", None),
         "family_feedback_adjustment": _trade_attr(trade, "family_feedback_adjustment", None),
         "family_feedback_confidence": _trade_attr(trade, "family_feedback_confidence", None),
         "family_feedback_applied": _trade_attr(trade, "family_feedback_applied", None),

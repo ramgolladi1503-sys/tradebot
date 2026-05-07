@@ -1791,7 +1791,18 @@ class Orchestrator:
         perf_paths = [str(live_strategy_perf_path)]
         if bool(getattr(cfg, "LIVE_STRATEGY_PERF_SHADOW_FALLBACK_ENABLE", True)):
             perf_paths.append(str(shadow_strategy_perf_path))
-        selected_strategy_perf_path = self.strategy_tracker.load_first_available(perf_paths)
+        selected_strategy_perf_path = None
+        # Backward-compat: older StrategyTracker implementations only expose `load()`.
+        if hasattr(self.strategy_tracker, "load_first_available"):
+            selected_strategy_perf_path = self.strategy_tracker.load_first_available(perf_paths)
+        else:
+            for path in perf_paths:
+                try:
+                    self.strategy_tracker.load(path)
+                    selected_strategy_perf_path = str(path)
+                    break
+                except Exception:
+                    continue
         if selected_strategy_perf_path and selected_strategy_perf_path != str(live_strategy_perf_path):
             logger.warning(
                 "strategy_perf_shadow_fallback_used primary=%s fallback=%s selected=%s",

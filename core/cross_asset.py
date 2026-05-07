@@ -26,7 +26,9 @@ def _skip_broker_auth_resolution() -> bool:
         getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM"
     ).strip().upper()
     dry_run_enabled = bool(getattr(cfg, "DRY_RUN", False) or _env_flag_enabled("DRY_RUN"))
-    return mode in {"SIM", "DRY_RUN"} or dry_run_enabled
+    # Cross-asset features are useful in SIM (replay/backtest) too; only skip when
+    # explicitly dry-running or in a DRY_RUN execution mode.
+    return mode in {"DRY_RUN"} or dry_run_enabled
 
 
 def _log_error(payload: dict) -> None:

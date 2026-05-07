@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 from config import config as cfg
 from core.fs_utils import ensure_parent_dir
+from core import tick_store
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +375,15 @@ def evaluate_reject_shadow_once(
     no_data = 0
     table = _shadow_table_name()
     try:
+        # Reject-shadow evaluation is analytics-only. In SIM/PAPER/OFFHOURS we can safely
+        # flush the async tick-store queue to make outcomes deterministic. In LIVE we
+        # avoid forcing a flush boundary because it can stall under SQLite contention.
+        mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).strip().upper()
+        if mode != "LIVE":
+            try:
+                tick_store.flush_pending_ticks()
+            except Exception:
+                pass
         db_path = _shadow_db_path()
         with sqlite3.connect(str(db_path)) as conn:
             conn.row_factory = sqlite3.Row

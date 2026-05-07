@@ -522,6 +522,20 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         default=confidence_final,
     )
 
+    row_kind = str(row.get("row_kind") or "").strip().lower()
+    candidate_class = "primary"
+    if row_kind in {"recovered_fallback", "fallback"}:
+        candidate_class = "fallback"
+
+    if candidate_class == "fallback":
+        cap = _cfg_float("FALLBACK_CANDIDATE_SCORE_CAP", 0.39)
+        cap = max(0.0, min(1.0, float(cap)))
+        if rank_score > cap:
+            rank_score = cap
+        if opportunity_score > cap:
+            opportunity_score = cap
+        penalty_reasons = _dedupe_texts(list(penalty_reasons) + ["class_fallback"])
+
     score_breakdown = {
         "components": {
             "setup_strength": _round_score(setup_strength),
@@ -547,9 +561,11 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         "rank_score": _round_score(rank_score),
         "opportunity_score": _round_score(opportunity_score),
         "missing_reasons": list(missing_reasons),
+        "candidate_class": candidate_class,
     }
 
     return {
+        "candidate_class": candidate_class,
         "setup_strength": _round_score(setup_strength),
         "regime_fit": _round_score(regime_fit),
         "liquidity_score": _round_score(liquidity_score),

@@ -187,6 +187,11 @@ def get_kite_auth_health(force: bool = False) -> Dict[str, Any]:
     """
     now_epoch = time.time()
     ttl_sec = float(getattr(cfg, "AUTH_HEALTH_TTL_SEC", 60))
+    if not force and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
+        cached = dict(_CACHE.get("payload") or {})
+        cached["source"] = "cache"
+        cached["ttl_sec"] = ttl_sec
+        return _maybe_proactive_refresh(cached, force=False, now_epoch=now_epoch)
     if (not force) and _skip_auth_probe_in_sim():
         payload = {
             "ok": True,
@@ -206,11 +211,6 @@ def get_kite_auth_health(force: bool = False) -> Dict[str, Any]:
         _CACHE["payload"] = payload
         _log_event(payload)
         return payload
-    if not force and _CACHE.get("ts_epoch") and (now_epoch - float(_CACHE["ts_epoch"])) <= ttl_sec:
-        cached = dict(_CACHE.get("payload") or {})
-        cached["source"] = "cache"
-        cached["ttl_sec"] = ttl_sec
-        return _maybe_proactive_refresh(cached, force=False, now_epoch=now_epoch)
 
     api_key = str(getattr(cfg, "KITE_API_KEY", "") or "").strip()
     api_key_tail4 = _tail4(api_key)

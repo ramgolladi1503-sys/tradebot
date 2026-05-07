@@ -179,7 +179,9 @@ class KiteClient:
         """
         Fetch instruments list from Kite (heavy). Cache per exchange per day.
         """
-        kite = self.ensure()
+        # Allow tests / harnesses to inject a stub client via `self.kite` without
+        # requiring real credentials or token alignment.
+        kite = self.kite if self.kite is not None else self.ensure()
         key = (exchange or "ALL").upper()
         today = date.today().isoformat()
 
@@ -251,7 +253,16 @@ class KiteClient:
         _exchange: Optional[str] = None,
         _caller: Optional[str] = None,
     ):
-        kite = self.ensure()
+        cooldown_remaining = self._historical_auth_cooldown_remaining()
+        if cooldown_remaining > 0.0:
+            self._log_atomic(
+                "[HIST_SUPPRESSED] "
+                f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
+                f"interval={interval} cooldown_remaining_sec={cooldown_remaining:.1f}"
+            )
+            return []
+        # Allow tests / harnesses to inject a stub client via `self.kite`.
+        kite = self.kite if self.kite is not None else self.ensure()
         try:
             bars = kite.historical_data(
                 instrument_token=instrument_token,
@@ -271,6 +282,14 @@ class KiteClient:
             return bars
         except Exception as e:
             if self._is_historical_auth_error(e):
+                cooldown_sec = float(getattr(cfg, "HISTORICAL_AUTH_COOLDOWN_SEC", 300.0) or 300.0)
+                now_ts = float(time.time())
+                self._historical_auth_cooldown_until = now_ts + max(1.0, cooldown_sec)
+                self._log_atomic(
+                    "[HIST_AUTH_COOLDOWN] "
+                    f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "
+                    f"interval={interval} cooldown_sec={cooldown_sec:.0f} reason={repr(e)}"
+                )
                 self._log_atomic(
                     "FATAL: Kite authentication failed — stopping system. "
                     f"caller={_caller} symbol={_symbol} exchange={_exchange} token={instrument_token} "

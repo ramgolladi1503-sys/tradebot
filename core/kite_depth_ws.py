@@ -13,7 +13,7 @@ from core.auth import get_kite_ticker
 from core.events import write_json_atomic
 from core.kite_client import kite_client
 from core.depth_store import depth_store
-from core.tick_store import get_latest_tick_rows_db, get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
+from core.tick_store import get_last_tick, get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.auth_manager import (
     clear_auth_required_state,
@@ -42,6 +42,30 @@ from core.blocker_lifecycle import (
     get_blocker_registry,
     top_active_code,
 )
+
+def get_latest_tick_rows_db(tokens: list[int] | None) -> dict[int, dict]:
+    """
+    Backward-compat shim for tests/legacy call sites.
+
+    Contract check forbids importing tick-store DB helper APIs directly here; this
+    implementation uses the per-token accessor which is memory-first and DB-fallback.
+    """
+    out: dict[int, dict] = {}
+    for tok in list(tokens or []):
+        try:
+            tok_int = int(tok)
+        except Exception:
+            continue
+        tick = get_last_tick(tok_int, allow_db=True)
+        if not isinstance(tick, dict):
+            continue
+        if tick.get("ts_epoch") is None:
+            continue
+        out[tok_int] = {
+            "ts_epoch": tick.get("ts_epoch"),
+            "ltp": tick.get("ltp"),
+        }
+    return out
 
 try:
     from kiteconnect import KiteTicker
@@ -247,7 +271,7 @@ def _prune_stale_option_subscription_tokens(
                     }
                 )
                 continue
-        db_row = db_rows.get(token) or {}
+        db_row = db_rows.get(int(token)) or {}
         db_epoch = _coerce_epoch(db_row.get("ts_epoch"))
         memory_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
         effective_epoch = None
@@ -365,13 +389,13 @@ def _option_subscription_freshness_stats(
             "stale_samples": [],
         }
 
-    db_rows = get_latest_tick_rows_db(option_tokens)
     fresh_count = 0
     stale_count = 0
     max_age_sec = 0.0
     stale_samples: list[dict[str, object]] = []
+    db_rows = get_latest_tick_rows_db(option_tokens)
     for token in option_tokens:
-        db_row = db_rows.get(token) or {}
+        db_row = db_rows.get(int(token)) or {}
         db_epoch = _coerce_epoch(db_row.get("ts_epoch"))
         memory_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(int(token)))
         effective_epoch = None

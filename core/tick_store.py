@@ -38,11 +38,18 @@ def _normalize_token(token: int | str | None) -> int | None:
 
 
 def _db_writes_enabled() -> bool:
-    return bool(getattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True))
+    value = getattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True)
+    # Treat an explicit None as "unset" to preserve the safe default (enabled).
+    if value is None:
+        return True
+    return bool(value)
 
 
 def _async_db_writes_enabled() -> bool:
-    return bool(getattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True))
+    value = getattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True)
+    if value is None:
+        return True
+    return bool(value)
 
 
 def _flush_interval_sec() -> float:
@@ -222,6 +229,47 @@ def get_max_tick_epoch_db(tokens: list[int] | None = None) -> float | None:
         return None
 
 
+def get_max_tick_epoch_db_no_flush(tokens: list[int] | None = None) -> float | None:
+    """
+    SQLite max-tick query without forcing a durable flush boundary.
+
+    Some runtime paths (freshness SLA, live decision loops) only need best-effort
+    evidence and must not block on SQLite WAL/busy contention caused by the async
+    tick writer. If you need read-after-write consistency, call flush_pending_ticks()
+    explicitly before reading.
+    """
+    try:
+        init_ticks()
+        with _conn() as conn:
+            cols = _tick_columns(conn)
+            if "timestamp_epoch" not in cols:
+                return None
+            if not tokens:
+                # NOTE: get_max_tick_epoch(conn) forces a flush; replicate the query without flushing.
+                row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks").fetchone()
+                return _to_epoch(row[0] if row else None)
+            token_list = [t for t in (_normalize_token(v) for v in list(tokens)) if t is not None]
+            if not token_list:
+                return None
+            latest = None
+            chunk_size = 900
+            for idx in range(0, len(token_list), chunk_size):
+                chunk = token_list[idx : idx + chunk_size]
+                q_marks = ",".join(["?"] * len(chunk))
+                row = conn.execute(
+                    f"SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token IN ({q_marks})",
+                    tuple(chunk),
+                ).fetchone()
+                val = _to_epoch(row[0] if row else None)
+                if val is None:
+                    continue
+                if latest is None or val > latest:
+                    latest = val
+            return latest
+    except Exception:
+        return None
+
+
 def get_last_tick_for_token(
     conn: sqlite3.Connection, token: int | str | None
 ) -> tuple[float | None, float | None] | None:
@@ -259,6 +307,10 @@ def get_latest_tick_db(token: int) -> dict | None:
     token_int = _normalize_token(token)
     if token_int is None:
         return None
+    try:
+        _flush_pending_ticks()
+    except Exception:
+        pass
     try:
         init_ticks()
         with _conn() as conn:
@@ -311,6 +363,79 @@ def get_latest_tick_db(token: int) -> dict | None:
 
 
 def get_latest_tick_rows_db(tokens: list[int]) -> dict[int, dict]:
+    token_list = [t for t in (_normalize_token(v) for v in list(tokens or [])) if t is not None]
+    if not token_list:
+        return {}
+    out: dict[int, dict] = {}
+    try:
+        _flush_pending_ticks()
+    except Exception:
+        pass
+    try:
+        init_ticks()
+        with _conn() as conn:
+            cols = _tick_columns(conn)
+            if "timestamp_epoch" not in cols or "instrument_token" not in cols:
+                return out
+            last_price_expr = "last_price" if "last_price" in cols else "NULL"
+            volume_expr = "volume" if "volume" in cols else "NULL"
+            oi_expr = "oi" if "oi" in cols else "NULL"
+            chunk_size = 900
+            for idx in range(0, len(token_list), chunk_size):
+                chunk = token_list[idx : idx + chunk_size]
+                q_marks = ",".join(["?"] * len(chunk))
+                rows = conn.execute(
+                    f"""
+                    SELECT instrument_token, {last_price_expr} AS last_price, timestamp_epoch, {volume_expr} AS volume, {oi_expr} AS oi
+                    FROM ticks
+                    WHERE instrument_token IN ({q_marks})
+                    ORDER BY instrument_token ASC, timestamp_epoch DESC
+                    """,
+                    tuple(chunk),
+                ).fetchall()
+                for row in rows:
+                    token_int = _normalize_token(row[0])
+                    if token_int is None or token_int in out:
+                        continue
+                    ltp = None
+                    try:
+                        if row[1] is not None:
+                            ltp = float(row[1])
+                    except Exception:
+                        ltp = None
+                    volume = None
+                    oi = None
+                    try:
+                        if row[3] is not None:
+                            volume = float(row[3])
+                    except Exception:
+                        volume = None
+                    try:
+                        if row[4] is not None:
+                            oi = float(row[4])
+                    except Exception:
+                        oi = None
+                    out[token_int] = {
+                        "instrument_token": token_int,
+                        "ltp": ltp,
+                        "ts_epoch": _to_epoch(row[2]),
+                        "volume": volume,
+                        "oi": oi,
+                        "source": "sqlite",
+                    }
+    except Exception:
+        return out
+    return out
+
+
+def get_latest_tick_rows_db_no_flush(tokens: list[int]) -> dict[int, dict]:
+    """
+    Read latest per-token tick rows from SQLite without forcing a flush.
+
+    This is intended for latency-sensitive monitoring paths. It trades off strict
+    read-after-write consistency in exchange for avoiding multi-second stalls when
+    SQLite is busy.
+    """
     token_list = [t for t in (_normalize_token(v) for v in list(tokens or [])) if t is not None]
     if not token_list:
         return {}
@@ -428,6 +553,16 @@ def _flush_pending_ticks(max_rows: int | None = None) -> int:
         for row in reversed(rows):
             _WRITE_QUEUE.appendleft(row)
     return 0
+
+
+def flush_pending_ticks(max_rows: int | None = None) -> int:
+    """
+    Drain pending async tick writes into SQLite.
+
+    Callers that need read-after-write consistency (analytics, offline validation)
+    should call this explicitly. Live execution paths should avoid forcing flushes.
+    """
+    return _flush_pending_ticks(max_rows=max_rows)
 
 
 def _flush_loop() -> None:

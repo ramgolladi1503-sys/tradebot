@@ -969,6 +969,46 @@ class TradeBuilder:
                 hard_top_rejects,
                 top_rejects,
             )
+            unresolved_reason_codes = {
+                "MISSING_CONTRACT_FIELDS",
+                "UNRESOLVED_CONTRACT",
+                "MISSING_OPTION_TOKEN",
+                "NO_TOKEN",
+            }
+            if considered == 0:
+                try:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "unresolved_contract",
+                        "Option contract unresolved before candidate gating",
+                        market_data=market_data,
+                        extra={
+                            "derived_levels": False,
+                            "stop": None,
+                            "target": None,
+                            "reason_code": "unresolved_contract",
+                        },
+                    )
+                except Exception:
+                    pass
+            elif top_rejects:
+                try:
+                    self._log_blocked_candidate(
+                        symbol,
+                        "no_viable_candidates",
+                        "No viable trade candidates after option scan",
+                        market_data=market_data,
+                        extra={
+                            "derived_levels": False,
+                            "stop": None,
+                            "target": None,
+                            "reason_code": "no_viable_candidates",
+                            "option_reject_reason_counts": reject_counts,
+                            "top_option_reject_reasons": list(top_rejects.keys()),
+                        },
+                    )
+                except Exception:
+                    pass
             reject_ctx.setdefault("reject_counts", reject_counts)
             reject_ctx.setdefault("top_reject_counts", top_rejects)
             reject_ctx.setdefault("hard_top_rejects", hard_top_rejects)
@@ -1152,27 +1192,6 @@ class TradeBuilder:
             value = source_flags.get(field)
         if value is None and isinstance(decision_trace, dict):
             value = decision_trace.get(field)
-        if value is None:
-            for nested in (
-                TradeBuilder._candidate_field(candidate, "quality_detail", {}),
-                (source_flags or {}).get("quality_detail") if isinstance(source_flags, dict) else {},
-                (decision_trace or {}).get("quality_detail") if isinstance(decision_trace, dict) else {},
-            ):
-                if isinstance(nested, dict) and field in nested:
-                    value = nested.get(field)
-                    break
-        if value is None:
-            for nested in (
-                TradeBuilder._candidate_field(candidate, "score_inputs_used", {}),
-                TradeBuilder._candidate_field(candidate, "score_breakdown", {}),
-                source_flags,
-                decision_trace,
-            ):
-                if isinstance(nested, dict):
-                    qd = nested.get("quality_detail")
-                    if isinstance(qd, dict) and field in qd:
-                        value = qd.get(field)
-                        break
         if value is None and field == "raw_rank_score":
             for fallback_field in ("ranking_score", "rank_score"):
                 value = TradeBuilder._candidate_field(candidate, fallback_field, None)
@@ -1193,143 +1212,81 @@ class TradeBuilder:
         return default if value is None else value
 
     @staticmethod
-    def _candidate_decision_telemetry_payload(
+    def _setup_telemetry_fields(
         candidate,
         source_flags: dict | None,
         decision_trace: dict | None,
-        score_breakdown: dict | None = None,
-    ) -> dict:
-        source_flags = dict(source_flags or {})
-        decision_trace = dict(decision_trace or {})
-        score_breakdown = dict(
-            score_breakdown
-            or TradeBuilder._candidate_field(candidate, "score_breakdown", {})
-            or {}
-        )
-        quality_detail = TradeBuilder._candidate_field(candidate, "quality_detail", {})
-        if not isinstance(quality_detail, dict):
-            quality_detail = {}
-        for nested in (source_flags.get("quality_detail"), decision_trace.get("quality_detail"), score_breakdown.get("quality_detail")):
-            if isinstance(nested, dict):
-                quality_detail = {**quality_detail, **nested}
-        quality_detail_source = "native"
-        setup_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "setup_score")
-        trigger_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "trigger_score")
-        entry_quality_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "entry_quality_score")
-        regime_conf = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "regime_conf")
-        signal_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "signal_score")
-        family_survival_score = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "family_survival_score")
-        strike_offset = TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "strike_offset")
-        orb_state = source_flags.get("orb_state") if isinstance(source_flags, dict) else None
-        orb_progress = 0.0
-        if isinstance(orb_state, dict):
-            try:
-                window_bars = float(orb_state.get("window_bars") or 0.0)
-                required_bars = max(float(orb_state.get("required_bars") or 0.0), 1.0)
-                orb_progress = max(0.0, min(1.0, window_bars / required_bars))
-            except Exception:
-                orb_progress = 0.0
-        strike_factor = 0.0
-        try:
-            if strike_offset is not None:
-                strike_scale = max(float(getattr(cfg, "SETUP_FALLBACK_STRIKE_OFFSET_SCALE", 20.0) or 20.0), 1.0)
-                strike_factor = max(0.0, min(1.0, 1.0 - (abs(float(strike_offset)) / strike_scale)))
-        except Exception:
-            strike_factor = 0.0
-        setup_component = None if setup_score is None else max(0.0, min(1.0, float(setup_score)))
-        trigger_component = None if trigger_score is None else max(0.0, min(1.0, float(trigger_score)))
-        entry_component = None if entry_quality_score is None else max(0.0, min(1.0, float(entry_quality_score)))
+        *,
+        candidate_quality_score: float | None = None,
+        trigger_base_score: float | None = None,
+        invalidation_score: float | None = None,
+        overextension_score: float | None = None,
+        timing_quality_score: float | None = None,
+    ) -> dict[str, float | None]:
+        source_flags = dict(source_flags or {}) if isinstance(source_flags, dict) else {}
+        decision_trace = dict(decision_trace or {}) if isinstance(decision_trace, dict) else {}
+        family_consensus_components = source_flags.get("family_consensus_components") or decision_trace.get("family_consensus_components") or {}
+        family_survival_components = source_flags.get("family_survival_components") or decision_trace.get("family_survival_components") or {}
+        if not isinstance(family_consensus_components, dict):
+            family_consensus_components = {}
+        if not isinstance(family_survival_components, dict):
+            family_survival_components = {}
 
-        def _build_setup_proxy_detail() -> dict[str, float | None]:
-            setup_regime_alignment_score = None
-            if setup_component is not None:
-                regime_component = float(regime_conf) if regime_conf is not None else setup_component
-                setup_regime_alignment_score = max(
-                    0.0,
-                    min(1.0, (regime_component * 0.22) + (setup_component * 0.18) + (trigger_component or setup_component) * 0.20 + (orb_progress * 0.20) + (strike_factor * 0.20)),
-                )
-            setup_structure_score = None
-            if setup_component is not None:
-                survival_component = float(family_survival_score) if family_survival_score is not None else setup_component
-                setup_structure_score = max(
-                    0.0,
-                    min(1.0, (setup_component * 0.18) + (survival_component * 0.20) + (trigger_component or setup_component) * 0.22 + (orb_progress * 0.20) + (strike_factor * 0.20)),
-                )
-            setup_thesis_score = None
-            if setup_component is not None:
-                signal_component = float(signal_score) if signal_score is not None else setup_component
-                setup_thesis_score = max(
-                    0.0,
-                    min(1.0, (setup_component * 0.16) + (signal_component * 0.22) + (trigger_component or setup_component) * 0.22 + (orb_progress * 0.20) + (strike_factor * 0.20)),
-                )
-            return {
-                "setup_regime_alignment_score": None if setup_regime_alignment_score is None else round(float(setup_regime_alignment_score), 6),
-                "setup_structure_score": None if setup_structure_score is None else round(float(setup_structure_score), 6),
-                "setup_thesis_score": None if setup_thesis_score is None else round(float(setup_thesis_score), 6),
-                "trigger_base_score": trigger_component,
-                "entry_invalidation_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 0.95))), 6),
-                "entry_overextension_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 0.90))), 6),
-                "entry_timing_quality_score": None if entry_component is None else round(float(max(0.0, min(1.0, entry_component * 1.10))), 6),
-            }
+        def _first_non_none(*values):
+            for value in values:
+                if value is not None:
+                    return value
+            return None
 
-        native_setup_scores = [quality_detail.get(name) for name in ("setup_regime_alignment_score", "setup_structure_score", "setup_thesis_score")]
-        native_setup_values = [float(value) for value in native_setup_scores if isinstance(value, (int, float))]
-        native_setup_flat = (
-            not native_setup_values
-            or max(native_setup_values) - min(native_setup_values) < 0.01
-            or any(abs(float(value) - float(setup_component)) < 1e-6 for value in native_setup_values if setup_component is not None)
+        setup_regime_alignment_score = _first_non_none(
+            TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "setup_regime_alignment_score"),
+            family_survival_components.get("regime_alignment"),
+            family_consensus_components.get("regime_alignment"),
         )
-        if not quality_detail or native_setup_flat:
-            setup_proxy_detail = _build_setup_proxy_detail()
-            if not quality_detail:
-                quality_detail_source = "derived_from_setup_proxies"
-                quality_detail = setup_proxy_detail
-            else:
-                quality_detail_source = "native_setup_enriched"
-                quality_detail = {
-                    **quality_detail,
-                    "setup_regime_alignment_score": setup_proxy_detail["setup_regime_alignment_score"],
-                    "setup_structure_score": setup_proxy_detail["setup_structure_score"],
-                    "setup_thesis_score": setup_proxy_detail["setup_thesis_score"],
-                    "trigger_base_score": setup_proxy_detail["trigger_base_score"],
-                }
+        setup_structure_score = _first_non_none(
+            TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "setup_structure_score"),
+            family_consensus_components.get("structure_strength"),
+            family_survival_components.get("structure_strength"),
+        )
+        setup_thesis_score = _first_non_none(
+            TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "setup_thesis_score"),
+            candidate_quality_score,
+            source_flags.get("candidate_quality_score"),
+            decision_trace.get("candidate_quality_score"),
+            TradeBuilder._candidate_field(candidate, "candidate_quality_score", None),
+            TradeBuilder._candidate_field(candidate, "quality_score", None),
+        )
         return {
-            "source_flags": source_flags,
-            "score_breakdown": score_breakdown,
-            "decision_trace": decision_trace,
-            "quality_detail": quality_detail,
-            "quality_detail_source": quality_detail_source,
-            "candidate_quality_score": TradeBuilder._candidate_telemetry_field(
-                candidate,
-                source_flags,
-                decision_trace,
-                "candidate_quality_score",
+            "setup_regime_alignment_score": setup_regime_alignment_score,
+            "setup_structure_score": setup_structure_score,
+            "setup_thesis_score": setup_thesis_score,
+            "trigger_base_score": _first_non_none(
+                TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "trigger_base_score"),
+                trigger_base_score,
+                source_flags.get("trigger_score_raw"),
+                decision_trace.get("trigger_score_raw"),
+                TradeBuilder._candidate_field(candidate, "trigger_score_raw", None),
             ),
-            "family_consensus_score": TradeBuilder._candidate_telemetry_field(
-                candidate,
-                source_flags,
-                decision_trace,
-                "family_consensus_score",
+            "entry_invalidation_score": _first_non_none(
+                TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "entry_invalidation_score"),
+                invalidation_score,
+                source_flags.get("invalidation_score"),
+                decision_trace.get("invalidation_score"),
+                TradeBuilder._candidate_field(candidate, "invalidation_score", None),
             ),
-            "family_consensus_components": TradeBuilder._candidate_telemetry_field(
-                candidate,
-                source_flags,
-                decision_trace,
-                "family_consensus_components",
-                {},
+            "entry_overextension_score": _first_non_none(
+                TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "entry_overextension_score"),
+                overextension_score,
+                source_flags.get("overextension_score"),
+                decision_trace.get("overextension_score"),
+                TradeBuilder._candidate_field(candidate, "overextension_score", None),
             ),
-            "family_survival_score": TradeBuilder._candidate_telemetry_field(
-                candidate,
-                source_flags,
-                decision_trace,
-                "family_survival_score",
-            ),
-            "family_survival_components": TradeBuilder._candidate_telemetry_field(
-                candidate,
-                source_flags,
-                decision_trace,
-                "family_survival_components",
-                {},
+            "entry_timing_quality_score": _first_non_none(
+                TradeBuilder._candidate_telemetry_field(candidate, source_flags, decision_trace, "entry_timing_quality_score"),
+                timing_quality_score,
+                source_flags.get("timing_quality"),
+                decision_trace.get("timing_quality"),
+                TradeBuilder._candidate_field(candidate, "timing_quality", None),
             ),
         }
 
@@ -1614,13 +1571,23 @@ class TradeBuilder:
         )
         strategy_family = str(getattr(trade, "strategy_family", None) or identity.get("strategy_family") or "").strip().lower()
         if strategy_family in {"", "unknown"}:
-            strategy_family = "breakout"
+            raw_strategy = str(getattr(trade, "strategy", None) or getattr(trade, "strategy_name", None) or "").strip().upper()
+            if "MEAN" in raw_strategy:
+                strategy_family = "mean-reversion"
+            elif "VOL" in raw_strategy or "EXPANSION" in raw_strategy:
+                strategy_family = "volatility_expansion"
+            elif "RANGE" in raw_strategy:
+                strategy_family = "range-watchlist"
+            elif "CONT" in raw_strategy or "TREND" in raw_strategy:
+                strategy_family = "continuation"
+            else:
+                strategy_family = "unknown"
         candidate_type = str(getattr(trade, "candidate_type", None) or identity.get("candidate_type") or "").strip().lower()
         if candidate_type in {"", "unknown"}:
             candidate_type = "directional"
         setup_variant = str(getattr(trade, "setup_variant", None) or identity.get("setup_variant") or "").strip().lower()
         if setup_variant in {"", "unknown"}:
-            setup_variant = strategy_family or "breakout"
+            setup_variant = strategy_family or "unknown"
         direction = str(getattr(trade, "direction", None) or identity.get("direction") or "").strip()
         if not direction:
             direction = "UNKNOWN"
@@ -3058,18 +3025,12 @@ class TradeBuilder:
                     soft_vetos = [str(x) for x in raw_soft if str(x)]
             rec_sf = dict(rec.get("source_flags", {}) or {}) if isinstance(rec, dict) else {}
             rec_trace = dict(meta.get("decision_trace", {}) or {}) if isinstance(meta, dict) else {}
-            rec_score_breakdown = dict(rec.get("score_breakdown", {}) or {}) if isinstance(rec, dict) else {}
-            setup_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_score")
-            setup_regime_alignment_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_regime_alignment_score")
-            setup_structure_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_structure_score")
-            setup_thesis_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "setup_thesis_score")
-            trigger_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "trigger_score")
-            trigger_base_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "trigger_base_score")
-            entry_quality_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_quality_score")
-            entry_invalidation_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_invalidation_score")
-            entry_overextension_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_overextension_score")
-            entry_timing_quality_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "entry_timing_quality_score")
-            execution_quality_score = self._candidate_telemetry_field(rec, rec_sf, rec_trace, "execution_quality_score")
+            setup_telemetry_fields = self._setup_telemetry_fields(
+                rec,
+                rec_sf,
+                rec_trace,
+                candidate_quality_score=(meta.get("final_score") if isinstance(meta, dict) else None),
+            )
             record_candidate_decision(
                 {
                     "candidate_id": rec.get("candidate_id"),
@@ -3100,7 +3061,6 @@ class TradeBuilder:
                     "orb_factor": meta.get("orb_factor") if isinstance(meta, dict) else None,
                     "reg_penalty": meta.get("reg_penalty") if isinstance(meta, dict) else None,
                     "global_conf": meta.get("global_conf") if isinstance(meta, dict) else None,
-                    **self._candidate_decision_telemetry_payload(rec, rec_sf, rec_trace, rec_score_breakdown),
                     "liquidity_score": rec.get("liquidity_score"),
                     "quote_consistency_score": rec.get("quote_consistency_score"),
                     "quote_validation_status": rec.get("quote_validation_status"),
@@ -3109,25 +3069,11 @@ class TradeBuilder:
                     "liquidity_spread_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_spread_score"),
                     "liquidity_volume_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_volume_score"),
                     "liquidity_oi_score": self._candidate_telemetry_field(rec, rec_sf, rec_trace, "liquidity_oi_score"),
-                    "setup_score": setup_score,
-                    "setup_regime_alignment_score": setup_regime_alignment_score,
-                    "setup_structure_score": setup_structure_score,
-                    "setup_thesis_score": setup_thesis_score,
-                    "trigger_score": trigger_score,
-                    "trigger_base_score": trigger_base_score,
-                    "entry_quality_score": entry_quality_score,
-                    "entry_invalidation_score": entry_invalidation_score,
-                    "entry_overextension_score": entry_overextension_score,
-                    "entry_timing_quality_score": entry_timing_quality_score,
-                    "execution_quality_score": execution_quality_score,
+                    **setup_telemetry_fields,
                     "rank_score": rec.get("rank_score"),
                     "raw_rank_score": rec.get("raw_rank_score"),
                     "terminal_rank_score": rec.get("terminal_rank_score"),
                     "opportunity_score": rec.get("opportunity_score"),
-                    "liquidity_flow_score": rec.get("liquidity_flow_score"),
-                    "liquidity_book_score": rec.get("liquidity_book_score"),
-                    "liquidity_volume_score": rec.get("liquidity_volume_score"),
-                    "liquidity_oi_score": rec.get("liquidity_oi_score"),
                     "permission": meta.get("permission") if isinstance(meta, dict) else "ADVISORY_ONLY",
                     "permission_reason": meta.get("permission_reason") if isinstance(meta, dict) else str(reason_code),
                     "entry_status": meta.get("entry_status") if isinstance(meta, dict) else "INTENT_BLOCKED",
@@ -3719,7 +3665,12 @@ class TradeBuilder:
             }
 
         market_mode = str(getattr(market_ctx, "mode", getattr(cfg, "EXECUTION_MODE", "SIM")))
-        live_sla_default = float(getattr(cfg, "OPTION_LTP_SLA_SEC", getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)))
+        live_sla_default = float(
+            min(
+                float(getattr(cfg, "OPTION_LTP_SLA_SEC", getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))),
+                float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+            )
+        )
         option_tick_sla_sec = float(
             get_option_ltp_sla_sec(
                 market_mode,
@@ -3743,8 +3694,10 @@ class TradeBuilder:
         hard_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "OPTION_TICK_HARD_STALE_SEC", 6.0))))
         market_mode_live = str(market_mode or "").strip().upper() == "LIVE"
         if market_mode_live:
-            soft_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "LIVE_OPTION_TICK_SOFT_STALE_SEC", soft_stale_sec))))
-            hard_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "LIVE_OPTION_TICK_HARD_STALE_SEC", hard_stale_sec))))
+            live_soft_stale_sec = float(getattr(cfg, "LIVE_OPTION_TICK_SOFT_STALE_SEC", soft_stale_sec) or soft_stale_sec)
+            live_hard_stale_sec = float(getattr(cfg, "LIVE_OPTION_TICK_HARD_STALE_SEC", hard_stale_sec) or hard_stale_sec)
+            soft_stale_sec = float(min(soft_stale_sec, live_soft_stale_sec))
+            hard_stale_sec = float(max(soft_stale_sec, min(hard_stale_sec, live_hard_stale_sec)))
             fallback_max_sec = max(
                 0.0,
                 float(getattr(cfg, "TRADE_BUILDER_FEED_AGE_FALLBACK_MAX_SEC", 3.0) or 3.0),
@@ -5271,6 +5224,7 @@ class TradeBuilder:
                     self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.35))
                     or 0.0
                 )
+            trigger_base_score = round(float(trigger_base), 6)
             stop_distance = abs(float(getattr(built_trade, "entry_price", 0.0) or 0.0) - float(getattr(built_trade, "stop_loss", 0.0) or 0.0))
             entry_distance_to_invalidation = (
                 round(float(stop_distance) / atr_value, 6) if atr_value > 0 and stop_distance > 0 else None
@@ -5376,6 +5330,7 @@ class TradeBuilder:
                 "execution_feasibility_score": round(float(execution_feasibility_score), 6),
                 "family_consensus_score": round(float(family_consensus_score), 6),
                 "regime_alignment": round(float(regime_alignment_component), 6),
+                "structure_strength": round(float(structure_component), 6),
             }
             component_floor = float(family_survival_policy.get("component_min", 0.26) or 0.26)
             survival_floor = float(family_survival_policy.get("min_score", 0.42) or 0.42)
@@ -5442,24 +5397,33 @@ class TradeBuilder:
                     tradable_reasons.append(blocker)
             if quality_detail_map:
                 trade_source_flags["quality_detail"] = dict(quality_detail_map)
+            setup_telemetry_fields = self._setup_telemetry_fields(
+                built_trade,
+                trade_source_flags,
+                trade_source_flags.get("decision_trace") or {},
+                candidate_quality_score=candidate_quality_score,
+                trigger_base_score=trigger_base_score,
+                invalidation_score=invalidation_score,
+                overextension_score=overextension_score,
+                timing_quality_score=timing_quality,
+            )
             trade_source_flags.update(
                 {
                     "candidate_quality_score": candidate_quality_score,
                     "execution_feasibility_score": round(float(execution_feasibility_score), 6),
+                    "execution_quality_score": round(float(execution_feasibility_score), 6),
                     "setup_score": round(float(setup_score), 6),
-                    "setup_regime_alignment_score": round(float(regime_alignment_component), 6),
-                    "setup_structure_score": round(float(structure_component), 6),
-                    "setup_thesis_score": round(float(candidate_quality_score), 6),
                     "trigger_score": round(float(trigger_score), 6),
-                    "trigger_base_score": round(float(trigger_score_raw), 6),
+                    "trigger_base_score": trigger_base_score,
                     "entry_quality_score": round(float(entry_quality_score), 6),
                     "entry_quality_reason": entry_quality_reason,
                     "entry_invalidation_score": round(float(invalidation_score), 6),
-                    "entry_overextension_score": round(float(overextension_score), 6),
-                    "entry_timing_quality_score": round(float(timing_quality), 6),
                     "overextension_score": round(float(overextension_score), 6),
+                    "entry_overextension_score": round(float(overextension_score), 6),
                     "overextension_penalty": round(float(overextension_penalty), 6),
                     "entry_distance_to_invalidation": entry_distance_to_invalidation,
+                    "entry_timing_quality_score": round(float(timing_quality), 6),
+                    "execution_quality_score": round(float(execution_feasibility_score), 6),
                     "session_mode": session_mode,
                     "session_entry_penalty": round(float(session_entry_penalty), 6),
                     "family_survival_score": round(float(family_survival_score), 6),
@@ -5489,6 +5453,7 @@ class TradeBuilder:
                     "execution_allowed": bool(execution_allowed_final),
                     "planning_only": bool(planning_only_final),
                     "hard_execution_blockers": list(hard_execution_blockers),
+                    **setup_telemetry_fields,
                 }
             )
             ranking_score = round(
@@ -5515,6 +5480,7 @@ class TradeBuilder:
                 {
                     "candidate_quality_score": candidate_quality_score,
                     "execution_feasibility_score": execution_feasibility_score,
+                    "execution_quality_score": execution_feasibility_score,
                     "ranking_score": ranking_score,
                     "trigger_reason": trigger_reason,
                     "direction_family": trade_source_flags.get("direction_family"),
@@ -5546,11 +5512,16 @@ class TradeBuilder:
                     "session_entry_penalty": session_entry_penalty,
                     "setup_score": setup_score,
                     "trigger_score": trigger_score,
+                    "trigger_base_score": trigger_base_score,
                     "entry_quality_score": entry_quality_score,
                     "entry_quality_reason": entry_quality_reason,
+                    "entry_invalidation_score": invalidation_score,
                     "overextension_score": overextension_score,
+                    "entry_overextension_score": overextension_score,
                     "overextension_penalty": overextension_penalty,
                     "entry_distance_to_invalidation": entry_distance_to_invalidation,
+                    "entry_timing_quality_score": timing_quality,
+                    "execution_quality_score": execution_feasibility_score,
                     "risk_assessment": risk_assessment.to_dict(),
                     "effective_session_policy": dict(session_policy),
                     "effective_regime_policy": dict(regime_policy),
@@ -5568,16 +5539,9 @@ class TradeBuilder:
                 opportunity_score=round(float(candidate_quality_score), 6),
                 rank_score=ranking_score,
                 setup_score=round(float(setup_score), 6),
-                setup_regime_alignment_score=round(float(regime_alignment_component), 6),
-                setup_structure_score=round(float(structure_component), 6),
-                setup_thesis_score=round(float(candidate_quality_score), 6),
                 trigger_score=round(float(trigger_score), 6),
-                trigger_base_score=round(float(trigger_score_raw), 6),
                 entry_quality_score=round(float(entry_quality_score), 6),
                 entry_quality_reason=entry_quality_reason,
-                entry_invalidation_score=round(float(invalidation_score), 6),
-                entry_overextension_score=round(float(overextension_score), 6),
-                entry_timing_quality_score=round(float(timing_quality), 6),
                 overextension_score=round(float(overextension_score), 6),
                 overextension_penalty=round(float(overextension_penalty), 6),
                 entry_distance_to_invalidation=entry_distance_to_invalidation,
@@ -6380,7 +6344,7 @@ class TradeBuilder:
                 "confidence": max(float(expansion_quality), 0.34),
                 "quality_score": max(float(expansion_quality), 0.34),
                 "quality_detail": {"volatility_expansion_strength": round(min(volatility_expansion_strength, 2.0), 6)},
-                "strategy_family": "breakout",
+                "strategy_family": "volatility_expansion",
                 "candidate_type": "volatility_expansion",
                 "setup_variant": "opportunity_volatility_expansion",
                 "soft_veto_codes": [] if expansion_signal is not None else ["weak_volatility_expansion_signal"],
@@ -8425,7 +8389,7 @@ class TradeBuilder:
                     )
                 except Exception:
                     live_signal = None
-            if not live_signal:
+            if not live_signal and bool(market_data.get("market_open", True)):
                 bias = str(market_data.get("bias") or "").strip().upper()
                 ltp_change = float(market_data.get("ltp_change") or 0.0)
                 direction = None
@@ -8478,6 +8442,8 @@ class TradeBuilder:
                     "planning_no_signal_fallback_enable": bool(getattr(cfg, "PLANNING_NO_SIGNAL_FALLBACK_ENABLE", True)),
                 },
             )
+            if not allow_fallbacks:
+                return None
             if fallback_allowed and exec_mode in {"SIM", "PAPER", "OFFHOURS"}:
                 opportunity_trade = self._rank_nonlive_opportunity_candidates(
                     market_data,
@@ -10414,7 +10380,7 @@ class TradeBuilder:
                     reject_reason_ctx = str((self._reject_ctx or {}).get("reason") or "").lower()
                     if not (
                         exec_mode in {"SIM", "PAPER"}
-                        and reject_reason_ctx in {"trend_vwap_fallback", "no_candidates_survived"}
+                        and reject_reason_ctx in {"trend_vwap_fallback"}
                     ):
                         softened = self._soften_reject_to_candidate(
                             market_data=market_data,
@@ -10860,6 +10826,44 @@ class TradeBuilder:
                         )
                         # terminal reject reason must not remain as no-trade once fallback is selected
                         self._reject_ctx = {}
+            elif best_trade is None:
+                current_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
+                reject_reason = str((self._reject_ctx or {}).get("reason") or "").strip().lower()
+                option_rows_considered = int((getattr(self, "_last_option_scan_summary", {}) or {}).get("considered") or 0)
+                if current_mode in {"SIM", "PAPER"} and reject_reason not in {"trend_vwap_fallback"} and option_rows_considered > 0:
+                    hard_trace_blockers = {
+                        "unresolved_contract",
+                        "missing_contract_fields",
+                        "missing_instrument_id",
+                        "missing_live_bidask",
+                        "no_option_quote_source",
+                        "no_option_quote",
+                    }
+                    if reject_reason in hard_trace_blockers:
+                        best_trade = None
+                    else:
+                        try:
+                            top_ranked = (self._last_ranked_candidates or [None])[0]
+                        except Exception:
+                            top_ranked = None
+                        if top_ranked is not None:
+                            best_trade = self._soften_reject_to_candidate(
+                                market_data=market_data or {},
+                                reject_ctx=dict(self._reject_ctx or {}),
+                                strategy_tag=strategy_tag,
+                                direction=direction,
+                            )
+                        if best_trade is None and reject_reason not in {"no_candidates_survived", "no_signal"}:
+                            fallback_ctx = dict(self._reject_ctx or {})
+                            fallback_ctx["reason"] = "no_candidates_survived"
+                            best_trade = self._soften_reject_to_candidate(
+                                market_data=market_data or {},
+                                reject_ctx=fallback_ctx,
+                                strategy_tag=strategy_tag,
+                                direction=direction,
+                            )
+                            if best_trade is not None:
+                                self._reject_ctx = {}
 
             if best_trade is None:
                 option_reject_total = int(sum(option_reject_counts.values()))
@@ -10909,7 +10913,6 @@ class TradeBuilder:
             try:
                 sf = dict(getattr(cand, "source_flags", {}) or {})
                 decision_trace = dict(sf.get("decision_trace", {}) or {})
-                score_breakdown = dict(getattr(cand, "score_breakdown", {}) or {})
                 gates_failed = list(dict.fromkeys(sf.get("gates_failed") or getattr(cand, "tradable_reasons_blocking", []) or []))
                 soft_vetos = list(dict.fromkeys(sf.get("soft_veto_codes") or []))
                 liquidity_flow_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_flow_score")
@@ -10917,17 +10920,16 @@ class TradeBuilder:
                 liquidity_spread_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_spread_score")
                 liquidity_volume_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_volume_score")
                 liquidity_oi_score = self._candidate_telemetry_field(cand, sf, decision_trace, "liquidity_oi_score")
-                setup_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_score")
-                setup_regime_alignment_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_regime_alignment_score")
-                setup_structure_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_structure_score")
-                setup_thesis_score = self._candidate_telemetry_field(cand, sf, decision_trace, "setup_thesis_score")
-                trigger_score = self._candidate_telemetry_field(cand, sf, decision_trace, "trigger_score")
-                trigger_base_score = self._candidate_telemetry_field(cand, sf, decision_trace, "trigger_base_score")
-                entry_quality_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_quality_score")
-                entry_invalidation_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_invalidation_score")
-                entry_overextension_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_overextension_score")
-                entry_timing_quality_score = self._candidate_telemetry_field(cand, sf, decision_trace, "entry_timing_quality_score")
-                execution_quality_score = self._candidate_telemetry_field(cand, sf, decision_trace, "execution_quality_score")
+                setup_telemetry_fields = self._setup_telemetry_fields(
+                    cand,
+                    sf,
+                    decision_trace,
+                    candidate_quality_score=getattr(cand, "opportunity_score", None),
+                    trigger_base_score=decision_trace.get("trigger_base_score"),
+                    invalidation_score=decision_trace.get("invalidation_score"),
+                    overextension_score=decision_trace.get("overextension_score"),
+                    timing_quality_score=decision_trace.get("timing_quality"),
+                )
                 record_candidate_decision(
                     {
                         "candidate_id": getattr(cand, "trade_id", None),
@@ -10956,15 +10958,10 @@ class TradeBuilder:
                         "orb_factor": decision_trace.get("orb_factor"),
                         "reg_penalty": decision_trace.get("reg_penalty"),
                         "global_conf": decision_trace.get("global_conf"),
-                        **self._candidate_decision_telemetry_payload(cand, sf, decision_trace, score_breakdown),
                         "builder_confidence": getattr(cand, "builder_confidence", None),
                         "permission_confidence": getattr(cand, "permission_confidence", None),
                         "gating_final_confidence": getattr(cand, "gating_final_confidence", None),
                         "liquidity_score": getattr(cand, "liquidity_score", None),
-                        "liquidity_flow_score": getattr(cand, "liquidity_flow_score", None),
-                        "liquidity_book_score": getattr(cand, "liquidity_book_score", None),
-                        "liquidity_volume_score": getattr(cand, "liquidity_volume_score", None),
-                        "liquidity_oi_score": getattr(cand, "liquidity_oi_score", None),
                         "quote_consistency_score": getattr(cand, "quote_consistency_score", None),
                         "quote_validation_status": getattr(cand, "quote_validation_status", None),
                         "liquidity_flow_score": liquidity_flow_score,
@@ -10972,17 +10969,7 @@ class TradeBuilder:
                         "liquidity_spread_score": liquidity_spread_score,
                         "liquidity_volume_score": liquidity_volume_score,
                         "liquidity_oi_score": liquidity_oi_score,
-                        "setup_score": setup_score,
-                        "setup_regime_alignment_score": setup_regime_alignment_score,
-                        "setup_structure_score": setup_structure_score,
-                        "setup_thesis_score": setup_thesis_score,
-                        "trigger_score": trigger_score,
-                        "trigger_base_score": trigger_base_score,
-                        "entry_quality_score": entry_quality_score,
-                        "entry_invalidation_score": entry_invalidation_score,
-                        "entry_overextension_score": entry_overextension_score,
-                        "entry_timing_quality_score": entry_timing_quality_score,
-                        "execution_quality_score": execution_quality_score,
+                        **setup_telemetry_fields,
                         "rank_score": getattr(cand, "rank_score", None),
                         "raw_rank_score": getattr(cand, "raw_rank_score", None),
                         "terminal_rank_score": getattr(cand, "terminal_rank_score", None),
@@ -11062,7 +11049,7 @@ class TradeBuilder:
             if not ranked_candidates:
                 exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
                 reject_reason_ctx = str(reject_ctx.get("reason") or "").lower()
-                if not (
+                if allow_fallbacks and not (
                     exec_mode in {"SIM", "PAPER", "OFFHOURS"}
                     and reject_reason_ctx == "trend_vwap_fallback"
                 ):
@@ -11582,23 +11569,21 @@ class TradeBuilder:
         try:
             trade_sf = dict(getattr(trade, "source_flags", {}) or {})
             trade_trace = dict(trade_sf.get("decision_trace", {}) or {})
-            trade_score_breakdown = dict(getattr(trade, "score_breakdown", {}) or {})
             liquidity_flow_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_flow_score")
             liquidity_book_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_book_score")
             liquidity_spread_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_spread_score")
             liquidity_volume_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_volume_score")
             liquidity_oi_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "liquidity_oi_score")
-            setup_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_score")
-            setup_regime_alignment_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_regime_alignment_score")
-            setup_structure_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_structure_score")
-            setup_thesis_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "setup_thesis_score")
-            trigger_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "trigger_score")
-            trigger_base_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "trigger_base_score")
-            entry_quality_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_quality_score")
-            entry_invalidation_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_invalidation_score")
-            entry_overextension_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_overextension_score")
-            entry_timing_quality_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "entry_timing_quality_score")
-            execution_quality_score = self._candidate_telemetry_field(trade, trade_sf, trade_trace, "execution_quality_score")
+            setup_telemetry_fields = self._setup_telemetry_fields(
+                trade,
+                trade_sf,
+                trade_trace,
+                candidate_quality_score=getattr(trade, "opportunity_score", None),
+                trigger_base_score=trade_trace.get("trigger_base_score"),
+                invalidation_score=trade_trace.get("invalidation_score"),
+                overextension_score=trade_trace.get("overextension_score"),
+                timing_quality_score=trade_trace.get("timing_quality"),
+            )
             record_candidate_decision(
                 {
                     "candidate_id": trade.trade_id,
@@ -11616,30 +11601,14 @@ class TradeBuilder:
                     "gates_failed": [],
                     "soft_vetos": [],
                     "signal_score": trade.confidence,
-                    "liquidity_score": getattr(trade, "liquidity_score", None),
-                    "liquidity_flow_score": getattr(trade, "liquidity_flow_score", None),
-                    "liquidity_book_score": getattr(trade, "liquidity_book_score", None),
-                    "liquidity_volume_score": getattr(trade, "liquidity_volume_score", None),
-                    "liquidity_oi_score": getattr(trade, "liquidity_oi_score", None),
                     "regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),
                     "orb_bias": market_data.get("orb_bias"),
-                    **self._candidate_decision_telemetry_payload(trade, trade_sf, trade_trace, trade_score_breakdown),
                     "liquidity_flow_score": liquidity_flow_score,
                     "liquidity_book_score": liquidity_book_score,
                     "liquidity_spread_score": liquidity_spread_score,
                     "liquidity_volume_score": liquidity_volume_score,
                     "liquidity_oi_score": liquidity_oi_score,
-                    "setup_score": setup_score,
-                    "setup_regime_alignment_score": setup_regime_alignment_score,
-                    "setup_structure_score": setup_structure_score,
-                    "setup_thesis_score": setup_thesis_score,
-                    "trigger_score": trigger_score,
-                    "trigger_base_score": trigger_base_score,
-                    "entry_quality_score": entry_quality_score,
-                    "entry_invalidation_score": entry_invalidation_score,
-                    "entry_overextension_score": entry_overextension_score,
-                    "entry_timing_quality_score": entry_timing_quality_score,
-                    "execution_quality_score": execution_quality_score,
+                    **setup_telemetry_fields,
                     "permission": "ADVISORY_ONLY",
                     "permission_reason": "PAPER_ONLY",
                     "entry_status": (
