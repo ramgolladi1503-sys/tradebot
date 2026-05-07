@@ -21,7 +21,7 @@ from config.profile import get_option_filter_profile
 from core.kite_client import kite_client
 from core.option_liquidity_cache import update_option_liquidity_cache
 from core.greeks import implied_vol, greeks
-from core.tick_store import get_last_tick
+from core.tick_store import get_latest_tick_rows_db_no_flush
 from core.depth_store import depth_store
 from core.time_utils import compute_age_sec, now_utc_epoch
 
@@ -35,6 +35,9 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
     This avoids blocking LIVE cycles on REST quote latency.
     """
     out: dict = {}
+    tokens: list[int] = []
+    token_by_key: dict[str, int] = {}
+    inst_by_key: dict[str, dict] = {}
     for inst in list(instruments or []):
         tsym = inst.get("tradingsymbol")
         if not tsym:
@@ -46,15 +49,21 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
             tok_int = None
         if not tok_int or tok_int <= 0:
             continue
-        # LIVE chain quotes should be memory-first and non-blocking; DB fallback can stall under contention.
-        tick = get_last_tick(tok_int, allow_db=False) or {}
-        ltp = tick.get("ltp")
-        ts_epoch = tick.get("ts_epoch")
+        key = f"{exchange}:{tsym}"
+        tokens.append(tok_int)
+        token_by_key[key] = tok_int
+        inst_by_key[key] = inst
+
+    rows = get_latest_tick_rows_db_no_flush(tokens) if tokens else {}
+    for key, tok_int in token_by_key.items():
+        row = rows.get(int(tok_int)) or {}
+        ltp = row.get("ltp")
+        ts_epoch = row.get("ts_epoch")
         book = depth_store.get(tok_int) or {}
         depth = book.get("depth") or {}
         if ts_epoch is None:
             ts_epoch = book.get("ts_epoch")
-        out[f"{exchange}:{tsym}"] = {
+        out[key] = {
             "last_price": ltp,
             "depth": depth,
             # keep as epoch seconds; downstream tries float conversion
@@ -487,6 +496,15 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
             use_ws_quotes = exec_mode == "LIVE" and bool(getattr(cfg, "OPTION_CHAIN_LIVE_USE_WS_QUOTES", True))
             if use_ws_quotes:
                 quotes = _ws_quotes_for_instruments(exchange=exchange, instruments=list(opt_rows) + list(next_candidates))
+                if (not quotes) and _debug_option_chain_enabled():
+                    logger.debug(
+                        "option_chain_ws_quotes_empty symbol=%s exchange=%s opt_rows=%d next_rows=%d sample_inst_keys=%s",
+                        symbol,
+                        exchange,
+                        len(opt_rows),
+                        len(next_candidates),
+                        sorted(list((opt_rows[0] or {}).keys())) if opt_rows else [],
+                    )
             else:
                 quotes = kite_client.quote(tradingsymbols) if tradingsymbols else {}
             if not opt_rows or not quotes:

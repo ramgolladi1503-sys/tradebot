@@ -4,11 +4,11 @@ from __future__ import annotations
 def test_ws_quotes_for_instruments_builds_kite_like_payload(monkeypatch):
     import core.option_chain as oc
 
-    # Fake tick/depth sources.
+    # Fake tick rows source (sqlite bulk read path).
     monkeypatch.setattr(
         oc,
-        "get_last_tick",
-        lambda token, allow_db=True: {"ltp": 123.45, "ts_epoch": 1000.0, "source": "memory"},
+        "get_latest_tick_rows_db_no_flush",
+        lambda tokens: {int(tokens[0]): {"ltp": 123.45, "ts_epoch": 1000.0}},
         raising=False,
     )
 
