@@ -14,3 +14,4 @@ xgboost
 scikit-learn
 pyarrow
 holidays
+plotly
