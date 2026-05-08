@@ -38,6 +38,14 @@ from core.events import append_event as append_runtime_event, write_json_atomic
 from core.heartbeat_status import derive_cycle_semantics
 from core.ml_governance import log_ab_trial
 from rl.size_agent import SizeRLAgent, build_features
+
+
+def _perf_ms(start_perf: float) -> float:
+    """Best-effort monotonic elapsed time in milliseconds."""
+    try:
+        return (time.perf_counter() - float(start_perf)) * 1000.0
+    except Exception:
+        return 0.0
 from config import config as cfg
 from core.strategy_tracker import StrategyTracker
 from ml.strategy_decay_predictor import generate_decay_report, telegram_summary
@@ -4310,41 +4318,67 @@ class Orchestrator:
                 # Feed freshness is now evaluated only in the Decision DAG from the
                 # immutable market snapshot. Do not recompute readiness here.
                 feature_stage_start = time.perf_counter()
+                feature_timing: dict[str, float] = {}
                 cycle_stage = "fetch_market_data"
                 # Daily decay report / strategy gating
+                t0 = time.perf_counter()
                 self._refresh_decay_report()
-                market_data_list = self._build_cycle_market_data(fetch_live_market_data())
+                feature_timing["refresh_decay_report_ms"] = _perf_ms(t0)
+
+                t0 = time.perf_counter()
+                live_market_data = fetch_live_market_data()
+                feature_timing["fetch_live_market_data_ms"] = _perf_ms(t0)
+
+                t0 = time.perf_counter()
+                market_data_list = self._build_cycle_market_data(live_market_data)
+                feature_timing["build_cycle_market_data_ms"] = _perf_ms(t0)
                 cycle_market_open = bool(
                     any(bool((row or {}).get("market_open")) for row in (market_data_list or []))
                 )
                 dashboard_market_snapshot = None
                 try:
                     # Engine-owned compute: dashboard reads this compact artifact and must not recompute it.
+                    t0 = time.perf_counter()
                     dashboard_market_snapshot = produce_and_store_market_snapshot(
                         market_data_list=market_data_list,
                         market_open=cycle_market_open,
                         compute_ms=(time.perf_counter() - feature_stage_start) * 1000.0,
                         loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
                     )
+                    feature_timing["produce_market_snapshot_ms"] = _perf_ms(t0)
                 except Exception as exc:
                     logger.error("[MARKET_SNAPSHOT_WRITE_ERROR] phase=cycle error=%s:%s", type(exc).__name__, exc)
+                t0 = time.perf_counter()
                 self._update_decision_breakers(market_data_list)
+                feature_timing["update_decision_breakers_ms"] = _perf_ms(t0)
+
+                t0 = time.perf_counter()
                 self._update_pilot_unlock_clean_cycles()
+                feature_timing["update_pilot_unlock_ms"] = _perf_ms(t0)
+
+                t0 = time.perf_counter()
                 self._evaluate_suggestions(market_data_list)
+                feature_timing["evaluate_suggestions_ms"] = _perf_ms(t0)
                 try:
+                    t0 = time.perf_counter()
                     self._run_v2_shadow_pipeline(market_data_list)
+                    feature_timing["v2_shadow_pipeline_ms"] = _perf_ms(t0)
                 except Exception as exc:
                     logger.warning("v2_shadow_pipeline_cycle_error err=%s", exc)
                 try:
+                    t0 = time.perf_counter()
                     produce_and_store_runtime_snapshots(
                         market_snapshot=dashboard_market_snapshot,
                         producer="orchestrator_cycle",
                         loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
                     )
+                    feature_timing["produce_runtime_snapshots_ms"] = _perf_ms(t0)
                 except Exception as exc:
                     logger.error("[RUNTIME_SNAPSHOT_WRITE_ERROR] phase=cycle error=%s:%s", type(exc).__name__, exc)
                 try:
+                    t0 = time.perf_counter()
                     self._maybe_run_suggestion_reliability_check()
+                    feature_timing["suggestion_reliability_check_ms"] = _perf_ms(t0)
                 except Exception as exc:
                     logger.warning("suggestion_slo_check_failed err=%s", exc)
                 try:
@@ -4396,6 +4430,21 @@ class Orchestrator:
                 if getattr(cfg, "LIVE_PILOT_MODE", False):
                     max_trades_day = min(max_trades_day, int(getattr(cfg, "LIVE_MAX_TRADES_PER_DAY", 2)))
                 feature_build_ms += (time.perf_counter() - feature_stage_start) * 1000.0
+
+                try:
+                    total_ms = float(feature_build_ms)
+                    # Only log when feature_build is unexpectedly slow to avoid noisy logs.
+                    if bool(getattr(cfg, "FEATURE_BUILD_TIMING_LOG_ENABLE", True)) and (total_ms >= float(getattr(cfg, "FEATURE_BUILD_TIMING_LOG_SLOW_MS", 2500.0))):
+                        audit_append(
+                            {
+                                "event": "FEATURE_BUILD_TIMING",
+                                "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                                "total_ms": round(total_ms, 3),
+                                "timing_ms": {k: round(float(v), 3) for k, v in (feature_timing or {}).items()},
+                            }
+                        )
+                except Exception:
+                    pass
 
                 cycle_stage = "scan_symbols"
                 for market_data in market_data_list:
