@@ -19,13 +19,14 @@ This repository should be read as a QA/SDET + fintech reliability project, not a
 - [Branch protection policy](docs/BRANCH_PROTECTION.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [Historical engineering log](docs/HISTORICAL_ENGINEERING_LOG.md)
+- [Project chat evidence](docs/PROJECT_CHAT_EVIDENCE.md)
 - LinkedIn: https://www.linkedin.com/in/ram-golladi
 
 ---
 
 ## CI and release gates
 
-Tradebot protects `main` through PR-based development, CI checks, Portfolio CI, branch protection documentation, historical release evidence, and a release checklist for runtime-sensitive changes.
+Tradebot protects `main` through PR-based development, CI checks, Portfolio CI, branch protection documentation, historical release evidence, project-chat evidence, and a release checklist for runtime-sensitive changes.
 
 Required merge gates:
 
@@ -38,6 +39,7 @@ Before merging changes that touch market feed, contract resolution, execution ga
 - [Branch protection policy](docs/BRANCH_PROTECTION.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [Historical engineering log](docs/HISTORICAL_ENGINEERING_LOG.md)
+- [Project chat evidence](docs/PROJECT_CHAT_EVIDENCE.md)
 
 Trading-system rule: a change is not release-ready just because tests start. It must preserve the system's ability to explain whether a trade is executable, queue-only, advisory-only, or blocked.
 
