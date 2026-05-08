@@ -106,6 +106,12 @@ def _runtime_snapshot_epochs(symbol: str | None) -> dict[str, Any]:
             symbol_epoch = normalize_epoch_seconds(by_symbol.get(symbol_norm))
             if symbol_epoch is not None:
                 ltp_epoch = symbol_epoch
+    # Pass through additional runtime feed evidence for callers that want to prefer
+    # runtime freshness over SQLite lag (must never make execution less safe).
+    opt_age_by_symbol = snapshot.get("option_last_tick_age_by_symbol")
+    if not isinstance(opt_age_by_symbol, dict):
+        opt_age_by_symbol = snapshot.get("last_option_tick_age_by_symbol")
+    opt_reason_by_symbol = snapshot.get("option_feed_block_reason_by_symbol")
     return {
         "ltp_epoch": ltp_epoch,
         "depth_epoch": depth_epoch,
@@ -113,6 +119,9 @@ def _runtime_snapshot_epochs(symbol: str | None) -> dict[str, Any]:
         "runtime_state": str(snapshot.get("runtime_state") or "").strip().upper() or None,
         "ws_connected": snapshot.get("ws_connected"),
         "subscribed_tokens_count": snapshot.get("subscribed_tokens_count"),
+        "last_option_tick_ts_by_symbol": snapshot.get("last_option_tick_ts_by_symbol"),
+        "option_last_tick_age_by_symbol": opt_age_by_symbol,
+        "option_feed_block_reason_by_symbol": opt_reason_by_symbol,
     }
 
 
@@ -313,6 +322,17 @@ def get_freshness_status(
     max_depth_age = float(policy.depth_max_age_sec)
     depth_required = bool(policy.depth_required and getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
 
+    # Index LTP ticks can be bursty (especially around open/halts). Treat index freshness
+    # separately from option-token freshness so we don't trip FEED_LTP_STALE on normal gaps.
+    # This only applies to symbol-scoped checks (symbol provided, tokens not provided).
+    if symbol_norm and not tokens:
+        try:
+            idx_sla = getattr(cfg, "SLA_MAX_INDEX_LTP_AGE_SEC", None)
+            if idx_sla is not None:
+                max_ltp_age = max(max_ltp_age, float(idx_sla))
+        except Exception:
+            pass
+
     ltp_last_epoch = None
     depth_last_epoch = None
     ltp_source = "none"
@@ -377,6 +397,8 @@ def get_freshness_status(
     depth_age = compute_age_sec(depth_last_epoch, now_epoch) if depth_last_epoch is not None else None
 
     reasons: List[str] = []
+    runtime_option_freshness_applied = False
+    runtime_option_stale_symbols: list[str] = []
 
     ltp_ok = ltp_age is not None and ltp_age <= max_ltp_age
     depth_ok = depth_age is not None and depth_age <= max_depth_age
@@ -387,6 +409,9 @@ def get_freshness_status(
         if stale_tokens and tokens_for_ltp
         else 0.0
     )
+    # Preserve the DB-derived ratio for observability even if we later prefer runtime freshness.
+    db_stale_ratio = float(stale_ratio)
+    stale_ratio_source = "db"
     max_stale_ratio = float(getattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.5))
     stale_min_count = int(getattr(cfg, "FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT", 5))
     stale_tokens_violation = bool(
@@ -397,14 +422,47 @@ def get_freshness_status(
     )
 
     if market_open and (not allow_stale_quotes):
+        # Prefer runtime option freshness evidence over SQLite stale-token ratios when:
+        # - we are doing a global/unscoped check (no symbol and no explicit token list)
+        # - runtime says per-symbol option feed is OK and fresh
+        #
+        # This avoids false halts when SQLite lags in-memory ticks, while still failing closed if runtime
+        # itself reports staleness/block reasons.
+        try:
+            opt_age_by_symbol = runtime_snapshot.get("option_last_tick_age_by_symbol")
+            opt_reason_by_symbol = runtime_snapshot.get("option_feed_block_reason_by_symbol")
+            if (
+                symbol_norm is None
+                and tokens is None
+                and isinstance(opt_age_by_symbol, dict)
+                and isinstance(opt_reason_by_symbol, dict)
+                and opt_age_by_symbol
+            ):
+                option_ok_age = float(getattr(policy, "option_ok_age_sec", getattr(cfg, "FEED_HEALTH_OPTION_OK_AGE_SEC", 2.5)))
+                for sym, age in opt_age_by_symbol.items():
+                    sym_u = str(sym or "").upper() or "UNKNOWN"
+                    reason = str((opt_reason_by_symbol or {}).get(sym_u) or "").upper() or "UNKNOWN"
+                    age_val = float(age) if age is not None else float("inf")
+                    if reason not in {"OK"} or age_val > option_ok_age:
+                        runtime_option_stale_symbols.append(sym_u)
+                if not runtime_option_stale_symbols:
+                    stale_tokens_violation = False
+                    runtime_option_freshness_applied = True
+                    # SQLite lag is not actionable when runtime says option ticks are fresh.
+                    stale_tokens = []
+                    stale_ratio = 0.0
+                    stale_ratio_source = "runtime_option_ages"
+        except Exception:
+            pass
+
         if no_ticks_yet:
             reasons.append("no_ticks_yet")
         elif stale_tokens_violation:
             reasons.append(
-                f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)} ratio={stale_ratio:.2f} max_ratio={max_stale_ratio:.2f}"
+                f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)}"
             )
         elif ltp_age > max_ltp_age:
-            reasons.append(f"ltp_stale:NIFTY age={ltp_age:.2f} max={max_ltp_age:.2f}")
+            reasons.append(f"ltp_stale:{symbol_norm or 'UNKNOWN'} age={ltp_age:.2f} max={max_ltp_age:.2f}")
 
         if depth_required:
             if depth_age is None:
@@ -461,6 +519,13 @@ def get_freshness_status(
         "max_tick_age_sec": max_tick_age_sec,
         "stale_tokens": stale_tokens,
         "tracked_tokens": tokens_for_ltp,
+        "stale_token_ratio": stale_ratio,
+        "db_stale_token_ratio": db_stale_ratio,
+        "stale_token_ratio_source": stale_ratio_source,
+        "max_stale_token_ratio": max_stale_ratio,
+        "stale_token_min_count": stale_min_count,
+        "runtime_option_freshness_applied": bool(runtime_option_freshness_applied),
+        "runtime_option_stale_symbols": list(runtime_option_stale_symbols),
         "ltp": {
             "ok": ltp_ok if market_open else True,
             "age_sec": ltp_age,

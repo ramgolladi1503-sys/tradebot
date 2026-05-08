@@ -22,7 +22,7 @@ from config.profile import get_option_filter_profile
 from core.kite_client import kite_client
 from core.option_liquidity_cache import update_option_liquidity_cache
 from core.greeks import implied_vol, greeks
-from core.tick_store import get_latest_tick_rows_db_no_flush
+from core.tick_store import get_last_tick, get_latest_tick_rows_db_no_flush
 from core.depth_store import depth_store
 from core.time_utils import compute_age_sec, now_utc_epoch
 
@@ -68,9 +68,7 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
     This avoids blocking LIVE cycles on REST quote latency.
     """
     out: dict = {}
-    tokens: list[int] = []
     token_by_key: dict[str, int] = {}
-    inst_by_key: dict[str, dict] = {}
     for inst in list(instruments or []):
         tsym = inst.get("tradingsymbol")
         if not tsym:
@@ -83,15 +81,21 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
         if not tok_int or tok_int <= 0:
             continue
         key = f"{exchange}:{tsym}"
-        tokens.append(tok_int)
         token_by_key[key] = tok_int
-        inst_by_key[key] = inst
 
-    rows = get_latest_tick_rows_db_no_flush(tokens) if tokens else {}
+    # Mission-critical latency path:
+    # - default to in-memory ticks only (fast, no SQLite I/O)
+    # - optional DB fallback is config-gated for debugging/backfills
+    allow_db_fallback = bool(getattr(cfg, "OPTION_CHAIN_WS_QUOTES_ALLOW_DB_FALLBACK", False))
+    db_rows: dict[int, dict] = {}
+    missing_tokens: list[int] = []
+
     for key, tok_int in token_by_key.items():
-        row = rows.get(int(tok_int)) or {}
-        ltp = row.get("ltp")
-        ts_epoch = row.get("ts_epoch")
+        tick = get_last_tick(tok_int, allow_db=allow_db_fallback) or {}
+        ltp = tick.get("ltp")
+        ts_epoch = tick.get("ts_epoch")
+        if ts_epoch is None and not allow_db_fallback:
+            missing_tokens.append(int(tok_int))
         book = depth_store.get(tok_int) or {}
         depth = book.get("depth") or {}
         if ts_epoch is None:
@@ -104,6 +108,24 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
             "oi": None,
             "volume": None,
         }
+
+    # If explicitly enabled, fill missing tick timestamps from SQLite in one bulk read.
+    # This remains off by default because it can add seconds of latency per cycle.
+    if allow_db_fallback and missing_tokens:
+        try:
+            db_rows = get_latest_tick_rows_db_no_flush(missing_tokens) or {}
+        except Exception:
+            db_rows = {}
+        for key, tok_int in token_by_key.items():
+            q = out.get(key) or {}
+            if q.get("timestamp") is not None:
+                continue
+            row = db_rows.get(int(tok_int)) or {}
+            if row.get("ts_epoch") is None:
+                continue
+            q["last_price"] = q.get("last_price") if q.get("last_price") is not None else row.get("ltp")
+            q["timestamp"] = row.get("ts_epoch")
+            out[key] = q
     return out
 
 

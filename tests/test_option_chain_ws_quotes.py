@@ -4,11 +4,17 @@ from __future__ import annotations
 def test_ws_quotes_for_instruments_builds_kite_like_payload(monkeypatch):
     import core.option_chain as oc
 
-    # Fake tick rows source (sqlite bulk read path).
+    # Default behavior should be memory-first and must not hit SQLite on the hot path.
     monkeypatch.setattr(
         oc,
         "get_latest_tick_rows_db_no_flush",
-        lambda tokens: {int(tokens[0]): {"ltp": 123.45, "ts_epoch": 1000.0}},
+        lambda tokens: (_ for _ in ()).throw(AssertionError("unexpected sqlite tick read")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        oc,
+        "get_last_tick",
+        lambda token, allow_db=True, decision_path=False: {"ltp": 123.45, "ts_epoch": 1000.0, "source": "memory"},
         raising=False,
     )
 
