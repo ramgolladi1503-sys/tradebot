@@ -122,6 +122,41 @@ def test_restart_respects_cooldown(monkeypatch):
     assert calls["stop"] == 1
 
 
+def test_restart_ignore_cooldown_allows_immediate_restart(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 9999.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+
+    calls = {"start": 0, "stop": 0}
+
+    def _start(tokens, profile_verified=False, **kwargs):
+        calls["start"] += 1
+
+    def _stop(reason="manual_stop"):
+        calls["stop"] += 1
+
+    monkeypatch.setattr(ws, "start_depth_ws", _start)
+    monkeypatch.setattr(ws, "stop_depth_ws", _stop)
+
+    assert ws.restart_depth_ws(reason="first") is True
+    assert ws.restart_depth_ws(reason="second_blocked") is False
+    assert ws.restart_depth_ws(reason="third_ignored", ignore_cooldown=True) is True
+    assert calls["start"] == 2
+    assert calls["stop"] == 2
+
+
+def test_ws_fault_1006_bypasses_restart_cooldown_policy():
+    assert ws._should_ignore_restart_cooldown_for_ws_fault(code=1006, reason_text="") is True
+    assert ws._should_ignore_restart_cooldown_for_ws_fault(code="1006", reason_text="") is True
+    assert ws._should_ignore_restart_cooldown_for_ws_fault(code=1011, reason_text="") is False
+
+
 def test_market_open_transition_resets_restart_guard(monkeypatch):
     calls = []
     monkeypatch.setattr(

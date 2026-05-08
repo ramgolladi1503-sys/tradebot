@@ -2803,6 +2803,25 @@ def _schedule_restart_depth_ws(
     return True
 
 
+def _should_ignore_restart_cooldown_for_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
+    """
+    Only bypass the full-restart cooldown for hard websocket faults that leave the feed dead in practice.
+
+    This does NOT bypass:
+    - hourly restart limits
+    - restart-storm breaker
+    - feed_restart_guard
+    """
+    try:
+        code_int = int(code) if code is not None else None
+    except Exception:
+        code_int = None
+    if code_int == 1006:
+        return True
+    _ = reason_text
+    return False
+
+
 def on_ticks(ws, ticks):
     global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
     _ = ws
@@ -3123,9 +3142,15 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
         if (not bool(ignore_cooldown)) and (now - _LAST_FULL_RESTART_EPOCH) < cooldown:
             next_allowed = _LAST_FULL_RESTART_EPOCH + cooldown
+            remaining_sec = max(0.0, float(next_allowed) - float(now))
             _log_ws(
                 "FEED_RESTART_RATE_LIMIT_COOLDOWN",
-                {"reason": reason, "cooldown_sec": cooldown, "next_allowed_epoch": next_allowed},
+                {
+                    "reason": reason,
+                    "cooldown_sec": cooldown,
+                    "next_allowed_epoch": next_allowed,
+                    "cooldown_remaining_sec": remaining_sec,
+                },
             )
             return False
 
@@ -3626,6 +3651,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             fatal = True
         stop_set = bool(_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set())
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
+            ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
             if _use_internal_reconnect():
                 _log_ws(
                     "FEED_INTERNAL_RECONNECT_FORCE_FULL",
@@ -3633,11 +3659,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 )
                 _schedule_restart_depth_ws(
                     reason=f"ws_error:{code}",
+                    ignore_cooldown=ignore_cooldown,
                     force_full_restart=True,
                     source="on_error",
                 )
                 return
-            restart_depth_ws(reason=f"ws_error:{code}")
+            restart_depth_ws(reason=f"ws_error:{code}", ignore_cooldown=ignore_cooldown)
 
     def on_close(ws, code, reason):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
@@ -3686,6 +3713,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if "connection" in reason_lower and "closed" in reason_lower:
             fatal = True
         if is_market_open_ist():
+            ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
             if _use_internal_reconnect():
                 if fatal:
                     _log_ws(
@@ -3694,6 +3722,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     _schedule_restart_depth_ws(
                         reason=f"ws_close:{code}",
+                        ignore_cooldown=ignore_cooldown,
                         force_full_restart=True,
                         source="on_close",
                     )
@@ -3704,7 +3733,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 )
                 _soft_resubscribe_current(reason=f"on_close:{code}")
                 return
-            restart_depth_ws(reason=f"ws_close:{code}")
+            restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
 
     def _watchdog():
         global _STALE_STRIKES, _WARMUP_PENDING
