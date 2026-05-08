@@ -29,6 +29,7 @@ from core.time_utils import compute_age_sec, now_utc_epoch
 
 logger = logging.getLogger(__name__)
 _OPTION_CHAIN_ERROR_LAST_TS: dict[str, float] = {}
+_WS_QUOTES_DB_SEED_LAST_EPOCH: float = 0.0
 
 
 def _log_option_chain_error(symbol: str, *, stage: str, error: Exception) -> None:
@@ -85,11 +86,12 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
 
     # Mission-critical latency path:
     # - default to in-memory ticks only (fast, no SQLite I/O)
-    # - optional DB fallback is config-gated for debugging/backfills
+    # - optionally do a *rate-limited* DB seed when memory ticks are missing for most tokens
     allow_db_fallback = bool(getattr(cfg, "OPTION_CHAIN_WS_QUOTES_ALLOW_DB_FALLBACK", False))
-    db_rows: dict[int, dict] = {}
-    missing_tokens: list[int] = []
+    seed_db_when_empty = bool(getattr(cfg, "OPTION_CHAIN_WS_QUOTES_DB_SEED_ENABLE", True))
+    seed_min_interval_sec = float(getattr(cfg, "OPTION_CHAIN_WS_QUOTES_DB_SEED_MIN_INTERVAL_SEC", 30.0))
 
+    missing_tokens: list[int] = []
     for key, tok_int in token_by_key.items():
         tick = get_last_tick(tok_int, allow_db=allow_db_fallback) or {}
         ltp = tick.get("ltp")
@@ -110,8 +112,23 @@ def _ws_quotes_for_instruments(*, exchange: str, instruments: list[dict]) -> dic
         }
 
     # If explicitly enabled, fill missing tick timestamps from SQLite in one bulk read.
-    # This remains off by default because it can add seconds of latency per cycle.
-    if allow_db_fallback and missing_tokens:
+    #
+    # Two modes:
+    # - allow_db_fallback: explicit config override (always allowed)
+    # - seed_db_when_empty: rate-limited cold-start seeding when memory ticks are mostly absent
+    use_seed = False
+    if seed_db_when_empty and missing_tokens and token_by_key:
+        try:
+            miss_ratio = float(len(missing_tokens)) / float(len(token_by_key))
+        except Exception:
+            miss_ratio = 1.0
+        now_epoch = float(now_utc_epoch())
+        global _WS_QUOTES_DB_SEED_LAST_EPOCH
+        if miss_ratio >= 0.80 and (now_epoch - float(_WS_QUOTES_DB_SEED_LAST_EPOCH or 0.0)) >= seed_min_interval_sec:
+            use_seed = True
+            _WS_QUOTES_DB_SEED_LAST_EPOCH = now_epoch
+
+    if (allow_db_fallback or use_seed) and missing_tokens:
         try:
             db_rows = get_latest_tick_rows_db_no_flush(missing_tokens) or {}
         except Exception:
