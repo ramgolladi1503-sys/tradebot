@@ -4,6 +4,8 @@ Use this checklist before merging release-sensitive changes, tagging a release, 
 
 Tradebot is a real-time fintech reliability project. A release is not safe just because the code starts. It must prove market data, contract resolution, execution gates, risk controls, persistence, dashboard fields, and reconciliation still agree.
 
+For historical context behind these gates, read [Historical engineering log](HISTORICAL_ENGINEERING_LOG.md).
+
 ---
 
 ## 1. Repository state
@@ -25,7 +27,32 @@ git status
 
 ---
 
-## 2. Dependency and environment sanity
+## 2. Historical evidence review
+
+Before deciding release readiness, check whether this release touches a past failure pattern from [Historical engineering log](HISTORICAL_ENGINEERING_LOG.md).
+
+- [ ] Execution-intent boundary reviewed if execution routing or review queue changed.
+- [ ] Execution truth guard reviewed if candidate status, score, or ranking changed.
+- [ ] Fallback candidate handling reviewed if market-data fallback, planning rows, softened rows, or advisory rows changed.
+- [ ] Contract-resolution history reviewed if instrument mapping, token resolution, expiry, strike, or CE/PE handling changed.
+- [ ] No-executable-trades history reviewed if candidates are visible but not executable.
+- [ ] Feed freshness history reviewed if tick store, depth websocket, quote age, DB flush timing, or feed runtime logs changed.
+- [ ] Dashboard/persistence history reviewed if review queue fields, normalized rows, final decision fields, or dashboard columns changed.
+- [ ] CI/health-gate history reviewed if workflow, test selection, or health artifacts changed.
+
+Evidence to capture in the PR:
+
+```text
+Historical PR/issue referenced:
+Subsystem affected:
+Past failure pattern protected:
+Validation evidence:
+Remaining risk:
+```
+
+---
+
+## 3. Dependency and environment sanity
 
 - [ ] Python dependencies install cleanly.
 - [ ] Local environment is paper/offline unless intentionally testing live broker behavior.
@@ -49,7 +76,7 @@ export KITE_USE_API=false
 
 ---
 
-## 3. Full test gate
+## 4. Full test gate
 
 - [ ] Full pytest suite passes.
 - [ ] No test requires real broker credentials in CI.
@@ -63,7 +90,7 @@ PYTHONPATH=. pytest -q
 
 ---
 
-## 4. Offline health gate
+## 5. Offline health gate
 
 - [ ] Deterministic health gate passes.
 - [ ] Health report is generated.
@@ -88,7 +115,7 @@ In CI, artifacts may be stored under `.runtime/logs/`.
 
 ---
 
-## 5. Runtime-risk review
+## 6. Runtime-risk review
 
 Complete this section if the PR touches `core/`, `strategies/`, `scripts/`, `dashboard/`, `config/`, `models/`, or `rl/`.
 
@@ -110,7 +137,7 @@ PYTHONPATH=. python -m core.health_gate --desk DEFAULT --strict
 
 ---
 
-## 6. Broker/session-sensitive review
+## 7. Broker/session-sensitive review
 
 Complete this section if the change touches Kite/broker auth, instruments, feed, websocket, live fills sync, order routing, or execution intents.
 
@@ -133,7 +160,7 @@ Only run live broker validation when the environment is intentionally configured
 
 ---
 
-## 7. Dashboard and persistence review
+## 8. Dashboard and persistence review
 
 Complete this section if the change touches dashboard rendering, review queue, normalized rows, trade log, analytics, or reporting.
 
@@ -153,7 +180,7 @@ PYTHONPATH=. pytest -q
 
 ---
 
-## 8. Data quality and reconciliation review
+## 9. Data quality and reconciliation review
 
 Complete this section when touching logs, fills, reports, SQLite persistence, outcome labeling, or data governance.
 
@@ -174,7 +201,37 @@ python scripts/data_manifest.py
 
 ---
 
-## 9. CI/release gate status
+## 10. Past-release evidence capture
+
+For major fixes or releases, record the evidence in the PR using this structure:
+
+```text
+Issue / PR reference:
+Original failure:
+Subsystem:
+Fix summary:
+Tests run:
+Health gate status:
+CI status:
+Paper/live validation:
+Known limitation:
+Rollback path:
+```
+
+This is required for changes similar to past work around:
+
+- no executable trades
+- contract-resolution fallback
+- stale feed / feed freshness
+- execution truth guard
+- decision-engine promotion path
+- dashboard field drift
+- risk halt / kill switch
+- reconciliation mismatch
+
+---
+
+## 11. CI/release gate status
 
 Before merge, verify GitHub shows green for:
 
@@ -186,18 +243,19 @@ Do not merge when required checks are red, skipped, or stale.
 
 ---
 
-## 10. Documentation review
+## 12. Documentation review
 
 - [ ] README still matches actual commands.
 - [ ] Architecture links still work.
 - [ ] Test report guide still matches CI artifacts.
 - [ ] Branch protection policy is current.
+- [ ] Historical engineering log is current if the PR fixes a major runtime failure.
 - [ ] Known limitations are not hidden.
 - [ ] Any runtime-sensitive behavior change is documented honestly.
 
 ---
 
-## 11. Final release decision
+## 13. Final release decision
 
 Only merge/tag/use the release branch when all relevant checks above pass.
 
