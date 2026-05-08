@@ -322,17 +322,6 @@ def get_freshness_status(
     max_depth_age = float(policy.depth_max_age_sec)
     depth_required = bool(policy.depth_required and getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
 
-    # Index LTP ticks can be bursty (especially around open/halts). Treat index freshness
-    # separately from option-token freshness so we don't trip FEED_LTP_STALE on normal gaps.
-    # This only applies to symbol-scoped checks (symbol provided, tokens not provided).
-    if symbol_norm and not tokens:
-        try:
-            idx_sla = getattr(cfg, "SLA_MAX_INDEX_LTP_AGE_SEC", None)
-            if idx_sla is not None:
-                max_ltp_age = max(max_ltp_age, float(idx_sla))
-        except Exception:
-            pass
-
     ltp_last_epoch = None
     depth_last_epoch = None
     ltp_source = "none"
@@ -342,6 +331,28 @@ def get_freshness_status(
     max_tick_age_sec = None
 
     tokens_for_ltp = _resolve_ltp_tokens(symbol_norm, tokens)
+
+    # Index LTP ticks can be bursty (especially around open/halts). Treat index freshness
+    # separately from option-token freshness so we don't trip FEED_LTP_STALE on normal gaps.
+    #
+    # Apply this only when we are effectively evaluating index freshness:
+    # - symbol-scoped checks (symbol provided, tokens not provided), or
+    # - unscoped checks where token resolution falls back to a tiny index-token set (not an option universe)
+    try:
+        idx_sla = getattr(cfg, "SLA_MAX_INDEX_LTP_AGE_SEC", None)
+        if idx_sla is not None:
+            is_symbol_scoped_index = bool(symbol_norm and not tokens)
+            is_unscoped_index_fallback = bool(
+                symbol_norm is None
+                and tokens is None
+                and tokens_for_ltp
+                and len(tokens_for_ltp) <= int(getattr(cfg, "FEED_FRESHNESS_INDEX_TOKEN_MAX_COUNT", 5))
+            )
+            if is_symbol_scoped_index or is_unscoped_index_fallback:
+                max_ltp_age = max(max_ltp_age, float(idx_sla))
+    except Exception:
+        pass
+
     ltp_metrics = _ltp_metrics_from_db(
         tokens_for_ltp=tokens_for_ltp,
         now_epoch=now_epoch,
@@ -462,7 +473,9 @@ def get_freshness_status(
                 f"ltp_stale_tokens:{len(stale_tokens)}/{len(tokens_for_ltp)}"
             )
         elif ltp_age > max_ltp_age:
-            reasons.append(f"ltp_stale:{symbol_norm or 'UNKNOWN'} age={ltp_age:.2f} max={max_ltp_age:.2f}")
+            # When symbol is None (unscoped checks), token resolution typically falls back to the
+            # primary index token; keep the reason stable and human-readable.
+            reasons.append(f"ltp_stale:{symbol_norm or 'NIFTY'} age={ltp_age:.2f} max={max_ltp_age:.2f}")
 
         if depth_required:
             if depth_age is None:
