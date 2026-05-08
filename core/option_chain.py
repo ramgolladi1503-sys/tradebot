@@ -751,8 +751,8 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 for inst in next_candidates:
                     ts = f"{exchange}:{inst['tradingsymbol']}"
                     q = quotes.get(ts, {})
-                    ltp_opt = q.get("last_price", 0)
-                    if ltp_opt <= 0:
+                    ltp_opt = _to_float_or_none(q.get("last_price"))
+                    if not ltp_opt or ltp_opt <= 0:
                         continue
                     is_call = inst.get("instrument_type") == "CE"
                     dte = max((next_exp - date.today()).days, 1)
