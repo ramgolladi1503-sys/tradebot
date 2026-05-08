@@ -2626,6 +2626,12 @@ SLO_AUTH_LATENCY_HARD_BLOCK_ENABLE = (
 SLO_FEED_MAX_LTP_AGE_SEC = float(os.getenv("SLO_FEED_MAX_LTP_AGE_SEC", str(SLA_MAX_LTP_AGE_SEC)))
 SLO_FEED_MAX_DEPTH_AGE_SEC = float(os.getenv("SLO_FEED_MAX_DEPTH_AGE_SEC", str(SLA_MAX_DEPTH_AGE_SEC)))
 SLO_FAILOVER_CONSECUTIVE_BREACHES = int(os.getenv("SLO_FAILOVER_CONSECUTIVE_BREACHES", "3"))
+# Failover on transient feed-stale is intentionally more conservative than other SLO breaches.
+# This prevents brief websocket/reconnect gaps from triggering a sticky risk-halt while
+# still blocking the live cycle on SLO breach.
+SLO_FAILOVER_CONSECUTIVE_BREACHES_FEED_STALE = int(
+    os.getenv("SLO_FAILOVER_CONSECUTIVE_BREACHES_FEED_STALE", "6")
+)
 SLO_FAILOVER_ACTION = os.getenv("SLO_FAILOVER_ACTION", "RISK_HALT")
 SLO_FAILOVER_COOLDOWN_SEC = float(os.getenv("SLO_FAILOVER_COOLDOWN_SEC", "300"))
 SLO_FAILOVER_STATE_PATH = os.getenv("SLO_FAILOVER_STATE_PATH", f"{LOGS_ROOT}/slo_failover_state.json")

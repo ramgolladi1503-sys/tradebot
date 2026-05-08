@@ -215,6 +215,19 @@ def evaluate_slo_status(
     failover_reason_code = None
     failover_action = str(getattr(cfg, "SLO_FAILOVER_ACTION", "RISK_HALT") or "RISK_HALT").upper()
     failover_threshold = max(1, int(getattr(cfg, "SLO_FAILOVER_CONSECUTIVE_BREACHES", 3)))
+    # Feed-stale can happen in short bursts around reconnects. We still block the live
+    # cycle, but we require more consecutive breaches before triggering a sticky failover
+    # (risk_halt + breaker) for feed-only staleness.
+    feed_only_failover_threshold = max(
+        1,
+        int(getattr(cfg, "SLO_FAILOVER_CONSECUTIVE_BREACHES_FEED_STALE", max(failover_threshold, 6))),
+    )
+    feed_only_reasons = {"FEED_LTP_STALE", "FEED_LTP_TS_MISSING", "FEED_DEPTH_STALE", "FEED_DEPTH_TS_MISSING"}
+    effective_failover_threshold = (
+        max(failover_threshold, feed_only_failover_threshold)
+        if breached and set(reasons).issubset(feed_only_reasons)
+        else failover_threshold
+    )
     failover_cooldown_sec = float(getattr(cfg, "SLO_FAILOVER_COOLDOWN_SEC", 300.0))
     last_failover_ts = _coerce_float(state.get("last_failover_ts"))
     cooldown_elapsed = (
@@ -227,13 +240,14 @@ def evaluate_slo_status(
         state["last_breach_ts"] = now_ts
         state["last_reasons"] = list(reasons)
 
-    if breached and should_enforce and enforce_failover and consecutive >= failover_threshold and cooldown_elapsed:
+    if breached and should_enforce and enforce_failover and consecutive >= effective_failover_threshold and cooldown_elapsed:
         details = {
             "reason_code": "SLO_FAILOVER",
             "reasons": list(reasons),
             "mode": ctx.mode,
             "market_open": bool(ctx.is_market_open),
             "consecutive_breaches": consecutive,
+            "effective_failover_threshold": effective_failover_threshold,
             "auth_age_sec": auth_age_sec,
             "auth_latency_sec": auth_latency_sec,
             "ltp_age_sec": ltp_age_sec,
@@ -288,6 +302,8 @@ def evaluate_slo_status(
         "startup_grace_active": bool(startup_grace_active),
         "startup_suppressed_warnings": list(startup_suppressed),
         "consecutive_breaches": int(consecutive),
+        "failover_threshold": int(failover_threshold),
+        "effective_failover_threshold": int(effective_failover_threshold),
         "failover_triggered": bool(failover_triggered),
         "failover_reason_code": failover_reason_code,
         "failover_action": failover_action,
