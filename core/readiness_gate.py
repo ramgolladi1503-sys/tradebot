@@ -78,6 +78,7 @@ def _as_int(value: Any) -> int:
 def _load_fresh_feed_runtime_snapshot(now_epoch: float) -> Dict[str, Any]:
     max_age_sec = max(1.0, float(getattr(cfg, "READINESS_FEED_RUNTIME_MAX_AGE_SEC", 60.0) or 60.0))
     selected: Dict[str, Any] | None = None
+    selected_ts_epoch = -1.0
     selected_mtime = -1.0
     selected_age_sec: float | None = None
     selected_path: Path | None = None
@@ -89,11 +90,22 @@ def _load_fresh_feed_runtime_snapshot(now_epoch: float) -> Dict[str, Any]:
             continue
         payload = _unwrap_feed_runtime_payload(raw)
         ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
-        age_sec = compute_age_sec(ts_epoch, now_epoch) if ts_epoch is not None else compute_age_sec(mtime, now_epoch)
+        age_by_ts = compute_age_sec(ts_epoch, now_epoch) if ts_epoch is not None else None
+        age_by_mtime = compute_age_sec(mtime, now_epoch)
+        # Clock-skew resilience: if payload ts is wildly old/new but file mtime is fresh,
+        # fall back to mtime so we don't ignore an otherwise fresh snapshot.
+        if age_by_ts is not None and age_by_mtime is not None and age_by_ts > max_age_sec and age_by_mtime <= max_age_sec:
+            ts_epoch = None
+            age_sec = age_by_mtime
+        else:
+            age_sec = age_by_ts if age_by_ts is not None else age_by_mtime
         if age_sec is None or age_sec > max_age_sec:
             continue
-        if mtime > selected_mtime:
+        ts_val = float(ts_epoch) if ts_epoch is not None else -1.0
+        # Prefer the freshest declared ts_epoch; fall back to mtime when ts is missing.
+        if (ts_val > selected_ts_epoch) or (ts_val <= 0.0 and selected_ts_epoch <= 0.0 and mtime > selected_mtime):
             selected = payload
+            selected_ts_epoch = ts_val
             selected_mtime = mtime
             selected_age_sec = age_sec
             selected_path = path
@@ -573,11 +585,16 @@ def run_readiness_state(write_log: bool = True) -> ReadinessResult:
             )
         ),
     )
-    decision_engine_active = bool(
-        decision_health.get("decision_engine_active", False)
-        or decision_health.get("symbols")
-        or decision_health.get("rows")
-    )
+    # "Active" means we have recent decision telemetry (not just configured symbols).
+    decision_engine_active = bool(decision_health.get("decision_engine_active", False))
+    if not decision_engine_active:
+        try:
+            decision_engine_active = bool(
+                int(decision_health.get("evaluations_last_window") or 0) > 0
+                or int(decision_health.get("decisions_last_window") or 0) > 0
+            )
+        except Exception:
+            decision_engine_active = False
     for reason in decision_health.get("blockers", []):
         blockers.append(reason)
     checks["decision_gate"] = {
