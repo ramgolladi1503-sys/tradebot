@@ -464,12 +464,13 @@ def _annotate_iv_oi(chain):
             elif "oi_change" not in c:
                 c["oi_change"] = None
             prev_ltp = _PREV_LTP.get(token)
-            c["ltp_change"] = (c.get("ltp", 0) - prev_ltp) if prev_ltp is not None else 0
-            _PREV_LTP[token] = c.get("ltp", 0)
+            ltp_val = _to_float_or_none(c.get("ltp")) or 0.0
+            c["ltp_change"] = (ltp_val - float(prev_ltp)) if prev_ltp is not None else 0.0
+            _PREV_LTP[token] = ltp_val
 
             # OI buildup logic
-            oi_ch = c.get("oi_change", 0)
-            px_ch = c.get("ltp_change", 0)
+            oi_ch = _to_float_or_none(c.get("oi_change")) or 0.0
+            px_ch = _to_float_or_none(c.get("ltp_change")) or 0.0
             if oi_ch > 0 and px_ch > 0:
                 c["oi_build"] = "LONG"
             elif oi_ch > 0 and px_ch < 0:
