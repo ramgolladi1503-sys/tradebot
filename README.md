@@ -1,5 +1,6 @@
 # Tradebot
 
+[![CI](https://github.com/ramgolladi1503-sys/tradebot/actions/workflows/ci.yml/badge.svg)](https://github.com/ramgolladi1503-sys/tradebot/actions/workflows/ci.yml)
 [![Portfolio CI](https://github.com/ramgolladi1503-sys/tradebot/actions/workflows/portfolio-ci.yml/badge.svg)](https://github.com/ramgolladi1503-sys/tradebot/actions/workflows/portfolio-ci.yml)
 
 **Real-time financial decision, risk, and execution-monitoring system for options trading workflows.**
@@ -15,7 +16,28 @@ This repository should be read as a QA/SDET + fintech reliability project, not a
 - [Architecture image](docs/architecture/tradebot-architecture.svg)
 - [Fintech QA one-pager](docs/one-pagers/fintech-qa-trading-systems.md)
 - [Test reports guide](docs/test-reports/README.md)
+- [Branch protection policy](docs/BRANCH_PROTECTION.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
 - LinkedIn: https://www.linkedin.com/in/ram-golladi
+
+---
+
+## CI and release gates
+
+Tradebot protects `main` through PR-based development, CI checks, Portfolio CI, branch protection documentation, and a release checklist for runtime-sensitive changes.
+
+Required merge gates:
+
+- `ci / unit_tests` — installs dependencies and runs the full pytest suite in paper/offline-safe mode.
+- `ci / health_gate` — runs `python -m core.health_gate --desk DEFAULT --strict` and uploads health-gate artifacts on failure.
+- `Portfolio CI / Documentation, architecture, runtime health, contract guard, stale feed, and portfolio quality gate` — validates portfolio docs and runs focused runtime-health, contract-resolution guard, and stale-feed simulator tests.
+
+Before merging changes that touch market feed, contract resolution, execution gating, risk controls, dashboard persistence, broker/session handling, reconciliation, or operational scripts, review:
+
+- [Branch protection policy](docs/BRANCH_PROTECTION.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
+
+Trading-system rule: a change is not release-ready just because tests start. It must preserve the system's ability to explain whether a trade is executable, queue-only, advisory-only, or blocked.
 
 ---
 
