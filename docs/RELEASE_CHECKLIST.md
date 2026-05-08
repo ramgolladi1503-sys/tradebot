@@ -4,7 +4,10 @@ Use this checklist before merging release-sensitive changes, tagging a release, 
 
 Tradebot is a real-time fintech reliability project. A release is not safe just because the code starts. It must prove market data, contract resolution, execution gates, risk controls, persistence, dashboard fields, and reconciliation still agree.
 
-For historical context behind these gates, read [Historical engineering log](HISTORICAL_ENGINEERING_LOG.md).
+For context behind these gates, read:
+
+- [Historical engineering log](HISTORICAL_ENGINEERING_LOG.md)
+- [Project chat evidence](PROJECT_CHAT_EVIDENCE.md)
 
 ---
 
@@ -27,26 +30,34 @@ git status
 
 ---
 
-## 2. Historical evidence review
+## 2. Historical and chat evidence review
 
-Before deciding release readiness, check whether this release touches a past failure pattern from [Historical engineering log](HISTORICAL_ENGINEERING_LOG.md).
+Before deciding release readiness, check whether this release touches a past failure pattern from:
+
+- [Historical engineering log](HISTORICAL_ENGINEERING_LOG.md)
+- [Project chat evidence](PROJECT_CHAT_EVIDENCE.md)
 
 - [ ] Execution-intent boundary reviewed if execution routing or review queue changed.
 - [ ] Execution truth guard reviewed if candidate status, score, or ranking changed.
 - [ ] Fallback candidate handling reviewed if market-data fallback, planning rows, softened rows, or advisory rows changed.
 - [ ] Contract-resolution history reviewed if instrument mapping, token resolution, expiry, strike, or CE/PE handling changed.
 - [ ] No-executable-trades history reviewed if candidates are visible but not executable.
-- [ ] Feed freshness history reviewed if tick store, depth websocket, quote age, DB flush timing, or feed runtime logs changed.
-- [ ] Dashboard/persistence history reviewed if review queue fields, normalized rows, final decision fields, or dashboard columns changed.
+- [ ] Feed freshness history reviewed if tick store, depth websocket, quote age, DB flush timing, runtime state, or feed logs changed.
+- [ ] Path/artifact history reviewed if logs, SQLite, review queue, reports, snapshots, or dashboard loaders changed.
+- [ ] Dashboard/persistence history reviewed if normalized rows, final decision fields, table columns, or timestamp parsing changed.
+- [ ] Scorecard/reporting semantics reviewed if no-trades, skipped checks, hash scripts, or daily regression changed.
+- [ ] Backtest/execution-reality history reviewed if replay, slippage, bid/ask, partial fills, or rejection handling changed.
 - [ ] CI/health-gate history reviewed if workflow, test selection, or health artifacts changed.
 
 Evidence to capture in the PR:
 
 ```text
 Historical PR/issue referenced:
+Project-chat evidence referenced:
 Subsystem affected:
 Past failure pattern protected:
 Validation evidence:
+Runtime artifact checked:
 Remaining risk:
 ```
 
@@ -207,6 +218,7 @@ For major fixes or releases, record the evidence in the PR using this structure:
 
 ```text
 Issue / PR reference:
+Project-chat evidence reference:
 Original failure:
 Subsystem:
 Fix summary:
@@ -214,6 +226,7 @@ Tests run:
 Health gate status:
 CI status:
 Paper/live validation:
+Runtime artifact checked:
 Known limitation:
 Rollback path:
 ```
@@ -228,6 +241,9 @@ This is required for changes similar to past work around:
 - dashboard field drift
 - risk halt / kill switch
 - reconciliation mismatch
+- path/artifact mismatch
+- scorecard/reporting semantics
+- backtest execution realism
 
 ---
 
@@ -250,6 +266,7 @@ Do not merge when required checks are red, skipped, or stale.
 - [ ] Test report guide still matches CI artifacts.
 - [ ] Branch protection policy is current.
 - [ ] Historical engineering log is current if the PR fixes a major runtime failure.
+- [ ] Project chat evidence is current if the PR fixes a previously discussed chat-derived issue.
 - [ ] Known limitations are not hidden.
 - [ ] Any runtime-sensitive behavior change is documented honestly.
 
