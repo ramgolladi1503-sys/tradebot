@@ -200,6 +200,48 @@ if [[ -z "${KITE_API_KEY:-}" ]]; then
   exit 1
 fi
 
+preflight_api_key() {
+  # Fail fast if the api_key itself is invalid/expired. Otherwise the autologin
+  # flow can hang behind a browser tab that never reaches a usable request_token.
+  python - <<'PY'
+import os
+import sys
+import urllib.request
+import urllib.error
+
+api_key = str(os.getenv("KITE_API_KEY", "") or "").strip()
+if not api_key:
+    sys.exit(0)
+
+# Do not print api_key or URL. Only emit a safe tail marker.
+tail4 = api_key[-4:] if len(api_key) >= 4 else api_key
+url = f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3"
+
+try:
+    with urllib.request.urlopen(url, timeout=8) as resp:
+        body = resp.read(512) or b""
+except urllib.error.HTTPError as exc:
+    # Some environments return JSON even on 4xx.
+    try:
+        body = exc.read(512) or b""
+    except Exception:
+        body = b""
+except Exception as exc:
+    # Network/bot-protection hiccups should not be treated as invalid credentials.
+    print(f"[RUN_LIVE][WARN] api_key_preflight_unavailable api_key_tail4={tail4} err={type(exc).__name__}")
+    sys.exit(0)
+
+text = body.decode("utf-8", "ignore").lower()
+if "invalid" in text and "api_key" in text:
+    print(f"[RUN_LIVE] ERROR: Zerodha rejected KITE_API_KEY (invalid api_key). api_key_tail4={tail4}")
+    print("[RUN_LIVE]        Update KITE_API_KEY/KITE_API_SECRET to the current app values, then re-run.")
+    sys.exit(13)
+sys.exit(0)
+PY
+}
+
+preflight_api_key || exit $?
+
 RUN_LIVE_CONFIGURE_OPENMP_RUNTIME="${RUN_LIVE_CONFIGURE_OPENMP_RUNTIME:-false}"
 if [[ "$RUN_LIVE_CONFIGURE_OPENMP_RUNTIME" =~ ^([Tt][Rr][Uu][Ee]|1|[Yy][Ee]?[Ss])$ ]]; then
   configure_openmp_runtime
