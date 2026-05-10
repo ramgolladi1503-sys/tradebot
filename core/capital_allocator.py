@@ -4,6 +4,8 @@ from collections import Counter
 from dataclasses import replace
 from typing import Any, Iterable
 
+from core.data_quality import assess_candidate_data_quality
+
 
 def _safe_float(value: Any) -> float | None:
     try:
@@ -18,6 +20,14 @@ def _get_value(candidate: Any, field: str, default: Any = None) -> Any:
     if isinstance(candidate, dict):
         return candidate.get(field, default)
     return getattr(candidate, field, default)
+
+
+def _candidate_snapshot(candidate: Any) -> dict[str, Any]:
+    if isinstance(candidate, dict):
+        return dict(candidate)
+    if hasattr(candidate, "__dict__"):
+        return dict(candidate.__dict__)
+    return {}
 
 
 def _update_candidate(candidate: Any, updates: dict[str, Any]) -> Any:
@@ -76,7 +86,17 @@ def _requested_capital(candidate: Any) -> float:
     return max(0.0, notional)
 
 
+def _data_truth_allocation_blocker(candidate: Any) -> str | None:
+    result = assess_candidate_data_quality(_candidate_snapshot(candidate))
+    if result.execution_truth_allowed:
+        return None
+    blockers = ",".join(result.execution_truth_blockers) if result.execution_truth_blockers else "unknown"
+    return f"data_truth_block:{result.data_quality_grade}:{blockers}"
+
+
 def _is_allocation_eligible(candidate: Any) -> bool:
+    if _data_truth_allocation_blocker(candidate) is not None:
+        return False
     selected = _get_value(candidate, "selected_for_execution")
     if selected is not None:
         return bool(selected)
@@ -90,6 +110,8 @@ def _is_allocation_eligible(candidate: Any) -> bool:
 def _annotate_default(candidate: Any) -> Any:
     source_flags = _candidate_source_flags(candidate)
     source_flags.setdefault("allocation_scope", "capital_allocator")
+    result = assess_candidate_data_quality(_candidate_snapshot(candidate))
+    source_flags.update(result.to_updates())
     current_size_mult = _safe_float(_get_value(candidate, "size_mult")) or 0.0
     return _update_candidate(
         candidate,
@@ -99,6 +121,11 @@ def _annotate_default(candidate: Any) -> Any:
             "allocation_score": round(_allocation_score(candidate), 6),
             "capital_assigned": _safe_float(_get_value(candidate, "capital_assigned")) or 0.0,
             "size_multiplier_effective": _safe_float(_get_value(candidate, "size_multiplier_effective")) or current_size_mult,
+            "data_quality_grade": result.data_quality_grade,
+            "execution_truth_allowed": result.execution_truth_allowed,
+            "execution_truth_blockers": list(result.execution_truth_blockers),
+            "fallback_fields": list(result.fallback_fields),
+            "data_lineage": dict(result.lineage),
             "source_flags": source_flags,
         },
     )
@@ -124,6 +151,9 @@ def _apply_deferred(candidate: Any, *, reason: str, selection_reason: str | None
 
 
 def _apply_allocated(candidate: Any, *, slot_id: str, capital_assigned: float, selection_reason: str | None = None) -> Any:
+    data_blocker = _data_truth_allocation_blocker(candidate)
+    if data_blocker is not None:
+        return _apply_deferred(candidate, reason=data_blocker, selection_reason="allocation_data_truth_block")
     source_flags = _candidate_source_flags(candidate)
     source_flags["allocation_reason"] = "allocated"
     source_flags["slot_id"] = slot_id
@@ -233,6 +263,10 @@ def allocate_capital_slots(
     for index, candidate in enumerate(candidate_list):
         score = float(_allocation_score(candidate))
         current_selection_reason = str(_get_value(candidate, "selection_reason") or "").strip() or None
+        data_blocker = _data_truth_allocation_blocker(candidate)
+        if data_blocker is not None:
+            candidate_list[index] = _apply_deferred(candidate, reason=data_blocker, selection_reason="allocation_data_truth_block")
+            continue
         if not _is_allocation_eligible(candidate):
             candidate_list[index] = _apply_deferred(candidate, reason="not_selected_for_execution", selection_reason=current_selection_reason)
             continue
@@ -296,7 +330,6 @@ def allocate_capital_slots(
         defer_reason = reasons[0] if reasons else "deferred_allocation"
         candidate_list[index] = _apply_deferred(candidate, reason=defer_reason, selection_reason="allocation_deferred")
 
-    return candidate_list
     return candidate_list
 
 
