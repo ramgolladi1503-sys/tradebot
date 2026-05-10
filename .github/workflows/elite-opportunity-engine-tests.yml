@@ -1,0 +1,56 @@
+name: Elite Opportunity Engine Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - feature/elite-opportunity-engine-bible
+  workflow_dispatch:
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run focused elite opportunity engine tests
+        run: |
+          pytest -q \
+            tests/test_data_quality.py \
+            tests/test_candidate_pool.py \
+            tests/test_validate_candidate_truth_script.py \
+            tests/test_build_opportunity_truth_report_script.py \
+            tests/test_shadow_truth.py \
+            tests/test_run_shadow_truth_audit_script.py \
+            tests/test_summarize_truth_reports.py \
+            tests/test_guard_mode_wiring.py \
+            tests/test_risk_data_guard.py \
+            tests/test_guarded_risk_engine.py \
+            tests/test_guarded_review.py \
+            tests/test_lineage_stamp.py \
+            tests/test_offline_elite_pipeline_validate.py
+
+      - name: Run offline elite pipeline fixture validation
+        run: |
+          python scripts/offline_elite_pipeline_validate.py \
+            --inputs tests/fixtures/candidates_truth_sample.json \
+            --out-json logs/offline_elite_pipeline_report.json \
+            --out-md logs/offline_elite_pipeline_report.md \
+            --fail-on-dirty-capital \
+            --print-summary
