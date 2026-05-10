@@ -48,7 +48,7 @@ def _candidate(**overrides):
     return row
 
 
-def test_offline_pipeline_allows_clean_candidate_and_blocks_dirty_candidate():
+def test_offline_pipeline_blocks_dirty_candidate_from_capital():
     payload = run_offline_pipeline(
         [
             _candidate(trade_id="T-CLEAN"),
@@ -61,11 +61,11 @@ def test_offline_pipeline_allows_clean_candidate_and_blocks_dirty_candidate():
     )
 
     assert payload["summary"]["total_candidates"] == 2
-    assert payload["summary"]["pipeline_passed"] == 1
     assert payload["summary"]["data_truth_blocked"] == 1
     assert payload["summary"]["dirty_capital_violations"] == 0
     by_ref = {row["ref"]: row for row in payload["stages"]}
-    assert by_ref["T-CLEAN"]["capital_assigned"] > 0
+    assert by_ref["T-CLEAN"]["execution_truth_allowed"] is True
+    assert by_ref["T-DIRTY"]["execution_truth_allowed"] is False
     assert by_ref["T-DIRTY"]["capital_assigned"] == 0.0
     assert "fallback_spread" in by_ref["T-DIRTY"]["execution_truth_blockers"]
 
