@@ -4,6 +4,7 @@ from dataclasses import fields as dataclass_fields, replace
 from typing import Any
 
 from config import config as cfg
+from core.data_quality import EXECUTION_CRITICAL_FIELDS, assess_candidate_data_quality
 
 
 def _candidate_field(candidate: Any, field: str, default: Any = None) -> Any:
@@ -17,6 +18,21 @@ def _candidate_field_names(candidate: Any) -> set[str]:
         return {field.name for field in dataclass_fields(candidate)}
     except Exception:
         return set()
+
+
+def _candidate_snapshot(candidate: Any) -> dict[str, Any]:
+    if isinstance(candidate, dict):
+        return dict(candidate)
+    payload: dict[str, Any] = {}
+    try:
+        for field in dataclass_fields(candidate):
+            payload[field.name] = getattr(candidate, field.name, None)
+    except Exception:
+        if hasattr(candidate, "__dict__"):
+            payload.update(dict(candidate.__dict__))
+    if hasattr(candidate, "__dict__"):
+        payload.update(dict(candidate.__dict__))
+    return payload
 
 
 def _normalize_code_list(value: Any) -> list[str]:
@@ -72,6 +88,67 @@ def apply_candidate_updates(candidate: Any, updates: dict[str, Any]) -> Any:
         except Exception:
             continue
     return out
+
+
+def _enforce_data_truth(candidate: Any) -> Any:
+    """Attach canonical data-truth fields and downgrade unsafe execution claims.
+
+    This is guard-mode wiring. It does not create trades. It only prevents a
+    finalized candidate from continuing to claim executable/selected/capitalized
+    status when execution-critical data is fallback, stale, missing, recovered,
+    synthetic, or unknown.
+    """
+    payload = _candidate_snapshot(candidate)
+    result = assess_candidate_data_quality(payload)
+    source_flags = dict(_candidate_field(candidate, "source_flags", {}) or {})
+    updates = result.to_updates()
+    source_flags.update({key: value for key, value in updates.items() if key != "source_flags"})
+    updates["source_flags"] = source_flags
+
+    if not result.execution_truth_allowed:
+        blockers = list(result.execution_truth_blockers)
+        primary_blocker = blockers[0] if blockers else "data_truth_blocked"
+        gates_failed = _normalize_code_list(_candidate_field(candidate, "gates_failed", []))
+        warnings = _normalize_code_list(_candidate_field(candidate, "warnings", []))
+        for blocker in blockers:
+            if blocker not in gates_failed:
+                gates_failed.append(blocker)
+        if "data_truth_execution_block" not in warnings:
+            warnings.append("data_truth_execution_block")
+        candidate_status = str(_candidate_field(candidate, "candidate_status", "") or "").strip().lower()
+        if candidate_status in {"", "executable", "ready", "selected"}:
+            candidate_status = "data_invalid" if result.data_quality_grade == "F" else "advisory_only"
+        updates.update(
+            {
+                "execution_allowed": False,
+                "eligible_for_execution": False,
+                "selected_for_execution": False,
+                "is_executable": False,
+                "capital_assigned": 0.0,
+                "candidate_status": candidate_status,
+                "primary_blocker": primary_blocker,
+                "gates_failed": gates_failed,
+                "warnings": warnings,
+            }
+        )
+        source_flags.update(
+            {
+                "execution_allowed": False,
+                "eligible_for_execution": False,
+                "selected_for_execution": False,
+                "is_executable": False,
+                "capital_assigned": 0.0,
+                "candidate_status": candidate_status,
+                "primary_blocker": primary_blocker,
+                "gates_failed": gates_failed,
+                "warnings": warnings,
+                "data_truth_guard_applied": True,
+            }
+        )
+    else:
+        source_flags["data_truth_guard_applied"] = False
+    updates["source_flags"] = source_flags
+    return apply_candidate_updates(candidate, updates)
 
 
 def stamp_lifecycle_stage(candidate: Any, lifecycle_stage: str | None) -> Any:
@@ -276,7 +353,7 @@ def mirror_candidate_truth(
         if decision_trace_out:
             source_flags["decision_trace"] = decision_trace_out
         updates["source_flags"] = source_flags
-    return apply_candidate_updates(out, updates)
+    return _enforce_data_truth(apply_candidate_updates(out, updates))
 
 
 def assert_ranked_candidate_ready(candidate: Any) -> None:
@@ -321,3 +398,17 @@ def assert_executable_candidate_ready(candidate: Any) -> None:
     ]
     if missing:
         raise AssertionError(f"executable candidate missing required fields: {','.join(missing)}")
+
+    result = assess_candidate_data_quality(_candidate_snapshot(candidate))
+    if not result.execution_truth_allowed:
+        raise AssertionError(
+            "executable candidate failed data truth: " + ",".join(result.execution_truth_blockers)
+        )
+    if result.data_quality_grade not in {"A", "B"}:
+        raise AssertionError(f"executable candidate has non-executable data grade: {result.data_quality_grade}")
+    dirty_fallback_fields = sorted(set(result.fallback_fields).intersection(EXECUTION_CRITICAL_FIELDS))
+    if dirty_fallback_fields:
+        raise AssertionError(
+            "executable candidate has fallback execution-critical fields: "
+            + ",".join(dirty_fallback_fields)
+        )
