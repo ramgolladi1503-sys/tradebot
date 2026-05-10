@@ -12,6 +12,42 @@ branch: feature/elite-opportunity-engine-bible
 base: main
 ```
 
+## Project Operating Rule — Main Is Read-Only
+
+This Bible must be executed under a strict non-invasive branch rule.
+
+```text
+main is read-only.
+No direct commits to main.
+No merge to main without explicit user approval.
+No runtime behavior change should be forced into main.
+All enrichment work must happen on a dedicated feature branch.
+```
+
+Every change must enrich Tradebot without destabilizing the existing working system.
+
+Allowed without extra approval:
+
+- new documentation
+- new tests
+- new standalone modules
+- new optional helper utilities
+- new validation/reporting scripts
+- additive contracts that are not wired into live execution by default
+
+Not allowed without explicit approval:
+
+- direct changes to `main`
+- forced runtime-path rewiring
+- execution behavior changes
+- broker/order-path changes
+- dashboard changes that break existing fields
+- removing existing fallback/safety logic
+- deleting existing tests
+- merging the branch into `main`
+
+The branch can prepare elite functionality, but integration must be controlled, testable, reversible, and validated during market hours before merge.
+
 ## Purpose
 
 This document defines the final product scope, current-state assessment, architectural direction, implementation roadmap, acceptance gates, and elite-version requirements for the Tradebot Opportunity Engine.
@@ -261,6 +297,20 @@ capital_assigned = 0
 ## Principle 5 — Capital Allocation Requires Clean Truth
 
 Capital should only go to candidates that pass data truth, execution truth, scoring threshold, risk budget, portfolio exposure limits, and lifecycle readiness.
+
+## Principle 6 — Enrichment Must Be Non-Invasive Until Approved
+
+New work must enrich Tradebot without silently changing existing live behavior.
+
+Examples of acceptable enrichment:
+
+- add a standalone data-quality validator
+- add tests that prove fallback candidates cannot execute
+
+Examples of unacceptable hidden rewiring:
+
+- changing live execution selection without a separate integration PR
+- replacing existing review queue logic without market validation
 
 ---
 
@@ -824,7 +874,7 @@ tests/test_fallback_execution_truth.py
 docs/ELITE_OPPORTUNITY_ENGINE_BIBLE.md
 ```
 
-## Modify
+## Modify — Only After Explicit Integration Approval
 
 ```text
 core/engine_phase2_adapter.py
@@ -837,6 +887,8 @@ core/risk_engine.py
 dashboard/streamlit_app_runtime.py
 tests/test_opportunity_engine.py
 ```
+
+These files are live-behavior-sensitive. They should not be changed silently. Runtime integration must be done in separate, reviewable commits after the standalone contracts and tests prove value.
 
 ## Optional Later
 
