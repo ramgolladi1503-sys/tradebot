@@ -362,6 +362,38 @@ def is_safe_nearest_contract_fallback(resolution: dict | None) -> bool:
     return str(resolution.get("resolution_path") or "").strip().lower() == "safe_nearest_contract_fallback"
 
 
+def _available_expiries_for_strike(
+    registry: dict,
+    *,
+    sym: str,
+    segment: str,
+    opt_type: str,
+    strike_val: float,
+) -> list[date]:
+    """Return matching expiries without assuming registry key shape.
+
+    This function is intentionally defensive because it runs in the miss path.
+    A malformed registry key must not hide the real outcome: contract not found.
+    """
+    expiries: set[date] = set()
+    for key in (registry or {}).keys():
+        try:
+            key_sym, key_segment, key_strike, key_opt_type, key_expiry = key
+        except Exception:
+            continue
+        if key_sym != sym or key_segment != segment or key_opt_type != opt_type:
+            continue
+        try:
+            if abs(float(key_strike) - float(strike_val)) > 1e-6:
+                continue
+        except Exception:
+            continue
+        expiry = _coerce_expiry(key_expiry)
+        if expiry is not None:
+            expiries.add(expiry)
+    return sorted(expiries)
+
+
 def resolve_option_token(
     symbol: str,
     expiry_date: str | date,
@@ -511,12 +543,12 @@ def resolve_option_token(
             "resolved_strike": fallback.get("resolved_strike"),
         }
 
-    available_expiries = sorted(
-        {
-            k[4]
-            for k in registry.keys()
-            if k[0] == sym and k[1] == segment and k[3] == opt_type and abs(float(k[2]) - strike_val) <= 1e-6
-        }
+    available_expiries = _available_expiries_for_strike(
+        registry,
+        sym=sym,
+        segment=segment,
+        opt_type=opt_type,
+        strike_val=strike_val,
     )
     if available_expiries:
         log_requested_expiry_missing(
