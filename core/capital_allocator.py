@@ -7,6 +7,9 @@ from typing import Any, Iterable
 from core.data_quality import assess_candidate_data_quality
 
 
+SAFE_EXECUTION_ENTRY_SOURCES = {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}
+
+
 def _safe_float(value: Any) -> float | None:
     try:
         if value in (None, "", "None"):
@@ -130,7 +133,7 @@ def _normalize_truth_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
                 if _is_dirty_lineage(data_lineage.get(key)):
                     data_lineage[key] = value
             entry_source = str(out.get("execution_entry_source") or "").strip().lower()
-            if entry_source in {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}:
+            if entry_source in SAFE_EXECUTION_ENTRY_SOURCES:
                 if _is_dirty_lineage(data_lineage.get("execution_entry")):
                     data_lineage["execution_entry"] = entry_source.upper()
                 if _is_dirty_lineage(out.get("execution_entry_lineage")):
@@ -147,6 +150,37 @@ def _normalize_truth_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     source_flags.update({k: v for k, v in out.items() if k in {"quote_source", "spread_source", "liquidity_source", "data_lineage", "price_lineage", "spread_lineage", "liquidity_lineage", "contract_lineage", "execution_entry_lineage"}})
     out["source_flags"] = source_flags
     return out
+
+
+def _has_clean_execution_evidence(snapshot: dict[str, Any]) -> bool:
+    if _has_explicit_dirty_data(snapshot):
+        return False
+    execution_entry = _safe_float(snapshot.get("execution_entry"))
+    if execution_entry is None or execution_entry <= 0:
+        return False
+    if str(snapshot.get("execution_entry_status") or "").strip().lower() != "executable":
+        return False
+    if str(snapshot.get("execution_entry_source") or "").strip().lower() not in SAFE_EXECUTION_ENTRY_SOURCES:
+        return False
+    bid = _safe_float(snapshot.get("best_bid") or snapshot.get("bid"))
+    ask = _safe_float(snapshot.get("best_ask") or snapshot.get("ask"))
+    ltp = _safe_float(snapshot.get("opt_ltp") or snapshot.get("current_ltp") or snapshot.get("ltp"))
+    if bid is None or ask is None or ask < bid or ltp is None or ltp <= 0:
+        return False
+    if _safe_float(snapshot.get("quote_age_sec")) is None:
+        return False
+    if not snapshot.get("instrument_token"):
+        return False
+    if not (snapshot.get("tradingsymbol") or snapshot.get("instrument_id")):
+        return False
+    return True
+
+
+def _has_executable_entry_claim(snapshot: dict[str, Any]) -> bool:
+    return bool(
+        _safe_float(snapshot.get("execution_entry")) is not None
+        and str(snapshot.get("execution_entry_status") or "").strip().lower() == "executable"
+    )
 
 
 def _update_candidate(candidate: Any, updates: dict[str, Any]) -> Any:
@@ -215,7 +249,12 @@ def _requested_capital(candidate: Any) -> float:
 
 
 def _data_truth_allocation_blocker(candidate: Any) -> str | None:
-    result = assess_candidate_data_quality(_candidate_snapshot(candidate))
+    snapshot = _candidate_snapshot(candidate)
+    if not _has_executable_entry_claim(snapshot):
+        return None
+    if _has_clean_execution_evidence(snapshot):
+        return None
+    result = assess_candidate_data_quality(snapshot)
     if result.execution_truth_allowed:
         return None
     blockers = ",".join(result.execution_truth_blockers) if result.execution_truth_blockers else "unknown"
@@ -223,16 +262,21 @@ def _data_truth_allocation_blocker(candidate: Any) -> str | None:
 
 
 def _is_allocation_eligible(candidate: Any) -> bool:
-    if _data_truth_allocation_blocker(candidate) is not None:
-        return False
     selected = _get_value(candidate, "selected_for_execution")
-    if selected is not None:
-        return bool(selected)
+    if selected is not None and not bool(selected):
+        return False
     execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
     tradable = bool(_get_value(candidate, "tradable", False))
     execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
     execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
-    return bool(execution_allowed and tradable and execution_entry is not None and execution_entry_status == "executable")
+    eligible = bool(execution_allowed and tradable and execution_entry is not None and execution_entry_status == "executable")
+    if not eligible:
+        return False
+    if _data_truth_allocation_blocker(candidate) is not None:
+        return False
+    if selected is not None:
+        return bool(selected)
+    return True
 
 
 def _annotate_default(candidate: Any) -> Any:
