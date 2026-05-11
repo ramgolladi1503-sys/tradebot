@@ -732,7 +732,7 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         "confidence_final",
     ):
         if c in out.columns:
-            out[c] = out[c].round(2)
+            out[c] = pd.to_numeric(out[c], errors="coerce").round(2)
     if "display_ts_ist" in out.columns:
         out["display_ts_ist"] = out["display_ts_ist"].where(out["display_ts_ist"].notna(), "—")
     return out
