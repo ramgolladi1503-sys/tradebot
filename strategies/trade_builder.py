@@ -13045,3 +13045,118 @@ class TradeBuilder:
 
 
 TradeBuilder.build = _wrap_trade_builder_build_with_status(TradeBuilder.build)
+
+# PR31 targeted compatibility patch:
+# Allows LIVE option candidates with missing/zero volume when quote is not hard-stale
+# and OI is strong. Hard stale and true hard blockers stay blocked.
+def _install_pr31_live_missing_volume_high_oi_soften_patch() -> None:
+    original = getattr(TradeBuilder, "_option_tradability_precondition", None)
+    if original is None or getattr(original, "_PR31_live_missing_volume_high_oi_soften_installed", False):
+        return
+
+    def _patched_option_tradability_precondition(self, *args, **kwargs):
+        tradable, payload = original(self, *args, **kwargs)
+        payload = dict(payload or {})
+
+        opt = kwargs.get("opt")
+        market_ctx = kwargs.get("market_ctx")
+
+        # Signature is keyword-based in tests, but keep positional fallback safe.
+        if opt is None and len(args) >= 2:
+            opt = args[1]
+        if market_ctx is None and len(args) >= 4:
+            market_ctx = args[3]
+
+        if not isinstance(opt, dict):
+            return tradable, payload
+
+        mode = str(
+            getattr(market_ctx, "mode", "")
+            or getattr(cfg, "EXECUTION_MODE", "")
+            or ""
+        ).strip().upper()
+
+        if mode not in {"LIVE", "REAL"}:
+            return tradable, payload
+
+        blocked_reason = str(
+            payload.get("reason")
+            or payload.get("reject_reason")
+            or payload.get("primary_blocker")
+            or payload.get("execution_block_reason")
+            or ""
+        ).strip().lower()
+
+        hard_blockers = {
+            "unresolved_contract",
+            "quote_missing",
+            "missing_live_quote",
+            "invalid_option_ltp",
+            "hard_stale_quote",
+            "no_live_option_feed",
+            "malformed_option_row",
+        }
+
+        if blocked_reason in hard_blockers:
+            return tradable, payload
+
+        if any(bool(payload.get(flag)) for flag in (
+            "hard_stale_quote",
+            "unresolved_contract",
+            "invalid_option_ltp",
+        )):
+            return tradable, payload
+
+        quote_ok = bool(opt.get("quote_ok", payload.get("quote_ok", True)))
+        require_quote_ok = bool(getattr(cfg, "TRADE_BUILDER_LIVE_STALE_SOFTEN_REQUIRE_QUOTE_OK", True))
+        if require_quote_ok and not quote_ok:
+            return tradable, payload
+
+        quote_age = self._coerce_positive_float(
+            payload.get("quote_age_sec")
+            or opt.get("quote_age_sec")
+            or opt.get("option_tick_age_sec")
+            or opt.get("tick_age_sec")
+        )
+
+        hard_stale_sec = float(getattr(cfg, "LIVE_OPTION_TICK_HARD_STALE_SEC", 24.0) or 24.0)
+        if quote_age is not None and quote_age >= hard_stale_sec:
+            return tradable, payload
+
+        oi_value = self._coerce_positive_float(opt.get("oi") or opt.get("open_interest"))
+        volume_value = self._coerce_positive_float(opt.get("volume") or opt.get("volume_traded"))
+
+        high_oi_floor = float(
+            getattr(
+                cfg,
+                "TRADE_BUILDER_LIVE_STALE_SOFTEN_MIN_OI",
+                getattr(cfg, "LIVE_OPTION_MISSING_VOLUME_HIGH_OI_MIN", 10000),
+            )
+            or 10000
+        )
+
+        volume_missing_but_oi_strong = (
+            (volume_value is None or volume_value <= 0)
+            and oi_value is not None
+            and oi_value >= high_oi_floor
+        )
+
+        if not volume_missing_but_oi_strong:
+            return tradable, payload
+
+        payload["volume_missing_softened_by_oi"] = True
+        payload["live_softened"] = True
+        payload["quote_softened"] = True
+        payload["soft_stale_quote"] = True
+        payload["liquidity_ok"] = True
+        payload["liquidity_ok_for_soften"] = True
+        payload["quote_ok"] = True
+        payload["oi_ok"] = True
+        return True, payload
+
+    _patched_option_tradability_precondition._PR31_live_missing_volume_high_oi_soften_installed = True
+    TradeBuilder._option_tradability_precondition = _patched_option_tradability_precondition
+
+
+_install_pr31_live_missing_volume_high_oi_soften_patch()
+

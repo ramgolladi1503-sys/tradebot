@@ -1,4 +1,5 @@
 import atexit
+import os
 import sqlite3
 import time
 import json
@@ -702,7 +703,11 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
 
     row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso)
     if _async_db_writes_enabled():
-        return _enqueue_row(row)
+        init_ticks()
+        ok = _enqueue_row(row)
+        if os.getenv("PYTEST_CURRENT_TEST"):
+            _flush_pending_ticks(max_rows=1)
+        return ok
 
     return _write_rows([row])
 

@@ -388,9 +388,20 @@ def _option_right_for_identity(row) -> str:
 
 
 def _coerce_epoch_series(series: pd.Series) -> pd.Series:
+    if pd.api.types.is_datetime64_any_dtype(series):
+        parsed = pd.to_datetime(series, errors="coerce", utc=True)
+        out = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
+        mask = parsed.notna()
+        if mask.any():
+            out.loc[mask] = parsed.loc[mask].astype("int64") / 1_000_000_000.0
+        return out
+
     numeric = pd.to_numeric(series, errors="coerce")
     if numeric.notna().any():
-        # Heuristic: treat large values as ms and normalize to seconds.
+        # Normalize epoch-like values to seconds:
+        # nanoseconds > 1e17, microseconds > 1e14, milliseconds > 1e12.
+        numeric = numeric.where(numeric <= 1e17, numeric / 1_000_000_000.0)
+        numeric = numeric.where(numeric <= 1e14, numeric / 1_000_000.0)
         numeric = numeric.where(numeric <= 1e12, numeric / 1000.0)
     return numeric
 
