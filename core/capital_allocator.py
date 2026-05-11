@@ -25,6 +25,10 @@ def _get_value(candidate: Any, field: str, default: Any = None) -> Any:
 def _candidate_snapshot(candidate: Any) -> dict[str, Any]:
     if isinstance(candidate, dict):
         snapshot = dict(candidate)
+    elif is_dataclass(candidate):
+        snapshot = {field.name: getattr(candidate, field.name, None) for field in fields(candidate)}
+        if hasattr(candidate, "__dict__"):
+            snapshot.update(dict(candidate.__dict__))
     elif hasattr(candidate, "__dict__"):
         snapshot = dict(candidate.__dict__)
     else:
