@@ -183,6 +183,13 @@ def _has_executable_entry_claim(snapshot: dict[str, Any]) -> bool:
     )
 
 
+def _effective_budget_cap(capital_budget_cap: float | None) -> float | None:
+    cap = _safe_float(capital_budget_cap)
+    if cap is None or cap <= 0:
+        return None
+    return float(cap)
+
+
 def _update_candidate(candidate: Any, updates: dict[str, Any]) -> Any:
     if isinstance(candidate, dict):
         out = dict(candidate)
@@ -366,7 +373,7 @@ def _fits_constraints(
     capital_budget_cap: float | None,
 ) -> bool:
     all_states = list(states) + [candidate_state]
-    if len(all_states) > max_slots:
+    if max_slots > 0 and len(all_states) > max_slots:
         return False
     symbol_counts = Counter(state["symbol"] for state in all_states)
     if per_symbol_cap > 0 and symbol_counts[candidate_state["symbol"]] > per_symbol_cap:
@@ -374,9 +381,10 @@ def _fits_constraints(
     theme_counts = Counter(state["theme"] for state in all_states)
     if per_theme_cap > 0 and theme_counts[candidate_state["theme"]] > per_theme_cap:
         return False
-    if capital_budget_cap is not None:
+    effective_budget_cap = _effective_budget_cap(capital_budget_cap)
+    if effective_budget_cap is not None:
         total_capital = sum(float(state["capital"]) for state in all_states)
-        if total_capital > capital_budget_cap:
+        if total_capital > effective_budget_cap:
             return False
     return True
 
@@ -408,9 +416,10 @@ def _candidate_slot_conflicts(
             reasons.append("deferred_per_theme_cap")
             for state in theme_matches:
                 pool[state["index"]] = state
-    if capital_budget_cap is not None:
+    effective_budget_cap = _effective_budget_cap(capital_budget_cap)
+    if effective_budget_cap is not None:
         current_budget = sum(float(state["capital"]) for state in allocated_states)
-        if current_budget + float(candidate_state["capital"]) > capital_budget_cap:
+        if current_budget + float(candidate_state["capital"]) > effective_budget_cap:
             reasons.append("deferred_budget_cap")
             for state in allocated_states:
                 pool[state["index"]] = state
