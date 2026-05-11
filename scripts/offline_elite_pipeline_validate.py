@@ -17,13 +17,14 @@ from core.capital_allocator import allocate_capital_slots
 from core.fallback_lineage import stamp_fallback_lineage
 from core.guarded_review import enforce_review_data_truth
 from core.guarded_risk_engine import evaluate_candidate_risk_guarded
+from core.paths import logs_dir
 
 
 DEFAULT_INPUTS = [
     "tests/fixtures/candidates_truth_sample.json",
-    "logs/review_queue.json",
-    "logs/quick_review_queue.json",
-    "logs/approved_trades.json",
+    str(logs_dir() / "review_queue.json"),
+    str(logs_dir() / "quick_review_queue.json"),
+    str(logs_dir() / "approved_trades.json"),
     "runtime/review_queue.json",
     "runtime/quick_review_queue.json",
 ]
@@ -220,8 +221,8 @@ def _resolve_inputs(args: argparse.Namespace) -> list[Path]:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Offline elite end-to-end pipeline validator")
     parser.add_argument("--inputs", nargs="*", default=None, help="Input candidate JSON files")
-    parser.add_argument("--out-json", default="logs/offline_elite_pipeline_report.json")
-    parser.add_argument("--out-md", default="logs/offline_elite_pipeline_report.md")
+    parser.add_argument("--out-json", default=str(logs_dir() / "offline_elite_pipeline_report.json"))
+    parser.add_argument("--out-md", default=str(logs_dir() / "offline_elite_pipeline_report.md"))
     parser.add_argument("--fail-on-dirty-capital", action="store_true")
     parser.add_argument("--print-summary", action="store_true")
     return parser.parse_args(argv)

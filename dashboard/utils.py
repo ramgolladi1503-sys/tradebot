@@ -283,3 +283,26 @@ def filter_by_permission(df: pd.DataFrame, permission: str) -> pd.DataFrame:
         return df
     series = df["permission"].fillna("").astype(str).str.upper()
     return df[series == perm].copy()
+
+# _PR31_NORMALIZE_TRADE_DF_TIMESTAMP_PRESERVE
+_PR31_PREV_NORMALIZE_TRADE_DF = normalize_trade_df
+
+def normalize_trade_df(df):
+    original_timestamp = None
+    try:
+        if df is not None and "timestamp" in df.columns:
+            original_timestamp = df["timestamp"].copy()
+    except Exception:
+        original_timestamp = None
+
+    out = _PR31_PREV_NORMALIZE_TRADE_DF(df)
+
+    try:
+        if original_timestamp is not None and "timestamp" in out.columns:
+            bad = out["timestamp"].astype(str).isin({"nan", "NaN", "None", "NaT", ""})
+            out.loc[bad, "timestamp"] = original_timestamp.loc[bad].astype(str)
+    except Exception:
+        pass
+
+    return out
+

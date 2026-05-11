@@ -5,12 +5,13 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
+from core.paths import logs_dir
 
 
 DEFAULT_REPORTS = {
-    "candidate_truth": "logs/candidate_truth_report.json",
-    "opportunity_truth": "logs/opportunity_truth_report.json",
-    "shadow_truth": "logs/shadow_truth_audit.json",
+    "candidate_truth": str(logs_dir() / "candidate_truth_report.json"),
+    "opportunity_truth": str(logs_dir() / "opportunity_truth_report.json"),
+    "shadow_truth": str(logs_dir() / "shadow_truth_audit.json"),
 }
 
 

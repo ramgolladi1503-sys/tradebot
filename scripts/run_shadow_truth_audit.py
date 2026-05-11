@@ -8,6 +8,7 @@ from typing import Any
 
 from core.shadow_truth import shadow_evaluate_candidates
 from scripts.build_opportunity_truth_report import DEFAULT_SOURCES, _merge_candidates_by_key
+from core.paths import logs_dir
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -67,8 +68,8 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run non-invasive shadow truth audit")
     parser.add_argument("--inputs", nargs="*", default=None, help="Input JSON files. Defaults to common logs/runtime files.")
-    parser.add_argument("--out-json", default="logs/shadow_truth_audit.json")
-    parser.add_argument("--out-md", default="logs/shadow_truth_audit.md")
+    parser.add_argument("--out-json", default=str(logs_dir() / "shadow_truth_audit.json"))
+    parser.add_argument("--out-md", default=str(logs_dir() / "shadow_truth_audit.md"))
     parser.add_argument("--fail-on-critical", action="store_true", help="Exit non-zero if critical shadow drifts are detected")
     parser.add_argument("--print-summary", action="store_true")
     return parser.parse_args(argv)

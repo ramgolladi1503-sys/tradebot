@@ -21,7 +21,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-path", default=str(getattr(cfg, "OPTION_SYMBOL_BACKTEST_EXPORT_DB_PATH", getattr(cfg, "TRADE_DB_PATH", ".runtime/db/DEFAULT.sqlite"))))
     parser.add_argument("--output", default=None, help="Output CSV path.")
     parser.add_argument("--option-chain-path", default=str(getattr(cfg, "OPTION_SYMBOL_BACKTEST_EXPORT_CHAIN_PATH", ".runtime/option_chain_latest.json")))
-    parser.add_argument("--instruments-path", default=str(getattr(cfg, "OPTION_SYMBOL_BACKTEST_EXPORT_INSTRUMENTS_PATH", "data/kite_instruments.json")))
+    parser.add_argument("--instruments-path", default=str(getattr(cfg, "OPTION_SYMBOL_BACKTEST_EXPORT_INSTRUMENTS_PATH", Path(getattr(cfg, "DATA_ROOT", ".runtime")) / "kite_instruments.json")))
     return parser
 
 
@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     output_path = Path(
         args.output
         or (
-            Path(str(getattr(cfg, "OPTION_SYMBOL_BACKTEST_EXPORT_OUTPUT_DIR", "data/backtest")))
+            Path(str(getattr(cfg, "OPTION_SYMBOL_BACKTEST_EXPORT_OUTPUT_DIR", Path(getattr(cfg, "DATA_ROOT", ".runtime")) / "backtest")))
             / f"{tradingsymbol}_1min.csv"
         )
     )

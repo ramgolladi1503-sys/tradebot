@@ -10,13 +10,14 @@ from typing import Any
 
 from core.candidate_pool import build_candidate_pool
 from core.data_quality import assess_candidate_data_quality
+from core.paths import logs_dir
 
 
 DEFAULT_INPUT_CANDIDATES = (
-    "logs/review_queue.json",
-    "logs/quick_review_queue.json",
-    "logs/approved_trades.json",
-    "logs/advisory_rows.json",
+    str(logs_dir() / "review_queue.json"),
+    str(logs_dir() / "quick_review_queue.json"),
+    str(logs_dir() / "approved_trades.json"),
+    str(logs_dir() / "advisory_rows.json"),
     "runtime/review_queue.json",
     "runtime/quick_review_queue.json",
 )
@@ -186,8 +187,8 @@ def _resolve_input_path(args: argparse.Namespace) -> Path | None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Non-wired Tradebot candidate truth validator")
     parser.add_argument("--input", help="Path to candidate/trade JSON file. If omitted, common queue/log paths are tried.")
-    parser.add_argument("--out-json", default="logs/candidate_truth_report.json", help="Output JSON report path")
-    parser.add_argument("--out-md", default="logs/candidate_truth_report.md", help="Output Markdown report path")
+    parser.add_argument("--out-json", default=str(logs_dir() / "candidate_truth_report.json"), help="Output JSON report path")
+    parser.add_argument("--out-md", default=str(logs_dir() / "candidate_truth_report.md"), help="Output Markdown report path")
     parser.add_argument("--fail-on-dirty-selected", action="store_true", help="Exit non-zero if selected/executable dirty candidates are detected")
     parser.add_argument("--print-summary", action="store_true", help="Print summary to stdout")
     return parser.parse_args(argv)

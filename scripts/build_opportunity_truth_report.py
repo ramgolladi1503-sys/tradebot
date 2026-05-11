@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from scripts.validate_candidate_truth import build_truth_report
+from core.paths import logs_dir
 
 
 DEFAULT_SOURCES = [
-    "logs/review_queue.json",
-    "logs/quick_review_queue.json",
-    "logs/approved_trades.json",
-    "logs/advisory_rows.json",
+    str(logs_dir() / "review_queue.json"),
+    str(logs_dir() / "quick_review_queue.json"),
+    str(logs_dir() / "approved_trades.json"),
+    str(logs_dir() / "advisory_rows.json"),
     "runtime/review_queue.json",
     "runtime/quick_review_queue.json",
 ]
@@ -133,8 +134,8 @@ def _write_markdown(path: Path, report: dict[str, Any]) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build non-wired multi-source opportunity truth report")
     parser.add_argument("--inputs", nargs="*", default=None, help="Input JSON files. Defaults to common logs/runtime files.")
-    parser.add_argument("--out-json", default="logs/opportunity_truth_report.json")
-    parser.add_argument("--out-md", default="logs/opportunity_truth_report.md")
+    parser.add_argument("--out-json", default=str(logs_dir() / "opportunity_truth_report.json"))
+    parser.add_argument("--out-md", default=str(logs_dir() / "opportunity_truth_report.md"))
     parser.add_argument("--fail-on-dirty-selected", action="store_true")
     parser.add_argument("--print-summary", action="store_true")
     return parser.parse_args(argv)

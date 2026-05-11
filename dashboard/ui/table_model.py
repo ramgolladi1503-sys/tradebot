@@ -387,7 +387,7 @@ def _option_right_for_identity(row) -> str:
     return ""
 
 
-def _coerce_epoch_series(series: pd.Series) -> pd.Series:
+def _pr31_safe_epoch_series(series: pd.Series) -> pd.Series:
     if pd.api.types.is_datetime64_any_dtype(series):
         parsed = pd.to_datetime(series, errors="coerce", utc=True)
         out = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
@@ -396,15 +396,27 @@ def _coerce_epoch_series(series: pd.Series) -> pd.Series:
             out.loc[mask] = parsed.loc[mask].astype("int64") / 1_000_000_000.0
         return out
 
-    numeric = pd.to_numeric(series, errors="coerce")
-    if numeric.notna().any():
-        original = numeric.copy()
-        normalized = numeric.astype("float64")
+    text = series.astype("string").str.strip()
+    numeric = pd.to_numeric(text, errors="coerce")
+    numeric_like = numeric.notna() & text.str.fullmatch(r"[-+]?\d+(\.\d+)?").fillna(False)
+
+    parsed = pd.to_datetime(text.mask(numeric_like), errors="coerce", utc=True)
+    out = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
+
+    dt_mask = parsed.notna()
+    if dt_mask.any():
+        out.loc[dt_mask] = parsed.loc[dt_mask].astype("int64") / 1_000_000_000.0
+
+    num_mask = numeric_like & ~dt_mask
+    if num_mask.any():
+        original = numeric.loc[num_mask].astype("float64")
+        normalized = original.copy()
         normalized = normalized.mask(original > 1e17, original / 1_000_000_000.0)
         normalized = normalized.mask((original > 1e14) & (original <= 1e17), original / 1_000_000.0)
         normalized = normalized.mask((original > 1e12) & (original <= 1e14), original / 1000.0)
-        return normalized
-    return numeric
+        out.loc[num_mask] = normalized
+
+    return out
 
 def _parse_ts_series(series: pd.Series) -> pd.Series:
     if series is None:
@@ -415,7 +427,7 @@ def _parse_ts_series(series: pd.Series) -> pd.Series:
 
 
 def _coerce_ts_epoch(series: pd.Series) -> pd.Series:
-    numeric = _coerce_epoch_series(series)
+    numeric = _pr31_safe_epoch_series(series)
     parsed = _parse_ts_series(series)
     parsed_epoch = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
     mask = parsed.notna()
@@ -792,3 +804,118 @@ def filter_non_active(df: pd.DataFrame) -> pd.DataFrame:
         return df
     status = df["status"].astype(str).str.upper()
     return df[status != "ACTIVE"].copy()
+
+# --- PR31 local hotfix: safe epoch coercion ---
+def _pr31_safe_epoch_value(value):
+    import math
+    import pandas as pd
+
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+
+    # Timestamp/datetime values.
+    try:
+        if isinstance(value, pd.Timestamp):
+            if pd.isna(value):
+                return None
+            return float(value.timestamp())
+    except Exception:
+        pass
+
+    # Numeric epoch values.
+    try:
+        number = float(value)
+    except Exception:
+        try:
+            ts = pd.to_datetime(value, errors="coerce", utc=True)
+            if pd.isna(ts):
+                return None
+            return float(ts.timestamp())
+        except Exception:
+            return None
+
+    if not math.isfinite(number) or number <= 0:
+        return None
+
+    # Already seconds: normal Unix epoch seconds or small test seconds like 300.0.
+    if number < 10_000_000_000:
+        return number
+
+    # Milliseconds.
+    if number < 10_000_000_000_000:
+        return number / 1_000.0
+
+    # Microseconds.
+    if number < 10_000_000_000_000_000:
+        return number / 1_000_000.0
+
+    # Nanoseconds.
+    return number / 1_000_000_000.0
+
+
+def _pr31_safe_epoch_series(series):
+    import pandas as pd
+
+    if series is None:
+        return pd.Series(dtype="float64")
+    return series.map(_pr31_safe_epoch_value).astype("float64")
+
+# --- PR31 local hotfix: normalize_df timestamp repair wrapper ---
+_PR31_ORIGINAL_NORMALIZE_DF = normalize_df
+
+def normalize_df(df, *args, **kwargs):
+    import pandas as pd
+
+    out = _PR31_ORIGINAL_NORMALIZE_DF(df, *args, **kwargs)
+
+    if not isinstance(out, pd.DataFrame) or out.empty:
+        return out
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return out
+
+    source = df.reset_index(drop=True)
+    out = out.copy().reset_index(drop=True)
+
+    repaired_epoch = None
+    for col in (
+        "display_ts_epoch",
+        "decision_ts_epoch",
+        "timestamp_epoch",
+        "ts_epoch",
+    ):
+        if col not in source.columns:
+            continue
+        coerced = source[col].map(_pr31_safe_epoch_value)
+        if repaired_epoch is None:
+            repaired_epoch = coerced
+        else:
+            repaired_epoch = repaired_epoch.fillna(coerced)
+
+    if repaired_epoch is not None:
+        valid = repaired_epoch.notna()
+        if "display_ts_epoch" not in out.columns:
+            out["display_ts_epoch"] = None
+
+        # Critical fix:
+        # If the source already provided epoch seconds, keep them as seconds.
+        # Do not let the older normalizer divide seconds into nano-sized values.
+        out.loc[valid, "display_ts_epoch"] = repaired_epoch.loc[valid].astype(float)
+
+        out["display_ts_utc"] = pd.to_datetime(
+            out["display_ts_epoch"],
+            errors="coerce",
+            unit="s",
+            utc=True,
+        )
+        out["display_ts_ist"] = (
+            out["display_ts_utc"]
+            .dt.tz_convert("Asia/Kolkata")
+            .dt.strftime("%Y-%m-%d %H:%M:%S IST")
+        )
+
+    return out

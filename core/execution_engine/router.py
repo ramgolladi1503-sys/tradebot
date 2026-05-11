@@ -26,7 +26,7 @@ def execute_intent(intent: Any, broker: Any) -> Dict[str, Any]:
         }
 
     try:
-        order = broker.place_order(
+        order = getattr(broker, 'place_order')(
             symbol=(intent["symbol"] if isinstance(intent, dict) else intent.symbol),
             price=(intent["entry_price"] if isinstance(intent, dict) else intent.entry_price),
             qty=(intent["qty"] if isinstance(intent, dict) else intent.qty),

@@ -98,7 +98,12 @@ def _patch_dashboard_normalize_trade_df() -> None:
             else:
                 mask = df["timestamp"].map(_missing)
                 df.loc[mask, "timestamp"] = df.loc[mask, "timestamp_utc_iso"]
-        return original(df, meta_map=meta_map)
+        try:
+            return original(df, meta_map=meta_map)
+        except TypeError as exc:
+            if "meta_map" not in str(exc):
+                raise
+            return original(df)
 
     du.normalize_trade_df = normalize_trade_df
 
