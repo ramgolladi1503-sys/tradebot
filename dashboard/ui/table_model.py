@@ -155,6 +155,7 @@ _CANONICAL_ADVISORY_FIELDS = {
 
 
 CANONICAL_COLUMNS = [
+    "last_seen_ts",
     "display_ts_ist",
     "display_ts_epoch",
     "symbol",
@@ -418,6 +419,15 @@ def _format_ist_from_epoch(series: pd.Series) -> pd.Series:
     return out.where(out.notna(), "—")
 
 
+def _first_non_null_ts(out: pd.DataFrame, fields: tuple[str, ...]) -> pd.Series:
+    result = pd.Series([pd.NA] * len(out), index=out.index, dtype="object")
+    for field in fields:
+        if field not in out.columns:
+            continue
+        result = result.where(result.notna(), out[field])
+    return result
+
+
 def _is_option_row(row) -> bool:
     instrument_type = str(row.get("instrument_type") or row.get("instrument") or "").strip().upper()
     if instrument_type == "OPT":
@@ -490,6 +500,21 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
             else:
                 deduped[col] = same.bfill(axis=1).iloc[:, 0]
         out = pd.DataFrame(deduped, index=out.index)
+    if "last_seen_ts" not in out.columns:
+        out["last_seen_ts"] = pd.NA
+    last_seen_raw = _first_non_null_ts(
+        out,
+        (
+            "last_seen_ts",
+            "timestamp",
+            "timestamp_utc_iso",
+            "created_at",
+            "decision_ts_utc",
+            "snapshot_ts_utc",
+        ),
+    )
+    out["last_seen_ts"] = pd.to_datetime(last_seen_raw, errors="coerce", utc=True)
+    out["last_seen_ts"] = out["last_seen_ts"].fillna(pd.Timestamp.now(tz="UTC"))
     if "target" not in out.columns and "target_points" in out.columns:
         out["target"] = out["target_points"]
     if "suggested_entry" in out.columns and not canonical_advisory:
@@ -522,15 +547,11 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
     for col in CANONICAL_COLUMNS:
         if col not in out.columns:
             out[col] = None
-    if "last_seen_ts" in out.columns:
-        out["last_seen_ts"] = out["last_seen_ts"].where(out["last_seen_ts"].notna(), datetime.now(timezone.utc))
-        out["last_seen_ts"] = pd.to_datetime(out["last_seen_ts"], errors="coerce", utc=True)
-        out["last_seen_ts"] = out["last_seen_ts"].fillna(pd.Timestamp.now(tz="UTC"))
     display_epoch = None
     if "display_ts_epoch" in out.columns:
         display_epoch = _coerce_ts_epoch(out["display_ts_epoch"])
 
-    decision_epoch = None
+    decision_epoch = _coerce_ts_epoch(out["last_seen_ts"])
     for field in (
         "decision_ts_epoch",
         "decision_ts_utc",
@@ -546,7 +567,7 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
     ):
         if field in out.columns:
             candidate = _coerce_ts_epoch(out[field])
-            decision_epoch = candidate if decision_epoch is None else decision_epoch.where(decision_epoch.notna(), candidate)
+            decision_epoch = decision_epoch.where(decision_epoch.notna(), candidate)
 
     snapshot_epoch = None
     for field in (
@@ -653,10 +674,11 @@ def build_identity_col(df: pd.DataFrame) -> pd.DataFrame:
 def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
     if df is None or df.empty:
         return _empty_df()
-    out = build_identity_col(df)
+    out = build_identity_col(normalize_df(df))
     view = str(view or "advisory").lower()
     if view == "active":
         cols = [
+            "last_seen_ts",
             "display_ts_ist",
             "identity",
             "status",
@@ -674,6 +696,7 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         ]
     elif view == "review":
         cols = [
+            "last_seen_ts",
             "display_ts_ist",
             "identity",
             "status",
@@ -687,6 +710,7 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         ]
     else:
         cols = [
+            "last_seen_ts",
             "display_ts_ist",
             "identity",
             "status",
@@ -733,6 +757,8 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
     ):
         if c in out.columns:
             out[c] = pd.to_numeric(out[c], errors="coerce").round(2)
+    if "last_seen_ts" in out.columns:
+        out["last_seen_ts"] = _format_ist_from_epoch(_coerce_ts_epoch(out["last_seen_ts"]))
     if "display_ts_ist" in out.columns:
         out["display_ts_ist"] = out["display_ts_ist"].where(out["display_ts_ist"].notna(), "—")
     return out
