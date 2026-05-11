@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import replace
+from dataclasses import fields, is_dataclass, replace
 from typing import Any, Iterable
 
 from core.data_quality import assess_candidate_data_quality
@@ -35,7 +35,16 @@ def _update_candidate(candidate: Any, updates: dict[str, Any]) -> Any:
         out = dict(candidate)
         out.update(updates)
         return out
-    return replace(candidate, **updates)
+    if is_dataclass(candidate):
+        valid_fields = {field.name for field in fields(candidate)}
+        safe_updates = {key: value for key, value in updates.items() if key in valid_fields}
+        return replace(candidate, **safe_updates)
+    for key, value in updates.items():
+        try:
+            setattr(candidate, key, value)
+        except Exception:
+            pass
+    return candidate
 
 
 def _candidate_source_flags(candidate: Any) -> dict[str, Any]:
