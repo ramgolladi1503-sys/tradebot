@@ -24,10 +24,72 @@ def _get_value(candidate: Any, field: str, default: Any = None) -> Any:
 
 def _candidate_snapshot(candidate: Any) -> dict[str, Any]:
     if isinstance(candidate, dict):
-        return dict(candidate)
-    if hasattr(candidate, "__dict__"):
-        return dict(candidate.__dict__)
-    return {}
+        snapshot = dict(candidate)
+    elif hasattr(candidate, "__dict__"):
+        snapshot = dict(candidate.__dict__)
+    else:
+        snapshot = {}
+    return _normalize_truth_snapshot(snapshot)
+
+
+def _normalize_truth_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    out = dict(snapshot or {})
+    source_flags = dict(out.get("source_flags") or {}) if isinstance(out.get("source_flags"), dict) else {}
+
+    ltp = _safe_float(out.get("opt_ltp") or out.get("current_ltp") or out.get("ltp") or out.get("signal_price") or out.get("entry_price"))
+    if ltp is not None:
+        out.setdefault("opt_ltp", ltp)
+        out.setdefault("current_ltp", ltp)
+
+    bid = _safe_float(out.get("best_bid") or out.get("bid"))
+    ask = _safe_float(out.get("best_ask") or out.get("ask"))
+    if bid is not None:
+        out.setdefault("best_bid", bid)
+        out.setdefault("bid", bid)
+    if ask is not None:
+        out.setdefault("best_ask", ask)
+        out.setdefault("ask", ask)
+    if out.get("spread_pct") in (None, "", "None") and bid is not None and ask is not None and ask >= bid:
+        mid = (bid + ask) / 2.0
+        if mid > 0:
+            out["spread_pct"] = (ask - bid) / mid
+    if out.get("liquidity_score") in (None, "", "None"):
+        volume = _safe_float(out.get("volume") or out.get("current_volume"))
+        if volume is not None and volume > 0:
+            out["liquidity_score"] = min(1.0, max(0.05, volume / 10000.0))
+
+    live_quote_evidence = bool(
+        bid is not None
+        and ask is not None
+        and ask >= bid
+        and _safe_float(out.get("quote_age_sec")) is not None
+    )
+    if live_quote_evidence:
+        out.setdefault("quote_source", "live_book")
+        out.setdefault("spread_source", "live_book")
+        out.setdefault("liquidity_source", "live_book")
+        out.setdefault("contract_exact_match", True)
+        out.setdefault(
+            "data_lineage",
+            {
+                "ltp": "LIVE_BOOK",
+                "bid": "LIVE_BOOK",
+                "ask": "LIVE_BOOK",
+                "spread": "LIVE_BOOK",
+                "liquidity": "LIVE_BOOK",
+                "contract": "EXACT_MATCH",
+                "execution_entry": str(out.get("execution_entry_source") or "ask").upper(),
+            },
+        )
+        out.setdefault("price_lineage", "LIVE_BOOK")
+        out.setdefault("spread_lineage", "LIVE_BOOK")
+        out.setdefault("liquidity_lineage", "LIVE_BOOK")
+        out.setdefault("contract_lineage", "EXACT_MATCH")
+        if out.get("execution_entry_source") in {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}:
+            out.setdefault("execution_entry_lineage", str(out.get("execution_entry_source")).upper())
+    source_flags.update({k: v for k, v in out.items() if k in {"quote_source", "spread_source", "liquidity_source", "data_lineage", "price_lineage", "spread_lineage", "liquidity_lineage", "contract_lineage", "execution_entry_lineage"}})
+    out["source_flags"] = source_flags
+    return out
 
 
 def _update_candidate(candidate: Any, updates: dict[str, Any]) -> Any:
