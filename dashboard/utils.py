@@ -305,4 +305,3 @@ def normalize_trade_df(df):
         pass
 
     return out
-
