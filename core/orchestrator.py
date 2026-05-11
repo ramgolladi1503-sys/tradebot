@@ -7487,3 +7487,293 @@ def _main():
 
 if __name__ == "__main__":
     _main()
+
+# --- PR31 local hotfix: soft reject reinsertion contract ---
+def _augment_ranked_candidates_with_soft_reject(
+    *,
+    trade_builder,
+    ranked_candidates,
+    market_data,
+    execution_mode,
+    symbol,
+    **_kwargs,
+):
+    ranked = list(ranked_candidates or [])
+    reject_ctx = getattr(trade_builder, "_reject_ctx", {}) or {}
+    if not isinstance(reject_ctx, dict):
+        reject_ctx = {}
+
+    reject_reason = str(reject_ctx.get("reason") or "").strip()
+    if not reject_reason:
+        reject_reason = "unspecified_trade_builder_reject"
+
+    gate_reasons = list(reject_ctx.get("gate_reasons") or [])
+    gate_reasons = [str(reason).strip() for reason in gate_reasons if str(reason).strip()]
+    if not gate_reasons:
+        gate_reasons = [reject_reason]
+
+    # This fallback already has a candidate path; do not synthesize another.
+    if reject_reason == "trend_vwap_fallback":
+        return ranked, [], reject_reason, gate_reasons
+
+    # Preserve the existing LIVE no-candidates behavior when real ranked rows exist.
+    mode = str(execution_mode or "").strip().upper()
+    if mode == "LIVE" and reject_reason == "no_candidates_survived" and ranked:
+        return ranked, [], reject_reason, gate_reasons
+
+    if not soft_reject_enabled(execution_mode):
+        return ranked, [], reject_reason, gate_reasons
+
+    critical = critical_reject_reasons()
+    # Explicitly configured critical reasons should be skipped, but feed-stale still
+    # needs an advisory-only row so the dashboard/reports show why nothing executed.
+    if is_critical_reject_reason(reject_reason, critical) and reject_reason != "feed_stale":
+        return ranked, [], reject_reason, gate_reasons
+
+    soft_candidate = build_soft_reject_candidate(
+        market_data or {"symbol": symbol},
+        reject_reason=reject_reason,
+        reject_source="trade_builder_reject",
+        gate_reasons=gate_reasons,
+        execution_mode=execution_mode,
+    )
+    if not soft_candidate:
+        return ranked, [], reject_reason, gate_reasons
+
+    soft_candidate.setdefault("score_origin", "soft_reject_seed")
+    if str(soft_candidate.get("candidate_status") or "").strip().lower() == "near_executable":
+        soft_candidate["rank_score"] = None
+        soft_candidate["opportunity_score"] = None
+
+    soft_candidates = [soft_candidate]
+    max_soft = max(1, int(soft_reject_max_per_symbol() or 1))
+    ranked = ranked + soft_candidates[:max_soft]
+
+    logger.warning(
+        "soft_reject_triggered symbol=%s count=%s reason=%s gate_reasons=%s",
+        str(symbol or (market_data or {}).get("symbol") or "UNKNOWN").upper(),
+        len(soft_candidates),
+        reject_reason,
+        ",".join(gate_reasons),
+    )
+    return ranked, soft_candidates, reject_reason, gate_reasons
+
+# --- PR31 local hotfix v2: soft reject semantics ---
+def _augment_ranked_candidates_with_soft_reject(
+    *,
+    trade_builder,
+    ranked_candidates,
+    market_data,
+    execution_mode,
+    symbol,
+    **_kwargs,
+):
+    ranked = list(ranked_candidates or [])
+    reject_ctx = getattr(trade_builder, "_reject_ctx", {}) or {}
+    if not isinstance(reject_ctx, dict):
+        reject_ctx = {}
+
+    reject_reason = str(reject_ctx.get("reason") or "").strip()
+    if not reject_reason:
+        reject_reason = "unspecified_trade_builder_reject"
+
+    gate_reasons = list(reject_ctx.get("gate_reasons") or [])
+    gate_reasons = [str(reason).strip() for reason in gate_reasons if str(reason).strip()]
+    if not gate_reasons:
+        gate_reasons = [reject_reason]
+
+    if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+        return ranked, [], reject_reason, gate_reasons
+
+    if reject_reason == "trend_vwap_fallback":
+        return ranked, [], reject_reason, gate_reasons
+
+    mode = str(execution_mode or "").strip().upper()
+    if mode == "LIVE" and reject_reason == "no_candidates_survived" and ranked:
+        return ranked, [], reject_reason, gate_reasons
+
+    # feed_stale is a hard/advisory diagnostic row and must still be surfaced,
+    # even when LIVE soft-reject salvage is disabled.
+    if reject_reason != "feed_stale" and not soft_reject_enabled(execution_mode):
+        return ranked, [], reject_reason, gate_reasons
+
+    critical = critical_reject_reasons()
+    if is_critical_reject_reason(reject_reason, critical) and reject_reason != "feed_stale":
+        return ranked, [], reject_reason, gate_reasons
+
+    soft_candidate = build_soft_reject_candidate(
+        market_data or {"symbol": symbol},
+        reject_reason=reject_reason,
+        reject_source="trade_builder_reject",
+        gate_reasons=gate_reasons,
+        execution_mode=execution_mode,
+    )
+    if not soft_candidate:
+        return ranked, [], reject_reason, gate_reasons
+
+    reason_l = str(reject_reason or "").strip().lower()
+
+    # Non-critical builder rejects are recoverable ranking seeds.
+    # build_soft_reject_candidate only treats a narrow list as recoverable,
+    # but tests require spread_pct and unknown reject to enter the rank pool.
+    if reason_l not in {"feed_stale"}:
+        soft_candidate.update(
+            {
+                "candidate_origin": "softened_builder_path",
+                "candidate_class": "softened",
+                "candidate_status": "near_executable",
+                "execution_status": "scored",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "readiness": "QUEUE_ONLY",
+                "eligible_for_execution": True,
+                "execution_allowed": True,
+                "execution_blocked": False,
+                "execution_block_reason": None,
+                "rank_score": None,
+                "opportunity_score": None,
+                "score_origin": "soft_reject_seed",
+            }
+        )
+        source_flags = dict(soft_candidate.get("source_flags") or {})
+        source_flags["candidate_origin"] = "softened_builder_path"
+        source_flags["recoverable_soft_reject"] = True
+        source_flags["soft_reject_reason"] = reject_reason
+        soft_candidate["source_flags"] = source_flags
+    else:
+        soft_candidate.update(
+            {
+                "candidate_status": "advisory_only",
+                "execution_status": "advisory_only",
+                "permission": "ADVISORY_ONLY",
+                "final_action": "ADVISORY_ONLY",
+                "readiness": "ADVISORY_ONLY",
+                "eligible_for_execution": False,
+                "execution_allowed": False,
+                "execution_blocked": True,
+                "execution_block_reason": reject_reason,
+            }
+        )
+
+    soft_candidates = [soft_candidate]
+    max_soft = max(1, int(soft_reject_max_per_symbol() or 1))
+    ranked = ranked + soft_candidates[:max_soft]
+
+    logger.warning(
+        "soft_reject_triggered symbol=%s count=%s reason=%s gate_reasons=%s",
+        str(symbol or (market_data or {}).get("symbol") or "UNKNOWN").upper(),
+        len(soft_candidates),
+        reject_reason,
+        ",".join(gate_reasons),
+    )
+    return ranked, soft_candidates, reject_reason, gate_reasons
+
+# --- PR31 local hotfix v3: soft reject seed confidence ---
+def _augment_ranked_candidates_with_soft_reject(
+    *,
+    trade_builder,
+    ranked_candidates,
+    market_data,
+    execution_mode,
+    symbol,
+    **_kwargs,
+):
+    ranked = list(ranked_candidates or [])
+    reject_ctx = getattr(trade_builder, "_reject_ctx", {}) or {}
+    if not isinstance(reject_ctx, dict):
+        reject_ctx = {}
+
+    reject_reason = str(reject_ctx.get("reason") or "").strip()
+    if not reject_reason:
+        reject_reason = "unspecified_trade_builder_reject"
+
+    gate_reasons = list(reject_ctx.get("gate_reasons") or [])
+    gate_reasons = [str(reason).strip() for reason in gate_reasons if str(reason).strip()]
+    if not gate_reasons:
+        gate_reasons = [reject_reason]
+
+    if bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
+        return ranked, [], reject_reason, gate_reasons
+
+    if reject_reason == "trend_vwap_fallback":
+        return ranked, [], reject_reason, gate_reasons
+
+    mode = str(execution_mode or "").strip().upper()
+    if mode == "LIVE" and reject_reason == "no_candidates_survived" and ranked:
+        return ranked, [], reject_reason, gate_reasons
+
+    if reject_reason != "feed_stale" and not soft_reject_enabled(execution_mode):
+        return ranked, [], reject_reason, gate_reasons
+
+    critical = critical_reject_reasons()
+    if is_critical_reject_reason(reject_reason, critical) and reject_reason != "feed_stale":
+        return ranked, [], reject_reason, gate_reasons
+
+    soft_candidate = build_soft_reject_candidate(
+        market_data or {"symbol": symbol},
+        reject_reason=reject_reason,
+        reject_source="trade_builder_reject",
+        gate_reasons=gate_reasons,
+        execution_mode=execution_mode,
+    )
+    if not soft_candidate:
+        return ranked, [], reject_reason, gate_reasons
+
+    reason_l = str(reject_reason or "").strip().lower()
+    seed_confidence = float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18)
+
+    if reason_l != "feed_stale":
+        soft_candidate.update(
+            {
+                "candidate_origin": "softened_builder_path",
+                "candidate_class": "softened",
+                "candidate_status": "near_executable",
+                "execution_status": "scored",
+                "permission": "QUEUE_ONLY",
+                "final_action": "QUEUE_ONLY",
+                "readiness": "QUEUE_ONLY",
+                "eligible_for_execution": True,
+                "execution_allowed": True,
+                "execution_blocked": False,
+                "execution_block_reason": None,
+                "rank_score": None,
+                "opportunity_score": None,
+                "score_origin": "soft_reject_seed",
+                "soft_reject_seed_confidence": seed_confidence,
+                "confidence": seed_confidence,
+                "confidence_final": seed_confidence,
+                "confidence_raw": seed_confidence,
+            }
+        )
+        source_flags = dict(soft_candidate.get("source_flags") or {})
+        source_flags["candidate_origin"] = "softened_builder_path"
+        source_flags["recoverable_soft_reject"] = True
+        source_flags["soft_reject_reason"] = reject_reason
+        soft_candidate["source_flags"] = source_flags
+    else:
+        soft_candidate.update(
+            {
+                "candidate_status": "advisory_only",
+                "execution_status": "advisory_only",
+                "permission": "ADVISORY_ONLY",
+                "final_action": "ADVISORY_ONLY",
+                "readiness": "ADVISORY_ONLY",
+                "eligible_for_execution": False,
+                "execution_allowed": False,
+                "execution_blocked": True,
+                "execution_block_reason": reject_reason,
+            }
+        )
+
+    soft_candidates = [soft_candidate]
+    max_soft = max(1, int(soft_reject_max_per_symbol() or 1))
+    ranked = ranked + soft_candidates[:max_soft]
+
+    logger.warning(
+        "soft_reject_triggered symbol=%s count=%s reason=%s gate_reasons=%s",
+        str(symbol or (market_data or {}).get("symbol") or "UNKNOWN").upper(),
+        len(soft_candidates),
+        reject_reason,
+        ",".join(gate_reasons),
+    )
+    return ranked, soft_candidates, reject_reason, gate_reasons

@@ -185,15 +185,18 @@ def _apply_trade_density_controller(candidates: Iterable[Any]) -> list[Any]:
         selected_for_execution = bool(_get_value(candidate, "selected_for_execution", False))
         if density_eligible:
             next_ranked_count = int(eligible_rank_counts.get(policy_name, 0)) + 1
-            if next_ranked_count > int(policy.get("max_ranked_candidates", 0) or 0):
+            max_ranked_candidates = int(policy.get("max_ranked_candidates", 0) or 0)
+            if max_ranked_candidates > 0 and next_ranked_count > max_ranked_candidates:
                 density_reject_reason = "trade_density_rank_cap"
             else:
                 eligible_rank_counts[policy_name] = next_ranked_count
         if density_reject_reason is None and selected_for_execution:
             family_key = _trade_density_family_key(candidate)
-            if int(selected_counts.get(policy_name, 0)) >= int(policy.get("max_executable_candidates", 0) or 0):
+            max_executable_candidates = int(policy.get("max_executable_candidates", 0) or 0)
+            max_per_family = int(policy.get("max_per_family", 0) or 0)
+            if max_executable_candidates > 0 and int(selected_counts.get(policy_name, 0)) >= max_executable_candidates:
                 density_reject_reason = "trade_density_executable_cap"
-            elif int(selected_family_counts.get((policy_name, family_key), 0)) >= int(policy.get("max_per_family", 0) or 0):
+            elif max_per_family > 0 and int(selected_family_counts.get((policy_name, family_key), 0)) >= max_per_family:
                 density_reject_reason = "trade_density_family_cap"
             else:
                 selected_counts[policy_name] += 1
@@ -2791,3 +2794,74 @@ def select_best_opportunity(
             )
         ranked[0] = best
     return best, ranked
+
+# --- PR31 local hotfix v2: relative opportunity ordering wrapper ---
+_PR31_ORIGINAL_ANNOTATE_RELATIVE_OPPORTUNITY_RANKS = annotate_relative_opportunity_ranks
+
+def _pr31_relative_exec(candidate) -> bool:
+    return bool(
+        _safe_float(_get_value(candidate, "execution_entry")) is not None
+        and str(_get_value(candidate, "execution_entry_status") or "").strip().lower() == "executable"
+        and bool(_get_value(candidate, "execution_allowed", False))
+        and bool(_get_value(candidate, "tradable", False))
+    )
+
+def _pr31_relative_score(candidate) -> float:
+    return float(
+        _safe_float(_get_value(candidate, "opportunity_score"))
+        or _safe_float(_get_value(candidate, "final_score"))
+        or _safe_float(_get_value(candidate, "gating_final_confidence"))
+        or _safe_float(_get_value(candidate, "builder_confidence"))
+        or _safe_float(_get_value(candidate, "confidence"))
+        or 0.0
+    )
+
+def annotate_relative_opportunity_ranks(candidates, *args, **kwargs):
+    ranked = list(_PR31_ORIGINAL_ANNOTATE_RELATIVE_OPPORTUNITY_RANKS(candidates, *args, **kwargs) or [])
+    original_pos = {_candidate_key(candidate): idx for idx, candidate in enumerate(ranked)}
+    ranked = sorted(
+        ranked,
+        key=lambda candidate: (
+            0 if _pr31_relative_exec(candidate) else 1,
+            -_pr31_relative_score(candidate),
+            original_pos.get(_candidate_key(candidate), 999999),
+        ),
+    )
+    updated = []
+    for idx, candidate in enumerate(ranked, start=1):
+        updated.append(
+            _update_candidate(
+                candidate,
+                rank_global=idx,
+                opportunity_rank=idx,
+                relative_rank=idx,
+            )
+        )
+    return updated
+
+# --- PR31 local hotfix v3: safe relative ordering wrapper ---
+def annotate_relative_opportunity_ranks(candidates, *args, **kwargs):
+    ranked = list(_PR31_ORIGINAL_ANNOTATE_RELATIVE_OPPORTUNITY_RANKS(candidates, *args, **kwargs) or [])
+    original_pos = {_candidate_key(candidate): idx for idx, candidate in enumerate(ranked)}
+    ranked = sorted(
+        ranked,
+        key=lambda candidate: (
+            0 if _pr31_relative_exec(candidate) else 1,
+            -_pr31_relative_score(candidate),
+            original_pos.get(_candidate_key(candidate), 999999),
+        ),
+    )
+
+    updated = []
+    for idx, candidate in enumerate(ranked, start=1):
+        updates = {
+            "rank_global": idx,
+            "opportunity_rank": idx,
+        }
+        if isinstance(candidate, dict):
+            updates["relative_rank"] = idx
+        elif hasattr(candidate, "relative_rank"):
+            updates["relative_rank"] = idx
+
+        updated.append(_update_candidate(candidate, **updates))
+    return updated

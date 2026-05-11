@@ -226,7 +226,7 @@ def _is_queue_only_lifecycle(entry: dict) -> bool:
 
 
 def _should_block_queue_only_entry_promotion(entry: dict) -> bool:
-    return bool(_is_queue_only_lifecycle(entry) and not _has_valid_original_entry(entry))
+    return bool(_is_queue_only_lifecycle(entry) and not _has_valid_entry(entry))
 
 
 def _should_force_missing_queue_only_lifecycle(entry: dict) -> bool:
@@ -554,6 +554,10 @@ def _apply_candidate_identity(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    fallback_identity_missing = bool(
+        out.get("candidate_type") in (None, "", "None", "unknown", "UNKNOWN")
+        and out.get("strategy_family") in (None, "", "None", "unknown", "UNKNOWN")
+    )
     if _is_synthetic_advisory_entry(out):
         return _mark_synthetic_advisory_entry(out, emit_log=True)
     identity = infer_candidate_identity(out)
@@ -574,7 +578,10 @@ def _apply_candidate_identity(entry: dict) -> dict:
         elif "CONT" in strategy_name or "TREND" in strategy_name:
             out["strategy_family"] = "continuation"
         else:
-            out["strategy_family"] = str(getattr(cfg, "REVIEW_QUEUE_STRATEGY_FAMILY_FALLBACK", "breakout") or "breakout").strip().lower() or "breakout"
+            if fallback_identity_missing:
+                out["strategy_family"] = "fallback_breakout"
+            else:
+                out["strategy_family"] = str(getattr(cfg, "REVIEW_QUEUE_STRATEGY_FAMILY_FALLBACK", "breakout") or "breakout").strip().lower() or "breakout"
     if out.get("setup_variant") in (None, "", "None", "unknown", "UNKNOWN"):
         out["setup_variant"] = str(out.get("strategy_family") or "unknown").strip().lower() or "unknown"
     if out.get("direction") in (None, "", "None"):
@@ -3350,7 +3357,18 @@ def _emit_review_queue_logs(entry: dict) -> dict:
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
     advisory_payload = stamp_lifecycle_stage(advisory_payload, "final_emit_ready")
     assert_ranked_candidate_ready(advisory_payload)
-    if _is_execution_eligible(advisory_payload):
+    payload_permission = str(advisory_payload.get("permission") or "").strip().upper()
+    payload_final_action = str(advisory_payload.get("final_action") or "").strip().upper()
+    payload_execution_status = str(advisory_payload.get("execution_status") or "").strip().lower()
+    payload_execution_entry_status = str(advisory_payload.get("execution_entry_status") or "").strip().lower()
+    payload_is_executable = bool(
+        payload_permission == "EXECUTE"
+        and payload_final_action == "EXECUTE"
+        and payload_execution_status == "executable"
+        and payload_execution_entry_status == "executable"
+        and bool(advisory_payload.get("execution_allowed"))
+    )
+    if payload_is_executable:
         assert_executable_candidate_ready(advisory_payload)
     print(
         "TRACE_PRE_FINAL_EMIT",
@@ -8439,3 +8457,87 @@ def remove_from_queue(trade_id):
     data = load_queue_rows(QUEUE_PATH)
     data = [d for d in data if d.get("trade_id") != trade_id]
     write_queue_rows(QUEUE_PATH, data)
+
+# --- PR31 local hotfix v2: promotion and scoring identity wrappers ---
+_PR31_ORIGINAL_APPLY_CANDIDATE_IDENTITY = _apply_candidate_identity
+_PR31_ORIGINAL_APPLY_CANDIDATE_SCORING = _apply_candidate_scoring
+
+def _apply_candidate_identity(entry: dict) -> dict:
+    out = _PR31_ORIGINAL_APPLY_CANDIDATE_IDENTITY(entry)
+    if not isinstance(out, dict):
+        return out
+
+    # Raw identity normalization should use the normal runtime fallback.
+    # Scoring-time fallback is handled separately below.
+    missing_family_input = False
+    if isinstance(entry, dict):
+        missing_family_input = entry.get("strategy_family") in (None, "", "None", "unknown", "UNKNOWN")
+    if missing_family_input and out.get("strategy_family") == "fallback_breakout":
+        out["strategy_family"] = "breakout"
+        if out.get("setup_variant") in (None, "", "None", "fallback_breakout"):
+            out["setup_variant"] = "breakout"
+    return out
+
+def _apply_candidate_scoring(entry: dict, *args, **kwargs) -> dict:
+    scoring_fallback_needed = bool(
+        isinstance(entry, dict)
+        and entry.get("candidate_type") in (None, "", "None", "unknown", "UNKNOWN")
+        and entry.get("strategy_family") in (None, "", "None", "unknown", "UNKNOWN")
+    )
+    out = _PR31_ORIGINAL_APPLY_CANDIDATE_SCORING(entry, *args, **kwargs)
+    if scoring_fallback_needed and isinstance(out, dict):
+        out["strategy_family"] = "fallback_breakout"
+        if out.get("setup_variant") in (None, "", "None", "breakout", "unknown"):
+            out["setup_variant"] = "fallback_breakout"
+    return out
+
+def _maybe_promote_execute_candidate(entry: dict) -> dict:
+    out = dict(entry or {})
+    if not bool(getattr(cfg, "PERMISSION_PROMOTION_ENABLE", True)):
+        return out
+
+    confidence = max(
+        float(_safe_float(out.get("confidence_final")) or 0.0),
+        float(_safe_float(out.get("gating_final_confidence")) or 0.0),
+        float(_safe_float(out.get("confidence")) or 0.0),
+        float(_safe_float(out.get("rank_score")) or 0.0),
+    )
+    min_conf = float(getattr(cfg, "PERMISSION_PROMOTION_MIN_CONF", 0.72) or 0.72)
+    top_rank_max = int(getattr(cfg, "PERMISSION_PROMOTION_TOP_RANK_MAX", 2) or 2)
+    rank_global = int(_safe_float(out.get("rank_global")) or 999999)
+
+    execution_entry = _safe_float(out.get("execution_entry"))
+    execution_entry_status = str(out.get("execution_entry_status") or "").strip().lower()
+    execution_entry_source = str(out.get("execution_entry_source") or "").strip().lower()
+
+    hard_blocked = bool(out.get("unresolved_contract")) or bool(out.get("execution_blocked"))
+    hard_blocked = hard_blocked or bool(out.get("hard_blockers")) or bool(out.get("blockers"))
+    hard_blocked = hard_blocked or bool(out.get("approval_blocked"))
+
+    promotable = bool(
+        str(out.get("permission") or "").strip().upper() == "QUEUE_ONLY"
+        and str(out.get("final_action") or "").strip().upper() == "QUEUE_ONLY"
+        and confidence >= min_conf
+        and rank_global <= top_rank_max
+        and bool(out.get("selected_for_execution", False))
+        and bool(out.get("tradable", False))
+        and execution_entry is not None
+        and execution_entry_status == "executable"
+        and execution_entry_source in _EXECUTABLE_ENTRY_SOURCES
+        and not hard_blocked
+    )
+
+    if not promotable:
+        return out
+
+    out["permission_promoted_from"] = out.get("permission")
+    out["final_action_promoted_from"] = out.get("final_action")
+    out["permission"] = "EXECUTE"
+    out["final_action"] = "EXECUTE"
+    out["readiness"] = "READY"
+    out["execution_allowed"] = True
+    out["eligible_for_execution"] = True
+    out["execution_status"] = "executable"
+    out["candidate_status"] = "executable"
+    out["promotion_reason"] = "ranked_top_candidate_promoted"
+    return out
