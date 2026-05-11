@@ -12,6 +12,28 @@ from core.candidate_finalization import (
 from core.trade_schema import Trade
 
 
+def _clean_execution_truth(**overrides):
+    row = {
+        "opt_ltp": 150.0,
+        "current_ltp": 150.0,
+        "best_bid": 149.8,
+        "best_ask": 150.2,
+        "spread_pct": 0.0027,
+        "liquidity_score": 0.82,
+        "quote_age_sec": 0.3,
+        "max_quote_age_sec": 2.0,
+        "quote_source": "live_broker",
+        "spread_source": "live_book",
+        "liquidity_source": "live_book",
+        "contract_exact_match": True,
+        "execution_entry": 150.2,
+        "execution_entry_status": "executable",
+        "execution_entry_source": "ask",
+    }
+    row.update(overrides)
+    return row
+
+
 def _trade(**overrides) -> Trade:
     base = dict(
         trade_id="T-FINALIZE",
@@ -34,15 +56,16 @@ def _trade(**overrides) -> Trade:
         candidate_status="executable",
         permission="QUEUE_ONLY",
         execution_allowed=True,
-        execution_entry=150.0,
+        execution_entry=150.2,
         execution_entry_status="executable",
         execution_entry_source="ask",
-        display_entry=150.0,
+        display_entry=150.2,
         display_entry_status="displayable",
         display_entry_source="ask",
         tradable=True,
         source_flags={},
     )
+    base.update(_clean_execution_truth())
     base.update(overrides)
     return Trade(**base)
 
@@ -56,6 +79,7 @@ def test_mirror_candidate_truth_promotes_decision_and_contract_metadata():
         "confidence": 0.81,
         "source_flags": {},
     }
+    candidate.update(_clean_execution_truth(opt_ltp=585.95, current_ltp=585.95, best_bid=585.7, best_ask=585.95, execution_entry=585.95))
     decision_trace = {
         "rank_score": 0.67,
         "permission": "EXECUTE",
@@ -142,13 +166,13 @@ def test_mirror_candidate_truth_preserves_trade_dataclass_fields():
             "warnings": [],
         },
         lifecycle={
-            "execution_entry": 150.0,
+            "execution_entry": 150.2,
             "execution_entry_source": "ask",
             "execution_entry_status": "executable",
-            "display_entry": 150.0,
+            "display_entry": 150.2,
             "display_entry_source": "ask",
             "display_entry_status": "displayable",
-            "entry": 150.0,
+            "entry": 150.2,
             "entry_source": "ask",
             "entry_status": "displayable",
             "entry_reason": "execution_from_ask",
