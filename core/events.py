@@ -8,6 +8,7 @@ from typing import Any
 import uuid
 
 from core.paths import logs_dir
+from core.sensitive_redaction import redact_sensitive_data
 from core.telemetry_streams import append_execution_stream_event
 from core.time_utils import utc_now
 
@@ -42,7 +43,7 @@ def append_event(
 ) -> None:
     target = path or events_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    payload_obj = dict(payload or {})
+    payload_obj = redact_sensitive_data(dict(payload or {}))
     payload_event_id = str(payload_obj.get("event_id") or "").strip()
     if not payload_event_id:
         payload_event_id = str(uuid.uuid4())
@@ -106,7 +107,8 @@ def read_events(
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
-    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
+    safe_payload = redact_sensitive_data(dict(payload or {}))
+    data = json.dumps(safe_payload, indent=2, sort_keys=True, ensure_ascii=True)
     with tmp.open("w", encoding="utf-8") as handle:
         handle.write(data)
         handle.flush()
