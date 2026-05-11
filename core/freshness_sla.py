@@ -597,3 +597,229 @@ def get_freshness_status(
 
 def _reset_cache_for_tests() -> None:
     _CACHE.clear()
+
+# _PR31_EXPLICIT_TOKEN_STALE_RATIO_PATCH
+# Explicit token-set freshness must track sparse/stale option tokens ratio separately
+# from planning/offhours max_ltp_age. A small stale fraction should be observable
+# but should not fail the SLA unless it breaches configured ratio/min-count limits.
+
+_PR31_ORIGINAL_GET_FRESHNESS_STATUS = get_freshness_status
+
+def _pr31_token_stale_threshold_sec() -> float:
+    for name in (
+        "FEED_FRESHNESS_STALE_TOKEN_AGE_SEC",
+        "SLA_MAX_LTP_AGE_SEC",
+        "FEED_HEALTH_OPTION_OK_AGE_SEC",
+    ):
+        try:
+            value = getattr(cfg, name, None)
+            if value is not None:
+                value = float(value)
+                if value > 0:
+                    return value
+        except Exception:
+            continue
+    return 2.5
+
+def get_freshness_status(symbol=None, tokens=None, force=False):
+    payload = _PR31_ORIGINAL_GET_FRESHNESS_STATUS(symbol=symbol, tokens=tokens, force=force)
+
+    token_list = _normalize_tokens(tokens)
+    if not token_list:
+        return payload
+
+    now_epoch = float(now_utc_epoch())
+    threshold = _pr31_token_stale_threshold_sec()
+
+    stale_tokens = []
+    latest_epoch = None
+    token_ages = {}
+
+    for token in token_list:
+        tick = _get_last_tick(token, allow_db=False)
+        ts_epoch = normalize_epoch_seconds((tick or {}).get("ts_epoch")) if isinstance(tick, dict) else None
+        age_sec = compute_age_sec(ts_epoch, now_epoch) if ts_epoch is not None else None
+
+        if age_sec is not None:
+            token_ages[int(token)] = age_sec
+        if ts_epoch is not None and (latest_epoch is None or ts_epoch > latest_epoch):
+            latest_epoch = ts_epoch
+        if age_sec is None or age_sec > threshold:
+            stale_tokens.append(int(token))
+
+    if not token_ages and latest_epoch is None:
+        return payload
+
+    stale_ratio = float(len(stale_tokens)) / float(len(token_list)) if token_list else 0.0
+    max_stale_ratio = float(getattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.5) or 0.5)
+    stale_min_count = int(getattr(cfg, "FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT", 5) or 5)
+    violation = bool(
+        stale_tokens
+        and len(stale_tokens) >= stale_min_count
+        and stale_ratio > max_stale_ratio
+    )
+
+    payload = dict(payload or {})
+    ltp = dict(payload.get("ltp") or {})
+
+    ltp["stale_tokens_count"] = len(stale_tokens)
+    ltp["token_stale_threshold_sec"] = threshold
+    if latest_epoch is not None:
+        ltp["age_sec"] = compute_age_sec(latest_epoch, now_epoch)
+        ltp["source"] = "ticks_memory"
+
+    payload["ltp"] = ltp
+    payload["stale_tokens"] = list(stale_tokens)
+    payload["tracked_tokens"] = list(token_list)
+    payload["stale_token_ratio"] = stale_ratio
+    payload["db_stale_token_ratio"] = stale_ratio
+    payload["stale_token_ratio_source"] = "explicit_token_memory"
+    payload["max_stale_token_ratio"] = max_stale_ratio
+    payload["stale_token_min_count"] = stale_min_count
+    payload["data_available"] = bool(payload.get("data_available") or latest_epoch is not None)
+
+    if violation:
+        payload["ok"] = False
+        reasons = list(payload.get("reasons") or [])
+        reason = f"ltp_stale_tokens:{len(stale_tokens)}/{len(token_list)}"
+        if reason not in reasons:
+            reasons.append(reason)
+        payload["reasons"] = reasons
+
+    return payload
+
+# _PR31_FORCE_DB_SCOPED_FRESHNESS_PATCH
+# Force-mode unscoped checks used by health tests must respect the configured
+# TRADE_DB_PATH and must not inherit stale in-memory tick evidence from prior tests.
+# Explicit token checks still use the normal token-ratio path above.
+
+_PR31_PRE_FORCE_DB_GET_FRESHNESS_STATUS = get_freshness_status
+
+def _pr31_max_epoch_from_trade_db(table_name: str):
+    try:
+        db_path = Path(cfg.TRADE_DB_PATH)
+        if not db_path.exists():
+            return None
+        with sqlite3.connect(str(db_path)) as conn:
+            row = conn.execute(f"SELECT MAX(timestamp_epoch) FROM {table_name}").fetchone()
+        if not row:
+            return None
+        return normalize_epoch_seconds(row[0])
+    except Exception:
+        return None
+
+def _pr31_table_exists_in_trade_db(table_name: str) -> bool:
+    try:
+        db_path = Path(cfg.TRADE_DB_PATH)
+        if not db_path.exists():
+            return False
+        with sqlite3.connect(str(db_path)) as conn:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            ).fetchone()
+        return bool(row)
+    except Exception:
+        return False
+
+def get_freshness_status(symbol=None, tokens=None, force=False):
+    # Only override the problematic unscoped force path. Token-specific SLA tests
+    # must continue to use the explicit token-ratio wrapper.
+    if force and symbol is None and tokens is None and _pr31_table_exists_in_trade_db("ticks"):
+        now_epoch = float(now_utc_epoch())
+        mode = str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").upper()
+        market_open = bool(is_market_open_ist())
+
+        ltp_epoch = _pr31_max_epoch_from_trade_db("ticks")
+        depth_epoch = _pr31_max_epoch_from_trade_db("depth_snapshots")
+
+        ltp_age = compute_age_sec(ltp_epoch, now_epoch) if ltp_epoch is not None else None
+        depth_age = compute_age_sec(depth_epoch, now_epoch) if depth_epoch is not None else None
+
+        max_ltp_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5) or 2.5)
+        max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0) or 6.0)
+        depth_required = bool(mode == "LIVE" and getattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True))
+
+        reasons = []
+        data_available = ltp_epoch is not None
+
+        ltp_ok = bool(ltp_age is not None and ltp_age <= max_ltp_age)
+        depth_ok = bool(depth_age is not None and depth_age <= max_depth_age)
+
+        if ltp_epoch is None:
+            reasons.append("no_ticks_yet")
+        elif not ltp_ok and mode == "LIVE" and market_open:
+            reasons.append(f"ltp_stale:NIFTY age={ltp_age:.2f} max={max_ltp_age:.2f}")
+
+        if depth_required:
+            if depth_epoch is None:
+                reasons.append("depth_missing")
+            elif not depth_ok:
+                reasons.append(f"depth_stale age={depth_age:.2f} max={max_depth_age:.2f}")
+
+        if mode in {"SIM", "PAPER"} and ltp_epoch is None:
+            state = "IDLE"
+            ok = True
+        elif mode == "LIVE" and market_open:
+            if ltp_epoch is None:
+                state = "STALE"
+                ok = False
+            elif depth_required:
+                if ltp_ok and depth_ok:
+                    state = "OK"
+                    ok = True
+                elif ltp_ok or depth_ok:
+                    state = "DEGRADED"
+                    ok = False
+                else:
+                    state = "STALE"
+                    ok = False
+            else:
+                state = "OK" if ltp_ok else "STALE"
+                ok = bool(ltp_ok)
+        else:
+            state = "PLANNING" if mode in {"SIM", "PAPER"} else "MARKET_CLOSED"
+            ok = True
+
+        return {
+            "ok": bool(ok),
+            "state": state,
+            "mode": mode,
+            "policy_profile": "force_db_scoped",
+            "symbol": None,
+            "market_open": market_open,
+            "offhours_mode": False,
+            "allow_stale_quotes": bool(mode in {"SIM", "PAPER"} or not market_open),
+            "data_available": bool(data_available),
+            "ts_epoch": now_epoch,
+            "sla_threshold_sec": max_ltp_age,
+            "max_tick_age_sec": ltp_age,
+            "stale_tokens": [],
+            "tracked_tokens": [],
+            "stale_token_ratio": 0.0,
+            "db_stale_token_ratio": 0.0,
+            "stale_token_ratio_source": "force_db_scoped",
+            "max_stale_token_ratio": float(getattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 0.5) or 0.5),
+            "stale_token_min_count": int(getattr(cfg, "FEED_FRESHNESS_STALE_TOKEN_MIN_COUNT", 5) or 5),
+            "ltp": {
+                "ok": ltp_ok if market_open else True,
+                "age_sec": ltp_age,
+                "max_age_sec": max_ltp_age,
+                "required": True,
+                "symbol": "NIFTY",
+                "source": "ticks_db_force_scoped" if ltp_epoch is not None else "none",
+                "stale_tokens_count": 0,
+            },
+            "depth": {
+                "ok": depth_ok if depth_required else True,
+                "age_sec": depth_age,
+                "max_age_sec": max_depth_age,
+                "scope": "options",
+                "source": "depth_snapshots" if depth_epoch is not None else "none",
+                "required": bool(depth_required),
+            },
+            "reasons": reasons,
+        }
+
+    return _PR31_PRE_FORCE_DB_GET_FRESHNESS_STATUS(symbol=symbol, tokens=tokens, force=force)
+

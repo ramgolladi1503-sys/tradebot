@@ -13160,3 +13160,54 @@ def _install_pr31_live_missing_volume_high_oi_soften_patch() -> None:
 
 _install_pr31_live_missing_volume_high_oi_soften_patch()
 
+# _PR31_FINAL_QUOTE_OK_REQUIRED_GUARD
+# Final guard: live stale soften must not override explicit quote_ok=False
+# when TRADE_BUILDER_LIVE_STALE_SOFTEN_REQUIRE_QUOTE_OK is enabled.
+def _install_pr31_final_quote_ok_required_guard() -> None:
+    original = getattr(TradeBuilder, "_option_tradability_precondition", None)
+    if original is None or getattr(original, "_PR31_FINAL_QUOTE_OK_REQUIRED_GUARD", False):
+        return
+
+    def _patched_option_tradability_precondition(self, *args, **kwargs):
+        tradable, payload = original(self, *args, **kwargs)
+        payload = dict(payload or {})
+
+        opt = kwargs.get("opt")
+        market_ctx = kwargs.get("market_ctx")
+        if opt is None and len(args) >= 2:
+            opt = args[1]
+        if market_ctx is None and len(args) >= 4:
+            market_ctx = args[3]
+
+        mode = str(
+            getattr(market_ctx, "mode", "")
+            or getattr(cfg, "EXECUTION_MODE", "")
+            or ""
+        ).strip().upper()
+
+        require_quote_ok = bool(
+            getattr(cfg, "TRADE_BUILDER_LIVE_STALE_SOFTEN_REQUIRE_QUOTE_OK", True)
+        )
+
+        if (
+            mode in {"LIVE", "REAL"}
+            and require_quote_ok
+            and isinstance(opt, dict)
+            and opt.get("quote_ok") is False
+        ):
+            payload["quote_ok"] = False
+            payload["live_softened"] = False
+            payload["quote_softened"] = False
+            payload["reason_code"] = payload.get("reason_code") or "STALE_OPTION_TICK"
+            payload["primary_blocker"] = payload.get("primary_blocker") or "STALE_OPTION_TICK"
+            payload["reason"] = payload.get("reason") or "STALE_OPTION_TICK"
+            return False, payload
+
+        return tradable, payload
+
+    _patched_option_tradability_precondition._PR31_FINAL_QUOTE_OK_REQUIRED_GUARD = True
+    TradeBuilder._option_tradability_precondition = _patched_option_tradability_precondition
+
+
+_install_pr31_final_quote_ok_required_guard()
+

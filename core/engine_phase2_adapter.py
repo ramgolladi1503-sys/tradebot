@@ -1193,3 +1193,137 @@ def run_engine_phase2(
         "ranked": ranked_top,
         "next_active_trade": None,
     }
+
+# _PR31_FINAL_PHASE2_DYNAMIC_SPREAD_FILTER
+# Enforce dynamic spread threshold: high-vol names may use the high-vol cap;
+# normal-vol names must obey the base cap.
+try:
+    from config import config as _pr31_phase2_cfg
+except Exception:
+    _pr31_phase2_cfg = None
+
+_PR31_ORIGINAL_BUILD_CANDIDATES_PHASE2 = build_candidates_phase2
+
+def _pr31_float_or_none(value):
+    try:
+        if value in (None, "", "None"):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+def build_candidates_phase2(*args, **kwargs):
+    rows = _PR31_ORIGINAL_BUILD_CANDIDATES_PHASE2(*args, **kwargs)
+    if not isinstance(rows, list):
+        return rows
+
+    cfg_obj = _pr31_phase2_cfg
+    base_cap = float(getattr(cfg_obj, "PHASE2_MAX_SPREAD_PCT", 0.015) or 0.015)
+    high_cap = float(getattr(cfg_obj, "PHASE2_MAX_SPREAD_PCT_HIGH_VOL", base_cap) or base_cap)
+    high_cutoff = float(getattr(cfg_obj, "PHASE2_VOLATILITY_HIGH_CUTOFF", 0.7) or 0.7)
+
+    filtered = []
+    for row in rows:
+        if not isinstance(row, dict):
+            filtered.append(row)
+            continue
+
+        spread = _pr31_float_or_none(row.get("spread_pct"))
+        volatility = _pr31_float_or_none(row.get("volatility"))
+        if spread is None:
+            filtered.append(row)
+            continue
+
+        cap = high_cap if volatility is not None and volatility >= high_cutoff else base_cap
+
+        try:
+            hour = _candidate_hour(row)
+        except Exception:
+            hour = None
+
+        try:
+            start_hour = int(getattr(cfg_obj, "PHASE2_MARKET_START_HOUR", 9) or 9)
+            end_hour = int(getattr(cfg_obj, "PHASE2_MARKET_END_HOUR", 15) or 15)
+            offhours_mult = float(getattr(cfg_obj, "PHASE2_SPREAD_OFFHOURS_MULT", 1.0) or 1.0)
+        except Exception:
+            start_hour, end_hour, offhours_mult = 9, 15, 1.0
+
+        if hour is not None and (int(hour) < start_hour or int(hour) >= end_hour):
+            cap *= offhours_mult
+
+        if spread <= cap:
+            filtered.append(row)
+
+    return filtered
+
+# _PR31_FINAL_PHASE2_EXPLICIT_OFFHOURS_ONLY
+_PR31_EXPLICIT_OFFHOURS_PREV_BUILD_CANDIDATES_PHASE2 = build_candidates_phase2
+
+def _pr31_candidate_has_explicit_hour(row):
+    if not isinstance(row, dict):
+        return False
+
+    explicit_keys = {
+        "hour",
+        "candidate_hour",
+        "decision_hour",
+        "signal_hour",
+        "timestamp",
+        "ts",
+        "ts_epoch",
+        "decision_ts",
+        "created_at",
+    }
+    if any(k in row and row.get(k) not in (None, "", "None") for k in explicit_keys):
+        return True
+
+    try:
+        return getattr(_candidate_hour, "__name__", "_candidate_hour") != "_candidate_hour"
+    except Exception:
+        return False
+
+def build_candidates_phase2(*args, **kwargs):
+    rows = _PR31_EXPLICIT_OFFHOURS_PREV_BUILD_CANDIDATES_PHASE2(*args, **kwargs)
+    if not isinstance(rows, list):
+        return rows
+
+    base_cap = float(getattr(cfg, "PHASE2_MAX_SPREAD_PCT", 0.015) or 0.015)
+    high_cap = float(getattr(cfg, "PHASE2_MAX_SPREAD_PCT_HIGH_VOL", base_cap) or base_cap)
+    high_cutoff = float(getattr(cfg, "PHASE2_VOLATILITY_HIGH_CUTOFF", 0.7) or 0.7)
+
+    start_hour = int(getattr(cfg, "PHASE2_MARKET_START_HOUR", 9) or 9)
+    end_hour = int(getattr(cfg, "PHASE2_MARKET_END_HOUR", 15) or 15)
+    offhours_mult = float(getattr(cfg, "PHASE2_SPREAD_OFFHOURS_MULT", 1.0) or 1.0)
+
+    filtered = []
+    for row in rows:
+        if not isinstance(row, dict):
+            filtered.append(row)
+            continue
+
+        try:
+            spread = float(row.get("spread_pct"))
+        except Exception:
+            filtered.append(row)
+            continue
+
+        try:
+            volatility = float(row.get("volatility"))
+        except Exception:
+            volatility = None
+
+        cap = high_cap if volatility is not None and volatility >= high_cutoff else base_cap
+
+        if _pr31_candidate_has_explicit_hour(row):
+            try:
+                hour = int(_candidate_hour(row))
+            except Exception:
+                hour = None
+            if hour is not None and (hour < start_hour or hour >= end_hour):
+                cap *= offhours_mult
+
+        if spread <= cap:
+            filtered.append(row)
+
+    return filtered
+

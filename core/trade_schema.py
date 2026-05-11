@@ -409,6 +409,31 @@ class Trade:
     trade_lifecycle_ts: str | None = None
     trade_lifecycle_history: list[dict] = field(default_factory=list)
 
+    best_bid: float | None = None
+    best_ask: float | None = None
+    bid: float | None = None
+    ask: float | None = None
+    spread: float | None = None
+    spread_pct: float | None = None
+    liquidity_score: float | None = None
+    quote_age_sec: float | None = None
+    max_quote_age_sec: float | None = None
+    quote_source: str | None = None
+    quote_book_source: str | None = None
+    option_ltp_source: str | None = None
+    ltp_source: str | None = None
+    bid_source: str | None = None
+    ask_source: str | None = None
+    spread_source: str | None = None
+    liquidity_source: str | None = None
+    contract_source: str | None = None
+    price_lineage: str | None = None
+    spread_lineage: str | None = None
+    liquidity_lineage: str | None = None
+    contract_lineage: str | None = None
+    execution_entry_lineage: str | None = None
+    contract_exact_match: bool | None = None
+    data_lineage: dict | None = None
     def __post_init__(self):
         source_flags = dict(self.source_flags or {})
         for list_key in ("warning_codes", "soft_veto_codes", "gates_failed", "advisory_flags"):

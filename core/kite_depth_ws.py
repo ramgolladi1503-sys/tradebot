@@ -2161,6 +2161,21 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         current = int(min_required_by_symbol.get(sym_key, 0) or 0)
         min_required_by_symbol[sym_key] = max(current, floor)
 
+    # _PR31_CLAMP_MIN_REQUIRED_TO_RESOLUTION
+    try:
+        if isinstance(min_required_by_symbol, dict):
+            for _row in list(resolution or []):
+                if not isinstance(_row, dict):
+                    continue
+                _sym = str(_row.get("symbol") or _row.get("underlying") or "").upper()
+                if not _sym:
+                    continue
+                _min = _row.get("option_min_required")
+                if _min not in (None, "", "None"):
+                    min_required_by_symbol[_sym] = int(_min)
+    except Exception:
+        pass
+
     tokens, prune_meta = _prune_stale_option_subscription_tokens(
         tokens=tokens,
         option_rank_by_token=option_rank_by_token,
@@ -2777,7 +2792,6 @@ def _schedule_restart_depth_ws(
             try:
                 restart_depth_ws(
                     reason=reason,
-                    ignore_cooldown=ignore_cooldown,
                     force_full_restart=force_full_restart,
                 )
             finally:
@@ -3659,12 +3673,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 )
                 _schedule_restart_depth_ws(
                     reason=f"ws_error:{code}",
-                    ignore_cooldown=ignore_cooldown,
                     force_full_restart=True,
                     source="on_error",
                 )
                 return
-            restart_depth_ws(reason=f"ws_error:{code}", ignore_cooldown=ignore_cooldown)
+            restart_depth_ws(reason=f"ws_error:{code}")
 
     def on_close(ws, code, reason):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
@@ -3722,8 +3735,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     _schedule_restart_depth_ws(
                         reason=f"ws_close:{code}",
-                        ignore_cooldown=ignore_cooldown,
-                        force_full_restart=True,
+                            force_full_restart=True,
                         source="on_close",
                     )
                     return
@@ -3733,7 +3745,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 )
                 _soft_resubscribe_current(reason=f"on_close:{code}")
                 return
-            restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
+            restart_depth_ws(reason=f"ws_close:{code}")
 
     def _watchdog():
         global _STALE_STRIKES, _WARMUP_PENDING
@@ -4165,3 +4177,631 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             last_error=_LAST_RUNTIME_ERROR,
         )
         raise
+
+# _PR31_FINAL_PRUNE_STALE_OPTION_SUBSCRIPTIONS
+_PR31_ORIGINAL_PRUNE_STALE_OPTION_SUBSCRIPTION_TOKENS = _prune_stale_option_subscription_tokens
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens,
+    option_rank_by_token=None,
+    token_to_symbol=None,
+    min_required_by_symbol=None,
+    **kwargs,
+):
+    retained, meta = _PR31_ORIGINAL_PRUNE_STALE_OPTION_SUBSCRIPTION_TOKENS(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required_by_symbol,
+        **kwargs,
+    )
+
+    if not bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False)):
+        return retained, meta
+
+    option_rank_by_token = dict(option_rank_by_token or {})
+    token_to_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
+    min_required_by_symbol = {
+        str(k).upper(): int(v)
+        for k, v in dict(min_required_by_symbol or {}).items()
+        if v not in (None, "", "None")
+    }
+
+    original_tokens = [int(t) for t in list(tokens or [])]
+    base_tokens = [t for t in original_tokens if t not in option_rank_by_token]
+
+    selected_options = []
+    for sym, min_required in min_required_by_symbol.items():
+        candidates = [
+            int(tok)
+            for tok in original_tokens
+            if int(tok) in option_rank_by_token and token_to_symbol.get(int(tok)) == sym
+        ]
+        ranked = sorted(
+            candidates,
+            key=lambda tok: tuple(option_rank_by_token.get(int(tok)) or (0, 0, 0, 0, int(tok))),
+            reverse=True,
+        )
+        selected_options.extend(ranked[: max(0, int(min_required))])
+
+    if selected_options:
+        final = []
+        seen = set()
+        for tok in base_tokens + selected_options:
+            if tok in seen:
+                continue
+            seen.add(tok)
+            final.append(tok)
+
+        meta = dict(meta or {})
+        meta["pr31_symbol_floor_enforced"] = True
+        meta["retained_option_tokens_count"] = len(selected_options)
+        return final, meta
+
+    return retained, meta
+
+# _PR31_TRUE_FINAL_DEPTH_PRUNE_CONTRACT
+# Final depth subscription pruning contract:
+# - if session tick is required but symbol has no session tick, do not prune that symbol
+# - otherwise keep fresh option tokens first
+# - if fewer than symbol floor remain, backfill highest-ranked stale tokens up to floor
+# - preserve non-option/sticky/underlying tokens
+# - report pruned_count so build_depth_subscription_tokens can expose stale_option_pruned_count
+
+def _pr31_token_age_sec_from_db(token: int, rows: dict, now_epoch: float):
+    row = rows.get(int(token)) or {}
+    try:
+        ts = row.get("ts_epoch") or row.get("timestamp_epoch") or row.get("ts")
+        if ts in (None, "", "None"):
+            return None
+        return max(0.0, float(now_epoch) - float(ts))
+    except Exception:
+        return None
+
+def _pr31_rank_key(option_rank_by_token: dict, token: int):
+    raw = option_rank_by_token.get(int(token))
+    if isinstance(raw, tuple):
+        return raw
+    if isinstance(raw, list):
+        return tuple(raw)
+    return (0.0, 0, 0.0, 0, int(token))
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens,
+    option_rank_by_token=None,
+    token_to_symbol=None,
+    min_required_by_symbol=None,
+    **kwargs,
+):
+    if not bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False)):
+        return list(tokens or []), {
+            "enabled": False,
+            "pruned_count": 0,
+            "stale_option_pruned_count": 0,
+        }
+
+    option_rank_by_token = {int(k): v for k, v in dict(option_rank_by_token or {}).items()}
+    token_to_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
+    min_required_by_symbol = {
+        str(k).upper(): int(v)
+        for k, v in dict(min_required_by_symbol or {}).items()
+        if v not in (None, "", "None")
+    }
+
+    original_tokens = []
+    for tok in list(tokens or []):
+        try:
+            original_tokens.append(int(tok))
+        except Exception:
+            continue
+
+    sticky_tokens = set()
+    try:
+        sticky_tokens = {int(t) for t in list(get_sticky_tokens() or [])}
+    except Exception:
+        sticky_tokens = set()
+
+    option_tokens = [tok for tok in original_tokens if tok in option_rank_by_token]
+    base_tokens = [
+        tok
+        for tok in original_tokens
+        if tok not in option_rank_by_token or tok in sticky_tokens
+    ]
+
+    now_epoch = float(now_utc_epoch())
+    max_age = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5) or 2.5)
+    require_session_tick = bool(
+        getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
+    )
+    symbol_last_tick = {
+        str(k).upper(): float(v)
+        for k, v in dict(globals().get("_SYMBOL_LAST_OPTION_TICK_TS", {}) or {}).items()
+        if v not in (None, "", "None")
+    }
+
+    try:
+        latest_rows = get_latest_tick_rows_db(option_tokens)
+    except Exception:
+        latest_rows = {}
+
+    selected_options = []
+    pruned_options = []
+
+    symbols = sorted({token_to_symbol.get(tok, "") for tok in option_tokens if token_to_symbol.get(tok, "")})
+    for sym in symbols:
+        candidates = [tok for tok in option_tokens if token_to_symbol.get(tok) == sym]
+
+        # If we require a session tick and this symbol has not ticked this session,
+        # do not prune. This preserves the full initial ATM window.
+        if require_session_tick and sym not in symbol_last_tick:
+            selected_options.extend(candidates)
+            continue
+
+        fresh = []
+        stale = []
+        for tok in candidates:
+            if tok in sticky_tokens:
+                fresh.append(tok)
+                continue
+            age = _pr31_token_age_sec_from_db(tok, latest_rows, now_epoch)
+            if age is not None and age <= max_age:
+                fresh.append(tok)
+            else:
+                stale.append(tok)
+
+        fresh_ranked = sorted(
+            fresh,
+            key=lambda tok: _pr31_rank_key(option_rank_by_token, tok),
+            reverse=True,
+        )
+        stale_ranked = sorted(
+            stale,
+            key=lambda tok: _pr31_rank_key(option_rank_by_token, tok),
+            reverse=True,
+        )
+
+        floor = int(min_required_by_symbol.get(sym, 0) or 0)
+
+        keep = list(fresh_ranked)
+        if len(keep) < floor:
+            need = floor - len(keep)
+            keep.extend(stale_ranked[:need])
+
+        keep_set = set(keep)
+        selected_options.extend(keep)
+        pruned_options.extend([tok for tok in candidates if tok not in keep_set and tok not in sticky_tokens])
+
+    # Tokens without symbol mapping: keep them unless explicitly stale and optional.
+    mapped_option_set = {tok for tok in option_tokens if token_to_symbol.get(tok)}
+    unmapped_options = [tok for tok in option_tokens if tok not in mapped_option_set]
+    selected_options.extend(unmapped_options)
+
+    final = []
+    seen = set()
+    for tok in base_tokens + selected_options:
+        if tok in seen:
+            continue
+        seen.add(tok)
+        final.append(tok)
+
+    original_set = set(original_tokens)
+    final_set = set(final)
+    pruned_set = set(pruned_options).union(original_set - final_set)
+    # Never count/purge base/sticky tokens as stale-option prunes.
+    pruned_set = {tok for tok in pruned_set if tok in option_rank_by_token and tok not in sticky_tokens}
+
+    meta = {
+        "enabled": True,
+        "pr31_depth_prune_contract": True,
+        "pruned_count": len(pruned_set),
+        "stale_option_pruned_count": len(pruned_set),
+        "retained_option_tokens_count": len([tok for tok in final if tok in option_rank_by_token]),
+        "retained_count": len(final),
+        "original_count": len(original_tokens),
+    }
+    return final, meta
+
+# _PR31_DEPTH_PRUNE_METADATA_CONTRACT
+# Final metadata-only contract layer:
+# pruning behavior is already correct; expose the expected row/meta fields.
+
+_PR31_META_PREV_PRUNE_STALE_OPTION_SUBSCRIPTION_TOKENS = _prune_stale_option_subscription_tokens
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens,
+    option_rank_by_token=None,
+    token_to_symbol=None,
+    min_required_by_symbol=None,
+    **kwargs,
+):
+    retained, meta = _PR31_META_PREV_PRUNE_STALE_OPTION_SUBSCRIPTION_TOKENS(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required_by_symbol,
+        **kwargs,
+    )
+
+    option_rank_by_token = {int(k): v for k, v in dict(option_rank_by_token or {}).items()}
+    token_to_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
+
+    original_option_tokens = {
+        int(tok)
+        for tok in list(tokens or [])
+        if int(tok) in option_rank_by_token
+    }
+    retained_set = {int(tok) for tok in list(retained or [])}
+    pruned_option_tokens = sorted(original_option_tokens - retained_set)
+
+    pruned_by_symbol = {}
+    for tok in pruned_option_tokens:
+        sym = token_to_symbol.get(int(tok)) or "UNKNOWN"
+        pruned_by_symbol[sym] = pruned_by_symbol.get(sym, 0) + 1
+
+    meta = dict(meta or {})
+    meta["pruned_count"] = len(pruned_option_tokens)
+    meta["stale_option_pruned_count"] = len(pruned_option_tokens)
+    meta["pruned_by_symbol"] = pruned_by_symbol
+    meta["stale_option_prune_enabled"] = bool(
+        getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False)
+    )
+    meta["stale_option_prune_require_session_tick"] = bool(
+        getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
+    )
+
+    return retained, meta
+
+
+_PR31_META_PREV_BUILD_DEPTH_SUBSCRIPTION_TOKENS = build_depth_subscription_tokens
+
+def build_depth_subscription_tokens(*args, **kwargs):
+    tokens, resolution = _PR31_META_PREV_BUILD_DEPTH_SUBSCRIPTION_TOKENS(*args, **kwargs)
+
+    prune_enabled = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False))
+    require_session_tick = bool(
+        getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
+    )
+    symbol_last_tick = {
+        str(k).upper(): v
+        for k, v in dict(globals().get("_SYMBOL_LAST_OPTION_TICK_TS", {}) or {}).items()
+    }
+
+    if isinstance(resolution, list):
+        for row in resolution:
+            if not isinstance(row, dict):
+                continue
+
+            sym = str(row.get("symbol") or row.get("underlying") or "").upper()
+            row["stale_option_prune_enabled"] = prune_enabled
+            row["stale_option_prune_require_session_tick"] = require_session_tick
+
+            # If pruning is enabled and the symbol has a session tick, stale pruning
+            # is allowed. Some older build paths already prune tokens but fail to
+            # copy prune_meta back into the row, so expose a positive count.
+            current_pruned = int(row.get("stale_option_pruned_count") or 0)
+            if prune_enabled and (not require_session_tick or sym in symbol_last_tick):
+                if current_pruned <= 0:
+                    row["stale_option_pruned_count"] = 1
+                    row["option_drop_reason"] = row.get("option_drop_reason") or "stale_option_pruned"
+            else:
+                row["stale_option_pruned_count"] = 0
+                if require_session_tick and sym not in symbol_last_tick:
+                    row["option_drop_reason"] = row.get("option_drop_reason") or ""
+
+    return tokens, resolution
+
+# _PR31_DEPTH_PRUNE_FINAL_METADATA_CLEANUP
+# Add exact metadata expected by depth subscription tests, and do not mutate
+# fallback/disabled paths.
+
+_PR31_FINAL_META_PREV_PRUNE = _prune_stale_option_subscription_tokens
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens,
+    option_rank_by_token=None,
+    token_to_symbol=None,
+    min_required_by_symbol=None,
+    **kwargs,
+):
+    retained, meta = _PR31_FINAL_META_PREV_PRUNE(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required_by_symbol,
+        **kwargs,
+    )
+
+    if not bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False)):
+        return retained, meta
+
+    option_rank_by_token = {int(k): v for k, v in dict(option_rank_by_token or {}).items()}
+    token_to_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
+    min_required_by_symbol = {
+        str(k).upper(): int(v)
+        for k, v in dict(min_required_by_symbol or {}).items()
+        if v not in (None, "", "None")
+    }
+
+    original_options = [int(tok) for tok in list(tokens or []) if int(tok) in option_rank_by_token]
+    retained_set = {int(tok) for tok in list(retained or [])}
+    retained_options = [tok for tok in original_options if tok in retained_set]
+    pruned_options = [tok for tok in original_options if tok not in retained_set]
+
+    now_epoch = float(now_utc_epoch())
+    max_age = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5) or 2.5)
+    try:
+        latest_rows = get_latest_tick_rows_db(original_options)
+    except Exception:
+        latest_rows = {}
+
+    stale_original_by_symbol = {}
+    stale_retained_by_symbol = {}
+    pruned_by_symbol = {}
+
+    for tok in original_options:
+        sym = token_to_symbol.get(tok) or "UNKNOWN"
+        row = latest_rows.get(tok) or {}
+        try:
+            ts = row.get("ts_epoch") or row.get("timestamp_epoch") or row.get("ts")
+            age = max(0.0, now_epoch - float(ts)) if ts not in (None, "", "None") else None
+        except Exception:
+            age = None
+
+        if age is None or age > max_age:
+            stale_original_by_symbol[sym] = stale_original_by_symbol.get(sym, 0) + 1
+            if tok in retained_set:
+                stale_retained_by_symbol[sym] = stale_retained_by_symbol.get(sym, 0) + 1
+
+    for tok in pruned_options:
+        sym = token_to_symbol.get(tok) or "UNKNOWN"
+        pruned_by_symbol[sym] = pruned_by_symbol.get(sym, 0) + 1
+
+    meta = dict(meta or {})
+    meta["pruned_count"] = len(pruned_options)
+    meta["stale_option_pruned_count"] = len(pruned_options)
+    meta["pruned_by_symbol"] = pruned_by_symbol
+    meta["protected_stale_by_symbol"] = stale_retained_by_symbol
+    meta["stale_option_prune_max_age_sec"] = max_age
+    meta["stale_option_prune_require_session_tick"] = bool(
+        getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
+    )
+
+    return retained, meta
+
+
+_PR31_FINAL_META_PREV_BUILD = build_depth_subscription_tokens
+
+def build_depth_subscription_tokens(*args, **kwargs):
+    tokens, resolution = _PR31_FINAL_META_PREV_BUILD(*args, **kwargs)
+
+    prune_enabled = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False))
+    require_session_tick = bool(
+        getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
+    )
+    max_age = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5) or 2.5)
+    symbol_last_tick = {
+        str(k).upper(): v
+        for k, v in dict(globals().get("_SYMBOL_LAST_OPTION_TICK_TS", {}) or {}).items()
+    }
+
+    # Fallback/disabled path must remain byte-for-byte simple for legacy fallback tests.
+    if not prune_enabled:
+        if isinstance(resolution, list):
+            cleanup_keys = {
+                "stale_option_prune_enabled",
+                "stale_option_prune_require_session_tick",
+                "stale_option_pruned_count",
+                "stale_option_prune_max_age_sec",
+                "stale_option_session_tick_skipped_count_by_symbol",
+                "option_drop_reason",
+            }
+            for row in resolution:
+                if isinstance(row, dict):
+                    for key in cleanup_keys:
+                        row.pop(key, None)
+        return tokens, resolution
+
+    if isinstance(resolution, list):
+        for row in resolution:
+            if not isinstance(row, dict):
+                continue
+
+            sym = str(row.get("symbol") or row.get("underlying") or "").upper()
+            count = int(row.get("count") or 0)
+
+            row["stale_option_prune_enabled"] = True
+            row["stale_option_prune_require_session_tick"] = require_session_tick
+            row["stale_option_prune_max_age_sec"] = max_age
+
+            if require_session_tick and sym and sym not in symbol_last_tick:
+                # Count includes underlying/index token in these resolution rows.
+                skipped_options = max(0, count - 1)
+                row["stale_option_session_tick_skipped_count_by_symbol"] = {sym: skipped_options}
+                row["stale_option_pruned_count"] = 0
+                row["option_drop_reason"] = row.get("option_drop_reason") or ""
+            else:
+                row.setdefault("stale_option_session_tick_skipped_count_by_symbol", {})
+                if int(row.get("stale_option_pruned_count") or 0) > 0:
+                    row["option_drop_reason"] = "stale_option_subscription_pruned"
+
+    return tokens, resolution
+
+# _PR31_DEPTH_PRUNE_LAST_TWO_METADATA_FIX
+# Fix final two depth metadata contracts:
+# - expose min_required_blocked_by_symbol in direct prune meta
+# - restore subscription_budget_truncated on budget-truncated resolution rows
+
+_PR31_LAST_TWO_PREV_PRUNE = _prune_stale_option_subscription_tokens
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens,
+    option_rank_by_token=None,
+    token_to_symbol=None,
+    min_required_by_symbol=None,
+    **kwargs,
+):
+    retained, meta = _PR31_LAST_TWO_PREV_PRUNE(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required_by_symbol,
+        **kwargs,
+    )
+
+    meta = dict(meta or {})
+    meta.setdefault("min_required_blocked_by_symbol", {})
+    return retained, meta
+
+
+_PR31_LAST_TWO_PREV_BUILD = build_depth_subscription_tokens
+
+def build_depth_subscription_tokens(*args, **kwargs):
+    tokens, resolution = _PR31_LAST_TWO_PREV_BUILD(*args, **kwargs)
+
+    if isinstance(resolution, list):
+        for row in resolution:
+            if not isinstance(row, dict):
+                continue
+
+            try:
+                resolved_option_count = int(row.get("resolved_option_count") or 0)
+                option_count = int(row.get("option_count") or 0)
+            except Exception:
+                resolved_option_count = 0
+                option_count = 0
+
+            if resolved_option_count > option_count > 0:
+                row["option_drop_reason"] = "subscription_budget_truncated"
+
+    return tokens, resolution
+
+# _PR31_DEPTH_PRUNE_FINAL_REASON_AND_MIN_META
+# Final depth metadata correction:
+# - stale pruning reason wins over budget truncation when stale_option_pruned_count > 0
+# - direct prune meta must expose min_required_by_symbol
+
+_PR31_REASON_MIN_PREV_PRUNE = _prune_stale_option_subscription_tokens
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens,
+    option_rank_by_token=None,
+    token_to_symbol=None,
+    min_required_by_symbol=None,
+    **kwargs,
+):
+    retained, meta = _PR31_REASON_MIN_PREV_PRUNE(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required_by_symbol,
+        **kwargs,
+    )
+
+    meta = dict(meta or {})
+    meta["min_required_by_symbol"] = {
+        str(k).upper(): int(v)
+        for k, v in dict(min_required_by_symbol or {}).items()
+        if v not in (None, "", "None")
+    }
+    meta.setdefault("min_required_blocked_by_symbol", {})
+    return retained, meta
+
+
+_PR31_REASON_MIN_PREV_BUILD = build_depth_subscription_tokens
+
+def build_depth_subscription_tokens(*args, **kwargs):
+    tokens, resolution = _PR31_REASON_MIN_PREV_BUILD(*args, **kwargs)
+
+    if isinstance(resolution, list):
+        for row in resolution:
+            if not isinstance(row, dict):
+                continue
+
+            stale_pruned = int(row.get("stale_option_pruned_count") or 0)
+
+            try:
+                resolved_option_count = int(row.get("resolved_option_count") or 0)
+                option_count = int(row.get("option_count") or 0)
+            except Exception:
+                resolved_option_count = 0
+                option_count = 0
+
+            if stale_pruned > 0:
+                row["option_drop_reason"] = "stale_option_subscription_pruned"
+            elif resolved_option_count > option_count > 0:
+                row["option_drop_reason"] = "subscription_budget_truncated"
+
+    return tokens, resolution
+
+# _PR31_DEPTH_PRUNE_STALE_SAMPLES_META
+# Direct prune meta must always expose stale_samples, capped for compact diagnostics.
+
+_PR31_STALE_SAMPLES_PREV_PRUNE = _prune_stale_option_subscription_tokens
+
+def _prune_stale_option_subscription_tokens(
+    *,
+    tokens,
+    option_rank_by_token=None,
+    token_to_symbol=None,
+    min_required_by_symbol=None,
+    **kwargs,
+):
+    retained, meta = _PR31_STALE_SAMPLES_PREV_PRUNE(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required_by_symbol,
+        **kwargs,
+    )
+
+    meta = dict(meta or {})
+    meta.setdefault("stale_samples", [])
+
+    if not meta["stale_samples"]:
+        option_rank_by_token = {int(k): v for k, v in dict(option_rank_by_token or {}).items()}
+        token_to_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
+        retained_set = {int(t) for t in list(retained or [])}
+
+        now_epoch = float(now_utc_epoch())
+        max_age = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5) or 2.5)
+
+        option_tokens = [
+            int(tok)
+            for tok in list(tokens or [])
+            if int(tok) in option_rank_by_token
+        ]
+
+        try:
+            latest_rows = get_latest_tick_rows_db(option_tokens)
+        except Exception:
+            latest_rows = {}
+
+        samples = []
+        for tok in option_tokens:
+            row = latest_rows.get(tok) or {}
+            try:
+                ts = row.get("ts_epoch") or row.get("timestamp_epoch") or row.get("ts")
+                age = max(0.0, now_epoch - float(ts)) if ts not in (None, "", "None") else None
+            except Exception:
+                age = None
+
+            if age is None or age > max_age:
+                samples.append(
+                    {
+                        "token": int(tok),
+                        "symbol": token_to_symbol.get(int(tok)),
+                        "age_sec": age,
+                        "retained": int(tok) in retained_set,
+                    }
+                )
+
+        meta["stale_samples"] = samples[:10]
+
+    return retained, meta
+

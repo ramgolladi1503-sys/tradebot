@@ -445,3 +445,38 @@ def classify_session_mode(snapshot_or_config: Mapping[str, Any] | Any = None) ->
         "minutes_to_close": minutes_to_close,
         "market_mode": market_ctx.mode,
     }
+
+# _PR31_MARKET_CONTEXT_PLANNING_PATCH
+try:
+    from dataclasses import replace as _pr31_dataclass_replace
+except Exception:
+    _pr31_dataclass_replace = None
+
+_pr31_original_derive_market_context = derive_market_context
+
+def derive_market_context(payload=None, *args, **kwargs):
+    ctx = _pr31_original_derive_market_context(payload, *args, **kwargs)
+    nested = payload.get("market_context") if isinstance(payload, dict) else None
+    if (
+        isinstance(nested, dict)
+        and nested.get("market_open") is False
+        and str(getattr(ctx, "mode", "") or "").upper() in {"PAPER", "SIM"}
+    ):
+        if _pr31_dataclass_replace is not None:
+            try:
+                return _pr31_dataclass_replace(
+                    ctx,
+                    planning_only=True,
+                    allow_stale_quotes=True,
+                    require_live_quotes=False,
+                )
+            except Exception:
+                pass
+        try:
+            ctx.planning_only = True
+            ctx.allow_stale_quotes = True
+            ctx.require_live_quotes = False
+        except Exception:
+            pass
+    return ctx
+

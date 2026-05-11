@@ -651,3 +651,79 @@ def enforce_entry_contract(row: Mapping[str, Any], *, stage: str, mode: str | No
             )
 
     return out
+
+# _PR31_FINAL_DISPLAY_ONLY_BID_ASK_STATUS
+# Bid/ask alone can be display evidence, but without mark/mid/last it must remain
+# non-executable rather than "missing".
+_PR31_ORIGINAL_BUILD_ENTRY_STATE = build_entry_state
+
+def build_entry_state(*args, **kwargs):
+    out = _PR31_ORIGINAL_BUILD_ENTRY_STATE(*args, **kwargs)
+    if not isinstance(out, dict):
+        return out
+
+    bid = kwargs.get("bid")
+    ask = kwargs.get("ask")
+    mark = kwargs.get("mark")
+    mid = kwargs.get("mid")
+    last = kwargs.get("last")
+
+    if (
+        out.get("execution_entry") is None
+        and out.get("execution_entry_status") == "missing"
+        and bid not in (None, "", "None")
+        and ask not in (None, "", "None")
+        and mark in (None, "", "None")
+        and mid in (None, "", "None")
+        and last in (None, "", "None")
+    ):
+        out["execution_entry_status"] = "non_executable"
+        out["entry_status"] = out.get("entry_status") or "non_executable"
+        try:
+            out["display_entry"] = (float(bid) + float(ask)) / 2.0
+        except Exception:
+            pass
+        out["execution_entry_reason"] = (
+            out.get("execution_entry_reason")
+            or "display_only_bid_ask_without_executable_price"
+        )
+
+    return out
+
+# _PR31_FINAL_DISPLAY_ENTRY_SOURCE_MID
+_PR31_DISPLAY_ENTRY_SOURCE_PREV_BUILD_ENTRY_STATE = build_entry_state
+
+def build_entry_state(*args, **kwargs):
+    out = _PR31_DISPLAY_ENTRY_SOURCE_PREV_BUILD_ENTRY_STATE(*args, **kwargs)
+    if not isinstance(out, dict):
+        return out
+
+    bid = kwargs.get("bid")
+    ask = kwargs.get("ask")
+    mark = kwargs.get("mark")
+    mid = kwargs.get("mid")
+    last = kwargs.get("last")
+
+    if (
+        out.get("execution_entry") is None
+        and bid not in (None, "", "None")
+        and ask not in (None, "", "None")
+        and mark in (None, "", "None")
+        and mid in (None, "", "None")
+        and last in (None, "", "None")
+    ):
+        try:
+            out["display_entry"] = (float(bid) + float(ask)) / 2.0
+            out["display_entry_source"] = "mid"
+            out["display_entry_status"] = "displayable"
+        except Exception:
+            pass
+        out["execution_entry_status"] = "non_executable"
+        out["entry_status"] = out.get("entry_status") or "non_executable"
+        out["execution_entry_reason"] = (
+            out.get("execution_entry_reason")
+            or "display_only_bid_ask_without_executable_price"
+        )
+
+    return out
+

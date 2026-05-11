@@ -398,13 +398,13 @@ def _coerce_epoch_series(series: pd.Series) -> pd.Series:
 
     numeric = pd.to_numeric(series, errors="coerce")
     if numeric.notna().any():
-        # Normalize epoch-like values to seconds:
-        # nanoseconds > 1e17, microseconds > 1e14, milliseconds > 1e12.
-        numeric = numeric.where(numeric <= 1e17, numeric / 1_000_000_000.0)
-        numeric = numeric.where(numeric <= 1e14, numeric / 1_000_000.0)
-        numeric = numeric.where(numeric <= 1e12, numeric / 1000.0)
+        original = numeric.copy()
+        normalized = numeric.astype("float64")
+        normalized = normalized.mask(original > 1e17, original / 1_000_000_000.0)
+        normalized = normalized.mask((original > 1e14) & (original <= 1e17), original / 1_000_000.0)
+        normalized = normalized.mask((original > 1e12) & (original <= 1e14), original / 1000.0)
+        return normalized
     return numeric
-
 
 def _parse_ts_series(series: pd.Series) -> pd.Series:
     if series is None:
@@ -562,7 +562,7 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
     if "display_ts_epoch" in out.columns:
         display_epoch = _coerce_ts_epoch(out["display_ts_epoch"])
 
-    decision_epoch = _coerce_ts_epoch(out["last_seen_ts"])
+    decision_epoch = pd.Series([float("nan")] * len(out), index=out.index, dtype="float64")
     for field in (
         "decision_ts_epoch",
         "decision_ts_utc",
@@ -653,6 +653,10 @@ def dedupe(df: pd.DataFrame) -> pd.DataFrame:
     out = compute_trade_key(normalize_df(df))
     if "decision_ts_epoch" not in out.columns:
         out["decision_ts_epoch"] = pd.Series([float("nan")] * len(out), index=out.index, dtype="float64")
+    out["decision_ts_epoch"] = pd.to_numeric(out["decision_ts_epoch"], errors="coerce")
+    if "last_seen_ts" in out.columns:
+        last_seen_epoch = _coerce_ts_epoch(out["last_seen_ts"])
+        out["decision_ts_epoch"] = out["decision_ts_epoch"].where(out["decision_ts_epoch"].notna(), last_seen_epoch)
     if "display_ts_epoch" in out.columns:
         out = out.sort_values(
             ["display_ts_epoch", "decision_ts_epoch"],
@@ -685,8 +689,15 @@ def build_identity_col(df: pd.DataFrame) -> pd.DataFrame:
 def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
     if df is None or df.empty:
         return _empty_df()
-    out = build_identity_col(normalize_df(df))
     view = str(view or "advisory").lower()
+    include_legacy_last_seen = (
+        view == "advisory"
+        and "last_seen_ts" in df.columns
+        and "display_ts_epoch" not in df.columns
+        and "display_ts_ist" not in df.columns
+        and "decision_ts_epoch" not in df.columns
+    )
+    out = build_identity_col(normalize_df(df))
     if view == "active":
         cols = [
             "last_seen_ts",
@@ -721,7 +732,6 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         ]
     else:
         cols = [
-            "last_seen_ts",
             "display_ts_ist",
             "identity",
             "status",
@@ -750,6 +760,8 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
             "trade_key",
             "tradingsymbol",
         ]
+    if include_legacy_last_seen and "last_seen_ts" in out.columns and "last_seen_ts" not in cols:
+        cols = ["last_seen_ts"] + cols
     cols = [c for c in cols if c in out.columns]
     out = out[cols].copy()
     if "status" in out.columns:
