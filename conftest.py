@@ -3,21 +3,32 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import pandas as pd
+
+def _pd():
+    try:
+        import pandas as pd
+    except Exception:
+        return None
+    return pd
 
 
 def _missing(value: Any) -> bool:
     if value is None:
         return True
-    try:
-        if bool(pd.isna(value)):
-            return True
-    except Exception:
-        pass
+    pd = _pd()
+    if pd is not None:
+        try:
+            if bool(pd.isna(value)):
+                return True
+        except Exception:
+            pass
     return str(value).strip().lower() in {"", "none", "nan", "nat"}
 
 
 def _patch_pandas_date_range() -> None:
+    pd = _pd()
+    if pd is None:
+        return
     original = pd.date_range
 
     def compat_date_range(*args: Any, **kwargs: Any):
@@ -30,6 +41,9 @@ def _patch_pandas_date_range() -> None:
 
 
 def _patch_dashboard_timestamps() -> None:
+    pd = _pd()
+    if pd is None:
+        return
     try:
         import dashboard.ui.table_model as tm
     except Exception:
@@ -37,7 +51,7 @@ def _patch_dashboard_timestamps() -> None:
 
     epoch = pd.Timestamp("1970-01-01T00:00:00Z")
 
-    def epoch_seconds_from_datetime(series: pd.Series) -> pd.Series:
+    def epoch_seconds_from_datetime(series):
         parsed = pd.to_datetime(series, errors="coerce", utc=True)
         out = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
         mask = parsed.notna()
@@ -45,7 +59,7 @@ def _patch_dashboard_timestamps() -> None:
             out.loc[mask] = (parsed.loc[mask] - epoch).dt.total_seconds().astype("float64")
         return out
 
-    def coerce_epoch_series(series: pd.Series) -> pd.Series:
+    def coerce_epoch_series(series):
         if pd.api.types.is_datetime64_any_dtype(series):
             return epoch_seconds_from_datetime(series)
         numeric = pd.to_numeric(series, errors="coerce")
@@ -58,7 +72,7 @@ def _patch_dashboard_timestamps() -> None:
             return normalized
         return numeric.astype("float64")
 
-    def coerce_ts_epoch(series: pd.Series) -> pd.Series:
+    def coerce_ts_epoch(series):
         parsed_epoch = epoch_seconds_from_datetime(series)
         numeric = coerce_epoch_series(series)
         return parsed_epoch.where(parsed_epoch.notna(), numeric)
@@ -68,6 +82,8 @@ def _patch_dashboard_timestamps() -> None:
 
 
 def _patch_dashboard_normalize_trade_df() -> None:
+    if _pd() is None:
+        return
     try:
         import dashboard.utils as du
     except Exception:
@@ -94,7 +110,6 @@ def _patch_data_quality_contract() -> None:
         return
     current = dq.assess_candidate_data_quality
     strict = getattr(dq, "_PR31_ORIGINAL_ASSESS_CANDIDATE_DATA_QUALITY", current)
-
     dirty_entry_sources = {"recovered_fallback", "rest_fallback", "synthetic_offhours", "fallback", "unknown", "none", ""}
 
     def should_use_strict(candidate: dict[str, Any]) -> bool:
