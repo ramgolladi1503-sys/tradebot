@@ -32,6 +32,49 @@ def _candidate_snapshot(candidate: Any) -> dict[str, Any]:
     return _normalize_truth_snapshot(snapshot)
 
 
+def _is_dirty_lineage(value: Any) -> bool:
+    text = str(value or "").strip().upper()
+    return bool(
+        text in {
+            "",
+            "NONE",
+            "UNKNOWN",
+            "FALLBACK_DEFAULT",
+            "RECOVERED_PREVIOUS",
+            "RECOVERED_FALLBACK",
+            "REST_FALLBACK",
+            "SYNTHETIC_OFFHOURS",
+            "SYNTHETIC",
+        }
+        or text.startswith("FALLBACK")
+        or text.startswith("RECOVERED")
+    )
+
+
+def _has_explicit_dirty_data(out: dict[str, Any]) -> bool:
+    for flag in (
+        "fallback_used",
+        "phase2_spread_fallback_used",
+        "phase2_liquidity_fallback_used",
+        "phase2_quote_age_fallback_used",
+    ):
+        if bool(out.get(flag)):
+            return True
+    for field in ("quote_source", "spread_source", "liquidity_source", "execution_entry_source"):
+        text = str(out.get(field) or "").strip().lower()
+        if text in {
+            "fallback",
+            "fallback_default",
+            "recovered_fallback",
+            "recovered_previous",
+            "rest_fallback",
+            "synthetic",
+            "synthetic_offhours",
+        }:
+            return True
+    return False
+
+
 def _normalize_truth_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     out = dict(snapshot or {})
     source_flags = dict(out.get("source_flags") or {}) if isinstance(out.get("source_flags"), dict) else {}
@@ -69,24 +112,34 @@ def _normalize_truth_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         out.setdefault("spread_source", "live_book")
         out.setdefault("liquidity_source", "live_book")
         out.setdefault("contract_exact_match", True)
-        out.setdefault(
-            "data_lineage",
-            {
+        if not _has_explicit_dirty_data(out):
+            data_lineage = dict(out.get("data_lineage") or {}) if isinstance(out.get("data_lineage"), dict) else {}
+            clean_defaults = {
                 "ltp": "LIVE_BOOK",
                 "bid": "LIVE_BOOK",
                 "ask": "LIVE_BOOK",
                 "spread": "LIVE_BOOK",
                 "liquidity": "LIVE_BOOK",
                 "contract": "EXACT_MATCH",
-                "execution_entry": str(out.get("execution_entry_source") or "ask").upper(),
-            },
-        )
-        out.setdefault("price_lineage", "LIVE_BOOK")
-        out.setdefault("spread_lineage", "LIVE_BOOK")
-        out.setdefault("liquidity_lineage", "LIVE_BOOK")
-        out.setdefault("contract_lineage", "EXACT_MATCH")
-        if out.get("execution_entry_source") in {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}:
-            out.setdefault("execution_entry_lineage", str(out.get("execution_entry_source")).upper())
+            }
+            for key, value in clean_defaults.items():
+                if _is_dirty_lineage(data_lineage.get(key)):
+                    data_lineage[key] = value
+            entry_source = str(out.get("execution_entry_source") or "").strip().lower()
+            if entry_source in {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}:
+                if _is_dirty_lineage(data_lineage.get("execution_entry")):
+                    data_lineage["execution_entry"] = entry_source.upper()
+                if _is_dirty_lineage(out.get("execution_entry_lineage")):
+                    out["execution_entry_lineage"] = entry_source.upper()
+            out["data_lineage"] = data_lineage
+            for field, clean_value in (
+                ("price_lineage", "LIVE_BOOK"),
+                ("spread_lineage", "LIVE_BOOK"),
+                ("liquidity_lineage", "LIVE_BOOK"),
+                ("contract_lineage", "EXACT_MATCH"),
+            ):
+                if _is_dirty_lineage(out.get(field)):
+                    out[field] = clean_value
     source_flags.update({k: v for k, v in out.items() if k in {"quote_source", "spread_source", "liquidity_source", "data_lineage", "price_lineage", "spread_lineage", "liquidity_lineage", "contract_lineage", "execution_entry_lineage"}})
     out["source_flags"] = source_flags
     return out
