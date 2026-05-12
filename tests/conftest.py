@@ -24,6 +24,8 @@ try:
 except Exception:  # pragma: no cover - defensive for import-only failures
     _cfg = None
 
+# PR31: focused regression guards live below. Full-suite failures are handled in production modules, not by broad test monkeypatching.
+
 
 def _copy_value(value: Any) -> Any:
     try:
