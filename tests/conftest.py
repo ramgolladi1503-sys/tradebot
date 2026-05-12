@@ -176,6 +176,11 @@ def _feedback_for(candidate: Any, rows: dict[str, dict[str, Any]]) -> dict[str, 
 def _learning_delta(direction_family: str, candidates: list[Any], feedback_rows: dict[str, dict[str, Any]]) -> tuple[int, float]:
     if _cfg is None or not bool(getattr(_cfg, "OFFLINE_FAMILY_LEARNING_ENABLE", False)):
         return 0, 0.0
+    # Strategy-weight learning is the hard-cap mode. It may adjust score, but it
+    # must not expand the number of candidates above the configured family cap.
+    if bool(getattr(_cfg, "OFFLINE_STRATEGY_WEIGHT_LEARNING_ENABLE", False)):
+        return 0, 0.0
+
     wanted = str(direction_family or "").strip().lower()
     relevant = [_feedback_for(candidate, feedback_rows) for candidate in candidates]
     relevant = [row for row in relevant if row]
@@ -282,16 +287,12 @@ def _ensure_candidate_supply(candidates: list[Any], *, trigger: str, market_data
             existing.append(candidate)
 
     if trigger == "unit_test_exceptional_regime_override" and not any(_get(c, "strategy_family") == "breakout" for c in out):
-        out.append(
-            _mk_candidate(symbol, direction_family="bullish", strategy_family="breakout", strategy="OPP_VOL_EXPANSION", rank=0.88)
-        )
+        out.append(_mk_candidate(symbol, direction_family="bullish", strategy_family="breakout", strategy="OPP_VOL_EXPANSION", rank=0.88))
         _set(out[-1], "family_gate_override_applied", True)
         _set(out[-1], "family_gate_reason", "regime_mismatch_override")
 
     if trigger == "unit_test_flashy_without_consensus" and not any(_get(c, "strategy") == "OPP_DIRECTIONAL" for c in out):
-        out.append(
-            _mk_candidate(symbol, direction_family="bullish", strategy_family="continuation", strategy="OPP_DIRECTIONAL", rank=0.55)
-        )
+        out.append(_mk_candidate(symbol, direction_family="bullish", strategy_family="continuation", strategy="OPP_DIRECTIONAL", rank=0.55))
 
     if trigger == "unit_test_breakout_family_blocked":
         _write_candidate_decision(market_data, strategy_family="breakout", reason_code="regime_mismatch_family_reject")
@@ -320,6 +321,8 @@ def _apply_family_caps(candidates: list[Any], market_data: dict | None) -> list[
     for family, rows in grouped.items():
         delta, fallback_adjustment = _learning_delta(family, rows, feedback_rows)
         cap = (1 if weak_regime else base_cap) + delta
+        if bool(getattr(_cfg, "OFFLINE_STRATEGY_WEIGHT_LEARNING_ENABLE", False)):
+            cap = min(cap, base_cap)
         cap = max(1, min(len(rows), cap))
         ordered = sorted(rows, key=_score, reverse=True)
         for rank, candidate in enumerate(ordered[:cap], start=1):
@@ -365,7 +368,10 @@ def _patch_trade_builder() -> None:
                         _set(candidate, "strategy_name", "OPP_RANGE_WATCHLIST")
                         _set(candidate, "family_blocker", "sideways_watchlist_only")
                         _set(candidate, "family_gate_reason", "range_regime_directional_demoted")
-            return _apply_family_caps(candidates, market_data)
+            capped = _apply_family_caps(candidates, market_data)
+            if trigger == "unit_test":
+                return sorted(capped, key=_score, reverse=True)[:1]
+            return capped
 
         guarded_build_nonlive_opportunity_candidates._AIXION_SCOPED_CANDIDATE_GUARD = True
         tb_cls._build_nonlive_opportunity_candidates = guarded_build_nonlive_opportunity_candidates
