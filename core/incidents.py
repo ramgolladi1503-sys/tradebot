@@ -7,6 +7,7 @@ from typing import Dict
 
 from config import config as cfg
 from core.audit_log import append_event
+from core.sensitive_redaction import redact_sensitive_data
 
 
 logger = logging.getLogger(__name__)
@@ -21,23 +22,24 @@ SEV4 = "SEV4"
 
 def create_incident(sev: str, code: str, context: Dict) -> str:
     incident_id = f"inc-{int(time.time())}-{code}"
+    safe_context = redact_sensitive_data(dict(context or {}))
     record = {
         "incident_id": incident_id,
         "sev": sev,
         "code": code,
-        "context": context,
+        "context": safe_context,
         "ts_epoch": time.time(),
     }
     INCIDENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with INCIDENTS_PATH.open("a") as f:
-        f.write(json.dumps(record) + "\n")
-    append_event({"event": "INCIDENT", "sev": sev, "code": code, "context": context})
+    with INCIDENTS_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, sort_keys=True) + "\n")
+    append_event({"event": "INCIDENT", "sev": sev, "code": code, "context": safe_context})
     try:
         from core.storage import emit_sla_violation_event
 
         emit_sla_violation_event(
             code=str(code or ""),
-            context=dict(context or {}),
+            context=safe_context,
             severity=str(sev or ""),
         )
     except Exception:
@@ -46,24 +48,25 @@ def create_incident(sev: str, code: str, context: Dict) -> str:
 
 
 def close_incident(incident_id: str, resolution: str):
+    safe_resolution = str(redact_sensitive_data(resolution))
     record = {
         "incident_id": incident_id,
-        "resolution": resolution,
+        "resolution": safe_resolution,
         "ts_epoch": time.time(),
     }
     INCIDENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with INCIDENTS_PATH.open("a") as f:
-        f.write(json.dumps(record) + "\n")
-    append_event({"event": "INCIDENT_CLOSED", "incident_id": incident_id, "resolution": resolution})
+    with INCIDENTS_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, sort_keys=True) + "\n")
+    append_event({"event": "INCIDENT_CLOSED", "incident_id": incident_id, "resolution": safe_resolution})
 
 
 def trigger_audit_chain_fail(context: Dict) -> str:
     from core import risk_halt
     incident_id = create_incident(SEV1, "AUDIT_CHAIN_FAIL", context)
     try:
-        risk_halt.set_halt("audit_chain_fail", {"incident_id": incident_id, **context})
+        risk_halt.set_halt("audit_chain_fail", {"incident_id": incident_id, **redact_sensitive_data(dict(context or {}))})
     except Exception as exc:
-        logger.error("incident_audit_chain_fail_halt_error err=%s", exc)
+        logger.error("incident_audit_chain_fail_halt_error err=%s", redact_sensitive_data(str(exc)))
     return incident_id
 
 
@@ -71,9 +74,9 @@ def trigger_db_write_fail(context: Dict) -> str:
     from core import risk_halt
     incident_id = create_incident(SEV1, "DB_WRITE_FAIL", context)
     try:
-        risk_halt.set_halt("db_write_fail", {"incident_id": incident_id, **context})
+        risk_halt.set_halt("db_write_fail", {"incident_id": incident_id, **redact_sensitive_data(dict(context or {}))})
     except Exception as exc:
-        logger.error("incident_db_write_fail_halt_error err=%s", exc)
+        logger.error("incident_db_write_fail_halt_error err=%s", redact_sensitive_data(str(exc)))
     return incident_id
 
 
@@ -84,9 +87,9 @@ def trigger_feed_stale(context: Dict) -> str:
         pilot_mode = bool(getattr(cfg, "LIVE_PILOT_MODE", False))
         if live_mode or pilot_mode:
             from core import risk_halt
-            risk_halt.set_halt("feed_stale", {"incident_id": incident_id, **context})
+            risk_halt.set_halt("feed_stale", {"incident_id": incident_id, **redact_sensitive_data(dict(context or {}))})
     except Exception as exc:
-        logger.error("incident_feed_stale_halt_error err=%s", exc)
+        logger.error("incident_feed_stale_halt_error err=%s", redact_sensitive_data(str(exc)))
     return incident_id
 
 
