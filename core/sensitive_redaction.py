@@ -25,10 +25,10 @@ _SENSITIVE_KEY_FRAGMENTS = (
     "token",
 )
 
-_TOKEN_VALUE_PATTERNS = (
-    re.compile(r"(?i)(access[_-]?token|api[_-]?key|authorization|bearer|password|secret|session)[=:]\s*['\"]?[^\s,'\"]+"),
-    re.compile(r"(?i)bearer\s+[a-z0-9._\-+/=]{12,}"),
+_KEY_VALUE_PATTERN = re.compile(
+    r"(?i)(access[_-]?token|api[_-]?key|authorization|password|secret|session)\s*([=:])\s*['\"]?[^\s,'\"]+"
 )
+_BEARER_PATTERN = re.compile(r"(?i)bearer\s+[a-z0-9._\-+/=]{12,}")
 
 
 def is_sensitive_key(key: object) -> bool:
@@ -42,9 +42,8 @@ def redact_text(value: object) -> str:
     text = str(value or "")
     if not text:
         return text
-    safe = text
-    for pattern in _TOKEN_VALUE_PATTERNS:
-        safe = pattern.sub(lambda match: match.group(0).split("=", 1)[0].split(":", 1)[0] + f"={REDACTED}", safe)
+    safe = _KEY_VALUE_PATTERN.sub(lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}", text)
+    safe = _BEARER_PATTERN.sub(f"Bearer {REDACTED}", safe)
     return safe
 
 
