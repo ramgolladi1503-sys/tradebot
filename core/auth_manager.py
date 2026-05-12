@@ -8,7 +8,7 @@ from typing import Any
 
 from config import config as cfg
 from core.paths import logs_dir, repo_root
-
+from core.sensitive_redaction import redact_sensitive_data
 
 
 _CACHE: dict[str, Any] = {}
@@ -64,16 +64,16 @@ def resolve_access_token(
 
 def _is_network_error(exc: Exception) -> bool:
     name = type(exc).__name__.lower()
-    msg = str(exc).lower()
+    msg = str(redact_sensitive_data(str(exc))).lower()
     if any(k in name for k in ("timeout", "connection", "network", "request")):
         return True
     return ("timed out" in msg) or ("connection" in msg and "invalid session" not in msg)
 
 
 def is_auth_error(exc: Exception | None = None, *, code: int | None = None, reason_text: str | None = None) -> bool:
-    text = str(reason_text or "")
+    text = str(redact_sensitive_data(reason_text or ""))
     if exc is not None:
-        text = f"{text} {exc}"
+        text = f"{text} {redact_sensitive_data(str(exc))}"
     lower = text.lower()
     if code == 403:
         return True
@@ -97,7 +97,7 @@ def is_auth_error(exc: Exception | None = None, *, code: int | None = None, reas
 def invalidate_cache(reason: str = "") -> None:
     _CACHE.clear()
     if reason:
-        _append_auth_event({"event": "AUTH_CACHE_INVALIDATED", "reason": reason, "ts_epoch": time.time()})
+        _append_auth_event({"event": "AUTH_CACHE_INVALIDATED", "reason": str(redact_sensitive_data(reason)), "ts_epoch": time.time()})
 
 
 def validate_token(
@@ -121,7 +121,7 @@ def validate_token(
         return {
             "ok": False,
             "auth_state": "FAILED",
-            "error": str(exc),
+            "error": str(redact_sensitive_data(str(exc))),
             "ts_epoch": now_epoch,
         }
     try:
@@ -156,12 +156,13 @@ def validate_token(
             "user_name": user_name,
         }
     except Exception as exc:
+        safe_error = str(redact_sensitive_data(str(exc)))
         if is_auth_error(exc):
             invalidate_cache(reason=f"profile_auth_error:{type(exc).__name__}")
             return {
                 "ok": False,
                 "auth_state": "AUTH_REQUIRED",
-                "error": f"profile_error:{type(exc).__name__}:{exc}",
+                "error": f"profile_error:{type(exc).__name__}:{safe_error}",
                 "ts_epoch": now_epoch,
             }
         if _is_network_error(exc):
@@ -174,7 +175,7 @@ def validate_token(
         return {
             "ok": False,
             "auth_state": "FAILED",
-            "error": f"profile_error:{type(exc).__name__}:{exc}",
+            "error": f"profile_error:{type(exc).__name__}:{safe_error}",
             "ts_epoch": now_epoch,
         }
 
@@ -192,7 +193,7 @@ def load_auth_state(*, repo_root_path: Path | str | None = None) -> dict[str, An
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-    return payload if isinstance(payload, dict) else {}
+    return redact_sensitive_data(payload) if isinstance(payload, dict) else {}
 
 
 def runtime_auth_snapshot(*, repo_root_path: Path | str | None = None) -> dict[str, Any]:
@@ -220,8 +221,8 @@ def set_auth_required_state(
 ) -> dict[str, Any]:
     payload = {
         "status": "AUTH_REQUIRED",
-        "reason": str(reason),
-        "source": str(source),
+        "reason": str(redact_sensitive_data(reason)),
+        "source": str(redact_sensitive_data(source)),
         "code": code,
         "ts_epoch": time.time(),
     }
@@ -234,7 +235,7 @@ def clear_auth_required_state(*, source: str, repo_root_path: Path | str | None 
     payload = {
         "status": "OK",
         "reason": "",
-        "source": str(source),
+        "source": str(redact_sensitive_data(source)),
         "ts_epoch": time.time(),
     }
     _write_auth_state(payload, repo_root_path=repo_root_path)
@@ -245,14 +246,16 @@ def clear_auth_required_state(*, source: str, repo_root_path: Path | str | None 
 def _write_auth_state(payload: dict[str, Any], *, repo_root_path: Path | str | None = None) -> None:
     path = auth_state_path(repo_root_path=repo_root_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    safe_payload = redact_sensitive_data(dict(payload or {}))
+    path.write_text(json.dumps(safe_payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _append_auth_event(payload: dict[str, Any]) -> None:
     path = logs_dir() / "auth_events.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
+    safe_payload = redact_sensitive_data(dict(payload or {}))
     try:
         with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, sort_keys=True, default=str) + "\n")
+            handle.write(json.dumps(safe_payload, sort_keys=True, default=str) + "\n")
     except Exception:
         pass
