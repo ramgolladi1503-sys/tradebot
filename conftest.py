@@ -178,14 +178,6 @@ def _patch_auth_and_feed_helpers() -> None:
         pass
 
 
-def _patch_readiness_runtime_feed_shadow() -> None:
-    try:
-        import core.readiness_gate as readiness_gate
-    except Exception:
-        return
-    readiness_gate._load_fresh_feed_runtime_snapshot = lambda now_epoch: {}
-
-
 def _set_ci_test_defaults() -> None:
     try:
         from config import config as cfg
@@ -202,5 +194,4 @@ def pytest_configure(config):
     _patch_dashboard_normalize_trade_df()
     _patch_data_quality_contract()
     _patch_auth_and_feed_helpers()
-    _patch_readiness_runtime_feed_shadow()
     _set_ci_test_defaults()
