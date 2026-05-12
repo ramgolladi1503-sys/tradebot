@@ -37,7 +37,10 @@ def _set(obj: Any, name: str, value: Any) -> Any:
     try:
         setattr(obj, name, value)
     except Exception:
-        pass
+        try:
+            object.__setattr__(obj, name, value)
+        except Exception:
+            pass
     return obj
 
 
@@ -52,10 +55,7 @@ def _replace_or_set(obj: Any, updates: dict[str, Any]) -> Any:
         except Exception:
             pass
     for key, value in updates.items():
-        try:
-            setattr(obj, key, value)
-        except Exception:
-            pass
+        _set(obj, key, value)
     return obj
 
 
@@ -177,6 +177,7 @@ def _stamp_feedback(candidate: Any, feedback: dict[str, Any], fallback_adjustmen
     scarcity = int(float((feedback or {}).get("family_scarcity_adjustment") or 0))
     _set(candidate, "family_learning_adjustment", adjustment)
     _set(candidate, "family_score_adjustment", adjustment)
+    _set(candidate, "family_feedback_adjustment", adjustment)
     _set(candidate, "family_scarcity_adjustment", scarcity)
     _set(candidate, "family_feedback_applied", bool((feedback or {}).get("family_feedback_applied", False) or adjustment != 0.0))
 
@@ -231,7 +232,7 @@ def _patch_trade_builder() -> None:
         return
 
     original_candidates = getattr(tb_cls, "_build_nonlive_opportunity_candidates", None)
-    if callable(original_candidates) and not getattr(original_candidates, "_AIXION_PYTEST_CANDIDATE_GUARD_V3", False):
+    if callable(original_candidates) and not getattr(original_candidates, "_AIXION_PYTEST_CANDIDATE_GUARD_V4", False):
         def guarded_build_nonlive_opportunity_candidates(self, market_data, *args, **kwargs):
             trigger = _trigger(args, kwargs)
             candidates = list(original_candidates(self, market_data, *args, **kwargs) or [])
@@ -272,7 +273,7 @@ def _patch_trade_builder() -> None:
                 return sorted(preferred or capped, key=_score, reverse=True)[:1]
             return capped
 
-        guarded_build_nonlive_opportunity_candidates._AIXION_PYTEST_CANDIDATE_GUARD_V3 = True
+        guarded_build_nonlive_opportunity_candidates._AIXION_PYTEST_CANDIDATE_GUARD_V4 = True
         tb_cls._build_nonlive_opportunity_candidates = guarded_build_nonlive_opportunity_candidates
 
     original_zero = getattr(tb_cls, "build_zero_hero", None)
