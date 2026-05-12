@@ -6,23 +6,32 @@ from typing import Any
 
 REDACTED = "[REDACTED]"
 
-_SENSITIVE_KEY_FRAGMENTS = (
+_NORMALIZED_EXACT_SENSITIVE_KEYS = {
     "access_token",
     "api_key",
     "apikey",
-    "auth",
     "authorization",
     "bearer",
     "client_secret",
     "cookie",
     "credential",
+    "credentials",
     "jwt",
     "kite_access_token",
     "password",
     "refresh_token",
     "secret",
-    "session",
-    "token",
+    "session_id",
+    "session_token",
+}
+
+_SENSITIVE_SUFFIXES = (
+    "_token",
+    "_secret",
+    "_password",
+    "_cookie",
+    "_credential",
+    "_credentials",
 )
 
 _KEY_VALUE_PATTERN = re.compile(
@@ -31,19 +40,28 @@ _KEY_VALUE_PATTERN = re.compile(
 _BEARER_PATTERN = re.compile(r"(?i)bearer\s+[a-z0-9._\-+/=]{12,}")
 
 
+def _normalize_key(key: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(key or "").strip().lower()).strip("_")
+
+
 def is_sensitive_key(key: object) -> bool:
-    text = str(key or "").strip().lower()
-    if not text:
+    normalized = _normalize_key(key)
+    if not normalized:
         return False
-    return any(fragment in text for fragment in _SENSITIVE_KEY_FRAGMENTS)
+    if normalized in _NORMALIZED_EXACT_SENSITIVE_KEYS:
+        return True
+    return normalized.endswith(_SENSITIVE_SUFFIXES) or normalized.startswith(("secret_", "password_"))
 
 
 def redact_text(value: object) -> str:
     text = str(value or "")
     if not text:
         return text
-    safe = _KEY_VALUE_PATTERN.sub(lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}", text)
-    safe = _BEARER_PATTERN.sub(f"Bearer {REDACTED}", safe)
+    safe = _BEARER_PATTERN.sub(f"Bearer {REDACTED}", text)
+    safe = _KEY_VALUE_PATTERN.sub(
+        lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}",
+        safe,
+    )
     return safe
 
 
