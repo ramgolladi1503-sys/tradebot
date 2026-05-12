@@ -10,6 +10,11 @@ from pathlib import Path
 from kiteconnect import KiteConnect, KiteTicker
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core.sensitive_redaction import redact_sensitive_data
+
 TOKEN_PATH = ROOT / ".runtime" / "kite_access_token"
 
 API_KEY = os.getenv("KITE_API_KEY", "").strip()
@@ -39,8 +44,12 @@ state = {
 }
 
 
+def _emit(payload: dict) -> None:
+    print(json.dumps(redact_sensitive_data(payload), default=str))
+
+
 def shutdown(code: int = 0) -> None:
-    print(json.dumps({"event": "FINAL_STATE", **state}, default=str))
+    _emit({"event": "FINAL_STATE", **state})
     try:
         kws.close()
     except Exception:
@@ -50,28 +59,22 @@ def shutdown(code: int = 0) -> None:
 
 def on_connect(ws, response):
     state["connected"] = True
-    print(
-        json.dumps(
-            {
-                "event": "WS_CONNECTED",
-                "response": response,
-                "token_count": len(TEST_TOKENS),
-                "tokens": TEST_TOKENS,
-            },
-            default=str,
-        )
+    _emit(
+        {
+            "event": "WS_CONNECTED",
+            "response": response,
+            "token_count": len(TEST_TOKENS),
+            "tokens": TEST_TOKENS,
+        }
     )
     ws.subscribe(TEST_TOKENS)
     ws.set_mode(ws.MODE_FULL, TEST_TOKENS)
-    print(
-        json.dumps(
-            {
-                "event": "WS_SUBSCRIBED",
-                "mode": "full",
-                "token_count": len(TEST_TOKENS),
-            },
-            default=str,
-        )
+    _emit(
+        {
+            "event": "WS_SUBSCRIBED",
+            "mode": "full",
+            "token_count": len(TEST_TOKENS),
+        }
     )
 
 
@@ -80,65 +83,53 @@ def on_ticks(ws, ticks):
     state["ticks_seen"] += len(ticks or [])
     state["last_tick_ts"] = time.time()
     sample = ticks[0] if ticks else {}
-    print(
-        json.dumps(
-            {
-                "event": "WS_TICKS",
-                "count": len(ticks or []),
-                "sample_keys": sorted(sample.keys()) if isinstance(sample, dict) else [],
-                "sample_token": sample.get("instrument_token") if isinstance(sample, dict) else None,
-                "sample_ltp": sample.get("last_price") if isinstance(sample, dict) else None,
-            },
-            default=str,
-        )
+    _emit(
+        {
+            "event": "WS_TICKS",
+            "count": len(ticks or []),
+            "sample_keys": sorted(sample.keys()) if isinstance(sample, dict) else [],
+            "sample_token": sample.get("instrument_token") if isinstance(sample, dict) else None,
+            "sample_ltp": sample.get("last_price") if isinstance(sample, dict) else None,
+        }
     )
 
 
 def on_error(ws, code, reason):
     _ = ws
-    state["last_error"] = f"{code}:{reason}"
-    print(
-        json.dumps(
-            {
-                "event": "WS_ERROR",
-                "code": code,
-                "reason": reason,
-            },
-            default=str,
-        )
+    state["last_error"] = f"{code}:{redact_sensitive_data(reason)}"
+    _emit(
+        {
+            "event": "WS_ERROR",
+            "code": code,
+            "reason": reason,
+        }
     )
 
 
 def on_close(ws, code, reason):
     _ = ws
-    print(
-        json.dumps(
-            {
-                "event": "WS_CLOSED",
-                "code": code,
-                "reason": reason,
-            },
-            default=str,
-        )
+    _emit(
+        {
+            "event": "WS_CLOSED",
+            "code": code,
+            "reason": reason,
+        }
     )
 
 
 def on_reconnect(ws, attempts_count):
     _ = ws
-    print(
-        json.dumps(
-            {
-                "event": "WS_RECONNECT",
-                "attempts_count": attempts_count,
-            },
-            default=str,
-        )
+    _emit(
+        {
+            "event": "WS_RECONNECT",
+            "attempts_count": attempts_count,
+        }
     )
 
 
 def on_noreconnect(ws):
     _ = ws
-    print(json.dumps({"event": "WS_NO_RECONNECT"}, default=str))
+    _emit({"event": "WS_NO_RECONNECT"})
     shutdown(2)
 
 
@@ -158,15 +149,12 @@ def handle_sigint(signum, frame):
 
 signal.signal(signal.SIGINT, handle_sigint)
 
-print(
-    json.dumps(
-        {
-            "event": "WS_START",
-            "api_key_tail": API_KEY[-4:],
-            "token_count": len(TEST_TOKENS),
-        },
-        default=str,
-    )
+_emit(
+    {
+        "event": "WS_START",
+        "api_key_present": bool(API_KEY),
+        "token_count": len(TEST_TOKENS),
+    }
 )
 
 kws.connect(threaded=False)
