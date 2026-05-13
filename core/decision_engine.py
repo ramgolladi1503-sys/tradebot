@@ -50,6 +50,12 @@ def _get_value(candidate: Any, field: str, default: Any = None) -> Any:
     return getattr(candidate, field, default)
 
 
+def _has_field(candidate: Any, field: str) -> bool:
+    if isinstance(candidate, dict):
+        return field in candidate
+    return hasattr(candidate, field)
+
+
 def _source_flags(candidate: Any) -> dict[str, Any]:
     value = _get_value(candidate, "source_flags", {}) or {}
     return value if isinstance(value, dict) else {}
@@ -128,6 +134,101 @@ def _infer_candidate_class(candidate: Any) -> str:
     if truth_quality == TRUTH_DEGRADED:
         return "degraded"
     return "real"
+
+
+def _truth_or_source_reasons(candidate: Any, score_payload: dict[str, Any] | None = None) -> list[str]:
+    """Return evidence that should stop an EXECUTE decision.
+
+    This intentionally blocks when bad evidence is present, but does not require
+    every historical fixture to carry every newer source-lineage field.
+    """
+    flags = _source_flags(candidate)
+    reasons: list[str] = []
+    truth_quality = str(
+        (score_payload or {}).get("truth_quality") or derive_truth_quality(candidate)
+    ).strip().upper()
+    candidate_class = str(
+        (score_payload or {}).get("candidate_class") or _infer_candidate_class(candidate)
+    ).strip().lower()
+
+    if truth_quality and truth_quality != TRUTH_REAL:
+        reasons.append(f"truth_quality_{truth_quality.lower()}")
+    if candidate_class and candidate_class != "real":
+        reasons.append(f"candidate_class_{candidate_class}")
+
+    hard_boolean_flags = (
+        "fallback_candidate",
+        "recovered_fallback",
+        "planning_only",
+        "phase2_spread_fallback_used",
+        "phase2_liquidity_fallback_used",
+        "fallback_fields",
+        "synthetic_candidate",
+        "synthetic_source",
+        "unresolved_contract",
+    )
+    for field in hard_boolean_flags:
+        if bool(_get_value(candidate, field, False)) or bool(flags.get(field, False)):
+            reasons.append(field)
+
+    fallback_values = {
+        "",
+        "unknown",
+        "none",
+        "fallback",
+        "quote_fallback",
+        "close_fallback",
+        "recovered_fallback",
+        "synthetic",
+        "synthetic_chain",
+        "synthetic_offhours",
+        "rest_fallback",
+    }
+    source_fields = (
+        "quote_source",
+        "chain_source",
+        "execution_entry_source",
+        "contract_source",
+        "price_source",
+    )
+    for field in source_fields:
+        value_present = _has_field(candidate, field) or field in flags
+        value = str(_get_value(candidate, field, flags.get(field, "")) or "").strip().lower()
+        if value_present and value in fallback_values:
+            reasons.append(f"{field}_{value or 'missing'}")
+
+    lineage_fields = (
+        "price_lineage",
+        "spread_lineage",
+        "liquidity_lineage",
+        "contract_lineage",
+        "execution_entry_lineage",
+    )
+    for field in lineage_fields:
+        value = str(_get_value(candidate, field, flags.get(field, "")) or "").strip().upper()
+        if value.startswith(("FALLBACK", "RECOVERED", "SYNTHETIC")) or value == "UNKNOWN":
+            reasons.append(f"{field.lower()}_{value.lower()}")
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for reason in reasons:
+        if reason not in seen:
+            seen.add(reason)
+            unique.append(reason)
+    return unique
+
+
+def _quote_context_reasons(candidate: Any) -> list[str]:
+    reasons: list[str] = []
+    for field in ("best_bid", "best_ask", "spread_pct"):
+        if _has_field(candidate, field) and _safe_float(_get_value(candidate, field)) is None:
+            reasons.append(f"missing_{field}")
+    if _has_field(candidate, "best_bid") and _has_field(candidate, "best_ask"):
+        bid = _safe_float(_get_value(candidate, "best_bid"))
+        ask = _safe_float(_get_value(candidate, "best_ask"))
+        if bid is not None and ask is not None and (bid <= 0 or ask <= 0 or ask < bid):
+            reasons.append("invalid_bid_ask")
+    return reasons
 
 
 def _liquidity_quality(candidate: Any) -> float:
@@ -346,8 +447,10 @@ def _has_invalid_geometry(candidate: Any) -> bool:
 
 def _is_execution_ready(candidate: Any, score_payload: dict[str, Any]) -> tuple[bool, list[str]]:
     reasons: list[str] = []
-    if score_payload["feed"]["feed_state"] == "invalid":
+    if score_payload["feed"]["feed_state"] != "healthy":
         reasons.append("feed_not_healthy")
+    reasons.extend(_truth_or_source_reasons(candidate, score_payload))
+    reasons.extend(_quote_context_reasons(candidate))
     if bool(_get_value(candidate, "execution_blocked")):
         reasons.append("execution_blocked")
     if bool(_get_value(candidate, "unresolved_contract")):
@@ -366,7 +469,59 @@ def _is_execution_ready(candidate: Any, score_payload: dict[str, Any]) -> tuple[
             reasons.append("execution_quality_reject")
         else:
             reasons.append("execution_quality_not_ready")
-    return (len(reasons) == 0), reasons
+    seen: set[str] = set()
+    unique = [reason for reason in reasons if not (reason in seen or seen.add(reason))]
+    return (len(unique) == 0), unique
+
+
+def _meets_execute_quality_floor(
+    candidate: Any,
+    score_payload: dict[str, Any],
+    *,
+    effective_raw_rank: float,
+    min_raw_rank: float,
+    execute_min_score: float,
+    execution_ready: bool,
+    readiness_reasons: list[str],
+) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    if not execution_ready:
+        reasons.extend(readiness_reasons or ["execution_not_ready"])
+
+    final_score = float(score_payload.get("final_score") or 0.0)
+    if final_score < execute_min_score:
+        reasons.append("final_score_below_execute_floor")
+    if effective_raw_rank < min_raw_rank:
+        reasons.append("raw_rank_below_execute_floor")
+
+    min_fill_probability = float(
+        getattr(cfg, "DECISION_ENGINE_EXECUTE_MIN_FILL_PROBABILITY", 0.50) or 0.50
+    )
+    fill_probability = float(score_payload.get("fill_probability") or 0.0)
+    if fill_probability < min_fill_probability:
+        reasons.append("fill_probability_below_execute_floor")
+
+    min_execution_quality = float(
+        getattr(cfg, "DECISION_ENGINE_EXECUTE_MIN_EXECUTION_QUALITY_SCORE", 0.50) or 0.50
+    )
+    execution_quality_score = float(score_payload.get("execution_quality_score") or 0.0)
+    if execution_quality_score < min_execution_quality:
+        reasons.append("execution_quality_below_execute_floor")
+
+    min_risk_quality = float(
+        getattr(cfg, "DECISION_ENGINE_EXECUTE_MIN_RISK_ADJUSTED_SCORE", 0.0) or 0.0
+    )
+    risk_adjusted_score = float(score_payload.get("risk_adjusted_score") or 0.0)
+    if risk_adjusted_score < min_risk_quality:
+        reasons.append("risk_reward_below_execute_floor")
+
+    order_policy = str(score_payload.get("order_policy") or "").strip().lower()
+    if order_policy in {"", "reject", "advisory"}:
+        reasons.append("non_executable_order_policy")
+
+    seen: set[str] = set()
+    unique = [reason for reason in reasons if not (reason in seen or seen.add(reason))]
+    return (len(unique) == 0), unique
 
 
 def _decision_payload(
@@ -421,6 +576,15 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
     selected_for_execution = bool(_get_value(candidate, "selected_for_execution"))
     has_rank_context = _safe_float(_get_value(candidate, "rank_global")) is not None
     candidate_class = str(score_payload.get("candidate_class") or _get_value(candidate, "candidate_class") or "").strip().lower()
+    execute_floor_ok, execute_floor_reasons = _meets_execute_quality_floor(
+        candidate,
+        score_payload,
+        effective_raw_rank=effective_raw_rank,
+        min_raw_rank=min_raw_rank,
+        execute_min_score=max(execute_min_score, float(score_payload["adaptive_execution_threshold"])),
+        execution_ready=execution_ready,
+        readiness_reasons=readiness_reasons,
+    )
 
     if _has_invalid_geometry(candidate):
         return _decision_payload(
@@ -467,29 +631,39 @@ def evaluate_candidate_decision(candidate: dict[str, Any]) -> dict[str, Any]:
             decision_reason = "raw_rank_below_execute_floor"
         else:
             decision_reason = "raw_rank_too_low"
-    elif gating_confidence >= promote_strong_conf:
+    elif not execute_floor_ok:
+        if max(final_score, raw_score, gating_confidence) >= queue_min_score:
+            decision_action = "QUEUE"
+            decision_reason = "execute_quality_floor_not_met"
+        else:
+            decision_reason = "execute_quality_floor_not_met"
+    elif gating_confidence >= promote_strong_conf and final_score >= max(execute_min_score, float(score_payload["adaptive_execution_threshold"])):
         decision_action = "EXECUTE"
         decision_reason = "strong_confidence_executable_entry"
-    elif gating_confidence >= promote_min_conf:
+    elif gating_confidence >= promote_min_conf and final_score >= max(execute_min_score, float(score_payload["adaptive_execution_threshold"])):
         decision_action = "EXECUTE"
         decision_reason = "strong_signal"
     elif final_score >= max(execute_min_score, float(score_payload["adaptive_execution_threshold"])):
         decision_action = "EXECUTE"
         decision_reason = "strong_edge"
     elif gating_confidence >= promote_min_conf and max(final_score, raw_score) >= queue_min_score and (selected_for_execution or has_rank_context):
-        decision_action = "EXECUTE"
-        decision_reason = "ranked_top_candidate_promoted"
+        decision_action = "QUEUE"
+        decision_reason = "ranked_top_candidate_queue_only"
     elif final_score >= queue_min_score:
         decision_action = "QUEUE"
         decision_reason = "borderline_edge"
     else:
         decision_reason = "below_queue_threshold"
 
+    combined_readiness_reasons = readiness_reasons
+    if decision_action != "EXECUTE" and execute_floor_reasons:
+        combined_readiness_reasons = list(dict.fromkeys([*readiness_reasons, *execute_floor_reasons]))
+
     return _decision_payload(
         candidate,
         score_payload,
         decision_action=decision_action,
         decision_reason=decision_reason,
-        readiness_reasons=readiness_reasons,
+        readiness_reasons=combined_readiness_reasons,
         execution_ready=execution_ready,
     )
