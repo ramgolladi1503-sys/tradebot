@@ -41,13 +41,16 @@ def _tradebuilder_candidate_decision_telemetry_payload(candidate, source_flags, 
     quality_detail_source = "source_flags" if isinstance(source_quality, dict) else "native"
     if quality_detail and "candidate_quality_score" not in quality_detail:
         trigger_score = _safe_float(getattr(candidate, "trigger_score", 0.0))
+        entry_quality_score = _safe_float(getattr(candidate, "entry_quality_score", 0.0))
         regime_conf = _safe_float(getattr(candidate, "regime_conf", 0.0))
         signal_score = _safe_float(getattr(candidate, "signal_score", 0.0))
         family_survival = _safe_float(getattr(candidate, "family_survival_score", 0.0))
-        quality_detail.setdefault("setup_regime_alignment_score", round(((regime_conf + signal_score) / 2.0) - 0.155, 3))
-        quality_detail.setdefault("setup_structure_score", round(_safe_float(quality_detail.get("trigger_base_score")) + 0.01, 4))
-        quality_detail.setdefault("setup_thesis_score", round((signal_score + family_survival) / 2.0, 2))
-        quality_detail.setdefault("trigger_base_score", trigger_score)
+        quality_detail["setup_regime_alignment_score"] = round((regime_conf + signal_score) / 2.0, 3)
+        quality_detail["setup_structure_score"] = round(_safe_float(quality_detail.get("trigger_base_score")) + 0.01, 4)
+        quality_detail["setup_thesis_score"] = round((signal_score + family_survival) / 2.0, 2)
+        quality_detail["trigger_base_score"] = trigger_score
+        if entry_quality_score:
+            quality_detail.setdefault("entry_quality_score", entry_quality_score)
         if not isinstance(source_quality, dict):
             quality_detail_source = "native_setup_enriched"
     payload = {
