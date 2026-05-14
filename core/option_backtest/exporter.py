@@ -177,6 +177,7 @@ def build_option_backtest_frame(
     bars = (
         ticks.groupby("minute", as_index=False)
         .agg(
+            timestamp_epoch=("timestamp_epoch", "first"),
             open=("last_price", "first"),
             high=("last_price", "max"),
             low=("last_price", "min"),
@@ -206,7 +207,7 @@ def build_option_backtest_frame(
 
     bars["symbol"] = str(tradingsymbol)
     bars["timestamp"] = bars["minute"].dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S")
-    return bars[["timestamp", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]]
+    return bars[["timestamp", "timestamp_epoch", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]]
 
 
 def export_option_backtest_csv(
@@ -239,10 +240,6 @@ def export_option_backtest_csv(
         "ok": True,
         "output_path": str(output_path),
         "rows": int(len(frame)),
-        "tradingsymbol": str(tradingsymbol),
+        "tradingsymbol": str(tradingsymbol).upper(),
         "instrument_token": int(instrument_token),
-        "has_bid_rows": int(frame["bid"].notna().sum()) if "bid" in frame.columns else 0,
-        "has_ask_rows": int(frame["ask"].notna().sum()) if "ask" in frame.columns else 0,
-        "timestamp_min": str(frame["timestamp"].min()) if not frame.empty else None,
-        "timestamp_max": str(frame["timestamp"].max()) if not frame.empty else None,
     }
