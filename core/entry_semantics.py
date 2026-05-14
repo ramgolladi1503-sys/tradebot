@@ -44,8 +44,6 @@ _FILL_ENTRY_SOURCES = (
     "broker_avg_fill_price",
 )
 
-# "APPROVED or later" is interpreted as the execution-side lifecycle where
-# order approval has happened and downstream states follow.
 _REQUIRES_EXPECTED_ENTRY_STATES = {
     "APPROVED",
     "SENT",
@@ -87,7 +85,7 @@ def _safe_float(value: Any) -> float | None:
         out = float(value)
     except Exception:
         return None
-    if out != out:  # NaN guard
+    if out != out:
         return None
     return out
 
@@ -365,13 +363,19 @@ def build_entry_state(
     age_val = _safe_float(quote_age_sec)
     trusted_quote_source = quote_source_key not in _UNTRUSTED_QUOTE_SOURCES
 
-    display_mid = _valid_positive_quote(mid)
+    raw_bid = _valid_positive_quote(bid)
+    raw_ask = _valid_positive_quote(ask)
+    raw_mark = _valid_positive_quote(mark)
+    raw_mid = _valid_positive_quote(mid)
+    raw_last = _valid_positive_quote(last)
+
+    display_mid = raw_mid
     display_bid = _valid_quote_by_age(bid, age_val, display_max_age_sec)
     display_ask = _valid_quote_by_age(ask, age_val, display_max_age_sec)
     display_mark = _valid_quote_by_age(mark, age_val, display_max_age_sec)
     display_last = _valid_quote_by_age(last, age_val, display_max_age_sec)
-    if display_mid is None and display_bid is not None and display_ask is not None:
-        display_mid = (display_bid + display_ask) / 2.0
+    if display_mid is None and raw_bid is not None and raw_ask is not None:
+        display_mid = (raw_bid + raw_ask) / 2.0
 
     execution_bid = _valid_quote_by_age(bid, age_val, exec_max_age_sec)
     execution_ask = _valid_quote_by_age(ask, age_val, exec_max_age_sec)
@@ -388,9 +392,7 @@ def build_entry_state(
     display_entry = execution_entry
     display_entry_source = execution_entry_source if execution_entry is not None else None
     display_entry_status = "displayable" if execution_entry is not None else "missing"
-    entry_reason = (
-        f"execution_from_{execution_entry_source}" if execution_entry is not None else None
-    )
+    entry_reason = f"execution_from_{execution_entry_source}" if execution_entry is not None else None
     entry_clear_reason = None
 
     if not instrument_matches:
@@ -430,7 +432,7 @@ def build_entry_state(
                 entry_clear_reason = "invalid_quote_value"
             elif age_val > float(display_max_age_sec):
                 entry_clear_reason = "stale_quote"
-            elif any(_valid_positive_quote(v) is not None for v in (bid, ask, mark, mid, last)):
+            elif any(v is not None for v in (raw_bid, raw_ask, raw_mark, raw_mid, raw_last)):
                 entry_clear_reason = "invalid_quote_value"
             else:
                 entry_clear_reason = "missing_executable_quote"
@@ -449,7 +451,6 @@ def build_entry_state(
         "execution_entry": execution_entry,
         "execution_entry_source": execution_entry_source,
         "execution_entry_status": execution_entry_status,
-        # Explicit execution-truth field so downstream gating does not rely on display lifecycle.
         "entry_execution_status": execution_entry_status,
         "display_entry": display_entry,
         "display_entry_source": display_entry_source,
@@ -491,11 +492,11 @@ def build_entry_state(
         str(expiry or ""),
         str(right or "").upper(),
         direction_key,
-        _valid_positive_quote(bid),
-        _valid_positive_quote(ask),
-        _valid_positive_quote(mark),
-        _valid_positive_quote(mid),
-        _valid_positive_quote(last),
+        raw_bid,
+        raw_ask,
+        raw_mark,
+        raw_mid,
+        raw_last,
         age_val,
         out["execution_entry"],
         out["execution_entry_source"],
@@ -530,13 +531,7 @@ def build_entry_state(
             "display_entry": out["display_entry"],
             "display_entry_status": out["display_entry_status"],
             "derivation_reason": out["entry_reason"] or out["entry_clear_reason"],
-            "derivation_source_chain": [
-                "ask",
-                "bid",
-                "mark",
-                "mid",
-                "last",
-            ],
+            "derivation_source_chain": ["ask", "bid", "mark", "mid", "last"],
         },
     )
     return out
@@ -567,11 +562,6 @@ def _resolve_mode(row: Mapping[str, Any], mode: str | None) -> str:
 
 
 def resolve_entry_price(row: Mapping[str, Any], *, mode: str | None = None) -> float | None:
-    """
-    Contract:
-    - PAPER/SIM/OFFHOURS/ADVISORY => expected_entry
-    - LIVE/ARMED => fill_entry if available else expected_entry
-    """
     expected_entry = _safe_float(row.get("expected_entry"))
     fill_entry = _safe_float(row.get("fill_entry"))
     mode_key = _resolve_mode(row, mode)
