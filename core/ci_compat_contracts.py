@@ -44,7 +44,53 @@ def _csv_set(raw: Any) -> set[str]:
     return {p.strip().lower() for p in str(raw or "").split(",") if p.strip()}
 
 
+def _source_flags(candidate: Any) -> dict[str, Any]:
+    flags = _get(candidate, "source_flags", {}) or {}
+    return flags if isinstance(flags, dict) else {}
+
+
+def _candidate_truth_class(candidate: Any) -> str:
+    flags = _source_flags(candidate)
+    for key in ("candidate_class", "row_kind", "candidate_origin", "trade_status"):
+        text = str(_get(candidate, key, "") or "").strip().lower()
+        if text:
+            return text
+    for key in ("candidate_class", "row_kind", "candidate_origin", "origin", "trade_status"):
+        text = str(flags.get(key) or "").strip().lower()
+        if text:
+            return text
+    return ""
+
+
+def _execution_class_blocks(candidate: Any) -> bool:
+    klass = _candidate_truth_class(candidate)
+    flags = _source_flags(candidate)
+    if bool(_get(candidate, "planning_only", False) or _get(candidate, "advisory_only", False)):
+        return True
+    if bool(flags.get("planning_only") or flags.get("advisory_only") or flags.get("debug_candidate")):
+        return True
+    blocked_markers = {
+        "fallback",
+        "recovered_fallback",
+        "fallback_min_breadth",
+        "planning",
+        "planning_only",
+        "synthetic",
+        "softened",
+        "softened_builder_path",
+        "advisory",
+        "advisory_only",
+        "invalid_snapshot",
+        "pre_builder_gate",
+    }
+    if klass in blocked_markers:
+        return True
+    return any(marker in klass for marker in ("fallback", "planning", "synthetic", "softened", "advisory"))
+
+
 def _is_exec(candidate: Any) -> bool:
+    if _execution_class_blocks(candidate):
+        return False
     return bool(
         _get(candidate, "execution_entry") is not None
         and str(_get(candidate, "execution_entry_status", "")).lower() == "executable"
