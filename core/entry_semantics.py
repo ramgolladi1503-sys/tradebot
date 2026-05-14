@@ -329,6 +329,8 @@ def _derive_entry_thresholds(
             expiry_lotto_mode=bool(getattr(cfg, "EXPIRY_LOTTO_MODE", False)),
         )
     )
+    if not bool(allow_stale_quotes) and mode and str(mode).strip().upper() in {"LIVE", "ARMED"}:
+        display_max_age_sec = min(float(display_max_age_sec), float(execution_max_age_sec))
     return execution_max_age_sec, display_max_age_sec
 
 
