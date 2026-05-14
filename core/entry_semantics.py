@@ -371,13 +371,13 @@ def build_entry_state(
     raw_mid = _valid_positive_quote(mid)
     raw_last = _valid_positive_quote(last)
 
-    display_mid = raw_mid
     display_bid = _valid_quote_by_age(bid, age_val, display_max_age_sec)
     display_ask = _valid_quote_by_age(ask, age_val, display_max_age_sec)
     display_mark = _valid_quote_by_age(mark, age_val, display_max_age_sec)
     display_last = _valid_quote_by_age(last, age_val, display_max_age_sec)
-    if display_mid is None and raw_bid is not None and raw_ask is not None:
-        display_mid = (raw_bid + raw_ask) / 2.0
+    display_mid = _valid_quote_by_age(mid, age_val, display_max_age_sec)
+    if display_mid is None and display_bid is not None and display_ask is not None:
+        display_mid = (display_bid + display_ask) / 2.0
 
     execution_bid = _valid_quote_by_age(bid, age_val, exec_max_age_sec)
     execution_ask = _valid_quote_by_age(ask, age_val, exec_max_age_sec)
