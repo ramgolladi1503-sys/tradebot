@@ -1,4 +1,4 @@
-# Tradebot Reliable Trading Layer — Opportunity Engine V2 Product Bible
+# Tradebot Reliable Trading Layer - Opportunity Engine V2 Product Bible
 
 ## 1. Purpose
 
@@ -17,30 +17,28 @@ Before any trade is considered, the system must answer:
 7. What size is allowed?
 8. What will stop this trade from becoming reckless?
 9. Can the full decision be replayed after the session?
-10. Can CI, replay, and live/paper validation prove the change did not weaken the system?
+10. Can CI, replay, and live or paper validation prove the change did not weaken the system?
 
-Tradebot remains a QA/SDET + fintech reliability project. This document does not claim trading profitability. It defines the engineering standard required before Tradebot can be trusted as a serious trading layer.
-
----
+Tradebot remains a QA, SDET, and fintech reliability project. This document does not claim trading profitability. It defines the engineering standard required before Tradebot can be trusted as a serious trading layer.
 
 ## 2. North Star
 
 Tradebot V2 must become a reliable trading decision layer, not a row-emitting dashboard.
 
-The target behavior:
+Target flow:
 
 ```text
 fresh market data
-  → validated contracts
-  → candidate discovery
-  → data-quality gate
-  → regime-aware scoring
-  → explainable ranking
-  → execution safety
-  → capital allocation
-  → broker/order lifecycle guard
-  → replay/audit
-  → cockpit dashboard
+  -> validated contracts
+  -> candidate discovery
+  -> data-quality gate
+  -> regime-aware scoring
+  -> explainable ranking
+  -> execution safety
+  -> capital allocation
+  -> broker and order lifecycle guard
+  -> replay and audit
+  -> cockpit dashboard
 ```
 
 The system is successful only when it can clearly explain:
@@ -54,9 +52,7 @@ The system is successful only when it can clearly explain:
 - what it executed or would have executed;
 - what happened after the decision.
 
----
-
-## 3. Core Problem Statement
+## 3. Current Failure Pattern
 
 The current system can produce rows, but rows are not opportunities.
 
@@ -64,17 +60,15 @@ The V1 failure pattern is:
 
 - strategy output is emitted too directly into UI tables;
 - weak and strong candidates look similar;
-- fallback/recovered values can pollute decision logic;
+- fallback or recovered values can pollute decision logic;
 - stale feed conditions can leak into display or execution paths;
 - ranking is not clearly separated from execution eligibility;
-- UI filtering hides weak data instead of making decision quality better;
+- UI filtering hides weak data instead of improving decision quality;
 - post-run review is hard because candidate, decision, order, and outcome snapshots are not first-class artifacts;
 - CI can prove code compiles, but not yet prove trading-layer reliability;
 - live-run validation is still too dependent on manual interpretation.
 
 V2 must fix the product brain and reliability layer, not merely reorganize screens.
-
----
 
 ## 4. Product Positioning
 
@@ -104,8 +98,6 @@ It should not behave like:
 - a broker-click automation toy;
 - a black-box signal bot.
 
----
-
 ## 5. Non-Negotiable Product Principles
 
 ### 5.1 Data truth before trade intelligence
@@ -126,9 +118,9 @@ DISCONNECTED
 
 Execution rule:
 
-- `REALTIME` may become executable.
-- `DELAYED`, `STALE`, `FALLBACK`, `SUSPECT`, and `DISCONNECTED` may be advisory only or blocked.
-- `MISSING` must be blocked.
+- REALTIME may become executable.
+- DELAYED, STALE, FALLBACK, SUSPECT, and DISCONNECTED may be advisory only or blocked.
+- MISSING must be blocked.
 
 ### 5.2 Feed health is a first-class trading input
 
@@ -156,8 +148,8 @@ A high-ranked candidate can still be non-executable.
 
 Examples:
 
-- high score + wide spread = attractive but not executable;
-- medium score + fresh quote + tight spread = potentially executable at smaller size.
+- high score plus wide spread means attractive but not executable;
+- medium score plus fresh quote plus tight spread can be executable at smaller size.
 
 ### 5.5 Explain every decision
 
@@ -173,7 +165,7 @@ Required reason buckets:
 - contract-resolution reasons;
 - execution reasons;
 - sizing reasons;
-- replay/outcome reasons.
+- replay or outcome reasons.
 
 ### 5.6 Human cockpit, not table viewer
 
@@ -183,7 +175,7 @@ The top-level UI must distinguish:
 
 - top opportunities;
 - ready but not approved;
-- watchlist / near executable;
+- watchlist or near executable;
 - blocked candidates;
 - stale-feed candidates;
 - contract-resolution failures;
@@ -199,15 +191,11 @@ The system must not quietly continue as if healthy when a critical layer is degr
 
 If feed quality drops, broker connection fails, contract resolution breaks, or risk limits are exceeded, the system must downgrade, block, alert, and record the reason.
 
----
-
 ## 6. Reference Architecture Extraction
 
 Tradebot V2 must not be designed in isolation. Before and during implementation, we must extract proven patterns from mature open-source trading systems and adapt only the parts that fit Tradebot's Indian index-options reality.
 
 The purpose is not to copy code. The purpose is to extract architecture, failure handling, testing boundaries, and operational discipline.
-
-### 6.1 Reference systems
 
 Reference systems to study:
 
@@ -216,82 +204,35 @@ QuantConnect LEAN
 Freqtrade
 Hummingbot
 vn.py / VeighNa
-FinRL / FinRL-X style research-to-deployment pipelines
-Backtrader-style strategy/replay harnesses
+FinRL or FinRL-X style research-to-deployment pipelines
+Backtrader-style strategy and replay harnesses
 ```
 
-### 6.2 Patterns to extract
+Patterns to extract:
 
-From QuantConnect LEAN:
+- LEAN: separation between universe selection, alpha generation, portfolio construction, risk management, and execution.
+- LEAN: risk management as a layer that can override targets before execution.
+- Freqtrade: cooldowns, stoploss guards, low-profit-pair locks, max-drawdown guards, and protection tests.
+- Hummingbot: strategy, connector, executor, order candidate, and order-event separation.
+- Hummingbot: executor lifecycle, retry limits, balance validation, start and stop behavior, and event registration.
+- vn.py: event-driven engine architecture, gateway separation, paper account boundary, data recorder, risk manager, and RPC routing.
+- FinRL-style pipelines: separation between data processing, research, backtesting, broker execution, and portfolio risk overlays.
 
-- separation between universe selection, alpha generation, portfolio construction, risk management, and execution;
-- risk management as a layer that can override targets before execution;
-- debug visibility for insights, targets, risk-adjusted targets, and execution flow;
-- warmup/delisted/invalid-security checks before processing signals.
-
-From Freqtrade:
-
-- protection mechanisms such as cooldowns, stoploss guards, low-profit-pair locks, and max-drawdown guards;
-- configuration validation for risk/protection settings;
-- pair/global lock concepts;
-- test-heavy behavior around protections.
-
-From Hummingbot:
-
-- separation between strategies, connectors, executors, order candidates, and order event processing;
-- executor lifecycle with status, retry limits, balance validation, start/stop behavior, and event registration;
-- active order, fill, cancel, completion, and failure event handling;
-- connector abstraction for prices, balances, trading rules, and order books.
-
-From vn.py / VeighNa:
-
-- event-driven engine architecture;
-- gateway separation for broker/data providers;
-- dedicated risk-manager app concepts;
-- paper account / simulation account boundary;
-- data recorder and historical data management for replay/backtesting;
-- RPC/distributed routing for quotes and trades.
-
-From FinRL / research frameworks:
-
-- separation between data processing, strategy construction, backtesting, broker execution, and portfolio/risk overlays;
-- consistency between research/backtest semantics and deployment semantics;
-- evidence-driven evaluation instead of screenshot-driven validation.
-
-### 6.3 Patterns not to copy blindly
-
-Do not blindly copy:
+Patterns not to copy blindly:
 
 - crypto exchange assumptions into NSE options;
-- portfolio-target models that ignore option liquidity and contract expiry;
-- ML-first strategy generation before feed and execution truth are fixed;
-- code structure that conflicts with current Tradebot CI/runtime constraints;
+- portfolio-target models that ignore option liquidity and expiry;
+- ML-first signal generation before feed and execution truth are fixed;
+- code structure that conflicts with current Tradebot CI or runtime constraints;
 - live-execution behavior without paper-mode parity and replay.
 
-### 6.4 Tradebot-specific adaptations
-
-Tradebot must adapt those patterns into:
-
-```text
-candidate_pool instead of raw trade rows
-quote_freshness_gate before ranking
-contract_resolution_guard before order intent
-execution_gate before broker adapter
-capital_allocator before order intent
-order_intent before order submission
-reconciliation before trusted runtime status
-replay_store before live confidence
-```
-
-### 6.5 Required benchmark artifact
-
-Add a dedicated benchmark document before heavy implementation:
+Required benchmark artifact:
 
 ```text
 docs/reference_architecture/TRADEBOT_V2_REFERENCE_EXTRACTION.md
 ```
 
-It must include:
+That artifact must include:
 
 - reference system reviewed;
 - pattern extracted;
@@ -301,59 +242,36 @@ It must include:
 - target Tradebot module impacted;
 - acceptance test that proves the pattern is implemented safely.
 
-### 6.6 Acceptance rule
+Acceptance rule:
 
 No major V2 runtime module should be built without checking whether a mature reference system already solved the same class of problem.
-
-If we do not study references, we risk rebuilding amateur versions of solved layers.
-
----
 
 ## 7. Target Architecture
 
 ```text
 broker websocket / broker REST / instruments / strategy scanners
-        ↓
-market_data_ingestion
-        ↓
-feed_health_monitor
-        ↓
-quote_freshness_gate
-        ↓
-contract_resolution_guard
-        ↓
-candidate_pool
-        ↓
-data_quality_gate
-        ↓
-regime_detector
-        ↓
-scoring_engine
-        ↓
-ranking_engine
-        ↓
-lifecycle_engine
-        ↓
-execution_gate
-        ↓
-capital_allocator
-        ↓
-order_intent_builder
-        ↓
-broker_execution_adapter
-        ↓
-order_lifecycle_monitor
-        ↓
-reconciliation_engine
-        ↓
-replay_store + audit_log + dashboard cockpit
+        -> market_data_ingestion
+        -> feed_health_monitor
+        -> quote_freshness_gate
+        -> contract_resolution_guard
+        -> candidate_pool
+        -> data_quality_gate
+        -> regime_detector
+        -> scoring_engine
+        -> ranking_engine
+        -> lifecycle_engine
+        -> execution_gate
+        -> capital_allocator
+        -> order_intent_builder
+        -> broker_execution_adapter
+        -> order_lifecycle_monitor
+        -> reconciliation_engine
+        -> replay_store + audit_log + dashboard cockpit
 ```
 
-The V2 engine must run side-by-side with existing V1 paths until it proves better through tests, replay, and live/paper validation.
+The V2 engine must run side-by-side with existing V1 paths until it proves better through tests, replay, and live or paper validation.
 
-No V1 path should be deleted until V2 can demonstrate equal or better behavior under replay and paper/live validation.
-
----
+No V1 path should be deleted until V2 can demonstrate equal or better behavior under replay and paper or live validation.
 
 ## 8. Required Modules
 
@@ -431,15 +349,11 @@ tests/execution/
     test_live_execution_guard.py
 ```
 
----
-
 ## 9. Feed Staleness and Market Data Freshness Contract
 
 Staleness is one of the main product problems. It must be handled as a core safety contract, not a UI warning.
 
-### 9.1 Required freshness fields
-
-Every market snapshot and candidate must expose:
+Required freshness fields:
 
 ```text
 feed_source
@@ -466,7 +380,7 @@ reconnect_count
 heartbeat_age_ms
 ```
 
-### 9.2 Freshness states
+Freshness states:
 
 ```text
 FRESH
@@ -477,18 +391,18 @@ DISCONNECTED
 UNKNOWN
 ```
 
-### 9.3 Required rules
+Required rules:
 
-- If option quote age is greater than the configured threshold, candidate gets `STALE_OPTION_LTP`.
-- If underlying quote age is greater than the configured threshold, candidate gets `STALE_UNDERLYING_LTP`.
-- If websocket disconnects, affected candidates must become `ADVISORY_ONLY` or `BLOCKED`.
+- If option quote age is greater than the configured threshold, candidate gets STALE_OPTION_LTP.
+- If underlying quote age is greater than the configured threshold, candidate gets STALE_UNDERLYING_LTP.
+- If websocket disconnects, affected candidates must become ADVISORY_ONLY or BLOCKED.
 - If REST fallback is used, candidate must not become executable.
 - If recovered fallback is used, candidate must not become executable.
-- If quote recovers after stale state, candidate must be revalidated before becoming `READY`.
-- If quote age cannot be measured, candidate must be treated as `UNKNOWN` and blocked from execution.
+- If quote recovers after stale state, candidate must be revalidated before becoming READY.
+- If quote age cannot be measured, candidate must be treated as UNKNOWN and blocked from execution.
 - Freshness thresholds must be configurable and test-covered, not hardcoded in dashboard code.
 
-### 9.4 Required blockers
+Required blockers:
 
 ```text
 STALE_OPTION_LTP
@@ -502,9 +416,7 @@ RECOVERED_FALLBACK_USED
 QUOTE_RECOVERY_PENDING_REVALIDATION
 ```
 
-### 9.5 Acceptance tests
-
-The test suite must prove:
+Acceptance tests must prove:
 
 - stale option quotes cannot become executable;
 - stale underlying quotes cannot become executable;
@@ -514,8 +426,6 @@ The test suite must prove:
 - unknown quote age blocks execution;
 - freshness status is visible in candidate serialization;
 - UI receives freshness fields without recomputing them incorrectly.
-
----
 
 ## 10. Candidate Contract
 
@@ -567,8 +477,6 @@ decision_snapshot_id
 
 A missing field must be explicit. Silent defaults are not allowed for decision-critical fields.
 
----
-
 ## 11. Contract Resolution Guard
 
 Contract resolution is a hard safety layer.
@@ -612,8 +520,6 @@ Rules:
 - contract resolution failures must be visible in UI and replay;
 - no order intent may be created without a valid contract.
 
----
-
 ## 12. Lifecycle Model
 
 Allowed candidate lifecycle states:
@@ -634,21 +540,19 @@ CANCELLED
 
 Lifecycle rules:
 
-- A candidate starts as `DISCOVERED`.
-- A candidate becomes `VALIDATING` only after minimum structural fields exist.
-- A candidate becomes `WATCHLIST` when setup is interesting but not executable.
-- A candidate becomes `READY` when score, data quality, feed health, contract validity, and execution conditions are aligned.
-- A candidate becomes `APPROVED` only after approval policy passes.
-- A candidate becomes `ORDER_INTENT_CREATED` only after risk sizing and execution checks pass.
-- A candidate becomes `SUBMITTED` only after broker adapter accepts the order request.
-- A candidate becomes `EXECUTED` only after broker/execution confirmation.
-- A candidate becomes `REJECTED` when hard blockers exist.
-- A candidate becomes `EXPIRED` when its opportunity window is no longer valid.
-- A candidate becomes `CANCELLED` when user/system cancels an active intent or order.
+- A candidate starts as DISCOVERED.
+- A candidate becomes VALIDATING only after minimum structural fields exist.
+- A candidate becomes WATCHLIST when setup is interesting but not executable.
+- A candidate becomes READY when score, data quality, feed health, contract validity, and execution conditions are aligned.
+- A candidate becomes APPROVED only after approval policy passes.
+- A candidate becomes ORDER_INTENT_CREATED only after risk sizing and execution checks pass.
+- A candidate becomes SUBMITTED only after broker adapter accepts the order request.
+- A candidate becomes EXECUTED only after broker or execution confirmation.
+- A candidate becomes REJECTED when hard blockers exist.
+- A candidate becomes EXPIRED when its opportunity window is no longer valid.
+- A candidate becomes CANCELLED when user or system cancels an active intent or order.
 
 Invalid transitions must fail loudly and be tested.
-
----
 
 ## 13. Data-Quality Gate
 
@@ -677,16 +581,14 @@ Rules:
 - fallback-based candidates must not become executable;
 - stale LTP must not become executable;
 - invalid contract resolution must block execution;
-- spread must be measured from bid/ask where available;
+- spread must be measured from bid and ask where available;
 - derived or recovered quote values must be labeled as such;
 - UI must not recompute truth fields differently from the engine;
 - missing critical fields must create explicit blockers, not defaults.
 
----
+## 14. Scoring and Ranking
 
-## 14. Scoring Model
-
-`confidence_raw` alone is not enough.
+confidence_raw alone is not enough.
 
 V2 scoring must be component-based:
 
@@ -708,24 +610,16 @@ final_score =
   - execution_risk_penalty
 ```
 
-Each component must be inspectable and testable.
-
 Score requirements:
 
 - final score must be deterministic for the same input snapshot;
 - each score component must have bounded ranges;
 - score output must include reason codes;
 - score alone must not grant execution permission;
-- stale/fallback penalties must be strong enough that bad data cannot dominate rankings;
+- stale and fallback penalties must be strong enough that bad data cannot dominate rankings;
 - hard blockers must override score.
 
----
-
-## 15. Ranking Model
-
-Ranking must compare all candidates, not merely display surviving rows.
-
-Required ranking behavior:
+Ranking requirements:
 
 - sort candidates by final score after hard-block handling;
 - separate executable, watchlist, advisory, stale, and blocked candidates;
@@ -735,11 +629,7 @@ Required ranking behavior:
 - prevent stale candidates from appearing as ready opportunities;
 - show primary reason and primary blocker.
 
----
-
-## 16. Market Regime Model
-
-The same candidate must be judged differently under different market regimes.
+## 15. Market Regime Model
 
 Required regimes:
 
@@ -765,11 +655,7 @@ Rules:
 - high-volatility regimes must tighten sizing and spread limits;
 - regime must be captured in replay snapshots.
 
----
-
-## 17. Execution Gate
-
-The execution gate decides whether a candidate may be traded now.
+## 16. Execution Gate
 
 Execution statuses:
 
@@ -782,27 +668,21 @@ STALE_ONLY
 BLOCKED
 ```
 
-Hard rule:
+A candidate cannot be EXECUTABLE unless:
 
-A candidate cannot be `EXECUTABLE` unless:
-
-- data quality is `REALTIME`;
+- data quality is REALTIME;
 - feed health is valid;
 - option quote is fresh;
 - underlying quote is fresh;
 - contract is valid;
 - spread is acceptable;
 - risk limits allow it;
-- lifecycle state is `READY` or stronger;
+- lifecycle state is READY or stronger;
 - blocker list is empty;
 - sizing decision exists;
 - order intent can be created safely.
 
----
-
-## 18. Capital Allocation and Risk Guard
-
-Execution without sizing is incomplete.
+## 17. Capital Allocation and Risk Guard
 
 Required controls:
 
@@ -837,9 +717,7 @@ No candidate may be labeled executable without a valid size decision.
 
 Risk must be able to block execution even when scoring is strong.
 
----
-
-## 19. Order Intent and Execution Safety
+## 18. Order Intent and Execution Safety
 
 The system must separate a candidate from an order intent.
 
@@ -873,11 +751,7 @@ Rules:
 - duplicate order intents must be prevented through idempotency keys;
 - order submission must be auditable.
 
----
-
-## 20. Order Lifecycle and Reconciliation
-
-A reliable trading layer must track what happened after intent creation.
+## 19. Order Lifecycle and Reconciliation
 
 Required order states:
 
@@ -904,15 +778,11 @@ Required reconciliation checks:
 - orphan order detection;
 - rejected order reason capture;
 - stale order state detection;
-- paper/live mode mismatch detection.
+- paper or live mode mismatch detection.
 
 Reconciliation failures must be visible in the dashboard and replay store.
 
----
-
-## 21. Kill Switch and Degradation Policy
-
-Tradebot must have explicit kill-switch behavior.
+## 20. Kill Switch and Degradation Policy
 
 Kill-switch triggers:
 
@@ -945,11 +815,7 @@ Rules:
 - recovery from degraded state requires revalidation;
 - kill-switch events must be persisted and shown in UI.
 
----
-
-## 22. Replay and Learning
-
-Every candidate should be replayable.
+## 21. Replay, Learning, and Run Health
 
 Required snapshots:
 
@@ -980,12 +846,6 @@ Replay must support:
 - whether stale feed caused false opportunity display;
 - whether contract fallback caused unsafe output;
 - whether execution state matched broker truth.
-
----
-
-## 23. Observability and Run Health
-
-A top-class system needs operational visibility.
 
 Required run-health metrics:
 
@@ -1019,18 +879,14 @@ runtime/reports/decision_audit.json
 runtime/reports/reconciliation_report.json
 ```
 
----
-
-## 24. Dashboard Cockpit Requirements
-
-The V2 dashboard must be organized by decision usefulness.
+## 22. Dashboard Cockpit Requirements
 
 Required panels:
 
 1. Top Opportunities
 2. Ready but Not Approved
-3. Watchlist / Near Executable
-4. Stale / Feed-Degraded Candidates
+3. Watchlist or Near Executable
+4. Stale or Feed-Degraded Candidates
 5. Blocked Candidates
 6. Contract Resolution Failures
 7. Data Quality Health
@@ -1040,8 +896,8 @@ Required panels:
 11. Order Lifecycle
 12. Reconciliation
 13. Decision Timeline
-14. Replay / Outcome Review
-15. Kill Switch / Degradation Status
+14. Replay or Outcome Review
+15. Kill Switch or Degradation Status
 
 Table rows must include:
 
@@ -1072,9 +928,7 @@ UI rules:
 - UI must show quote age and feed state near execution labels;
 - UI must clearly distinguish advisory, paper, and live states.
 
----
-
-## 25. Configuration and Safety Defaults
+## 23. Configuration and Safety Defaults
 
 All thresholds must be centralized and testable.
 
@@ -1100,9 +954,7 @@ Rules:
 - secrets must not be committed;
 - runtime config must be visible in session summary without exposing secrets.
 
----
-
-## 26. MVP Scope
+## 24. MVP Scope
 
 The first V2 MVP must be serious but controlled.
 
@@ -1136,11 +988,9 @@ MVP excludes:
 - live-money automation changes;
 - deletion of V1 paths before V2 validation.
 
----
+## 25. PR Plan
 
-## 27. PR Plan
-
-### PR 1 — Product Bible
+### PR 1 - Product Bible
 
 Scope:
 
@@ -1154,12 +1004,12 @@ Acceptance:
 - CI remains green;
 - Portfolio CI remains green.
 
-### PR 2 — Reference Architecture Extraction
+### PR 2 - Reference Architecture Extraction
 
 Scope:
 
-- add `docs/reference_architecture/TRADEBOT_V2_REFERENCE_EXTRACTION.md`;
-- compare LEAN, Freqtrade, Hummingbot, vn.py, FinRL-style patterns;
+- add docs/reference_architecture/TRADEBOT_V2_REFERENCE_EXTRACTION.md;
+- compare LEAN, Freqtrade, Hummingbot, vn.py, and FinRL-style patterns;
 - map extracted patterns to Tradebot modules and tests.
 
 Acceptance:
@@ -1169,28 +1019,28 @@ Acceptance:
 - extraction does not copy proprietary or incompatible behavior;
 - CI remains green.
 
-### PR 3 — Candidate + Reason-Code Contracts
+### PR 3 - Candidate and Reason-Code Contracts
 
 Scope:
 
-- add candidate dataclasses / typed contracts;
-- add reason-code enums/constants;
+- add candidate dataclasses or typed contracts;
+- add reason-code enums or constants;
 - add serialization tests.
 
 Acceptance:
 
 - deterministic candidate serialization;
 - no hidden defaults for decision-critical fields;
-- stale/feed/contract/risk reason codes exist;
+- stale, feed, contract, and risk reason codes exist;
 - tests green.
 
-### PR 4 — Feed Health + Quote Freshness Contracts
+### PR 4 - Feed Health and Quote Freshness Contracts
 
 Scope:
 
 - implement feed-health model;
 - implement quote-freshness classification;
-- add stale/fallback/disconnected tests.
+- add stale, fallback, and disconnected tests.
 
 Acceptance:
 
@@ -1200,12 +1050,12 @@ Acceptance:
 - recovered fallback requires revalidation;
 - tests green.
 
-### PR 5 — Data-Quality Gate + Contract Guard
+### PR 5 - Data-Quality Gate and Contract Guard
 
 Scope:
 
 - implement data-quality classification;
-- enforce fallback/stale/missing execution blocks;
+- enforce fallback, stale, and missing execution blocks;
 - add contract guard model and tests.
 
 Acceptance:
@@ -1216,7 +1066,7 @@ Acceptance:
 - invalid contracts are blocked;
 - tests green.
 
-### PR 6 — Scoring + Ranking
+### PR 6 - Scoring and Ranking
 
 Scope:
 
@@ -1227,10 +1077,10 @@ Scope:
 Acceptance:
 
 - deterministic scores;
-- blocked/advisory/stale candidates preserved but separated;
+- blocked, advisory, and stale candidates are preserved but separated;
 - ranking tests green.
 
-### PR 7 — Lifecycle + Execution Gate
+### PR 7 - Lifecycle and Execution Gate
 
 Scope:
 
@@ -1244,7 +1094,7 @@ Acceptance:
 - execution requires realtime data, fresh quote, valid contract, sizing, and no blockers;
 - tests green.
 
-### PR 8 — Capital Allocation + Risk Guard
+### PR 8 - Capital Allocation and Risk Guard
 
 Scope:
 
@@ -1257,9 +1107,9 @@ Acceptance:
 
 - no executable candidate without sizing;
 - risk-blocked candidates are not executable;
-- loss/session/exposure controls are represented.
+- loss, session, and exposure controls are represented.
 
-### PR 9 — Order Intent + Paper Execution Guard
+### PR 9 - Order Intent and Paper Execution Guard
 
 Scope:
 
@@ -1270,10 +1120,10 @@ Scope:
 Acceptance:
 
 - no order intent without candidate, contract, risk, and execution snapshots;
-- paper/live mode cannot be confused;
+- paper and live mode cannot be confused;
 - duplicate intents are blocked.
 
-### PR 10 — Replay Store + Run Health Artifacts
+### PR 10 - Replay Store and Run Health Artifacts
 
 Scope:
 
@@ -1288,7 +1138,7 @@ Acceptance:
 - feed health and stale decisions are replayable;
 - replay tests green.
 
-### PR 11 — Dashboard Cockpit Integration
+### PR 11 - Dashboard Cockpit Integration
 
 Scope:
 
@@ -1300,7 +1150,7 @@ Acceptance:
 - V1 dashboard still works;
 - V2 cockpit displays ranked opportunities, stale candidates, watchlist, blocked candidates, contract failures, risk, feed health, and data-quality health.
 
-### PR 12 — Reconciliation + Kill Switch
+### PR 12 - Reconciliation and Kill Switch
 
 Scope:
 
@@ -1310,68 +1160,62 @@ Scope:
 
 Acceptance:
 
-- broker/local mismatches create explicit health events;
+- broker and local mismatches create explicit health events;
 - kill-switch blocks new order intents;
 - recovery requires revalidation.
 
-### PR 13 — Live/Paper Validation Harness
+### PR 13 - Live and Paper Validation Harness
 
 Scope:
 
-- paper/live validation checklist;
+- paper and live validation checklist;
 - session report expectations;
 - replay comparison between V1 and V2.
 
 Acceptance:
 
 - session summary proves candidate counts, blocked counts, stale counts, executable counts, and outcomes;
-- live/paper validation can be reviewed without guessing from UI screenshots.
+- live or paper validation can be reviewed without guessing from UI screenshots.
 
----
-
-## 28. CI and Release Gates
+## 26. CI and Release Gates
 
 Every PR must be small enough to review and safe enough to revert.
 
-Required gates by category:
-
-### Documentation PRs
+Documentation PRs:
 
 - markdown renders;
 - no runtime behavior changes;
 - CI and Portfolio CI green.
 
-### Contract/model PRs
+Contract and model PRs:
 
 - unit tests for serialization and invalid states;
 - no dashboard dependency;
 - no broker dependency.
 
-### Runtime logic PRs
+Runtime logic PRs:
 
 - unit tests;
 - regression tests;
 - no live broker dependency;
-- paper/offline-safe tests;
+- paper and offline-safe tests;
 - focused replay fixture where possible.
 
-### Dashboard PRs
+Dashboard PRs:
 
 - V1 dashboard remains intact;
 - V2 behind feature flag;
 - UI uses engine-provided truth fields;
-- stale/fallback states visible.
+- stale and fallback states visible.
 
-### Execution-related PRs
+Execution-related PRs:
 
 - paper mode default;
 - live mode guarded;
 - no live order path enabled by default;
 - reconciliation and kill-switch implications documented.
 
----
-
-## 29. Acceptance Gates
+## 27. Acceptance Gates
 
 A V2 candidate can be considered production-safe only when:
 
@@ -1390,11 +1234,9 @@ A V2 candidate can be considered production-safe only when:
 - reconciliation can detect state mismatches;
 - kill switch can halt unsafe behavior;
 - CI and Portfolio CI are green;
-- paper/live validation confirms the decision stream behaves as expected.
+- paper or live validation confirms the decision stream behaves as expected.
 
----
-
-## 30. Definition of Done
+## 28. Definition of Done
 
 Opportunity Engine V2 is done only when Tradebot can show, for each trading session:
 
@@ -1410,16 +1252,14 @@ Opportunity Engine V2 is done only when Tradebot can show, for each trading sess
 - what size was allowed;
 - whether an order intent was created;
 - what happened to the order lifecycle;
-- whether broker/local state reconciled;
+- whether broker and local state reconciled;
 - what changed over time;
 - what happened after the decision;
 - whether the decision logic should be improved.
 
 If the system cannot explain these, it is not a reliable trading layer. It is still a table viewer.
 
----
-
-## 31. Hard Truth
+## 29. Hard Truth
 
 A reliable Tradebot is not created by adding more strategy output, more dashboard columns, or more confidence numbers.
 
