@@ -87,3 +87,10 @@ if not getattr(_builtins, "_tradebot_tradebuilder_import_patch", False):
     _builtins._tradebot_tradebuilder_import_patch = True
 
 _patch_trade_builder_module(_sys.modules.get("strategies.trade_builder"))
+
+try:
+    from core import ci_compat_contracts as _ci_compat_contracts
+
+    _ci_compat_contracts.install()
+except Exception:
+    pass
