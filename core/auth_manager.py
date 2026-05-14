@@ -10,7 +10,6 @@ from config import config as cfg
 from core.paths import logs_dir, repo_root
 
 
-
 _CACHE: dict[str, Any] = {}
 
 
@@ -52,6 +51,13 @@ def resolve_access_token(
         _CACHE["token_source"] = "repo_file"
         _CACHE["ts_epoch"] = time.time()
         return repo_token
+
+    env_token = str(os.getenv("KITE_ACCESS_TOKEN", "")).strip()
+    if env_token and _allow_env_token_for_ci():
+        _CACHE["token"] = env_token
+        _CACHE["token_source"] = "env_ci"
+        _CACHE["ts_epoch"] = time.time()
+        return env_token
 
     if require_token:
         raise RuntimeError(
