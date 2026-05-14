@@ -77,6 +77,18 @@ REQUIRED_COLUMNS = [
 ]
 
 
+def _is_missing(value) -> bool:
+    if value is None:
+        return True
+    try:
+        if pd.isna(value):
+            return True
+    except Exception:
+        pass
+    text = str(value).strip()
+    return text == "" or text.upper() in {"NONE", "NA", "N/A", "NAN", "NAT", "NULL"}
+
+
 def _coerce_opt_type(value) -> str | None:
     if value is None:
         return None
@@ -190,19 +202,19 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
             strike_val = _coerce_strike(row.get("strike"))
             if strike_val is not None:
                 norm.at[idx, "strike"] = strike_val
-            elif row.get("strike") not in (None, "", "None"):
+            elif not _is_missing(row.get("strike")):
                 row_warn.append("strike_invalid")
 
             ts = row.get("timestamp")
-            if not ts:
+            if _is_missing(ts):
                 for alt in ("created_at", "queue_ts", "ts"):
-                    if row.get(alt):
+                    if not _is_missing(row.get(alt)):
                         ts = row.get(alt)
                         break
             last_seen = row.get("last_seen")
-            if last_seen not in (None, "", "None"):
+            if not _is_missing(last_seen):
                 ts = last_seen
-            if not ts:
+            if _is_missing(ts):
                 ts = datetime.now(timezone.utc).isoformat()
                 row_warn.append("timestamp_fallback")
             norm.at[idx, "timestamp"] = str(ts)
@@ -217,16 +229,16 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
             norm.at[idx, "status"] = status
 
             instrument_id = row.get("instrument_id")
-            if instrument_id not in (None, "", "None"):
+            if not _is_missing(instrument_id):
                 instr_text = str(instrument_id)
-                if norm.at[idx, "tradingsymbol"] in (None, "", "None") and not instr_text.isdigit():
+                if _is_missing(norm.at[idx, "tradingsymbol"]) and not instr_text.isdigit():
                     norm.at[idx, "tradingsymbol"] = instr_text
             tradingsymbol = row.get("tradingsymbol")
-            if tradingsymbol not in (None, "", "None") and norm.at[idx, "instrument_id"] in (None, "", "None"):
+            if not _is_missing(tradingsymbol) and _is_missing(norm.at[idx, "instrument_id"]):
                 norm.at[idx, "instrument_id"] = str(tradingsymbol)
 
             trade_key = row.get("trade_key")
-            if not trade_key:
+            if _is_missing(trade_key):
                 strategy_id = derive_strategy_id(row.get("strategy_id"), row.get("strategy") or row.get("generator"))
                 trade_key = compute_trade_key(
                     row.get("symbol"),
@@ -237,13 +249,13 @@ def normalize_trade_df(df: pd.DataFrame | None, meta_map: dict | None = None) ->
                     strategy_id,
                 )
                 norm.at[idx, "trade_key"] = trade_key
-            if norm.at[idx, "trade_status"] in (None, "", "None"):
+            if _is_missing(norm.at[idx, "trade_status"]):
                 norm.at[idx, "trade_status"] = row.get("trade_status") or "NEW"
-            if norm.at[idx, "first_seen"] in (None, "", "None"):
+            if _is_missing(norm.at[idx, "first_seen"]):
                 norm.at[idx, "first_seen"] = norm.at[idx, "timestamp"]
-            if norm.at[idx, "last_seen"] in (None, "", "None"):
+            if _is_missing(norm.at[idx, "last_seen"]):
                 norm.at[idx, "last_seen"] = norm.at[idx, "timestamp"]
-            if norm.at[idx, "update_count"] in (None, "", "None"):
+            if _is_missing(norm.at[idx, "update_count"]):
                 norm.at[idx, "update_count"] = 0
 
             if row_warn:
@@ -271,7 +283,11 @@ def dedupe_by_trade_key(df: pd.DataFrame, sort_by: str | None = None) -> pd.Data
                 sort_col = candidate
                 break
     if sort_col and sort_col in df.columns:
-        df = df.sort_values(sort_col, ascending=False)
+        df = df.copy()
+        parsed = pd.to_datetime(df[sort_col], errors="coerce", utc=True)
+        df["__dedupe_sort_ts"] = parsed
+        df = df.sort_values(["__dedupe_sort_ts", sort_col], ascending=[False, False], na_position="last")
+        df = df.drop(columns=["__dedupe_sort_ts"])
     return df.drop_duplicates(subset=["trade_key"], keep="first").copy()
 
 
