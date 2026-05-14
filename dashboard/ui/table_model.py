@@ -286,8 +286,11 @@ def dedupe(df: pd.DataFrame) -> pd.DataFrame:
     out = compute_trade_key(normalize_df(df))
     if "decision_ts_epoch" not in out.columns:
         out["decision_ts_epoch"] = pd.Series([float("nan")] * len(out), index=out.index, dtype="float64")
-    out = out.sort_values(["display_ts_epoch", "decision_ts_epoch"], ascending=False, kind="mergesort")
-    return out.drop_duplicates(subset=["trade_key"], keep="first")
+    last_seen_epoch = out["last_seen_ts"].map(lambda ts: float(ts.timestamp()) if pd.notna(ts) else float("nan"))
+    out["_dedupe_ts_epoch"] = out["display_ts_epoch"].where(out["display_ts_epoch"].notna(), last_seen_epoch)
+    out = out.sort_values(["_dedupe_ts_epoch", "decision_ts_epoch"], ascending=False, kind="mergesort")
+    out = out.drop_duplicates(subset=["trade_key"], keep="first")
+    return out.drop(columns=["_dedupe_ts_epoch"], errors="ignore")
 
 
 def build_identity_col(df: pd.DataFrame) -> pd.DataFrame:
