@@ -45,6 +45,16 @@ def _row_outcome_bucket(row: dict[str, Any]) -> str:
     return "blocked"
 
 
+def _bar_ts_epoch_series(bars: pd.DataFrame) -> pd.Series:
+    for col in ("timestamp_epoch", "ts_epoch"):
+        if col in bars.columns:
+            parsed = pd.to_numeric(bars[col], errors="coerce")
+            if parsed.notna().any():
+                return parsed.astype(float)
+    parsed_ts = pd.to_datetime(bars.get("timestamp"), errors="coerce", utc=True)
+    return parsed_ts.astype("int64") / 1e9
+
+
 def _simulate_from_snapshot(
     *,
     bars: pd.DataFrame,
@@ -56,7 +66,7 @@ def _simulate_from_snapshot(
     if bars.empty:
         return {"outcome": "no_data"}
     bars = bars.copy()
-    bars["ts_epoch"] = pd.to_datetime(bars["timestamp"]).dt.tz_localize("Asia/Kolkata").astype("int64") / 1e9
+    bars["ts_epoch"] = _bar_ts_epoch_series(bars)
     live = bars.loc[bars["ts_epoch"] >= float(snapshot_ts_epoch)].copy()
     if live.empty:
         return {"outcome": "no_future_bars"}
@@ -119,7 +129,7 @@ def evaluate_review_queue_snapshot(
                 )
             except ValueError:
                 bars_cache[cache_key] = pd.DataFrame(
-                    columns=["timestamp", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]
+                    columns=["timestamp", "timestamp_epoch", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]
                 )
         outcome = _simulate_from_snapshot(
             bars=bars_cache[cache_key],
