@@ -105,10 +105,8 @@ def _coerce_ts_epoch(series: pd.Series) -> pd.Series:
     parsed_epoch = pd.Series([float("nan")] * len(series), index=series.index, dtype="float64")
     mask = parsed.notna()
     if mask.any():
-        parsed_epoch.loc[mask] = parsed.loc[mask].astype("int64") / 1_000_000_000.0
+        parsed_epoch.loc[mask] = parsed.loc[mask].map(lambda ts: float(ts.timestamp()))
 
-    # For object/string timestamp columns, prefer real datetime parsing. This avoids
-    # pandas interpreting epoch seconds as nanoseconds in later formatting paths.
     if series.dtype == object or str(series.dtype).startswith("string"):
         return parsed_epoch.where(parsed_epoch.notna(), numeric)
     return numeric.where(numeric.notna(), parsed_epoch)
@@ -226,8 +224,7 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
     display_epoch = _coerce_ts_epoch(out["display_ts_epoch"]) if "display_ts_epoch" in out.columns else None
     decision_epoch = _first_epoch(out, (
         "decision_ts_epoch", "decision_ts_utc", "decision_ts_ist", "ts_epoch", "ts_utc",
-        "ts_ist", "timestamp_epoch_ms", "timestamp_utc_iso", "timestamp", "last_seen_ts",
-        "created_ts_epoch", "created_at",
+        "ts_ist", "timestamp_epoch_ms", "timestamp_utc_iso", "timestamp", "created_ts_epoch", "created_at",
     ))
     snapshot_epoch = _first_epoch(out, ("snapshot_ts_epoch", "snapshot_ts_utc", "snapshot_ts_ist"))
     if display_epoch is None:
@@ -316,12 +313,16 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         return _empty_df()
     out = build_identity_col(normalize_df(df))
     view = str(view or "advisory").lower()
+    include_last_seen = not bool(pd.to_numeric(out.get("display_ts_epoch"), errors="coerce").notna().any())
     if view == "active":
         cols = ["display_ts_ist", "last_seen_ts", "identity", "status", "side", "entry", "stop", "target", "live_ltp", "pnl_points", "pnl_cash", "qty", "confidence", "trade_key", "tradingsymbol"]
     elif view == "review":
         cols = ["display_ts_ist", "last_seen_ts", "identity", "status", "side", "entry", "stop", "target", "confidence", "trade_key", "tradingsymbol"]
     else:
-        cols = ["display_ts_ist", "last_seen_ts", "identity", "status", "candidate_class", "final_score", "market_mode", "fallback_candidate", "readiness", "execution_status", "side", "entry", "entry_status", "entry_source", "stop", "target", "confidence_raw", "confidence_penalty", "confidence_final", "fresh_quote_ok", "liquidity_ok", "spread_ok", "primary_blocker", "hard_blockers", "soft_penalties", "warnings", "trade_key", "tradingsymbol"]
+        cols = ["display_ts_ist"]
+        if include_last_seen:
+            cols.append("last_seen_ts")
+        cols += ["identity", "status", "candidate_class", "final_score", "market_mode", "fallback_candidate", "readiness", "execution_status", "side", "entry", "entry_status", "entry_source", "stop", "target", "confidence_raw", "confidence_penalty", "confidence_final", "fresh_quote_ok", "liquidity_ok", "spread_ok", "primary_blocker", "hard_blockers", "soft_penalties", "warnings", "trade_key", "tradingsymbol"]
     out = out[[c for c in cols if c in out.columns]].copy()
     if "status" in out.columns:
         out["status"] = out["status"].apply(_status_badge)
