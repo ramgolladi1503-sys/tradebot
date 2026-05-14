@@ -36,7 +36,9 @@ def _tradebuilder_candidate_decision_telemetry_payload(candidate, source_flags, 
     source_flags_payload = dict(source_flags or {})
     decision_trace_payload = dict(decision_trace or {})
     score_breakdown_payload = dict(score_breakdown or getattr(candidate, "score_breakdown", {}) or {})
-    quality_detail = dict(source_flags_payload.get("quality_detail") or getattr(candidate, "quality_detail", {}) or {})
+    source_quality = source_flags_payload.get("quality_detail")
+    quality_detail = dict(source_quality or getattr(candidate, "quality_detail", {}) or {})
+    quality_detail_source = "source_flags" if isinstance(source_quality, dict) else "native"
     if quality_detail and "candidate_quality_score" not in quality_detail:
         trigger_score = _safe_float(getattr(candidate, "trigger_score", 0.0))
         regime_conf = _safe_float(getattr(candidate, "regime_conf", 0.0))
@@ -46,12 +48,14 @@ def _tradebuilder_candidate_decision_telemetry_payload(candidate, source_flags, 
         quality_detail.setdefault("setup_structure_score", round(_safe_float(quality_detail.get("trigger_base_score")) + 0.01, 4))
         quality_detail.setdefault("setup_thesis_score", round((signal_score + family_survival) / 2.0, 2))
         quality_detail.setdefault("trigger_base_score", trigger_score)
+        if not isinstance(source_quality, dict):
+            quality_detail_source = "native_setup_enriched"
     payload = {
         "source_flags": source_flags_payload,
         "score_breakdown": score_breakdown_payload,
         "decision_trace": decision_trace_payload,
         "quality_detail": quality_detail,
-        "quality_detail_source": "source_flags" if isinstance(source_flags_payload.get("quality_detail"), dict) else "native",
+        "quality_detail_source": quality_detail_source,
     }
     for key in ("candidate_quality_score", "family_consensus_score", "family_consensus_components", "family_survival_score", "family_survival_components"):
         if key in source_flags_payload:
