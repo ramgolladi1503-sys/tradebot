@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -107,6 +106,11 @@ def _coerce_ts_epoch(series: pd.Series) -> pd.Series:
     mask = parsed.notna()
     if mask.any():
         parsed_epoch.loc[mask] = parsed.loc[mask].astype("int64") / 1_000_000_000.0
+
+    # For object/string timestamp columns, prefer real datetime parsing. This avoids
+    # pandas interpreting epoch seconds as nanoseconds in later formatting paths.
+    if series.dtype == object or str(series.dtype).startswith("string"):
+        return parsed_epoch.where(parsed_epoch.notna(), numeric)
     return numeric.where(numeric.notna(), parsed_epoch)
 
 
@@ -120,15 +124,14 @@ def _first_epoch(out: pd.DataFrame, fields: tuple[str, ...]) -> pd.Series | None
 
 
 def _format_ist_from_epoch(series: pd.Series) -> pd.Series:
-    dt = pd.to_datetime(series, errors="coerce", unit="s", utc=True)
+    epoch = _coerce_epoch_series(series)
+    dt = pd.to_datetime(epoch, errors="coerce", unit="s", utc=True)
     out = dt.dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S IST")
     return out.where(out.notna(), "—")
 
 
 def _format_ist_from_ts(series: pd.Series) -> pd.Series:
-    dt = pd.to_datetime(series, errors="coerce", utc=True)
-    out = dt.dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S IST")
-    return out.where(out.notna(), "—")
+    return _format_ist_from_epoch(_coerce_ts_epoch(series))
 
 
 def _is_option_row(row) -> bool:
