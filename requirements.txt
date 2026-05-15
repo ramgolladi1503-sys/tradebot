@@ -1,5 +1,6 @@
 python-dotenv
 pytest
+pytest-timeout
 hypothesis
 streamlit
 streamlit-autorefresh

@@ -13,6 +13,8 @@ jobs:
       DATA_ROOT: ${{ github.workspace }}/.runtime
       EXECUTION_MODE: PAPER
       KITE_USE_API: "false"
+      PYTEST_TIMEOUT: "120"
+      PYTEST_TIMEOUT_METHOD: "thread"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +31,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests
-        run: PYTHONPATH=. pytest -q
+        run: PYTHONPATH=. pytest -vv --timeout=120 --timeout-method=thread --maxfail=1
 
   health_gate:
     runs-on: ubuntu-latest
