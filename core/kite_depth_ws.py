@@ -103,14 +103,22 @@ def _normalize_depth_resolution_metadata(resolution: list[dict[str, Any]]) -> li
         row = dict(item)
         symbol = str(row.get("symbol") or "").upper()
         if _session_tick_skipped_count(row, symbol) > 0:
-            # Session-tick gating skipped pruning for this symbol. The row may
-            # still carry stale-count diagnostics from the attempted prune pass,
-            # but no token was actually pruned from the final subscription.
             row["stale_option_pruned_count"] = 0
             row["stale_option_pruned_sample_tokens"] = []
             row["option_drop_reason"] = row.get("option_fail_reason")
         normalized.append(row)
     return normalized
+
+
+def _final_pruned_by_symbol(*, original_tokens: list[int], retained: list[int], option_rank_by_token: dict[int, tuple], token_to_symbol: dict[int, str]) -> dict[str, int]:
+    original_set = {int(t) for t in _dedupe_ints(original_tokens) if int(t) in option_rank_by_token}
+    retained_set = {int(t) for t in _dedupe_ints(retained) if int(t) in option_rank_by_token}
+    out: dict[str, int] = {}
+    for token in sorted(original_set - retained_set):
+        symbol = str(token_to_symbol.get(int(token)) or "").upper()
+        if symbol:
+            out[symbol] = out.get(symbol, 0) + 1
+    return out
 
 
 def _direct_prune_contract(
@@ -158,7 +166,6 @@ def _direct_prune_contract(
 
     non_options = [int(t) for t in token_list if int(t) not in option_rank]
     retained = list(non_options)
-    pruned_by_symbol: dict[str, int] = {}
     protected_stale_by_symbol: dict[str, int] = {}
     skipped_by_symbol: dict[str, int] = {}
     stale_samples: list[dict[str, object]] = []
@@ -183,16 +190,25 @@ def _direct_prune_contract(
         protected_needed = max(0, minimum - len(fresh))
         stale_sorted = sorted(stale, key=lambda token: option_rank.get(int(token), (float("inf"), 2, float("inf"), 2, int(token))), reverse=True)
         protected = stale_sorted[:protected_needed]
-        pruned = [token for token in stale if token not in set(protected)]
         retained.extend(fresh + protected)
         if protected:
             protected_stale_by_symbol[symbol] = len(protected)
-        if pruned:
-            pruned_by_symbol[symbol] = len(pruned)
-            for token in pruned[:10]:
-                stale_samples.append({"token": int(token), "symbol": symbol})
 
     retained = _dedupe_ints(retained)
+    pruned_by_symbol = _final_pruned_by_symbol(
+        original_tokens=token_list,
+        retained=retained,
+        option_rank_by_token=option_rank,
+        token_to_symbol=token_symbol,
+    )
+    for symbol, count in pruned_by_symbol.items():
+        missing = [
+            int(token)
+            for token in option_tokens
+            if token_symbol.get(int(token)) == symbol and int(token) not in set(retained)
+        ]
+        for token in missing[:10]:
+            stale_samples.append({"token": int(token), "symbol": symbol})
     out_meta.update(
         {
             "enabled": True,
@@ -214,7 +230,7 @@ def _direct_prune_contract(
 
 def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, token_to_symbol, min_required_by_symbol=None):  # noqa: F811
     _sync_contract_public_state()
-    retained, meta = _contract_prune_stale_option_subscription_tokens(
+    _, meta = _contract_prune_stale_option_subscription_tokens(
         tokens=tokens,
         option_rank_by_token=option_rank_by_token,
         token_to_symbol=token_to_symbol,
