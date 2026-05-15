@@ -146,7 +146,7 @@ def _load_depth(
     df["bid"] = df["depth_json"].map(lambda payload: _parse_side(payload, "buy"))
     df["ask"] = df["depth_json"].map(lambda payload: _parse_side(payload, "sell"))
     df["timestamp"] = pd.to_datetime(df["timestamp_epoch"], unit="s", utc=True)
-    return df[["timestamp_epoch", "timestamp", "bid", "ask"]]
+    return df[["timestamp", "bid", "ask"]]
 
 
 def build_option_backtest_frame(
@@ -239,10 +239,6 @@ def export_option_backtest_csv(
         "ok": True,
         "output_path": str(output_path),
         "rows": int(len(frame)),
-        "tradingsymbol": str(tradingsymbol),
+        "tradingsymbol": str(tradingsymbol).upper(),
         "instrument_token": int(instrument_token),
-        "has_bid_rows": int(frame["bid"].notna().sum()) if "bid" in frame.columns else 0,
-        "has_ask_rows": int(frame["ask"].notna().sum()) if "ask" in frame.columns else 0,
-        "timestamp_min": str(frame["timestamp"].min()) if not frame.empty else None,
-        "timestamp_max": str(frame["timestamp"].max()) if not frame.empty else None,
     }

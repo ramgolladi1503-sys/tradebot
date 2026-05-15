@@ -9,6 +9,12 @@ class ExecutionRouterError(RuntimeError):
     pass
 
 
+def _intent_value(intent: Any, key: str) -> Any:
+    if isinstance(intent, dict):
+        return intent[key]
+    return getattr(intent, key)
+
+
 def execute_intent(intent: Any, broker: Any) -> Dict[str, Any]:
     ok, reason = validate_execution_intent(intent)
     if not ok:
@@ -25,12 +31,20 @@ def execute_intent(intent: Any, broker: Any) -> Dict[str, Any]:
             "order_id": None,
         }
 
+    submit_order = getattr(broker, "place_order", None)
+    if not callable(submit_order):
+        return {
+            "status": "rejected",
+            "reason": "missing_place_order",
+            "order_id": None,
+        }
+
     try:
-        order = broker.place_order(
-            symbol=(intent["symbol"] if isinstance(intent, dict) else intent.symbol),
-            price=(intent["entry_price"] if isinstance(intent, dict) else intent.entry_price),
-            qty=(intent["qty"] if isinstance(intent, dict) else intent.qty),
-            side=(intent["direction"] if isinstance(intent, dict) else intent.direction),
+        order = submit_order(
+            symbol=_intent_value(intent, "symbol"),
+            price=_intent_value(intent, "entry_price"),
+            qty=_intent_value(intent, "qty"),
+            side=_intent_value(intent, "direction"),
         )
     except Exception as exc:
         return {

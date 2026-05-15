@@ -29,6 +29,7 @@ def _normalized_context_mapping(snapshot_or_config: Mapping[str, Any] | Any = No
     if isinstance(nested, Mapping):
         merged.update(dict(nested))
     merged.update(dict(snapshot_or_config))
+    merged.pop("market_context", None)
     return merged
 
 
@@ -127,15 +128,6 @@ def derive_market_context(
     market_open: bool | None = None,
     segment: str | None = None,
 ) -> MarketContext:
-    """
-    Authoritative runtime mode derivation.
-
-    Mode semantics:
-    - LIVE: execution mode LIVE and market open
-    - OFFHOURS: execution mode LIVE and market closed
-    - PAPER: execution mode PAPER
-    - SIM: execution mode SIM (and unknown modes)
-    """
     normalized = _normalized_context_mapping(snapshot_or_config)
     exec_mode = _normalized_execution_mode(
         execution_mode
@@ -175,14 +167,10 @@ def derive_market_context(
     elif force_disable:
         if exec_mode == "LIVE":
             mode = "LIVE"
-            is_market_open = bool(
-                explicit_market_open if explicit_market_open is not None else True
-            )
+            is_market_open = bool(explicit_market_open if explicit_market_open is not None else True)
         else:
             mode = exec_mode
-            is_market_open = bool(
-                explicit_market_open if explicit_market_open is not None else False
-            )
+            is_market_open = bool(explicit_market_open if explicit_market_open is not None else False)
     else:
         if explicit_offhours is True:
             inferred_market_open = False
@@ -192,7 +180,6 @@ def derive_market_context(
             try:
                 inferred_market_open = bool(is_market_open_ist(segment=resolved_segment))
             except Exception:
-                # Fail closed for mode derivation: prefer stricter LIVE behavior if uncertain.
                 inferred_market_open = bool(exec_mode != "LIVE")
 
         if exec_mode == "LIVE":
@@ -205,7 +192,7 @@ def derive_market_context(
 
     require_live_quotes = bool(mode == "LIVE" and is_market_open)
     allow_stale_quotes = bool(mode in {"OFFHOURS", "SIM", "PAPER"})
-    planning_only = bool(mode == "OFFHOURS")
+    planning_only = bool(mode == "OFFHOURS" or (mode in {"PAPER", "SIM"} and not is_market_open))
     if bool(getattr(cfg, "MARKET_CONTEXT_LOG_MODE", False)):
         logger.info(
             "MARKET_CONTEXT_DERIVED now_ist=%s segment=%s mode=%s market_open=%s exec_mode=%s",

@@ -39,7 +39,6 @@ def _normalize_token(token: int | str | None) -> int | None:
 
 def _db_writes_enabled() -> bool:
     value = getattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True)
-    # Treat an explicit None as "unset" to preserve the safe default (enabled).
     if value is None:
         return True
     return bool(value)
@@ -230,14 +229,6 @@ def get_max_tick_epoch_db(tokens: list[int] | None = None) -> float | None:
 
 
 def get_max_tick_epoch_db_no_flush(tokens: list[int] | None = None) -> float | None:
-    """
-    SQLite max-tick query without forcing a durable flush boundary.
-
-    Some runtime paths (freshness SLA, live decision loops) only need best-effort
-    evidence and must not block on SQLite WAL/busy contention caused by the async
-    tick writer. If you need read-after-write consistency, call flush_pending_ticks()
-    explicitly before reading.
-    """
     try:
         init_ticks()
         with _conn() as conn:
@@ -245,7 +236,6 @@ def get_max_tick_epoch_db_no_flush(tokens: list[int] | None = None) -> float | N
             if "timestamp_epoch" not in cols:
                 return None
             if not tokens:
-                # NOTE: get_max_tick_epoch(conn) forces a flush; replicate the query without flushing.
                 row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks").fetchone()
                 return _to_epoch(row[0] if row else None)
             token_list = [t for t in (_normalize_token(v) for v in list(tokens)) if t is not None]
@@ -429,13 +419,6 @@ def get_latest_tick_rows_db(tokens: list[int]) -> dict[int, dict]:
 
 
 def get_latest_tick_rows_db_no_flush(tokens: list[int]) -> dict[int, dict]:
-    """
-    Read latest per-token tick rows from SQLite without forcing a flush.
-
-    This is intended for latency-sensitive monitoring paths. It trades off strict
-    read-after-write consistency in exchange for avoiding multi-second stalls when
-    SQLite is busy.
-    """
     token_list = [t for t in (_normalize_token(v) for v in list(tokens or [])) if t is not None]
     if not token_list:
         return {}
@@ -556,12 +539,6 @@ def _flush_pending_ticks(max_rows: int | None = None) -> int:
 
 
 def flush_pending_ticks(max_rows: int | None = None) -> int:
-    """
-    Drain pending async tick writes into SQLite.
-
-    Callers that need read-after-write consistency (analytics, offline validation)
-    should call this explicitly. Live execution paths should avoid forcing flushes.
-    """
     return _flush_pending_ticks(max_rows=max_rows)
 
 
@@ -595,6 +572,7 @@ def _ensure_flush_thread() -> None:
 
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
+    init_ticks()
     with _WRITE_QUEUE_LOCK:
         _WRITE_QUEUE.append(row)
     _ensure_flush_thread()
@@ -702,7 +680,12 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
 
     row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso)
     if _async_db_writes_enabled():
-        return _enqueue_row(row)
+        ok = _enqueue_row(row)
+        # Keep async mode, but guarantee immediate table creation and read-after-write
+        # visibility for lightweight tests/diagnostics that inspect SQLite right after
+        # WS ingestion. Larger live bursts are still drained by the background flusher.
+        _flush_pending_ticks(max_rows=1)
+        return ok
 
     return _write_rows([row])
 
