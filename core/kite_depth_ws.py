@@ -28,6 +28,7 @@ def _sync_contract_public_state() -> None:
     """
     for name in (
         "_underlying_ltp",
+        "_maybe_raise_option_token_incident",
         "get_sticky_tokens",
         "get_latest_tick_rows_db",
         "now_utc_epoch",
