@@ -16,7 +16,12 @@ This document tracks the cleanup plan so the repo does not quietly normalize run
 - `core.ci_tail_contracts`
 - `core.ci_finish_contracts`
 - `core.ci_last5_contracts`
-- `core.ci_phase2_final_contract`
+
+Previously removed/deactivated:
+
+- `core.ci_phase2_final_contract` was removed in PR #37 after Phase2 adapter behavior moved into `core/engine_phase2_adapter.py`.
+- Phase2 behavior in `core.ci_last5_contracts` was deactivated in PR #37.
+- Depth behavior in `core.ci_finish_contracts` and `core.ci_last5_contracts` is targeted by PR #38 after confirming the owning module already carries the subscription contracts.
 
 These modules should not remain as permanent product behavior. Each hook must either be:
 
@@ -33,13 +38,13 @@ These modules should not remain as permanent product behavior. Each hook must ei
 
 ## Migration order
 
-### 1. Phase2 adapter contracts
+### 1. Phase2 adapter contracts — completed in PR #37
 
 Owning module:
 
 - `core/engine_phase2_adapter.py`
 
-Likely hooks to absorb:
+Absorbed/deactivated behavior:
 
 - dynamic spread threshold
 - off-hours spread multiplier
@@ -52,13 +57,13 @@ Exit gate:
 
 - Phase2 adapter tests pass without `ci_phase2_final_contract` and without Phase2 sections in `ci_last5_contracts`.
 
-### 2. Depth subscription contracts
+### 2. Depth subscription contracts — PR #38
 
 Owning module:
 
 - `core/kite_depth_ws.py`
 
-Likely hooks to absorb:
+Real-module behavior to own:
 
 - NIFTY minimum option floor
 - stale option pruning
