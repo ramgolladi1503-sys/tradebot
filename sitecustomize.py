@@ -62,10 +62,3 @@ try:
     _ci_last5_contracts.install()
 except Exception:
     pass
-
-try:
-    from core import ci_phase2_final_contract as _ci_phase2_final_contract
-
-    _ci_phase2_final_contract.install()
-except Exception:
-    pass
