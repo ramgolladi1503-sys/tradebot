@@ -17,6 +17,7 @@ for _name, _value in vars(_contracts).items():
     globals()[_name] = _value
 
 _contract_build_depth_subscription_tokens = _contracts.build_depth_subscription_tokens
+_contract_prune_stale_option_subscription_tokens = _contracts._prune_stale_option_subscription_tokens
 
 
 def _sync_contract_public_state() -> None:
@@ -87,6 +88,18 @@ def _normalize_depth_resolution_metadata(resolution: list[dict[str, Any]]) -> li
             row["option_drop_reason"] = row.get("option_fail_reason")
         normalized.append(row)
     return normalized
+
+
+def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, token_to_symbol, min_required_by_symbol=None):  # noqa: F811
+    _sync_contract_public_state()
+    retained, meta = _contract_prune_stale_option_subscription_tokens(
+        tokens=tokens,
+        option_rank_by_token=option_rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required_by_symbol,
+    )
+    _sync_contract_outputs()
+    return retained, meta
 
 
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):  # noqa: F811
