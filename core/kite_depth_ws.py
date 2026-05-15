@@ -71,6 +71,21 @@ def _to_float(value: Any, default: float | None = None) -> float | None:
         return default
 
 
+def _dedupe_ints(values: Any) -> list[int]:
+    seen: set[int] = set()
+    out: list[int] = []
+    for value in list(values or []):
+        try:
+            token = int(value)
+        except Exception:
+            continue
+        if token <= 0 or token in seen:
+            continue
+        seen.add(token)
+        out.append(token)
+    return out
+
+
 def _session_tick_skipped_count(row: dict[str, Any], symbol: str) -> int:
     skipped = row.get("stale_option_session_tick_skipped_count_by_symbol") or {}
     try:
@@ -98,23 +113,30 @@ def _normalize_depth_resolution_metadata(resolution: list[dict[str, Any]]) -> li
     return normalized
 
 
-def _normalize_prune_meta(
+def _direct_prune_contract(
     *,
-    retained: list[int],
-    meta: dict[str, Any],
+    tokens: list[int],
     option_rank_by_token: dict[int, tuple],
     token_to_symbol: dict[int, str],
     min_required_by_symbol: dict[str, int] | None,
-) -> dict[str, Any]:
-    out = dict(meta or {})
-    if out.get("protected_stale_by_symbol"):
-        return out
-    pruned_by_symbol = dict(out.get("pruned_by_symbol") or {})
-    if not pruned_by_symbol:
-        return out
+    meta: dict[str, Any] | None = None,
+) -> tuple[list[int], dict[str, Any]]:
+    token_list = _dedupe_ints(tokens)
+    option_rank = {int(k): tuple(v) for k, v in dict(option_rank_by_token or {}).items()}
+    token_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
     minimums = {str(k).upper(): int(v or 0) for k, v in dict(min_required_by_symbol or {}).items()}
-    if not minimums:
-        return out
+    out_meta = dict(meta or {})
+    if not option_rank or not minimums:
+        return token_list, out_meta
+
+    try:
+        enabled = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True))
+    except Exception:
+        enabled = True
+    if not enabled:
+        out_meta.setdefault("enabled", False)
+        return token_list, out_meta
+
     try:
         now = float(now_utc_epoch())
     except Exception:
@@ -123,34 +145,71 @@ def _normalize_prune_meta(
         max_age = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5) or 2.5)
     except Exception:
         max_age = 2.5
-    option_tokens = [int(t) for t in option_rank_by_token]
+    try:
+        require_session = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True))
+    except Exception:
+        require_session = True
+    session_symbols = {str(k).upper() for k in dict(globals().get("_SYMBOL_LAST_OPTION_TICK_TS") or {}).keys()}
+    option_tokens = [int(t) for t in token_list if int(t) in option_rank]
     try:
         rows = get_latest_tick_rows_db(option_tokens) or {}
     except Exception:
         rows = {}
-    retained_set = {int(t) for t in list(retained or [])}
-    protected: dict[str, int] = {}
-    for symbol, minimum in minimums.items():
-        if int(pruned_by_symbol.get(symbol, 0) or 0) <= 0 or minimum <= 0:
+
+    non_options = [int(t) for t in token_list if int(t) not in option_rank]
+    retained = list(non_options)
+    pruned_by_symbol: dict[str, int] = {}
+    protected_stale_by_symbol: dict[str, int] = {}
+    skipped_by_symbol: dict[str, int] = {}
+    stale_samples: list[dict[str, object]] = []
+
+    symbols = sorted({token_symbol.get(int(t), "") for t in option_tokens if token_symbol.get(int(t), "")})
+    for symbol in symbols:
+        sym_options = [int(t) for t in option_tokens if token_symbol.get(int(t)) == symbol]
+        if require_session and symbol not in session_symbols:
+            retained.extend(sym_options)
+            skipped_by_symbol[symbol] = len(sym_options)
             continue
-        retained_options = [
-            int(token)
-            for token in option_rank_by_token
-            if int(token) in retained_set
-            and str(token_to_symbol.get(int(token)) or "").upper() == symbol
-        ]
-        fresh_count = 0
-        for token in retained_options:
+        fresh: list[int] = []
+        stale: list[int] = []
+        for token in sym_options:
             row = rows.get(int(token)) or rows.get(str(int(token))) or {}
             ts = _to_float(row.get("ts_epoch"), None)
             if ts is not None and now > 0 and (now - float(ts)) <= max_age:
-                fresh_count += 1
-        protected_count = max(0, min(int(minimum), len(retained_options)) - int(fresh_count))
-        if protected_count:
-            protected[symbol] = int(protected_count)
-    if protected:
-        out["protected_stale_by_symbol"] = protected
-    return out
+                fresh.append(int(token))
+            else:
+                stale.append(int(token))
+        minimum = max(0, int(minimums.get(symbol, 0) or 0))
+        protected_needed = max(0, minimum - len(fresh))
+        stale_sorted = sorted(stale, key=lambda token: option_rank.get(int(token), (float("inf"), 2, float("inf"), 2, int(token))), reverse=True)
+        protected = stale_sorted[:protected_needed]
+        pruned = [token for token in stale if token not in set(protected)]
+        retained.extend(fresh + protected)
+        if protected:
+            protected_stale_by_symbol[symbol] = len(protected)
+        if pruned:
+            pruned_by_symbol[symbol] = len(pruned)
+            for token in pruned[:10]:
+                stale_samples.append({"token": int(token), "symbol": symbol})
+
+    retained = _dedupe_ints(retained)
+    out_meta.update(
+        {
+            "enabled": True,
+            "max_age_sec": max_age,
+            "require_session_tick": require_session,
+            "min_required_by_symbol": minimums,
+            "min_required_blocked_by_symbol": {},
+            "protected_stale_by_symbol": protected_stale_by_symbol,
+            "pruned_count": sum(pruned_by_symbol.values()),
+            "kept_count": len(retained),
+            "pruned_by_symbol": pruned_by_symbol,
+            "session_tick_skipped_by_symbol": skipped_by_symbol,
+            "stale_option_session_tick_skipped_count_by_symbol": skipped_by_symbol,
+            "stale_samples": stale_samples[:10],
+        }
+    )
+    return retained, out_meta
 
 
 def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, token_to_symbol, min_required_by_symbol=None):  # noqa: F811
@@ -162,14 +221,13 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
         min_required_by_symbol=min_required_by_symbol,
     )
     _sync_contract_outputs()
-    meta = _normalize_prune_meta(
-        retained=list(retained or []),
-        meta=dict(meta or {}),
+    return _direct_prune_contract(
+        tokens=list(tokens or []),
         option_rank_by_token=dict(option_rank_by_token or {}),
         token_to_symbol=dict(token_to_symbol or {}),
         min_required_by_symbol=dict(min_required_by_symbol or {}),
+        meta=dict(meta or {}),
     )
-    return retained, meta
 
 
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):  # noqa: F811
