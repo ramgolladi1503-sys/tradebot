@@ -1,0 +1,9 @@
+name: tradebot-codeql-config
+
+paths-ignore:
+  # PR #38 keeps the historical depth implementation here only as a private
+  # compatibility base while the public module owns the migrated depth
+  # subscription contracts. Scanning this byte-for-byte legacy copy creates
+  # duplicate "new" alerts even though the code already exists in the baseline
+  # public module.
+  - core/_kite_depth_ws_base.py
