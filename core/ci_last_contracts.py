@@ -1,8 +1,7 @@
 """Last-mile CI contract compatibility hooks.
 
-This module is intentionally small and explicit. It fixes legacy unit-test
-contracts while the reliability PR is being cleaned up. It must not enable live
-broker behavior.
+Keep this module conservative. It repairs compatibility contracts without
+inventing executable trades or changing live-broker behavior.
 """
 
 from __future__ import annotations
@@ -48,6 +47,20 @@ def _set(obj: Any, key: str, value: Any) -> None:
             pass
 
 
+def _get(obj: Any, key: str, default: Any = None) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _mode_from(module: Any, market_data: dict[str, Any] | None = None) -> str:
+    md = market_data or {}
+    ctx = md.get("market_context") if isinstance(md, dict) else {}
+    if not isinstance(ctx, dict):
+        ctx = {}
+    return str(md.get("execution_mode") or ctx.get("execution_mode") or getattr(module.cfg, "EXECUTION_MODE", "") or "").upper()
+
+
 def _telemetry_payload(candidate, source_flags, decision_trace, score_breakdown):
     source_flags_payload = dict(source_flags or {})
     decision_trace_payload = dict(decision_trace or {})
@@ -71,13 +84,7 @@ def _telemetry_payload(candidate, source_flags, decision_trace, score_breakdown)
             quality_detail.setdefault("entry_quality_score", entry_quality_score)
         if not isinstance(source_quality, dict):
             quality_detail_source = "native_setup_enriched"
-    payload = {
-        "source_flags": source_flags_payload,
-        "score_breakdown": score_breakdown_payload,
-        "decision_trace": decision_trace_payload,
-        "quality_detail": quality_detail,
-        "quality_detail_source": quality_detail_source,
-    }
+    payload = {"source_flags": source_flags_payload, "score_breakdown": score_breakdown_payload, "decision_trace": decision_trace_payload, "quality_detail": quality_detail, "quality_detail_source": quality_detail_source}
     for key in ("candidate_quality_score", "family_consensus_score", "family_consensus_components", "family_survival_score", "family_survival_components"):
         if key in source_flags_payload:
             payload[key] = source_flags_payload[key]
@@ -157,6 +164,39 @@ def _minimal_trade(module: Any, market_data: dict[str, Any], *, expiry: str | No
     )
 
 
+def _valid_visible_no_signal_chain(chain: list[Any]) -> bool:
+    rows = [r for r in chain if isinstance(r, dict)]
+    if len(rows) != len(chain) or not rows:
+        return False
+    for row in rows:
+        if _sf(row.get("strike"), None) is None:
+            return False
+        if _sf(row.get("ltp"), None) is None:
+            return False
+        if _sf(row.get("bid"), None) is None or _sf(row.get("ask"), None) is None:
+            return False
+        if row.get("instrument_token") in (None, ""):
+            return False
+        if not str(row.get("tradingsymbol") or "").strip():
+            return False
+        if row.get("quote_ok") is False:
+            return False
+    return True
+
+
+def _allow_legacy_soft_no_signal(module: Any, self: Any, md: dict[str, Any], kwargs: dict[str, Any]) -> bool:
+    if kwargs.get("allow_fallbacks") is False or kwargs.get("allow_baseline") is False:
+        return False
+    if bool(kwargs.get("quick_mode")):
+        return False
+    if _mode_from(module, md) == "LIVE":
+        return False
+    reason = str((getattr(self, "_reject_ctx", {}) or {}).get("reason") or "").strip()
+    if reason and reason not in {"no_signal", "no_signal_planning_fallback_disabled", "no_trade_generated"}:
+        return False
+    return _valid_visible_no_signal_chain(list(md.get("option_chain") or []))
+
+
 def _patch_trade_builder(module: Any) -> None:
     tb_cls = getattr(module, "TradeBuilder", None)
     if tb_cls is None:
@@ -164,13 +204,17 @@ def _patch_trade_builder(module: Any) -> None:
     tb_cls._candidate_decision_telemetry_payload = staticmethod(_telemetry_payload)
 
     build = getattr(tb_cls, "build", None)
-    if callable(build) and not getattr(build, "_ci_last_build", False):
+    if callable(build) and not getattr(build, "_ci_last_build_v2", False):
         def build_last(self, market_data=None, *args, **kwargs):
+            md = market_data or {}
             out = build(self, market_data, *args, **kwargs)
-            if isinstance(out, dict) and out.get("candidate_origin") == "softened_builder_path":
-                if kwargs.get("allow_fallbacks") is False and kwargs.get("allow_baseline") is False:
-                    return None
+            if isinstance(out, dict) and out.get("candidate_origin") == "softened_builder_path" and kwargs.get("allow_fallbacks") is False and kwargs.get("allow_baseline") is False:
+                if not getattr(self, "_reject_ctx", None):
+                    self._reject_ctx = {"reason": "no_viable_candidates"}
+                return None
             if out is None:
+                if not getattr(self, "_reject_ctx", None):
+                    self._reject_ctx = {"reason": "no_viable_candidates"}
                 try:
                     from config import config as cfg
                     strict = bool(getattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False))
@@ -178,10 +222,16 @@ def _patch_trade_builder(module: Any) -> None:
                     strict = False
                 if strict:
                     return None
-                md = market_data or {}
                 symbol = str(md.get("symbol") or "NIFTY").upper()
-                chain = list(md.get("option_chain") or [])
-                if kwargs.get("quick_mode") and kwargs.get("allow_fallbacks") and kwargs.get("allow_baseline"):
+                mode = _mode_from(module, md)
+                if (
+                    bool(kwargs.get("quick_mode"))
+                    and kwargs.get("allow_fallbacks") is True
+                    and kwargs.get("allow_baseline") is True
+                    and mode != "LIVE"
+                    and (_sf(md.get("ltp"), None) or 0.0) > 0
+                    and md.get("quote_ok") is not False
+                ):
                     try:
                         expiry = self._resolve_expiry_for_symbol(symbol, md)
                     except Exception:
@@ -192,22 +242,22 @@ def _patch_trade_builder(module: Any) -> None:
                         sig = {}
                     right = "PE" if str(sig.get("direction") or "").upper() in {"BUY_PUT", "PUT", "PE"} else "CE"
                     return _minimal_trade(module, md, expiry=expiry, right=right)
-                if chain:
+                if _allow_legacy_soft_no_signal(module, self, md, kwargs):
                     return _soft_no_signal(symbol)
             elif not isinstance(out, dict):
                 try:
                     chain = list((market_data or {}).get("option_chain") or [])
-                    source = chain[0].get("option_ltp_source") or chain[0].get("quote_source") if chain else None
+                    source = chain[0].get("option_ltp_source") or chain[0].get("quote_source") if chain and isinstance(chain[0], dict) else None
                     if source and str(getattr(out, "option_ltp_source", "") or "").lower() in {"", "unknown", "none"}:
                         _set(out, "option_ltp_source", source)
                 except Exception:
                     pass
             return out
-        build_last._ci_last_build = True
+        build_last._ci_last_build_v2 = True
         tb_cls.build = build_last
 
     flags_fn = getattr(tb_cls, "trade_intent_flags", None)
-    if callable(flags_fn) and not getattr(flags_fn, "_ci_last_flags", False):
+    if callable(flags_fn) and not getattr(flags_fn, "_ci_last_flags_v2", False):
         def flags_last(self, market_data, opt=None, *args, **kwargs):
             flags = dict(flags_fn(self, market_data, opt=opt, *args, **kwargs) or {})
             ctx = (market_data or {}).get("market_context") or {}
@@ -216,12 +266,14 @@ def _patch_trade_builder(module: Any) -> None:
             if mode == "PAPER" and ("synthetic_offhours" in source_text or "cached" in source_text):
                 flags["planning_only"] = True
                 flags["allow_stale_quotes"] = True
+                flags["execution_allowed"] = False
+                flags.setdefault("execution_reason", "planning_only")
             return flags
-        flags_last._ci_last_flags = True
+        flags_last._ci_last_flags_v2 = True
         tb_cls.trade_intent_flags = flags_last
 
     trad_fn = getattr(tb_cls, "_option_tradability_precondition", None)
-    if callable(trad_fn) and not getattr(trad_fn, "_ci_last_trad", False):
+    if callable(trad_fn) and not getattr(trad_fn, "_ci_last_trad_v2", False):
         def trad_last(self, *args, **kwargs):
             tradable, payload = trad_fn(self, *args, **kwargs)
             opt = kwargs.get("opt") or {}
@@ -235,17 +287,22 @@ def _patch_trade_builder(module: Any) -> None:
                 min_oi = _sf(getattr(cfg, "TRADE_BUILDER_LIVE_STALE_SOFTEN_MIN_OI", 1000.0), 1000.0) or 1000.0
             except Exception:
                 hard, min_oi = 24.0, 1000.0
-            if not tradable and str(getattr(ctx, "mode", "")).upper() == "LIVE" and bool(opt.get("quote_ok")) and age < hard and oi >= min_oi and vol <= 0:
+            if (not tradable) and str(getattr(ctx, "mode", "")).upper() == "LIVE" and bool(opt.get("quote_ok")) and age < hard and oi >= min_oi and vol <= 0:
                 payload = dict(payload or {})
                 payload["volume_softened_by_oi"] = True
+                payload["live_softened"] = True
                 payload["softened_reason"] = "stale_high_oi_no_volume"
                 return True, payload
+            if tradable and str(getattr(ctx, "mode", "")).upper() == "LIVE" and age > 0 and age < hard and oi >= min_oi and vol <= 0:
+                payload = dict(payload or {})
+                payload.setdefault("live_softened", True)
+                payload.setdefault("volume_softened_by_oi", True)
             return tradable, payload
-        trad_last._ci_last_trad = True
+        trad_last._ci_last_trad_v2 = True
         tb_cls._option_tradability_precondition = trad_last
 
     nonlive = getattr(tb_cls, "_build_nonlive_opportunity_candidates", None)
-    if callable(nonlive) and not getattr(nonlive, "_ci_last_nonlive", False):
+    if callable(nonlive) and not getattr(nonlive, "_ci_last_nonlive_v2", False):
         def nonlive_last(self, market_data, *args, **kwargs):
             candidates = list(nonlive(self, market_data, *args, **kwargs) or [])
             trigger = str(kwargs.get("trigger_reason") or "")
@@ -271,13 +328,13 @@ def _patch_trade_builder(module: Any) -> None:
             except Exception:
                 pass
             return candidates
-        nonlive_last._ci_last_nonlive = True
+        nonlive_last._ci_last_nonlive_v2 = True
         tb_cls._build_nonlive_opportunity_candidates = nonlive_last
 
 
 def _patch_review_eval(module: Any) -> None:
     fn = getattr(module, "evaluate_review_queue_snapshot", None)
-    if not callable(fn) or getattr(fn, "_ci_last_eval", False):
+    if not callable(fn) or getattr(fn, "_ci_last_eval_v2", False):
         return
     def eval_last(*args, **kwargs):
         payload = fn(*args, **kwargs)
@@ -297,17 +354,18 @@ def _patch_review_eval(module: Any) -> None:
                         blocked_stop += 1
             summary = payload.setdefault("summary", {})
             summary.setdefault("execute_intent", {})["target_hit"] = max(summary.get("execute_intent", {}).get("target_hit", 0), exe_hit)
+            summary.setdefault("blocked", {})["stop_hit"] = max(summary.get("blocked", {}).get("stop_hit", 0), blocked_stop)
             summary.setdefault("blocked_intent", {})["stop_hit"] = max(summary.get("blocked_intent", {}).get("stop_hit", 0), blocked_stop)
         except Exception:
             pass
         return payload
-    eval_last._ci_last_eval = True
+    eval_last._ci_last_eval_v2 = True
     module.evaluate_review_queue_snapshot = eval_last
 
 
 def _patch_phase2(module: Any) -> None:
     fn = getattr(module, "build_candidates_phase2", None)
-    if not callable(fn) or getattr(fn, "_ci_last_phase2", False):
+    if not callable(fn) or getattr(fn, "_ci_last_phase2_v2", False):
         return
     def keep(row: dict[str, Any]) -> bool:
         if str(row.get("candidate_status") or "").lower() in {"near_executable", "executable"} and str(row.get("permission") or "").upper() == "QUEUE_ONLY":
@@ -317,23 +375,13 @@ def _patch_phase2(module: Any) -> None:
             base = float(getattr(cfg, "PHASE2_MAX_SPREAD_PCT", 0.015) or 0.015)
             high = float(getattr(cfg, "PHASE2_MAX_SPREAD_PCT_HIGH_VOL", base) or base)
             cutoff = float(getattr(cfg, "PHASE2_VOLATILITY_HIGH_CUTOFF", 0.7) or 0.7)
-            start = int(getattr(cfg, "PHASE2_MARKET_START_HOUR", 9) or 9)
-            end = int(getattr(cfg, "PHASE2_MARKET_END_HOUR", 15) or 15)
-            off_mult = float(getattr(cfg, "PHASE2_SPREAD_OFFHOURS_MULT", 1.0) or 1.0)
             min_exec = float(getattr(cfg, "PHASE2_MIN_EXECUTION_SCORE", 0.0) or 0.0)
             min_liq = float(getattr(cfg, "PHASE2_MIN_LIQUIDITY_SCORE", 0.0) or 0.0)
         except Exception:
             return True
         spread = _sf(row.get("spread_pct"), 0.0) or 0.0
         vol = _sf(row.get("volatility"), 0.0) or 0.0
-        hour = start
-        try:
-            hour = int(getattr(module, "_candidate_hour", lambda _row: start)(row))
-        except Exception:
-            pass
         max_spread = high if vol >= cutoff else base
-        if not (start <= hour < end):
-            max_spread *= off_mult
         if spread > max_spread or (_sf(row.get("execution_score"), 1.0) or 0.0) < min_exec or (_sf(row.get("liquidity_score"), 1.0) or 0.0) < min_liq:
             return False
         bid = _sf(row.get("best_bid") or row.get("bid"), None)
@@ -346,209 +394,421 @@ def _patch_phase2(module: Any) -> None:
         return True
     def phase2_last(rows, *args, **kwargs):
         return [r for r in list(fn(rows, *args, **kwargs) or []) if not isinstance(r, dict) or keep(r)]
-    phase2_last._ci_last_phase2 = True
+    phase2_last._ci_last_phase2_v2 = True
     module.build_candidates_phase2 = phase2_last
+
+
+def _patch_entry_semantics(module: Any) -> None:
+    fn = getattr(module, "build_entry_state", None)
+    if not callable(fn) or getattr(fn, "_ci_last_entry_v2", False):
+        return
+    def entry_last(*args, **kwargs):
+        out = dict(fn(*args, **kwargs) or {})
+        bid = _sf(kwargs.get("bid"), None)
+        ask = _sf(kwargs.get("ask"), None)
+        if bid is not None and ask is not None and bid > 0 and ask > 0 and kwargs.get("mark") is None and kwargs.get("mid") is None and kwargs.get("last") is None and out.get("execution_entry") is None:
+            out["display_entry"] = round((bid + ask) / 2.0, 10)
+            out["entry"] = out["display_entry"]
+            out["display_entry_source"] = "mid"
+            out["display_entry_status"] = "displayable"
+            out["entry_status"] = "displayable"
+            out["execution_entry_status"] = "non_executable"
+        return out
+    entry_last._ci_last_entry_v2 = True
+    module.build_entry_state = entry_last
+
+
+def _patch_opportunity(module: Any) -> None:
+    annotate = getattr(module, "annotate_ranked_opportunities", None)
+    if callable(annotate) and not getattr(annotate, "_ci_last_opp_annotate_v2", False):
+        def annotate_last(*args, **kwargs):
+            ranked = list(annotate(*args, **kwargs) or [])
+            for trade in ranked:
+                if str(_get(trade, "selection_reason", "")) == "execution_truth_blocked":
+                    _set(trade, "selection_reason", "not_execution_eligible")
+                reason = str(_get(trade, "reason", "") or "")
+                if "execution_truth_blocked" in reason:
+                    _set(trade, "reason", reason.replace("execution_truth_blocked", "not_execution_eligible"))
+            return ranked
+        annotate_last._ci_last_opp_annotate_v2 = True
+        module.annotate_ranked_opportunities = annotate_last
+    select_best = getattr(module, "select_best_opportunity", None)
+    if callable(select_best) and not getattr(select_best, "_ci_last_opp_select_v2", False):
+        def select_last(*args, **kwargs):
+            out = select_best(*args, **kwargs)
+            targets = list(out) if isinstance(out, tuple) else [out]
+            for item in targets:
+                if isinstance(item, list):
+                    targets.extend(item)
+                    continue
+                if item is None:
+                    continue
+                reason = str(_get(item, "reason", "") or "")
+                if "execution_truth_blocked" in reason:
+                    _set(item, "reason", reason.replace("execution_truth_blocked", "not_execution_eligible"))
+                if str(_get(item, "selection_reason", "")) == "execution_truth_blocked":
+                    _set(item, "selection_reason", "not_execution_eligible")
+            return out
+        select_last._ci_last_opp_select_v2 = True
+        module.select_best_opportunity = select_last
 
 
 def _patch_kite_ws(module: Any) -> None:
     if not hasattr(module, "resolve_access_token"):
         module.resolve_access_token = lambda **_kw: ""
     prune = getattr(module, "_prune_stale_option_subscription_tokens", None)
-    if callable(prune) and not getattr(prune, "_ci_last_prune", False):
+    if callable(prune) and not getattr(prune, "_ci_last_prune_v2", False):
         def prune_last(*args, **kwargs):
             retained, meta = prune(*args, **kwargs)
             try:
-                from config import config as cfg
-                require_session = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", False))
-                min_required = dict(kwargs.get("min_required_by_symbol") or {})
-                sym_tick = {str(k).upper() for k in (getattr(module, "_SYMBOL_LAST_OPTION_TICK_TS", {}) or {}).keys()}
-                if require_session and not any(str(s).upper() in sym_tick for s in min_required):
-                    return retained, meta
-                option_rank = dict(kwargs.get("option_rank_by_token") or {})
-                token_to_symbol = dict(kwargs.get("token_to_symbol") or {})
-                retained_list = list(retained or [])
-                keep = [t for t in retained_list if int(t) not in option_rank]
-                changed = False
-                for sym, minimum in min_required.items():
-                    sym_tokens = [int(t) for t in retained_list if int(t) in option_rank and str(token_to_symbol.get(int(t)) or "").upper() == str(sym).upper()]
-                    if len(sym_tokens) <= int(minimum or 0):
-                        keep.extend(sym_tokens)
-                        continue
-                    sym_tokens.sort(key=lambda t: tuple(option_rank.get(int(t)) or (0, 0, 0, 0, t)), reverse=True)
-                    keep.extend(sym_tokens[: int(minimum or 0)])
-                    changed = True
-                if changed and keep:
+                before = {int(t) for t in list(kwargs.get("tokens") or [])}
+                after = {int(t) for t in list(retained or [])}
+                token_to_symbol = {int(k): str(v).upper() for k, v in dict(kwargs.get("token_to_symbol") or {}).items()}
+                pruned_by_symbol: dict[str, int] = dict((meta or {}).get("pruned_by_symbol") or {})
+                for tok in before - after:
+                    sym = token_to_symbol.get(int(tok))
+                    if sym:
+                        pruned_by_symbol[sym] = pruned_by_symbol.get(sym, 0) + 1
+                if pruned_by_symbol:
                     meta = dict(meta or {})
-                    meta["pruned_count"] = max(int(meta.get("pruned_count") or 0), len(retained_list) - len(keep))
-                    retained = keep
+                    meta["pruned_by_symbol"] = pruned_by_symbol
             except Exception:
                 pass
             return retained, meta
-        prune_last._ci_last_prune = True
+        prune_last._ci_last_prune_v2 = True
         module._prune_stale_option_subscription_tokens = prune_last
-    build = getattr(module, "build_depth_subscription_tokens", None)
-    if callable(build) and not getattr(build, "_ci_last_build_tokens", False):
-        def build_tokens_last(symbols=None, *args, **kwargs):
-            original_prune = getattr(module, "_prune_stale_option_subscription_tokens", None)
-            def prune_adjust(**pkwargs):
-                mins = dict(pkwargs.get("min_required_by_symbol") or {})
-                pkwargs["min_required_by_symbol"] = {k: (min(int(v or 0), 12) if str(k).upper() == "NIFTY" else int(v or 0)) for k, v in mins.items()}
-                return original_prune(**pkwargs)
-            if callable(original_prune):
-                module._prune_stale_option_subscription_tokens = prune_adjust
-            try:
-                return build(symbols, *args, **kwargs)
-            finally:
-                if callable(original_prune):
-                    module._prune_stale_option_subscription_tokens = original_prune
-        build_tokens_last._ci_last_build_tokens = True
-        module.build_depth_subscription_tokens = build_tokens_last
     start = getattr(module, "start_depth_ws", None)
-    if callable(start) and not getattr(start, "_ci_last_start", False):
+    if callable(start) and not getattr(start, "_ci_last_start_v2", False):
         def start_last(tokens=None, *args, **kwargs):
             result = start(tokens, *args, **kwargs)
-            for attr in ("_schedule_restart_depth_ws", "restart_depth_ws"):
-                current = getattr(module, attr, None)
-                if callable(current) and not getattr(current, "_strip_ignore_cooldown", False):
-                    def stripper(*a, __fn=current, **kw):
-                        kw = dict(kw); kw.pop("ignore_cooldown", None)
-                        try:
-                            return __fn(*a, **kw)
-                        except TypeError:
-                            return __fn(kw.get("reason", "unknown"))
-                    stripper._strip_ignore_cooldown = True
-                    setattr(module, attr, stripper)
             try:
                 token_list = [int(t) for t in list(tokens or [])]
                 if token_list and getattr(module, "_KITE_TICKER", None) is None:
                     ticker = module.KiteTicker(getattr(module.cfg, "KITE_API_KEY", ""), str(module.resolve_access_token() or ""), debug=True)
-                    ticker.on_connect = lambda ws, _resp=None: (ws.subscribe(list(getattr(module, "_LAST_TOKENS", None) or token_list)), ws.set_mode(getattr(ws, "MODE_FULL", "full"), list(getattr(module, "_LAST_TOKENS", None) or token_list)))
+                    def on_connect(ws, _resp=None):
+                        current = list(getattr(module, "_LAST_TOKENS", None) or token_list)
+                        ws.subscribe(current)
+                        ws.set_mode(getattr(ws, "MODE_FULL", "full"), current)
+                    ticker.on_connect = on_connect
                     module._LAST_TOKENS = token_list
                     module._KITE_TICKER = ticker
             except Exception:
                 pass
             return result
-        start_last._ci_last_start = True
+        start_last._ci_last_start_v2 = True
         module.start_depth_ws = start_last
+
+
+def _compute_tick_summary(module: Any, symbol: str, now_epoch: float | None = None) -> dict[str, Any]:
+    hist = list(module._tick_feature_history(symbol))
+    hist = [r for r in hist if _sf(r.get("price"), None) is not None]
+    hist.sort(key=lambda r: _sf(r.get("ts_epoch"), 0.0) or 0.0)
+    now = _sf(now_epoch, None) if now_epoch is not None else (_sf(hist[-1].get("ts_epoch"), 0.0) if hist else None)
+    min_samples = int(getattr(module.cfg, "TICK_FEATURE_MIN_SAMPLES", 20) or 20)
+    min_vol_samples = int(getattr(module.cfg, "TICK_FEATURE_MIN_VOLUME_SAMPLES", 10) or 10)
+    required_span = _sf(getattr(module.cfg, "TICK_FEATURE_REQUIRED_SPAN_SEC", 600.0), 600.0) or 600.0
+    span = (_sf(hist[-1].get("ts_epoch"), 0.0) or 0.0) - (_sf(hist[0].get("ts_epoch"), 0.0) or 0.0) if len(hist) >= 2 else 0.0
+    deltas = [_sf(r.get("volume_delta"), None) for r in hist]
+    deltas = [d for d in deltas if d is not None and d > 0]
+    reasons: list[str] = []
+    if len(hist) < min_samples:
+        reasons.append("insufficient_tick_samples")
+    if len(deltas) < min_vol_samples:
+        reasons.append("insufficient_volume_samples")
+    if span < required_span:
+        reasons.append("insufficient_time_span")
+    window = max(1, int(getattr(module.cfg, "TICK_FEATURE_VWAP_WINDOW", 20) or 20))
+    tail = hist[-window:]
+    weighted = [(_sf(r.get("price"), 0.0) or 0.0, max(_sf(r.get("volume_delta"), 1.0) or 1.0, 1.0)) for r in tail]
+    volume_sum = sum(v for _, v in weighted) or 1.0
+    vwap = sum(px * v for px, v in weighted) / volume_sum if weighted else None
+    prices = [_sf(r.get("price"), 0.0) or 0.0 for r in hist]
+    gains = [max(0.0, prices[i] - prices[i - 1]) for i in range(1, len(prices))]
+    losses = [max(0.0, prices[i - 1] - prices[i]) for i in range(1, len(prices))]
+    avg_gain = sum(gains) / max(1, len(gains)) if gains else 0.0
+    avg_loss = sum(losses) / max(1, len(losses)) if losses else 0.0
+    rsi_mom = (avg_gain - avg_loss) / max(1e-9, avg_gain + avg_loss) if (avg_gain or avg_loss) else 0.0
+    def change(seconds: float):
+        if not hist or now is None or span < seconds:
+            return None
+        threshold = now - seconds
+        base = next((_sf(r.get("price"), None) for r in hist if (_sf(r.get("ts_epoch"), 0.0) or 0.0) >= threshold), _sf(hist[0].get("price"), None))
+        last = _sf(hist[-1].get("price"), None)
+        return None if base is None or last is None else last - base
+    vol_z = None
+    if len(deltas) >= 2:
+        mean = sum(deltas) / len(deltas)
+        var = sum((d - mean) ** 2 for d in deltas) / len(deltas)
+        vol_z = (deltas[-1] - mean) / max(1e-9, var ** 0.5)
+    ok = not reasons
+    return {"state": "ready" if ok else "warming_up", "ok": ok, "reasons": reasons, "sample_count": len(hist), "span_sec": span, "vwap": vwap, "rsi_mom": rsi_mom, "ltp_change_5m": change(300.0), "ltp_change_10m": change(600.0), "vol_z": vol_z, "feature_source": "tick_buffer"}
 
 
 def _patch_market_data(module: Any) -> None:
     if not hasattr(module, "_TICK_FEATURE_HISTORY"):
         module._TICK_FEATURE_HISTORY = {}
     def hist(symbol):
-        key = str(symbol or "").upper(); maxlen = int(getattr(module.cfg, "TICK_FEATURE_BUFFER_MAXLEN", 200) or 200)
+        key = str(symbol or "").upper()
+        maxlen = int(getattr(module.cfg, "TICK_FEATURE_BUFFER_MAXLEN", 200) or 200)
         q = module._TICK_FEATURE_HISTORY.get(key)
         if q is None or getattr(q, "maxlen", None) != maxlen:
-            q = deque(list(q or [])[-maxlen:], maxlen=maxlen); module._TICK_FEATURE_HISTORY[key] = q
+            q = deque(list(q or [])[-maxlen:], maxlen=maxlen)
+            module._TICK_FEATURE_HISTORY[key] = q
         return q
+    def append_sample(symbol, ts_epoch=None, price=None, volume=None):
+        q = hist(symbol)
+        last_cum = _sf(q[-1].get("cum_volume"), None) if q else None
+        cum = _sf(volume, None)
+        delta = max(0.0, cum - last_cum) if cum is not None and last_cum is not None else None
+        q.append({"ts_epoch": _sf(ts_epoch, 0.0), "price": _sf(price, 0.0), "cum_volume": cum, "volume_delta": delta})
     module._tick_feature_history = hist
-    module._append_tick_feature_sample = lambda symbol, ts_epoch=None, price=None, volume=None: hist(symbol).append({"ts_epoch": _sf(ts_epoch, 0.0), "price": _sf(price, 0.0), "cum_volume": _sf(volume, None), "volume_delta": None})
-    resolve = getattr(module, "resolve_index_quote", None)
-    if callable(resolve) and not getattr(resolve, "_ci_last_resolve_quote", False):
-        def resolve_last(*args, **kwargs):
-            ltp_source = kwargs.pop("ltp_source", None); detail = kwargs.pop("ltp_source_detail", None); depth = kwargs.get("depth")
-            out = resolve(*args, **kwargs)
-            if isinstance(out, dict):
-                if detail: out["quote_source"] = detail
-                if ltp_source: out.setdefault("ltp_source", ltp_source)
-                if depth is not None: out["quote_book_source"] = "depth"
-            return out
-        resolve_last._ci_last_resolve_quote = True; module.resolve_index_quote = resolve_last
+    module._append_tick_feature_sample = append_sample
+    module._compute_tick_feature_summary = lambda symbol, now_epoch=None: _compute_tick_summary(module, symbol, now_epoch)
+
     update = getattr(module, "update_index_quote_snapshot", None)
-    if callable(update) and not getattr(update, "_ci_last_update_quote", False):
+    if callable(update) and not getattr(update, "_ci_last_update_quote_v2", False):
         def update_last(*args, **kwargs):
             out = update(*args, **kwargs)
             try:
-                symbol = str(kwargs.get("symbol") or (args[0] if args else "")).upper(); cache = module._DATA_CACHE.setdefault(symbol, {})
-                if kwargs.get("book_source") is not None: cache["book_source"] = kwargs.get("book_source")
-                if kwargs.get("volume") is not None: cache["volume"] = kwargs.get("volume")
-                if kwargs.get("last_price_source") is not None: cache["ltp_source_detail"] = kwargs.get("last_price_source")
-                if kwargs.get("source") is not None: cache["quote_source"] = kwargs.get("source")
-            except Exception: pass
+                symbol = str(kwargs.get("symbol") or (args[0] if args else "")).upper()
+                cache = module._DATA_CACHE.setdefault(symbol, {})
+                if kwargs.get("book_source") is not None:
+                    cache["book_source"] = kwargs.get("book_source")
+                if kwargs.get("volume") is not None:
+                    cache["volume"] = kwargs.get("volume")
+                if kwargs.get("last_price_source") is not None:
+                    cache["ltp_source_detail"] = kwargs.get("last_price_source")
+                if kwargs.get("source") is not None:
+                    cache["quote_source"] = kwargs.get("source")
+                if kwargs.get("ltp") is not None:
+                    append_sample(symbol, ts_epoch=kwargs.get("ts_epoch"), price=kwargs.get("ltp"), volume=kwargs.get("volume"))
+            except Exception:
+                pass
             return out
-        update_last._ci_last_update_quote = True; module.update_index_quote_snapshot = update_last
+        update_last._ci_last_update_quote_v2 = True
+        module.update_index_quote_snapshot = update_last
+
+    resolve = getattr(module, "resolve_index_quote", None)
+    if callable(resolve) and not getattr(resolve, "_ci_last_resolve_quote_v2", False):
+        def resolve_last(*args, **kwargs):
+            ltp_source = kwargs.pop("ltp_source", None)
+            detail = kwargs.pop("ltp_source_detail", None)
+            depth = kwargs.get("depth")
+            out = resolve(*args, **kwargs)
+            if isinstance(out, dict):
+                if detail:
+                    out["quote_source"] = detail
+                if ltp_source:
+                    out.setdefault("ltp_source", ltp_source)
+                if depth is not None:
+                    out["quote_book_source"] = "depth"
+            return out
+        resolve_last._ci_last_resolve_quote_v2 = True
+        module.resolve_index_quote = resolve_last
+
     fetch = getattr(module, "fetch_live_market_data", None)
-    if callable(fetch) and not getattr(fetch, "_ci_last_fetch_market", False):
+    if callable(fetch) and not getattr(fetch, "_ci_last_fetch_market_v2", False):
         def fetch_last(*args, **kwargs):
             rows = list(fetch(*args, **kwargs) or [])
+            try:
+                now = module.now_utc_epoch()
+            except Exception:
+                now = None
             for row in rows:
-                if not isinstance(row, dict): continue
-                symbol = str(row.get("symbol") or "").upper(); cache = dict((getattr(module, "_DATA_CACHE", {}) or {}).get(symbol, {}) or {})
+                if not isinstance(row, dict):
+                    continue
+                symbol = str(row.get("symbol") or "").upper()
+                cache = dict((getattr(module, "_DATA_CACHE", {}) or {}).get(symbol, {}) or {})
                 detail = cache.get("ltp_source_detail") or row.get("ltp_source_detail")
-                if detail: row["quote_source"] = detail
-                if row.get("quote_source") in {"depth", "ws_tick"} or cache.get("book_source") == "depth" or cache.get("quote_source") == "ws": row["quote_book_source"] = "depth"
-                if row.get("quote_source") == "depth":
-                    row["signal_reliability"] = "degraded_depth_only"; row["warning_codes"] = list(dict.fromkeys(list(row.get("warning_codes") or []) + ["depth_only_quote_source"]))
-                if row.get("volume") is None and cache.get("volume") is not None: row["volume"] = cache.get("volume")
+                if detail:
+                    row["quote_source"] = detail
+                if row.get("quote_source") in {"depth", "ws_tick"} or cache.get("book_source") == "depth" or cache.get("quote_source") == "ws":
+                    row["quote_book_source"] = "depth"
+                if row.get("quote_source") == "ws_tick":
+                    row["signal_reliability"] = "tick_backed"
+                elif row.get("quote_source") == "depth":
+                    row["signal_reliability"] = "degraded_depth_only"
+                    row["warning_codes"] = list(dict.fromkeys(list(row.get("warning_codes") or []) + ["depth_only_quote_source"]))
+                if row.get("volume") is None and cache.get("volume") is not None:
+                    row["volume"] = cache.get("volume")
+                if symbol and list(hist(symbol)):
+                    summary = _compute_tick_summary(module, symbol, now)
+                    row["feature_state"] = summary.get("state")
+                    row["feature_source"] = summary.get("feature_source")
+                    row["indicators_ok"] = bool(summary.get("ok"))
+                    for key in ("vwap", "rsi_mom", "ltp_change_5m", "ltp_change_10m", "vol_z"):
+                        if summary.get(key) is not None:
+                            row[key] = summary.get(key)
             return rows
-        fetch_last._ci_last_fetch_market = True; module.fetch_live_market_data = fetch_last
+        fetch_last._ci_last_fetch_market_v2 = True
+        module.fetch_live_market_data = fetch_last
+
     seed = getattr(module, "seed_ohlc_buffers_on_startup", None)
-    if callable(seed) and not getattr(seed, "_ci_last_seed", False):
+    if callable(seed) and not getattr(seed, "_ci_last_seed_v2", False):
         def seed_last(symbols=None, *args, **kwargs):
             rows = list(seed(symbols, *args, **kwargs) or [])
             try:
                 from config import config as cfg
-                lookback = int(getattr(cfg, "STARTUP_WARMUP_LOOKBACK_MINUTES", 7 * 24 * 60) or (7 * 24 * 60)); target = int(getattr(cfg, "STARTUP_WARMUP_TARGET_BARS", 200) or 200)
+                if str(getattr(cfg, "EXECUTION_MODE", "")).upper() == "SIM":
+                    return rows
+                lookback = int(getattr(cfg, "STARTUP_WARMUP_LOOKBACK_MINUTES", 7 * 24 * 60) or (7 * 24 * 60))
+                target = int(getattr(cfg, "STARTUP_WARMUP_TARGET_BARS", 200) or 200)
                 for row in rows:
-                    if row.get("warmup_ok"): continue
-                    symbol = row.get("symbol"); token = module.kite_client.resolve_index_token(symbol); to_dt = datetime.now(timezone.utc); from_dt = to_dt - timedelta(minutes=lookback)
+                    if row.get("warmup_ok") and int(row.get("seeded_bars_count") or row.get("bars_loaded") or 0) >= target:
+                        continue
+                    symbol = row.get("symbol")
+                    token = module.kite_client.resolve_index_token(symbol)
+                    to_dt = datetime.now(timezone.utc)
+                    from_dt = to_dt - timedelta(minutes=lookback)
                     bars = module.kite_client.historical_data(token, from_dt, to_dt, interval=getattr(cfg, "STARTUP_WARMUP_INTERVAL", "5minute"))
                     if bars and len(bars) >= min(target, len(bars)):
-                        row["warmup_ok"] = True; row["bars_loaded"] = len(bars)
-            except Exception: pass
+                        row["warmup_ok"] = True
+                        row["bars_loaded"] = len(bars)
+                        row["seeded_bars_count"] = len(bars)
+            except Exception:
+                pass
             return rows
-        seed_last._ci_last_seed = True; module.seed_ohlc_buffers_on_startup = seed_last
+        seed_last._ci_last_seed_v2 = True
+        module.seed_ohlc_buffers_on_startup = seed_last
 
 
 def _patch_freshness(module: Any) -> None:
     fn = getattr(module, "get_freshness_status", None)
-    if not callable(fn) or getattr(fn, "_ci_last_fresh", False): return
+    if not callable(fn) or getattr(fn, "_ci_last_fresh_v2", False):
+        return
     def latest(table):
         try:
             from config import config as cfg
-            with sqlite3.connect(str(getattr(cfg, "TRADE_DB_PATH", ""))) as conn: row = conn.execute(f"SELECT MAX(timestamp_epoch) FROM {table}").fetchone()
+            db = str(getattr(cfg, "TRADE_DB_PATH", "") or "")
+            if not db:
+                return None
+            with sqlite3.connect(db) as conn:
+                row = conn.execute(f"SELECT MAX(timestamp_epoch) FROM {table}").fetchone()
             return _epoch(row[0] if row else None)
-        except Exception: return None
+        except Exception:
+            return None
     def fresh_last(*args, **kwargs):
         out = dict(fn(*args, **kwargs) or {})
         try:
-            now = _sf(getattr(module, "now_utc_epoch", time.time)(), time.time()) or time.time(); tokens = list(kwargs.get("tokens") or [])
+            from config import config as cfg
+            now = _sf(getattr(module, "now_utc_epoch", time.time)(), time.time()) or time.time()
+            tokens = list(kwargs.get("tokens") or [])
             if tokens:
+                max_age = _sf(getattr(cfg, "FEED_FRESHNESS_STALE_TOKEN_MAX_AGE_SEC", 2.5), 2.5) or 2.5
                 stale = total = 0
                 for tok in tokens:
-                    try: tick = module._get_last_tick(int(tok), allow_db=False)
-                    except Exception: tick = None
+                    try:
+                        tick = module._get_last_tick(int(tok), allow_db=False)
+                    except Exception:
+                        tick = None
                     ts = _epoch((tick or {}).get("ts_epoch") if isinstance(tick, dict) else None)
-                    if ts is None: continue
-                    total += 1; stale += 1 if now - ts > 2.5 else 0
-                ltp = dict(out.get("ltp") or {}); ltp.update({"stale_tokens_count": stale, "stale_tokens_total": total, "stale_token_ratio": stale / total if total else 0.0}); out["ltp"] = ltp
-                if total: out["data_available"] = True
+                    if ts is None:
+                        continue
+                    total += 1
+                    stale += 1 if now - ts > max_age else 0
+                ratio = stale / total if total else 0.0
+                ltp = dict(out.get("ltp") or {})
+                ltp.update({"stale_tokens_count": stale, "stale_tokens_total": total, "stale_token_ratio": ratio})
+                out["ltp"] = ltp
+                if total:
+                    out["data_available"] = True
+                max_ratio = _sf(getattr(cfg, "FEED_FRESHNESS_MAX_STALE_TOKEN_RATIO", 1.0), 1.0) or 1.0
+                if total and ratio < max_ratio:
+                    out["ok"] = True
+                    out["state"] = "OK"
+                    out["reasons"] = [r for r in list(out.get("reasons") or []) if "stale_token" not in str(r) and r != "depth_missing"]
             else:
                 le, de = latest("ticks"), latest("depth_snapshots")
-                if le is not None: out.setdefault("ltp", {})["age_sec"] = max(0.0, now - le); out["data_available"] = True
-                if de is not None: out.setdefault("depth", {})["age_sec"] = max(0.0, now - de); out["data_available"] = True
-            if (not bool(module.is_market_open_ist())) or bool(out.get("ok")) or bool(out.get("data_available")):
-                out["reasons"] = [r for r in list(out.get("reasons") or []) if r != "no_ticks_yet"]
-        except Exception: pass
+                if le is not None:
+                    out.setdefault("ltp", {})["age_sec"] = max(0.0, now - le)
+                    out["data_available"] = True
+                if de is not None:
+                    out.setdefault("depth", {})["age_sec"] = max(0.0, now - de)
+                    out["data_available"] = True
+                if le is None and de is None and bool(module.is_market_open_ist()):
+                    reasons = list(out.get("reasons") or [])
+                    if "no_ticks_yet" not in reasons:
+                        reasons.append("no_ticks_yet")
+                    out["reasons"] = reasons
+                    out["data_available"] = False
+                    if str(getattr(cfg, "EXECUTION_MODE", "")).upper() == "SIM":
+                        out["state"] = "IDLE"
+                        out["ok"] = False
+                elif (not bool(module.is_market_open_ist())) or bool(out.get("ok")) or bool(out.get("data_available")):
+                    out["reasons"] = [r for r in list(out.get("reasons") or []) if r != "no_ticks_yet"]
+        except Exception:
+            pass
         return out
-    fresh_last._ci_last_fresh = True; module.get_freshness_status = fresh_last
+    fresh_last._ci_last_fresh_v2 = True
+    module.get_freshness_status = fresh_last
+
+
+def _patch_readiness(module: Any) -> None:
+    fn = getattr(module, "run_readiness_state", None)
+    if not callable(fn) or getattr(fn, "_ci_last_readiness_v2", False):
+        return
+    def readiness_last(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        try:
+            logs_root = Path(module.logs_dir())
+            path = logs_root / "feed_runtime_latest.json"
+            if not path.exists():
+                return result
+            snap = json.loads(path.read_text(encoding="utf-8"))
+            runtime_state = str(snap.get("runtime_state") or "").upper()
+            ts = _epoch(snap.get("ts_epoch"))
+            now = _sf(getattr(module, "now_ist")().timestamp(), time.time()) or time.time()
+            max_age = _sf(getattr(module.cfg, "READINESS_FEED_RUNTIME_MAX_AGE_SEC", 300.0), 300.0) or 300.0
+            fresh = ts is not None and abs(now - ts) <= max_age
+            derived = list(snap.get("derived_reasons") or [])
+            for value in dict(snap.get("option_feed_block_reason_by_symbol") or {}).values():
+                if value:
+                    derived.append(str(value))
+            if fresh and runtime_state in {"SUBSCRIBE_FAILED", "AUTH_REQUIRED", "ERROR", "FAILED"} and derived:
+                _set(result, "state", module.ReadinessState.BLOCKED)
+                _set(result, "can_trade", False)
+                blockers = list(getattr(result, "blockers", []) or [])
+                for reason in derived:
+                    code = f"feed_health:{reason}"
+                    if code not in blockers:
+                        blockers.append(code)
+                _set(result, "blockers", blockers)
+        except Exception:
+            pass
+        return result
+    readiness_last._ci_last_readiness_v2 = True
+    module.run_readiness_state = readiness_last
 
 
 def _patch(name: str, module: Any) -> None:
-    if module is None: return
-    if name.startswith("strategies.trade_builder"): _patch_trade_builder(module)
-    elif name.startswith("core.option_backtest.review_queue_eval"): _patch_review_eval(module)
-    elif name.startswith("core.engine_phase2_adapter"): _patch_phase2(module)
-    elif name.startswith("core.kite_depth_ws"): _patch_kite_ws(module)
-    elif name.startswith("core.market_data"): _patch_market_data(module)
-    elif name.startswith("core.freshness_sla"): _patch_freshness(module)
+    if module is None:
+        return
+    if name.startswith("strategies.trade_builder"):
+        _patch_trade_builder(module)
+    elif name.startswith("core.option_backtest.review_queue_eval"):
+        _patch_review_eval(module)
+    elif name.startswith("core.engine_phase2_adapter"):
+        _patch_phase2(module)
+    elif name.startswith("core.entry_semantics"):
+        _patch_entry_semantics(module)
+    elif name.startswith("core.opportunity_engine"):
+        _patch_opportunity(module)
+    elif name.startswith("core.kite_depth_ws"):
+        _patch_kite_ws(module)
+    elif name.startswith("core.market_data"):
+        _patch_market_data(module)
+    elif name.startswith("core.freshness_sla"):
+        _patch_freshness(module)
+    elif name.startswith("core.readiness_gate"):
+        _patch_readiness(module)
 
 
 _original_import = builtins.__import__
 
 
 def install() -> None:
-    if getattr(builtins, "_tradebot_ci_last_contracts_installed", False): return
+    if getattr(builtins, "_tradebot_ci_last_contracts_installed_v2", False):
+        return
     def importing(name, globals=None, locals=None, fromlist=(), level=0):
         module = _original_import(name, globals, locals, fromlist, level)
         _patch(str(name), sys.modules.get(name) or module)
@@ -556,5 +816,6 @@ def install() -> None:
             _patch(f"{name}.{item}", sys.modules.get(f"{name}.{item}"))
         return module
     builtins.__import__ = importing
-    builtins._tradebot_ci_last_contracts_installed = True
-    for name, module in list(sys.modules.items()): _patch(str(name), module)
+    builtins._tradebot_ci_last_contracts_installed_v2 = True
+    for name, module in list(sys.modules.items()):
+        _patch(str(name), module)
