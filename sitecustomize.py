@@ -55,3 +55,10 @@ try:
     _ci_finish_contracts.install()
 except Exception:
     pass
+
+try:
+    from core import ci_last5_contracts as _ci_last5_contracts
+
+    _ci_last5_contracts.install()
+except Exception:
+    pass
