@@ -48,3 +48,10 @@ try:
     _ci_tail_contracts.install()
 except Exception:
     pass
+
+try:
+    from core import ci_finish_contracts as _ci_finish_contracts
+
+    _ci_finish_contracts.install()
+except Exception:
+    pass
