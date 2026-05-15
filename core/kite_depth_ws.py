@@ -227,15 +227,12 @@ def _prune_stale_option_subscription_tokens(  # noqa: F811
         stale_tokens = list(stale.get(symbol, []))
         minimum = int(mins.get(symbol, 0))
         if len(keep) < minimum and stale_tokens:
-            stale_tokens.sort(key=lambda token: option_rank.get(int(token), (0, 0, 0, 0, int(token))), reverse=True)
+            stale_tokens.sort(key=lambda token: option_rank.get(int(token), (0, 0, 0, 0, int(token))))
             add = stale_tokens[: max(0, minimum - len(keep))]
             keep.extend(add)
             protected[symbol] = len(add)
             add_set = set(add)
             stale_tokens = [token for token in stale_tokens if token not in add_set]
-        if len(keep) < minimum:
-            # Session-gated rows can make this non-zero, but never invent tokens.
-            pass
         if stale_tokens:
             pruned_by_symbol[symbol] = len(stale_tokens)
             for token in stale_tokens[:5]:
@@ -261,6 +258,40 @@ def _prune_stale_option_subscription_tokens(  # noqa: F811
         "stale_samples": stale_samples[:10],
         "consecutive_stale_windows_required": consecutive,
     }
+
+
+def _repair_option_minimum_floor(
+    tokens: list[int],
+    *,
+    option_rank_by_token: dict[int, tuple],
+    token_to_symbol: dict[int, str],
+    min_required_by_symbol: dict[str, int],
+) -> list[int]:
+    """Restore nearest missing options when prune falls below a symbol floor."""
+    out = _contract_dedupe(tokens)
+    present = set(out)
+    for symbol, minimum_raw in sorted(dict(min_required_by_symbol or {}).items()):
+        symbol_u = str(symbol or "").upper()
+        minimum = max(0, int(minimum_raw or 0))
+        if minimum <= 0:
+            continue
+        current = [
+            token
+            for token in out
+            if token in option_rank_by_token and str(token_to_symbol.get(int(token)) or "").upper() == symbol_u
+        ]
+        if len(current) >= minimum:
+            continue
+        candidates = [
+            int(token)
+            for token in option_rank_by_token
+            if int(token) not in present and str(token_to_symbol.get(int(token)) or "").upper() == symbol_u
+        ]
+        candidates.sort(key=lambda token: option_rank_by_token.get(int(token), (float("inf"), 2, float("inf"), 2, int(token))))
+        for token in candidates[: max(0, minimum - len(current))]:
+            out.append(int(token))
+            present.add(int(token))
+    return _contract_dedupe(out)
 
 
 def _enforce_depth_contract_budget(
@@ -465,6 +496,7 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):  # noqa: F81
     }
     if bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False)):
         tokens, prune_meta = _prune_stale_option_subscription_tokens(tokens=tokens, option_rank_by_token=option_rank_by_token, token_to_symbol=token_to_symbol, min_required_by_symbol=min_required)
+        tokens = _repair_option_minimum_floor(tokens, option_rank_by_token=option_rank_by_token, token_to_symbol=token_to_symbol, min_required_by_symbol=min_required)
 
     if validate_tokens:
         known_tokens: set[int] = set()
