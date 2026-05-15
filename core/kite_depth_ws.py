@@ -63,6 +63,14 @@ def _sync_contract_outputs() -> None:
             globals()[name] = getattr(_contracts, name)
 
 
+def _to_float(value: Any, default: float | None = None) -> float | None:
+    try:
+        out = float(value)
+        return default if out != out else out
+    except Exception:
+        return default
+
+
 def _session_tick_skipped_count(row: dict[str, Any], symbol: str) -> int:
     skipped = row.get("stale_option_session_tick_skipped_count_by_symbol") or {}
     try:
@@ -90,6 +98,61 @@ def _normalize_depth_resolution_metadata(resolution: list[dict[str, Any]]) -> li
     return normalized
 
 
+def _normalize_prune_meta(
+    *,
+    retained: list[int],
+    meta: dict[str, Any],
+    option_rank_by_token: dict[int, tuple],
+    token_to_symbol: dict[int, str],
+    min_required_by_symbol: dict[str, int] | None,
+) -> dict[str, Any]:
+    out = dict(meta or {})
+    if out.get("protected_stale_by_symbol"):
+        return out
+    pruned_by_symbol = dict(out.get("pruned_by_symbol") or {})
+    if not pruned_by_symbol:
+        return out
+    minimums = {str(k).upper(): int(v or 0) for k, v in dict(min_required_by_symbol or {}).items()}
+    if not minimums:
+        return out
+    try:
+        now = float(now_utc_epoch())
+    except Exception:
+        now = 0.0
+    try:
+        max_age = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5) or 2.5)
+    except Exception:
+        max_age = 2.5
+    option_tokens = [int(t) for t in option_rank_by_token]
+    try:
+        rows = get_latest_tick_rows_db(option_tokens) or {}
+    except Exception:
+        rows = {}
+    retained_set = {int(t) for t in list(retained or [])}
+    protected: dict[str, int] = {}
+    for symbol, minimum in minimums.items():
+        if int(pruned_by_symbol.get(symbol, 0) or 0) <= 0 or minimum <= 0:
+            continue
+        retained_options = [
+            int(token)
+            for token in option_rank_by_token
+            if int(token) in retained_set
+            and str(token_to_symbol.get(int(token)) or "").upper() == symbol
+        ]
+        fresh_count = 0
+        for token in retained_options:
+            row = rows.get(int(token)) or rows.get(str(int(token))) or {}
+            ts = _to_float(row.get("ts_epoch"), None)
+            if ts is not None and now > 0 and (now - float(ts)) <= max_age:
+                fresh_count += 1
+        protected_count = max(0, min(int(minimum), len(retained_options)) - int(fresh_count))
+        if protected_count:
+            protected[symbol] = int(protected_count)
+    if protected:
+        out["protected_stale_by_symbol"] = protected
+    return out
+
+
 def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, token_to_symbol, min_required_by_symbol=None):  # noqa: F811
     _sync_contract_public_state()
     retained, meta = _contract_prune_stale_option_subscription_tokens(
@@ -99,6 +162,13 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
         min_required_by_symbol=min_required_by_symbol,
     )
     _sync_contract_outputs()
+    meta = _normalize_prune_meta(
+        retained=list(retained or []),
+        meta=dict(meta or {}),
+        option_rank_by_token=dict(option_rank_by_token or {}),
+        token_to_symbol=dict(token_to_symbol or {}),
+        min_required_by_symbol=dict(min_required_by_symbol or {}),
+    )
     return retained, meta
 
 
