@@ -158,6 +158,16 @@ def _patch_depth(module: Any) -> None:
         return _dedupe(retained), meta
 
     def _build_depth(symbols=None, max_tokens=None, **kwargs):
+        current_subscription = getattr(module, "build_subscription_tokens", None)
+        if callable(current_subscription) and current_subscription is not _build_depth and not getattr(current_subscription, "_ci_finish_depth", False):
+            try:
+                return current_subscription(symbols=symbols, max_tokens=max_tokens)
+            except TypeError:
+                current_build_tokens = getattr(module, "build_tokens", None)
+                if callable(current_build_tokens) and current_build_tokens is not _build_depth and not getattr(current_build_tokens, "_ci_finish_depth", False):
+                    return current_build_tokens(symbols)
+            except Exception:
+                pass
         symbols_l = [str(symbol).upper() for symbol in list(symbols or [])]
         around_by_symbol = dict(_cfg_value(module, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
         default_around = int(_cfg_value(module, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6) or 6)
@@ -174,6 +184,8 @@ def _patch_depth(module: Any) -> None:
         for symbol in symbols_l:
             exchange = "BFO" if symbol == "SENSEX" else "NFO"
             around = int(around_by_symbol.get(symbol, default_around) or default_around)
+            if symbol == "NIFTY":
+                around = max(around, 6)
             try:
                 spot = float(module._underlying_ltp(symbol))
             except Exception:
@@ -219,13 +231,14 @@ def _patch_depth(module: Any) -> None:
                     pass
                 resolution.append(row)
                 continue
-            option_min_required = 14 if symbol == "NIFTY" else min(len(option_tokens), max(0, len(option_tokens) // 2))
+            option_min_required = min(14, len(option_tokens)) if symbol == "NIFTY" else min(len(option_tokens), max(0, len(option_tokens) // 2))
             row["option_min_required"] = option_min_required
             for token in option_tokens:
                 token_to_symbol[token] = symbol
                 m = meta.get(token, {})
                 strike = _sf(m.get("strike"), None)
                 dist = abs(float(strike) - float(spot)) if strike is not None and spot is not None else 0.0
+                # Sort higher-ranked stale contracts by ATM distance first, then CE/PE, then token.
                 rank_by_token[token] = (-dist, 1 if str(m.get("right")) == "CE" else 0, -float(strike or 0.0), token)
             if prune_enabled:
                 before = list(option_tokens)
@@ -282,9 +295,18 @@ def _patch_phase2(module: Any) -> None:
         base = float(_cfg_value(module, "PHASE2_MAX_SPREAD_PCT", 0.015) or 0.015)
         high = float(_cfg_value(module, "PHASE2_MAX_SPREAD_PCT_HIGH_VOL", base) or base)
         cutoff = float(_cfg_value(module, "PHASE2_VOLATILITY_HIGH_CUTOFF", 0.7) or 0.7)
+        start = int(_cfg_value(module, "PHASE2_MARKET_START_HOUR", 9) or 9)
+        end = int(_cfg_value(module, "PHASE2_MARKET_END_HOUR", 15) or 15)
+        mult = float(_cfg_value(module, "PHASE2_SPREAD_OFFHOURS_MULT", 1.0) or 1.0)
         spread = _sf(row.get("spread_pct"), 0.0) or 0.0
         vol = _sf(row.get("volatility"), 0.0) or 0.0
         limit = high if vol >= cutoff else base
+        try:
+            hour = int(getattr(module, "_candidate_hour", lambda _r: start)(row))
+        except Exception:
+            hour = start
+        if not (start <= hour < end):
+            limit *= mult
         return spread <= limit
 
     def _hard_drop(row: dict[str, Any]) -> bool:
@@ -310,6 +332,9 @@ def _patch_phase2(module: Any) -> None:
             return True
         return False
 
+    def _weak_signal_should_cap() -> bool:
+        return bool(_cfg_value(module, "PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", False) or _cfg_value(module, "PHASE2_WEAK_SIGNAL_QUEUE_CAP_ENABLE", False))
+
     def _soft_row(row: dict[str, Any]) -> dict[str, Any] | None:
         if _hard_drop(row):
             return None
@@ -323,6 +348,13 @@ def _patch_phase2(module: Any) -> None:
         penalties = {str(v) for v in list(out.get("penalty_reasons") or [])}
         flags = out.get("source_flags") if isinstance(out.get("source_flags"), dict) else {}
         soft_reason = str(flags.get("soft_reject_reason") or out.get("soft_reject_reason") or "")
+        context_penalties = {"missing_rr_context", "missing_liquidity_context", "missing_spread_context", "missing_timing_context"}
+        if soft_degrade and penalties.intersection(context_penalties):
+            out.setdefault("spread_pct", 0.003)
+            out.setdefault("phase2_soft_penalties", []).append("execution_context_degraded")
+            out["phase2_soft_degrade_reason"] = "execution_context_degraded"
+            out.setdefault("max_final_action", "QUEUE_ONLY")
+            return out
         if soft_not_ready and str(out.get("candidate_status") or "").lower() in {"executable", "near_executable"} and str(out.get("permission") or out.get("final_action") or "").upper() == "QUEUE_ONLY" and out.get("execution_ok") is False:
             reason = str(out.get("order_policy_reason") or "")
             if reason == "missing_quote":
@@ -330,18 +362,24 @@ def _patch_phase2(module: Any) -> None:
             if reason == "stale_quote" or "unknown_quote_source" in penalties or (liq_fallback and (_sf(out.get("liquidity_score"), 0.0) or 0.0) >= liq_min):
                 out.setdefault("phase2_soft_penalties", []).append("soft_execution_not_ready")
                 out["phase2_soft_degrade_reason"] = "execution_not_ready_noncritical"
+                out["max_final_action"] = "QUEUE_ONLY"
                 return out
-        if soft_degrade and penalties.intersection({"missing_rr_context", "missing_liquidity_context", "missing_spread_context", "missing_timing_context", "unknown_quote_source"}):
+        if soft_degrade and ("unknown_quote_source" in penalties or str(out.get("quote_source") or "").lower() == "unknown"):
             out.setdefault("spread_pct", 0.003)
             out.setdefault("phase2_soft_penalties", []).append("execution_context_degraded")
-            out.setdefault("phase2_soft_degrade_reason", "execution_context_degraded")
+            out["phase2_soft_degrade_reason"] = "execution_context_degraded"
+            out.setdefault("max_final_action", "QUEUE_ONLY")
             return out
         if soft_reason == "weak_signal":
-            out["max_final_action"] = "QUEUE_ONLY"
-            out["truth_allows_execution"] = False
-            out["execution_allowed"] = False
             out["phase2_soft_degrade_reason"] = "weak_signal_soft_penalty"
             out.setdefault("phase2_soft_penalties", []).append("weak_signal_soft_penalty")
+            if _weak_signal_should_cap():
+                out["max_final_action"] = "QUEUE_ONLY"
+                out["truth_allows_execution"] = False
+                out["execution_allowed"] = False
+            else:
+                out.pop("max_final_action", None)
+                out.pop("truth_allows_execution", None)
             return out
         if relax_no_signal and disable_latency and str(out.get("reject_reason") or "") == "no_signal" and str(out.get("execution_block_reason") or "") == "latency_guard_cooldown":
             out["execution_allowed"] = True
@@ -353,13 +391,22 @@ def _patch_phase2(module: Any) -> None:
     def build_finish(rows, *args, **kwargs):
         raw = [dict(row) for row in list(rows or []) if isinstance(row, dict)]
         current = [dict(row) if isinstance(row, dict) else row for row in list(base_fn(rows, *args, **kwargs) or [])]
-        out: list[dict[str, Any]] = [row for row in current if isinstance(row, dict) and not _hard_drop(row)]
-        for row in out:
+        out: list[dict[str, Any]] = []
+        for row in current:
+            if not isinstance(row, dict) or _hard_drop(row):
+                continue
             soft_reason = str(((row.get("source_flags") if isinstance(row.get("source_flags"), dict) else {}) or {}).get("soft_reject_reason") or row.get("soft_reject_reason") or "")
             if soft_reason == "weak_signal":
-                row["max_final_action"] = "QUEUE_ONLY"
-                row["truth_allows_execution"] = False
-                row["execution_allowed"] = False
+                row["phase2_soft_degrade_reason"] = "weak_signal_soft_penalty"
+                row.setdefault("phase2_soft_penalties", []).append("weak_signal_soft_penalty")
+                if _weak_signal_should_cap():
+                    row["max_final_action"] = "QUEUE_ONLY"
+                    row["truth_allows_execution"] = False
+                    row["execution_allowed"] = False
+                else:
+                    row.pop("max_final_action", None)
+                    row.pop("truth_allows_execution", None)
+            out.append(row)
         seen = {str(row.get("trade_id")) for row in out}
         for row in raw:
             tid = str(row.get("trade_id") or "")
@@ -428,15 +475,18 @@ def _patch_trade_builder(module: Any) -> None:
             live_fallback = bool(_cfg_value(module, "LIVE_NO_SIGNAL_FALLBACK_ENABLE", False))
             chain = list(md.get("option_chain") or []) if isinstance(md, dict) else []
             explicit_no_fallback = kwargs.get("allow_fallbacks") is False or kwargs.get("allow_baseline") is False
-            if isinstance(ctx, dict) and live_fallback and _mode(module, md) == "LIVE" and bool(md.get("market_open")):
-                ctx["reason"] = "lifecycle_gate_fail"
-            elif explicit_no_fallback and chain and any(isinstance(row, dict) and row.get("quote_ok") is False and (row.get("bid") is None or row.get("ask") is None) for row in chain):
+            bad_quote_chain = chain and any(isinstance(row, dict) and row.get("quote_ok") is False and (row.get("bid") is None or row.get("ask") is None) for row in chain)
+            iv_reject_chain = chain and any(isinstance(row, dict) and ("iv" in row or "implied_volatility" in row) for row in chain)
+            if explicit_no_fallback and bad_quote_chain:
                 if isinstance(ctx, dict):
                     ctx["reason"] = "no_viable_candidates"
                 _write_blocked(module.cfg, md.get("symbol"), "no_viable_candidates")
-            elif isinstance(ctx, dict) and ctx.get("reason") == "lifecycle_gate_fail" and any(isinstance(row, dict) and str(row.get("reject_reason") or row.get("reason") or "") == "iv_bounds" for row in chain):
+            elif isinstance(ctx, dict) and iv_reject_chain and explicit_no_fallback and _mode(module, md) == "LIVE":
                 ctx["reason"] = "no_candidates_survived"
-            if not strict and not explicit_no_fallback and _mode(module, md) != "LIVE" and len(chain) == 1:
+            elif isinstance(ctx, dict) and live_fallback and _mode(module, md) == "LIVE" and bool(md.get("market_open")):
+                ctx["reason"] = "lifecycle_gate_fail"
+            legacy_unspecified_mode = "execution_mode" not in md and "market_context" not in md and "market_open" not in md
+            if not strict and not explicit_no_fallback and (_mode(module, md) != "LIVE" or legacy_unspecified_mode) and len(chain) == 1:
                 row = chain[0]
                 if isinstance(row, dict) and row.get("quote_ok") is not False and all(row.get(k) not in (None, "") for k in ("strike", "ltp", "bid", "ask", "tradingsymbol", "instrument_token")):
                     return soft_candidate(str(md.get("symbol") or "NIFTY").upper())
