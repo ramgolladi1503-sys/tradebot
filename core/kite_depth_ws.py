@@ -260,6 +260,41 @@ def _prune_stale_option_subscription_tokens(  # noqa: F811
     }
 
 
+def _restore_session_tick_skipped_options(
+    tokens: list[int],
+    *,
+    option_rank_by_token: dict[int, tuple],
+    token_to_symbol: dict[int, str],
+) -> list[int]:
+    """Preserve the full option universe for symbols without a session tick.
+
+    When session-tick gating is enabled, no option for a symbol may be pruned
+    until at least one option tick has arrived during the current depth session.
+    """
+    if not bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)):
+        return _contract_dedupe(tokens)
+    session_symbols = {str(k).upper() for k in dict(globals().get("_SYMBOL_LAST_OPTION_TICK_TS") or {}).keys()}
+    out = _contract_dedupe(tokens)
+    present = set(out)
+    missing_session_symbols = {
+        str(token_to_symbol.get(int(token)) or "").upper()
+        for token in option_rank_by_token
+        if str(token_to_symbol.get(int(token)) or "").upper()
+        and str(token_to_symbol.get(int(token)) or "").upper() not in session_symbols
+    }
+    for symbol in sorted(missing_session_symbols):
+        candidates = [
+            int(token)
+            for token in option_rank_by_token
+            if int(token) not in present and str(token_to_symbol.get(int(token)) or "").upper() == symbol
+        ]
+        candidates.sort(key=lambda token: option_rank_by_token.get(int(token), (float("inf"), 2, float("inf"), 2, int(token))))
+        for token in candidates:
+            out.append(int(token))
+            present.add(int(token))
+    return _contract_dedupe(out)
+
+
 def _repair_option_minimum_floor(
     tokens: list[int],
     *,
@@ -496,6 +531,7 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):  # noqa: F81
     }
     if bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", False)):
         tokens, prune_meta = _prune_stale_option_subscription_tokens(tokens=tokens, option_rank_by_token=option_rank_by_token, token_to_symbol=token_to_symbol, min_required_by_symbol=min_required)
+        tokens = _restore_session_tick_skipped_options(tokens, option_rank_by_token=option_rank_by_token, token_to_symbol=token_to_symbol)
         tokens = _repair_option_minimum_floor(tokens, option_rank_by_token=option_rank_by_token, token_to_symbol=token_to_symbol, min_required_by_symbol=min_required)
 
     if validate_tokens:
