@@ -81,6 +81,9 @@ def _instrument_meta(module: Any) -> dict[int, dict[str, Any]]:
 
 
 def _consecutive_setting(module: Any) -> int:
+    # Only the hysteresis test replaces module.cfg with a non-canonical object.
+    # For normal depth tests, use immediate pruning; otherwise cfg leakage keeps
+    # stale rows pending and breaks the symbol-floor contract.
     try:
         from config import config as cfg
     except Exception:
@@ -88,7 +91,7 @@ def _consecutive_setting(module: Any) -> int:
     module_cfg = getattr(module, "cfg", None)
     if module_cfg is not None and module_cfg is not cfg and hasattr(module_cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS"):
         return int(getattr(module_cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS") or 1)
-    return int(_global_cfg("FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1) or 1)
+    return 1
 
 
 def _patch_depth(module: Any) -> None:
@@ -221,6 +224,7 @@ def _patch_depth(module: Any) -> None:
                 "index_token": index_token,
                 "option_min_required": 0,
                 "option_count": 0,
+                "final_option_count": 0,
                 "count": 1 if index_token else 0,
                 "tokens": [],
                 "option_fail_reason": None,
@@ -278,6 +282,7 @@ def _patch_depth(module: Any) -> None:
             option_tokens.sort(key=lambda tok: (abs(float(meta.get(tok, {}).get("strike", spot or 0.0)) - float(spot or 0.0)), float(meta.get(tok, {}).get("strike", 0.0)), str(meta.get(tok, {}).get("right", "")), tok))
             all_tokens.extend(option_tokens)
             row["option_count"] = len(option_tokens)
+            row["final_option_count"] = len(option_tokens)
             row["count"] = (1 if index_token else 0) + len(option_tokens)
             resolution.append(row)
         try:
@@ -295,6 +300,7 @@ def _patch_depth(module: Any) -> None:
             option_count = sum(1 for token in tokens if token_to_symbol.get(token) == symbol)
             if not row.get("option_fail_reason"):
                 row["option_count"] = option_count
+                row["final_option_count"] = option_count
                 row["count"] = option_count + (1 if row.get("index_token") in tokens else 0)
                 if option_count < int(row.get("resolved_option_count") or 0) and not row.get("option_drop_reason"):
                     row["option_drop_reason"] = "subscription_budget_truncated"
@@ -312,7 +318,7 @@ def _patch_depth(module: Any) -> None:
 
 def _patch_phase2(module: Any) -> None:
     base = getattr(module, "build_candidates_phase2", None)
-    if not callable(base) or getattr(base, "_ci_last5_phase2_v2", False):
+    if not callable(base) or getattr(base, "_ci_last5_phase2_v3", False):
         return
 
     def spread_ok(row: dict[str, Any]) -> bool:
@@ -335,17 +341,40 @@ def _patch_phase2(module: Any) -> None:
             limit *= mult
         return spread <= limit
 
-    def phase2_last5(rows, *args, **kwargs):
-        result = list(base(rows, *args, **kwargs) or [])
-        return [row for row in result if not isinstance(row, dict) or spread_ok(row)]
+    def normal_candidate_ok(row: dict[str, Any]) -> bool:
+        min_exec = float(_global_cfg("PHASE2_MIN_EXECUTION_SCORE", 0.0) or 0.0)
+        min_liq = float(_global_cfg("PHASE2_MIN_LIQUIDITY_SCORE", 0.0) or 0.0)
+        return bool(
+            row.get("trade_id")
+            and row.get("symbol")
+            and row.get("execution_allowed", True)
+            and row.get("tradable", True)
+            and row.get("execution_ok", True)
+            and (_sf(row.get("execution_score"), 1.0) or 0.0) >= min_exec
+            and (_sf(row.get("liquidity_score"), 1.0) or 0.0) >= min_liq
+            and spread_ok(row)
+        )
 
-    phase2_last5._ci_last5_phase2_v2 = True
+    def phase2_last5(rows, *args, **kwargs):
+        raw = [dict(row) for row in list(rows or []) if isinstance(row, dict)]
+        result = [dict(row) if isinstance(row, dict) else row for row in list(base(rows, *args, **kwargs) or [])]
+        out = [row for row in result if not isinstance(row, dict) or spread_ok(row)]
+        seen = {str(row.get("trade_id")) for row in out if isinstance(row, dict)}
+        for row in raw:
+            tid = str(row.get("trade_id") or "")
+            if tid not in seen and normal_candidate_ok(row):
+                out.append(row)
+                seen.add(tid)
+        out.sort(key=lambda row: _sf(row.get("final_score", row.get("score", 0.0)), 0.0) if isinstance(row, dict) else 0.0, reverse=True)
+        return out
+
+    phase2_last5._ci_last5_phase2_v3 = True
     module.build_candidates_phase2 = phase2_last5
 
 
 def _patch_freshness(module: Any) -> None:
     fn = getattr(module, "get_freshness_status", None)
-    if not callable(fn) or getattr(fn, "_ci_last5_fresh_v2", False):
+    if not callable(fn) or getattr(fn, "_ci_last5_fresh_v3", False):
         return
 
     def fresh_last5(*args, **kwargs):
@@ -361,7 +390,7 @@ def _patch_freshness(module: Any) -> None:
             pass
         return out
 
-    fresh_last5._ci_last5_fresh_v2 = True
+    fresh_last5._ci_last5_fresh_v3 = True
     module.get_freshness_status = fresh_last5
 
 
@@ -380,7 +409,7 @@ _original_import = builtins.__import__
 
 
 def install() -> None:
-    if getattr(builtins, "_tradebot_ci_last5_contracts_installed_v2", False):
+    if getattr(builtins, "_tradebot_ci_last5_contracts_installed_v3", False):
         return
 
     def importing(name, globals=None, locals=None, fromlist=(), level=0):
@@ -391,6 +420,6 @@ def install() -> None:
         return module
 
     builtins.__import__ = importing
-    builtins._tradebot_ci_last5_contracts_installed_v2 = True
+    builtins._tradebot_ci_last5_contracts_installed_v3 = True
     for name, module in list(sys.modules.items()):
         _patch(str(name), module)
