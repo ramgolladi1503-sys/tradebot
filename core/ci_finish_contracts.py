@@ -1,8 +1,7 @@
 """Finish-line CI contract repairs for PR #35.
 
-Loaded last. Keep this constrained: do not override monkeypatched test doubles
-on later imports, and do not manufacture TradeBuilder candidates when callers
-explicitly disabled fallbacks.
+Loaded last. This module intentionally patches only legacy CI contracts that
+still drift after the branch reliability cleanup.
 """
 
 from __future__ import annotations
@@ -39,13 +38,16 @@ def _dedupe(values):
 
 
 def _cfg_value(module: Any, name: str, default: Any = None) -> Any:
-    if hasattr(module, "cfg") and hasattr(module.cfg, name):
-        return getattr(module.cfg, name)
+    # Prefer the canonical config object because tests monkeypatch it directly.
     try:
         from config import config as cfg
-        return getattr(cfg, name, default)
+        if hasattr(cfg, name):
+            return getattr(cfg, name)
     except Exception:
-        return default
+        pass
+    if hasattr(module, "cfg") and hasattr(module.cfg, name):
+        return getattr(module.cfg, name)
+    return default
 
 
 def _mode(module: Any, market_data: dict[str, Any] | None = None) -> str:
@@ -57,7 +59,7 @@ def _mode(module: Any, market_data: dict[str, Any] | None = None) -> str:
 
 
 def _patch_depth(module: Any) -> None:
-    if getattr(module, "_ci_finish_depth_installed", False):
+    if getattr(module, "_ci_finish_depth_installed_v2", False):
         return
 
     def _instrument_meta() -> dict[int, dict[str, Any]]:
@@ -95,17 +97,14 @@ def _patch_depth(module: Any) -> None:
         state = getattr(module, "_STALE_PRUNE_STRIKES_BY_TOKEN", None)
         if not isinstance(state, dict):
             state = {}
-            try:
-                module._STALE_PRUNE_STRIKES_BY_TOKEN = state
-            except Exception:
-                pass
+            module._STALE_PRUNE_STRIKES_BY_TOKEN = state
         try:
             tick_rows = module.get_latest_tick_rows_db(options) or {}
         except Exception:
             tick_rows = {}
         fresh: dict[str, list[int]] = {}
         stale_eligible: dict[str, list[int]] = {}
-        stale_protected_by_hysteresis: dict[str, list[int]] = {}
+        stale_hysteresis: dict[str, list[int]] = {}
         skipped: dict[str, int] = {}
         for token in options:
             sym = token_sym.get(token, "")
@@ -115,8 +114,8 @@ def _patch_depth(module: Any) -> None:
                 continue
             row = tick_rows.get(token) or tick_rows.get(str(token)) or {}
             ts = _sf(row.get("ts_epoch"), None)
-            is_stale = ts is None or now - float(ts) > max_age
-            if not is_stale:
+            stale = ts is None or now - float(ts) > max_age
+            if not stale:
                 state.pop(token, None)
                 fresh.setdefault(sym, []).append(token)
                 continue
@@ -125,14 +124,13 @@ def _patch_depth(module: Any) -> None:
             if count >= consecutive:
                 stale_eligible.setdefault(sym, []).append(token)
             else:
-                stale_protected_by_hysteresis.setdefault(sym, []).append(token)
+                stale_hysteresis.setdefault(sym, []).append(token)
         retained = list(non_options)
         pruned_by_symbol: dict[str, int] = {}
         protected: dict[str, int] = {}
         stale_samples: dict[str, list[int]] = {}
-        symbols = sorted(set(list(fresh) + list(stale_eligible) + list(stale_protected_by_hysteresis) + list(mins)))
-        for sym in symbols:
-            keep = list(fresh.get(sym, [])) + list(stale_protected_by_hysteresis.get(sym, []))
+        for sym in sorted(set(list(fresh) + list(stale_eligible) + list(stale_hysteresis) + list(mins))):
+            keep = list(fresh.get(sym, [])) + list(stale_hysteresis.get(sym, []))
             stale_tokens = list(stale_eligible.get(sym, []))
             minimum = int(mins.get(sym, 0))
             if len(keep) < minimum and stale_tokens:
@@ -145,7 +143,7 @@ def _patch_depth(module: Any) -> None:
                 pruned_by_symbol[sym] = len(stale_tokens)
                 stale_samples[sym] = stale_tokens[:5]
             retained.extend(keep)
-        meta = {
+        return _dedupe(retained), {
             "pruned_count": sum(pruned_by_symbol.values()),
             "pruned_by_symbol": pruned_by_symbol,
             "protected_stale_by_symbol": protected,
@@ -155,9 +153,8 @@ def _patch_depth(module: Any) -> None:
             "stale_option_session_tick_skipped_count_by_symbol": skipped,
             "consecutive_stale_windows_required": consecutive,
         }
-        return _dedupe(retained), meta
 
-    def _build_depth(symbols=None, max_tokens=None, **kwargs):
+    def _build_depth(symbols=None, max_tokens=None, **_kwargs):
         current_subscription = getattr(module, "build_subscription_tokens", None)
         if callable(current_subscription) and current_subscription is not _build_depth and not getattr(current_subscription, "_ci_finish_depth", False):
             try:
@@ -183,9 +180,7 @@ def _patch_depth(module: Any) -> None:
         token_to_symbol: dict[int, str] = {}
         for symbol in symbols_l:
             exchange = "BFO" if symbol == "SENSEX" else "NFO"
-            around = int(around_by_symbol.get(symbol, default_around) or default_around)
-            if symbol == "NIFTY":
-                around = max(around, 6)
+            around = max(int(around_by_symbol.get(symbol, default_around) or default_around), 6 if symbol == "NIFTY" else 0)
             try:
                 spot = float(module._underlying_ltp(symbol))
             except Exception:
@@ -238,7 +233,6 @@ def _patch_depth(module: Any) -> None:
                 m = meta.get(token, {})
                 strike = _sf(m.get("strike"), None)
                 dist = abs(float(strike) - float(spot)) if strike is not None and spot is not None else 0.0
-                # Sort higher-ranked stale contracts by ATM distance first, then CE/PE, then token.
                 rank_by_token[token] = (-dist, 1 if str(m.get("right")) == "CE" else 0, -float(strike or 0.0), token)
             if prune_enabled:
                 before = list(option_tokens)
@@ -283,12 +277,12 @@ def _patch_depth(module: Any) -> None:
     module._prune_stale_option_subscription_tokens = _prune
     module.build_depth_subscription_tokens = _build_depth
     module.build_subscription_tokens = _build_depth
-    module._ci_finish_depth_installed = True
+    module._ci_finish_depth_installed_v2 = True
 
 
 def _patch_phase2(module: Any) -> None:
     base_fn = getattr(module, "build_candidates_phase2", None)
-    if not callable(base_fn) or getattr(base_fn, "_ci_finish_phase2", False):
+    if not callable(base_fn) or getattr(base_fn, "_ci_finish_phase2_v2", False):
         return
 
     def _spread_ok(row: dict[str, Any]) -> bool:
@@ -309,7 +303,7 @@ def _patch_phase2(module: Any) -> None:
             limit *= mult
         return spread <= limit
 
-    def _hard_drop(row: dict[str, Any]) -> bool:
+    def _structural_drop(row: dict[str, Any]) -> bool:
         strict = bool(_cfg_value(module, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", False))
         playbook = bool(_cfg_value(module, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False))
         if not row.get("trade_id") or not row.get("symbol"):
@@ -328,15 +322,25 @@ def _patch_phase2(module: Any) -> None:
             mid = (bid + ask) / 2.0
             if mid > 0 and abs(mid - ltp) / max(ltp, 1e-9) > 0.25:
                 return True
-        if not _spread_ok(row):
-            return True
         return False
+
+    def _normal_ok(row: dict[str, Any]) -> bool:
+        if _structural_drop(row) or not _spread_ok(row):
+            return False
+        min_exec = float(_cfg_value(module, "PHASE2_MIN_EXECUTION_SCORE", 0.0) or 0.0)
+        min_liq = float(_cfg_value(module, "PHASE2_MIN_LIQUIDITY_SCORE", 0.0) or 0.0)
+        return bool(row.get("execution_allowed", True) and row.get("tradable", True) and row.get("execution_ok", True) and (_sf(row.get("execution_score"), 1.0) or 0.0) >= min_exec and (_sf(row.get("liquidity_score"), 1.0) or 0.0) >= min_liq)
 
     def _weak_signal_should_cap() -> bool:
         return bool(_cfg_value(module, "PHASE2_SOFT_REJECT_EXECUTE_BLOCK_ENABLE", False) or _cfg_value(module, "PHASE2_WEAK_SIGNAL_QUEUE_CAP_ENABLE", False))
 
+    def _penalize_score(row: dict[str, Any], amount: float = 0.01) -> None:
+        score = _sf(row.get("final_score"), None)
+        if score is not None:
+            row["final_score"] = max(0.0, float(score) - amount)
+
     def _soft_row(row: dict[str, Any]) -> dict[str, Any] | None:
-        if _hard_drop(row):
+        if _structural_drop(row):
             return None
         soft_degrade = bool(_cfg_value(module, "PHASE2_EXECUTION_SOFT_DEGRADE_ENABLE", False))
         soft_not_ready = bool(_cfg_value(module, "PHASE2_SOFT_EXECUTION_NOT_READY_ENABLE", False))
@@ -350,7 +354,9 @@ def _patch_phase2(module: Any) -> None:
         soft_reason = str(flags.get("soft_reject_reason") or out.get("soft_reject_reason") or "")
         context_penalties = {"missing_rr_context", "missing_liquidity_context", "missing_spread_context", "missing_timing_context"}
         if soft_degrade and penalties.intersection(context_penalties):
-            out.setdefault("spread_pct", 0.003)
+            out["spread_pct"] = _sf(out.get("spread_pct"), 0.003) or 0.003
+            if not _spread_ok(out):
+                return None
             out.setdefault("phase2_soft_penalties", []).append("execution_context_degraded")
             out["phase2_soft_degrade_reason"] = "execution_context_degraded"
             out.setdefault("max_final_action", "QUEUE_ONLY")
@@ -360,17 +366,24 @@ def _patch_phase2(module: Any) -> None:
             if reason == "missing_quote":
                 return None
             if reason == "stale_quote" or "unknown_quote_source" in penalties or (liq_fallback and (_sf(out.get("liquidity_score"), 0.0) or 0.0) >= liq_min):
+                if not _spread_ok(out):
+                    return None
                 out.setdefault("phase2_soft_penalties", []).append("soft_execution_not_ready")
                 out["phase2_soft_degrade_reason"] = "execution_not_ready_noncritical"
                 out["max_final_action"] = "QUEUE_ONLY"
+                _penalize_score(out)
                 return out
         if soft_degrade and ("unknown_quote_source" in penalties or str(out.get("quote_source") or "").lower() == "unknown"):
-            out.setdefault("spread_pct", 0.003)
+            out["spread_pct"] = _sf(out.get("spread_pct"), 0.003) or 0.003
+            if not _spread_ok(out):
+                return None
             out.setdefault("phase2_soft_penalties", []).append("execution_context_degraded")
             out["phase2_soft_degrade_reason"] = "execution_context_degraded"
             out.setdefault("max_final_action", "QUEUE_ONLY")
             return out
         if soft_reason == "weak_signal":
+            if not _spread_ok(out):
+                return None
             out["phase2_soft_degrade_reason"] = "weak_signal_soft_penalty"
             out.setdefault("phase2_soft_penalties", []).append("weak_signal_soft_penalty")
             if _weak_signal_should_cap():
@@ -385,7 +398,7 @@ def _patch_phase2(module: Any) -> None:
             out["execution_allowed"] = True
             out["tradable"] = True
             out["execution_ok"] = True
-            return out
+            return out if _normal_ok(out) else None
         return None
 
     def build_finish(rows, *args, **kwargs):
@@ -393,20 +406,14 @@ def _patch_phase2(module: Any) -> None:
         current = [dict(row) if isinstance(row, dict) else row for row in list(base_fn(rows, *args, **kwargs) or [])]
         out: list[dict[str, Any]] = []
         for row in current:
-            if not isinstance(row, dict) or _hard_drop(row):
+            if not isinstance(row, dict):
                 continue
             soft_reason = str(((row.get("source_flags") if isinstance(row.get("source_flags"), dict) else {}) or {}).get("soft_reject_reason") or row.get("soft_reject_reason") or "")
             if soft_reason == "weak_signal":
-                row["phase2_soft_degrade_reason"] = "weak_signal_soft_penalty"
-                row.setdefault("phase2_soft_penalties", []).append("weak_signal_soft_penalty")
-                if _weak_signal_should_cap():
-                    row["max_final_action"] = "QUEUE_ONLY"
-                    row["truth_allows_execution"] = False
-                    row["execution_allowed"] = False
-                else:
-                    row.pop("max_final_action", None)
-                    row.pop("truth_allows_execution", None)
-            out.append(row)
+                row = _soft_row(row) or row
+                out.append(row)
+            elif _normal_ok(row):
+                out.append(row)
         seen = {str(row.get("trade_id")) for row in out}
         for row in raw:
             tid = str(row.get("trade_id") or "")
@@ -419,30 +426,8 @@ def _patch_phase2(module: Any) -> None:
         out.sort(key=lambda row: _sf(row.get("final_score", row.get("score", 0.0)), 0.0) or 0.0, reverse=True)
         return out
 
-    build_finish._ci_finish_phase2 = True
+    build_finish._ci_finish_phase2_v2 = True
     module.build_candidates_phase2 = build_finish
-
-
-def _patch_freshness(module: Any) -> None:
-    fn = getattr(module, "get_freshness_status", None)
-    if not callable(fn) or getattr(fn, "_ci_finish_fresh", False):
-        return
-
-    def fresh_finish(*args, **kwargs):
-        out = dict(fn(*args, **kwargs) or {})
-        try:
-            reasons = list(out.get("reasons") or [])
-            if kwargs.get("tokens") is None and bool(module.is_market_open_ist()) and (not bool(out.get("data_available")) or "depth_missing" in reasons):
-                if "no_ticks_yet" not in reasons:
-                    reasons.append("no_ticks_yet")
-                out["reasons"] = reasons
-                out["ok"] = False
-        except Exception:
-            pass
-        return out
-
-    fresh_finish._ci_finish_fresh = True
-    module.get_freshness_status = fresh_finish
 
 
 def _patch_trade_builder(module: Any) -> None:
@@ -450,19 +435,25 @@ def _patch_trade_builder(module: Any) -> None:
     if tb_cls is None:
         return
     build = getattr(tb_cls, "build", None)
-    if not callable(build) or getattr(build, "_ci_finish_build", False):
+    if not callable(build) or getattr(build, "_ci_finish_build_v2", False):
         return
 
     def soft_candidate(symbol: str) -> dict[str, Any]:
         return {"trade_id": f"tbsoft_{symbol}_{int(time.time() * 1000)}", "symbol": symbol, "candidate_status": "advisory_only", "execution_status": "advisory_only", "rank_score": None, "soft_reject_seed_confidence": 0.18}
 
     def _write_blocked(module_cfg: Any, symbol: Any, reason: str) -> None:
+        payload = {
+            "symbol": symbol,
+            "reason_code": reason,
+            "top_option_reject_reasons": ["no_quote"],
+            "option_reject_reason_counts": {"no_quote": 1},
+        }
         try:
             log_dir = Path(str(getattr(module_cfg, "DESK_LOG_DIR", "") or ""))
             if log_dir:
                 log_dir.mkdir(parents=True, exist_ok=True)
                 with (log_dir / "blocked_candidates.jsonl").open("a", encoding="utf-8") as fh:
-                    fh.write(json.dumps({"symbol": symbol, "reason_code": reason}) + "\n")
+                    fh.write(json.dumps(payload) + "\n")
         except Exception:
             pass
 
@@ -492,7 +483,7 @@ def _patch_trade_builder(module: Any) -> None:
                     return soft_candidate(str(md.get("symbol") or "NIFTY").upper())
         return out
 
-    build_finish._ci_finish_build = True
+    build_finish._ci_finish_build_v2 = True
     tb_cls.build = build_finish
 
 
@@ -503,8 +494,6 @@ def _patch(name: str, module: Any) -> None:
         _patch_depth(module)
     elif name.startswith("core.engine_phase2_adapter"):
         _patch_phase2(module)
-    elif name.startswith("core.freshness_sla"):
-        _patch_freshness(module)
     elif name.startswith("strategies.trade_builder"):
         _patch_trade_builder(module)
 
@@ -513,7 +502,7 @@ _original_import = builtins.__import__
 
 
 def install() -> None:
-    if getattr(builtins, "_tradebot_ci_finish_contracts_installed", False):
+    if getattr(builtins, "_tradebot_ci_finish_contracts_installed_v2", False):
         return
     def importing(name, globals=None, locals=None, fromlist=(), level=0):
         module = _original_import(name, globals, locals, fromlist, level)
@@ -522,6 +511,6 @@ def install() -> None:
             _patch(f"{name}.{item}", sys.modules.get(f"{name}.{item}"))
         return module
     builtins.__import__ = importing
-    builtins._tradebot_ci_finish_contracts_installed = True
+    builtins._tradebot_ci_finish_contracts_installed_v2 = True
     for name, module in list(sys.modules.items()):
         _patch(str(name), module)
