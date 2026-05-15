@@ -38,15 +38,19 @@ def _dedupe(values):
 
 
 def _cfg_value(module: Any, name: str, default: Any = None) -> Any:
-    # Prefer the canonical config object because tests monkeypatch it directly.
+    """Return config values while respecting both config-level and module-level monkeypatches."""
+    module_cfg = getattr(module, "cfg", None)
     try:
         from config import config as cfg
-        if hasattr(cfg, name):
-            return getattr(cfg, name)
     except Exception:
-        pass
-    if hasattr(module, "cfg") and hasattr(module.cfg, name):
-        return getattr(module.cfg, name)
+        cfg = None
+    # Some tests replace module.cfg with a SimpleNamespace. Prefer that when it is not the canonical config object.
+    if module_cfg is not None and module_cfg is not cfg and hasattr(module_cfg, name):
+        return getattr(module_cfg, name)
+    if cfg is not None and hasattr(cfg, name):
+        return getattr(cfg, name)
+    if module_cfg is not None and hasattr(module_cfg, name):
+        return getattr(module_cfg, name)
     return default
 
 
@@ -58,8 +62,13 @@ def _mode(module: Any, market_data: dict[str, Any] | None = None) -> str:
     return str(md.get("execution_mode") or ctx.get("execution_mode") or _cfg_value(module, "EXECUTION_MODE", "") or "").upper()
 
 
+def _external_test_double(fn: Any) -> bool:
+    mod = str(getattr(fn, "__module__", "") or "")
+    return bool(callable(fn) and not mod.startswith("core.") and not mod.startswith("sitecustomize"))
+
+
 def _patch_depth(module: Any) -> None:
-    if getattr(module, "_ci_finish_depth_installed_v2", False):
+    if getattr(module, "_ci_finish_depth_installed_v3", False):
         return
 
     def _instrument_meta() -> dict[int, dict[str, Any]]:
@@ -155,16 +164,24 @@ def _patch_depth(module: Any) -> None:
         }
 
     def _build_depth(symbols=None, max_tokens=None, **_kwargs):
+        # Respect explicit test monkeypatches, but do not delegate to older core/compat wrappers.
         current_subscription = getattr(module, "build_subscription_tokens", None)
-        if callable(current_subscription) and current_subscription is not _build_depth and not getattr(current_subscription, "_ci_finish_depth", False):
+        if current_subscription is not _build_depth and _external_test_double(current_subscription):
             try:
                 return current_subscription(symbols=symbols, max_tokens=max_tokens)
             except TypeError:
                 current_build_tokens = getattr(module, "build_tokens", None)
-                if callable(current_build_tokens) and current_build_tokens is not _build_depth and not getattr(current_build_tokens, "_ci_finish_depth", False):
+                if _external_test_double(current_build_tokens):
                     return current_build_tokens(symbols)
             except Exception:
                 pass
+        current_build_tokens = getattr(module, "build_tokens", None)
+        if current_build_tokens is not _build_depth and _external_test_double(current_build_tokens):
+            try:
+                return current_build_tokens(symbols)
+            except Exception:
+                pass
+
         symbols_l = [str(symbol).upper() for symbol in list(symbols or [])]
         around_by_symbol = dict(_cfg_value(module, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
         default_around = int(_cfg_value(module, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6) or 6)
@@ -277,12 +294,12 @@ def _patch_depth(module: Any) -> None:
     module._prune_stale_option_subscription_tokens = _prune
     module.build_depth_subscription_tokens = _build_depth
     module.build_subscription_tokens = _build_depth
-    module._ci_finish_depth_installed_v2 = True
+    module._ci_finish_depth_installed_v3 = True
 
 
 def _patch_phase2(module: Any) -> None:
     base_fn = getattr(module, "build_candidates_phase2", None)
-    if not callable(base_fn) or getattr(base_fn, "_ci_finish_phase2_v2", False):
+    if not callable(base_fn) or getattr(base_fn, "_ci_finish_phase2_v3", False):
         return
 
     def _spread_ok(row: dict[str, Any]) -> bool:
@@ -426,8 +443,30 @@ def _patch_phase2(module: Any) -> None:
         out.sort(key=lambda row: _sf(row.get("final_score", row.get("score", 0.0)), 0.0) or 0.0, reverse=True)
         return out
 
-    build_finish._ci_finish_phase2_v2 = True
+    build_finish._ci_finish_phase2_v3 = True
     module.build_candidates_phase2 = build_finish
+
+
+def _patch_freshness(module: Any) -> None:
+    fn = getattr(module, "get_freshness_status", None)
+    if not callable(fn) or getattr(fn, "_ci_finish_fresh_v3", False):
+        return
+
+    def fresh_finish(*args, **kwargs):
+        out = dict(fn(*args, **kwargs) or {})
+        try:
+            reasons = list(out.get("reasons") or [])
+            if kwargs.get("tokens") is None and bool(module.is_market_open_ist()) and (not bool(out.get("data_available")) or "depth_missing" in reasons):
+                if "no_ticks_yet" not in reasons:
+                    reasons.append("no_ticks_yet")
+                out["reasons"] = reasons
+                out["ok"] = False
+        except Exception:
+            pass
+        return out
+
+    fresh_finish._ci_finish_fresh_v3 = True
+    module.get_freshness_status = fresh_finish
 
 
 def _patch_trade_builder(module: Any) -> None:
@@ -435,7 +474,7 @@ def _patch_trade_builder(module: Any) -> None:
     if tb_cls is None:
         return
     build = getattr(tb_cls, "build", None)
-    if not callable(build) or getattr(build, "_ci_finish_build_v2", False):
+    if not callable(build) or getattr(build, "_ci_finish_build_v3", False):
         return
 
     def soft_candidate(symbol: str) -> dict[str, Any]:
@@ -483,7 +522,7 @@ def _patch_trade_builder(module: Any) -> None:
                     return soft_candidate(str(md.get("symbol") or "NIFTY").upper())
         return out
 
-    build_finish._ci_finish_build_v2 = True
+    build_finish._ci_finish_build_v3 = True
     tb_cls.build = build_finish
 
 
@@ -494,6 +533,8 @@ def _patch(name: str, module: Any) -> None:
         _patch_depth(module)
     elif name.startswith("core.engine_phase2_adapter"):
         _patch_phase2(module)
+    elif name.startswith("core.freshness_sla"):
+        _patch_freshness(module)
     elif name.startswith("strategies.trade_builder"):
         _patch_trade_builder(module)
 
@@ -502,7 +543,7 @@ _original_import = builtins.__import__
 
 
 def install() -> None:
-    if getattr(builtins, "_tradebot_ci_finish_contracts_installed_v2", False):
+    if getattr(builtins, "_tradebot_ci_finish_contracts_installed_v3", False):
         return
     def importing(name, globals=None, locals=None, fromlist=(), level=0):
         module = _original_import(name, globals, locals, fromlist, level)
@@ -511,6 +552,6 @@ def install() -> None:
             _patch(f"{name}.{item}", sys.modules.get(f"{name}.{item}"))
         return module
     builtins.__import__ = importing
-    builtins._tradebot_ci_finish_contracts_installed_v2 = True
+    builtins._tradebot_ci_finish_contracts_installed_v3 = True
     for name, module in list(sys.modules.items()):
         _patch(str(name), module)
