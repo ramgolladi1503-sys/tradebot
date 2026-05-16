@@ -90,9 +90,17 @@ try:
 except Exception:
     pass
 
-# Local full-suite stabilization contracts. Remaining behaviors here are review
-# queue REST fallback/rate-limit and torture long-run latency until their own
-# migration PRs move them into real modules.
+# Long-run stability latency contract has been isolated from the generic full
+# pytest shim. Install it before full_pytest_contracts so the generic shim skips it.
+try:
+    from core import longrun_stability_contract as _longrun_stability_contract
+
+    _longrun_stability_contract.install()
+except Exception:
+    pass
+
+# Local full-suite stabilization contracts. Remaining behavior here is review
+# queue REST fallback/rate-limit until its own migration PR moves it out.
 try:
     from core import full_pytest_contracts as _full_pytest_contracts
 
