@@ -11,7 +11,6 @@ functions that matter after sitecustomize and compatibility hooks load.
 from __future__ import annotations
 
 import importlib
-import sys
 from dataclasses import dataclass
 from typing import Callable
 
@@ -33,6 +32,10 @@ class CheckResult:
 
 def _result(name: str, ok: bool, detail: str) -> CheckResult:
     return CheckResult(name=name, ok=ok, detail=detail)
+
+
+def _is_ci_owner(module: str) -> bool:
+    return module.startswith("core.ci_") or module.startswith("core._ci_")
 
 
 def check_import() -> list[CheckResult]:
@@ -69,7 +72,7 @@ def check_no_ci_depth_owner() -> list[CheckResult]:
     for name in TARGETS:
         fn = getattr(ws, name, None)
         module = str(getattr(fn, "__module__", "") or "")
-        ok = not module.startswith("core.ci_")
+        ok = not _is_ci_owner(module)
         results.append(_result(f"not_ci_owner:{name}", ok, f"module={module!r}"))
     return results
 
