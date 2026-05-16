@@ -62,3 +62,12 @@ try:
     _ci_last5_contracts.install()
 except Exception:
     pass
+
+# Rewrite branch override: install after legacy hooks so depth subscription
+# contracts are owned by the new direct engine during validation.
+try:
+    from core import depth_subscription_engine as _depth_subscription_engine
+
+    _depth_subscription_engine.install()
+except Exception:
+    pass
