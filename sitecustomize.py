@@ -81,8 +81,18 @@ try:
 except Exception:
     pass
 
-# Local full-suite stabilization contracts. These are intentionally narrow and
-# should be migrated into real modules in follow-up cleanup PRs.
+# Market-data warmup contract has been isolated from the generic full pytest
+# shim. Install it first so full_pytest_contracts skips the market-data wrapper.
+try:
+    from core import market_data_warmup_contract as _market_data_warmup_contract
+
+    _market_data_warmup_contract.install()
+except Exception:
+    pass
+
+# Local full-suite stabilization contracts. Remaining behaviors here are review
+# queue REST fallback/rate-limit and torture long-run latency until their own
+# migration PRs move them into real modules.
 try:
     from core import full_pytest_contracts as _full_pytest_contracts
 
