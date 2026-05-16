@@ -63,6 +63,21 @@ def _cfg_bool(conf: Any, name: str, default: bool) -> bool:
     return bool(value)
 
 
+def _direct_prune_consecutive_windows(conf: Any) -> int:
+    """Return consecutive stale windows for the direct prune contract.
+
+    Direct calls to ``_prune_stale_option_subscription_tokens`` historically
+    prune immediately unless a caller explicitly supplies a different value via
+    ``ws.cfg``. Runtime subscription construction can still choose conservative
+    settings before it calls direct prune, but this unit-level contract must not
+    inherit broad global defaults that make isolated stale-prune tests order
+    dependent.
+    """
+    if conf is cfg:
+        return 1
+    return _cfg_int(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1)
+
+
 def _dedupe_tokens(values: Any) -> list[int]:
     seen: set[int] = set()
     out: list[int] = []
@@ -211,7 +226,7 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
     max_age = _cfg_float(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 12.0)
     grace = _cfg_float(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0)
     require_session = _cfg_bool(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
-    consecutive = max(1, min(10, _cfg_int(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1)))
+    consecutive = max(1, min(10, _direct_prune_consecutive_windows(conf)))
     if not _cfg_bool(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True):
         return token_list, {
             "enabled": False,
