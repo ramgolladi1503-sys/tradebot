@@ -145,6 +145,25 @@ def _install_market_data_contract() -> None:
         previous = getattr(conf, "NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS", None)
         had_previous = hasattr(conf, "NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS")
         try:
+            prev_int = int(previous) if previous is not None else 0
+        except Exception:
+            prev_int = 0
+        # Preserve the explicit early-degrade contract. Several tests and runtime
+        # callers intentionally set this to 1 to fail fast when non-live history
+        # is empty. The long-lookback stabilization should only extend the retry
+        # budget when the configured budget is not explicitly fail-fast.
+        if prev_int <= 1:
+            return original(
+                symbol,
+                bars,
+                min_bars,
+                interval=interval,
+                windows_minutes=windows_minutes,
+                required_seed_bars=required_seed_bars,
+                startup_phase=startup_phase,
+                market_mode=market_mode,
+            )
+        try:
             retries = max(1, int(getattr(conf, "STARTUP_WARMUP_FETCH_RETRIES", 3) or 3))
         except Exception:
             retries = 3
@@ -154,7 +173,7 @@ def _install_market_data_contract() -> None:
             setattr(
                 conf,
                 "NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS",
-                max(int(previous or 1), len(windows) * retries),
+                max(prev_int, len(windows) * retries),
             )
             return original(
                 symbol,
