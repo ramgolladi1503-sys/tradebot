@@ -63,11 +63,20 @@ try:
 except Exception:
     pass
 
-# Rewrite branch override: install after legacy hooks so depth subscription
-# contracts are owned by the new direct engine during validation.
+# Depth rewrite override: install after legacy hooks so depth subscription
+# contracts are owned by the new direct engine during validation/runtime.
 try:
     from core import depth_subscription_engine as _depth_subscription_engine
 
     _depth_subscription_engine.install()
+except Exception:
+    pass
+
+# Depth hook cleanup: neutralize only legacy depth-specific CI hook paths while
+# leaving the non-depth compatibility hooks installed for later cleanup PRs.
+try:
+    from core import depth_hook_cleanup as _depth_hook_cleanup
+
+    _depth_hook_cleanup.install()
 except Exception:
     pass
