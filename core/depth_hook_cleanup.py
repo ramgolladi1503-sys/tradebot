@@ -10,6 +10,7 @@ hooks intact for their own cleanup PRs.
 
 from __future__ import annotations
 
+import builtins
 import importlib
 import sys
 from types import ModuleType
@@ -38,6 +39,7 @@ _DEPTH_PATCH_NAMES = (
     "_patch_depth_ws",
 )
 _INSTALLED = False
+_REAPPLYING = False
 
 
 def _noop_depth_patch(_module: Any = None, *args: Any, **kwargs: Any) -> None:
@@ -89,7 +91,33 @@ def _patch_importlib() -> None:
     importlib.import_module = import_module_without_depth_repatch
 
 
+def _patch_builtins_import() -> None:
+    original_import = builtins.__import__
+    if getattr(original_import, "_depth_cleanup_wrapped", False):
+        return
+
+    def import_without_depth_repatch(name, globals=None, locals=None, fromlist=(), level=0):  # type: ignore[no-untyped-def]
+        module = original_import(name, globals, locals, fromlist, level)
+        target_names = [str(name or "")]
+        for item in fromlist or ():
+            target_names.append(f"{name}.{item}")
+        for target_name in target_names:
+            loaded = sys.modules.get(target_name)
+            if target_name in _HOOK_MODULE_NAMES and isinstance(loaded, ModuleType):
+                _neutralize_module(loaded)
+            if target_name.startswith(_DEPTH_MODULE_PREFIX):
+                _reapply_depth_engine()
+        return module
+
+    import_without_depth_repatch._depth_cleanup_wrapped = True  # type: ignore[attr-defined]
+    builtins.__import__ = import_without_depth_repatch
+
+
 def _reapply_depth_engine() -> None:
+    global _REAPPLYING
+    if _REAPPLYING:
+        return
+    _REAPPLYING = True
     try:
         ws = sys.modules.get("core.kite_depth_ws") or importlib.import_module("core.kite_depth_ws")
         engine = sys.modules.get("core.depth_subscription_engine") or importlib.import_module("core.depth_subscription_engine")
@@ -102,6 +130,8 @@ def _reapply_depth_engine() -> None:
                 install()
     except Exception:
         pass
+    finally:
+        _REAPPLYING = False
 
 
 def install() -> None:
@@ -112,5 +142,6 @@ def install() -> None:
         return
     _neutralize_loaded_hooks()
     _patch_importlib()
+    _patch_builtins_import()
     _reapply_depth_engine()
     _INSTALLED = True
