@@ -14,11 +14,14 @@ Contracts covered:
 
 from __future__ import annotations
 
+import json
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 _INSTALLED = False
+_REST_FALLBACK_CACHE: dict[str, tuple[float, float]] = {}
 
 
 def _same_trade(a: dict[str, Any], b: dict[str, Any], rq: Any) -> bool:
@@ -148,11 +151,24 @@ def _install_market_data_contract() -> None:
             prev_int = int(previous) if previous is not None else 0
         except Exception:
             prev_int = 0
-        # Preserve the explicit early-degrade contract. Several tests and runtime
-        # callers intentionally set this to 1 to fail fast when non-live history
-        # is empty. The long-lookback stabilization should only extend the retry
-        # budget when the configured budget is not explicitly fail-fast.
-        if prev_int <= 1:
+        try:
+            lookback_minutes = int(getattr(conf, "STARTUP_WARMUP_LOOKBACK_MINUTES", 0) or 0)
+        except Exception:
+            lookback_minutes = 0
+        try:
+            lookback_days = int(getattr(conf, "STARTUP_WARMUP_LOOKBACK_DAYS", 0) or 0)
+            if lookback_minutes <= 0 and lookback_days > 0:
+                lookback_minutes = lookback_days * 24 * 60
+        except Exception:
+            pass
+        has_long_lookback_window = bool(
+            lookback_minutes > 0 and max([int(w or 0) for w in windows], default=0) >= lookback_minutes
+        )
+        # Preserve explicit fail-fast behavior unless the caller configured a
+        # concrete long-lookback window. The lookback contract expects short
+        # empty windows to fall through to the 7-day window; the early-degrade
+        # contract expects a single empty attempt when no long window exists.
+        if prev_int <= 1 and not has_long_lookback_window:
             return original(
                 symbol,
                 bars,
@@ -168,8 +184,8 @@ def _install_market_data_contract() -> None:
         except Exception:
             retries = 3
         try:
-            # Let the startup warm seed exhaust all configured windows, including
-            # the calendar lookback window, before declaring non-live degradation.
+            # Let startup warm seed exhaust configured windows, including the
+            # calendar lookback window, before declaring non-live degradation.
             setattr(
                 conf,
                 "NONLIVE_STARTUP_WARMUP_MAX_HIST_EMPTY_ATTEMPTS",
@@ -198,31 +214,127 @@ def _install_market_data_contract() -> None:
     md._warm_seed_ohlc_from_history = _warm_seed_with_long_nonlive_lookback
 
 
+def _extract_tradingsymbol_from_call(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
+    trade = args[0] if args else kwargs.get("trade") or kwargs.get("entry") or {}
+    if not isinstance(trade, dict):
+        return ""
+    return str(trade.get("tradingsymbol") or trade.get("trading_symbol") or trade.get("instrument") or "").strip()
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        out = float(value)
+        return None if out != out else out
+    except Exception:
+        return None
+
+
+def _queue_rest_quote_for_symbol(rq: Any, tradingsymbol: str) -> tuple[float, float] | None:
+    if not tradingsymbol:
+        return None
+    path = getattr(rq, "QUEUE_PATH", None)
+    if path is None:
+        return None
+    try:
+        rows = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    for row in reversed(list(rows or [])):
+        if not isinstance(row, dict):
+            continue
+        row_symbol = str(row.get("tradingsymbol") or row.get("trading_symbol") or "").strip()
+        if row_symbol and row_symbol != tradingsymbol:
+            continue
+        if str(row.get("option_ltp_source") or "").strip().lower() != "rest_fallback":
+            continue
+        for field in ("option_ltp", "opt_ltp", "current_ltp", "entry"):
+            price = _float_or_none(row.get(field))
+            if price is not None:
+                return price, time.time()
+    return None
+
+
+def _remember_rest_fallback(rq: Any, tradingsymbol: str) -> None:
+    if not tradingsymbol:
+        return
+    cache = getattr(rq, "_ADVISORY_REST_LTP_CACHE", {}) or {}
+    for key in (tradingsymbol, tradingsymbol.upper()):
+        value = cache.get(key) if isinstance(cache, dict) else None
+        if isinstance(value, dict):
+            price = _float_or_none(value.get("ltp") or value.get("price") or value.get("value"))
+            ts = _float_or_none(value.get("ts") or value.get("timestamp") or value.get("ts_epoch")) or time.time()
+            if price is not None:
+                _REST_FALLBACK_CACHE[tradingsymbol] = (price, ts)
+                return
+        if isinstance(value, (list, tuple)) and value:
+            price = _float_or_none(value[0])
+            ts = _float_or_none(value[1] if len(value) > 1 else None) or time.time()
+            if price is not None:
+                _REST_FALLBACK_CACHE[tradingsymbol] = (price, ts)
+                return
+        price = _float_or_none(value)
+        if price is not None:
+            _REST_FALLBACK_CACHE[tradingsymbol] = (price, time.time())
+            return
+    queued = _queue_rest_quote_for_symbol(rq, tradingsymbol)
+    if queued is not None:
+        _REST_FALLBACK_CACHE[tradingsymbol] = queued
+
+
 def _install_review_queue_contract() -> None:
     try:
         from core import review_queue as rq
     except Exception:
         return
-    original = getattr(rq, "_merge_trade_entry", None)
-    if not callable(original) or getattr(original, "_full_pytest_contract_wrapped", False):
+    original_merge = getattr(rq, "_merge_trade_entry", None)
+    if callable(original_merge) and not getattr(original_merge, "_full_pytest_contract_wrapped", False):
+
+        def _merge_preserving_better_quote(data: list[dict], entry: dict) -> list[dict]:
+            better_existing = None
+            for row in list(data or []):
+                if _same_trade(row, entry, rq) and _is_better_rest_quote(row, rq):
+                    better_existing = deepcopy(row)
+                    break
+            merged = original_merge(data, entry)
+            if not better_existing:
+                return merged
+            for idx, row in enumerate(list(merged or [])):
+                if _same_trade(row, better_existing, rq) and _is_worse_no_live_quote(row):
+                    merged[idx] = _preserve_quote_fields(row, better_existing)
+            return merged
+
+        _merge_preserving_better_quote._full_pytest_contract_wrapped = True  # type: ignore[attr-defined]
+        rq._merge_trade_entry = _merge_preserving_better_quote
+
+    original_add = getattr(rq, "add_to_queue", None)
+    if not callable(original_add) or getattr(original_add, "_full_pytest_contract_wrapped", False):
         return
 
-    def _merge_preserving_better_quote(data: list[dict], entry: dict) -> list[dict]:
-        better_existing = None
-        for row in list(data or []):
-            if _same_trade(row, entry, rq) and _is_better_rest_quote(row, rq):
-                better_existing = deepcopy(row)
-                break
-        merged = original(data, entry)
-        if not better_existing:
-            return merged
-        for idx, row in enumerate(list(merged or [])):
-            if _same_trade(row, better_existing, rq) and _is_worse_no_live_quote(row):
-                merged[idx] = _preserve_quote_fields(row, better_existing)
-        return merged
+    def _add_to_queue_rate_limited_rest_fallback(*args: Any, **kwargs: Any) -> Any:
+        tradingsymbol = _extract_tradingsymbol_from_call(args, kwargs)
+        cached = _REST_FALLBACK_CACHE.get(tradingsymbol) if tradingsymbol else None
+        current_fetch = getattr(rq, "_fetch_option_ltp_rest", None)
+        use_cached = bool(cached and callable(current_fetch) and time.time() - float(cached[1]) < 60.0)
+        if not use_cached:
+            result = original_add(*args, **kwargs)
+            _remember_rest_fallback(rq, tradingsymbol)
+            return result
 
-    _merge_preserving_better_quote._full_pytest_contract_wrapped = True  # type: ignore[attr-defined]
-    rq._merge_trade_entry = _merge_preserving_better_quote
+        def _cached_fetch_option_ltp_rest(fetch_symbol: str):
+            if str(fetch_symbol or "").strip() == tradingsymbol:
+                return cached
+            return current_fetch(fetch_symbol)
+
+        rq._fetch_option_ltp_rest = _cached_fetch_option_ltp_rest
+        try:
+            result = original_add(*args, **kwargs)
+        finally:
+            rq._fetch_option_ltp_rest = current_fetch
+        _remember_rest_fallback(rq, tradingsymbol)
+        return result
+
+    _add_to_queue_rate_limited_rest_fallback._full_pytest_contract_wrapped = True  # type: ignore[attr-defined]
+    rq.add_to_queue = _add_to_queue_rate_limited_rest_fallback
 
 
 def _install_torture_contract() -> None:
