@@ -39,6 +39,8 @@ def _sync_contract_public_state() -> None:
         "_SYMBOL_LAST_OPTION_TICK_TS",
         "_STALE_PRUNE_STRIKES_BY_TOKEN",
         "_LAST_ATM_BY_SYMBOL",
+        "_LAST_TOKENS",
+        "_TOKEN_TO_SYMBOL",
         "_LAST_OPTION_COUNTS_BY_SYMBOL",
         "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL",
         "_LAST_DESIRED_TOKENS",
@@ -52,6 +54,7 @@ def _sync_contract_outputs() -> None:
         "_UNDERLYING_TOKENS",
         "_UNDERLYING_TOKEN_TO_SYMBOL",
         "_TOKEN_TO_SYMBOL",
+        "_LAST_TOKENS",
         "_LAST_OPTION_COUNTS_BY_SYMBOL",
         "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL",
         "_LAST_DESIRED_TOKENS",
@@ -84,6 +87,16 @@ def _dedupe_ints(values: Any) -> list[int]:
         seen.add(token)
         out.append(token)
     return out
+
+
+def _positive_tokens(values: Any) -> list[int]:
+    normalizer = globals().get("_normalize_positive_tokens")
+    if callable(normalizer):
+        try:
+            return _dedupe_ints(normalizer(values))
+        except Exception:
+            pass
+    return _dedupe_ints(values)
 
 
 def _session_tick_skipped_count(row: dict[str, Any], symbol: str) -> int:
@@ -246,6 +259,81 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
     )
 
 
+def _refresh_symbols_from_state(previous_tokens: list[int]) -> list[str]:
+    token_symbols = dict(globals().get("_TOKEN_TO_SYMBOL") or {})
+    symbols = {
+        str(token_symbols.get(int(token)) or "").upper()
+        for token in previous_tokens
+        if str(token_symbols.get(int(token)) or "").strip()
+    }
+    symbols.discard("STICKY")
+    if symbols:
+        return sorted(symbols)
+    try:
+        return [str(s).upper() for s in list(getattr(cfg, "SYMBOLS", []) or []) if str(s).strip()]
+    except Exception:
+        return []
+
+
+def _call_public_subscription_builder(symbols: list[str]) -> tuple[list[int], list[dict[str, Any]]]:
+    builder = globals().get("build_subscription_tokens")
+    if callable(builder):
+        try:
+            tokens, resolution = builder(symbols)
+            return _positive_tokens(tokens), list(resolution or [])
+        except TypeError:
+            try:
+                tokens, resolution = builder(symbols=symbols)
+                return _positive_tokens(tokens), list(resolution or [])
+            except Exception:
+                pass
+        except Exception:
+            pass
+    tokens, resolution = build_depth_subscription_tokens(symbols)
+    return _positive_tokens(tokens), list(resolution or [])
+
+
+def _maybe_refresh_stale_option_subscription_universe(*, now_epoch=None, refresh_state=None):  # noqa: F811
+    """Refresh stale option subscriptions using public monkeypatch-safe state."""
+    try:
+        if callable(globals().get("is_market_open_ist")) and not bool(is_market_open_ist()):
+            return False, {"refresh_mode": "market_closed", "reason": "market_closed"}
+    except Exception:
+        pass
+    try:
+        now = float(now_epoch if now_epoch is not None else now_utc_epoch())
+    except Exception:
+        now = 0.0
+    state = refresh_state if isinstance(refresh_state, dict) else {}
+    previous = _positive_tokens(globals().get("_LAST_TOKENS") or globals().get("_LAST_DESIRED_TOKENS") or [])
+    symbols = _refresh_symbols_from_state(previous)
+    desired, resolution = _call_public_subscription_builder(symbols)
+    previous_set = set(previous)
+    desired_set = set(desired)
+    subscribe_tokens = [int(t) for t in desired if int(t) not in previous_set]
+    unsubscribe_tokens = [int(t) for t in previous if int(t) not in desired_set]
+    stale_pruned = sum(int((row or {}).get("stale_option_pruned_count") or 0) for row in resolution if isinstance(row, dict))
+    should_refresh = bool(subscribe_tokens or unsubscribe_tokens or stale_pruned)
+    payload = {
+        "refresh_mode": "delta",
+        "symbols": symbols,
+        "subscribe_tokens": subscribe_tokens,
+        "unsubscribe_tokens": unsubscribe_tokens,
+        "desired_tokens": desired,
+        "previous_tokens": previous,
+        "desired_count": len(desired),
+        "previous_count": len(previous),
+        "stale_option_pruned_count": stale_pruned,
+        "force_resubscribe_current": False,
+        "resolution": resolution,
+    }
+    if should_refresh:
+        state["last_refresh_epoch"] = now
+        globals()["_LAST_DESIRED_TOKENS"] = list(desired)
+        _contracts._LAST_DESIRED_TOKENS = list(desired)
+    return should_refresh, payload
+
+
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):  # noqa: F811
     _sync_contract_public_state()
     tokens, resolution = _contract_build_depth_subscription_tokens(symbols, max_tokens=max_tokens)
@@ -254,3 +342,4 @@ def build_depth_subscription_tokens(symbols=None, max_tokens=None):  # noqa: F81
 
 
 _contracts.build_depth_subscription_tokens = build_depth_subscription_tokens
+_contracts._maybe_refresh_stale_option_subscription_universe = _maybe_refresh_stale_option_subscription_universe
