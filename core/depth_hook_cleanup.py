@@ -17,6 +17,13 @@ from types import ModuleType
 from typing import Any, Callable
 
 _DEPTH_MODULE_PREFIX = "core.kite_depth_ws"
+_ENGINE_MODULE = "core.depth_subscription_engine"
+_TARGET_DEPTH_FUNCTIONS = (
+    "build_subscription_tokens",
+    "build_depth_subscription_tokens",
+    "_prune_stale_option_subscription_tokens",
+    "_maybe_refresh_stale_option_subscription_universe",
+)
 _HOOK_MODULE_NAMES = (
     "core.ci_compat_contracts",
     "core.ci_last_contracts",
@@ -44,6 +51,30 @@ _REAPPLYING = False
 
 def _noop_depth_patch(_module: Any = None, *args: Any, **kwargs: Any) -> None:
     return None
+
+
+def _is_ci_owner(module_name: str) -> bool:
+    return module_name.startswith("core.ci_") or module_name.startswith("core._ci_")
+
+
+def _depth_owner_modules(ws: Any) -> dict[str, str]:
+    owners: dict[str, str] = {}
+    for name in _TARGET_DEPTH_FUNCTIONS:
+        fn = getattr(ws, name, None)
+        owners[name] = str(getattr(fn, "__module__", "") or "")
+    return owners
+
+
+def _needs_depth_reapply(ws: Any) -> bool:
+    """Return True only when legacy CI hooks own depth functions.
+
+    This deliberately does not re-apply over test/runtime monkeypatches. A test
+    lambda usually has a module such as ``tests.test_*``; clobbering that breaks
+    callers that monkeypatch ``core.kite_depth_ws`` and then import symbols from
+    it inside the function under test.
+    """
+    owners = _depth_owner_modules(ws)
+    return any(_is_ci_owner(module_name) for module_name in owners.values())
 
 
 def _wrap_patch_dispatch(module: ModuleType) -> None:
@@ -74,6 +105,12 @@ def _neutralize_loaded_hooks() -> None:
             _neutralize_module(module)
 
 
+def _maybe_reapply_depth_engine() -> None:
+    ws = sys.modules.get("core.kite_depth_ws")
+    if ws is not None and _needs_depth_reapply(ws):
+        _reapply_depth_engine(force=True)
+
+
 def _patch_importlib() -> None:
     original_import_module = importlib.import_module
     if getattr(original_import_module, "_depth_cleanup_wrapped", False):
@@ -84,7 +121,7 @@ def _patch_importlib() -> None:
         if name in _HOOK_MODULE_NAMES and isinstance(module, ModuleType):
             _neutralize_module(module)
         if str(name or "").startswith(_DEPTH_MODULE_PREFIX):
-            _reapply_depth_engine()
+            _maybe_reapply_depth_engine()
         return module
 
     import_module_without_depth_repatch._depth_cleanup_wrapped = True  # type: ignore[attr-defined]
@@ -106,21 +143,23 @@ def _patch_builtins_import() -> None:
             if target_name in _HOOK_MODULE_NAMES and isinstance(loaded, ModuleType):
                 _neutralize_module(loaded)
             if target_name.startswith(_DEPTH_MODULE_PREFIX):
-                _reapply_depth_engine()
+                _maybe_reapply_depth_engine()
         return module
 
     import_without_depth_repatch._depth_cleanup_wrapped = True  # type: ignore[attr-defined]
     builtins.__import__ = import_without_depth_repatch
 
 
-def _reapply_depth_engine() -> None:
+def _reapply_depth_engine(*, force: bool = False) -> None:
     global _REAPPLYING
     if _REAPPLYING:
         return
     _REAPPLYING = True
     try:
         ws = sys.modules.get("core.kite_depth_ws") or importlib.import_module("core.kite_depth_ws")
-        engine = sys.modules.get("core.depth_subscription_engine") or importlib.import_module("core.depth_subscription_engine")
+        if not force and not _needs_depth_reapply(ws):
+            return
+        engine = sys.modules.get(_ENGINE_MODULE) or importlib.import_module(_ENGINE_MODULE)
         patch_module: Callable[[Any], None] | None = getattr(engine, "_patch_module", None)
         if callable(patch_module):
             patch_module(ws)
@@ -138,10 +177,10 @@ def install() -> None:
     global _INSTALLED
     if _INSTALLED:
         _neutralize_loaded_hooks()
-        _reapply_depth_engine()
+        _maybe_reapply_depth_engine()
         return
     _neutralize_loaded_hooks()
     _patch_importlib()
     _patch_builtins_import()
-    _reapply_depth_engine()
+    _reapply_depth_engine(force=True)
     _INSTALLED = True
