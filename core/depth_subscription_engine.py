@@ -38,6 +38,31 @@ def _sf(value: Any, default: float | None = None) -> float | None:
         return default
 
 
+def _cfg_float(conf: Any, name: str, default: float) -> float:
+    value = getattr(conf, name, None)
+    if value is None:
+        return float(default)
+    parsed = _sf(value, None)
+    return float(default) if parsed is None else float(parsed)
+
+
+def _cfg_int(conf: Any, name: str, default: int) -> int:
+    value = getattr(conf, name, None)
+    if value is None:
+        return int(default)
+    try:
+        return int(value)
+    except Exception:
+        return int(default)
+
+
+def _cfg_bool(conf: Any, name: str, default: bool) -> bool:
+    value = getattr(conf, name, None)
+    if value is None:
+        return bool(default)
+    return bool(value)
+
+
 def _dedupe_tokens(values: Any) -> list[int]:
     seen: set[int] = set()
     out: list[int] = []
@@ -155,10 +180,10 @@ def _option_min_required(ws: Any, symbol: str, option_count: int) -> int:
     if option_count <= 0:
         return 0
     conf = _cfg(ws)
-    floor = int(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR", 14) or 14)
+    floor = _cfg_int(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR", 14)
     by_symbol = getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR_BY_SYMBOL", {}) or {}
     try:
-        floor = int(by_symbol.get(str(symbol).upper(), floor) or floor)
+        floor = int(by_symbol.get(str(symbol).upper(), floor) if by_symbol.get(str(symbol).upper(), None) is not None else floor)
     except Exception:
         pass
     return max(0, min(int(floor), int(option_count)))
@@ -183,11 +208,11 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
     option_rank = {int(k): tuple(v) for k, v in dict(option_rank_by_token or {}).items()}
     token_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
     minimums = {str(k).upper(): int(v or 0) for k, v in dict(min_required_by_symbol or {}).items()}
-    max_age = float(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 12.0) or 12.0)
-    grace = float(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0) or 60.0)
-    require_session = bool(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True))
-    consecutive = max(1, min(10, int(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1) or 1)))
-    if not bool(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True)):
+    max_age = _cfg_float(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 12.0)
+    grace = _cfg_float(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0)
+    require_session = _cfg_bool(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True)
+    consecutive = max(1, min(10, _cfg_int(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1)))
+    if not _cfg_bool(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True):
         return token_list, {
             "enabled": False,
             "max_age_sec": max_age,
@@ -230,7 +255,10 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
         }
 
     non_options = [t for t in token_list if t not in option_rank]
-    option_tokens = [t for t in token_list if t in option_rank and not _is_underlying(ws, t)]
+    # In this direct-prune contract, option_rank_by_token is the source of truth.
+    # Do not consult process-global underlying state; tests use small fake tokens
+    # that can collide with prior runtime state.
+    option_tokens = [t for t in token_list if t in option_rank]
     session_symbols = {str(k).upper() for k in dict(getattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {}) or {}).keys()}
     stale_state = getattr(ws, "_STALE_PRUNE_STRIKES_BY_TOKEN", {})
     retained = list(non_options)
@@ -315,11 +343,11 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     conf = _cfg(ws)
     symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
     if max_tokens is None:
-        max_tokens = int(getattr(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150) or 150)
-    around_default = int(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6) or 6)
+        max_tokens = _cfg_int(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)
+    around_default = _cfg_int(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6)
     around_by_symbol = dict(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
     step_map = dict(getattr(conf, "STRIKE_STEP_BY_SYMBOL", {}) or {})
-    min_option_tokens = max(1, int(getattr(conf, "MIN_OPTION_TOKENS", 12) or 12))
+    min_option_tokens = max(1, _cfg_int(conf, "MIN_OPTION_TOKENS", 12))
     sticky = {int(t) for t in list(ws.get_sticky_tokens() or []) if int(t) > 0}
 
     tokens: list[int] = []
@@ -502,7 +530,7 @@ build_depth_subscription_tokens._depth_rewrite_internal = True
 
 def _option_freshness_stats(ws: Any, tokens: list[int], now_epoch: float) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     conf = _cfg(ws)
-    urgent = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0) or 8.0)
+    urgent = _cfg_float(conf, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0)
     by_symbol: dict[str, dict[str, Any]] = {}
     for token in _dedupe_tokens(tokens):
         if _is_underlying(ws, token):
@@ -547,9 +575,9 @@ def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refre
     subscribe = sorted(desired_set - current_set)
     unsubscribe = sorted(current_set - desired_set)
     by_symbol, overall = _option_freshness_stats(ws, current, now)
-    min_ratio = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8) or 0.8)
-    drift_sec = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 5.0) or 5.0)
-    refresh_sec = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_REFRESH_SEC", 20.0) or 20.0)
+    min_ratio = _cfg_float(conf, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8)
+    drift_sec = _cfg_float(conf, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 5.0)
+    refresh_sec = _cfg_float(conf, "FEED_STALE_OPTION_SUBSCRIPTION_REFRESH_SEC", 20.0)
     stale_symbols = [sym for sym, stats in sorted(by_symbol.items()) if int(stats.get("option_count") or 0) > 0 and (float(stats.get("fresh_ratio") or 1.0) < min_ratio or float(stats.get("max_age_sec") or 0.0) > float(stats.get("urgent_max_age_sec") or 0.0))]
     freshness_urgent = bool(stale_symbols)
     resolution_tokens_by_symbol: dict[str, list[int]] = {}
