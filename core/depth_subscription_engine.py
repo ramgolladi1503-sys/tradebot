@@ -8,15 +8,16 @@ be moved into ``core/kite_depth_ws.py`` and the depth hooks can be removed.
 
 from __future__ import annotations
 
-import builtins
-import sys
 from datetime import date, datetime
 from typing import Any
 
 from config import config as cfg
 
-_ORIGINAL_IMPORT = builtins.__import__
 _INSTALLED = False
+
+
+def _cfg(ws: Any) -> Any:
+    return getattr(ws, "cfg", cfg)
 
 
 def _sf(value: Any, default: float | None = None) -> float | None:
@@ -93,15 +94,16 @@ def _underlying_ltp(ws: Any, symbol: str, index_token: int | None) -> tuple[floa
             return _sf(result[0], None), str(result[1] or "live_ltp")
         if result is not None:
             return _sf(result, None), "live_ltp"
-    fallback = (getattr(cfg, "PREMARKET_INDICES_CLOSE", {}) or {}).get(str(symbol).upper())
+    fallback = (getattr(_cfg(ws), "PREMARKET_INDICES_CLOSE", {}) or {}).get(str(symbol).upper())
     return (_sf(fallback, None), "fallback_close") if fallback is not None else (None, "missing")
 
 
 def _load_option_meta(ws: Any, symbol: str, exchange: str, expiry: Any) -> dict[int, dict[str, Any]]:
+    conf = _cfg(ws)
     expiry_norm = _expiry_key(expiry)
     segment = "BFO-OPT" if str(exchange).upper() == "BFO" else "NFO-OPT"
     try:
-        rows = ws.kite_client.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600))
+        rows = ws.kite_client.instruments_cached(exchange, ttl_sec=getattr(conf, "KITE_INSTRUMENTS_TTL", 3600))
     except TypeError:
         rows = ws.kite_client.instruments_cached(exchange=exchange)
     except Exception:
@@ -139,11 +141,12 @@ def _rank(meta: dict[str, Any] | None, atm: int | None, step: float | None, toke
     return (dist_abs / max(float(step), 1e-9), type_rank, float(strike), 0, int(token))
 
 
-def _option_min_required(symbol: str, option_count: int) -> int:
+def _option_min_required(ws: Any, symbol: str, option_count: int) -> int:
     if option_count <= 0:
         return 0
-    floor = int(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR", 14) or 14)
-    by_symbol = getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR_BY_SYMBOL", {}) or {}
+    conf = _cfg(ws)
+    floor = int(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR", 14) or 14)
+    by_symbol = getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR_BY_SYMBOL", {}) or {}
     try:
         floor = int(by_symbol.get(str(symbol).upper(), floor) or floor)
     except Exception:
@@ -166,15 +169,16 @@ def _classify_option_freshness(ws: Any, token: int, now_epoch: float, max_age_se
 def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, token_to_symbol, min_required_by_symbol=None):
     import core.kite_depth_ws as ws
 
+    conf = _cfg(ws)
     token_list = _dedupe_tokens(tokens)
     option_rank = {int(k): tuple(v) for k, v in dict(option_rank_by_token or {}).items()}
     token_symbol = {int(k): str(v).upper() for k, v in dict(token_to_symbol or {}).items()}
     minimums = {str(k).upper(): int(v or 0) for k, v in dict(min_required_by_symbol or {}).items()}
-    max_age = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 12.0) or 12.0)
-    grace = float(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0) or 60.0)
-    require_session = bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True))
-    consecutive = max(1, min(10, int(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1) or 1)))
-    if not bool(getattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True)):
+    max_age = float(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 12.0) or 12.0)
+    grace = float(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_GRACE_SEC", 60.0) or 60.0)
+    require_session = bool(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", True))
+    consecutive = max(1, min(10, int(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1) or 1)))
+    if not bool(getattr(conf, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True)):
         return token_list, {
             "enabled": False,
             "max_age_sec": max_age,
@@ -258,7 +262,7 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
             pruned_by_symbol[symbol] = len(pruned)
             pruned_tokens.extend(pruned)
             for token in pruned[:10]:
-                is_fresh, age, db_epoch, memory_epoch = _classify_option_freshness(ws, token, now, max_age)
+                _is_fresh, age, db_epoch, memory_epoch = _classify_option_freshness(ws, token, now, max_age)
                 stale_samples.append({"token": int(token), "symbol": symbol, "age_sec": age, "db_epoch": db_epoch, "memory_epoch": memory_epoch})
     ws._STALE_PRUNE_STRIKES_BY_TOKEN = stale_state
     retained = _dedupe_tokens(retained)
@@ -283,10 +287,11 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
 
 
 def _resolve_known_tokens(ws: Any) -> set[int]:
+    conf = _cfg(ws)
     known: set[int] = set()
     try:
         for exch in ("NFO", "BFO", "NSE", "BSE"):
-            for inst in list(ws.kite_client.instruments_cached(exch, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600)) or []):
+            for inst in list(ws.kite_client.instruments_cached(exch, ttl_sec=getattr(conf, "KITE_INSTRUMENTS_TTL", 3600)) or []):
                 try:
                     known.add(int(inst.get("instrument_token")))
                 except Exception:
@@ -299,13 +304,14 @@ def _resolve_known_tokens(ws: Any) -> set[int]:
 def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict[str, Any]]]:
     import core.kite_depth_ws as ws
 
-    symbols_l = [str(s).upper() for s in list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))]
+    conf = _cfg(ws)
+    symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
     if max_tokens is None:
-        max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150) or 150)
-    around_default = int(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6) or 6)
-    around_by_symbol = dict(getattr(cfg, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
-    step_map = dict(getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {})
-    min_option_tokens = max(1, int(getattr(cfg, "MIN_OPTION_TOKENS", 12) or 12))
+        max_tokens = int(getattr(conf, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150) or 150)
+    around_default = int(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND", 6) or 6)
+    around_by_symbol = dict(getattr(conf, "DEPTH_SUBSCRIPTION_STRIKES_AROUND_BY_SYMBOL", {}) or {})
+    step_map = dict(getattr(conf, "STRIKE_STEP_BY_SYMBOL", {}) or {})
+    min_option_tokens = max(1, int(getattr(conf, "MIN_OPTION_TOKENS", 12) or 12))
     sticky = {int(t) for t in list(ws.get_sticky_tokens() or []) if int(t) > 0}
 
     tokens: list[int] = []
@@ -318,7 +324,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
 
     for symbol in symbols_l:
         exchange = "BFO" if symbol == "SENSEX" else "NFO"
-        step = float(step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)) or 50)
+        step = float(step_map.get(symbol, getattr(conf, "STRIKE_STEP", 50)) or 50)
         around = int(around_by_symbol.get(symbol, around_default) or around_default)
         try:
             index_token = int(ws.kite_client.resolve_index_token(symbol) or 0) or None
@@ -399,7 +405,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             "option_count": len(option_tokens),
             "resolved_option_count": len(option_tokens),
             "final_option_count": len(option_tokens),
-            "option_min_required": _option_min_required(symbol, len(option_tokens)),
+            "option_min_required": _option_min_required(ws, symbol, len(option_tokens)),
             "option_fail_reason": fail_reason,
             "option_strikes_selected": sorted(selected_strikes.keys()),
             "option_strike_count": len(selected_strikes),
@@ -421,7 +427,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     min_required = dict(ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL)
     tokens, prune_meta = ws._prune_stale_option_subscription_tokens(tokens=tokens, option_rank_by_token=option_rank, token_to_symbol=token_to_symbol, min_required_by_symbol=min_required)
 
-    if bool(getattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True)):
+    if bool(getattr(conf, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True)):
         known = _resolve_known_tokens(ws)
         if known:
             preserve = set(underlying_tokens) | set(sticky) | set(option_token_set)
@@ -488,7 +494,8 @@ build_depth_subscription_tokens._depth_rewrite_internal = True
 
 
 def _option_freshness_stats(ws: Any, tokens: list[int], now_epoch: float) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
-    urgent = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0) or 8.0)
+    conf = _cfg(ws)
+    urgent = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0) or 8.0)
     by_symbol: dict[str, dict[str, Any]] = {}
     for token in _dedupe_tokens(tokens):
         if _is_underlying(ws, token):
@@ -518,6 +525,7 @@ def _option_freshness_stats(ws: Any, tokens: list[int], now_epoch: float) -> tup
 def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refresh_state: dict[str, float]) -> tuple[bool, dict[str, Any]]:
     import core.kite_depth_ws as ws
 
+    conf = _cfg(ws)
     if not bool(ws.is_market_open_ist()):
         return False, {"reason": "market_closed"}
     now = float(now_epoch)
@@ -525,7 +533,7 @@ def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refre
     current = _normalize_positive_tokens(ws, getattr(ws, "_LAST_TOKENS", []))
     symbols = sorted({str((getattr(ws, "_TOKEN_TO_SYMBOL", {}) or {}).get(int(t)) or "").upper() for t in current if str((getattr(ws, "_TOKEN_TO_SYMBOL", {}) or {}).get(int(t)) or "").strip()})
     if not symbols:
-        symbols = [str(s).upper() for s in list(getattr(cfg, "SYMBOLS", []) or []) if str(s).strip()]
+        symbols = [str(s).upper() for s in list(getattr(conf, "SYMBOLS", []) or []) if str(s).strip()]
     desired_raw, resolution = ws.build_subscription_tokens(symbols)
     desired = _normalize_positive_tokens(ws, desired_raw)
     current_set = set(current)
@@ -533,12 +541,11 @@ def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refre
     subscribe = sorted(desired_set - current_set)
     unsubscribe = sorted(current_set - desired_set)
     by_symbol, overall = _option_freshness_stats(ws, current, now)
-    min_ratio = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8) or 0.8)
-    drift_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 5.0) or 5.0)
-    refresh_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_REFRESH_SEC", 20.0) or 20.0)
+    min_ratio = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8) or 0.8)
+    drift_sec = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 5.0) or 5.0)
+    refresh_sec = float(getattr(conf, "FEED_STALE_OPTION_SUBSCRIPTION_REFRESH_SEC", 20.0) or 20.0)
     stale_symbols = [sym for sym, stats in sorted(by_symbol.items()) if int(stats.get("option_count") or 0) > 0 and (float(stats.get("fresh_ratio") or 1.0) < min_ratio or float(stats.get("max_age_sec") or 0.0) > float(stats.get("urgent_max_age_sec") or 0.0))]
     freshness_urgent = bool(stale_symbols)
-    stale_symbol_set = set(stale_symbols)
     resolution_tokens_by_symbol: dict[str, list[int]] = {}
     for row in list(resolution or []):
         if not isinstance(row, dict):
@@ -574,20 +581,9 @@ def _patch_module(module: Any) -> None:
 
 
 def install() -> None:
-    global _INSTALLED, _ORIGINAL_IMPORT
+    global _INSTALLED
     if _INSTALLED:
         return
     import core.kite_depth_ws as ws
     _patch_module(ws)
-    previous_import = builtins.__import__
-
-    def importing(name, globals=None, locals=None, fromlist=(), level=0):
-        module = previous_import(name, globals, locals, fromlist, level)
-        if str(name) == "core.kite_depth_ws" or str(name).startswith("core.kite_depth_ws"):
-            _patch_module(sys.modules.get("core.kite_depth_ws") or module)
-        elif str(name) == "core" and fromlist and "kite_depth_ws" in fromlist:
-            _patch_module(sys.modules.get("core.kite_depth_ws"))
-        return module
-
-    builtins.__import__ = importing
     _INSTALLED = True
