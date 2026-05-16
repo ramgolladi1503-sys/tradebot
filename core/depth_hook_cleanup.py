@@ -1,11 +1,11 @@
 """Deactivate legacy depth compatibility hooks after the rewrite engine lands.
 
 PR #39 moved the final public depth subscription contracts into
-``core.depth_subscription_engine``. The older ``core.ci_*`` compatibility modules
-still contain broad import hooks that can re-patch ``core.kite_depth_ws`` later in
-the process. This module neutralizes only those depth-specific patch paths while
-leaving TradeBuilder, Phase2, freshness, readiness, market-data, and other CI
-compatibility hooks intact for their own cleanup PRs.
+``core.depth_subscription_engine``. The older compatibility modules still contain
+broad import hooks that can re-patch ``core.kite_depth_ws`` later in the process.
+This module neutralizes only those depth-specific patch paths while leaving
+TradeBuilder, Phase2, freshness, readiness, market-data, and other compatibility
+hooks intact for their own cleanup PRs.
 """
 
 from __future__ import annotations
@@ -23,6 +23,14 @@ _HOOK_MODULE_NAMES = (
     "core.ci_tail_contracts",
     "core.ci_finish_contracts",
     "core.ci_last5_contracts",
+    # Some public hook modules delegate to private base modules. Those bases can
+    # remain the actual function owner unless neutralized as well.
+    "core._ci_compat_contracts_base",
+    "core._ci_last_contracts_base",
+    "core._ci_final_contracts_base",
+    "core._ci_tail_contracts_base",
+    "core._ci_finish_contracts_base",
+    "core._ci_last5_contracts_base",
 )
 _DEPTH_PATCH_NAMES = (
     "_patch_kite_ws",
