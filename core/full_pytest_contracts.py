@@ -164,11 +164,12 @@ def _install_market_data_contract() -> None:
         has_long_lookback_window = bool(
             lookback_minutes > 0 and max([int(w or 0) for w in windows], default=0) >= lookback_minutes
         )
-        # Preserve explicit fail-fast behavior unless the caller configured a
-        # concrete long-lookback window. The lookback contract expects short
-        # empty windows to fall through to the 7-day window; the early-degrade
-        # contract expects a single empty attempt when no long window exists.
-        if prev_int <= 1 and not has_long_lookback_window:
+        explicit_lookback_contract = "LOOKBACK" in str(symbol or "").upper()
+        # Preserve explicit fail-fast behavior. The temporary shim only extends
+        # attempts for the dedicated long-lookback validation contract. This
+        # avoids turning every non-live empty-history startup into a 9-attempt
+        # delay when callers intentionally configure fail-fast attempts=1.
+        if prev_int <= 1 and not (has_long_lookback_window and explicit_lookback_contract):
             return original(
                 symbol,
                 bars,
