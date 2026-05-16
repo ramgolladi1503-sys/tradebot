@@ -8,12 +8,22 @@ be moved into ``core/kite_depth_ws.py`` and the depth hooks can be removed.
 
 from __future__ import annotations
 
+import sys
 from datetime import date, datetime
 from typing import Any
 
 from config import config as cfg
 
 _INSTALLED = False
+
+
+def _ws_module() -> Any:
+    module = sys.modules.get("core.kite_depth_ws")
+    if module is not None:
+        return module
+    import core.kite_depth_ws as ws
+
+    return ws
 
 
 def _cfg(ws: Any) -> Any:
@@ -167,8 +177,7 @@ def _classify_option_freshness(ws: Any, token: int, now_epoch: float, max_age_se
 
 
 def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, token_to_symbol, min_required_by_symbol=None):
-    import core.kite_depth_ws as ws
-
+    ws = _ws_module()
     conf = _cfg(ws)
     token_list = _dedupe_tokens(tokens)
     option_rank = {int(k): tuple(v) for k, v in dict(option_rank_by_token or {}).items()}
@@ -302,8 +311,7 @@ def _resolve_known_tokens(ws: Any) -> set[int]:
 
 
 def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict[str, Any]]]:
-    import core.kite_depth_ws as ws
-
+    ws = _ws_module()
     conf = _cfg(ws)
     symbols_l = [str(s).upper() for s in list(symbols or list(getattr(conf, "SYMBOLS", []) or []))]
     if max_tokens is None:
@@ -475,8 +483,7 @@ build_subscription_tokens._depth_rewrite_internal = True
 
 
 def build_depth_subscription_tokens(symbols=None, max_tokens=None):
-    import core.kite_depth_ws as ws
-
+    ws = _ws_module()
     public_builder = getattr(ws, "build_subscription_tokens", None)
     if callable(public_builder) and public_builder is not build_subscription_tokens and not getattr(public_builder, "_depth_rewrite_internal", False):
         try:
@@ -523,8 +530,7 @@ def _option_freshness_stats(ws: Any, tokens: list[int], now_epoch: float) -> tup
 
 
 def _maybe_refresh_stale_option_subscription_universe(*, now_epoch: float, refresh_state: dict[str, float]) -> tuple[bool, dict[str, Any]]:
-    import core.kite_depth_ws as ws
-
+    ws = _ws_module()
     conf = _cfg(ws)
     if not bool(ws.is_market_open_ist()):
         return False, {"reason": "market_closed"}
