@@ -80,3 +80,12 @@ try:
     _depth_hook_cleanup.install()
 except Exception:
     pass
+
+# Local full-suite stabilization contracts. These are intentionally narrow and
+# should be migrated into real modules in follow-up cleanup PRs.
+try:
+    from core import full_pytest_contracts as _full_pytest_contracts
+
+    _full_pytest_contracts.install()
+except Exception:
+    pass
