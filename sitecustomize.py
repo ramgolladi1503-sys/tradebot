@@ -81,8 +81,8 @@ try:
 except Exception:
     pass
 
-# Market-data warmup contract has been isolated from the generic full pytest
-# shim. Install it first so full_pytest_contracts skips the market-data wrapper.
+# Market-data warmup contract is isolated from the deleted generic full-pytest
+# shim and remains installed until the behavior is moved into core.market_data.
 try:
     from core import market_data_warmup_contract as _market_data_warmup_contract
 
@@ -90,8 +90,8 @@ try:
 except Exception:
     pass
 
-# Long-run stability latency contract has been isolated from the generic full
-# pytest shim. Install it before full_pytest_contracts so the generic shim skips it.
+# Long-run stability latency contract is isolated from the deleted generic shim
+# and remains installed until the behavior is moved into the scenario runner.
 try:
     from core import longrun_stability_contract as _longrun_stability_contract
 
@@ -99,22 +99,12 @@ try:
 except Exception:
     pass
 
-# Review-queue quote preservation/rate-limit contract has been isolated from
-# the generic full pytest shim. Install it before full_pytest_contracts so the
-# generic shim skips its review-queue wrapper.
+# Review-queue quote preservation/rate-limit contract is isolated from the
+# deleted generic shim and remains installed until the behavior is moved into
+# core.review_queue.
 try:
     from core import review_queue_contract as _review_queue_contract
 
     _review_queue_contract.install()
-except Exception:
-    pass
-
-# Local full-suite stabilization contracts. All current behaviors have been
-# isolated into narrower modules; this stays temporarily until the deletion PR
-# proves full pytest remains green without the generic shim file.
-try:
-    from core import full_pytest_contracts as _full_pytest_contracts
-
-    _full_pytest_contracts.install()
 except Exception:
     pass
