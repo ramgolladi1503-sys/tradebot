@@ -6,7 +6,9 @@ live trading behavior.
 """
 
 from strategies.movement.compression_breakout import generate_compression_breakout_candidates
+from strategies.movement.exhaustion_reversal import generate_exhaustion_reversal_candidates
 from strategies.movement.failed_breakout_trap import generate_failed_breakout_trap_candidates
+from strategies.movement.mean_reversion_extension import generate_mean_reversion_extension_candidates
 from strategies.movement.opening_drive import generate_opening_drive_candidates
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
@@ -14,7 +16,9 @@ from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_can
 
 __all__ = [
     "generate_compression_breakout_candidates",
+    "generate_exhaustion_reversal_candidates",
     "generate_failed_breakout_trap_candidates",
+    "generate_mean_reversion_extension_candidates",
     "generate_opening_drive_candidates",
     "generate_opening_range_retest_candidates",
     "generate_trend_pullback_candidates",
