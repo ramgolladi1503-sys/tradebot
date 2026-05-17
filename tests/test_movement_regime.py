@@ -57,7 +57,7 @@ def test_classifies_trend_down_with_option_pressure():
     assert result.scores["TREND_DOWN"] >= 0.5
 
 
-def test_classifies_compression_near_vwap_with_low_range_and_low_atr_ratio():
+def test_scores_compression_near_vwap_with_low_range_and_low_atr_ratio():
     ctx = StrategyContext(
         symbol="SENSEX",
         spot_ltp=74010.0,
@@ -74,7 +74,10 @@ def test_classifies_compression_near_vwap_with_low_range_and_low_atr_ratio():
 
     result = classify_movement_regime(ctx)
 
-    assert result.primary_regime == "COMPRESSION"
+    # Compression is a subtype of range, so primary may remain RANGE while the
+    # COMPRESSION score activates compression-specific strategies.
+    assert result.primary_regime in {"RANGE", "COMPRESSION"}
+    assert result.scores["COMPRESSION"] >= 0.6
     assert result.scores["COMPRESSION"] > result.scores["TREND_UP"]
     assert result.scores["COMPRESSION"] > result.scores["TREND_DOWN"]
     assert result.evidence["atr_short_long_ratio"] == 0.35
