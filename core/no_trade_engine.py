@@ -17,7 +17,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import time
 from typing import Any, Iterable, Literal
 
-from core.market_data import get_index_vwap, get_nifty_ltp
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.option_confirmation import OptionPressureAssessment, assess_option_pressure
@@ -288,9 +287,8 @@ def _candidate_conflict_signal(
 def check_no_trade_conditions() -> dict[str, Any]:
     """Legacy compatibility wrapper.
 
-    Returns the original ``allowed``/``reason`` shape. This function still reads
-    legacy live helpers because existing code may call it directly. New
-    opportunity-engine code should use ``assess_no_trade`` with injected context.
+    Returns the original ``allowed``/``reason`` shape. New opportunity-engine code
+    should use ``assess_no_trade`` with injected context.
     """
 
     now = now_ist().time()
@@ -308,6 +306,44 @@ def check_no_trade_conditions() -> dict[str, Any]:
     if vwap_distance < 0.15:
         return {"allowed": False, "reason": "Price hugging VWAP (no momentum)"}
     return {"allowed": True, "reason": "Trade allowed"}
+
+
+def get_nifty_ltp() -> float | None:
+    """Legacy helper shim kept monkeypatchable and import-safe."""
+
+    try:
+        from core import market_data
+    except Exception:
+        return None
+    helper = getattr(market_data, "get_nifty_ltp", None)
+    if not callable(helper):
+        return None
+    try:
+        return safe_float(helper())
+    except Exception:
+        return None
+
+
+def get_index_vwap(symbol: str) -> float | None:
+    """Legacy helper shim kept monkeypatchable and import-safe."""
+
+    try:
+        from core import market_data
+    except Exception:
+        return None
+    helper = getattr(market_data, "get_index_vwap", None)
+    if callable(helper):
+        try:
+            return safe_float(helper(symbol))
+        except Exception:
+            return None
+    helper = getattr(market_data, "get_vwap", None)
+    if callable(helper):
+        try:
+            return safe_float(helper(symbol))
+        except Exception:
+            return None
+    return None
 
 
 def safe_float(value: Any) -> float | None:
@@ -341,4 +377,6 @@ __all__ = [
     "NoTradeSignal",
     "assess_no_trade",
     "check_no_trade_conditions",
+    "get_index_vwap",
+    "get_nifty_ltp",
 ]
