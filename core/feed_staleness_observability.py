@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from core.paths import logs_dir as default_logs_dir
+
 DEFAULT_RUNTIME_LOG_FILES = {
     "feed_runtime": "feed_runtime_latest.json",
     "runtime_health": "runtime_health_latest.json",
@@ -49,6 +51,12 @@ EXECUTABLE_HINTS = (
     "execution_allowed",
     "visible_executable_count",
 )
+
+
+def _resolve_logs_dir(log_root: str | Path | None = None) -> Path:
+    if log_root is None:
+        return default_logs_dir()
+    return Path(log_root).expanduser()
 
 
 def _safe_json_load(path: Path) -> dict[str, Any]:
@@ -207,10 +215,10 @@ def _latest_numeric_age(rows: list[dict[str, Any]]) -> dict[str, float]:
     return dict(sorted(result.items()))
 
 
-def build_feed_staleness_report(logs_dir: str | Path = ".runtime/logs") -> dict[str, Any]:
+def build_feed_staleness_report(log_root: str | Path | None = None) -> dict[str, Any]:
     """Build a read-only feed/staleness evidence report from runtime logs."""
 
-    root = Path(logs_dir)
+    root = _resolve_logs_dir(log_root)
     files = {name: _safe_json_load(root / filename) for name, filename in DEFAULT_RUNTIME_LOG_FILES.items()}
     suggestions_rows = _safe_jsonl_tail(root / DEFAULT_SUGGESTIONS_JSONL)
     events_rows = _safe_jsonl_tail(root / DEFAULT_EVENTS_JSONL)
@@ -309,12 +317,12 @@ def build_feed_staleness_report(logs_dir: str | Path = ".runtime/logs") -> dict[
 
 
 def write_feed_staleness_report(
-    logs_dir: str | Path = ".runtime/logs",
+    log_root: str | Path | None = None,
     output_path: str | Path | None = None,
 ) -> Path:
     """Write the read-only evidence report as JSON and return its path."""
 
-    root = Path(logs_dir)
+    root = _resolve_logs_dir(log_root)
     out = Path(output_path) if output_path is not None else root / "feed_staleness_observability_latest.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     report = build_feed_staleness_report(root)
