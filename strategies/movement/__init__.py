@@ -1,8 +1,14 @@
-"""Movement strategy package shell.
+"""Movement strategy package.
 
-Actual movement strategies are intentionally added in later PRs. This package is
-created now so registry/candidate-pool plumbing can be tested without modifying
-existing strategy behavior.
+Movement strategies emit read-only StrategyCandidate objects. They do not call
+brokers, submit orders, alter execution gates, touch depth subscriptions, or tune
+live trading behavior.
 """
 
-__all__: list[str] = []
+from strategies.movement.opening_drive import generate_opening_drive_candidates
+from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
+
+__all__ = [
+    "generate_opening_drive_candidates",
+    "generate_opening_range_retest_candidates",
+]
