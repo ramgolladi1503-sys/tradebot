@@ -69,7 +69,8 @@ def test_assess_option_pressure_detects_bullish_dominance():
     assert assessment.dominant_direction == "BUY_CALL"
     assert assessment.bullish_score > assessment.bearish_score
     assert assessment.ce.pressure_score > assessment.pe.pressure_score
-    assert assessment.blockers == ("OPTION_CONFIRMATION_MISSING",)
+    assert assessment.ce.blockers == ()
+    assert "OPTION_CONFIRMATION_MISSING" in assessment.pe.blockers
     assert assessment.to_dict()["dominant_direction"] == "BUY_CALL"
 
 
@@ -86,6 +87,7 @@ def test_assess_option_pressure_detects_bearish_dominance():
     assert assessment.dominant_direction == "BUY_PUT"
     assert assessment.bearish_score > assessment.bullish_score
     assert assessment.pe.pressure_score > assessment.ce.pressure_score
+    assert assessment.pe.blockers == ()
 
 
 def test_assess_option_pressure_returns_neutral_when_sides_are_balanced():
@@ -113,7 +115,7 @@ def test_confirm_candidate_option_pressure_promotes_matching_candidate():
     assert confirmation.blockers == ()
 
 
-def test_confirm_candidate_option_pressure_demotes_opposing_candidate():
+def test_confirm_candidate_option_pressure_demotes_or_blocks_opposing_candidate():
     confirmation = confirm_candidate_option_pressure(_candidate("BUY_PUT"), _context())
 
     assert confirmation.suggested_effect == "BLOCK"
