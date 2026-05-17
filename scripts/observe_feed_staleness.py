@@ -12,7 +12,7 @@ from core.feed_staleness_observability import build_feed_staleness_report, write
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate feed/staleness observability evidence")
-    parser.add_argument("--logs-dir", default=".runtime/logs", help="Runtime logs directory")
+    parser.add_argument("--logs-dir", default=None, help="Runtime logs directory; defaults to core.paths.logs_dir()")
     parser.add_argument("--output", default=None, help="Output JSON path")
     parser.add_argument("--print", action="store_true", help="Print report JSON to stdout")
     args = parser.parse_args()
