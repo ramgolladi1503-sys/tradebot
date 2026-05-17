@@ -1,0 +1,3 @@
+{"confidence_raw": 0.46, "side": "BUY", "execution_status": "QUEUE_ONLY", "quote_source": "recovered_fallback", "primary_blocker": "STALE_OPTION_LTP"}
+{"confidence_raw": 0.45, "side": "BUY", "execution_status": "ADVISORY_ONLY", "quote_source": "recovered_fallback", "primary_blocker": "STALE_OPTION_LTP"}
+{"confidence_raw": 0.44, "side": "BUY", "execution_status": "EXECUTE", "quote_source": "recovered_fallback", "primary_blocker": "MEDIUM_GLOBAL_CONF"}
