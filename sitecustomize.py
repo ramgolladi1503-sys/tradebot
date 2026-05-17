@@ -99,8 +99,19 @@ try:
 except Exception:
     pass
 
-# Local full-suite stabilization contracts. Remaining behavior here is review
-# queue REST fallback/rate-limit until its own migration PR moves it out.
+# Review-queue quote preservation/rate-limit contract has been isolated from
+# the generic full pytest shim. Install it before full_pytest_contracts so the
+# generic shim skips its review-queue wrapper.
+try:
+    from core import review_queue_contract as _review_queue_contract
+
+    _review_queue_contract.install()
+except Exception:
+    pass
+
+# Local full-suite stabilization contracts. All current behaviors have been
+# isolated into narrower modules; this stays temporarily until the deletion PR
+# proves full pytest remains green without the generic shim file.
 try:
     from core import full_pytest_contracts as _full_pytest_contracts
 
