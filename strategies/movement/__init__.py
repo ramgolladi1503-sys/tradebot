@@ -5,10 +5,14 @@ brokers, submit orders, alter execution gates, touch depth subscriptions, or tun
 live trading behavior.
 """
 
+from strategies.movement.compression_breakout import generate_compression_breakout_candidates
 from strategies.movement.opening_drive import generate_opening_drive_candidates
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
+from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 
 __all__ = [
+    "generate_compression_breakout_candidates",
     "generate_opening_drive_candidates",
     "generate_opening_range_retest_candidates",
+    "generate_trend_pullback_candidates",
 ]
