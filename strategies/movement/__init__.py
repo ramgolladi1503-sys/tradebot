@@ -13,6 +13,7 @@ from strategies.movement.late_day_momentum import generate_late_day_momentum_can
 from strategies.movement.mean_reversion_extension import generate_mean_reversion_extension_candidates
 from strategies.movement.opening_drive import generate_opening_drive_candidates
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
+from strategies.movement.option_pressure import generate_option_pressure_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
 
@@ -25,6 +26,7 @@ __all__ = [
     "generate_mean_reversion_extension_candidates",
     "generate_opening_drive_candidates",
     "generate_opening_range_retest_candidates",
+    "generate_option_pressure_candidates",
     "generate_trend_pullback_candidates",
     "generate_vwap_reclaim_rejection_candidates",
 ]
