@@ -101,10 +101,18 @@ def _build_candidate(
 
 def _orb_distance(ctx: StrategyContext, direction: str) -> float:
     spot = safe_float(ctx.spot_ltp)
+    if spot is None:
+        return 0.0
     if direction == "BUY_CALL":
-        return pct_distance(spot, ctx.orb_high) or 0.0 if spot is not None and safe_float(ctx.orb_high) is not None and spot >= safe_float(ctx.orb_high) else 0.0
+        level = safe_float(ctx.orb_high)
+        if level is None or spot < level:
+            return 0.0
+        return pct_distance(spot, level) or 0.0
     if direction == "BUY_PUT":
-        return pct_distance(spot, ctx.orb_low) or 0.0 if spot is not None and safe_float(ctx.orb_low) is not None and spot <= safe_float(ctx.orb_low) else 0.0
+        level = safe_float(ctx.orb_low)
+        if level is None or spot > level:
+            return 0.0
+        return pct_distance(spot, level) or 0.0
     return 0.0
 
 
