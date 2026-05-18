@@ -41,6 +41,7 @@
       "warnings": [
         "depth_missing",
         "no_dominant_option_pressure",
+        "option_ltp_stale",
         "spread_missing"
       ]
     }
@@ -115,6 +116,7 @@
     "candidate_already_hard_blocked",
     "depth_missing",
     "no_dominant_option_pressure",
+    "option_ltp_stale",
     "spread_missing"
   ]
 }
