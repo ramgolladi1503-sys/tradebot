@@ -1,0 +1,30 @@
+{
+  "allowed_for_live_execution": false,
+  "allowed_for_paper_order": true,
+  "append": false,
+  "blockers": [],
+  "direction": "BUY_CALL",
+  "entry_price": 100.0,
+  "estimated_notional": 500.0,
+  "instrument_token": 12345,
+  "is_order_action": false,
+  "metadata": {
+    "orchestrator": "paper_decision_orchestrator_v1",
+    "requires_paper_intent_contract": true,
+    "requires_risk_decision": true,
+    "requires_selection_policy": true,
+    "scope": "read_only_no_order_creation_no_broker_calls_no_ledger_mutation"
+  },
+  "paper_intent_id": "intent-clean",
+  "quantity": 5,
+  "read_only": true,
+  "reasons": [
+    "selection_intent_and_risk_approved_for_paper_order_creation"
+  ],
+  "schema_version": 1,
+  "selected_strategy_id": "call_high",
+  "state": "PAPER_DECISION_APPROVED",
+  "symbol": "NIFTY",
+  "tradingsymbol": "NIFTY26MAY22500CE",
+  "warnings": []
+}

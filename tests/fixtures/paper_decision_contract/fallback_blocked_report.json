@@ -1,0 +1,38 @@
+{
+  "allowed_for_live_execution": false,
+  "allowed_for_paper_order": false,
+  "append": false,
+  "blockers": [
+    "CONTRACT_FALLBACK_CANDIDATE",
+    "CONTRACT_NOT_EXACT_MATCH",
+    "PAPER_INTENT_NOT_READY",
+    "PAPER_INTENT_NOT_READY_FOR_RISK_REVIEW",
+    "RISK_DECISION_NOT_APPROVED",
+    "RISK_NOT_ALLOWED_FOR_PAPER_ORDER",
+    "RISK_QUANTITY_ZERO"
+  ],
+  "direction": "BUY_CALL",
+  "entry_price": 100.0,
+  "estimated_notional": 0,
+  "instrument_token": 12345,
+  "is_order_action": false,
+  "metadata": {
+    "orchestrator": "paper_decision_orchestrator_v1",
+    "requires_paper_intent_contract": true,
+    "requires_risk_decision": true,
+    "requires_selection_policy": true,
+    "scope": "read_only_no_order_creation_no_broker_calls_no_ledger_mutation"
+  },
+  "paper_intent_id": "intent-fallback",
+  "quantity": 0,
+  "read_only": true,
+  "reasons": [
+    "paper_decision_preconditions_failed"
+  ],
+  "schema_version": 1,
+  "selected_strategy_id": "call_high",
+  "state": "PAPER_DECISION_BLOCKED",
+  "symbol": "NIFTY",
+  "tradingsymbol": "NIFTY26MAY22500CE",
+  "warnings": []
+}

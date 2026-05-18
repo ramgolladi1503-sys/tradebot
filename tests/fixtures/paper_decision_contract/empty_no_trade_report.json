@@ -1,0 +1,36 @@
+{
+  "allowed_for_live_execution": false,
+  "allowed_for_paper_order": false,
+  "append": false,
+  "blockers": [
+    "NO_RANKED_CANDIDATES",
+    "PAPER_INTENT_MISSING",
+    "RISK_DECISION_MISSING",
+    "SELECTION_NOT_SELECTED_FOR_PAPER",
+    "SELECTION_SELECTED_COUNT_NOT_ONE"
+  ],
+  "direction": null,
+  "entry_price": null,
+  "estimated_notional": 0,
+  "instrument_token": null,
+  "is_order_action": false,
+  "metadata": {
+    "orchestrator": "paper_decision_orchestrator_v1",
+    "requires_paper_intent_contract": true,
+    "requires_risk_decision": true,
+    "requires_selection_policy": true,
+    "scope": "read_only_no_order_creation_no_broker_calls_no_ledger_mutation"
+  },
+  "paper_intent_id": null,
+  "quantity": 0,
+  "read_only": true,
+  "reasons": [
+    "paper_decision_preconditions_failed"
+  ],
+  "schema_version": 1,
+  "selected_strategy_id": null,
+  "state": "PAPER_DECISION_BLOCKED",
+  "symbol": null,
+  "tradingsymbol": null,
+  "warnings": []
+}
