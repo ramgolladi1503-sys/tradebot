@@ -45,7 +45,10 @@ def test_paper_fill_writes_events_and_reconciliation(monkeypatch, tmp_path):
         {"bid": 99.0, "ask": 100.0, "ltp": 99.8, "ts": time.time(), "depth": {"sell": [{"quantity": 20}]}}
     ]
 
-    sim = PaperFillSimulator(timeout_sec=0.05, poll_sec=0.0)
+    # CI can spend more than 50ms writing fill-realism metrics after the first
+    # non-fillable snapshot. Give the simulator enough room to process the
+    # second, fillable snapshot without weakening the fill assertions.
+    sim = PaperFillSimulator(timeout_sec=1.0, poll_sec=0.0)
     filled, price, report = sim.simulate(_trade(), limit_price=100.0, snapshot_stream=snapshots)
     assert filled is True
     assert float(price) >= 100.0
