@@ -218,8 +218,25 @@ def _matches_prefix(path: str, prefixes: tuple[str, ...]) -> bool:
             base = clean_prefix.rstrip("/")
             if normalized == base or normalized.startswith(f"{base}/"):
                 return True
-        elif normalized == clean_prefix or normalized.startswith(f"{clean_prefix}/"):
+            continue
+        if normalized == clean_prefix:
             return True
+        if normalized.startswith(f"{clean_prefix}/"):
+            return True
+        # Some Tradebot risk/allow policies intentionally use file-prefix
+        # patterns such as `core/agent_`, `core/execution`, and `.env`.
+        # Treat those as string prefixes only when the policy segment itself
+        # clearly ends with a non path-name character or is a dotfile prefix.
+        if clean_prefix.endswith("_") or clean_prefix.startswith(".") or clean_prefix.split("/")[-1] in {
+            "execution",
+            "broker",
+            "order",
+            "risk",
+            "feed",
+            "freshness",
+        }:
+            if normalized.startswith(clean_prefix):
+                return True
     return False
 
 
