@@ -17,14 +17,16 @@
   "normalized_candidate_count": 3,
   "ranked_candidate_count": 3,
   "top_rank_strategy_id": "exec",
-  "top_rank_score": 0.05,
+  "top_rank_score": 0.0,
   "executable_rank_count": 0,
   "near_executable_rank_count": 0,
   "advisory_rank_count": 0,
   "suppressed_rank_count": 2,
   "no_trade_rank_count": 1,
   "blockers": [
-    "FALLBACK_QUOTE_ONLY"
+    "CONFLICTING_TRAP_SIGNAL",
+    "FALLBACK_QUOTE_ONLY",
+    "OPTION_CONFIRMATION_MISSING"
   ],
   "safety_flags": [
     "fallback_data",
@@ -96,7 +98,7 @@
     {
       "rank": 1,
       "strategy_id": "exec",
-      "final_score": 0.05,
+      "final_score": 0.0,
       "bucket": "SUPPRESSED_CANDIDATE",
       "score_eligibility": "SUPPRESSED_BY_DOWNGRADE",
       "directional_family": "BULLISH",
@@ -107,7 +109,7 @@
     {
       "rank": 2,
       "strategy_id": "fallback",
-      "final_score": 0.05,
+      "final_score": 0.0,
       "bucket": "SUPPRESSED_CANDIDATE",
       "score_eligibility": "SUPPRESSED_BY_DOWNGRADE",
       "directional_family": "BEARISH",
