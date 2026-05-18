@@ -1,5 +1,5 @@
 from core.candidate_classifier import classify_candidates
-from core.hard_downgrade_engine import apply_hard_downgrades
+from core.hard_downgrade_engine import HardDowngradeDecision, apply_hard_downgrades
 from core.movement_contract import StrategyCandidate
 from core.opportunity_scoring import (
     ADVISORY_ONLY,
@@ -60,6 +60,25 @@ def _score(candidates, **downgrade_kwargs):
     classification_report = classify_candidates(candidates)
     downgrade_report = apply_hard_downgrades(classification_report, **downgrade_kwargs)
     return score_opportunities(candidates, downgrade_report)
+
+
+def _advisory_decision(candidate: StrategyCandidate) -> HardDowngradeDecision:
+    return HardDowngradeDecision(
+        strategy_id=candidate.strategy_id,
+        symbol=candidate.symbol,
+        direction=candidate.direction,
+        movement_type=candidate.movement_type,
+        original_bucket="ADVISORY_CANDIDATE",
+        downgraded_bucket="ADVISORY_CANDIDATE",
+        downgraded=False,
+        executable_candidate=False,
+        downgrade_reasons=("informational_or_soft_blocked_candidate",),
+        blockers=(),
+        hard_blockers=(),
+        warnings=("context_only",),
+        safety_flags=(),
+        evidence_flags=(),
+    )
 
 
 def test_clean_candidate_gets_score_eligible_explainable_score():
@@ -135,15 +154,10 @@ def test_raw_candidate_scores_as_needs_confirmation_with_cap():
 
 
 def test_advisory_candidate_scores_as_advisory_only():
-    # A ranked candidate cannot have hard blockers by contract, so create an advisory
-    # classification path through a non-executable status with a soft warning.
     candidate = _candidate("advisory", status="RAW_CANDIDATE", warnings=("context_only",))
-    classification_report = classify_candidates([candidate])
-    downgrade_report = apply_hard_downgrades(classification_report)
-    report = score_opportunities([candidate], downgrade_report)
+    report = score_opportunities([candidate], [_advisory_decision(candidate)])
 
     record = report.scores[0]
-    # Current classifier treats raw candidates with warnings as advisory.
     assert record.score_eligibility == ADVISORY_ONLY
     assert record.final_score <= 0.35
     assert record.executable_candidate is False
