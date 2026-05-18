@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "symbol": "NIFTY",
+  "read_only": true,
+  "is_order_action": false,
+  "append": false,
+  "pipeline_stage_order": [
+    "candidate_pool",
+    "normalization",
+    "classification",
+    "hard_downgrade",
+    "opportunity_scoring",
+    "directional_balance",
+    "candidate_ranking"
+  ],
+  "raw_candidate_count": 2,
+  "normalized_candidate_count": 2,
+  "ranked_candidate_count": 2,
+  "top_rank_strategy_id": "call_high",
+  "top_rank_score": 0.8005,
+  "executable_rank_count": 2,
+  "near_executable_rank_count": 0,
+  "advisory_rank_count": 0,
+  "suppressed_rank_count": 0,
+  "no_trade_rank_count": 0,
+  "metadata": {
+    "orchestrator": "ranked_opportunity_pipeline_v1",
+    "scope": "read_only_no_execution_no_dashboard_no_live_wiring",
+    "source_candidate_pool": "candidate_pool_orchestrator_shell",
+    "source_normalizer": "candidate_normalizer_v1",
+    "source_classifier": "candidate_classifier_v1",
+    "source_downgrade_engine": "hard_downgrade_engine_v1",
+    "source_scorer": "opportunity_score_v1",
+    "source_directional_balance": "directional_balance_v1",
+    "source_ranker": "candidate_ranking_v1"
+  },
+  "stages": {
+    "candidate_pool": {
+      "candidate_count": 2,
+      "movement_candidate_count": 2,
+      "no_trade_candidate_count": 0,
+      "report_executable_eligible_count": 2,
+      "failed_generator_count": 0,
+      "no_trade": false,
+      "no_trade_primary_reason": "TRADE_ALLOWED"
+    },
+    "normalization": {
+      "raw_count": 2,
+      "normalized_count": 2,
+      "duplicate_group_count": 0
+    },
+    "classification": {
+      "candidate_count": 2,
+      "executable_count": 2,
+      "suppressed_count": 0,
+      "no_trade_count": 0
+    },
+    "hard_downgrade": {
+      "candidate_count": 2,
+      "executable_after_downgrade_count": 2,
+      "suppressed_count": 0,
+      "no_trade_count": 0
+    },
+    "scoring": {
+      "score_count": 2,
+      "score_eligible_count": 2,
+      "suppressed_count": 0,
+      "no_trade_count": 0
+    },
+    "directional_balance": {
+      "coverage_state": "BULLISH_ONLY_COVERAGE",
+      "imbalance_flags": [
+        "bullish_score_concentration",
+        "missing_bearish_candidate_coverage",
+        "no_score_eligible_bearish_candidates"
+      ]
+    },
+    "ranking": {
+      "rank_count": 2,
+      "executable_count": 2,
+      "suppressed_count": 0,
+      "no_trade_count": 0,
+      "directional_imbalance_flags": [
+        "bullish_score_concentration",
+        "missing_bearish_candidate_coverage",
+        "no_score_eligible_bearish_candidates"
+      ]
+    }
+  },
+  "ranks": [
+    {
+      "rank": 1,
+      "strategy_id": "call_high",
+      "final_score": 0.8005,
+      "bucket": "EXECUTABLE_CANDIDATE",
+      "score_eligibility": "SCORE_ELIGIBLE",
+      "directional_family": "BULLISH",
+      "directional_warnings": [
+        "directional_balance_bullish_score_concentration",
+        "directional_balance_missing_bearish_candidate_coverage",
+        "directional_balance_no_score_eligible_bearish_candidates"
+      ]
+    },
+    {
+      "rank": 2,
+      "strategy_id": "call_mid",
+      "final_score": 0.7465,
+      "bucket": "EXECUTABLE_CANDIDATE",
+      "score_eligibility": "SCORE_ELIGIBLE",
+      "directional_family": "BULLISH",
+      "directional_warnings": [
+        "directional_balance_bullish_score_concentration",
+        "directional_balance_missing_bearish_candidate_coverage",
+        "directional_balance_no_score_eligible_bearish_candidates"
+      ]
+    }
+  ]
+}
