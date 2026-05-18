@@ -1,0 +1,67 @@
+{
+  "append": false,
+  "blockers": [
+    "OPTION_CONFIRMATION_MISSING"
+  ],
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "blockers": [],
+      "direction": "BUY_CALL",
+      "executable_eligible": true,
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "status": "VALIDATED_CANDIDATE",
+      "strategy_id": "unit_buy_call",
+      "warnings": []
+    }
+  ],
+  "eligible_candidate_count_before_suppression": 1,
+  "failed_generator_count": 0,
+  "generator_count": 1,
+  "is_order_action": false,
+  "metadata": {
+    "dominant_option_direction": "BUY_CALL",
+    "no_trade": false,
+    "no_trade_primary_reason": "TRADE_ALLOWED",
+    "primary_regime": "TREND_UP",
+    "report_type": "candidate_pool_orchestrator_shell",
+    "scope": "read_only_no_execution_no_ranking"
+  },
+  "movement_candidate_count": 1,
+  "no_trade_assessment": {
+    "no_trade": false,
+    "primary_reason": "TRADE_ALLOWED",
+    "signal_reasons": []
+  },
+  "no_trade_candidate_count": 0,
+  "option_confirmations": [
+    {
+      "blockers": [],
+      "candidate_direction": "BUY_CALL",
+      "candidate_strategy_id": "unit_buy_call",
+      "dominant_direction": "BUY_CALL",
+      "suggested_effect": "PROMOTE",
+      "warnings": [
+        "both_option_sides_active"
+      ]
+    }
+  ],
+  "option_pressure": {
+    "blockers": [
+      "OPTION_CONFIRMATION_MISSING"
+    ],
+    "dominant_direction": "BUY_CALL",
+    "warnings": [
+      "both_option_sides_active"
+    ]
+  },
+  "read_only": true,
+  "report_executable_eligible_count": 1,
+  "schema_version": 1,
+  "symbol": "NIFTY",
+  "validated_candidate_count": 1,
+  "blocked_candidate_count": 0,
+  "warnings": [
+    "both_option_sides_active"
+  ]
+}
