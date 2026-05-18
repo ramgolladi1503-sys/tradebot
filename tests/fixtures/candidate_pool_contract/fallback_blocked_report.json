@@ -1,0 +1,120 @@
+{
+  "append": false,
+  "blockers": [
+    "FALLBACK_QUOTE_ONLY",
+    "MISSING_DEPTH",
+    "OPTION_CONFIRMATION_MISSING",
+    "STALE_OPTION_LTP",
+    "WIDE_SPREAD"
+  ],
+  "candidate_count": 2,
+  "candidates": [
+    {
+      "blockers": [
+        "FALLBACK_QUOTE_ONLY",
+        "MISSING_DEPTH",
+        "STALE_OPTION_LTP",
+        "WIDE_SPREAD"
+      ],
+      "direction": "BUY_CALL",
+      "executable_eligible": false,
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "status": "BLOCKED_CANDIDATE",
+      "strategy_id": "unit_buy_call",
+      "warnings": [
+        "depth_missing"
+      ]
+    },
+    {
+      "blockers": [
+        "FALLBACK_QUOTE_ONLY",
+        "MISSING_DEPTH",
+        "OPTION_CONFIRMATION_MISSING",
+        "STALE_OPTION_LTP",
+        "WIDE_SPREAD"
+      ],
+      "direction": "NO_TRADE",
+      "executable_eligible": false,
+      "movement_type": "NO_TRADE_CHOP",
+      "status": "NO_TRADE",
+      "strategy_id": "no_trade_engine_v1",
+      "warnings": [
+        "depth_missing",
+        "no_dominant_option_pressure",
+        "spread_missing"
+      ]
+    }
+  ],
+  "eligible_candidate_count_before_suppression": 0,
+  "failed_generator_count": 0,
+  "generator_count": 1,
+  "is_order_action": false,
+  "metadata": {
+    "dominant_option_direction": "NEUTRAL",
+    "no_trade": true,
+    "no_trade_primary_reason": "NO_TRADE_FALLBACK_DATA",
+    "primary_regime": "TREND_UP",
+    "report_type": "candidate_pool_orchestrator_shell",
+    "scope": "read_only_no_execution_no_ranking"
+  },
+  "movement_candidate_count": 1,
+  "no_trade_assessment": {
+    "no_trade": true,
+    "primary_reason": "NO_TRADE_FALLBACK_DATA",
+    "signal_reasons": [
+      "NO_TRADE_FALLBACK_DATA",
+      "NO_TRADE_LIQUIDITY",
+      "NO_TRADE_STALE_FEED",
+      "NO_TRADE_WEAK_OPTION_CONFIRMATION"
+    ]
+  },
+  "no_trade_candidate_count": 1,
+  "option_confirmations": [
+    {
+      "blockers": [
+        "FALLBACK_QUOTE_ONLY",
+        "MISSING_DEPTH",
+        "OPTION_CONFIRMATION_MISSING",
+        "STALE_OPTION_LTP",
+        "WIDE_SPREAD"
+      ],
+      "candidate_direction": "BUY_CALL",
+      "candidate_strategy_id": "unit_buy_call",
+      "dominant_direction": "NEUTRAL",
+      "suggested_effect": "BLOCK",
+      "warnings": [
+        "candidate_already_hard_blocked",
+        "depth_missing",
+        "no_dominant_option_pressure",
+        "spread_missing"
+      ]
+    }
+  ],
+  "option_pressure": {
+    "blockers": [
+      "FALLBACK_QUOTE_ONLY",
+      "MISSING_DEPTH",
+      "OPTION_CONFIRMATION_MISSING",
+      "STALE_OPTION_LTP",
+      "WIDE_SPREAD"
+    ],
+    "dominant_direction": "NEUTRAL",
+    "warnings": [
+      "depth_missing",
+      "no_dominant_option_pressure",
+      "spread_missing"
+    ]
+  },
+  "read_only": true,
+  "report_executable_eligible_count": 0,
+  "schema_version": 1,
+  "symbol": "NIFTY",
+  "validated_candidate_count": 0,
+  "blocked_candidate_count": 1,
+  "warnings": [
+    "candidate_already_hard_blocked",
+    "depth_missing",
+    "no_dominant_option_pressure",
+    "spread_missing"
+  ]
+}
