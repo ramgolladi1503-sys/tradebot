@@ -109,7 +109,7 @@ def test_ranked_opportunity_report_builds_full_read_only_pipeline():
         candidate_generators=[
             _generator(
                 _candidate("call_high", direction="BUY_CALL", price_structure_score=0.9, option_confirmation_score=0.9),
-                _candidate("put_mid", direction="BUY_PUT", movement_type="TREND_PULLBACK", price_structure_score=0.7),
+                _candidate("call_mid", direction="BUY_CALL", movement_type="TREND_PULLBACK", price_structure_score=0.7),
             )
         ],
         include_strategy_id_in_normalization_key=True,
@@ -129,7 +129,7 @@ def test_ranked_opportunity_report_builds_full_read_only_pipeline():
     assert report.metadata["source_ranker"] == "candidate_ranking_v1"
 
 
-def test_ranked_pipeline_keeps_suppressed_fallback_visible_below_executable():
+def test_ranked_pipeline_keeps_suppressed_fallback_visible_below_safer_candidate():
     executable = _candidate("exec", direction="BUY_CALL", price_structure_score=0.7)
     fallback = _candidate(
         "fallback",
@@ -153,11 +153,13 @@ def test_ranked_pipeline_keeps_suppressed_fallback_visible_below_executable():
         include_strategy_id_in_normalization_key=True,
     )
 
-    assert [rank.strategy_id for rank in report.ranking.ranks] == ["exec", "fallback"]
+    assert [rank.strategy_id for rank in report.ranking.ranks] == ["exec", "fallback", "no_trade_engine_v1"]
     assert report.suppressed_rank_count >= 1
+    assert report.no_trade_rank_count == 1
     assert "FALLBACK_QUOTE_ONLY" in report.blockers
     assert "fallback_data" in report.safety_flags
     assert report.ranking.ranks[1].score_eligibility == "SUPPRESSED_BY_DOWNGRADE"
+    assert report.ranking.ranks[-1].score_eligibility == "NO_TRADE_ONLY"
 
 
 def test_ranked_pipeline_global_no_trade_suppresses_directional_candidates():
