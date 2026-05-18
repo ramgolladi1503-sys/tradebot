@@ -23,6 +23,10 @@
   "advisory_rank_count": 0,
   "suppressed_rank_count": 0,
   "no_trade_rank_count": 0,
+  "blockers": [
+    "OPTION_CONFIRMATION_MISSING"
+  ],
+  "safety_flags": [],
   "metadata": {
     "orchestrator": "ranked_opportunity_pipeline_v1",
     "scope": "read_only_no_execution_no_dashboard_no_live_wiring",
