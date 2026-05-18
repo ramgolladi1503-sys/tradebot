@@ -353,6 +353,8 @@ def _token_payload_from_exact_match(*, token: int, entry: dict, exchange: str, s
         "resolution_path": "exact_contract_match",
         "fallback_candidate": False,
         "candidate_origin": "exact_contract",
+        "execution_grade": True,
+        "advisory_only": False,
     }
 
 
@@ -497,19 +499,21 @@ def resolve_option_token(
                 "strike_distance": fallback.get("strike_distance"),
             }
         )
-    return {
-        "instrument_token": fallback.get("instrument_token"),
-        "tradingsymbol": fallback.get("tradingsymbol"),
-        "exchange": exchange,
-        "segment": segment,
-        "resolution_path": "safe_nearest_contract_fallback",
-        "fallback_candidate": True,
-        "candidate_origin": "fallback",
-        "requested_expiry": fallback.get("requested_expiry"),
-        "resolved_expiry": fallback.get("resolved_expiry"),
-        "requested_strike": fallback.get("requested_strike"),
-        "resolved_strike": fallback.get("resolved_strike"),
-    }
+        return {
+            "instrument_token": fallback.get("instrument_token"),
+            "tradingsymbol": fallback.get("tradingsymbol"),
+            "exchange": exchange,
+            "segment": segment,
+            "resolution_path": "safe_nearest_contract_fallback",
+            "fallback_candidate": True,
+            "candidate_origin": "fallback",
+            "execution_grade": False,
+            "advisory_only": True,
+            "requested_expiry": fallback.get("requested_expiry"),
+            "resolved_expiry": fallback.get("resolved_expiry"),
+            "requested_strike": fallback.get("requested_strike"),
+            "resolved_strike": fallback.get("resolved_strike"),
+        }
 
     available_expiries = sorted(
         {

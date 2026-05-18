@@ -125,10 +125,14 @@ def test_resolver_returns_exact_contract_match_even_when_coverage_is_below_thres
 
     assert out is not None
     assert int(out["instrument_token"]) == 333
+    assert out["resolution_path"] == "exact_contract_match"
+    assert out["execution_grade"] is True
+    assert out["advisory_only"] is False
+    assert out["fallback_candidate"] is False
     assert not any(row.get("event") == "OPTION_TOKEN_COVERAGE_BELOW_THRESHOLD" for row in capture.rows)
 
 
-def test_resolver_marks_safe_nearest_contract_fallback_as_fallback_candidate(monkeypatch, tmp_path):
+def test_resolver_marks_safe_nearest_contract_fallback_as_advisory_only(monkeypatch, tmp_path):
     cache_path = tmp_path / "kite_instruments.json"
     cache_path.write_text(
         json.dumps({"NFO": [_instrument_row(token=444, strike=24650.0, opt_type="CE")]}),
@@ -154,3 +158,35 @@ def test_resolver_marks_safe_nearest_contract_fallback_as_fallback_candidate(mon
     assert out["resolution_path"] == "safe_nearest_contract_fallback"
     assert out["fallback_candidate"] is True
     assert out["candidate_origin"] == "fallback"
+    assert out["execution_grade"] is False
+    assert out["advisory_only"] is True
+
+
+def test_resolver_returns_none_and_logs_not_found_when_no_exact_or_safe_fallback(monkeypatch, tmp_path):
+    cache_path = tmp_path / "kite_instruments.json"
+    cache_path.write_text(
+        json.dumps({"NFO": [_instrument_row(token=555, strike=24600.0, opt_type="CE")]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(resolver, "data_root", lambda: tmp_path)
+    capture = _CaptureLogger()
+    monkeypatch.setattr(resolver, "_LOGGER", capture)
+    resolver._STATS_LOG_TS.clear()
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKEN_COUNT", 1, raising=False)
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 1, raising=False)
+    monkeypatch.setattr(cfg, "OPTION_TOKEN_FALLBACK_MAX_STRIKE_DISTANCE", 25, raising=False)
+
+    out = resolver.resolve_option_token(
+        symbol="NIFTY",
+        expiry_date="2026-03-02",
+        strike=24700.0,
+        option_type="CE",
+        exchange="NFO",
+    )
+
+    assert out is None
+    not_found_rows = [row for row in capture.rows if row.get("event") == "OPTION_TOKEN_NOT_FOUND"]
+    assert not_found_rows
+    assert not_found_rows[-1]["symbol"] == "NIFTY"
+    assert float(not_found_rows[-1]["strike"]) == 24700.0
+    assert not any(row.get("resolution_path") == "safe_nearest_contract_fallback" for row in capture.rows)
