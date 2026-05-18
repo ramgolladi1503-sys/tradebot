@@ -1,9 +1,9 @@
 """Agent evidence writer.
 
-Writes audit evidence for agent work requests, scope decisions, and approval
-decisions. Evidence is read-only from the trading system perspective: it records
-what happened, but it never mutates trading state, calls brokers, or grants live
-execution permission.
+Writes audit evidence for agent work requests, scope decisions, approval
+decisions, and optional review-orchestration decisions. Evidence is read-only
+from the trading system perspective: it records what happened, but it never
+mutates trading state, calls brokers, or grants live execution permission.
 """
 
 from __future__ import annotations
@@ -68,6 +68,7 @@ def build_agent_evidence_payload(
     request: Any,
     scope_decision: Any,
     approval_decision: Any | None = None,
+    orchestration_decision: Any | None = None,
     created_at: datetime | None = None,
 ) -> dict[str, Any]:
     now = created_at or _utc_now()
@@ -77,6 +78,7 @@ def build_agent_evidence_payload(
         "request": _json_safe(request),
         "scope_decision": _json_safe(scope_decision),
         "approval_decision": _json_safe(approval_decision),
+        "orchestration_decision": _json_safe(orchestration_decision),
         "safety": {
             "read_only": True,
             "is_order_action": False,
@@ -87,6 +89,7 @@ def build_agent_evidence_payload(
         "metadata": {
             "contract": "agent_evidence_v1",
             "scope": "audit_evidence_only_no_runtime_no_broker_no_live",
+            "includes_orchestration": orchestration_decision is not None,
         },
     }
 
@@ -96,6 +99,7 @@ def write_agent_evidence(
     request: Any,
     scope_decision: Any,
     approval_decision: Any | None = None,
+    orchestration_decision: Any | None = None,
     root_dir: str | Path | None = None,
     created_at: datetime | None = None,
 ) -> AgentEvidenceWriteResult:
@@ -104,6 +108,7 @@ def write_agent_evidence(
         request=request,
         scope_decision=scope_decision,
         approval_decision=approval_decision,
+        orchestration_decision=orchestration_decision,
         created_at=created_at,
     )
     created_text = str(payload["created_at"])
@@ -134,6 +139,7 @@ def write_agent_evidence(
         metadata={
             "contract": "agent_evidence_write_result_v1",
             "scope": "evidence_write_only_no_trading_state_mutation",
+            "includes_orchestration": orchestration_decision is not None,
         },
     )
 
