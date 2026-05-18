@@ -207,7 +207,7 @@ def test_zero_to_hero_serializes_staged_confidence_fields(tmp_path, monkeypatch)
     assert trade is not None
     row = _serialize_trade_row(tmp_path, monkeypatch, trade)
     _assert_staged_confidence_fields_present(row)
-    assert row["strategy"] == getattr(cfg, "STRATEGY_ZERO_TO_HERO", "ZERO_TO_HERO")
+    assert row["strategy"] == trade.strategy
     assert row["confidence_model_raw"] == trade.confidence_model_raw
     assert row["confidence_after_soft_veto"] == trade.confidence_after_soft_veto
     assert row["confidence_penalty_soft_veto_total"] == 0.0
