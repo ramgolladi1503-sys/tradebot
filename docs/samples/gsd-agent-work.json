@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "source_agent": "gsd",
+  "action": "GENERATE_TESTS",
+  "title": "Add tests for Agent Scope Guard",
+  "scope": "Add behavior tests proving agent scope validation blocks unsafe work and permits docs or tests-only work.",
+  "requested_paths": [
+    "tests/test_agent_scope_guard.py"
+  ],
+  "allowed_paths": [
+    "tests/"
+  ],
+  "forbidden_paths": [
+    "credentials.py",
+    ".env",
+    "core/broker"
+  ],
+  "requires_human_approval": false,
+  "metadata": {
+    "project": "tradebot",
+    "sample": true
+  }
+}
