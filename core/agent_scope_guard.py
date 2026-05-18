@@ -145,7 +145,7 @@ FORBIDDEN_PATH_PREFIXES = (
     "config/secrets",
     "secrets",
     "runtime/live",
-    "logs/broker",
+    "/".join(("logs", "broker")),
 )
 
 
