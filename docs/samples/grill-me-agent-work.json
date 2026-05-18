@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "source_agent": "grill_me",
+  "action": "CRITIQUE_SCOPE",
+  "title": "Critique Agent CLI Scope",
+  "scope": "Review the local agent work CLI scope for fake progress, unsafe assumptions, and overengineering.",
+  "requested_paths": [
+    "docs/AGENT_WORKFLOW.md"
+  ],
+  "allowed_paths": [
+    "docs/"
+  ],
+  "forbidden_paths": [
+    "credentials.py",
+    ".env",
+    "core/broker"
+  ],
+  "requires_human_approval": false,
+  "metadata": {
+    "project": "tradebot",
+    "sample": true
+  }
+}
