@@ -11,6 +11,7 @@ from core.paper_risk_ledger import (
     empty_paper_risk_ledger_snapshot,
     reduce_paper_risk_ledger_events,
 )
+from core.risk_decision import RISK_BLOCKED, build_risk_decision
 
 
 def _open_event(**overrides):
@@ -50,6 +51,48 @@ def _close_event(**overrides):
     return payload
 
 
+def _intent(**overrides):
+    payload = {
+        "schema_version": 1,
+        "state": "PAPER_INTENT_READY",
+        "read_only": True,
+        "is_order_action": False,
+        "append": False,
+        "paper_intent_id": "intent-2",
+        "ready_for_risk_review": True,
+        "allowed_for_paper_order": False,
+        "allowed_for_live_execution": False,
+        "selected_strategy_id": "call_high",
+        "symbol": "NIFTY",
+        "direction": "BUY_CALL",
+        "instrument_token": 12345,
+        "tradingsymbol": "NIFTY26MAY22500CE",
+        "ask": 100.0,
+        "bid": 99.0,
+        "ltp": 99.5,
+        "blockers": [],
+        "warnings": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _limits(**overrides):
+    payload = {
+        "max_trade_notional": 500.0,
+        "max_total_exposure": 2000.0,
+        "max_daily_loss": 1000.0,
+        "max_daily_trades": 5,
+        "max_open_positions": 2,
+        "max_contracts_per_trade": 5,
+        "min_contracts_per_trade": 1,
+        "risk_per_trade_pct": 10.0,
+        "available_cash": 2000.0,
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_empty_snapshot_is_safe_for_risk_decision():
     snapshot = empty_paper_risk_ledger_snapshot()
     payload = snapshot.to_dict()
@@ -81,6 +124,26 @@ def test_open_position_updates_exposure_and_duplicate_keys_for_risk_gate():
     assert snapshot.processed_event_ids == ("open-1",)
     assert snapshot.open_positions[0].paper_order_id == "paper-1"
     assert snapshot.open_positions[0].entry_notional == 500.0
+
+
+def test_ledger_snapshot_blocks_duplicate_contract_in_existing_risk_decision():
+    snapshot = reduce_paper_risk_ledger_events([_open_event()])
+    decision = build_risk_decision(_intent(), risk_limits=_limits(), ledger_snapshot=snapshot.to_dict())
+
+    assert decision.state == RISK_BLOCKED
+    assert "DUPLICATE_OPEN_CONTRACT" in decision.blockers
+
+
+def test_ledger_snapshot_blocks_trade_limit_in_existing_risk_decision():
+    snapshot = reduce_paper_risk_ledger_events([_open_event()])
+    decision = build_risk_decision(
+        _intent(instrument_token=54321, tradingsymbol="NIFTY26MAY22600CE"),
+        risk_limits=_limits(max_daily_trades=1),
+        ledger_snapshot=snapshot.to_dict(),
+    )
+
+    assert decision.state == RISK_BLOCKED
+    assert "DAILY_TRADE_LIMIT_REACHED" in decision.blockers
 
 
 def test_close_position_removes_exposure_and_calculates_realized_pnl():
