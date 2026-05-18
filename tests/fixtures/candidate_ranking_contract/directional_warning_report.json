@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "read_only": true,
+  "is_order_action": false,
+  "append": false,
+  "rank_count": 2,
+  "executable_count": 2,
+  "near_executable_count": 0,
+  "advisory_count": 0,
+  "suppressed_count": 0,
+  "no_trade_count": 0,
+  "blockers": [],
+  "warnings": [
+    "bullish_score_concentration",
+    "missing_bearish_candidate_coverage",
+    "no_score_eligible_bearish_candidates"
+  ],
+  "safety_flags": [],
+  "directional_imbalance_flags": [
+    "bullish_score_concentration",
+    "missing_bearish_candidate_coverage",
+    "no_score_eligible_bearish_candidates"
+  ],
+  "metadata": {
+    "ranker": "candidate_ranking_v1",
+    "scope": "read_only_no_execution_no_score_mutation",
+    "source_scorer": "opportunity_score_v1",
+    "source_directional_balance": "directional_balance_v1"
+  },
+  "ranks": [
+    {
+      "rank": 1,
+      "strategy_id": "call_a",
+      "symbol": "NIFTY",
+      "direction": "BUY_CALL",
+      "directional_family": "BULLISH",
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "final_score": 0.8,
+      "bucket": "EXECUTABLE_CANDIDATE",
+      "score_eligibility": "SCORE_ELIGIBLE",
+      "executable_candidate": true,
+      "rank_reason": "eligibility=SCORE_ELIGIBLE; bucket=EXECUTABLE_CANDIDATE; score=0.800000; family=BULLISH; directional_warnings=3",
+      "downgrade_reasons": [],
+      "blockers": [],
+      "warnings": [],
+      "safety_flags": [],
+      "directional_warnings": [
+        "directional_balance_bullish_score_concentration",
+        "directional_balance_missing_bearish_candidate_coverage",
+        "directional_balance_no_score_eligible_bearish_candidates"
+      ]
+    },
+    {
+      "rank": 2,
+      "strategy_id": "call_b",
+      "symbol": "NIFTY",
+      "direction": "CE",
+      "directional_family": "BULLISH",
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "final_score": 0.6,
+      "bucket": "EXECUTABLE_CANDIDATE",
+      "score_eligibility": "SCORE_ELIGIBLE",
+      "executable_candidate": true,
+      "rank_reason": "eligibility=SCORE_ELIGIBLE; bucket=EXECUTABLE_CANDIDATE; score=0.600000; family=BULLISH; directional_warnings=3",
+      "downgrade_reasons": [],
+      "blockers": [],
+      "warnings": [],
+      "safety_flags": [],
+      "directional_warnings": [
+        "directional_balance_bullish_score_concentration",
+        "directional_balance_missing_bearish_candidate_coverage",
+        "directional_balance_no_score_eligible_bearish_candidates"
+      ]
+    }
+  ]
+}

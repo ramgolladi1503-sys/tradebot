@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "read_only": true,
+  "is_order_action": false,
+  "append": false,
+  "rank_count": 5,
+  "executable_count": 1,
+  "near_executable_count": 1,
+  "advisory_count": 1,
+  "suppressed_count": 1,
+  "no_trade_count": 1,
+  "blockers": [
+    "FALLBACK_QUOTE_ONLY",
+    "NO_TRADE_CHOP"
+  ],
+  "warnings": [
+    "context_only"
+  ],
+  "safety_flags": [
+    "fallback_data"
+  ],
+  "directional_imbalance_flags": [],
+  "metadata": {
+    "ranker": "candidate_ranking_v1",
+    "scope": "read_only_no_execution_no_score_mutation",
+    "source_scorer": "opportunity_score_v1",
+    "source_directional_balance": null
+  },
+  "ranks": [
+    {
+      "rank": 1,
+      "strategy_id": "exec",
+      "symbol": "NIFTY",
+      "direction": "BUY_CALL",
+      "directional_family": "BULLISH",
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "final_score": 0.55,
+      "bucket": "EXECUTABLE_CANDIDATE",
+      "score_eligibility": "SCORE_ELIGIBLE",
+      "executable_candidate": true,
+      "rank_reason": "eligibility=SCORE_ELIGIBLE; bucket=EXECUTABLE_CANDIDATE; score=0.550000; family=BULLISH",
+      "downgrade_reasons": [],
+      "blockers": [],
+      "warnings": [],
+      "safety_flags": [],
+      "directional_warnings": []
+    },
+    {
+      "rank": 2,
+      "strategy_id": "near",
+      "symbol": "NIFTY",
+      "direction": "BUY_CALL",
+      "directional_family": "BULLISH",
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "final_score": 0.64,
+      "bucket": "NEAR_EXECUTABLE_CANDIDATE",
+      "score_eligibility": "NEEDS_CONFIRMATION",
+      "executable_candidate": false,
+      "rank_reason": "eligibility=NEEDS_CONFIRMATION; bucket=NEAR_EXECUTABLE_CANDIDATE; score=0.640000; family=BULLISH",
+      "downgrade_reasons": [],
+      "blockers": [],
+      "warnings": [],
+      "safety_flags": [],
+      "directional_warnings": []
+    },
+    {
+      "rank": 3,
+      "strategy_id": "advisory",
+      "symbol": "NIFTY",
+      "direction": "BUY_CALL",
+      "directional_family": "BULLISH",
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "final_score": 0.35,
+      "bucket": "ADVISORY_CANDIDATE",
+      "score_eligibility": "ADVISORY_ONLY",
+      "executable_candidate": false,
+      "rank_reason": "eligibility=ADVISORY_ONLY; bucket=ADVISORY_CANDIDATE; score=0.350000; family=BULLISH",
+      "downgrade_reasons": [],
+      "blockers": [],
+      "warnings": [
+        "context_only"
+      ],
+      "safety_flags": [],
+      "directional_warnings": []
+    },
+    {
+      "rank": 4,
+      "strategy_id": "suppressed",
+      "symbol": "NIFTY",
+      "direction": "BUY_CALL",
+      "directional_family": "BULLISH",
+      "movement_type": "COMPRESSION_BREAKOUT",
+      "final_score": 0.99,
+      "bucket": "SUPPRESSED_CANDIDATE",
+      "score_eligibility": "SUPPRESSED_BY_DOWNGRADE",
+      "executable_candidate": false,
+      "rank_reason": "eligibility=SUPPRESSED_BY_DOWNGRADE; bucket=SUPPRESSED_CANDIDATE; score=0.990000; family=BULLISH; blockers=1; safety_flags=1",
+      "downgrade_reasons": [
+        "fallback_quote_data"
+      ],
+      "blockers": [
+        "FALLBACK_QUOTE_ONLY"
+      ],
+      "warnings": [],
+      "safety_flags": [
+        "fallback_data"
+      ],
+      "directional_warnings": []
+    },
+    {
+      "rank": 5,
+      "strategy_id": "no_trade",
+      "symbol": "NIFTY",
+      "direction": "NO_TRADE",
+      "directional_family": "NO_TRADE",
+      "movement_type": "NO_TRADE_CHOP",
+      "final_score": 0.0,
+      "bucket": "NO_TRADE_CANDIDATE",
+      "score_eligibility": "NO_TRADE_ONLY",
+      "executable_candidate": false,
+      "rank_reason": "eligibility=NO_TRADE_ONLY; bucket=NO_TRADE_CANDIDATE; score=0.000000; family=NO_TRADE; blockers=1",
+      "downgrade_reasons": [
+        "candidate_is_no_trade_signal"
+      ],
+      "blockers": [
+        "NO_TRADE_CHOP"
+      ],
+      "warnings": [],
+      "safety_flags": [],
+      "directional_warnings": []
+    }
+  ]
+}
