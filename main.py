@@ -22,6 +22,7 @@ from core.broker_truth_reconciler import BrokerTruthReconciler
 from core.kite_client import kite_client
 from core.observability.pipeline import observability_dir
 from core.auth import validate_kite_startup_credentials
+from core.runtime_safety_boot_guard import enforce_runtime_boot_safety
 
 
 def _check_env():
@@ -220,6 +221,19 @@ def main():
     exec_mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
     print(f"[BOOT] exec_mode={exec_mode}")
     _validate_runtime_mode_config_alignment(exec_mode)
+
+    try:
+        boot_safety = enforce_runtime_boot_safety(mode=exec_mode, config=cfg)
+    except RuntimeError as exc:
+        _audit_startup_state(
+            "STARTUP_BOOT_SAFETY_FAIL",
+            message=str(exc),
+            extra={"stage": "runtime_boot_safety"},
+        )
+        print(f"[BOOT_SAFETY_ERROR] {exc}")
+        raise SystemExit(2)
+    if boot_safety.warnings:
+        print(f"[BOOT_SAFETY_WARN] {','.join(boot_safety.warnings)}")
 
     _ensure_runtime_dirs(repo_root)
     _repair_events_log_if_needed()
