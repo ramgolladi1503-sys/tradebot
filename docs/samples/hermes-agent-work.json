@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "source_agent": "hermes",
+  "action": "UPDATE_DOCS",
+  "title": "Update Agent Workflow Documentation",
+  "scope": "Update agent workflow documentation with safe local submission instructions and acceptance gates.",
+  "requested_paths": [
+    "docs/AGENT_WORKFLOW.md"
+  ],
+  "allowed_paths": [
+    "docs/"
+  ],
+  "forbidden_paths": [
+    "credentials.py",
+    ".env",
+    "core/broker"
+  ],
+  "requires_human_approval": false,
+  "metadata": {
+    "project": "tradebot",
+    "sample": true
+  }
+}
