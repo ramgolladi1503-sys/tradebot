@@ -42,6 +42,11 @@ def _trade(trade_id: str = "T-APPROVAL-1"):
         entry_ref_price=101.5,
         exchange="NFO",
         product="MIS",
+        # Keep approval-intent hashes deterministic across long full-suite runs.
+        # Without this, OrderIntent.from_trade() buckets by the current minute;
+        # a minute-boundary crossing between approve_order_intent() and
+        # ExecutionRouter.execute() turns an expired approval into a missing one.
+        timestamp_bucket=123456789,
     )
 
 
