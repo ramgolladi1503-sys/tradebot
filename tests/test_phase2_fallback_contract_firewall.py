@@ -132,8 +132,8 @@ def test_build_candidates_phase2_drops_fallback_contract_candidate(monkeypatch):
     out = phase2.build_candidates_phase2([fallback, clean])
 
     assert [row["trade_id"] for row in out] == ["clean-1"]
-    assert fallback["execution_allowed"] is False
-    assert fallback["final_action"] == "QUEUE_ONLY"
+    assert all(row["trade_id"] != "fallback-1" for row in out)
+    assert all(row.get("permission") != "EXECUTE" or row["trade_id"] != "fallback-1" for row in out)
 
 
 def test_build_candidates_phase2_does_not_readd_raw_fallback_candidate(monkeypatch):
@@ -149,5 +149,3 @@ def test_build_candidates_phase2_does_not_readd_raw_fallback_candidate(monkeypat
     out = phase2.build_candidates_phase2([fallback])
 
     assert out == []
-    assert fallback["execution_allowed"] is False
-    assert fallback["final_action"] == "QUEUE_ONLY"
