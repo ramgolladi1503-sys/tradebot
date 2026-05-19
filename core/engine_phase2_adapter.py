@@ -15,6 +15,46 @@ from core._engine_phase2_adapter_base import *  # noqa: F401,F403
 
 _base_build_candidates_phase2 = _phase2_base.build_candidates_phase2
 
+CONTRACT_FALLBACK_BLOCKER = "CONTRACT_RESOLUTION_FALLBACK_BLOCKED"
+CONTRACT_FALLBACK_REASON = "contract_resolution_fallback_blocked"
+
+_CONTRACT_FALLBACK_BOOL_KEYS = {
+    "contract_resolution_fallback",
+    "contract_resolution_fallback_used",
+    "contract_resolution_fallback_blocked",
+    "fallback_contract_resolution",
+    "fallback_contract_resolution_used",
+    "contract_fallback_used",
+    "fallback_resolved_contract",
+    "fallback_contract",
+    "is_fallback_contract",
+    "option_contract_fallback",
+    "contract_resolution_is_fallback",
+}
+
+_CONTRACT_FALLBACK_TEXT_KEYS = {
+    "contract_resolution_mode",
+    "contract_resolution_status",
+    "contract_resolution_source",
+    "contract_resolution_reason",
+    "contract_resolution_event",
+    "contract_source",
+    "resolution_source",
+    "resolution_mode",
+    "resolution_status",
+    "option_resolution_source",
+    "execution_block_reason",
+    "order_policy_reason",
+}
+
+_CONTRACT_FALLBACK_MARKERS = {
+    "CONTRACT_RESOLUTION_FALLBACK",
+    "CONTRACT_RESOLUTION_FALLBACK_BLOCKED",
+    "FALLBACK_CONTRACT_RESOLUTION",
+    "FALLBACK_CONTRACT",
+    "CONTRACT_FALLBACK",
+}
+
 
 def _sf(value: Any, default: float | None = 0.0) -> float | None:
     try:
@@ -99,7 +139,143 @@ def _effective_max_spread_pct(candidate: dict[str, Any]) -> float:  # noqa: F811
     return max(float(max_spread), 1e-6)
 
 
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off", "none", ""}:
+        return False
+    return False
+
+
+def _iter_contract_resolution_contexts(row: dict[str, Any]):
+    yield row
+    for key in (
+        "source_flags",
+        "contract_resolution",
+        "option_contract_resolution",
+        "resolved_contract",
+        "option_contract",
+        "selected_contract",
+        "instrument_resolution",
+        "resolution",
+    ):
+        value = row.get(key)
+        if isinstance(value, dict):
+            yield value
+
+
+def _iter_reason_texts(row: dict[str, Any]):
+    for ctx in _iter_contract_resolution_contexts(row):
+        for key in _CONTRACT_FALLBACK_TEXT_KEYS:
+            value = ctx.get(key)
+            if value not in (None, ""):
+                yield str(value)
+        for key in (
+            "reason",
+            "reasons",
+            "blocker",
+            "blockers",
+            "hard_blockers",
+            "execution_blockers",
+            "gate_reasons",
+            "penalty_reasons",
+            "confidence_penalty_reasons",
+            "event",
+            "events",
+        ):
+            value = ctx.get(key)
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    if item not in (None, ""):
+                        yield str(item)
+            elif value not in (None, ""):
+                yield str(value)
+
+
+def _is_contract_resolution_fallback(row: dict[str, Any]) -> bool:
+    """Return true when candidate carries fallback contract-resolution evidence.
+
+    This intentionally targets contract-resolution fallback, not every generic
+    advisory/fallback candidate. A fallback-resolved instrument is unsafe for
+    execution because the orderable contract mapping is uncertain.
+    """
+
+    for ctx in _iter_contract_resolution_contexts(row):
+        for key in _CONTRACT_FALLBACK_BOOL_KEYS:
+            if _as_bool(ctx.get(key)):
+                return True
+        for key in _CONTRACT_FALLBACK_TEXT_KEYS:
+            text = str(ctx.get(key) or "").strip().upper()
+            if text in _CONTRACT_FALLBACK_MARKERS or text == "FALLBACK":
+                return True
+            if "CONTRACT" in text and "FALLBACK" in text:
+                return True
+            if "RESOLUTION" in text and "FALLBACK" in text:
+                return True
+
+    for text in _iter_reason_texts(row):
+        normalized = str(text or "").strip().upper()
+        if normalized in _CONTRACT_FALLBACK_MARKERS:
+            return True
+        if "CONTRACT_RESOLUTION_FALLBACK" in normalized:
+            return True
+        if "FALLBACK_CONTRACT" in normalized:
+            return True
+
+    return False
+
+
+def _append_unique(row: dict[str, Any], key: str, value: str) -> None:
+    current = row.get(key)
+    if isinstance(current, list):
+        values = list(current)
+    elif current in (None, ""):
+        values = []
+    else:
+        values = [current]
+    if value not in {str(item) for item in values}:
+        values.append(value)
+    row[key] = values
+
+
+def _block_contract_resolution_fallback(row: dict[str, Any]) -> dict[str, Any]:
+    """Force fallback-resolved contract candidates into non-executable shape."""
+
+    row["execution_allowed"] = False
+    row["tradable"] = False
+    row["execution_ok"] = False
+    row["truth_allows_execution"] = False
+    row["execution_blocked"] = True
+    row["permission"] = "QUEUE_ONLY"
+    row["final_action"] = "QUEUE_ONLY"
+    row["max_final_action"] = "QUEUE_ONLY"
+    row["execution_status"] = "blocked"
+    row["candidate_status"] = "blocked"
+    row["execution_block_reason"] = CONTRACT_FALLBACK_REASON
+    row["order_policy_reason"] = CONTRACT_FALLBACK_REASON
+    row["contract_resolution_fallback_blocked"] = True
+    _append_unique(row, "hard_blockers", CONTRACT_FALLBACK_BLOCKER)
+    _append_unique(row, "blockers", CONTRACT_FALLBACK_BLOCKER)
+    _append_unique(row, "gate_reasons", CONTRACT_FALLBACK_BLOCKER)
+    source_flags = row.get("source_flags")
+    if not isinstance(source_flags, dict):
+        source_flags = {}
+    source_flags["contract_resolution_fallback_blocked"] = True
+    source_flags["order_policy_reason"] = CONTRACT_FALLBACK_REASON
+    row["source_flags"] = source_flags
+    return row
+
+
 def _phase2_contract_hard_drop(row: dict[str, Any]) -> bool:
+    if _is_contract_resolution_fallback(row):
+        _block_contract_resolution_fallback(row)
+        return True
+
     if bool(_cfg("PHASE2_STRICT_REAL_CANDIDATES_ONLY", False)):
         candidate_origin = str(row.get("candidate_origin") or "").strip().lower()
         strategy_family = str(row.get("strategy_family") or "").strip().lower()
@@ -159,6 +335,23 @@ def _phase2_contract_normal_ok(row: dict[str, Any]) -> bool:
     )
 
 
+def _finalize_phase2_output(rows: list[Any]) -> list[Any]:
+    """Fail-closed final guard against fallback contract leakage.
+
+    The adapter intentionally works with shallow copies for compatibility with
+    legacy Phase2 behavior. This final pass prevents raw or copied fallback rows
+    from leaking back into output after mutation/re-add paths.
+    """
+
+    safe_rows: list[Any] = []
+    for row in rows:
+        if isinstance(row, dict) and _is_contract_resolution_fallback(row):
+            _block_contract_resolution_fallback(row)
+            continue
+        safe_rows.append(row)
+    return safe_rows
+
+
 def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dict[str, Any]]:  # noqa: F811
     """Build Phase2 candidates with formerly hooked Phase2 contracts inline."""
     raw = [dict(row) for row in list(raw_candidates or []) if isinstance(row, dict)]
@@ -186,6 +379,7 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
             out.append(row)
             seen.add(trade_id)
 
+    out = _finalize_phase2_output(out)
     out.sort(
         key=lambda row: (
             _sf(row.get("final_score", row.get("score", 0.0)), 0.0)
@@ -196,6 +390,10 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
     )
     return out
 
+
+# The adapter now owns the Phase2 contract. Marking the callable prevents the
+# CI compatibility shim from wrapping it and reintroducing fallback rows.
+build_candidates_phase2._ci_phase2_contract_patch = True
 
 _phase2_base.build_candidates_phase2 = build_candidates_phase2
 _phase2_base._candidate_hour = _candidate_hour
