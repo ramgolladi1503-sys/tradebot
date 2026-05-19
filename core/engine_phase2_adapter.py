@@ -391,6 +391,10 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
     return out
 
 
+# The adapter now owns the Phase2 contract. Marking the callable prevents the
+# CI compatibility shim from wrapping it and reintroducing fallback rows.
+build_candidates_phase2._ci_phase2_contract_patch = True
+
 _phase2_base.build_candidates_phase2 = build_candidates_phase2
 _phase2_base._candidate_hour = _candidate_hour
 _phase2_base._spread_pct = _spread_pct
