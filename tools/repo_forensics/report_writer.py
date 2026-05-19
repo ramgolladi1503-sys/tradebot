@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tools.repo_forensics.critical_module_checker import CriticalModuleReport, CriticalModuleStatus
 from tools.repo_forensics.repo_cartographer import PathStatus, RepoMap
 from tools.repo_forensics.runtime_wiring import FlowStepStatus, RuntimeFlowReport
 
@@ -10,16 +11,18 @@ def write_repo_map_report(
     repo_map: RepoMap,
     output_path: str | Path,
     runtime_report: RuntimeFlowReport | None = None,
+    critical_report: CriticalModuleReport | None = None,
 ) -> Path:
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_repo_map_report(repo_map, runtime_report), encoding="utf-8")
+    target.write_text(render_repo_map_report(repo_map, runtime_report, critical_report), encoding="utf-8")
     return target
 
 
 def render_repo_map_report(
     repo_map: RepoMap,
     runtime_report: RuntimeFlowReport | None = None,
+    critical_report: CriticalModuleReport | None = None,
 ) -> str:
     inventory = repo_map.inventory
     lines: list[str] = []
@@ -57,6 +60,7 @@ def render_repo_map_report(
         lines.append(f"### {group}")
         lines.extend(_status_table(items))
         lines.append("")
+    lines.extend(_critical_caller_section(critical_report))
     lines.extend(_runtime_flow_section(runtime_report))
     lines.append("## Runtime / Evidence Paths Present")
     lines.append("")
@@ -79,12 +83,16 @@ def render_repo_map_report(
     missing_critical = repo_map.missing_critical_modules
     flow_failures = runtime_report.failures if runtime_report else []
     flow_unknowns = runtime_report.unknowns if runtime_report else []
+    critical_missing = critical_report.missing if critical_report else []
+    critical_test_only = critical_report.test_only if critical_report else []
+    critical_unreferenced = critical_report.unreferenced if critical_report else []
     lines.append(f"- Missing required entrypoints: {len(missing_entrypoints)}")
     lines.append(f"- Missing critical modules: {len(missing_critical)}")
     lines.append(f"- Runtime flow failures: {len(flow_failures)}")
     lines.append(f"- Runtime flow unknowns: {len(flow_unknowns)}")
+    lines.append(f"- Critical modules missing caller proof: {len(critical_test_only) + len(critical_unreferenced)}")
     lines.append("")
-    if missing_entrypoints or missing_critical or flow_failures or flow_unknowns:
+    if missing_entrypoints or missing_critical or flow_failures or flow_unknowns or critical_test_only or critical_unreferenced:
         lines.append("## Findings")
         lines.append("")
         for item in missing_entrypoints:
@@ -95,17 +103,48 @@ def render_repo_map_report(
             lines.append(f"- HIGH: runtime flow step failed `{item.flow_name}:{item.step}` evidence={item.evidence}")
         for item in flow_unknowns:
             lines.append(f"- UNKNOWN: runtime flow step unproven `{item.flow_name}:{item.step}` evidence={item.evidence}")
+        for item in critical_test_only:
+            lines.append(f"- HIGH: critical module has test-only caller proof `{item.path}` group={item.group}")
+        for item in critical_unreferenced:
+            lines.append(f"- UNKNOWN: critical module has no static caller proof `{item.path}` group={item.group}")
         lines.append("")
     lines.append("## Verdict")
     lines.append("")
-    if missing_entrypoints or missing_critical or flow_failures:
-        lines.append("FAIL — configured paths or runtime flow steps are missing.")
-    elif flow_unknowns:
-        lines.append("UNKNOWN — configured paths exist, but one or more runtime flow steps are unproven.")
+    if missing_entrypoints or missing_critical or flow_failures or critical_missing or critical_test_only:
+        lines.append("FAIL — configured paths, runtime flow steps, or critical module caller proof failed.")
+    elif flow_unknowns or critical_unreferenced:
+        lines.append("UNKNOWN — configured paths exist, but one or more runtime/caller relationships are unproven.")
     else:
-        lines.append("PASS — configured entrypoints, critical modules, and runtime flow references are present. This is still static proof only.")
+        lines.append("PASS — configured entrypoints, critical modules, runtime flow references, and critical module callers are statically present. This is still static proof only.")
     lines.append("")
     return "\n".join(lines)
+
+
+def _critical_caller_section(critical_report: CriticalModuleReport | None) -> list[str]:
+    lines: list[str] = []
+    lines.append("## Critical Module Caller Check")
+    lines.append("")
+    if critical_report is None:
+        lines.append("Critical module caller check was not run.")
+        lines.append("")
+        return lines
+    for group, statuses in critical_report.statuses.items():
+        lines.append(f"### {group}")
+        lines.extend(_critical_status_table(statuses))
+        lines.append("")
+    return lines
+
+
+def _critical_status_table(items: list[CriticalModuleStatus]) -> list[str]:
+    lines = ["", "| Module | Status | Production Callers | Test Callers | Evidence |", "|---|---|---:|---:|---|"]
+    if not items:
+        lines.append("| none | INFO | 0 | 0 | not configured |")
+        return lines
+    for item in items:
+        lines.append(
+            f"| `{item.path}` | {item.status} | {len(item.production_callers)} | {len(item.test_callers)} | {item.evidence} |"
+        )
+    return lines
 
 
 def _runtime_flow_section(runtime_report: RuntimeFlowReport | None) -> list[str]:
