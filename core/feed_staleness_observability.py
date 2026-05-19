@@ -267,6 +267,17 @@ def build_feed_staleness_report(log_root: str | Path | None = None) -> dict[str,
         )
     )
 
+    recon_daemon_running = _as_bool(
+        _get_nested(
+            engine_cycle,
+            "recon.daemon_running",
+            "order_recon.daemon_running",
+            "order_reconciliation.daemon_running",
+            "reconciliation.daemon_running",
+            default=_get_nested(suggestions_status, "recon.daemon_running", "order_recon.daemon_running"),
+        )
+    )
+
     stale_evidence = {
         "feed_runtime": _collect_key_values(feed_runtime, hints=STALE_KEY_HINTS),
         "runtime_health": _collect_key_values(runtime_health, hints=STALE_KEY_HINTS),
@@ -303,6 +314,7 @@ def build_feed_staleness_report(log_root: str | Path | None = None) -> dict[str,
             "ws_connected": ws_connected,
             "subscribed_option_tokens_count": subscribed_option_tokens_count,
             "visible_executable_count": visible_executable_count,
+            "recon_daemon_running": recon_daemon_running,
             "suggestions_tail_rows": len(suggestions_rows),
             "events_tail_rows": len(events_rows),
             "missing_runtime_files": missing_files,
