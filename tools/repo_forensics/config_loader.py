@@ -30,6 +30,18 @@ class ForensicsConfig:
         return {str(group): _as_str_list(items) for group, items in raw.items()}
 
     @property
+    def runtime_flows(self) -> dict[str, dict[str, Any]]:
+        raw = self.data.get("runtime_flow", {})
+        if not isinstance(raw, dict):
+            raise ConfigError("runtime_flow must be a mapping")
+        result: dict[str, dict[str, Any]] = {}
+        for name, flow in raw.items():
+            if not isinstance(flow, dict):
+                raise ConfigError(f"runtime_flow.{name} must be a mapping")
+            result[str(name)] = flow
+        return result
+
+    @property
     def excluded_directories(self) -> set[str]:
         return set(_as_str_list(self.data.get("exclude", {}).get("directories", [])))
 
