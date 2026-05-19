@@ -374,6 +374,15 @@ def _phase2_contract_fallback_blocked(module: Any, row: dict[str, Any]) -> bool:
     return False
 
 
+def _phase2_filter_fallback_rows(module: Any, rows: list[Any]) -> list[Any]:
+    safe_rows: list[Any] = []
+    for row in list(rows or []):
+        if isinstance(row, dict) and _phase2_contract_fallback_blocked(module, row):
+            continue
+        safe_rows.append(row)
+    return safe_rows
+
+
 def _phase2_fallback_rows(module: Any, rows: list[Any]) -> list[dict[str, Any]]:
     try:
         from config import config as cfg
@@ -425,7 +434,7 @@ def _patch_phase2(module: Any) -> None:
         return
 
     def _build_candidates_phase2_ci(rows, *args, **kwargs):
-        out = list(fn(rows, *args, **kwargs) or [])
+        out = _phase2_filter_fallback_rows(module, list(fn(rows, *args, **kwargs) or []))
         if out:
             return out
         return _phase2_fallback_rows(module, list(rows or []))
