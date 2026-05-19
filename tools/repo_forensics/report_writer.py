@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tools.repo_forensics.architecture_drift import ArchitectureDriftReport
 from tools.repo_forensics.critical_module_checker import CriticalModuleReport, CriticalModuleStatus
 from tools.repo_forensics.evidence_auditor import EvidenceAuditReport
 from tools.repo_forensics.repo_cartographer import PathStatus, RepoMap
@@ -18,6 +19,7 @@ def write_repo_map_report(
     test_reality_report: TestRealityReport | None = None,
     safety_report: SafetyBoundaryReport | None = None,
     evidence_report: EvidenceAuditReport | None = None,
+    drift_report: ArchitectureDriftReport | None = None,
 ) -> Path:
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -29,6 +31,7 @@ def write_repo_map_report(
             test_reality_report,
             safety_report,
             evidence_report,
+            drift_report,
         ),
         encoding="utf-8",
     )
@@ -42,6 +45,7 @@ def render_repo_map_report(
     test_reality_report: TestRealityReport | None = None,
     safety_report: SafetyBoundaryReport | None = None,
     evidence_report: EvidenceAuditReport | None = None,
+    drift_report: ArchitectureDriftReport | None = None,
 ) -> str:
     inventory = repo_map.inventory
     lines: list[str] = []
@@ -84,6 +88,7 @@ def render_repo_map_report(
     lines.extend(_test_reality_section(test_reality_report))
     lines.extend(_safety_boundary_section(safety_report))
     lines.extend(_evidence_audit_section(evidence_report))
+    lines.extend(_architecture_drift_section(drift_report))
     lines.append("## Runtime / Evidence Paths Present")
     lines.append("")
     if inventory.runtime_evidence_paths:
@@ -116,6 +121,9 @@ def render_repo_map_report(
     evidence_high = evidence_report.high if evidence_report else []
     evidence_medium = evidence_report.medium if evidence_report else []
     evidence_unknown = evidence_report.unknown if evidence_report else []
+    drift_high = drift_report.high if drift_report else []
+    drift_medium = drift_report.medium if drift_report else []
+    drift_unknown = drift_report.unknown if drift_report else []
     lines.append(f"- Missing required entrypoints: {len(missing_entrypoints)}")
     lines.append(f"- Missing critical modules: {len(missing_critical)}")
     lines.append(f"- Runtime flow failures: {len(flow_failures)}")
@@ -129,6 +137,9 @@ def render_repo_map_report(
     lines.append(f"- Evidence high findings: {len(evidence_high)}")
     lines.append(f"- Evidence medium findings: {len(evidence_medium)}")
     lines.append(f"- Evidence unknown findings: {len(evidence_unknown)}")
+    lines.append(f"- Drift high findings: {len(drift_high)}")
+    lines.append(f"- Drift medium findings: {len(drift_medium)}")
+    lines.append(f"- Drift unknown findings: {len(drift_unknown)}")
     lines.append("")
     if (
         missing_entrypoints
@@ -144,6 +155,9 @@ def render_repo_map_report(
         or evidence_high
         or evidence_medium
         or evidence_unknown
+        or drift_high
+        or drift_medium
+        or drift_unknown
     ):
         lines.append("## Findings")
         lines.append("")
@@ -173,19 +187,51 @@ def render_repo_map_report(
             lines.append(f"- {item.severity}: evidence `{item.path}` type={item.evidence_type} evidence={item.evidence}{missing}")
         if len(evidence_high + evidence_medium + evidence_unknown) > 30:
             lines.append(f"- MEDIUM: evidence findings truncated count={len(evidence_high + evidence_medium + evidence_unknown) - 30}")
+        for item in (drift_high + drift_medium + drift_unknown)[:30]:
+            lines.append(f"- {item.severity}: architecture drift `{item.path}` type={item.drift_type} evidence={item.evidence}")
+        if len(drift_high + drift_medium + drift_unknown) > 30:
+            lines.append(f"- MEDIUM: architecture drift findings truncated count={len(drift_high + drift_medium + drift_unknown) - 30}")
         lines.append("")
     lines.append("## Verdict")
     lines.append("")
-    if missing_entrypoints or missing_critical or flow_failures or critical_missing or critical_test_only or safety_critical or evidence_high:
-        lines.append("FAIL — configured paths, runtime flow, critical module caller proof, safety boundaries, or evidence contracts failed.")
-    elif flow_unknowns or critical_unreferenced or safety_high or safety_unknown or evidence_unknown:
-        lines.append("UNKNOWN — one or more runtime/caller/safety/evidence relationships are unproven or high-risk.")
-    elif fake_confidence or evidence_medium:
-        lines.append("PASS_WITH_WARNINGS — static structure and safety passed, but weak tests or weak evidence need review.")
+    if missing_entrypoints or missing_critical or flow_failures or critical_missing or critical_test_only or safety_critical or evidence_high or drift_high:
+        lines.append("FAIL — configured paths, runtime flow, caller proof, safety, evidence, or architecture drift failed.")
+    elif flow_unknowns or critical_unreferenced or safety_high or safety_unknown or evidence_unknown or drift_unknown:
+        lines.append("UNKNOWN — one or more runtime/caller/safety/evidence/drift relationships are unproven or high-risk.")
+    elif fake_confidence or evidence_medium or drift_medium:
+        lines.append("PASS_WITH_WARNINGS — static structure and safety passed, but weak tests/evidence or architecture drift need review.")
     else:
-        lines.append("PASS — configured entrypoints, critical modules, runtime flow references, caller proof, test reality, safety boundary, and evidence audit completed. This is still static proof only.")
+        lines.append("PASS — configured entrypoints, critical modules, runtime flow references, caller proof, test reality, safety boundary, evidence audit, and drift scan completed. This is still static proof only.")
     lines.append("")
     return "\n".join(lines)
+
+
+def _architecture_drift_section(drift_report: ArchitectureDriftReport | None) -> list[str]:
+    lines: list[str] = []
+    lines.append("## Architecture Drift")
+    lines.append("")
+    if drift_report is None:
+        lines.append("Architecture drift detector was not run.")
+        lines.append("")
+        return lines
+    lines.append("| Severity | Count |")
+    lines.append("|---|---:|")
+    lines.append(f"| HIGH | {len(drift_report.high)} |")
+    lines.append(f"| MEDIUM | {len(drift_report.medium)} |")
+    lines.append(f"| UNKNOWN | {len(drift_report.unknown)} |")
+    lines.append("")
+    flagged = drift_report.high + drift_report.medium + drift_report.unknown
+    if flagged:
+        lines.append("### Flagged Architecture Drift")
+        lines.append("")
+        lines.append("| Path | Severity | Type | Evidence |")
+        lines.append("|---|---|---|---|")
+        for item in flagged[:30]:
+            lines.append(f"| `{item.path}` | {item.severity} | {item.drift_type} | {item.evidence} |")
+        if len(flagged) > 30:
+            lines.append(f"| truncated | INFO | n/a | remaining={len(flagged) - 30} |")
+        lines.append("")
+    return lines
 
 
 def _evidence_audit_section(evidence_report: EvidenceAuditReport | None) -> list[str]:

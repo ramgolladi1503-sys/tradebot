@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from tools.repo_forensics.architecture_drift import detect_architecture_drift
 from tools.repo_forensics.config_loader import ConfigError, load_config
 from tools.repo_forensics.critical_module_checker import check_critical_modules
 from tools.repo_forensics.evidence_auditor import audit_evidence
@@ -23,31 +24,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", default=".", help="Repository root to scan. Default: current directory.")
     parser.add_argument("--config", default=DEFAULT_CONFIG, help="Forensics config path. Default: .gsd-forensics.yaml")
     parser.add_argument("--out", default=DEFAULT_OUTPUT, help="Repo map Markdown report path.")
-    parser.add_argument(
-        "--skip-runtime-wiring",
-        action="store_true",
-        help="Run only repo cartography. Runtime wiring audit is enabled by default.",
-    )
-    parser.add_argument(
-        "--skip-critical-callers",
-        action="store_true",
-        help="Skip critical module caller check. Enabled by default.",
-    )
-    parser.add_argument(
-        "--skip-test-reality",
-        action="store_true",
-        help="Skip test reality classifier. Enabled by default.",
-    )
-    parser.add_argument(
-        "--skip-safety-boundary",
-        action="store_true",
-        help="Skip safety boundary auditor. Enabled by default.",
-    )
-    parser.add_argument(
-        "--skip-evidence-audit",
-        action="store_true",
-        help="Skip evidence auditor. Enabled by default.",
-    )
+    parser.add_argument("--skip-runtime-wiring", action="store_true", help="Skip runtime wiring audit.")
+    parser.add_argument("--skip-critical-callers", action="store_true", help="Skip critical module caller check.")
+    parser.add_argument("--skip-test-reality", action="store_true", help="Skip test reality classifier.")
+    parser.add_argument("--skip-safety-boundary", action="store_true", help="Skip safety boundary auditor.")
+    parser.add_argument("--skip-evidence-audit", action="store_true", help="Skip evidence auditor.")
+    parser.add_argument("--skip-architecture-drift", action="store_true", help="Skip architecture drift detector.")
     return parser.parse_args()
 
 
@@ -69,6 +51,7 @@ def main() -> int:
         test_reality_report = None if args.skip_test_reality else classify_tests(repo_root, config)
         safety_report = None if args.skip_safety_boundary else audit_safety_boundaries(repo_root, config)
         evidence_report = None if args.skip_evidence_audit else audit_evidence(repo_root, config)
+        drift_report = None if args.skip_architecture_drift else detect_architecture_drift(repo_root, config)
         report_path = write_repo_map_report(
             repo_map,
             out_path,
@@ -77,6 +60,7 @@ def main() -> int:
             test_reality_report=test_reality_report,
             safety_report=safety_report,
             evidence_report=evidence_report,
+            drift_report=drift_report,
         )
     except (ConfigError, FileNotFoundError) as exc:
         print(f"[repo-forensics][ERROR] {exc}")
@@ -97,6 +81,9 @@ def main() -> int:
     evidence_high = len(evidence_report.high) if evidence_report else 0
     evidence_medium = len(evidence_report.medium) if evidence_report else 0
     evidence_unknown = len(evidence_report.unknown) if evidence_report else 0
+    drift_high = len(drift_report.high) if drift_report else 0
+    drift_medium = len(drift_report.medium) if drift_report else 0
+    drift_unknown = len(drift_report.unknown) if drift_report else 0
     print(f"[repo-forensics] report={report_path}")
     print(f"[repo-forensics] files={repo_map.inventory.total_files}")
     print(f"[repo-forensics] missing_required_entrypoints={missing_required}")
@@ -114,7 +101,10 @@ def main() -> int:
     print(f"[repo-forensics] evidence_high={evidence_high}")
     print(f"[repo-forensics] evidence_medium={evidence_medium}")
     print(f"[repo-forensics] evidence_unknown={evidence_unknown}")
-    if missing_required or missing_critical or flow_failures or caller_missing or caller_test_only or safety_critical or evidence_high:
+    print(f"[repo-forensics] drift_high={drift_high}")
+    print(f"[repo-forensics] drift_medium={drift_medium}")
+    print(f"[repo-forensics] drift_unknown={drift_unknown}")
+    if missing_required or missing_critical or flow_failures or caller_missing or caller_test_only or safety_critical or evidence_high or drift_high:
         return 1
     return 0
 
