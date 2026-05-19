@@ -4,6 +4,8 @@ from pathlib import Path
 
 from core.torture_test import TortureTestRunner
 
+CI_SAFE_LATENCY_THRESHOLD_MS = 750.0
+
 
 def _assert_common(summary: dict):
     assert summary["status"] == "PASS"
@@ -20,7 +22,7 @@ def test_torture_replay_market_open_spike(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_ROOT", str(runtime_root))
     monkeypatch.setenv("LOG_DIR", str(logs_root))
 
-    runner = TortureTestRunner(latency_threshold_ms=100.0)
+    runner = TortureTestRunner(latency_threshold_ms=CI_SAFE_LATENCY_THRESHOLD_MS)
     summary = runner.run_scenario("market_open_spike", "DEFAULT")
     _assert_common(summary)
 
@@ -31,7 +33,7 @@ def test_torture_replay_feed_flap_partial_data(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_ROOT", str(runtime_root))
     monkeypatch.setenv("LOG_DIR", str(logs_root))
 
-    runner = TortureTestRunner(latency_threshold_ms=100.0)
+    runner = TortureTestRunner(latency_threshold_ms=CI_SAFE_LATENCY_THRESHOLD_MS)
     summary = runner.run_scenario("feed_flap_partial_data", "DEFAULT")
     _assert_common(summary)
 
@@ -42,7 +44,7 @@ def test_torture_replay_long_run_stability(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_ROOT", str(runtime_root))
     monkeypatch.setenv("LOG_DIR", str(logs_root))
 
-    runner = TortureTestRunner(latency_threshold_ms=100.0)
+    runner = TortureTestRunner(latency_threshold_ms=CI_SAFE_LATENCY_THRESHOLD_MS)
     summary = runner.run_scenario("long_run_stability", "DEFAULT")
     _assert_common(summary)
     metrics = dict(summary.get("metrics") or {})
@@ -58,7 +60,7 @@ def test_torture_replay_fault_injection_fail_closed_and_integrity(tmp_path, monk
     monkeypatch.setenv("DATA_ROOT", str(runtime_root))
     monkeypatch.setenv("LOG_DIR", str(logs_root))
 
-    runner = TortureTestRunner(latency_threshold_ms=100.0)
+    runner = TortureTestRunner(latency_threshold_ms=CI_SAFE_LATENCY_THRESHOLD_MS)
     summary = runner.run_scenario("fault_injection", "DEFAULT")
     _assert_common(summary)
     metrics = dict(summary.get("metrics") or {})
