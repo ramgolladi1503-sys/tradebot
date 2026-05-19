@@ -1,0 +1,547 @@
+gsd_forensics_config_version: 1
+
+project:
+  name: tradebot
+  type: trading_bot
+  language: python
+  timezone: Asia/Kolkata
+  profile_scope: tradebot_local_manual_forensics
+  strict_unknown_policy: true
+
+baseline_rules:
+  no_target_runtime_execution: true
+  no_broker_calls: true
+  no_live_order_actions: true
+  no_auto_fix: true
+  no_auto_pr: true
+  no_webhooks: true
+  no_dashboard_in_mvp: true
+  unknown_is_not_pass: true
+  fail_closed_on_invalid_config: true
+
+exclude:
+  directories:
+    - .git
+    - .venv
+    - venv
+    - __pycache__
+    - .pytest_cache
+    - .mypy_cache
+    - .ruff_cache
+    - node_modules
+    - .runtime/cache
+    - .runtime/db
+    - logs/raw
+  file_patterns:
+    - "*.pyc"
+    - "*.pyo"
+    - "*.sqlite"
+    - "*.db"
+    - "*.parquet"
+    - "*.zip"
+
+entrypoints:
+  required:
+    - run_live.sh
+    - main.py
+    - dashboard/streamlit_app.py
+  optional:
+    - dashboard/streamlit_app_runtime.py
+    - premarket.py
+    - run_all.sh
+    - scripts/run_paper_replay.py
+
+runtime_flow:
+  live_startup:
+    starts_at: run_live.sh
+    expected_chain:
+      - run_live.sh
+      - main.py
+      - core.runtime_safety_boot_guard.enforce_runtime_boot_safety
+      - core.auth.validate_kite_startup_credentials
+      - core.readiness_gate.run_readiness_check
+      - core.orchestrator.Orchestrator
+      - core.orchestrator_parts.cycle.run_live_monitoring
+    required_states:
+      - TRADING_MODE=LIVE
+      - EXECUTION_MODE=LIVE
+    block_if_unknown:
+      - readiness_before_orchestrator
+      - risk_gate_before_execution_boundary
+      - broker_call_boundary
+      - evidence_write_path
+
+  candidate_to_decision:
+    expected_steps:
+      - market_data
+      - strategy_signal
+      - candidate_generation
+      - data_quality_gate
+      - candidate_finalization
+      - opportunity_scoring
+      - ranking
+      - no_trade_or_gatekeeper
+      - risk_evaluation
+      - execution_boundary
+      - review_queue_or_evidence
+    block_if_unknown:
+      - fallback_policy
+      - ranking_consumed_by_runtime
+      - execution_boundary_non_action_evidence
+
+critical_modules:
+  runtime_startup:
+    - run_live.sh
+    - main.py
+    - core/runtime_safety_boot_guard.py
+    - core/auth.py
+    - core/auth_health.py
+    - core/security_guard.py
+    - core/readiness_gate.py
+    - core/startup_recovery.py
+    - core/instance_lock.py
+    - core/session_guard.py
+  orchestration:
+    - core/orchestrator.py
+    - core/orchestrator_parts/cycle.py
+    - core/orchestrator_parts/data.py
+    - core/orchestrator_parts/decisions.py
+    - core/orchestrator_parts/finalize.py
+  market_data:
+    - core/market_data.py
+    - core/kite_depth_ws.py
+    - core/depth_store.py
+    - core/option_liquidity_cache.py
+    - core/quote_truth.py
+    - core/gates/quote_age_gate.py
+  candidates_and_ranking:
+    - strategies/trade_builder.py
+    - core/engine_phase2_adapter.py
+    - core/v2_pipeline.py
+    - core/pro_strategy_pipeline.py
+    - core/opportunity_engine.py
+    - core/trade_scoring.py
+    - core/candidate_finalization.py
+    - core/candidate_soft_reject.py
+    - core/decision_builder.py
+    - core/decision_dag.py
+  risk_and_safety:
+    - core/risk_engine.py
+    - core/execution_guard.py
+    - core/risk_halt.py
+    - core/risk_state.py
+    - core/portfolio_risk_allocator.py
+    - core/circuit_breaker.py
+    - core/decision_breakers.py
+    - core/slippage_guard.py
+    - core/slo_guard.py
+  execution_boundary:
+    - core/execution_engine.py
+    - core/execution_router.py
+    - core/live_dry_run_broker_payload_gate.py
+    - core/broker_reconciliation_dry_run_proof.py
+    - core/kill_switch_risk_halt_dry_run_proof.py
+    - core/broker_truth_reconciler.py
+    - core/kite_client.py
+  evidence_and_dashboard:
+    - core/events.py
+    - core/audit_log.py
+    - core/decision_logger.py
+    - core/decision_store.py
+    - core/runtime_health.py
+    - core/runtime_snapshot_producer.py
+    - core/runtime_snapshot_store.py
+    - core/observability/pipeline.py
+    - dashboard/streamlit_app.py
+    - dashboard/streamlit_app_runtime.py
+
+agent_parameters:
+  grill_me:
+    mission: challenge_assumptions_and_fake_confidence
+    severity_focus:
+      - fake_confidence
+      - trading_edge_claim_without_evidence
+      - broad_refactor
+      - happy_path_only_tests
+    required_questions:
+      - "What assumption can silently kill this change?"
+      - "What behavior is claimed but not proven?"
+      - "What would fail in live or paper even if tests pass?"
+    output_required:
+      - weak_assumptions
+      - failure_modes
+      - missing_proof
+      - verdict
+
+  hermes:
+    mission: scope_and_safety_boundary_guard
+    protected_boundaries:
+      - broker_calls
+      - live_order_actions
+      - runtime_startup
+      - dashboard_order_actions
+      - paper_live_boundary
+      - unrelated_strategy_behavior
+    block_on:
+      - unscoped_file_change
+      - live_behavior_introduced
+      - broker_import_introduced
+      - dashboard_action_introduced
+      - test_weakening
+    output_required:
+      - scope_pass_fail
+      - boundary_violations
+      - files_not_to_touch_check
+      - verdict
+
+  gsd:
+    mission: delivery_evidence_and_next_action_judge
+    required_sections:
+      - purpose
+      - scope
+      - files_changed
+      - tests_or_reason_not_required
+      - evidence
+      - risks
+      - next_pr
+    block_on:
+      - no_evidence
+      - vague_next_steps
+      - missing_scope_guard
+      - critical_or_high_unexplained
+    output_required:
+      - delivery_verdict
+      - evidence_summary
+      - next_action
+
+  scope_guard:
+    mission: prevent_unrelated_changes
+    requires:
+      - in_scope_list
+      - out_of_scope_list
+      - files_changed_list
+      - files_not_touched_list
+    block_on:
+      - broad_cleanup
+      - opportunistic_refactor
+      - unrelated_test_changes
+      - runtime_behavior_change_without_scope
+
+  argus:
+    mission: repo_cartographer
+    scan_targets:
+      - entrypoints
+      - python_files
+      - shell_scripts
+      - tests
+      - dashboard_files
+      - runtime_evidence_paths
+      - critical_modules
+    findings:
+      - missing_configured_entrypoint
+      - critical_module_missing
+      - critical_module_test_only
+      - duplicate_module_pattern
+      - dead_or_unreferenced_module
+    output_required:
+      - repo_map
+      - critical_module_status
+      - top_manual_inspection_files
+
+  atlas:
+    mission: runtime_wiring_auditor
+    expected_flows:
+      - live_startup
+      - candidate_to_decision
+    status_values:
+      - PASS
+      - FAIL
+      - UNKNOWN
+    block_on_unknown:
+      - broker_call_boundary
+      - risk_gate_before_execution_boundary
+      - fallback_policy
+      - ranking_consumed_by_runtime
+    output_required:
+      - flow_step_status
+      - missing_links
+      - unknowns
+      - proof_required
+
+  minerva:
+    mission: test_reality_classifier
+    classes:
+      - SHAPE_ONLY
+      - UNIT_BEHAVIOR
+      - INTEGRATION_WIRING
+      - SAFETY_REGRESSION
+      - RUNTIME_COMMAND
+      - EVIDENCE_CONTRACT
+      - FAKE_CONFIDENCE
+      - UNKNOWN
+    weak_test_patterns:
+      - "assert key exists only"
+      - "assert len(result) > 0 only"
+      - "mock broker success without unreachable proof"
+      - "no negative test for unsafe path"
+    required_negative_tests:
+      - fallback_candidate_cannot_be_executable
+      - stale_feed_blocks_order_intent
+      - paper_path_cannot_call_live_broker
+      - missing_evidence_field_fails_contract
+    output_required:
+      - test_classification_summary
+      - fake_confidence_tests
+      - missing_negative_tests
+
+  cerberus:
+    mission: sim_paper_live_safety_boundary_guard
+    protected_modes:
+      - SIM
+      - PAPER
+      - LIVE
+    forbidden_import_markers:
+      - place_order
+      - modify_order
+      - cancel_order
+      - exit_order
+      - kite.place_order
+      - broker.place_order
+    required_non_action_fields:
+      - is_order_action=false
+      - broker_api_called=false
+      - live_order_action=false
+      - broker_order_action=false
+    block_on:
+      - paper_imports_live_broker
+      - sim_imports_live_broker
+      - read_only_sets_order_action_true
+      - live_defaults_without_explicit_readiness
+      - dashboard_order_action_without_scope
+    output_required:
+      - safety_boundary_status
+      - critical_safety_findings
+      - proof_required
+
+  evidence_auditor:
+    mission: decision_traceability_checker
+    required_fields:
+      - mode
+      - candidate_id
+      - decision
+      - reason
+      - timestamp
+      - is_order_action
+      - broker_api_called
+      - source
+    evidence_paths:
+      - .runtime/logs
+      - .runtime/reports
+      - runtime/analytics
+      - docs/repo_forensics/reports
+      - docs/agent_reviews
+    weak_evidence_patterns:
+      - "status ok only"
+      - "safe true only"
+      - "missing reason"
+      - "missing candidate_id"
+      - "missing broker_api_called"
+    output_required:
+      - missing_fields
+      - weak_evidence
+      - traceability_status
+
+  architecture_drift:
+    mission: stale_duplicate_conflicting_path_detector
+    watch_areas:
+      - strategy_pipeline
+      - candidate_generation
+      - ranking
+      - risk
+      - execution_boundary
+      - dashboard_readers
+      - evidence_schema
+      - config_sources
+    findings:
+      - duplicate_owner
+      - stale_doc_claim
+      - old_new_pipeline_split
+      - dashboard_reads_old_path
+      - tests_protect_obsolete_behavior
+    output_required:
+      - drift_findings
+      - canonical_owner_needed
+      - proof_required
+
+  ariadne:
+    mission: root_cause_investigator
+    input_sources:
+      - repo_forensics_report
+      - pytest_output
+      - ci_logs
+      - stack_traces
+      - recent_git_diff
+      - import_graph
+      - runtime_evidence
+    cluster_signals:
+      - same_file
+      - same_module
+      - same_runtime_flow_step
+      - same_missing_field
+      - same_error_text
+      - same_candidate_or_ranking_concept
+      - same_safety_boundary
+    confidence_levels:
+      - CONFIRMED
+      - LIKELY
+      - POSSIBLE
+      - UNKNOWN
+    output_required:
+      - finding_cluster
+      - suspected_root_cause
+      - confidence_level
+      - blast_radius
+      - proof
+      - unresolved_unknowns
+
+  daedalus:
+    mission: remediation_architect
+    decisions:
+      - FIX_NOW
+      - BACKLOG
+      - DEFER
+      - FALSE_POSITIVE
+      - ACCEPTED_UNKNOWN
+    required_contract_fields:
+      - root_cause
+      - decision
+      - files_to_change
+      - files_not_to_touch
+      - patch_behavior
+      - tests_required
+      - negative_tests_required
+      - evidence_required
+      - regression_risks
+      - done_means
+    block_on:
+      - no_root_cause
+      - no_non_touch_list
+      - broad_fix
+      - missing_negative_tests
+    output_required:
+      - scoped_pr_contract
+      - priority
+      - proof_required
+
+  vulcan:
+    mission: production_hardening_from_scoped_contract
+    allowed_only_after:
+      - daedalus_contract
+      - hermes_scope_pass
+    hardening_targets:
+      - safe_defaults
+      - fail_closed_behavior
+      - deterministic_logic
+      - explicit_types_or_contracts
+      - structured_rejection_reasons
+      - evidence_rich_outputs
+      - negative_tests
+      - no_silent_fallback
+    forbidden_actions:
+      - broad_repo_rewrite
+      - unrelated_refactor
+      - test_weakening
+      - broker_live_runtime_changes_without_scope
+      - dashboard_changes_without_scope
+    output_required:
+      - maturity_before
+      - maturity_after
+      - patch_summary
+      - tests_added
+      - evidence_added
+      - regression_risks
+
+trade_quality_watchlist:
+  data_quality:
+    fallback_markers:
+      - recovered_fallback
+      - fallback
+      - contract_resolution_fallback
+      - CONTRACT_RESOLUTION_FALLBACK
+      - CONTRACT_RESOLUTION_FALLBACK_BLOCKED
+      - fallback_contract
+      - fallback_contract_resolution
+    fallback_policy:
+      displayable_allowed: true
+      executable_allowed: false
+      broker_intent_allowed: false
+      required_reason: FALLBACK_DATA_NOT_EXECUTABLE
+    stale_feed_policy:
+      executable_allowed: false
+      required_reason: STALE_FEED
+  ranking:
+    required_fields:
+      - final_score
+      - rank
+      - rank_reason
+      - liquidity_score
+      - risk_score
+      - execution_score
+      - data_quality_penalty
+    suspicious_patterns:
+      - clustered_confidence_scores
+      - raw_strategy_rows_displayed_as_opportunities
+      - all_buy_bias_without_regime_reason
+      - ranking_output_not_consumed
+  execution_realism:
+    required_considerations:
+      - spread
+      - slippage
+      - quote_age
+      - liquidity
+      - latency
+      - mode
+
+safety_rules:
+  forbidden_imports:
+    paper_or_sim_paths:
+      - core/kite_client.py
+      - broker.place_order
+      - kite.place_order
+    repo_forensics_tooling:
+      - core.kite_client
+      - core.market_data
+      - core.orchestrator
+      - strategies.trade_builder
+  forbidden_patterns:
+    - "except Exception: pass"
+    - "return True  # safe"
+    - "EXECUTION_MODE=LIVE default"
+    - "DRY_RUN=true compatible with live production startup"
+  required_live_readiness_markers:
+    - enforce_runtime_boot_safety
+    - validate_kite_startup_credentials
+    - run_readiness_check
+    - risk_halt
+    - InstanceLock
+
+evidence:
+  required_fields:
+    - mode
+    - candidate_id
+    - decision
+    - reason
+    - timestamp
+    - is_order_action
+    - broker_api_called
+    - source
+  report_output_dir: docs/repo_forensics/reports
+  agent_review_dir: docs/agent_reviews
+
+quality_gates:
+  critical_blocks_merge: true
+  high_requires_fix_or_waiver: true
+  unknown_requires_explanation: true
+  shape_only_tests_cannot_be_only_proof: true
+  every_code_change_requires_scope_guard: true
+  every_hardening_patch_requires_daedalus_contract: true
