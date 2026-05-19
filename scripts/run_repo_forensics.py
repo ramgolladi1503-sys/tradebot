@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tools.repo_forensics.config_loader import ConfigError, load_config
 from tools.repo_forensics.critical_module_checker import check_critical_modules
+from tools.repo_forensics.evidence_auditor import audit_evidence
 from tools.repo_forensics.repo_cartographer import build_repo_map
 from tools.repo_forensics.report_writer import write_repo_map_report
 from tools.repo_forensics.runtime_wiring import audit_runtime_wiring
@@ -42,6 +43,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip safety boundary auditor. Enabled by default.",
     )
+    parser.add_argument(
+        "--skip-evidence-audit",
+        action="store_true",
+        help="Skip evidence auditor. Enabled by default.",
+    )
     return parser.parse_args()
 
 
@@ -62,6 +68,7 @@ def main() -> int:
         critical_report = None if args.skip_critical_callers else check_critical_modules(repo_root, config)
         test_reality_report = None if args.skip_test_reality else classify_tests(repo_root, config)
         safety_report = None if args.skip_safety_boundary else audit_safety_boundaries(repo_root, config)
+        evidence_report = None if args.skip_evidence_audit else audit_evidence(repo_root, config)
         report_path = write_repo_map_report(
             repo_map,
             out_path,
@@ -69,6 +76,7 @@ def main() -> int:
             critical_report=critical_report,
             test_reality_report=test_reality_report,
             safety_report=safety_report,
+            evidence_report=evidence_report,
         )
     except (ConfigError, FileNotFoundError) as exc:
         print(f"[repo-forensics][ERROR] {exc}")
@@ -86,6 +94,9 @@ def main() -> int:
     safety_critical = len(safety_report.critical) if safety_report else 0
     safety_high = len(safety_report.high) if safety_report else 0
     safety_unknown = len(safety_report.unknown) if safety_report else 0
+    evidence_high = len(evidence_report.high) if evidence_report else 0
+    evidence_medium = len(evidence_report.medium) if evidence_report else 0
+    evidence_unknown = len(evidence_report.unknown) if evidence_report else 0
     print(f"[repo-forensics] report={report_path}")
     print(f"[repo-forensics] files={repo_map.inventory.total_files}")
     print(f"[repo-forensics] missing_required_entrypoints={missing_required}")
@@ -100,7 +111,10 @@ def main() -> int:
     print(f"[repo-forensics] safety_critical={safety_critical}")
     print(f"[repo-forensics] safety_high={safety_high}")
     print(f"[repo-forensics] safety_unknown={safety_unknown}")
-    if missing_required or missing_critical or flow_failures or caller_missing or caller_test_only or safety_critical:
+    print(f"[repo-forensics] evidence_high={evidence_high}")
+    print(f"[repo-forensics] evidence_medium={evidence_medium}")
+    print(f"[repo-forensics] evidence_unknown={evidence_unknown}")
+    if missing_required or missing_critical or flow_failures or caller_missing or caller_test_only or safety_critical or evidence_high:
         return 1
     return 0
 
