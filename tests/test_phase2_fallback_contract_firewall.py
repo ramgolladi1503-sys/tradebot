@@ -1,6 +1,43 @@
 from __future__ import annotations
 
+import builtins
+import importlib
+
+import pytest
+
 import core.engine_phase2_adapter as phase2
+
+
+def _production_phase2_module():
+    """Reload Phase2 without the legacy CI import hook wrapping the builder.
+
+    PR #101 moves the fallback-contract firewall into the production adapter.
+    The legacy CI compatibility hook can wrap `build_candidates_phase2` during
+    the full suite and re-add compatibility rows. These tests intentionally
+    target the production adapter contract, not that test-only wrapper.
+    """
+
+    current_import = builtins.__import__
+    original_import = current_import
+    try:
+        import core.ci_compat_contracts as ci_compat
+
+        original_import = getattr(ci_compat, "_original_import", current_import)
+    except Exception:
+        original_import = current_import
+
+    builtins.__import__ = original_import
+    try:
+        return importlib.reload(phase2)
+    finally:
+        builtins.__import__ = current_import
+
+
+@pytest.fixture(autouse=True)
+def _use_production_phase2_adapter(monkeypatch):
+    prod = _production_phase2_module()
+    monkeypatch.setattr(phase2, "build_candidates_phase2", prod.build_candidates_phase2, raising=False)
+    monkeypatch.setattr(phase2, "_base_build_candidates_phase2", prod._base_build_candidates_phase2, raising=False)
 
 
 def _base_candidate(**overrides):
