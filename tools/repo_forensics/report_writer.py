@@ -5,6 +5,7 @@ from pathlib import Path
 from tools.repo_forensics.critical_module_checker import CriticalModuleReport, CriticalModuleStatus
 from tools.repo_forensics.repo_cartographer import PathStatus, RepoMap
 from tools.repo_forensics.runtime_wiring import FlowStepStatus, RuntimeFlowReport
+from tools.repo_forensics.test_reality import TEST_CLASSES, TestRealityReport, TestRealityStatus
 
 
 def write_repo_map_report(
@@ -12,10 +13,14 @@ def write_repo_map_report(
     output_path: str | Path,
     runtime_report: RuntimeFlowReport | None = None,
     critical_report: CriticalModuleReport | None = None,
+    test_reality_report: TestRealityReport | None = None,
 ) -> Path:
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_repo_map_report(repo_map, runtime_report, critical_report), encoding="utf-8")
+    target.write_text(
+        render_repo_map_report(repo_map, runtime_report, critical_report, test_reality_report),
+        encoding="utf-8",
+    )
     return target
 
 
@@ -23,6 +28,7 @@ def render_repo_map_report(
     repo_map: RepoMap,
     runtime_report: RuntimeFlowReport | None = None,
     critical_report: CriticalModuleReport | None = None,
+    test_reality_report: TestRealityReport | None = None,
 ) -> str:
     inventory = repo_map.inventory
     lines: list[str] = []
@@ -62,6 +68,7 @@ def render_repo_map_report(
         lines.append("")
     lines.extend(_critical_caller_section(critical_report))
     lines.extend(_runtime_flow_section(runtime_report))
+    lines.extend(_test_reality_section(test_reality_report))
     lines.append("## Runtime / Evidence Paths Present")
     lines.append("")
     if inventory.runtime_evidence_paths:
@@ -86,13 +93,25 @@ def render_repo_map_report(
     critical_missing = critical_report.missing if critical_report else []
     critical_test_only = critical_report.test_only if critical_report else []
     critical_unreferenced = critical_report.unreferenced if critical_report else []
+    fake_confidence = test_reality_report.fake_confidence_tests if test_reality_report else []
+    unknown_tests = test_reality_report.unknown_tests if test_reality_report else []
     lines.append(f"- Missing required entrypoints: {len(missing_entrypoints)}")
     lines.append(f"- Missing critical modules: {len(missing_critical)}")
     lines.append(f"- Runtime flow failures: {len(flow_failures)}")
     lines.append(f"- Runtime flow unknowns: {len(flow_unknowns)}")
     lines.append(f"- Critical modules missing caller proof: {len(critical_test_only) + len(critical_unreferenced)}")
+    lines.append(f"- Fake-confidence tests: {len(fake_confidence)}")
+    lines.append(f"- Unknown test files: {len(unknown_tests)}")
     lines.append("")
-    if missing_entrypoints or missing_critical or flow_failures or flow_unknowns or critical_test_only or critical_unreferenced:
+    if (
+        missing_entrypoints
+        or missing_critical
+        or flow_failures
+        or flow_unknowns
+        or critical_test_only
+        or critical_unreferenced
+        or fake_confidence
+    ):
         lines.append("## Findings")
         lines.append("")
         for item in missing_entrypoints:
@@ -107,6 +126,10 @@ def render_repo_map_report(
             lines.append(f"- HIGH: critical module has test-only caller proof `{item.path}` group={item.group}")
         for item in critical_unreferenced:
             lines.append(f"- UNKNOWN: critical module has no static caller proof `{item.path}` group={item.group}")
+        for item in fake_confidence[:20]:
+            lines.append(f"- MEDIUM: fake-confidence test signal `{item.path}` evidence={item.evidence}")
+        if len(fake_confidence) > 20:
+            lines.append(f"- MEDIUM: fake-confidence test signal truncated count={len(fake_confidence) - 20}")
         lines.append("")
     lines.append("## Verdict")
     lines.append("")
@@ -114,10 +137,42 @@ def render_repo_map_report(
         lines.append("FAIL — configured paths, runtime flow steps, or critical module caller proof failed.")
     elif flow_unknowns or critical_unreferenced:
         lines.append("UNKNOWN — configured paths exist, but one or more runtime/caller relationships are unproven.")
+    elif fake_confidence:
+        lines.append("PASS_WITH_WARNINGS — static structure passed, but fake-confidence test signals need review.")
     else:
-        lines.append("PASS — configured entrypoints, critical modules, runtime flow references, and critical module callers are statically present. This is still static proof only.")
+        lines.append("PASS — configured entrypoints, critical modules, runtime flow references, caller proof, and test reality scan completed. This is still static proof only.")
     lines.append("")
     return "\n".join(lines)
+
+
+def _test_reality_section(test_report: TestRealityReport | None) -> list[str]:
+    lines: list[str] = []
+    lines.append("## Test Reality")
+    lines.append("")
+    if test_report is None:
+        lines.append("Test reality classifier was not run.")
+        lines.append("")
+        return lines
+    counts = test_report.class_counts
+    lines.append("| Class | Count |")
+    lines.append("|---|---:|")
+    for test_class in sorted(TEST_CLASSES):
+        lines.append(f"| {test_class} | {counts.get(test_class, 0)} |")
+    lines.append("")
+    flagged = test_report.fake_confidence_tests + test_report.unknown_tests
+    if flagged:
+        lines.append("### Flagged Test Files")
+        lines.append("")
+        lines.append("| File | Class | Strength | Evidence | Risks |")
+        lines.append("|---|---|---|---|---|")
+        for item in flagged[:25]:
+            lines.append(
+                f"| `{item.path}` | {item.test_class} | {item.strength} | {item.evidence} | {', '.join(item.risks) or 'none'} |"
+            )
+        if len(flagged) > 25:
+            lines.append(f"| truncated | INFO | n/a | remaining={len(flagged) - 25} | n/a |")
+        lines.append("")
+    return lines
 
 
 def _critical_caller_section(critical_report: CriticalModuleReport | None) -> list[str]:
