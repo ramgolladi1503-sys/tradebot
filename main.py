@@ -49,6 +49,25 @@ def _normalize_runtime_mode(value: str | None) -> str | None:
     return mode
 
 
+def _truthy_env(value: str | None, *, default: bool = False) -> bool:
+    if value is None or str(value).strip() == "":
+        return bool(default)
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _order_reconciliation_enabled(config=cfg) -> bool:
+    """Return whether runtime order reconciliation should start.
+
+    Safety default is false. Live observation must not start reconciliation unless
+    the operator explicitly enables it through env/config.
+    """
+
+    env_value = os.getenv("ORDER_RECON_ENABLED")
+    if env_value is not None and str(env_value).strip() != "":
+        return _truthy_env(env_value, default=False)
+    return bool(getattr(config, "ORDER_RECON_ENABLED", False))
+
+
 def _resolve_orchestrator_poll_interval(exec_mode: str) -> float:
     mode = _normalize_runtime_mode(exec_mode) or "SIM"
     configured = getattr(cfg, "ORCHESTRATOR_POLL_INTERVAL_SEC", None)
@@ -468,7 +487,7 @@ def main():
 
     broker_truth_reconciler = None
 
-    recon_enabled = bool(getattr(cfg, "ORDER_RECON_ENABLED", True))
+    recon_enabled = _order_reconciliation_enabled(cfg)
     if recon_enabled:
         try:
             interval_sec = float(getattr(cfg, "ORDER_RECON_INTERVAL_SEC", 5.0))
