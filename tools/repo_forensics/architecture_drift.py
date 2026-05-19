@@ -150,8 +150,6 @@ def _dashboard_evidence_reader_drift(repo_root: Path, config: ForensicsConfig) -
 
     configured_evidence_terms = {Path(path).name for path in config.runtime_evidence_paths if Path(path).name}
     configured_evidence_terms.update(Path(path).as_posix() for path in config.runtime_evidence_paths)
-    if not configured_evidence_terms:
-        return []
 
     findings: list[ArchitectureDriftFinding] = []
     evidence_reader_files: list[str] = []
@@ -164,6 +162,16 @@ def _dashboard_evidence_reader_drift(repo_root: Path, config: ForensicsConfig) -
         lowered = text.lower()
         if any(marker in lowered for marker in ["json", "report", "log", "snapshot", "evidence"]):
             evidence_reader_files.append(rel)
+            if not configured_evidence_terms:
+                findings.append(
+                    ArchitectureDriftFinding(
+                        path=rel,
+                        severity="UNKNOWN",
+                        drift_type="dashboard_evidence_reader_unproven",
+                        evidence="dashboard_reads_evidence_like_data_but_no_evidence_paths_configured",
+                    )
+                )
+                continue
             if not any(term.lower() in lowered for term in configured_evidence_terms):
                 findings.append(
                     ArchitectureDriftFinding(
