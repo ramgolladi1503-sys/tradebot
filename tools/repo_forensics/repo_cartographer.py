@@ -69,7 +69,7 @@ def build_repo_map(repo_root: str | Path, config: ForensicsConfig) -> RepoMap:
         shell_scripts=[p for p in rel_files if Path(p).suffix in SHELL_SUFFIXES],
         dashboard_files=[p for p in rel_files if _first_part(p) in DASHBOARD_DIRS],
         doc_files=[p for p in rel_files if Path(p).suffix in DOC_SUFFIXES],
-        runtime_evidence_paths=_configured_runtime_evidence_paths(root),
+        runtime_evidence_paths=_configured_runtime_evidence_paths(root, config),
     )
 
     required_entrypoints = [
@@ -103,7 +103,6 @@ def _iter_repo_files(repo_root: Path, config: ForensicsConfig) -> Iterable[Path]
         if not path.is_file():
             continue
         rel = path.relative_to(repo_root)
-        rel_text = rel.as_posix()
         if _is_excluded(rel, excluded_dirs, excluded_patterns):
             continue
         yield path
@@ -132,15 +131,8 @@ def _first_part(path: str) -> str:
     return path.split("/", 1)[0] if path else ""
 
 
-def _configured_runtime_evidence_paths(repo_root: Path) -> list[str]:
-    candidates = [
-        ".runtime/logs",
-        ".runtime/reports",
-        "runtime/analytics",
-        "docs/repo_forensics/reports",
-        "docs/agent_reviews",
-    ]
-    return [path for path in candidates if (repo_root / path).exists()]
+def _configured_runtime_evidence_paths(repo_root: Path, config: ForensicsConfig) -> list[str]:
+    return [path for path in config.runtime_evidence_paths if (repo_root / path).exists()]
 
 
 def _path_status(path: str, rel_file_set: set[str], *, category: str) -> PathStatus:
