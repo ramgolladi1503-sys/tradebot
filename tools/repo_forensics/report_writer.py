@@ -3,16 +3,24 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.repo_forensics.repo_cartographer import PathStatus, RepoMap
+from tools.repo_forensics.runtime_wiring import FlowStepStatus, RuntimeFlowReport
 
 
-def write_repo_map_report(repo_map: RepoMap, output_path: str | Path) -> Path:
+def write_repo_map_report(
+    repo_map: RepoMap,
+    output_path: str | Path,
+    runtime_report: RuntimeFlowReport | None = None,
+) -> Path:
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_repo_map_report(repo_map), encoding="utf-8")
+    target.write_text(render_repo_map_report(repo_map, runtime_report), encoding="utf-8")
     return target
 
 
-def render_repo_map_report(repo_map: RepoMap) -> str:
+def render_repo_map_report(
+    repo_map: RepoMap,
+    runtime_report: RuntimeFlowReport | None = None,
+) -> str:
     inventory = repo_map.inventory
     lines: list[str] = []
     lines.append("# Repo Forensics — Repo Map")
@@ -49,6 +57,7 @@ def render_repo_map_report(repo_map: RepoMap) -> str:
         lines.append(f"### {group}")
         lines.extend(_status_table(items))
         lines.append("")
+    lines.extend(_runtime_flow_section(runtime_report))
     lines.append("## Runtime / Evidence Paths Present")
     lines.append("")
     if inventory.runtime_evidence_paths:
@@ -68,25 +77,60 @@ def render_repo_map_report(repo_map: RepoMap) -> str:
     lines.append("")
     missing_entrypoints = repo_map.missing_required_entrypoints
     missing_critical = repo_map.missing_critical_modules
+    flow_failures = runtime_report.failures if runtime_report else []
+    flow_unknowns = runtime_report.unknowns if runtime_report else []
     lines.append(f"- Missing required entrypoints: {len(missing_entrypoints)}")
     lines.append(f"- Missing critical modules: {len(missing_critical)}")
+    lines.append(f"- Runtime flow failures: {len(flow_failures)}")
+    lines.append(f"- Runtime flow unknowns: {len(flow_unknowns)}")
     lines.append("")
-    if missing_entrypoints or missing_critical:
+    if missing_entrypoints or missing_critical or flow_failures or flow_unknowns:
         lines.append("## Findings")
         lines.append("")
         for item in missing_entrypoints:
             lines.append(f"- HIGH: missing required entrypoint `{item.path}`")
         for item in missing_critical:
             lines.append(f"- HIGH: missing critical module `{item.path}` ({item.category})")
+        for item in flow_failures:
+            lines.append(f"- HIGH: runtime flow step failed `{item.flow_name}:{item.step}` evidence={item.evidence}")
+        for item in flow_unknowns:
+            lines.append(f"- UNKNOWN: runtime flow step unproven `{item.flow_name}:{item.step}` evidence={item.evidence}")
         lines.append("")
     lines.append("## Verdict")
     lines.append("")
-    if missing_entrypoints or missing_critical:
-        lines.append("FAIL — configured paths are missing.")
+    if missing_entrypoints or missing_critical or flow_failures:
+        lines.append("FAIL — configured paths or runtime flow steps are missing.")
+    elif flow_unknowns:
+        lines.append("UNKNOWN — configured paths exist, but one or more runtime flow steps are unproven.")
     else:
-        lines.append("PASS — configured entrypoints and critical modules are present. Runtime wiring is not proven by this PR.")
+        lines.append("PASS — configured entrypoints, critical modules, and runtime flow references are present. This is still static proof only.")
     lines.append("")
     return "\n".join(lines)
+
+
+def _runtime_flow_section(runtime_report: RuntimeFlowReport | None) -> list[str]:
+    lines: list[str] = []
+    lines.append("## Runtime Wiring")
+    lines.append("")
+    if runtime_report is None:
+        lines.append("Runtime wiring audit was not run.")
+        lines.append("")
+        return lines
+    for flow_name, statuses in runtime_report.flow_statuses.items():
+        lines.append(f"### {flow_name}")
+        lines.extend(_flow_status_table(statuses))
+        lines.append("")
+    return lines
+
+
+def _flow_status_table(items: list[FlowStepStatus]) -> list[str]:
+    lines = ["", "| Step | Status | Evidence |", "|---|---|---|"]
+    if not items:
+        lines.append("| none | INFO | not configured |")
+        return lines
+    for item in items:
+        lines.append(f"| `{item.step}` | {item.status} | {item.evidence} |")
+    return lines
 
 
 def _status_table(items: list[PathStatus]) -> list[str]:
