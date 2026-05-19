@@ -61,7 +61,7 @@ def test_validate_live_evidence_fails_when_required_connection_false():
     assert "websocket_not_connected" in validation["violations"]
 
 
-def test_validate_live_evidence_inconclusive_when_core_fields_missing():
+def test_validate_live_evidence_fails_when_executable_summary_missing():
     report = {
         "read_only": True,
         "is_order_action": False,
@@ -75,8 +75,9 @@ def test_validate_live_evidence_inconclusive_when_core_fields_missing():
 
     validation = validate_live_evidence(report)
 
-    assert validation["verdict"] == "INCONCLUSIVE"
+    assert validation["verdict"] == "FAIL"
     assert "missing_summary_field:feed_ok" in validation["warnings"]
+    assert "missing_summary_field:visible_executable_count" in validation["violations"]
 
 
 def test_write_live_validation_report_writes_report(tmp_path):
