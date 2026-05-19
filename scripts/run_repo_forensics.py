@@ -7,6 +7,7 @@ from pathlib import Path
 from tools.repo_forensics.config_loader import ConfigError, load_config
 from tools.repo_forensics.repo_cartographer import build_repo_map
 from tools.repo_forensics.report_writer import write_repo_map_report
+from tools.repo_forensics.runtime_wiring import audit_runtime_wiring
 
 
 DEFAULT_CONFIG = ".gsd-forensics.yaml"
@@ -18,6 +19,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", default=".", help="Repository root to scan. Default: current directory.")
     parser.add_argument("--config", default=DEFAULT_CONFIG, help="Forensics config path. Default: .gsd-forensics.yaml")
     parser.add_argument("--out", default=DEFAULT_OUTPUT, help="Repo map Markdown report path.")
+    parser.add_argument(
+        "--skip-runtime-wiring",
+        action="store_true",
+        help="Run only repo cartography. Runtime wiring audit is enabled by default.",
+    )
     return parser.parse_args()
 
 
@@ -34,18 +40,23 @@ def main() -> int:
     try:
         config = load_config(config_path)
         repo_map = build_repo_map(repo_root, config)
-        report_path = write_repo_map_report(repo_map, out_path)
+        runtime_report = None if args.skip_runtime_wiring else audit_runtime_wiring(repo_root, config)
+        report_path = write_repo_map_report(repo_map, out_path, runtime_report=runtime_report)
     except (ConfigError, FileNotFoundError) as exc:
         print(f"[repo-forensics][ERROR] {exc}")
         return 2
 
     missing_required = len(repo_map.missing_required_entrypoints)
     missing_critical = len(repo_map.missing_critical_modules)
+    flow_failures = len(runtime_report.failures) if runtime_report else 0
+    flow_unknowns = len(runtime_report.unknowns) if runtime_report else 0
     print(f"[repo-forensics] report={report_path}")
     print(f"[repo-forensics] files={repo_map.inventory.total_files}")
     print(f"[repo-forensics] missing_required_entrypoints={missing_required}")
     print(f"[repo-forensics] missing_critical_modules={missing_critical}")
-    if missing_required or missing_critical:
+    print(f"[repo-forensics] runtime_flow_failures={flow_failures}")
+    print(f"[repo-forensics] runtime_flow_unknowns={flow_unknowns}")
+    if missing_required or missing_critical or flow_failures:
         return 1
     return 0
 
