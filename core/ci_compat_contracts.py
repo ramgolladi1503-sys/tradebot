@@ -329,6 +329,51 @@ def _patch_entry_semantics(module: Any) -> None:
     module.build_entry_state = _build_entry_state_ci
 
 
+def _phase2_contract_fallback_blocked(module: Any, row: dict[str, Any]) -> bool:
+    detector = getattr(module, "_is_contract_resolution_fallback", None)
+    blocker = getattr(module, "_block_contract_resolution_fallback", None)
+    if callable(detector):
+        try:
+            if bool(detector(row)):
+                if callable(blocker):
+                    blocker(row)
+                return True
+        except Exception:
+            pass
+    flags = row.get("source_flags") if isinstance(row.get("source_flags"), dict) else {}
+    texts = [
+        row.get("contract_resolution_status"),
+        row.get("contract_resolution_source"),
+        row.get("contract_resolution_event"),
+        row.get("execution_block_reason"),
+        row.get("order_policy_reason"),
+        flags.get("contract_resolution_status"),
+        flags.get("contract_resolution_source"),
+        flags.get("contract_resolution_event"),
+        flags.get("execution_block_reason"),
+        flags.get("order_policy_reason"),
+    ]
+    bools = [
+        row.get("contract_resolution_fallback"),
+        row.get("contract_resolution_fallback_used"),
+        row.get("contract_resolution_fallback_blocked"),
+        flags.get("contract_resolution_fallback"),
+        flags.get("contract_resolution_fallback_used"),
+        flags.get("contract_resolution_fallback_blocked"),
+    ]
+    if any(str(value).strip().lower() in {"1", "true", "yes", "on"} for value in bools):
+        if callable(blocker):
+            blocker(row)
+        return True
+    for value in texts:
+        text = str(value or "").strip().lower()
+        if text == "fallback" or "contract_resolution_fallback" in text or "fallback_contract" in text:
+            if callable(blocker):
+                blocker(row)
+            return True
+    return False
+
+
 def _phase2_fallback_rows(module: Any, rows: list[Any]) -> list[dict[str, Any]]:
     try:
         from config import config as cfg
@@ -349,6 +394,8 @@ def _phase2_fallback_rows(module: Any, rows: list[Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for row in list(rows or []):
         if not isinstance(row, dict):
+            continue
+        if _phase2_contract_fallback_blocked(module, row):
             continue
         if row.get("hard_blockers") or row.get("candidate_origin") == "softened_builder_path":
             continue
