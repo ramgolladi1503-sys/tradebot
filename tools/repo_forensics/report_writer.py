@@ -5,7 +5,8 @@ from pathlib import Path
 from tools.repo_forensics.critical_module_checker import CriticalModuleReport, CriticalModuleStatus
 from tools.repo_forensics.repo_cartographer import PathStatus, RepoMap
 from tools.repo_forensics.runtime_wiring import FlowStepStatus, RuntimeFlowReport
-from tools.repo_forensics.test_reality import TEST_CLASSES, TestRealityReport, TestRealityStatus
+from tools.repo_forensics.safety_boundary import SafetyBoundaryReport, SafetyFinding
+from tools.repo_forensics.test_reality import TEST_CLASSES, TestRealityReport
 
 
 def write_repo_map_report(
@@ -14,11 +15,12 @@ def write_repo_map_report(
     runtime_report: RuntimeFlowReport | None = None,
     critical_report: CriticalModuleReport | None = None,
     test_reality_report: TestRealityReport | None = None,
+    safety_report: SafetyBoundaryReport | None = None,
 ) -> Path:
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        render_repo_map_report(repo_map, runtime_report, critical_report, test_reality_report),
+        render_repo_map_report(repo_map, runtime_report, critical_report, test_reality_report, safety_report),
         encoding="utf-8",
     )
     return target
@@ -29,6 +31,7 @@ def render_repo_map_report(
     runtime_report: RuntimeFlowReport | None = None,
     critical_report: CriticalModuleReport | None = None,
     test_reality_report: TestRealityReport | None = None,
+    safety_report: SafetyBoundaryReport | None = None,
 ) -> str:
     inventory = repo_map.inventory
     lines: list[str] = []
@@ -69,6 +72,7 @@ def render_repo_map_report(
     lines.extend(_critical_caller_section(critical_report))
     lines.extend(_runtime_flow_section(runtime_report))
     lines.extend(_test_reality_section(test_reality_report))
+    lines.extend(_safety_boundary_section(safety_report))
     lines.append("## Runtime / Evidence Paths Present")
     lines.append("")
     if inventory.runtime_evidence_paths:
@@ -95,6 +99,9 @@ def render_repo_map_report(
     critical_unreferenced = critical_report.unreferenced if critical_report else []
     fake_confidence = test_reality_report.fake_confidence_tests if test_reality_report else []
     unknown_tests = test_reality_report.unknown_tests if test_reality_report else []
+    safety_critical = safety_report.critical if safety_report else []
+    safety_high = safety_report.high if safety_report else []
+    safety_unknown = safety_report.unknown if safety_report else []
     lines.append(f"- Missing required entrypoints: {len(missing_entrypoints)}")
     lines.append(f"- Missing critical modules: {len(missing_critical)}")
     lines.append(f"- Runtime flow failures: {len(flow_failures)}")
@@ -102,6 +109,9 @@ def render_repo_map_report(
     lines.append(f"- Critical modules missing caller proof: {len(critical_test_only) + len(critical_unreferenced)}")
     lines.append(f"- Fake-confidence tests: {len(fake_confidence)}")
     lines.append(f"- Unknown test files: {len(unknown_tests)}")
+    lines.append(f"- Safety critical findings: {len(safety_critical)}")
+    lines.append(f"- Safety high findings: {len(safety_high)}")
+    lines.append(f"- Safety unknown findings: {len(safety_unknown)}")
     lines.append("")
     if (
         missing_entrypoints
@@ -111,6 +121,9 @@ def render_repo_map_report(
         or critical_test_only
         or critical_unreferenced
         or fake_confidence
+        or safety_critical
+        or safety_high
+        or safety_unknown
     ):
         lines.append("## Findings")
         lines.append("")
@@ -130,19 +143,53 @@ def render_repo_map_report(
             lines.append(f"- MEDIUM: fake-confidence test signal `{item.path}` evidence={item.evidence}")
         if len(fake_confidence) > 20:
             lines.append(f"- MEDIUM: fake-confidence test signal truncated count={len(fake_confidence) - 20}")
+        for item in (safety_critical + safety_high + safety_unknown)[:30]:
+            line_suffix = f":{item.line}" if item.line else ""
+            lines.append(f"- {item.severity}: safety boundary `{item.path}{line_suffix}` boundary={item.boundary} evidence={item.evidence}")
+        if len(safety_critical + safety_high + safety_unknown) > 30:
+            lines.append(f"- HIGH: safety findings truncated count={len(safety_critical + safety_high + safety_unknown) - 30}")
         lines.append("")
     lines.append("## Verdict")
     lines.append("")
-    if missing_entrypoints or missing_critical or flow_failures or critical_missing or critical_test_only:
-        lines.append("FAIL — configured paths, runtime flow steps, or critical module caller proof failed.")
-    elif flow_unknowns or critical_unreferenced:
-        lines.append("UNKNOWN — configured paths exist, but one or more runtime/caller relationships are unproven.")
+    if missing_entrypoints or missing_critical or flow_failures or critical_missing or critical_test_only or safety_critical:
+        lines.append("FAIL — configured paths, runtime flow, critical module caller proof, or safety boundaries failed.")
+    elif flow_unknowns or critical_unreferenced or safety_high or safety_unknown:
+        lines.append("UNKNOWN — one or more runtime/caller/safety relationships are unproven or high-risk.")
     elif fake_confidence:
-        lines.append("PASS_WITH_WARNINGS — static structure passed, but fake-confidence test signals need review.")
+        lines.append("PASS_WITH_WARNINGS — static structure and safety passed, but fake-confidence test signals need review.")
     else:
-        lines.append("PASS — configured entrypoints, critical modules, runtime flow references, caller proof, and test reality scan completed. This is still static proof only.")
+        lines.append("PASS — configured entrypoints, critical modules, runtime flow references, caller proof, test reality, and safety boundary scan completed. This is still static proof only.")
     lines.append("")
     return "\n".join(lines)
+
+
+def _safety_boundary_section(safety_report: SafetyBoundaryReport | None) -> list[str]:
+    lines: list[str] = []
+    lines.append("## Safety Boundary")
+    lines.append("")
+    if safety_report is None:
+        lines.append("Safety boundary auditor was not run.")
+        lines.append("")
+        return lines
+    lines.append("| Severity | Count |")
+    lines.append("|---|---:|")
+    lines.append(f"| CRITICAL | {len(safety_report.critical)} |")
+    lines.append(f"| HIGH | {len(safety_report.high)} |")
+    lines.append(f"| MEDIUM | {len(safety_report.medium)} |")
+    lines.append(f"| UNKNOWN | {len(safety_report.unknown)} |")
+    lines.append("")
+    flagged = safety_report.critical + safety_report.high + safety_report.unknown
+    if flagged:
+        lines.append("### Flagged Safety Findings")
+        lines.append("")
+        lines.append("| File | Severity | Boundary | Evidence | Line |")
+        lines.append("|---|---|---|---|---:|")
+        for item in flagged[:30]:
+            lines.append(f"| `{item.path}` | {item.severity} | {item.boundary} | {item.evidence} | {item.line or ''} |")
+        if len(flagged) > 30:
+            lines.append(f"| truncated | INFO | n/a | remaining={len(flagged) - 30} |  |")
+        lines.append("")
+    return lines
 
 
 def _test_reality_section(test_report: TestRealityReport | None) -> list[str]:
