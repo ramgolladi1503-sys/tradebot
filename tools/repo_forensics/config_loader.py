@@ -37,6 +37,33 @@ class ForensicsConfig:
     def excluded_file_patterns(self) -> set[str]:
         return set(_as_str_list(self.data.get("exclude", {}).get("file_patterns", [])))
 
+    @property
+    def runtime_evidence_paths(self) -> list[str]:
+        """Configured paths that may contain evidence/report artifacts.
+
+        Repo-forensics code must not hardcode project runtime paths. The profile
+        owns those paths so scanners stay generic and policy-driven.
+        """
+
+        configured = []
+        agent_params = self.data.get("agent_parameters", {})
+        if isinstance(agent_params, dict):
+            evidence_auditor = agent_params.get("evidence_auditor", {})
+            if isinstance(evidence_auditor, dict):
+                configured.extend(_as_str_list(evidence_auditor.get("evidence_paths", [])))
+        evidence = self.data.get("evidence", {})
+        if isinstance(evidence, dict):
+            for key in ("report_output_dir", "agent_review_dir"):
+                value = evidence.get(key)
+                if isinstance(value, str) and value.strip():
+                    configured.append(value.strip())
+        deduped: list[str] = []
+        for path in configured:
+            normalized = str(path).strip().lstrip("./")
+            if normalized and normalized not in deduped:
+                deduped.append(normalized)
+        return deduped
+
 
 def load_config(path: str | Path) -> ForensicsConfig:
     config_path = Path(path)
