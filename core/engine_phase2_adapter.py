@@ -21,6 +21,7 @@ CONTRACT_FALLBACK_REASON = "contract_resolution_fallback_blocked"
 _CONTRACT_FALLBACK_BOOL_KEYS = {
     "contract_resolution_fallback",
     "contract_resolution_fallback_used",
+    "contract_resolution_fallback_blocked",
     "fallback_contract_resolution",
     "fallback_contract_resolution_used",
     "contract_fallback_used",
@@ -42,10 +43,13 @@ _CONTRACT_FALLBACK_TEXT_KEYS = {
     "resolution_mode",
     "resolution_status",
     "option_resolution_source",
+    "execution_block_reason",
+    "order_policy_reason",
 }
 
 _CONTRACT_FALLBACK_MARKERS = {
     "CONTRACT_RESOLUTION_FALLBACK",
+    "CONTRACT_RESOLUTION_FALLBACK_BLOCKED",
     "FALLBACK_CONTRACT_RESOLUTION",
     "FALLBACK_CONTRACT",
     "CONTRACT_FALLBACK",
@@ -331,6 +335,23 @@ def _phase2_contract_normal_ok(row: dict[str, Any]) -> bool:
     )
 
 
+def _finalize_phase2_output(rows: list[Any]) -> list[Any]:
+    """Fail-closed final guard against fallback contract leakage.
+
+    The adapter intentionally works with shallow copies for compatibility with
+    legacy Phase2 behavior. This final pass prevents raw or copied fallback rows
+    from leaking back into output after mutation/re-add paths.
+    """
+
+    safe_rows: list[Any] = []
+    for row in rows:
+        if isinstance(row, dict) and _is_contract_resolution_fallback(row):
+            _block_contract_resolution_fallback(row)
+            continue
+        safe_rows.append(row)
+    return safe_rows
+
+
 def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dict[str, Any]]:  # noqa: F811
     """Build Phase2 candidates with formerly hooked Phase2 contracts inline."""
     raw = [dict(row) for row in list(raw_candidates or []) if isinstance(row, dict)]
@@ -358,6 +379,7 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
             out.append(row)
             seen.add(trade_id)
 
+    out = _finalize_phase2_output(out)
     out.sort(
         key=lambda row: (
             _sf(row.get("final_score", row.get("score", 0.0)), 0.0)
