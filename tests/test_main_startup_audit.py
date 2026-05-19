@@ -8,12 +8,20 @@ import main as main_module
 class _DummyOrchestrator:
     def __init__(self, *args, **kwargs):
         self.live_monitoring_called = False
+        self.reconciliation_started = False
+        self.reconciliation_stopped = False
         self.execution_router = SimpleNamespace(
             engine=SimpleNamespace(
-                start_reconciliation_daemon=lambda **_kwargs: None,
-                stop_reconciliation_daemon=lambda **_kwargs: None,
+                start_reconciliation_daemon=self._start_reconciliation_daemon,
+                stop_reconciliation_daemon=self._stop_reconciliation_daemon,
             )
         )
+
+    def _start_reconciliation_daemon(self, **_kwargs):
+        self.reconciliation_started = True
+
+    def _stop_reconciliation_daemon(self, **_kwargs):
+        self.reconciliation_stopped = True
 
     def live_monitoring(self):
         self.live_monitoring_called = True
@@ -22,6 +30,7 @@ class _DummyOrchestrator:
 def _patch_common_startup(monkeypatch):
     monkeypatch.delenv("EXECUTION_MODE", raising=False)
     monkeypatch.delenv("TRADING_MODE", raising=False)
+    monkeypatch.delenv("ORDER_RECON_ENABLED", raising=False)
     monkeypatch.setattr(main_module.cfg, "FORCE_FALLBACK_EXECUTION", False, raising=False)
     monkeypatch.setattr(main_module.cfg, "ALLOW_STALE_QUOTES", False, raising=False)
     monkeypatch.setattr(main_module.cfg, "DISABLE_RISK_GATE", False, raising=False)
@@ -67,6 +76,62 @@ def test_runtime_mode_alignment_guard_allows_aligned_live(monkeypatch):
     monkeypatch.setattr(main_module, "append_runtime_event", lambda event_type, payload: None)
 
     main_module._validate_runtime_mode_config_alignment("LIVE")
+
+
+def test_order_reconciliation_defaults_disabled_when_config_key_missing(monkeypatch):
+    monkeypatch.delenv("ORDER_RECON_ENABLED", raising=False)
+    config = SimpleNamespace()
+
+    assert main_module._order_reconciliation_enabled(config) is False
+
+
+def test_order_reconciliation_env_override_controls_runtime_flag(monkeypatch):
+    config = SimpleNamespace(ORDER_RECON_ENABLED=False)
+
+    monkeypatch.setenv("ORDER_RECON_ENABLED", "true")
+    assert main_module._order_reconciliation_enabled(config) is True
+
+    monkeypatch.setenv("ORDER_RECON_ENABLED", "false")
+    assert main_module._order_reconciliation_enabled(config) is False
+
+
+def test_main_does_not_start_order_reconciliation_by_default(monkeypatch):
+    _patch_common_startup(monkeypatch)
+    monkeypatch.delenv("ORDER_RECON_ENABLED", raising=False)
+    monkeypatch.delattr(main_module.cfg, "ORDER_RECON_ENABLED", raising=False)
+    monkeypatch.setattr(main_module.cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(main_module.cfg, "BROKER_TRUTH_RECONCILE_ENABLED", False, raising=False)
+    monkeypatch.setattr(main_module, "ensure_db_ready", lambda: {"ok": True})
+    monkeypatch.setattr(main_module, "enforce_startup_security", lambda **_kwargs: None)
+    dummy = _DummyOrchestrator()
+    monkeypatch.setattr(main_module, "Orchestrator", lambda **_kwargs: dummy)
+    monkeypatch.setattr(main_module, "audit_append", lambda payload: None)
+    monkeypatch.setattr(main_module, "append_runtime_event", lambda event_type, payload: None)
+
+    main_module.main()
+
+    assert dummy.live_monitoring_called is True
+    assert dummy.reconciliation_started is False
+    assert dummy.reconciliation_stopped is True
+
+
+def test_main_starts_order_reconciliation_only_when_explicitly_enabled(monkeypatch):
+    _patch_common_startup(monkeypatch)
+    monkeypatch.setenv("ORDER_RECON_ENABLED", "true")
+    monkeypatch.setattr(main_module.cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(main_module.cfg, "BROKER_TRUTH_RECONCILE_ENABLED", False, raising=False)
+    monkeypatch.setattr(main_module, "ensure_db_ready", lambda: {"ok": True})
+    monkeypatch.setattr(main_module, "enforce_startup_security", lambda **_kwargs: None)
+    dummy = _DummyOrchestrator()
+    monkeypatch.setattr(main_module, "Orchestrator", lambda **_kwargs: dummy)
+    monkeypatch.setattr(main_module, "audit_append", lambda payload: None)
+    monkeypatch.setattr(main_module, "append_runtime_event", lambda event_type, payload: None)
+
+    main_module.main()
+
+    assert dummy.live_monitoring_called is True
+    assert dummy.reconciliation_started is True
+    assert dummy.reconciliation_stopped is True
 
 
 def test_main_audits_db_init_failure(monkeypatch):
