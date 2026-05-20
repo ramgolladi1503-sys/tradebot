@@ -12,6 +12,7 @@ PARTIALLY_PROVEN = "PARTIALLY_PROVEN"
 THEORETICAL = "THEORETICAL"
 MOCKED = "MOCKED"
 UNPROVEN = "UNPROVEN"
+EVIDENCE_PATH_PARTS = {"docs", "runtime", "logs"}
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,8 @@ def _classify_capability(repo_root: Path, files: list[Path], capability: str) ->
 
     for path in files:
         rel = path.relative_to(repo_root).as_posix()
+        if _is_forensics_profile_or_config(rel):
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -241,7 +244,13 @@ def _is_test_path(path: str) -> bool:
 
 def _is_evidence_path(path: str) -> bool:
     lowered = path.lower()
-    return any(marker in lowered for marker in ["docs/", "report", "evidence", "runtime/", "logs/"])
+    parts = set(Path(path).parts)
+    return bool(parts & EVIDENCE_PATH_PARTS) or any(marker in lowered for marker in ["report", "evidence"])
+
+
+def _is_forensics_profile_or_config(path: str) -> bool:
+    name = Path(path).name
+    return name in {".gsd-forensics.yaml", "forensics.yaml"}
 
 
 def _path_lines(paths: list[str]) -> list[str]:
