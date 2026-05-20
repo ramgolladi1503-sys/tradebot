@@ -60,8 +60,8 @@ def test_record_paper_execution_outcome_maps_filled_to_executed(monkeypatch):
     )
 
     assert result["written"] is True
-    assert len(captured) == 1
     payload = captured[0]
+    assert captured == [payload]
     assert payload["candidate_id"] == "trade-1"
     assert payload["paper_intent_id"] == "ord-1"
     assert payload["strategy_family"] == "orb"
