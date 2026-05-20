@@ -70,22 +70,22 @@ agent_parameters:
 {unknown}    weak_test_patterns:
       - assert key exists only
     required_negative_tests:
-      - fallback_candidate_cannot_be_executable
-      - stale_feed_blocks_order_intent
+      - invalid_state_cannot_pass
+      - missing_reason_blocks_acceptance
     output_required:
       - test_classification_summary
   cerberus:
-    mission: sim_paper_live_safety_boundary_guard
+    mission: boundary_guard
     protected_modes:
-      - PAPER
+      - SAFE_MODE
     forbidden_import_markers:
-      - place_order
+      - blocked_marker
     required_non_action_fields:
-      - is_order_action=false
+      - no_action_field=false
     block_on:
-      - read_only_sets_order_action_true
+      - unsafe_flag_true
     output_required:
-      - safety_boundary_status
+      - boundary_status
 """
 
 
@@ -119,7 +119,7 @@ def test_minerva_gate_passes_behavior_test_and_blocks_shape_only_test(tmp_path):
         """
         def test_shape_only():
             result = {"decision": "blocked"}
-            assert "decision" in result
+            assert isinstance(result, dict)
         """,
     )
 
@@ -186,20 +186,20 @@ def test_minerva_gate_report_contains_required_negative_tests(tmp_path):
     config = _write_config(tmp_path)
     _write_test(
         tmp_path,
-        "tests/test_safety.py",
+        "tests/test_contract.py",
         """
-        def test_fallback_candidate_cannot_be_executable():
-            result = {"is_order_action": False}
-            assert result["is_order_action"] is False
+        def test_invalid_state_cannot_pass():
+            result = {"accepted": False}
+            assert result["accepted"] is False
         """,
     )
 
-    report = run_minerva_gate(repo_root=tmp_path, config_path=config, changed_paths=("tests/test_safety.py",))
+    report = run_minerva_gate(repo_root=tmp_path, config_path=config, changed_paths=("tests/test_contract.py",))
     rendered = render_minerva_gate_report(report)
 
-    assert "fallback_candidate_cannot_be_executable" in rendered
-    assert "stale_feed_blocks_order_intent" in rendered
-    assert "tests/test_safety.py" in rendered
+    assert "invalid_state_cannot_pass" in rendered
+    assert "missing_reason_blocks_acceptance" in rendered
+    assert "tests/test_contract.py" in rendered
     assert report.block_count == 0
 
 
