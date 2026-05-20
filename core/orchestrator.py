@@ -491,7 +491,64 @@ def _candidate_visibility_bucket(candidate) -> str:
     return "blocked"
 
 
+
+def _candidate_runtime_truth_summary(candidate) -> dict:
+    """
+    Runtime/UI truth guard.
+
+    This does not decide trading eligibility. It explains whether an emitted trace
+    is actually reportable as executable or only looks executable because one
+    legacy field still says executable/READY/allowed.
+    """
+    reportable_executable = bool(_is_reportable_executable_candidate(candidate))
+    visibility_bucket = _candidate_visibility_bucket(candidate)
+    synthetic_candidate = bool(_is_synthetic_candidate(candidate))
+
+    execution_status = str(_trade_attr(candidate, "execution_status", "") or "").strip().lower()
+    execution_entry_status = str(_trade_attr(candidate, "execution_entry_status", "") or "").strip().lower()
+    permission = str(_trade_attr(candidate, "permission", "") or "").strip().upper()
+    final_action = str(_trade_attr(candidate, "final_action", "") or "").strip().upper()
+    readiness = str(_trade_attr(candidate, "readiness", "") or "").strip().upper()
+    candidate_status = str(_trade_attr(candidate, "candidate_status", "") or "").strip().lower()
+
+    executable_signals = []
+    if execution_status == "executable":
+        executable_signals.append("execution_status")
+    if execution_entry_status == "executable":
+        executable_signals.append("execution_entry_status")
+    if permission == "EXECUTE":
+        executable_signals.append("permission")
+    if final_action == "EXECUTE":
+        executable_signals.append("final_action")
+    if readiness == "READY":
+        executable_signals.append("readiness")
+    if bool(_trade_attr(candidate, "execution_allowed", False)):
+        executable_signals.append("execution_allowed")
+    if bool(_trade_attr(candidate, "eligible_for_execution", False)):
+        executable_signals.append("eligible_for_execution")
+
+    reasons: list[str] = []
+    if executable_signals and not reportable_executable:
+        reasons.append("executable_signals_not_reportable")
+    if reportable_executable and visibility_bucket != "executable":
+        reasons.append("reportable_executable_visibility_mismatch")
+    if synthetic_candidate and reportable_executable:
+        reasons.append("synthetic_candidate_marked_executable")
+    if candidate_status in {"advisory_only", "blocked", "blocked_contract"} and executable_signals:
+        reasons.append("blocked_or_advisory_candidate_has_executable_signals")
+
+    return {
+        "visibility_bucket": visibility_bucket,
+        "reportable_executable": reportable_executable,
+        "synthetic_candidate": synthetic_candidate,
+        "runtime_truth_consistent": not bool(reasons),
+        "runtime_truth_reasons": reasons,
+        "executable_signals": executable_signals,
+    }
+
+
 def _candidate_trace_payload(candidate) -> dict:
+    runtime_truth = _candidate_runtime_truth_summary(candidate)
     return {
         "symbol": _trade_attr(candidate, "symbol"),
         "trade_id": _trade_attr(candidate, "trade_id"),
@@ -503,8 +560,58 @@ def _candidate_trace_payload(candidate) -> dict:
         "execution_entry_status": _trade_attr(candidate, "execution_entry_status"),
         "permission": _trade_attr(candidate, "permission"),
         "final_action": _trade_attr(candidate, "final_action"),
+        "readiness": _trade_attr(candidate, "readiness"),
         "execution_allowed": _trade_attr(candidate, "execution_allowed"),
+        "eligible_for_execution": _trade_attr(candidate, "eligible_for_execution"),
         "reason": _trade_attr(candidate, "reason"),
+        **runtime_truth,
+    }
+
+
+def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[str] | None = None) -> dict:
+    reasons = [str(reason or "").strip().upper() for reason in list(gate_reasons or []) if str(reason or "").strip()]
+    unstable_markers = {"REGIME_UNSTABLE", "PROB_TOO_LOW", "ENTROPY_TOO_HIGH"}
+    if not any(reason in unstable_markers or reason.startswith("REGIME_") for reason in reasons):
+        return {}
+
+    row = dict(market_data or {})
+    symbol = str(row.get("symbol") or "UNKNOWN").strip().upper() or "UNKNOWN"
+    market_context = row.get("market_context") if isinstance(row.get("market_context"), dict) else {}
+    execution_mode = str(
+        market_context.get("mode")
+        or market_context.get("execution_mode")
+        or row.get("execution_mode")
+        or getattr(cfg, "EXECUTION_MODE", "SIM")
+    ).strip().upper() or "SIM"
+
+    regime_probs = row.get("regime_probs") if isinstance(row.get("regime_probs"), dict) else {}
+    regime_prob_max = _safe_float(row.get("regime_prob_max"))
+    if regime_prob_max is None and regime_probs:
+        numeric_probs = [_safe_float(value) for value in regime_probs.values()]
+        numeric_probs = [value for value in numeric_probs if value is not None]
+        regime_prob_max = max(numeric_probs) if numeric_probs else None
+
+    regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
+    regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
+    if execution_mode != "LIVE" and bool(getattr(cfg, "PAPER_RELAX_GATES", True)):
+        regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
+        regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
+
+    return {
+        "symbol": symbol,
+        "gate_reasons": reasons,
+        "execution_mode": execution_mode,
+        "primary_regime": row.get("primary_regime") or row.get("regime"),
+        "regime_prob_max": regime_prob_max,
+        "regime_entropy": _safe_float(row.get("regime_entropy")),
+        "regime_prob_min": regime_prob_min,
+        "regime_entropy_max": regime_entropy_max,
+        "unstable_reasons": [str(x) for x in list(row.get("unstable_reasons") or []) if str(x).strip()],
+        "regime_unstable_streak": int(row.get("regime_unstable_streak") or 0),
+        "regime_unstable_block_after": int(row.get("regime_unstable_block_after") or 0),
+        "regime_unstable_debounced": bool(row.get("regime_unstable_debounced", False)),
+        "feed_health": row.get("feed_health") if isinstance(row.get("feed_health"), dict) else {},
+        "quote_health": row.get("quote_health") if isinstance(row.get("quote_health"), dict) else {},
     }
 
 
@@ -4678,6 +4785,24 @@ class Orchestrator:
                         cycle_candidates_blocked += 1
                         for reason_code in list(gate.reasons or []) or ["gatekeeper_blocked"]:
                             cycle_blockers[str(reason_code)] += 1
+                        regime_diag = _regime_unstable_diagnostic_payload(market_data, gate.reasons)
+                        if regime_diag:
+                            logger.warning(
+                                "REGIME_UNSTABLE_DIAGNOSTIC %s",
+                                json.dumps(regime_diag, sort_keys=True, separators=(",", ":")),
+                            )
+                            try:
+                                audit_append(
+                                    {
+                                        "event": "REGIME_UNSTABLE_DIAGNOSTIC",
+                                        "symbol": sym,
+                                        "diagnostic": regime_diag,
+                                        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
+                                    }
+                                )
+                            except Exception:
+                                pass
+
                         tele_compact = {}
                         if debug_flag:
                             # --- Gatekeeper rejection telemetry (NO_STRATEGY_QUALIFIED debug) ---
@@ -4732,6 +4857,7 @@ class Orchestrator:
                                 "symbol": sym,
                                 "reasons": gate.reasons,
                                 "telemetry": tele_compact,
+                                "regime_diagnostic": regime_diag,
                                 "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
                             })
                         except Exception:
