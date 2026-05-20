@@ -1,5 +1,14 @@
 # CE-12 — PR Evidence Pack Generator
 
+mode: CE
+candidate_id: CE-12
+decision: evidence_pack_generator_added
+reason: Generate local PR evidence text from unified Code Excellence gate output so review context is preserved.
+timestamp: 2026-05-20T00:00:00Z
+is_order_action: false
+broker_api_called: false
+source: agent-review-remediation-pilot
+
 ## Purpose
 
 Add a generator that creates a PR-ready evidence pack from the unified CE gate report.
