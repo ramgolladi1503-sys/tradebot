@@ -34,6 +34,39 @@ def _normalize_code_list(value: Any) -> list[str]:
     return out
 
 
+CONTRACT_FALLBACK_BLOCKER = "CONTRACT_RESOLUTION_FALLBACK_BLOCKED"
+CONTRACT_FALLBACK_REASON = "contract_resolution_fallback_blocked"
+
+
+def _is_contract_fallback_resolution(contract_resolution: dict | None, fallback_metadata: dict | None) -> bool:
+    contexts = [
+        contract_resolution if isinstance(contract_resolution, dict) else {},
+        fallback_metadata if isinstance(fallback_metadata, dict) else {},
+    ]
+    for ctx in contexts:
+        if bool(ctx.get("fallback_used")):
+            return True
+        if bool(ctx.get("fallback_applied")):
+            return True
+        if str(ctx.get("resolution_mode") or "").strip().lower() == "fallback":
+            return True
+        exact = ctx.get("contract_exact_match")
+        if exact is not None and not bool(exact):
+            return True
+    return False
+
+
+def _contract_fallback_reason(contract_resolution: dict | None, fallback_metadata: dict | None) -> str:
+    for ctx in (
+        fallback_metadata if isinstance(fallback_metadata, dict) else {},
+        contract_resolution if isinstance(contract_resolution, dict) else {},
+    ):
+        reason = str(ctx.get("fallback_reason") or ctx.get("contract_resolution_reason") or "").strip()
+        if reason:
+            return reason
+    return CONTRACT_FALLBACK_REASON
+
+
 def apply_candidate_updates(candidate: Any, updates: dict[str, Any]) -> Any:
     if not isinstance(updates, dict) or not updates:
         return candidate
@@ -162,6 +195,35 @@ def mirror_candidate_truth(
         if fallback_metadata.get("fallback_used") is not None:
             source_flags["fallback_used"] = bool(fallback_metadata.get("fallback_used"))
 
+    contract_fallback_used = _is_contract_fallback_resolution(contract_resolution, fallback_metadata)
+    contract_fallback_reason = _contract_fallback_reason(contract_resolution, fallback_metadata)
+    if contract_fallback_used:
+        source_flags.update(
+            {
+                "contract_resolution_fallback_used": True,
+                "contract_resolution_status": "fallback",
+                "contract_resolution_reason": contract_fallback_reason,
+                "fallback_used": True,
+                "fallback_reason": contract_fallback_reason,
+            }
+        )
+        decision_trace_out.update(
+            {
+                "permission": "QUEUE_ONLY",
+                "permission_reason": contract_fallback_reason,
+                "final_action": "QUEUE_ONLY",
+                "readiness": "QUEUE_ONLY",
+                "execution_status": "queue_only",
+                "execution_allowed": False,
+                "exec_allowed": False,
+                "selected_for_execution": False,
+                "tradable": False,
+                "execution_entry": None,
+                "execution_entry_status": "blocked_contract",
+                "candidate_status": "advisory_only",
+            }
+        )
+
     if isinstance(decision_trace, dict):
         decision_trace_out.update(dict(decision_trace))
 
@@ -252,6 +314,69 @@ def mirror_candidate_truth(
                 "candidate_status": candidate_status,
                 "gates_failed": gates_failed,
                 "warnings": warnings,
+            }
+        )
+
+    if contract_fallback_used:
+        gates_failed = _normalize_code_list(
+            updates.get("gates_failed")
+            or decision_trace_out.get("gates_failed")
+            or _candidate_field(out, "gates_failed")
+            or []
+        )
+        if CONTRACT_FALLBACK_BLOCKER not in gates_failed:
+            gates_failed.append(CONTRACT_FALLBACK_BLOCKER)
+        decision_trace_out.update(
+            {
+                "permission": "QUEUE_ONLY",
+                "permission_reason": contract_fallback_reason,
+                "final_action": "QUEUE_ONLY",
+                "readiness": "QUEUE_ONLY",
+                "execution_status": "queue_only",
+                "execution_allowed": False,
+                "exec_allowed": False,
+                "selected_for_execution": False,
+                "tradable": False,
+                "execution_entry": None,
+                "execution_entry_status": "blocked_contract",
+                "candidate_status": "advisory_only",
+                "gates_failed": gates_failed,
+            }
+        )
+        source_flags.update(
+            {
+                "decision_trace": decision_trace_out,
+                "permission": "QUEUE_ONLY",
+                "permission_reason": contract_fallback_reason,
+                "final_action": "QUEUE_ONLY",
+                "readiness": "QUEUE_ONLY",
+                "execution_status": "queue_only",
+                "execution_allowed": False,
+                "selected_for_execution": False,
+                "tradable": False,
+                "execution_entry": None,
+                "execution_entry_status": "blocked_contract",
+                "candidate_status": "advisory_only",
+                "gates_failed": gates_failed,
+            }
+        )
+        updates.update(
+            {
+                "source_flags": source_flags,
+                "decision_trace": decision_trace_out,
+                "permission": "QUEUE_ONLY",
+                "permission_reason": contract_fallback_reason,
+                "final_action": "QUEUE_ONLY",
+                "readiness": "QUEUE_ONLY",
+                "execution_status": "queue_only",
+                "execution_allowed": False,
+                "selected_for_execution": False,
+                "tradable": False,
+                "execution_entry": None,
+                "execution_entry_status": "blocked_contract",
+                "candidate_status": "advisory_only",
+                "reason": contract_fallback_reason,
+                "gates_failed": gates_failed,
             }
         )
 

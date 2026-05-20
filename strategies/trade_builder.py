@@ -3633,6 +3633,23 @@ class TradeBuilder:
                 "skip_derived_levels": True,
             }
 
+        if bool(contract_info.get("fallback_applied")):
+            return False, {
+                "reason_code": "contract_resolution_fallback_blocked",
+                "reason_text": "Option contract fallback resolution blocked before candidate gating",
+                "gate_name": "option_tradability_precondition",
+                "contract": contract_label,
+                "strike": strike,
+                "option_type": opt_type,
+                "direction": direction,
+                "instrument_token": instrument_token,
+                "tradingsymbol": tradingsymbol or None,
+                "expiry_date": expiry_resolved or None,
+                "contract_resolution_fallback_used": True,
+                "fallback_applied": True,
+                "skip_derived_levels": True,
+            }
+
         quote_source = str(
             opt.get("quote_source")
             or opt.get("price_source")
