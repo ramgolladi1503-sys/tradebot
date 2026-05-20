@@ -177,6 +177,34 @@ def test_cerberus_gate_blocks_non_action_field_regression(tmp_path):
     assert finding.marker == "no_action=false"
 
 
+def test_cerberus_gate_ignores_required_field_name_constants(tmp_path):
+    config = _write_config(tmp_path)
+    _write_file(
+        tmp_path,
+        "tests/test_contract_header.py",
+        """
+        REQUIRED_FIELDS = (
+            "no_action:",
+            "client_called:",
+        )
+
+        def test_header_lists_required_fields():
+            header = "no_action: false\\nclient_called: false"
+            for field in REQUIRED_FIELDS:
+                assert field in header
+        """,
+    )
+
+    report = run_cerberus_gate(
+        repo_root=tmp_path,
+        config_path=config,
+        changed_paths=("tests/test_contract_header.py",),
+    )
+
+    assert report.block_count == 0
+    assert report.exit_code == 0
+
+
 def test_cerberus_gate_scopes_to_changed_paths_only(tmp_path):
     config = _write_config(tmp_path)
     _write_file(
