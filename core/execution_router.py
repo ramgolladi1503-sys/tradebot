@@ -11,6 +11,7 @@ from core.execution.execution_audit import append_execution_audit_event
 from core.execution.execution_guard import evaluate_execution_guard
 from core.execution_engine import ExecutionEngine
 from core.paper_fill_simulator import PaperFillSimulator
+from core.paper_outcome_journal import record_paper_outcome
 from core.trade_store import insert_execution_stat
 from core.fill_quality import log_fill_quality
 from core.execution_quality import execution_quality_score
@@ -24,6 +25,17 @@ from core.feed.gate import check_execution_allowed
 
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(value):
+    try:
+        if value in (None, "", "None"):
+            return None
+        number = float(value)
+    except Exception:
+        return None
+    return number if number == number else None
+
 
 class ExecutionRouter:
     """
@@ -39,6 +51,7 @@ class ExecutionRouter:
         self.feed_health = feed_health or get_feed_health_monitor()
         self._use_legacy_feed_gate = feed_health is not None
         self._intent_log_write_warned = False
+        self._paper_outcome_write_warned = False
 
     def execute(self, trade, bid, ask, volume, depth=None, snapshot_fn=None, spread_pct=None, depth_imbalance=None, vol_z=None):
         mode = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
@@ -121,7 +134,8 @@ class ExecutionRouter:
                     note=note,
                     execution_plan=execution_plan,
                 )
-            _transition(self._terminal_state_for_reason(reason), reason=reason)
+            terminal_state = self._terminal_state_for_reason(reason)
+            _transition(terminal_state, reason=reason)
             payload = {
                 "decision_mid": None,
                 "decision_spread": None,
@@ -131,6 +145,16 @@ class ExecutionRouter:
             }
             if extra:
                 payload.update(extra)
+            if mode == "PAPER":
+                self._record_paper_execution_outcome(
+                    trade=trade,
+                    order=current_order,
+                    terminal_state=terminal_state,
+                    reason=reason,
+                    report=payload,
+                    fill_price=None,
+                    slippage=payload.get("slippage"),
+                )
             append_execution_audit_event(
                 trade=trade,
                 order_action="abort",
@@ -304,6 +328,16 @@ class ExecutionRouter:
                     slippage=(report or {}).get("slippage"),
                     time_to_fill_sec=round(max(time.time() - start_ts, 0.0), 6),
                 )
+                if mode == "PAPER" and next_state == OrderState.FILLED:
+                    self._record_paper_execution_outcome(
+                        trade=trade,
+                        order=current_order,
+                        terminal_state=next_state,
+                        reason="fill_confirmed",
+                        report=report or {},
+                        fill_price=price,
+                        slippage=(report or {}).get("slippage"),
+                    )
                 try:
                     from core.reconciliation import emit_execution_fill_event
 
@@ -476,6 +510,65 @@ class ExecutionRouter:
         if text in {"spread_widened", "spread_too_wide", "max_chase_exceeded"}:
             return OrderState.CANCELLED
         return OrderState.REJECTED
+
+    def _record_paper_execution_outcome(
+        self,
+        *,
+        trade,
+        order,
+        terminal_state,
+        reason,
+        report=None,
+        fill_price=None,
+        slippage=None,
+    ):
+        state_text = getattr(terminal_state, "value", terminal_state)
+        terminal_status = {
+            "FILLED": "executed",
+            "REJECTED": "rejected-saved-loss",
+            "CANCELLED": "timed-exit",
+            "EXPIRED": "expired-no-move",
+        }.get(str(state_text).upper())
+        if terminal_status is None:
+            return None
+        payload = {
+            "candidate_id": getattr(trade, "trade_id", None) or getattr(order, "order_id", None),
+            "paper_intent_id": getattr(order, "order_id", None),
+            "strategy_family": getattr(trade, "strategy_family", None) or getattr(trade, "strategy", None),
+            "regime": getattr(trade, "regime", None),
+            "direction_family": getattr(trade, "direction_family", None) or getattr(trade, "direction", None) or getattr(trade, "side", None),
+            "terminal_status": terminal_status,
+            "candidate_class": getattr(trade, "candidate_type", None) or getattr(trade, "candidate_status", None),
+            "selector_outcome": getattr(trade, "selector_outcome", None),
+            "signal_score": getattr(trade, "signal_score", None),
+            "execution_score": getattr(trade, "execution_score", None),
+            "priority_score": getattr(trade, "priority_score", None),
+            "final_score": getattr(trade, "final_score", None) or getattr(trade, "opportunity_score", None) or getattr(trade, "trade_score", None),
+            "simulation_status": str(state_text).upper(),
+            "fill_status": (report or {}).get("fill_status") if isinstance(report, dict) else None,
+            "simulated_pnl": (report or {}).get("simulated_pnl") if isinstance(report, dict) else None,
+            "slippage_cost": abs(_safe_float(slippage) or 0.0),
+            "slippage_adjusted_pnl": (report or {}).get("slippage_adjusted_pnl") if isinstance(report, dict) else None,
+            "exit_reason": str(reason or terminal_status),
+            "realized_r_multiple": (report or {}).get("realized_r_multiple") if isinstance(report, dict) else None,
+            "source": "execution_router_paper_runtime",
+            "reason": str(reason or terminal_status),
+            "mode": "PAPER",
+            "metadata": {
+                "order_id": getattr(order, "order_id", None),
+                "idempotency_key": getattr(order, "idempotency_key", None),
+                "fill_price": fill_price,
+                "runtime_terminal_state": str(state_text).upper(),
+                "entry_order_outcome_only": True,
+            },
+        }
+        try:
+            return record_paper_outcome(payload)
+        except Exception as exc:
+            if not self._paper_outcome_write_warned:
+                self._paper_outcome_write_warned = True
+                logger.warning("paper_outcome_journal_write_failed err=%s", exc)
+            return None
 
     def _simulate_limit(self, trade, bid, ask, limit_price, snapshot_fn=None):
         if snapshot_fn is None or not callable(snapshot_fn):
