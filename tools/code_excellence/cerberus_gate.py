@@ -1,0 +1,283 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterable
+
+from tools.code_excellence.config import load_code_excellence_agent_parameters
+from tools.repo_forensics.config_loader import ConfigError
+
+
+class CerberusGateError(ValueError):
+    """Raised when Cerberus gate input is missing or invalid."""
+
+
+DEFAULT_CHANGED_FILE_LIMIT = 200
+TEXT_FILE_SUFFIXES = {".py", ".md", ".txt", ".yaml", ".yml", ".json", ".sh"}
+
+
+@dataclass(frozen=True)
+class CerberusGateFinding:
+    path: str
+    verdict: str
+    reason: str
+    marker: str
+    line_number: int
+    evidence: str
+    risks: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CerberusGateReport:
+    repo_root: str
+    config_path: str
+    scoped_paths: tuple[str, ...]
+    findings: tuple[CerberusGateFinding, ...]
+    protected_modes: tuple[str, ...]
+    forbidden_import_markers: tuple[str, ...]
+    required_non_action_fields: tuple[str, ...]
+    output_required: tuple[str, ...]
+
+    @property
+    def blocked_findings(self) -> tuple[CerberusGateFinding, ...]:
+        return tuple(finding for finding in self.findings if finding.verdict == "BLOCK")
+
+    @property
+    def pass_count(self) -> int:
+        return sum(1 for finding in self.findings if finding.verdict == "PASS")
+
+    @property
+    def block_count(self) -> int:
+        return len(self.blocked_findings)
+
+    @property
+    def exit_code(self) -> int:
+        return 1 if self.block_count else 0
+
+
+def run_cerberus_gate(
+    *,
+    repo_root: str | Path,
+    config_path: str | Path,
+    changed_paths: Iterable[str] | None = None,
+) -> CerberusGateReport:
+    root = Path(repo_root).resolve()
+    config_file = Path(config_path)
+    if not config_file.is_absolute():
+        config_file = root / config_file
+    params = load_code_excellence_agent_parameters(config_file)
+    cerberus = params.cerberus
+    scoped_paths = _normalize_changed_paths(changed_paths)
+    paths_to_scan = _paths_to_scan(root, scoped_paths)
+    forbidden_markers = cerberus.require_list("forbidden_import_markers")
+    required_non_action_fields = cerberus.require_list("required_non_action_fields")
+    findings = tuple(
+        finding
+        for path in paths_to_scan
+        for finding in _scan_file(
+            repo_root=root,
+            file_path=path,
+            forbidden_markers=forbidden_markers,
+            required_non_action_fields=required_non_action_fields,
+        )
+    )
+    return CerberusGateReport(
+        repo_root=str(root),
+        config_path=str(config_file),
+        scoped_paths=scoped_paths,
+        findings=findings,
+        protected_modes=cerberus.require_list("protected_modes"),
+        forbidden_import_markers=forbidden_markers,
+        required_non_action_fields=required_non_action_fields,
+        output_required=cerberus.require_list("output_required"),
+    )
+
+
+def render_cerberus_gate_report(report: CerberusGateReport) -> str:
+    lines: list[str] = [
+        "# CE-09 Cerberus Safety Regression Gate Report",
+        "",
+        "## Scope Guard",
+        "",
+        "- Static scoped-file review only.",
+        "- No product runtime execution.",
+        "- No code mutation.",
+        "- No auto-fix.",
+        "",
+        "## Summary",
+        "",
+        f"- repo_root: `{report.repo_root}`",
+        f"- config_path: `{report.config_path}`",
+        f"- scoped_paths: `{len(report.scoped_paths)}`",
+        f"- findings: `{len(report.findings)}`",
+        f"- pass_count: `{report.pass_count}`",
+        f"- block_count: `{report.block_count}`",
+        "",
+        "## Protected Modes",
+        "",
+    ]
+    lines.extend(_bullet_lines(report.protected_modes))
+    lines.extend(["", "## Required Non-Action Fields", ""])
+    lines.extend(_bullet_lines(report.required_non_action_fields))
+    lines.extend(["", "## Findings", ""])
+    if not report.findings:
+        lines.append("- No scoped safety boundary findings.")
+    else:
+        lines.append("| Path | Line | Verdict | Reason | Marker |")
+        lines.append("|---|---:|---|---|---|")
+        for finding in report.findings:
+            lines.append(
+                f"| `{finding.path}` | `{finding.line_number}` | `{finding.verdict}` | `{finding.reason}` | `{finding.marker}` |"
+            )
+    if report.blocked_findings:
+        lines.extend(["", "## Blocked Findings", ""])
+        for finding in report.blocked_findings:
+            lines.append(f"- `{finding.path}:{finding.line_number}` blocked because `{finding.reason}`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_cerberus_gate_report(report: CerberusGateReport, output_path: str | Path) -> Path:
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_cerberus_gate_report(report), encoding="utf-8")
+    return target
+
+
+def read_changed_paths_file(path: str | Path) -> tuple[str, ...]:
+    source = Path(path)
+    if not source.exists():
+        raise CerberusGateError(f"changed_paths_file_not_found path={source}")
+    paths = tuple(line.strip() for line in source.read_text(encoding="utf-8").splitlines() if line.strip())
+    if len(paths) > DEFAULT_CHANGED_FILE_LIMIT:
+        raise CerberusGateError(f"too_many_changed_paths count={len(paths)} limit={DEFAULT_CHANGED_FILE_LIMIT}")
+    return paths
+
+
+def _scan_file(
+    *,
+    repo_root: Path,
+    file_path: Path,
+    forbidden_markers: tuple[str, ...],
+    required_non_action_fields: tuple[str, ...],
+) -> tuple[CerberusGateFinding, ...]:
+    relative = _relative_path(repo_root, file_path)
+    if not file_path.exists() or not file_path.is_file() or file_path.suffix not in TEXT_FILE_SUFFIXES:
+        return ()
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise CerberusGateError(f"cerberus_gate_cannot_read_text path={relative}") from exc
+
+    findings: list[CerberusGateFinding] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        for marker in forbidden_markers:
+            if marker and marker in stripped:
+                findings.append(
+                    CerberusGateFinding(
+                        path=relative,
+                        verdict="BLOCK",
+                        reason="forbidden_boundary_marker_in_scoped_file",
+                        marker=marker,
+                        line_number=line_number,
+                        evidence=stripped,
+                        risks=("restricted_boundary_regression",),
+                    )
+                )
+        for field in required_non_action_fields:
+            name, expected = _split_required_field(field)
+            if name and name in stripped and expected and not _line_matches_required_field(stripped, name, expected):
+                findings.append(
+                    CerberusGateFinding(
+                        path=relative,
+                        verdict="BLOCK",
+                        reason="non_action_field_not_explicitly_false",
+                        marker=field,
+                        line_number=line_number,
+                        evidence=stripped,
+                        risks=("actionability_evidence_regression",),
+                    )
+                )
+    if not findings:
+        return (
+            CerberusGateFinding(
+                path=relative,
+                verdict="PASS",
+                reason="no_restricted_boundary_marker_found",
+                marker="",
+                line_number=0,
+                evidence="static_scan_passed",
+                risks=(),
+            ),
+        )
+    return tuple(findings)
+
+
+def _paths_to_scan(repo_root: Path, scoped_paths: tuple[str, ...]) -> tuple[Path, ...]:
+    if not scoped_paths:
+        raise CerberusGateError("changed_paths_required_for_cerberus_gate")
+    paths: list[Path] = []
+    for relative in scoped_paths:
+        path = (repo_root / relative).resolve()
+        if not _is_relative_to(path, repo_root):
+            raise CerberusGateError(f"changed_path_outside_repo path={relative}")
+        paths.append(path)
+    return tuple(paths)
+
+
+def _split_required_field(field: str) -> tuple[str, str]:
+    if "=" not in field:
+        return field.strip(), ""
+    name, expected = field.split("=", 1)
+    return name.strip(), expected.strip().lower()
+
+
+def _line_matches_required_field(line: str, name: str, expected: str) -> bool:
+    normalized = line.replace(" ", "").replace("\"", "").replace("'", "").lower()
+    expected_pairs = {
+        f"{name.lower()}={expected}",
+        f"{name.lower()}:{expected}",
+    }
+    if expected == "false":
+        expected_pairs.update({
+            f"{name.lower()}=false",
+            f"{name.lower()}:false",
+            f"{name.lower()}isfalse",
+        })
+    return any(pair in normalized for pair in expected_pairs)
+
+
+def _normalize_changed_paths(changed_paths: Iterable[str] | None) -> tuple[str, ...]:
+    if not changed_paths:
+        return ()
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in changed_paths:
+        text = str(raw).strip().replace("\\", "/")
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+    return tuple(sorted(normalized))
+
+
+def _relative_path(repo_root: Path, file_path: Path) -> str:
+    return str(file_path.resolve().relative_to(repo_root)).replace("\\", "/")
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _bullet_lines(items: Iterable[str]) -> list[str]:
+    values = tuple(item for item in items if item)
+    if not values:
+        return ["- none"]
+    return [f"- `{item}`" for item in values]
