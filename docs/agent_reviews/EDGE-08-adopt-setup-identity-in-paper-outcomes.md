@@ -7,6 +7,8 @@ candidate_id: EDGE-08-adopt-setup-identity-in-paper-outcomes
 decision: ADOPT_SETUP_IDENTITY_IN_PAPER_OUTCOME_JOURNAL
 reason: preserve setup identity in journal rows when supplied
 timestamp: 2026-05-20T21:10:00Z
+is_order_action: false
+broker_api_called: false
 source: docs/agent_reviews/EDGE-08-adopt-setup-identity-in-paper-outcomes.md
 
 ## Scope
