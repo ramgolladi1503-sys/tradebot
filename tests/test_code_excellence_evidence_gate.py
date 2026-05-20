@@ -14,18 +14,8 @@ from tools.code_excellence.evidence_gate import (
 from tools.repo_forensics.config_loader import ConfigError
 
 
-def _config_text() -> str:
-    return """
-gsd_forensics_config_version: 1
-project:
-  name: sample
-entrypoints:
-  required:
-    - main.py
-critical_modules:
-  runtime:
-    - main.py
-agent_parameters:
+def _config_text(*, include_evidence_auditor: bool = True) -> str:
+    evidence_auditor = """
   evidence_auditor:
     mission: traceability_checker
     required_fields:
@@ -51,12 +41,26 @@ agent_parameters:
       - missing_fields
       - weak_evidence
       - traceability_status
+""" if include_evidence_auditor else ""
+    return f"""
+gsd_forensics_config_version: 1
+project:
+  name: sample
+baseline_rules:
+  no_target_runtime_execution: true
+entrypoints:
+  required:
+    - main.py
+critical_modules:
+  runtime:
+    - main.py
+agent_parameters:{evidence_auditor}
 """
 
 
-def _write_config(tmp_path):
+def _write_config(tmp_path, *, include_evidence_auditor: bool = True):
     path = tmp_path / ".gsd-forensics.yaml"
-    path.write_text(_config_text(), encoding="utf-8")
+    path.write_text(_config_text(include_evidence_auditor=include_evidence_auditor), encoding="utf-8")
     return path
 
 
@@ -211,8 +215,7 @@ def test_evidence_gate_rejects_path_outside_repo(tmp_path):
 
 
 def test_evidence_gate_fails_closed_when_config_missing(tmp_path):
-    path = tmp_path / ".gsd-forensics.yaml"
-    path.write_text("gsd_forensics_config_version: 1\nproject:\n  name: sample\n", encoding="utf-8")
+    path = _write_config(tmp_path, include_evidence_auditor=False)
 
     with pytest.raises(ConfigError, match="agent_parameters_missing agent=evidence_auditor"):
         run_evidence_gate(repo_root=tmp_path, config_path=path, changed_paths=("docs/agent_reviews/evidence.json",))
