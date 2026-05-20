@@ -1,0 +1,55 @@
+name: Code Excellence Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  code-excellence-gates:
+    name: code-excellence-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Collect changed paths
+        run: |
+          git fetch origin main --depth=1
+          mkdir -p docs/code_excellence/reports
+          git diff --name-only origin/main...HEAD > docs/code_excellence/reports/changed_paths.txt
+          cat docs/code_excellence/reports/changed_paths.txt
+
+      - name: Run unified CE gates
+        run: |
+          PYTHONPATH=. python scripts/run_unified_ce_gates.py \
+            --repo . \
+            --config .gsd-forensics.yaml \
+            --changed-paths-file docs/code_excellence/reports/changed_paths.txt \
+            --out docs/code_excellence/reports/unified_ce_gate_latest.md
+
+      - name: Upload CE gate reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-excellence-gate-reports
+          if-no-files-found: warn
+          path: |
+            docs/code_excellence/reports/changed_paths.txt
+            docs/code_excellence/reports/unified_ce_gate_latest.md
