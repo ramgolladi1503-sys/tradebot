@@ -2,7 +2,6 @@
 
 mode: CE
 candidate_id: CE-13
-candidate_id: CE-13
 decision: scoped_ci_wiring
 reason: Wire unified Code Excellence gates into a separate lightweight pull request workflow without changing product behavior.
 timestamp: 2026-05-20T00:00:00Z
