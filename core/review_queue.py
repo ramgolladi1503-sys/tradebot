@@ -3276,6 +3276,100 @@ def _build_advisory_emit_failure_payload(
 
 
 
+
+def _schema_blocker_code(value) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    code = re.sub(r"[^A-Za-z0-9]+", "_", raw).strip("_").upper()
+    return code or ""
+
+
+def _dedupe_schema_blockers(values) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        code = _schema_blocker_code(value)
+        if not code or code in {"OK", "NONE", "NULL", "QUEUE_ONLY"}:
+            continue
+        if code not in seen:
+            seen.add(code)
+            out.append(code)
+    return out
+
+
+def _normalize_blocked_candidate_lifecycle_schema(entry: dict) -> dict:
+    """Make blocked final/advisory rows schema-valid before advisory serialization.
+
+    Diagnostic/lifecycle repair only. Does not make anything executable.
+    """
+    if not isinstance(entry, dict):
+        return {}
+
+    out = dict(entry)
+    readiness = str(out.get("readiness") or "").strip().upper()
+    final_action = str(out.get("final_action") or "").strip().upper()
+    permission = str(out.get("permission") or "").strip().upper()
+    execution_status = str(out.get("execution_status") or "").strip().lower()
+    candidate_status = str(out.get("candidate_status") or "").strip().lower()
+    entry_status = str(out.get("entry_status") or "").strip()
+
+    is_blocked = bool(
+        readiness == "BLOCKED"
+        or final_action == "BLOCK"
+        or permission == "BLOCK"
+        or execution_status == "blocked"
+        or candidate_status == "blocked"
+        or _is_entry_status_blocking(entry_status)
+    )
+
+    if not is_blocked:
+        return out
+
+    existing_hard = _dedupe_schema_blockers(out.get("hard_blockers") or [])
+    blockers = _dedupe_schema_blockers(out.get("blockers") or [])
+    soft_penalties = _dedupe_schema_blockers(out.get("soft_penalties") or [])
+
+    specific_reason_candidates = [
+        *existing_hard,
+        *blockers,
+        *soft_penalties,
+        out.get("final_emit_block_reason"),
+        out.get("permission_reason"),
+        out.get("reason"),
+    ]
+    repaired_hard = _dedupe_schema_blockers(specific_reason_candidates)
+
+    # Only use generic fallback blockers when the row has no specific blocker.
+    # Otherwise live evidence gets polluted with low-value generic reasons.
+    if not repaired_hard:
+        repaired_hard = _dedupe_schema_blockers([
+            _best_reject_reason(out, default=""),
+            "BLOCKED_CANDIDATE",
+        ])
+
+    out["hard_blockers"] = repaired_hard
+    out["blockers"] = _dedupe_schema_blockers([*(out.get("blockers") or []), *repaired_hard])
+    out["soft_penalties"] = _dedupe_schema_blockers(out.get("soft_penalties") or [])
+
+    if not str(out.get("permission_reason") or "").strip():
+        out["permission_reason"] = repaired_hard[0]
+
+    if final_action == "BLOCK" or permission == "BLOCK" or execution_status == "blocked" or candidate_status == "blocked":
+        out["readiness"] = "BLOCKED"
+        out["permission"] = "BLOCK"
+        out["final_action"] = "BLOCK"
+        out["execution_status"] = "blocked"
+        # Preserve more specific blocked lifecycle states.
+        # unresolved contracts must remain blocked_contract, not generic blocked.
+        if candidate_status != "blocked_contract":
+            out["candidate_status"] = "blocked"
+        out["execution_allowed"] = False
+        out["eligible_for_execution"] = False
+
+    return out
+
+
 def _final_emit_truth_event(advisory_payload: dict) -> tuple[str, dict]:
     """Return explicit final emit truth without mixing executable with queue-only/block.
 
@@ -3436,6 +3530,7 @@ def _emit_review_queue_logs(entry: dict) -> dict:
                 "emit_status": "no_execution_candidates",
             },
         )
+    advisory_payload = _normalize_blocked_candidate_lifecycle_schema(advisory_payload)
     _print_final_emit_truth(advisory_payload)
     advisory_payload = _backfill_instrument_identity(advisory_payload)
     try:
