@@ -3275,6 +3275,63 @@ def _build_advisory_emit_failure_payload(
     return payload
 
 
+
+def _final_emit_truth_event(advisory_payload: dict) -> tuple[str, dict]:
+    """Return explicit final emit truth without mixing executable with queue-only/block.
+
+    This is diagnostic/log truth only. It does not decide order eligibility.
+    """
+    payload = dict(advisory_payload or {})
+    permission = str(payload.get("permission") or "").strip().upper()
+    final_action = str(payload.get("final_action") or "").strip().upper()
+    execution_status = str(payload.get("execution_status") or "").strip().lower()
+    execution_entry_status = str(payload.get("execution_entry_status") or "").strip().lower()
+    candidate_status = str(payload.get("candidate_status") or "").strip().lower()
+    block_reason = str(payload.get("final_emit_block_reason") or "").strip()
+
+    execution_eligible = bool(_is_execution_eligible(payload))
+    if execution_eligible:
+        label = "FINAL_EMIT_EXECUTABLE"
+        final_emit_state = "executable"
+        reportable_executable = True
+    elif block_reason:
+        label = "FINAL_EMIT_ABORTED"
+        final_emit_state = "aborted"
+        reportable_executable = False
+    elif final_action == "BLOCK" or permission == "BLOCK" or execution_status in {"blocked", "rejected"}:
+        label = "FINAL_EMIT_BLOCKED"
+        final_emit_state = "blocked"
+        reportable_executable = False
+    elif final_action == "QUEUE_ONLY" or permission == "QUEUE_ONLY" or execution_status == "queue_only":
+        label = "FINAL_EMIT_QUEUE_ONLY"
+        final_emit_state = "queue_only"
+        reportable_executable = False
+    else:
+        label = "FINAL_EMIT_NON_EXECUTABLE"
+        final_emit_state = "non_executable"
+        reportable_executable = False
+
+    return label, {
+        "trade_id": payload.get("trade_id"),
+        "symbol": payload.get("symbol"),
+        "execution_entry": payload.get("execution_entry"),
+        "execution_entry_status": execution_entry_status or None,
+        "permission": permission or None,
+        "final_action": final_action or None,
+        "execution_status": execution_status or None,
+        "candidate_status": candidate_status or None,
+        "execution_allowed": bool(payload.get("execution_allowed")),
+        "reportable_executable": reportable_executable,
+        "final_emit_state": final_emit_state,
+        "final_emit_block_reason": block_reason or None,
+    }
+
+
+def _print_final_emit_truth(advisory_payload: dict) -> None:
+    label, payload = _final_emit_truth_event(advisory_payload)
+    print(label, payload)
+
+
 def _emit_review_queue_logs(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return {"ok": False, "target": "unknown", "diagnostic": None}
@@ -3379,12 +3436,7 @@ def _emit_review_queue_logs(entry: dict) -> dict:
                 "emit_status": "no_execution_candidates",
             },
         )
-    print(
-        "FINAL EMIT:",
-        advisory_payload.get("execution_entry"),
-        advisory_payload.get("execution_entry_status"),
-        advisory_payload.get("permission"),
-    )
+    _print_final_emit_truth(advisory_payload)
     advisory_payload = _backfill_instrument_identity(advisory_payload)
     try:
         advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
