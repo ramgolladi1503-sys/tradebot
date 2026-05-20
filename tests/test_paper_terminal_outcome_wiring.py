@@ -89,8 +89,10 @@ def test_terminal_paper_outcome_requires_strategy_family_and_direction():
     with pytest.raises(PaperTerminalOutcomeWiringError, match="strategy_family"):
         build_terminal_paper_outcome(order, defaults={})
 
+    payload_without_direction = order.to_dict()
+    payload_without_direction["direction"] = ""
     with pytest.raises(PaperTerminalOutcomeWiringError, match="direction_family"):
-        build_terminal_paper_outcome(order, defaults={"strategy_family": "orb", "direction": ""})
+        build_terminal_paper_outcome(payload_without_direction, defaults={"strategy_family": "orb"})
 
 
 def test_rejected_order_maps_to_saved_loss_by_default():
