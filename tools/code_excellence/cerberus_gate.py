@@ -189,7 +189,12 @@ def _scan_file(
                 )
         for field in required_non_action_fields:
             name, expected = _split_required_field(field)
-            if name and name in stripped and expected and not _line_matches_required_field(stripped, name, expected):
+            if (
+                name
+                and expected
+                and _line_contains_required_field_assignment(stripped, name)
+                and not _line_matches_required_field(stripped, name, expected)
+            ):
                 findings.append(
                     CerberusGateFinding(
                         path=relative,
@@ -235,8 +240,24 @@ def _split_required_field(field: str) -> tuple[str, str]:
     return name.strip(), expected.strip().lower()
 
 
+def _line_contains_required_field_assignment(line: str, name: str) -> bool:
+    stripped = line.strip()
+    if _is_standalone_string_literal(stripped):
+        return False
+    normalized = _normalize_assignment_line(stripped)
+    lowered_name = name.lower()
+    return any(
+        marker in normalized
+        for marker in (
+            f"{lowered_name}=",
+            f"{lowered_name}:",
+            f"{lowered_name}is",
+        )
+    )
+
+
 def _line_matches_required_field(line: str, name: str, expected: str) -> bool:
-    normalized = line.replace(" ", "").replace("\"", "").replace("'", "").lower()
+    normalized = _normalize_assignment_line(line)
     expected_pairs = {
         f"{name.lower()}={expected}",
         f"{name.lower()}:{expected}",
@@ -248,6 +269,17 @@ def _line_matches_required_field(line: str, name: str, expected: str) -> bool:
             f"{name.lower()}isfalse",
         })
     return any(pair in normalized for pair in expected_pairs)
+
+
+def _normalize_assignment_line(line: str) -> str:
+    return line.replace(" ", "").replace("\"", "").replace("'", "").lower()
+
+
+def _is_standalone_string_literal(line: str) -> bool:
+    candidate = line.rstrip(",").strip()
+    if len(candidate) < 2:
+        return False
+    return (candidate[0] == candidate[-1]) and candidate[0] in {"'", '"'}
 
 
 def _normalize_changed_paths(changed_paths: Iterable[str] | None) -> tuple[str, ...]:
