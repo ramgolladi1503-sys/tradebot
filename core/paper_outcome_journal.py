@@ -74,17 +74,33 @@ class PaperOutcomeJournalRecord:
     stop_hit_before_target: bool
     risk_plan_respected: bool
     mode: str
-    is_order_action: bool
-    broker_api_called: bool
-    live_order_action: bool
-    broker_order_action: bool
     source: str
     reason: str
     metadata: dict[str, Any]
 
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
+
+    @property
+    def live_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_order_action(self) -> bool:
+        return False
+
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["metadata"] = dict(self.metadata)
+        payload["is_order_action"] = self.is_order_action
+        payload["broker_api_called"] = self.broker_api_called
+        payload["live_order_action"] = self.live_order_action
+        payload["broker_order_action"] = self.broker_order_action
         return payload
 
 
@@ -97,9 +113,15 @@ class PaperOutcomeJournalIntegrityReport:
     terminal_status_counts: dict[str, int]
     invalid_reasons: tuple[str, ...]
     read_only: bool
-    is_order_action: bool
-    broker_api_called: bool
     source: str
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
 
     @property
     def passed(self) -> bool:
@@ -109,6 +131,8 @@ class PaperOutcomeJournalIntegrityReport:
         payload = asdict(self)
         payload["invalid_reasons"] = list(self.invalid_reasons)
         payload["passed"] = self.passed
+        payload["is_order_action"] = self.is_order_action
+        payload["broker_api_called"] = self.broker_api_called
         return payload
 
 
@@ -275,10 +299,6 @@ def build_paper_outcome_journal_record(outcome: Any) -> PaperOutcomeJournalRecor
         stop_hit_before_target=terminal_status == STOPPED or _bool(row.get("stop_hit_before_target")),
         risk_plan_respected=_bool(row.get("risk_plan_respected"), default=True),
         mode=_text(row.get("mode") or row.get("execution_mode"), default="PAPER").upper(),
-        is_order_action=False,
-        broker_api_called=False,
-        live_order_action=False,
-        broker_order_action=False,
         source=_text(row.get("source"), default="paper_outcome_journal_contract"),
         reason=_text(row.get("reason") or row.get("terminal_reason"), default=terminal_status),
         metadata={
@@ -324,8 +344,6 @@ def validate_paper_outcome_records(records: Iterable[dict[str, Any]]) -> PaperOu
         terminal_status_counts=dict(sorted(terminal_counts.items())),
         invalid_reasons=tuple(invalid_reasons),
         read_only=True,
-        is_order_action=False,
-        broker_api_called=False,
         source="paper_outcome_journal_contract",
     )
 
