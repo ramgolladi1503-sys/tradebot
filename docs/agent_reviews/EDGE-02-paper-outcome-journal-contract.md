@@ -22,7 +22,7 @@ Create a fail-closed contract for paper outcome records so EDGE-01 has real jour
 
 - Normalize one terminal paper outcome record.
 - Validate allowed terminal statuses.
-- Require candidate identity, strategy family, and direction.
+- Require candidate identifier, strategy family, and direction.
 - Append valid records through the existing `record_family_outcome()` path.
 - Keep `family_outcomes.jsonl` as the source of truth.
 - Provide read-only integrity reporting for candidate outcome records.
@@ -83,31 +83,23 @@ The journal record explicitly carries non-action flags as false:
 ### Files changed
 
 - `core/paper_outcome_journal.py`
+- `tests/test_paper_outcome_journal.py`
 - `docs/agent_reviews/EDGE-02-paper-outcome-journal-contract.md`
 
 ### Testing note
 
-A test file creation attempt was blocked by the connector safety layer during implementation. The intended tests were:
+Local test coverage was added for:
 
 - terminal status aliases normalize correctly
 - unknown terminal status fails closed
-- required identity fields fail closed
+- blank identity fields fail closed
 - valid record appends through `record_family_outcome()`
 - integrity report exposes invalid rows
 
 ### Local commands to run after checkout
 
 ```bash
-python - <<'PY'
-from core.paper_outcome_journal import build_paper_outcome_journal_record
-row = build_paper_outcome_journal_record({
-    'candidate_id': 'cand-1',
-    'strategy_family': 'orb',
-    'direction_family': 'BUY_CALL',
-    'terminal_status': 'target-hit',
-})
-print(row.to_dict())
-PY
+python -m pytest tests/test_paper_outcome_journal.py tests/test_edge_baseline_audit.py
 ```
 
 ## Scope Guard
@@ -140,10 +132,10 @@ Blocked:
   - stopped
   - target-hit
   - timed-exit
-- Missing terminal status fails closed.
-- Missing candidate identity fails closed.
-- Missing strategy family fails closed.
-- Missing direction fails closed.
+- Blank terminal status fails closed.
+- Blank candidate identifier fails closed.
+- Blank strategy family fails closed.
+- Blank direction fails closed.
 - Valid records use the existing family outcome journal path.
 
 ### Next PR
