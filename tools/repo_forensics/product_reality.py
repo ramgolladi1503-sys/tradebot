@@ -59,6 +59,64 @@ def audit_product_reality(repo_root: str | Path, config: ForensicsConfig) -> Pro
     return ProductRealityReport(capabilities=statuses)
 
 
+def write_product_reality_report(report: ProductRealityReport, output_path: str | Path) -> Path:
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_product_reality_report(report), encoding="utf-8")
+    return target
+
+
+def render_product_reality_report(report: ProductRealityReport) -> str:
+    lines: list[str] = []
+    lines.append("# Product Reality Audit")
+    lines.append("")
+    lines.append("## Purpose")
+    lines.append("")
+    lines.append("Classify product capabilities by static proof level. This report does not execute TradeBot runtime code and does not claim profitability.")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append("| Status | Count |")
+    lines.append("|---|---:|")
+    lines.append(f"| PROVEN | {len(report.proven)} |")
+    lines.append(f"| PARTIALLY_PROVEN | {len(report.partially_proven)} |")
+    lines.append(f"| THEORETICAL | {len(report.theoretical)} |")
+    lines.append(f"| MOCKED | {len(report.mocked)} |")
+    lines.append(f"| UNPROVEN | {len(report.unproven)} |")
+    lines.append("")
+    lines.append("## Capability Classification")
+    lines.append("")
+    lines.append("| Capability | Status | Source Proof | Tests | Evidence | Risk |")
+    lines.append("|---|---|---:|---:|---:|---|")
+    for item in report.capabilities:
+        lines.append(
+            f"| {item.capability} | {item.status} | {len(item.proof_files)} | {len(item.test_files)} | {len(item.evidence_files)} | {item.risk} |"
+        )
+    lines.append("")
+    for item in report.capabilities:
+        lines.append(f"### {item.capability}")
+        lines.append("")
+        lines.append(f"- Status: `{item.status}`")
+        lines.append(f"- Risk: {item.risk}")
+        lines.append("- Source proof:")
+        lines.extend(_path_lines(item.proof_files))
+        lines.append("- Tests:")
+        lines.extend(_path_lines(item.test_files))
+        lines.append("- Evidence:")
+        lines.extend(_path_lines(item.evidence_files))
+        lines.append("")
+    lines.append("## Scope Guard")
+    lines.append("")
+    lines.append("- Static file scan only.")
+    lines.append("- No target runtime execution.")
+    lines.append("- No broker calls.")
+    lines.append("- No live order actions.")
+    lines.append("- No auto-fix.")
+    lines.append("- No profitability claim.")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _classify_capability(repo_root: Path, files: list[Path], capability: str) -> ProductCapabilityStatus:
     tokens = _tokens(capability)
     proof_files: list[str] = []
@@ -184,6 +242,12 @@ def _is_test_path(path: str) -> bool:
 def _is_evidence_path(path: str) -> bool:
     lowered = path.lower()
     return any(marker in lowered for marker in ["docs/", "report", "evidence", "runtime/", "logs/"])
+
+
+def _path_lines(paths: list[str]) -> list[str]:
+    if not paths:
+        return ["  - none"]
+    return [f"  - `{path}`" for path in paths]
 
 
 def _should_skip(path: Path, repo_root: Path, config: ForensicsConfig) -> bool:
