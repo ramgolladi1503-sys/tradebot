@@ -1,0 +1,40 @@
+name: Repo Forensics PR Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repo-forensics-pr-gate:
+    name: repo-forensics-pr-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run baseline-aware repo-forensics gate
+        run: |
+          python scripts/run_repo_forensics_pr_gate.py --repo . --config .gsd-forensics.yaml
+
+      - name: Upload PR gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-forensics-pr-gate-report
+          path: docs/repo_forensics/reports/pr_gate_latest.md
+          if-no-files-found: warn
