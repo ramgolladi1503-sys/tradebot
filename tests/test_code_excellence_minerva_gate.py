@@ -118,8 +118,8 @@ def test_minerva_gate_passes_behavior_test_and_blocks_shape_only_test(tmp_path):
         "tests/test_shape_only.py",
         """
         def test_shape_only():
-            result = {"decision": "blocked"}
-            assert isinstance(result, dict)
+            payload = {"x": 1}
+            assert isinstance(payload, dict)
         """,
     )
 
