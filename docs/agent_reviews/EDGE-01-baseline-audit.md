@@ -1,5 +1,18 @@
 # EDGE-01 — Trading Edge Baseline Audit Report
 
+## Evidence Contract
+
+mode: PAPER
+candidate_id: EDGE-01-baseline-audit
+decision: READ_ONLY_EDGE_AUDIT_REPORT
+reason: Create read-only edge measurement before any strategy, scoring, ranking, dashboard, or execution changes.
+timestamp: 2026-05-20T18:10:00Z
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
+source: docs/agent_reviews/EDGE-01-baseline-audit.md
+
 ## Agent Work Contract
 
 ### Scope
