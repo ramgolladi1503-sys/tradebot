@@ -123,7 +123,25 @@ python -m pytest tests/test_order_reconciliation_broker_resolve_guard.py -q
 python scripts/validate_agent_review_evidence.py --base-ref origin/main
 ```
 
-Runtime proof after merge:
+## Acceptance Proof
+
+Commands:
+
+```bash
+python -m pytest tests/test_order_reconciliation_broker_resolve_guard.py -q
+python scripts/validate_agent_review_evidence.py --base-ref origin/main
+```
+
+Expected result:
+
+```text
+All tests pass.
+AGENT REVIEW EVIDENCE GATE: PASSED
+```
+
+## Runtime Proof Required After Merge
+
+Command:
 
 ```bash
 cd /Users/madhuram/tradebot
@@ -158,13 +176,13 @@ ORCHESTRATOR_INIT_COMPLETED
 LIVE_MONITORING_ENTERED
 ```
 
-## What This PR Does Not Do
+## What This PR Does Not Prove
 
-1. It does not disable reconciliation globally.
-2. It does not change broker order placement.
-3. It does not change strategy behavior.
-4. It does not solve LIVE broker auth latency.
-5. It does not build the separate Debug Forensics Agent.
+1. It does not prove feed/WebSocket works.
+2. It does not prove market-hours behavior.
+3. It does not prove strategy quality or profitability.
+4. It does not prove LIVE broker auth latency is fixed.
+5. It does not prove the separate Debug Forensics Agent architecture.
 
 ## Human Approval
 
