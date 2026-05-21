@@ -11,6 +11,23 @@ from core.paths import logs_dir
 from core.time_utils import now_utc_epoch, now_ist
 
 
+def _record_startup_boundary(event: str, *, details: dict[str, Any] | None = None, error: str | None = None) -> None:
+    try:
+        from core.runtime_startup_lifecycle import record_runtime_startup_event
+
+        payload = {"is_order_action": False}
+        if details:
+            payload.update(dict(details))
+        record_runtime_startup_event(
+            event,
+            source="core.db_guard.ensure_db_ready",
+            details=payload,
+            error=error,
+        )
+    except Exception:
+        pass
+
+
 def _log_event(payload: Dict[str, Any]) -> None:
     try:
         out = logs_dir() / "db_probe.jsonl"
@@ -61,8 +78,10 @@ def probe_db_write(db_path: Path) -> None:
 
 
 def ensure_db_ready(db_path: Optional[str] = None) -> Dict[str, Any]:
+    _record_startup_boundary("DB_READY_CALLING")
     raw_path = db_path or getattr(cfg, "DB_PATH", "") or getattr(cfg, "TRADE_DB_PATH", "")
     if not raw_path:
+        _record_startup_boundary("DB_READY_FAILED", error="DB_PATH is empty")
         raise RuntimeError("DB_PATH is empty. Set DB_PATH to a writable sqlite file path.")
     path = normalize_db_path(raw_path)
     cfg.DB_PATH = str(path)
@@ -82,6 +101,7 @@ def ensure_db_ready(db_path: Optional[str] = None) -> Dict[str, Any]:
     except Exception as exc:
         payload["error"] = f"{type(exc).__name__}:{exc}"
         _log_event({**payload, "event": "DB_PROBE_FAIL"})
+        _record_startup_boundary("DB_READY_FAILED", details={"db_path": str(path)}, error=payload["error"])
         raise RuntimeError(
             "DB probe failed (create/insert/delete): "
             f"{payload['error']} path={path}"
@@ -96,4 +116,5 @@ def ensure_db_ready(db_path: Optional[str] = None) -> Dict[str, Any]:
     except Exception:
         pass
 
+    _record_startup_boundary("DB_READY_COMPLETED", details={"db_path": str(path)})
     return payload
