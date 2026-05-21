@@ -44,6 +44,13 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
         def __init__(self):
             self.ready = True
 
+        def start_reconciliation_daemon(self):
+            self.recon_daemon_started = True
+
+        def reconcile_orders_once(self):
+            self.recon_once_completed = True
+            return {"checked": 0}
+
     class ExecutionRouter:
         def __init__(self):
             self.ready = True
@@ -85,6 +92,8 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
             self.execution_engine = fake_module.ExecutionEngine()
             self.execution_router = fake_module.ExecutionRouter()
             self.gatekeeper = fake_module.StrategyGatekeeper()
+            self.execution_engine.start_reconciliation_daemon()
+            self.execution_engine.reconcile_orders_once()
             self.strategy_tracker = fake_module.StrategyTracker()
             self.trade_builder = fake_module.TradeBuilder()
             self._startup_warmup_rows = self._run_startup_warmup_bootstrap()
@@ -123,6 +132,10 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
     assert "ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED" in event_names
     assert "ORCHESTRATOR_EXECUTION_ROUTER_INIT_COMPLETED" in event_names
     assert "ORCHESTRATOR_GATEKEEPER_INIT_COMPLETED" in event_names
+    assert "ORCHESTRATOR_RECON_DAEMON_START_STARTED" in event_names
+    assert "ORCHESTRATOR_RECON_DAEMON_START_COMPLETED" in event_names
+    assert "ORCHESTRATOR_RECON_ONCE_STARTED" in event_names
+    assert "ORCHESTRATOR_RECON_ONCE_COMPLETED" in event_names
     assert "ORCHESTRATOR_STRATEGY_TRACKER_INIT_COMPLETED" in event_names
     assert "ORCHESTRATOR_TRADE_BUILDER_INIT_COMPLETED" in event_names
     assert "ORCHESTRATOR_WARMUP_STARTED" in event_names
@@ -212,4 +225,50 @@ def test_orchestrator_probe_records_warmup_market_data_failure(monkeypatch):
     assert "ORCHESTRATOR_WARMUP_MARKET_DATA_STARTED" in event_names
     assert "ORCHESTRATOR_WARMUP_MARKET_DATA_FAILED" in event_names
     assert "ORCHESTRATOR_WARMUP_FAILED" in event_names
+    assert "ORCHESTRATOR_INIT_FAILED" in event_names
+
+
+def test_orchestrator_probe_records_reconciliation_failure(monkeypatch):
+    events = []
+
+    def fake_record(event, *, source, details=None, error=None):
+        events.append({"event": event, "source": source, "details": details or {}, "error": error or ""})
+
+    monkeypatch.setattr(probe, "_record", fake_record)
+    monkeypatch.setattr(probe, "_PATCHED", False)
+
+    fake_module = SimpleNamespace()
+
+    class ExecutionEngine:
+        def __init__(self):
+            self.ready = True
+
+        def start_reconciliation_daemon(self):
+            raise RuntimeError("recon daemon boom")
+
+        def reconcile_orders_once(self):
+            return {"checked": 0}
+
+    class Orchestrator:
+        def __init__(self):
+            self.execution_engine = fake_module.ExecutionEngine()
+            self.execution_engine.start_reconciliation_daemon()
+
+    fake_module.ExecutionEngine = ExecutionEngine
+    fake_module.Orchestrator = Orchestrator
+
+    probe._patch_orchestrator_module(fake_module)
+
+    try:
+        fake_module.Orchestrator()
+    except RuntimeError as exc:
+        assert "recon daemon boom" in str(exc)
+    else:
+        raise AssertionError("expected reconciliation failure")
+
+    event_names = [event["event"] for event in events]
+    assert "ORCHESTRATOR_INIT_ENTERED" in event_names
+    assert "ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED" in event_names
+    assert "ORCHESTRATOR_RECON_DAEMON_START_STARTED" in event_names
+    assert "ORCHESTRATOR_RECON_DAEMON_START_FAILED" in event_names
     assert "ORCHESTRATOR_INIT_FAILED" in event_names
