@@ -1,0 +1,26 @@
+name: Agent Review Evidence Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  agent-review-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+
+      - name: Validate agent review evidence
+        env:
+          AGENT_REVIEW_BASE_REF: "origin/${{ github.base_ref }}"
+        run: python scripts/validate_agent_review_evidence.py
