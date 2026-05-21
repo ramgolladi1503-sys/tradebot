@@ -82,7 +82,7 @@ def _validate_event(payload: dict[str, Any], *, index: int) -> ForensicEvent:
 
     boot_epoch = _as_float(payload.get("boot_epoch"), field_name="boot_epoch")
     ts_epoch = _as_float(payload.get("ts_epoch"), field_name="ts_epoch")
-    is_order_action = bool(payload.get("is_order_action", False))
+    action_evidence = bool(payload.get("is_order_action", False))
     details = payload.get("details")
 
     return ForensicEvent(
@@ -93,7 +93,7 @@ def _validate_event(payload: dict[str, Any], *, index: int) -> ForensicEvent:
         source=source,
         writer=writer,
         schema_version=schema_version,
-        is_order_action=is_order_action,
+        action_evidence=action_evidence,
         error=str(payload.get("error") or ""),
         details=dict(details) if isinstance(details, dict) else {},
     )
