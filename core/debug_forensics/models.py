@@ -23,7 +23,7 @@ class ForensicEvent:
     source: str
     writer: str
     schema_version: int
-    is_order_action: bool
+    action_evidence: bool
     error: str = ""
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -80,7 +80,6 @@ class ForensicsReport:
     killed_hypotheses: tuple[str, ...]
     next_diagnostic_scope: str
     forbidden_distractions: tuple[str, ...]
-    is_order_action: bool = False
     schema_version: int = 1
 
     def to_dict(self) -> dict[str, Any]:
@@ -95,5 +94,5 @@ class ForensicsReport:
             "killed_hypotheses": list(self.killed_hypotheses),
             "next_diagnostic_scope": self.next_diagnostic_scope,
             "forbidden_distractions": list(self.forbidden_distractions),
-            "is_order_action": self.is_order_action,
+            "is_order_action": False,
         }
