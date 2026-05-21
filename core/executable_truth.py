@@ -78,7 +78,8 @@ def _advisory_reason(candidate: Any, flags: dict[str, Any]) -> str:
             flags.get("runtime_mode"),
             _candidate_get(candidate, "execution_mode"),
             _candidate_get(candidate, "mode"),
-            flags.get("market_mode"),
+            getattr(cfg, "EXECUTION_MODE", None),
+            getattr(cfg, "TRADING_MODE", None),
         )
         or ""
     ).strip().upper()
