@@ -38,16 +38,30 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _current_run_events(payload: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+def _payload_is_current_run(payload: Mapping[str, Any] | None) -> bool:
     if not payload:
+        return False
+    try:
+        freshness = classify_runtime_payload_freshness(payload)
+    except Exception:
+        return False
+    return bool(freshness.get("is_current_run"))
+
+
+def _current_run_events(payload: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    if not _payload_is_current_run(payload):
         return []
-    freshness = classify_runtime_payload_freshness(payload)
-    if not freshness.get("is_current_run"):
-        return []
-    events = payload.get("events")
+    events = payload.get("events") if isinstance(payload, Mapping) else None
     if not isinstance(events, list):
         return []
     return [dict(event) for event in events if isinstance(event, dict)]
+
+
+def _current_run_flags(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not _payload_is_current_run(payload):
+        return {}
+    flags = payload.get("proof_flags") if isinstance(payload, Mapping) else None
+    return dict(flags) if isinstance(flags, Mapping) else {}
 
 
 def _is_safe_secret_metadata_key(key_lower: str) -> bool:
@@ -141,7 +155,7 @@ def record_runtime_startup_event(
     }
     events.append(compact_event)
 
-    previous_flags = dict(previous.get("proof_flags") or {}) if isinstance(previous, dict) else {}
+    previous_flags = _current_run_flags(previous)
     proof_flags = {
         **previous_flags,
         "main_boot_started": _flag(previous_flags, "main_boot_started", event_name, "MAIN_BOOT_STARTED"),
@@ -155,10 +169,19 @@ def record_runtime_startup_event(
         "db_ready_completed": _flag(previous_flags, "db_ready_completed", event_name, "DB_READY_COMPLETED"),
         "startup_security_calling": _flag(previous_flags, "startup_security_calling", event_name, "STARTUP_SECURITY_CALLING"),
         "startup_security_completed": _flag(previous_flags, "startup_security_completed", event_name, "STARTUP_SECURITY_COMPLETED"),
-        "session_guard_calling": _flag(previous_flags, "session_guard_calling", event_name, "SESSION_GUARD_CALLING"),
-        "session_guard_completed": _flag(previous_flags, "session_guard_completed", event_name, "SESSION_GUARD_COMPLETED"),
+        "session_guard_calling": _flag(previous_flags, "session_guard_calling", event_name, "SESSION_GUARD_CALLING", "ORCHESTRATOR_SESSION_GUARD_STARTED"),
+        "session_guard_completed": _flag(previous_flags, "session_guard_completed", event_name, "SESSION_GUARD_COMPLETED", "ORCHESTRATOR_SESSION_GUARD_COMPLETED"),
         "orchestrator_init_started": _flag(previous_flags, "orchestrator_init_started", event_name, "ORCHESTRATOR_INIT_STARTED", "ORCHESTRATOR_INIT_ENTERED"),
         "orchestrator_init_completed": _flag(previous_flags, "orchestrator_init_completed", event_name, "ORCHESTRATOR_INIT_COMPLETED"),
+        "orchestrator_trade_log_completed": _flag(previous_flags, "orchestrator_trade_log_completed", event_name, "ORCHESTRATOR_TRADE_LOG_READY_COMPLETED"),
+        "orchestrator_event_log_repair_completed": _flag(previous_flags, "orchestrator_event_log_repair_completed", event_name, "ORCHESTRATOR_EVENT_LOG_REPAIR_COMPLETED"),
+        "orchestrator_auth_warm_check_completed": _flag(previous_flags, "orchestrator_auth_warm_check_completed", event_name, "ORCHESTRATOR_AUTH_WARM_CHECK_COMPLETED"),
+        "orchestrator_risk_state_completed": _flag(previous_flags, "orchestrator_risk_state_completed", event_name, "ORCHESTRATOR_RISK_STATE_INIT_COMPLETED"),
+        "orchestrator_predictor_completed": _flag(previous_flags, "orchestrator_predictor_completed", event_name, "ORCHESTRATOR_PREDICTOR_INIT_COMPLETED"),
+        "orchestrator_execution_engine_completed": _flag(previous_flags, "orchestrator_execution_engine_completed", event_name, "ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED"),
+        "orchestrator_execution_router_completed": _flag(previous_flags, "orchestrator_execution_router_completed", event_name, "ORCHESTRATOR_EXECUTION_ROUTER_INIT_COMPLETED"),
+        "orchestrator_trade_builder_completed": _flag(previous_flags, "orchestrator_trade_builder_completed", event_name, "ORCHESTRATOR_TRADE_BUILDER_INIT_COMPLETED"),
+        "orchestrator_warmup_completed": _flag(previous_flags, "orchestrator_warmup_completed", event_name, "ORCHESTRATOR_WARMUP_COMPLETED"),
         "live_monitoring_calling": _flag(previous_flags, "live_monitoring_calling", event_name, "LIVE_MONITORING_CALLING"),
         "live_monitoring_returned": _flag(previous_flags, "live_monitoring_returned", event_name, "LIVE_MONITORING_RETURNED"),
         "feed_start_request_boundary_reached": _flag(previous_flags, "feed_start_request_boundary_reached", event_name, "FEED_START_REQUEST_BOUNDARY_REACHED"),
