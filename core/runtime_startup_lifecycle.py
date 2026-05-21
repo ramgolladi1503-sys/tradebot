@@ -175,7 +175,7 @@ def record_runtime_startup_event(
         "orchestrator_init_completed": _flag(previous_flags, "orchestrator_init_completed", event_name, "ORCHESTRATOR_INIT_COMPLETED"),
         "orchestrator_trade_log_completed": _flag(previous_flags, "orchestrator_trade_log_completed", event_name, "ORCHESTRATOR_TRADE_LOG_READY_COMPLETED"),
         "orchestrator_event_log_repair_completed": _flag(previous_flags, "orchestrator_event_log_repair_completed", event_name, "ORCHESTRATOR_EVENT_LOG_REPAIR_COMPLETED"),
-        "orchestrator_auth_WARM_CHECK_completed": _flag(previous_flags, "orchestrator_auth_WARM_CHECK_completed", event_name, "ORCHESTRATOR_AUTH_WARM_CHECK_COMPLETED"),
+        "orchestrator_auth_warm_check_completed": _flag(previous_flags, "orchestrator_auth_warm_check_completed", event_name, "ORCHESTRATOR_AUTH_WARM_CHECK_COMPLETED"),
         "orchestrator_risk_state_completed": _flag(previous_flags, "orchestrator_risk_state_completed", event_name, "ORCHESTRATOR_RISK_STATE_INIT_COMPLETED"),
         "orchestrator_predictor_completed": _flag(previous_flags, "orchestrator_predictor_completed", event_name, "ORCHESTRATOR_PREDICTOR_INIT_COMPLETED"),
         "orchestrator_execution_engine_completed": _flag(previous_flags, "orchestrator_execution_engine_completed", event_name, "ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED"),
