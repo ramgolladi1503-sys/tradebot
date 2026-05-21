@@ -84,6 +84,40 @@ def test_old_runtime_startup_events_are_ignored(tmp_path, monkeypatch):
     assert payload["events"][0]["event"] == "MAIN_BOOT_STARTED"
 
 
+def test_old_runtime_startup_flags_are_ignored(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_RUN_ID, "run-current-runtime-startup-flags")
+    monkeypatch.setenv(ENV_BOOT_EPOCH, "3500.0")
+    monkeypatch.setattr(lifecycle, "logs_dir", lambda: tmp_path)
+
+    (tmp_path / "runtime_startup_lifecycle_latest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "old-run",
+                "boot_epoch": 1.0,
+                "pid": 999,
+                "writer": "runtime_startup_lifecycle",
+                "schema_version": 1,
+                "events": [{"event": "RUNTIME_STATUS_WRITE_COMPLETED"}],
+                "proof_flags": {
+                    "runtime_status_write_attempted": True,
+                    "runtime_status_write_completed": True,
+                    "live_monitoring_calling": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = lifecycle.record_runtime_startup_event("MAIN_BOOT_STARTED", source="unit", now_epoch=3501.0)
+
+    assert payload["events_count"] == 1
+    assert payload["events"][0]["event"] == "MAIN_BOOT_STARTED"
+    assert payload["proof_flags"]["main_boot_started"] is True
+    assert payload["proof_flags"]["runtime_status_write_attempted"] is False
+    assert payload["proof_flags"]["runtime_status_write_completed"] is False
+    assert payload["proof_flags"]["live_monitoring_calling"] is False
+
+
 def test_failure_event_sets_failure_flag(tmp_path, monkeypatch):
     monkeypatch.setenv(ENV_RUN_ID, "run-runtime-startup-failure")
     monkeypatch.setenv(ENV_BOOT_EPOCH, "4000.0")
