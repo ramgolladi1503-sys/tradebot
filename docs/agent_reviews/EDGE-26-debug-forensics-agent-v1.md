@@ -5,7 +5,7 @@
 - mode: PAPER_EVIDENCE_PROOF
 - candidate_id: EDGE-26-debug-forensics-agent-v1
 - decision: ADD_STARTUP_DEBUG_FORENSICS_AGENT_V1
-- reason: Existing lifecycle probes produce evidence, but the repo needs a deterministic reader that compares expected startup flow against actual runtime proof and reports the first missing boundary.
+- reason: Existing lifecycle probes produce evidence, but the repo needs a deterministic reader that compares expected startup flow against actual runtime proof and reports the earliest unproven boundary.
 - timestamp: 2026-05-21T17:55:00Z
 - is_order_action: false
 - broker_api_called: false
