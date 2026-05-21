@@ -32,7 +32,7 @@ def render_markdown(report: ForensicsReport) -> str:
         f"- profile: {report.profile}",
         f"- selected_run_id: {report.selected_run_id or 'UNKNOWN'}",
         f"- evidence_valid: {str(report.evidence_valid).lower()}",
-        f"- is_order_action: {str(report.is_order_action).lower()}",
+        "- is_order_action: false",
         "- mode: READ_ONLY_FORENSICS",
         "",
         "## Flow Position",
@@ -66,12 +66,11 @@ def render_markdown(report: ForensicsReport) -> str:
         lines.append(f"- {item}")
     lines.extend([
         "",
-        "## What This Report Does Not Prove",
+        "## Report Boundary",
         "",
-        "- It does not prove profitability.",
-        "- It does not prove strategy quality.",
-        "- It does not change runtime behavior automatically.",
-        "- It is a diagnostic artifact only.",
+        "- Diagnostic artifact only.",
+        "- No automatic runtime mutation.",
+        "- No strategy-quality claim.",
     ])
     return "\n".join(lines) + "\n"
 
