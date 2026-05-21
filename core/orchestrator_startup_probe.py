@@ -49,6 +49,19 @@ def _safe_init_details(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[st
     return details
 
 
+def _safe_method_details(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
+    details: dict[str, Any] = {
+        "args_count": max(0, len(args) - 1),
+        "kwargs": sorted(str(key) for key in kwargs.keys()),
+    }
+    if args:
+        details["instance_type"] = type(args[0]).__name__
+    for key in ("mode", "execution_mode", "trading_mode", "enabled"):
+        if key in kwargs:
+            details[key] = kwargs.get(key)
+    return details
+
+
 def _wrap_callable(
     *,
     module: Any,
@@ -118,6 +131,44 @@ def _wrap_class_constructor(
     StageProbeWrapper.__module__ = getattr(original_cls, "__module__", "core.orchestrator")
     StageProbeWrapper._edge23_stage_probe_wrapped = True  # type: ignore[attr-defined]
     setattr(module, attr_name, StageProbeWrapper)
+
+
+def _wrap_class_method(
+    *,
+    module: Any,
+    attr_name: str,
+    method_name: str,
+    started_event: str,
+    completed_event: str,
+    failed_event: str,
+) -> None:
+    cls = getattr(module, attr_name, None)
+    if cls is None:
+        return
+    original = getattr(cls, method_name, None)
+    if original is None or getattr(original, "_edge26_recon_probe_wrapped", False):
+        return
+
+    def wrapped(self, *args, **kwargs):
+        _record(
+            started_event,
+            source=f"core.orchestrator_startup_probe.{attr_name}.{method_name}",
+            details=_safe_method_details((self, *args), dict(kwargs)),
+        )
+        try:
+            result = original(self, *args, **kwargs)
+        except Exception as exc:
+            _record(
+                failed_event,
+                source=f"core.orchestrator_startup_probe.{attr_name}.{method_name}",
+                error=f"{type(exc).__name__}:{exc}",
+            )
+            raise
+        _record(completed_event, source=f"core.orchestrator_startup_probe.{attr_name}.{method_name}")
+        return result
+
+    wrapped._edge26_recon_probe_wrapped = True  # type: ignore[attr-defined]
+    setattr(cls, method_name, wrapped)
 
 
 def _wrap_orchestrator_method(
@@ -203,6 +254,22 @@ def _patch_orchestrator_stages(module: Any, cls: Any) -> None:
         started_event="ORCHESTRATOR_EXECUTION_ENGINE_INIT_STARTED",
         completed_event="ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED",
         failed_event="ORCHESTRATOR_EXECUTION_ENGINE_INIT_FAILED",
+    )
+    _wrap_class_method(
+        module=module,
+        attr_name="ExecutionEngine",
+        method_name="start_reconciliation_daemon",
+        started_event="ORCHESTRATOR_RECON_DAEMON_START_STARTED",
+        completed_event="ORCHESTRATOR_RECON_DAEMON_START_COMPLETED",
+        failed_event="ORCHESTRATOR_RECON_DAEMON_START_FAILED",
+    )
+    _wrap_class_method(
+        module=module,
+        attr_name="ExecutionEngine",
+        method_name="reconcile_orders_once",
+        started_event="ORCHESTRATOR_RECON_ONCE_STARTED",
+        completed_event="ORCHESTRATOR_RECON_ONCE_COMPLETED",
+        failed_event="ORCHESTRATOR_RECON_ONCE_FAILED",
     )
     _wrap_class_constructor(
         module=module,
