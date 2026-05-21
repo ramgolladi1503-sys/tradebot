@@ -202,19 +202,12 @@ def load_auth_state(*, repo_root_path: Path | str | None = None) -> dict[str, An
 
 
 def runtime_auth_snapshot(*, repo_root_path: Path | str | None = None) -> dict[str, Any]:
-    payload = load_auth_state(repo_root_path=repo_root_path)
-    state = str(payload.get("status") or payload.get("auth_state") or "").strip().upper()
-    if not state:
-        return {
-            "auth_ok": True,
-            "auth_state": "UNKNOWN",
-            "auth_reason": "",
-        }
-    return {
-        "auth_ok": state == "OK",
-        "auth_state": state,
-        "auth_reason": str(payload.get("reason") or payload.get("error") or "").strip(),
-    }
+    from core.runtime_auth_freshness import latest_auth_health, resolve_runtime_auth_snapshot
+
+    return resolve_runtime_auth_snapshot(
+        load_auth_state(repo_root_path=repo_root_path),
+        latest_health_payload=latest_auth_health(),
+    )
 
 
 def set_auth_required_state(
