@@ -179,7 +179,7 @@ def _execution_quality_score(
 
 
 def _firebreak_reject_decision(candidate: Any, reason_code: str, context: dict[str, Any], *, data_confidence: float | None) -> ExecutionQualityDecision:
-    order_policy = "advisory" if reason_code in {"fallback_driven_data", "degraded_data", "planning_only", "advisory_only", "debug_candidate"} else "reject"
+    order_policy = "advisory" if reason_code in {"fallback_driven_data", "degraded_data", "data_not_live", "planning_only", "advisory_only", "debug_candidate"} else "reject"
     return ExecutionQualityDecision(
         expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
         spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
