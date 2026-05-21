@@ -5,7 +5,6 @@ from typing import Any
 
 from config import config as cfg
 
-
 EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
 FALLBACK_DRIVEN_REASON = "fallback_driven_data"
 DEGRADED_DATA_REASON = "degraded_data"
@@ -30,9 +29,7 @@ class ExecutableTruthDecision:
 
 
 def _candidate_get(candidate: Any, field: str, default: Any = None) -> Any:
-    if isinstance(candidate, dict):
-        return candidate.get(field, default)
-    return getattr(candidate, field, default)
+    return candidate.get(field, default) if isinstance(candidate, dict) else getattr(candidate, field, default)
 
 
 def _source_flags(candidate: Any) -> dict[str, Any]:
@@ -72,14 +69,19 @@ def _append_unique(reasons: list[str], reason: str | None) -> None:
         reasons.append(text)
 
 
+def _configured_mode() -> str:
+    return str(_coalesce(getattr(cfg, "EXECUTION_MODE", None), getattr(cfg, "TRADING_MODE", None)) or "").strip().upper()
+
+
 def _advisory_reason(candidate: Any, flags: dict[str, Any]) -> str:
+    if _configured_mode() == "LIVE":
+        return DATA_NOT_LIVE_REASON
     runtime_mode = str(
         _coalesce(
             flags.get("runtime_mode"),
             _candidate_get(candidate, "execution_mode"),
             _candidate_get(candidate, "mode"),
-            getattr(cfg, "EXECUTION_MODE", None),
-            getattr(cfg, "TRADING_MODE", None),
+            flags.get("market_mode"),
         )
         or ""
     ).strip().upper()
@@ -97,16 +99,8 @@ def classify_executable_truth(
     spread_ok: Any = None,
     data_confidence: float | None = None,
 ) -> ExecutableTruthDecision:
-    """Classify whether a candidate may remain execution-capable.
-
-    This is the EDGE-31 firebreak: fallback, degraded, stale, missing, or
-    partial execution evidence must not leak into final executable selection.
-    The classifier is intentionally pure and side-effect free so it can be used
-    from scoring, execution quality, and UI/reporting paths.
-    """
     flags = _source_flags(candidate)
     reasons: list[str] = []
-
     chain_source = str(
         _coalesce(
             _candidate_get(candidate, "chain_source"),
@@ -127,14 +121,12 @@ def classify_executable_truth(
         )
     ):
         _append_unique(reasons, FALLBACK_DRIVEN_REASON)
-
     if chain_source in _FALLBACK_CHAIN_SOURCES:
         _append_unique(reasons, FALLBACK_DRIVEN_REASON)
 
     execution_block_type = str(flags.get("execution_block_type") or "").strip().lower()
-    advisory_block_reason = _advisory_reason(candidate, flags) if execution_block_type == "advisory" else None
-    if advisory_block_reason:
-        _append_unique(reasons, advisory_block_reason)
+    if execution_block_type == "advisory":
+        _append_unique(reasons, _advisory_reason(candidate, flags))
 
     if _truthy(_coalesce(_candidate_get(candidate, "planning_only"), flags.get("planning_only"))):
         _append_unique(reasons, "planning_only")
@@ -155,29 +147,18 @@ def classify_executable_truth(
         fresh_quote_ok = _coalesce(_candidate_get(candidate, "fresh_quote_ok"), flags.get("fresh_quote_ok"))
     if fresh_quote_ok is False:
         _append_unique(reasons, "stale_quote")
-
     if spread_ok is None:
         spread_ok = _coalesce(_candidate_get(candidate, "spread_ok"), flags.get("spread_ok"))
     if spread_ok is False:
         _append_unique(reasons, "unverified_spread")
-
     if liquidity_ok is None:
         liquidity_ok = _coalesce(_candidate_get(candidate, "liquidity_ok"), flags.get("liquidity_ok"))
     if liquidity_ok is False:
         _append_unique(reasons, "missing_liquidity_validation")
 
-    confidence = _safe_float(
-        _coalesce(data_confidence, _candidate_get(candidate, "data_confidence"), flags.get("data_confidence"))
-    )
-    min_data_confidence = float(
-        getattr(
-            cfg,
-            "EXECUTABLE_TRUTH_MIN_DATA_CONFIDENCE",
-            getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20),
-        )
-        or 0.20
-    )
-    if confidence is not None and confidence < min_data_confidence:
+    confidence = _safe_float(_coalesce(data_confidence, _candidate_get(candidate, "data_confidence"), flags.get("data_confidence")))
+    min_confidence = float(getattr(cfg, "EXECUTABLE_TRUTH_MIN_DATA_CONFIDENCE", getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20)) or 0.20)
+    if confidence is not None and confidence < min_confidence:
         _append_unique(reasons, "low_data_confidence")
 
     allowed = not reasons
@@ -191,6 +172,6 @@ def classify_executable_truth(
             "chain_source": chain_source or None,
             "execution_block_type": execution_block_type or None,
             "data_confidence": confidence,
-            "min_data_confidence": min_data_confidence,
+            "min_data_confidence": min_confidence,
         },
     )
