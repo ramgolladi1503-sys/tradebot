@@ -15,7 +15,7 @@ source: docs/agent_reviews/EDGE-12-feed-startup-root-cause.md
 
 Allowed:
 
-- read local token metadata without printing secrets
+- read local credential metadata without printing secrets
 - read existing runtime files
 - read existing feed runtime files
 - read existing auth health logs
@@ -40,7 +40,7 @@ Not included:
 
 EDGE-11 proved the current blocker is feed startup truth: REST validation can succeed while the engine/feed path reports `AUTH_REQUIRED`, `feed_ok=false`, zero option subscriptions, and a WebSocket 403 failure.
 
-EDGE-12 narrows that down further by comparing safe tail markers and latch/status evidence. It answers whether the feed startup used the same token as the local token file, whether an env token drift exists, whether a latch blocked restart, and whether subscriptions were attempted after startup.
+EDGE-12 narrows that down further by comparing safe tail markers and latch evidence. It answers whether the feed startup used the same credential tail as the local credential file, whether env drift exists, whether a latch blocked restart, and whether subscriptions were attempted after startup.
 
 ## Files Changed
 
@@ -56,8 +56,8 @@ python -m pytest tests/test_feed_startup_root_cause_report.py
 
 ## Acceptance Proof
 
-- detects WebSocket rejection when the feed token tail matches the local token file tail
-- detects feed credential mismatch when the feed token tail differs from the local token file tail
+- detects WebSocket rejection when the feed credential tail matches the local credential file tail
+- detects feed credential mismatch when the feed credential tail differs from the local credential file tail
 - detects restart blocked by auth-required latch evidence
 - report is read-only
 - report does not expose full secrets
