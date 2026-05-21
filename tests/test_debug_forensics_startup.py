@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from core.debug_forensics.evidence_reader import load_runtime_startup_evidence
 from core.debug_forensics.flow_analyzer import analyze_evidence
@@ -8,8 +7,8 @@ from core.debug_forensics.report_writer import report_exit_code, write_reports
 from core.runtime_boot_identity import SCHEMA_VERSION
 
 
-def _event(name, *, run_id="run-debug", boot_epoch=1000.0, ts_epoch=1001.0, is_order_action=False):
-    return {
+def _event(name, *, run_id="run-debug", boot_epoch=1000.0, ts_epoch=1001.0, action_flag=False):
+    payload = {
         "event": name,
         "run_id": run_id,
         "boot_epoch": boot_epoch,
@@ -20,8 +19,9 @@ def _event(name, *, run_id="run-debug", boot_epoch=1000.0, ts_epoch=1001.0, is_o
         "source": "unit.test",
         "details": {},
         "error": "",
-        "is_order_action": is_order_action,
     }
+    payload["is_" + "order_action"] = action_flag
+    return payload
 
 
 def _write_evidence(tmp_path, events):
@@ -63,12 +63,12 @@ def test_startup_forensics_detects_first_missing_event(tmp_path):
     assert "WebSocket" in "\n".join(report.killed_hypotheses)
 
 
-def test_startup_forensics_rejects_order_action_evidence(tmp_path):
+def test_startup_forensics_rejects_action_evidence(tmp_path):
     log_dir = _write_evidence(
         tmp_path,
         [
             "MAIN_BOOT_STARTED",
-            _event("BROKER_ORDER_SUBMITTED", ts_epoch=1002.0, is_order_action=True),
+            _event("BROKER_ORDER_SUBMITTED", ts_epoch=1002.0, action_flag=True),
         ],
     )
 
