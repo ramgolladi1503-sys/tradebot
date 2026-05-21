@@ -49,10 +49,28 @@ def _write_evidence(tmp_path, events):
     return log_dir
 
 
-FULL_PREFIX_THROUGH_EXECUTE_STARTED = [
+POST_DB_PREFIX = [
     "MAIN_BOOT_STARTED",
     "MAIN_SAFETY_VALIDATED",
     "DB_READY_COMPLETED",
+]
+
+FULL_PREFIX_THROUGH_EXECUTE_STARTED = [
+    *POST_DB_PREFIX,
+    "POST_DB_STARTUP_STARTED",
+    "STARTUP_SECURITY_CALLING",
+    "STARTUP_SECURITY_COMPLETED",
+    "STARTUP_ENV_CHECK_CALLING",
+    "STARTUP_ENV_CHECK_COMPLETED",
+    "STARTUP_TRADE_LOG_READY_CALLING",
+    "STARTUP_TRADE_LOG_READY_COMPLETED",
+    "SESSION_GUARD_CALLING",
+    "SESSION_GUARD_COMPLETED",
+    "READINESS_GATE_RESOLUTION_CALLING",
+    "READINESS_GATE_RESOLUTION_COMPLETED",
+    "ORCHESTRATOR_POLL_INTERVAL_RESOLVE_STARTED",
+    "ORCHESTRATOR_POLL_INTERVAL_RESOLVE_COMPLETED",
+    "ORCHESTRATOR_INIT_CALLING",
     "ORCHESTRATOR_INIT_ENTERED",
     "ORCHESTRATOR_TRADE_LOG_READY_COMPLETED",
     "ORCHESTRATOR_EVENT_LOG_REPAIR_COMPLETED",
@@ -81,22 +99,60 @@ FULL_PREFIX_THROUGH_EXECUTE_STARTED = [
 ]
 
 
-def test_startup_forensics_detects_first_missing_event(tmp_path):
-    log_dir = _write_evidence(tmp_path, ["MAIN_BOOT_STARTED", "MAIN_SAFETY_VALIDATED", "DB_READY_COMPLETED"])
+def test_startup_forensics_detects_post_db_boundary(tmp_path):
+    log_dir = _write_evidence(tmp_path, POST_DB_PREFIX)
 
     evidence = load_runtime_startup_evidence(logs_path=log_dir)
     report = analyze_evidence(evidence)
 
     assert report.evidence_valid is True
     assert report.last_confirmed_event == "DB_READY_COMPLETED"
-    assert report.first_missing_event == "ORCHESTRATOR_INIT_ENTERED"
+    assert report.first_missing_event == "POST_DB_STARTUP_STARTED"
     assert any(finding.severity == Severity.BLOCKER for finding in report.findings)
     assert report_exit_code(report) == 1
-    assert "WebSocket" in "\n".join(report.killed_hypotheses)
+
+
+def test_startup_forensics_reports_startup_security_boundary(tmp_path):
+    log_dir = _write_evidence(tmp_path, [*POST_DB_PREFIX, "POST_DB_STARTUP_STARTED"])
+
+    evidence = load_runtime_startup_evidence(logs_path=log_dir)
+    report = analyze_evidence(evidence)
+
+    assert report.evidence_valid is True
+    assert report.last_confirmed_event == "POST_DB_STARTUP_STARTED"
+    assert report.first_missing_event == "STARTUP_SECURITY_CALLING"
+
+
+def test_startup_forensics_reports_orchestrator_init_calling_boundary(tmp_path):
+    events = [
+        *POST_DB_PREFIX,
+        "POST_DB_STARTUP_STARTED",
+        "STARTUP_SECURITY_CALLING",
+        "STARTUP_SECURITY_COMPLETED",
+        "STARTUP_ENV_CHECK_CALLING",
+        "STARTUP_ENV_CHECK_COMPLETED",
+        "STARTUP_TRADE_LOG_READY_CALLING",
+        "STARTUP_TRADE_LOG_READY_COMPLETED",
+        "SESSION_GUARD_CALLING",
+        "SESSION_GUARD_COMPLETED",
+        "READINESS_GATE_RESOLUTION_CALLING",
+        "READINESS_GATE_RESOLUTION_COMPLETED",
+        "ORCHESTRATOR_POLL_INTERVAL_RESOLVE_STARTED",
+        "ORCHESTRATOR_POLL_INTERVAL_RESOLVE_COMPLETED",
+    ]
+    log_dir = _write_evidence(tmp_path, events)
+
+    evidence = load_runtime_startup_evidence(logs_path=log_dir)
+    report = analyze_evidence(evidence)
+
+    assert report.evidence_valid is True
+    assert report.last_confirmed_event == "ORCHESTRATOR_POLL_INTERVAL_RESOLVE_COMPLETED"
+    assert report.first_missing_event == "ORCHESTRATOR_INIT_CALLING"
 
 
 def test_startup_forensics_reports_fast_engine_evaluate_boundary(tmp_path):
-    events = FULL_PREFIX_THROUGH_EXECUTE_STARTED[:25]
+    runtime_status_index = FULL_PREFIX_THROUGH_EXECUTE_STARTED.index("RUNTIME_STATUS_WRITE_ATTEMPTED") + 1
+    events = FULL_PREFIX_THROUGH_EXECUTE_STARTED[:runtime_status_index]
     log_dir = _write_evidence(tmp_path, events)
 
     evidence = load_runtime_startup_evidence(logs_path=log_dir)
