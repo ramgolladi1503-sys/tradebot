@@ -21,6 +21,17 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
     def validate_and_repair_event_log(_path):
         return {"repaired": False}
 
+    def ensure_startup_warmup_bootstrap(symbols):
+        return [
+            {
+                "symbol": symbol,
+                "seeded_bars_count": 10,
+                "warmup_ok": True,
+                "warmup_reason": "unit_test",
+            }
+            for symbol in list(symbols or [])
+        ]
+
     class RiskState:
         def __init__(self, *args, **kwargs):
             self.ready = True
@@ -56,7 +67,7 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
             return {"auth_ok": True}
 
         def _run_startup_warmup_bootstrap(self):
-            return []
+            return fake_module.ensure_startup_warmup_bootstrap(["NIFTY"])
 
         def _start_depth_ws_or_raise(self, *, start_depth_ws_enabled=True):
             return None
@@ -76,7 +87,7 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
             self.gatekeeper = fake_module.StrategyGatekeeper()
             self.strategy_tracker = fake_module.StrategyTracker()
             self.trade_builder = fake_module.TradeBuilder()
-            self._run_startup_warmup_bootstrap()
+            self._startup_warmup_rows = self._run_startup_warmup_bootstrap()
             self._start_depth_ws_or_raise(start_depth_ws_enabled=False)
 
         def live_monitoring(self):
@@ -85,6 +96,7 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
     fake_module.auto_clear_risk_halt_if_safe = auto_clear_risk_halt_if_safe
     fake_module.ensure_trade_log_exists = ensure_trade_log_exists
     fake_module.validate_and_repair_event_log = validate_and_repair_event_log
+    fake_module.ensure_startup_warmup_bootstrap = ensure_startup_warmup_bootstrap
     fake_module.RiskState = RiskState
     fake_module.TradePredictor = TradePredictor
     fake_module.ExecutionEngine = ExecutionEngine
@@ -97,6 +109,7 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
     probe._patch_orchestrator_module(fake_module)
     instance = fake_module.Orchestrator()
     assert instance.live_monitoring() == "DONE"
+    assert instance._startup_warmup_rows[0]["symbol"] == "NIFTY"
 
     event_names = [event["event"] for event in events]
     assert "ORCHESTRATOR_INIT_ENTERED" in event_names
@@ -112,6 +125,9 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
     assert "ORCHESTRATOR_GATEKEEPER_INIT_COMPLETED" in event_names
     assert "ORCHESTRATOR_STRATEGY_TRACKER_INIT_COMPLETED" in event_names
     assert "ORCHESTRATOR_TRADE_BUILDER_INIT_COMPLETED" in event_names
+    assert "ORCHESTRATOR_WARMUP_STARTED" in event_names
+    assert "ORCHESTRATOR_WARMUP_MARKET_DATA_STARTED" in event_names
+    assert "ORCHESTRATOR_WARMUP_MARKET_DATA_COMPLETED" in event_names
     assert "ORCHESTRATOR_WARMUP_COMPLETED" in event_names
     assert "FEED_START_REQUEST_BOUNDARY_REACHED" in event_names
     assert "ORCHESTRATOR_INIT_COMPLETED" in event_names
@@ -154,4 +170,46 @@ def test_orchestrator_probe_records_stage_failure(monkeypatch):
     assert "ORCHESTRATOR_INIT_ENTERED" in event_names
     assert "ORCHESTRATOR_PREDICTOR_INIT_STARTED" in event_names
     assert "ORCHESTRATOR_PREDICTOR_INIT_FAILED" in event_names
+    assert "ORCHESTRATOR_INIT_FAILED" in event_names
+
+
+def test_orchestrator_probe_records_warmup_market_data_failure(monkeypatch):
+    events = []
+
+    def fake_record(event, *, source, details=None, error=None):
+        events.append({"event": event, "source": source, "details": details or {}, "error": error or ""})
+
+    monkeypatch.setattr(probe, "_record", fake_record)
+    monkeypatch.setattr(probe, "_PATCHED", False)
+
+    fake_module = SimpleNamespace()
+
+    def ensure_startup_warmup_bootstrap(_symbols):
+        raise RuntimeError("warmup boom")
+
+    class Orchestrator:
+        def _run_startup_warmup_bootstrap(self):
+            return fake_module.ensure_startup_warmup_bootstrap(["NIFTY"])
+
+        def __init__(self):
+            self._run_startup_warmup_bootstrap()
+
+    fake_module.ensure_startup_warmup_bootstrap = ensure_startup_warmup_bootstrap
+    fake_module.Orchestrator = Orchestrator
+
+    probe._patch_orchestrator_module(fake_module)
+
+    try:
+        fake_module.Orchestrator()
+    except RuntimeError as exc:
+        assert "warmup boom" in str(exc)
+    else:
+        raise AssertionError("expected warmup failure")
+
+    event_names = [event["event"] for event in events]
+    assert "ORCHESTRATOR_INIT_ENTERED" in event_names
+    assert "ORCHESTRATOR_WARMUP_STARTED" in event_names
+    assert "ORCHESTRATOR_WARMUP_MARKET_DATA_STARTED" in event_names
+    assert "ORCHESTRATOR_WARMUP_MARKET_DATA_FAILED" in event_names
+    assert "ORCHESTRATOR_WARMUP_FAILED" in event_names
     assert "ORCHESTRATOR_INIT_FAILED" in event_names
