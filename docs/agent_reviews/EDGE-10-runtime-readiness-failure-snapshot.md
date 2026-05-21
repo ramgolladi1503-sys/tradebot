@@ -6,6 +6,7 @@ mode: PAPER
 candidate_id: EDGE-10-runtime-readiness-failure-snapshot
 decision: ADD_RUNTIME_READINESS_FAILURE_SNAPSHOT
 reason: today PAPER sessions produced no edge evidence because runtime/feed/readiness blockers stopped candidates before PAPER outcomes
+timestamp: 2026-05-21T04:50:00Z
 is_order_action: false
 broker_api_called: false
 source: docs/agent_reviews/EDGE-10-runtime-readiness-failure-snapshot.md
