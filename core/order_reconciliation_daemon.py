@@ -49,6 +49,8 @@ _TERMINAL_STATES = {
 
 _DAEMON_REGISTRY_LOCK = threading.RLock()
 _DAEMON_REGISTRY: weakref.WeakSet["OrderReconciliationDaemon"] = weakref.WeakSet()
+_NONLIVE_BROKER_AUTH_SKIP_MODES = {"SIM", "DRY_RUN", "PAPER", "PAPER_TRADING", "BACKTEST", "TEST"}
+_LIVE_MODES = {"LIVE"}
 
 
 @dataclass(frozen=True)
@@ -84,12 +86,22 @@ def _env_flag_enabled(name: str) -> bool:
     return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _runtime_mode_values() -> set[str]:
+    values = {
+        str(os.getenv("EXECUTION_MODE") or getattr(cfg, "EXECUTION_MODE", "") or "").strip().upper(),
+        str(os.getenv("TRADING_MODE") or getattr(cfg, "TRADING_MODE", "") or "").strip().upper(),
+    }
+    return {value for value in values if value}
+
+
 def _skip_broker_auth_resolution() -> bool:
-    mode = str(
-        getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM"
-    ).strip().upper()
     dry_run_enabled = bool(getattr(cfg, "DRY_RUN", False) or _env_flag_enabled("DRY_RUN"))
-    return mode in {"SIM", "DRY_RUN"} or dry_run_enabled
+    if dry_run_enabled:
+        return True
+    modes = _runtime_mode_values() or {"SIM"}
+    if modes & _LIVE_MODES:
+        return False
+    return bool(modes & _NONLIVE_BROKER_AUTH_SKIP_MODES)
 
 
 def _broker_order_id(order_row: dict[str, Any]) -> str:
@@ -608,7 +620,7 @@ class OrderReconciliationDaemon:
         }
         record.update(payload or {})
         try:
-            self._log_path.parent.mkdir(parents=True, exist_ok=True)
+            self._log_path.parent.mkdir(parents=True)
             with self._log_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
         except Exception:
