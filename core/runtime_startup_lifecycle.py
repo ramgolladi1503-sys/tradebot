@@ -76,6 +76,10 @@ def read_runtime_startup_lifecycle(path: str | Path | None = None) -> dict[str, 
     return _read_json(target)
 
 
+def _flag(previous_flags: Mapping[str, Any], name: str, event_name: str, *events: str) -> bool:
+    return bool(previous_flags.get(name, False)) or event_name in set(events)
+
+
 def record_runtime_startup_event(
     event: str,
     *,
@@ -124,17 +128,27 @@ def record_runtime_startup_event(
     previous_flags = dict(previous.get("proof_flags") or {}) if isinstance(previous, dict) else {}
     proof_flags = {
         **previous_flags,
-        "main_boot_started": previous_flags.get("main_boot_started", False) or event_name == "MAIN_BOOT_STARTED",
-        "main_safety_validated": previous_flags.get("main_safety_validated", False) or event_name == "MAIN_SAFETY_VALIDATED",
-        "main_auth_validated": previous_flags.get("main_auth_validated", False) or event_name == "MAIN_AUTH_VALIDATED",
-        "orchestrator_init_started": previous_flags.get("orchestrator_init_started", False) or event_name == "ORCHESTRATOR_INIT_STARTED",
-        "orchestrator_init_completed": previous_flags.get("orchestrator_init_completed", False) or event_name == "ORCHESTRATOR_INIT_COMPLETED",
-        "live_monitoring_calling": previous_flags.get("live_monitoring_calling", False) or event_name == "LIVE_MONITORING_CALLING",
-        "live_monitoring_returned": previous_flags.get("live_monitoring_returned", False) or event_name == "LIVE_MONITORING_RETURNED",
-        "feed_start_request_boundary_reached": previous_flags.get("feed_start_request_boundary_reached", False) or event_name == "FEED_START_REQUEST_BOUNDARY_REACHED",
-        "runtime_status_write_attempted": previous_flags.get("runtime_status_write_attempted", False) or event_name == "RUNTIME_STATUS_WRITE_ATTEMPTED",
-        "runtime_status_write_completed": previous_flags.get("runtime_status_write_completed", False) or event_name == "RUNTIME_STATUS_WRITE_COMPLETED",
-        "failure_seen": previous_flags.get("failure_seen", False) or event_name.endswith("_FAILED"),
+        "main_boot_started": _flag(previous_flags, "main_boot_started", event_name, "MAIN_BOOT_STARTED"),
+        "main_safety_validated": _flag(previous_flags, "main_safety_validated", event_name, "MAIN_SAFETY_VALIDATED"),
+        "main_auth_validation_calling": _flag(previous_flags, "main_auth_validation_calling", event_name, "MAIN_AUTH_VALIDATION_CALLING"),
+        "main_auth_validation_completed": _flag(previous_flags, "main_auth_validation_completed", event_name, "MAIN_AUTH_VALIDATION_COMPLETED"),
+        "main_auth_validated": _flag(previous_flags, "main_auth_validated", event_name, "MAIN_AUTH_VALIDATED", "MAIN_AUTH_VALIDATION_COMPLETED"),
+        "instance_lock_calling": _flag(previous_flags, "instance_lock_calling", event_name, "INSTANCE_LOCK_CALLING"),
+        "instance_lock_acquired": _flag(previous_flags, "instance_lock_acquired", event_name, "INSTANCE_LOCK_ACQUIRED"),
+        "db_ready_calling": _flag(previous_flags, "db_ready_calling", event_name, "DB_READY_CALLING"),
+        "db_ready_completed": _flag(previous_flags, "db_ready_completed", event_name, "DB_READY_COMPLETED"),
+        "startup_security_calling": _flag(previous_flags, "startup_security_calling", event_name, "STARTUP_SECURITY_CALLING"),
+        "startup_security_completed": _flag(previous_flags, "startup_security_completed", event_name, "STARTUP_SECURITY_COMPLETED"),
+        "session_guard_calling": _flag(previous_flags, "session_guard_calling", event_name, "SESSION_GUARD_CALLING"),
+        "session_guard_completed": _flag(previous_flags, "session_guard_completed", event_name, "SESSION_GUARD_COMPLETED"),
+        "orchestrator_init_started": _flag(previous_flags, "orchestrator_init_started", event_name, "ORCHESTRATOR_INIT_STARTED"),
+        "orchestrator_init_completed": _flag(previous_flags, "orchestrator_init_completed", event_name, "ORCHESTRATOR_INIT_COMPLETED"),
+        "live_monitoring_calling": _flag(previous_flags, "live_monitoring_calling", event_name, "LIVE_MONITORING_CALLING"),
+        "live_monitoring_returned": _flag(previous_flags, "live_monitoring_returned", event_name, "LIVE_MONITORING_RETURNED"),
+        "feed_start_request_boundary_reached": _flag(previous_flags, "feed_start_request_boundary_reached", event_name, "FEED_START_REQUEST_BOUNDARY_REACHED"),
+        "runtime_status_write_attempted": _flag(previous_flags, "runtime_status_write_attempted", event_name, "RUNTIME_STATUS_WRITE_ATTEMPTED"),
+        "runtime_status_write_completed": _flag(previous_flags, "runtime_status_write_completed", event_name, "RUNTIME_STATUS_WRITE_COMPLETED"),
+        "failure_seen": bool(previous_flags.get("failure_seen", False)) or event_name.endswith("_FAILED"),
     }
 
     latest = stamp_runtime_payload(
