@@ -41,4 +41,21 @@ def ensure_runtime_repo_guard() -> Path:
     return validate_repo_root()
 
 
-ensure_runtime_repo_guard()
+def _record_boot_boundary(root: Path) -> None:
+    """Best-effort evidence that main.py import-side startup reached repo guard."""
+
+    try:
+        from core.runtime_startup_lifecycle import record_runtime_startup_event
+
+        record_runtime_startup_event(
+            "MAIN_BOOT_STARTED",
+            source="core.runtime_guard.ensure_runtime_repo_guard",
+            details={"repo_root": str(root), "is_order_action": False},
+        )
+    except Exception:
+        # Runtime guard must remain a guard, not a startup dependency.
+        pass
+
+
+_repo_root = ensure_runtime_repo_guard()
+_record_boot_boundary(_repo_root)

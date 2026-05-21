@@ -4,6 +4,7 @@ import time
 from config import config as cfg
 from core.execution_core_fast import FastExecutionCore
 from core.execution_engine_fast import FastExecutionEngine
+from core.runtime_startup_lifecycle import record_runtime_startup_event
 
 
 logger = logging.getLogger(__name__)
@@ -13,8 +14,28 @@ def _fast_loop_enabled() -> bool:
     return bool(getattr(cfg, "ORCHESTRATOR_FAST_LOOP_ENABLE", True))
 
 
+def _record_runtime_boundary(event: str, *, details=None, error: str | None = None) -> None:
+    try:
+        record_runtime_startup_event(
+            event,
+            source="core.orchestrator_parts.cycle.run_live_monitoring",
+            details={"is_order_action": False, **dict(details or {})},
+            error=error,
+        )
+    except Exception:
+        pass
+
+
 def run_live_monitoring(orch, run_once=False, time_module=None):
+    _record_runtime_boundary(
+        "LIVE_MONITORING_ENTERED",
+        details={"run_once": bool(run_once), "fast_loop_enabled": bool(_fast_loop_enabled())},
+    )
     if run_once or not _fast_loop_enabled():
+        _record_runtime_boundary(
+            "ORCHESTRATOR_LEGACY_LOOP_SELECTED",
+            details={"run_once": bool(run_once), "fast_loop_enabled": bool(_fast_loop_enabled())},
+        )
         return orch._legacy_live_monitoring(run_once=run_once)
 
     clock = time_module or time
@@ -29,8 +50,25 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
             clock.sleep(core.idle_sleep_sec())
             continue
 
-        decision = engine.evaluate()
-        result = engine.execute(decision)
+        _record_runtime_boundary(
+            "ORCHESTRATOR_CYCLE_STARTED",
+            details={"feed_epoch": feed_epoch, "now_mono": now_mono},
+        )
+        try:
+            _record_runtime_boundary("RUNTIME_STATUS_WRITE_ATTEMPTED", details={"stage": "fast_engine_evaluate"})
+            decision = engine.evaluate()
+            result = engine.execute(decision)
+            _record_runtime_boundary(
+                "RUNTIME_STATUS_WRITE_COMPLETED",
+                details={"stage": "fast_engine_execute", "result": str(result)},
+            )
+        except Exception as exc:
+            _record_runtime_boundary(
+                "ORCHESTRATOR_CYCLE_FAILED",
+                details={"stage": "fast_engine"},
+                error=f"{type(exc).__name__}:{exc}",
+            )
+            raise
 
         try:
             if bool(getattr(cfg, "ENABLE_PRO_STRATEGY_SHADOW", False)):
@@ -43,7 +81,12 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
         if feed_epoch > 0.0:
             core.last_feed_epoch = float(feed_epoch)
 
+        _record_runtime_boundary(
+            "ORCHESTRATOR_CYCLE_COMPLETED",
+            details={"feed_epoch": feed_epoch, "result": str(result)},
+        )
         if result in {"STOP", "HALT", False}:
+            _record_runtime_boundary("LIVE_MONITORING_RETURNED", details={"result": str(result)})
             return result
 
         clock.sleep(core.idle_sleep_sec())
