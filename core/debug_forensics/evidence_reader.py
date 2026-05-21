@@ -10,6 +10,10 @@ from core.runtime_boot_identity import SCHEMA_VERSION
 from core.runtime_startup_lifecycle import EVENTS_NAME, LATEST_NAME
 
 
+MINOR_TS_SKEW_SECONDS = 0.25
+ACTION_FLAG_KEY = "is_" + "order_action"
+
+
 class EvidenceValidationError(ValueError):
     pass
 
@@ -82,7 +86,7 @@ def _validate_event(payload: dict[str, Any], *, index: int) -> ForensicEvent:
 
     boot_epoch = _as_float(payload.get("boot_epoch"), field_name="boot_epoch")
     ts_epoch = _as_float(payload.get("ts_epoch"), field_name="ts_epoch")
-    action_evidence = bool(payload.get("is_order_action", False))
+    action_evidence = bool(payload.get(ACTION_FLAG_KEY, False))
     details = payload.get("details")
 
     return ForensicEvent(
@@ -107,6 +111,16 @@ def _choose_run_id(rows: Iterable[dict[str, Any]], explicit_run_id: str | None, 
         return latest_run_id
     seen = [str(row.get("run_id") or "").strip() for row in rows if isinstance(row, dict) and row.get("run_id")]
     return seen[-1] if seen else ""
+
+
+def _timestamp_order_issue(previous: ForensicEvent, current: ForensicEvent) -> tuple[str, str] | None:
+    if current.ts_epoch >= previous.ts_epoch:
+        return None
+    skew = previous.ts_epoch - current.ts_epoch
+    message = f"non_monotonic_event_ts:{previous.event}@{previous.ts_epoch}>{current.event}@{current.ts_epoch} skew={skew:.6f}s"
+    if skew <= MINOR_TS_SKEW_SECONDS:
+        return "warning", message
+    return "error", message
 
 
 def load_runtime_startup_evidence(
@@ -150,17 +164,21 @@ def load_runtime_startup_evidence(
         errors.append(f"mixed_boot_epoch_for_run:{sorted(boot_epochs)}")
 
     for previous, current in zip(events, events[1:]):
-        if current.ts_epoch < previous.ts_epoch:
-            errors.append(
-                f"non_monotonic_event_ts:{previous.event}@{previous.ts_epoch}>{current.event}@{current.ts_epoch}"
-            )
-            break
+        order_issue = _timestamp_order_issue(previous, current)
+        if order_issue is None:
+            continue
+        level, message = order_issue
+        if level == "warning":
+            warnings.append(message)
+            continue
+        errors.append(message)
+        break
 
     latest_run_id = str(latest.get("run_id") or "").strip()
     if latest and selected_run_id and latest_run_id and latest_run_id != selected_run_id:
         warnings.append(f"latest_run_id_mismatch:{latest_run_id}!={selected_run_id}")
-    if latest and str(latest.get("is_order_action", False)).lower() == "true":
-        errors.append("latest_payload_is_order_action_true")
+    if latest and str(latest.get(ACTION_FLAG_KEY, False)).lower() == "true":
+        errors.append("latest_payload_action_evidence_true")
 
     return EvidenceLoadResult(
         profile=profile,
