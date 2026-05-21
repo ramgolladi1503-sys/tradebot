@@ -620,7 +620,7 @@ class OrderReconciliationDaemon:
         }
         record.update(payload or {})
         try:
-            self._log_path.parent.mkdir(parents=True)
+            self._log_path.parent.mkdir(parents=True, exist_ok=True)
             with self._log_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
         except Exception:
