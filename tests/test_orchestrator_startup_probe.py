@@ -49,6 +49,8 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
         def __init__(self, *_args, **_kwargs):
             self.ready = True
 
+    fake_module = SimpleNamespace()
+
     class Orchestrator:
         def _run_preopen_auth_warm_check(self):
             return {"auth_ok": True}
@@ -60,9 +62,12 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
             return None
 
         def __init__(self):
-            auto_clear_risk_halt_if_safe()
-            ensure_trade_log_exists()
-            validate_and_repair_event_log("events.jsonl")
+            # Match real core.orchestrator behavior: these calls resolve through
+            # module globals, not closed-over local names. The probe wraps the
+            # module attributes, so the test must exercise those attributes.
+            fake_module.auto_clear_risk_halt_if_safe()
+            fake_module.ensure_trade_log_exists()
+            fake_module.validate_and_repair_event_log("events.jsonl")
             self._run_preopen_auth_warm_check()
             self.risk_state = fake_module.RiskState()
             self.predictor = fake_module.TradePredictor()
@@ -77,19 +82,17 @@ def test_orchestrator_probe_wraps_constructor_stages(monkeypatch):
         def live_monitoring(self):
             return "DONE"
 
-    fake_module = SimpleNamespace(
-        auto_clear_risk_halt_if_safe=auto_clear_risk_halt_if_safe,
-        ensure_trade_log_exists=ensure_trade_log_exists,
-        validate_and_repair_event_log=validate_and_repair_event_log,
-        RiskState=RiskState,
-        TradePredictor=TradePredictor,
-        ExecutionEngine=ExecutionEngine,
-        ExecutionRouter=ExecutionRouter,
-        StrategyGatekeeper=StrategyGatekeeper,
-        StrategyTracker=StrategyTracker,
-        TradeBuilder=TradeBuilder,
-        Orchestrator=Orchestrator,
-    )
+    fake_module.auto_clear_risk_halt_if_safe = auto_clear_risk_halt_if_safe
+    fake_module.ensure_trade_log_exists = ensure_trade_log_exists
+    fake_module.validate_and_repair_event_log = validate_and_repair_event_log
+    fake_module.RiskState = RiskState
+    fake_module.TradePredictor = TradePredictor
+    fake_module.ExecutionEngine = ExecutionEngine
+    fake_module.ExecutionRouter = ExecutionRouter
+    fake_module.StrategyGatekeeper = StrategyGatekeeper
+    fake_module.StrategyTracker = StrategyTracker
+    fake_module.TradeBuilder = TradeBuilder
+    fake_module.Orchestrator = Orchestrator
 
     probe._patch_orchestrator_module(fake_module)
     instance = fake_module.Orchestrator()
@@ -125,6 +128,8 @@ def test_orchestrator_probe_records_stage_failure(monkeypatch):
     monkeypatch.setattr(probe, "_record", fake_record)
     monkeypatch.setattr(probe, "_PATCHED", False)
 
+    fake_module = SimpleNamespace()
+
     class TradePredictor:
         def __init__(self):
             raise RuntimeError("predictor boom")
@@ -133,10 +138,8 @@ def test_orchestrator_probe_records_stage_failure(monkeypatch):
         def __init__(self):
             self.predictor = fake_module.TradePredictor()
 
-    fake_module = SimpleNamespace(
-        TradePredictor=TradePredictor,
-        Orchestrator=Orchestrator,
-    )
+    fake_module.TradePredictor = TradePredictor
+    fake_module.Orchestrator = Orchestrator
 
     probe._patch_orchestrator_module(fake_module)
 
