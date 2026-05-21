@@ -45,6 +45,16 @@ def _outcome(**overrides):
     return payload
 
 
+def _setup_identity_fields():
+    return {
+        "setup_id": "orb_breakout_v1",
+        "regime_key": "trend_morning",
+        "entry_rule_id": "orb_high_break_with_volume",
+        "exit_rule_id": "target_stop_or_time_exit",
+        "cost_model_version": "cost_v1",
+    }
+
+
 def test_terminal_outcome_contract_is_explicit_and_fail_closed():
     assert set(ALLOWED_TERMINAL_OUTCOMES) == {
         "executed",
@@ -113,6 +123,35 @@ def test_record_paper_outcome_writes_existing_family_outcome_journal(tmp_path):
 
     assert load_family_outcome_records(path=records_path) == [normalized]
     assert load_family_learning_state(path=state_path)["families"]["orb|bullish"]["sample_count"] == 1
+
+
+def test_record_paper_outcome_preserves_setup_identity_when_supplied(tmp_path):
+    records_path = tmp_path / "family_outcomes.jsonl"
+    state_path = tmp_path / "family_learning_state.json"
+
+    normalized = record_paper_outcome(
+        _outcome(**_setup_identity_fields()),
+        records_path=records_path,
+        state_path=state_path,
+    )
+
+    assert normalized["setup_id"] == "ORB_BREAKOUT_V1"
+    assert normalized["regime_key"] == "TREND_MORNING"
+    assert normalized["entry_rule_id"] == "ORB_HIGH_BREAK_WITH_VOLUME"
+    assert normalized["exit_rule_id"] == "TARGET_STOP_OR_TIME_EXIT"
+    assert normalized["cost_model_version"] == "COST_V1"
+    assert normalized["score_bucket"] == "0.75-1.00"
+    assert normalized["metadata"]["edge_setup_identity"]["setup_id"] == "ORB_BREAKOUT_V1"
+    assert load_family_outcome_records(path=records_path) == [normalized]
+
+
+def test_record_paper_outcome_rejects_partial_setup_identity(tmp_path):
+    with pytest.raises(PaperOutcomeJournalError, match="paper_setup_identity_invalid"):
+        record_paper_outcome(
+            _outcome(setup_id="orb_breakout_v1"),
+            records_path=tmp_path / "family_outcomes.jsonl",
+            state_path=tmp_path / "family_learning_state.json",
+        )
 
 
 def test_validate_paper_outcome_records_reports_invalid_rows():

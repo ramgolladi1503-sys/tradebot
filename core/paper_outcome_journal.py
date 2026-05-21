@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from core.edge_setup_identity import EdgeSetupIdentityError, enrich_record_with_edge_setup_identity
 from core.offline_family_learning import record_family_outcome
 
 PAPER_OUTCOME_JOURNAL_SCHEMA_VERSION = 1
@@ -35,6 +36,10 @@ ALLOWED_TERMINAL_OUTCOMES: frozenset[str] = frozenset(
         TARGET_HIT,
         TIMED_EXIT,
     }
+)
+
+_SETUP_IDENTITY_TRIGGER_FIELDS: frozenset[str] = frozenset(
+    {"setup_id", "entry_rule_id", "exit_rule_id", "cost_model_version"}
 )
 
 
@@ -245,6 +250,43 @@ def _slippage_adjusted_pnl(record: Mapping[str, Any]) -> float | None:
     return round(float(pnl - slippage_cost), 6)
 
 
+def _has_setup_identity_input(record: Mapping[str, Any]) -> bool:
+    return any(_text(record.get(field)) for field in _SETUP_IDENTITY_TRIGGER_FIELDS)
+
+
+def _with_optional_setup_identity(payload: dict[str, Any], source: Mapping[str, Any]) -> dict[str, Any]:
+    if not _has_setup_identity_input(source):
+        return payload
+    candidate = dict(payload)
+    for field in (
+        "setup_id",
+        "entry_rule_id",
+        "exit_rule_id",
+        "cost_model_version",
+        "regime_key",
+        "score_bucket",
+    ):
+        if field in source:
+            candidate[field] = source.get(field)
+    try:
+        enriched = enrich_record_with_edge_setup_identity(candidate)
+    except EdgeSetupIdentityError as exc:
+        raise PaperOutcomeJournalError(f"paper_setup_identity_invalid:{exc}") from exc
+    for field in (
+        "setup_id",
+        "regime_key",
+        "entry_rule_id",
+        "exit_rule_id",
+        "cost_model_version",
+        "score_bucket",
+    ):
+        payload[field] = enriched[field]
+    metadata = dict(payload.get("metadata") or {})
+    metadata["edge_setup_identity"] = dict(enriched.get("metadata", {}).get("edge_setup_identity") or {})
+    payload["metadata"] = metadata
+    return payload
+
+
 def build_paper_outcome_journal_record(outcome: Any) -> PaperOutcomeJournalRecord:
     """Normalize one terminal paper outcome into family_outcomes.jsonl shape."""
 
@@ -318,8 +360,10 @@ def record_paper_outcome(
 ) -> dict[str, Any]:
     """Validate and append one terminal paper outcome to family_outcomes.jsonl."""
 
-    record = build_paper_outcome_journal_record(outcome)
-    return record_family_outcome(record.to_dict(), records_path=records_path, state_path=state_path)
+    source = _as_mapping(outcome)
+    record = build_paper_outcome_journal_record(source)
+    payload = _with_optional_setup_identity(record.to_dict(), source)
+    return record_family_outcome(payload, records_path=records_path, state_path=state_path)
 
 
 def validate_paper_outcome_records(records: Iterable[dict[str, Any]]) -> PaperOutcomeJournalIntegrityReport:
@@ -331,6 +375,7 @@ def validate_paper_outcome_records(records: Iterable[dict[str, Any]]) -> PaperOu
         checked += 1
         try:
             record = build_paper_outcome_journal_record(raw)
+            _with_optional_setup_identity(record.to_dict(), raw)
         except PaperOutcomeJournalError as exc:
             invalid_reasons.append(str(exc))
             continue
