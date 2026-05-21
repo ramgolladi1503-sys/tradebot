@@ -6,7 +6,11 @@
 - candidate_id: EDGE-26-debug-forensics-agent-v1
 - decision: ADD_STARTUP_DEBUG_FORENSICS_AGENT_V1
 - reason: Existing lifecycle probes produce evidence, but the repo needs a deterministic reader that compares expected startup flow against actual runtime proof and reports the first missing boundary.
+- timestamp: 2026-05-21T17:55:00Z
 - is_order_action: false
+- broker_api_called: false
+- live_order_action: false
+- broker_order_action: false
 - source: docs/agent_reviews/EDGE-26-debug-forensics-agent-v1.md
 
 ## Review Type
@@ -16,7 +20,7 @@
 
 ## Agent Work Contract
 
-- PR: EDGE-26 / PR #179 planned
+- PR: EDGE-26 / PR #180
 - Branch: edge26-debug-forensics-agent-v1
 - Scope: add read-only startup debug forensics v1.
 - Allowed files:
