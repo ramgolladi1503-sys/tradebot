@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 RUNTIME_SETUP_IDENTITY_FIELDS = (
     "setup_id",
@@ -28,4 +28,16 @@ def runtime_setup_identity_from_trade(trade: Any) -> dict[str, Any]:
     return payload
 
 
-__all__ = ["RUNTIME_SETUP_IDENTITY_FIELDS", "runtime_setup_identity_from_trade"]
+def attach_runtime_setup_identity(payload: Mapping[str, Any], trade: Any) -> dict[str, Any]:
+    """Copy supplied trade setup identity into a journal payload."""
+
+    enriched = dict(payload or {})
+    enriched.update(runtime_setup_identity_from_trade(trade))
+    return enriched
+
+
+__all__ = [
+    "RUNTIME_SETUP_IDENTITY_FIELDS",
+    "attach_runtime_setup_identity",
+    "runtime_setup_identity_from_trade",
+]
