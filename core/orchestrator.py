@@ -38,6 +38,7 @@ from core.events import append_event as append_runtime_event, write_json_atomic
 from core.heartbeat_status import derive_cycle_semantics
 from core.ml_governance import log_ab_trial
 from rl.size_agent import SizeRLAgent, build_features
+from core.runtime_boot_identity import stamp_runtime_payload
 
 
 def _perf_ms(start_perf: float) -> float:
@@ -4092,8 +4093,20 @@ class Orchestrator:
             "missing_option_tokens_count": int(feed_status.get("missing_option_tokens_count") or 0),
             "last_error": str(last_error or ""),
         }
-        write_json_atomic(logs_dir() / "suggestions_status.json", suggestions_payload)
-        write_json_atomic(logs_dir() / "engine_cycle_status.json", engine_payload)
+        write_json_atomic(
+            logs_dir() / "suggestions_status.json",
+            stamp_runtime_payload(
+                suggestions_payload,
+                writer="orchestrator.suggestions_status",
+            ),
+        )
+        write_json_atomic(
+            logs_dir() / "engine_cycle_status.json",
+            stamp_runtime_payload(
+                engine_payload,
+                writer="orchestrator.engine_cycle_status",
+            ),
+        )
 
     def _validate_market_snapshot(self, market_data: dict):
         return orchestrator_finalize.validate_market_snapshot(self, market_data)

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any
+from core.runtime_boot_identity import RuntimeBootIdentity, classify_runtime_payload_freshness
 
 from core.events import write_json_atomic
 from core.paths import ensure_dir, logs_dir, reports_dir
@@ -161,6 +162,44 @@ def _conclusion(
     return "status_provenance_unclear"
 
 
+def _runtime_identity_from_status_payloads(
+    *payloads: dict[str, Any],
+) -> RuntimeBootIdentity | None:
+    candidates: list[tuple[float, RuntimeBootIdentity]] = []
+
+    for payload in payloads:
+        if not isinstance(payload, dict):
+            continue
+
+        run_id = payload.get("run_id")
+        boot_epoch = payload.get("boot_epoch")
+        pid = payload.get("pid")
+
+        if not run_id or boot_epoch is None or pid is None:
+            continue
+
+        try:
+            identity = RuntimeBootIdentity(
+                run_id=str(run_id),
+                boot_epoch=float(boot_epoch),
+                pid=int(pid),
+            )
+        except (TypeError, ValueError):
+            continue
+
+        try:
+            ts_epoch = float(payload.get("ts_epoch") or identity.boot_epoch)
+        except (TypeError, ValueError):
+            ts_epoch = identity.boot_epoch
+
+        candidates.append((ts_epoch, identity))
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda item: item[0])[1]
+
+
 def build_ws_status_provenance_report(
     *,
     engine_status_path: str | Path | None = None,
@@ -191,6 +230,41 @@ def build_ws_status_provenance_report(
     suggestions_status = _read_json(suggestions_target)
     runtime_health = _read_json(runtime_target)
     feed_runtime = _read_json(feed_target)
+
+    observed_runtime_identity = _runtime_identity_from_status_payloads(
+        engine_status,
+        suggestions_status,
+        runtime_health,
+        feed_runtime,
+    )
+
+    runtime_status_freshness = {
+        "engine_cycle_status": classify_runtime_payload_freshness(
+            engine_status,
+            path=engine_target,
+            current=observed_runtime_identity,
+        ),
+        "suggestions_status": classify_runtime_payload_freshness(
+            suggestions_status,
+            path=suggestions_target,
+            current=observed_runtime_identity,
+        ),
+        "runtime_health_latest": classify_runtime_payload_freshness(
+            runtime_health,
+            path=runtime_target,
+            current=observed_runtime_identity,
+        ),
+        "feed_runtime_latest": classify_runtime_payload_freshness(
+            feed_runtime,
+            path=feed_target,
+            current=observed_runtime_identity,
+        ),
+    }
+    stale_runtime_inputs = [
+        name
+        for name, freshness in runtime_status_freshness.items()
+        if not bool(freshness.get("is_current_run"))
+    ]
     auth_events = _read_jsonl_tail(auth_events_target)
     depth_lines = _read_lines(depth_target)
     paper_lines = _read_lines(paper_target)
@@ -222,6 +296,22 @@ def build_ws_status_provenance_report(
         failure_seen_in_logs=failure_seen,
     )
 
+    decision = {
+        "primary_conclusion": conclusion,
+        "probable_writer": _probable_writer(engine_status, suggestions_status),
+        "status_reason": status_reason,
+        "safe_to_treat_status_as_fresh_ws_failure": conclusion == "fresh_ws_attempt_failed",
+        "recommended_next_action": _recommended_next_action(conclusion),
+    }
+    if stale_runtime_inputs:
+        decision = {
+            "primary_conclusion": "stale_runtime_status_rejected",
+            "probable_writer": "mixed_or_unversioned_runtime_status",
+            "status_reason": ",".join(stale_runtime_inputs),
+            "safe_to_treat_status_as_fresh_ws_failure": False,
+            "recommended_next_action": "rerun_after_boot_status_versioning_or_wait_for_current_run_status_files",
+        }
+
     return {
         "version": REPORT_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -238,6 +328,13 @@ def build_ws_status_provenance_report(
             "startup_recovery_path": str(startup_target),
         },
         "file_freshness": file_freshness,
+        "observed_runtime_identity": {
+            "run_id": observed_runtime_identity.run_id if observed_runtime_identity else None,
+            "boot_epoch": observed_runtime_identity.boot_epoch if observed_runtime_identity else None,
+            "pid": observed_runtime_identity.pid if observed_runtime_identity else None,
+        },
+        "runtime_status_freshness": runtime_status_freshness,
+        "stale_runtime_inputs": stale_runtime_inputs,
         "status_truth": {
             "engine_auth_state": engine_status.get("auth_state"),
             "engine_auth_ok": engine_status.get("auth_ok"),
@@ -269,13 +366,7 @@ def build_ws_status_provenance_report(
             "failure_lines": _matching_lines(combined_lines, _FAILURE_MARKERS, limit=120),
             "latest_auth_event_failure": _latest_auth_event_failure(auth_events),
         },
-        "decision": {
-            "primary_conclusion": conclusion,
-            "probable_writer": _probable_writer(engine_status, suggestions_status),
-            "status_reason": status_reason,
-            "safe_to_treat_status_as_fresh_ws_failure": conclusion == "fresh_ws_attempt_failed",
-            "recommended_next_action": _recommended_next_action(conclusion),
-        },
+        "decision": decision,
     }
 
 

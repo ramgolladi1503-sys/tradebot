@@ -15,6 +15,7 @@ from core.kite_client import kite_client
 from core.depth_store import depth_store
 from core.tick_store import get_last_tick, get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
+from core.runtime_boot_identity import stamp_runtime_payload
 from core.auth_manager import (
     clear_auth_required_state,
     invalidate_cache,
@@ -1470,6 +1471,10 @@ def _write_feed_runtime_snapshot(
     }
     payload["effective_ws_connected"] = derive_effective_ws_connected(payload)
     payload["feed_ok"] = derive_feed_ok(payload)
+    payload = stamp_runtime_payload(
+        payload,
+        writer="kite_depth_ws.feed_runtime",
+    )
     try:
         write_json_atomic(path, payload)
         publish_feed_unhealthy_status_overlay(

@@ -8,6 +8,7 @@ from typing import Any
 
 from core.events import write_json_atomic
 from core.paths import ensure_dir, logs_dir, repo_root, reports_dir
+from core.runtime_boot_identity import classify_runtime_payload_freshness
 
 REPORT_VERSION = 1
 STALE_FILE_THRESHOLD_SEC = 300.0
@@ -237,6 +238,26 @@ def build_feed_startup_root_cause_report(
     runtime_health = _read_json(runtime_target)
     feed_runtime = _read_json(feed_target)
     engine_status = _read_json(engine_target)
+
+    runtime_status_freshness = {
+        "runtime_health_latest": classify_runtime_payload_freshness(
+            runtime_health,
+            path=runtime_target,
+        ),
+        "feed_runtime_latest": classify_runtime_payload_freshness(
+            feed_runtime,
+            path=feed_target,
+        ),
+        "engine_cycle_status": classify_runtime_payload_freshness(
+            engine_status,
+            path=engine_target,
+        ),
+    }
+    stale_runtime_inputs = [
+        name
+        for name, freshness in runtime_status_freshness.items()
+        if not bool(freshness.get("is_current_run"))
+    ]
     auth_rows = _read_jsonl_tail(auth_target)
     ws_rows = _read_jsonl_tail(ws_target)
     paper_lines = _read_lines(paper_target)
@@ -292,6 +313,8 @@ def build_feed_startup_root_cause_report(
             "ws_events": _file_meta(ws_target, now_epoch=now),
             "paper_log": _file_meta(paper_target, now_epoch=now),
         },
+        "runtime_status_freshness": runtime_status_freshness,
+        "stale_runtime_inputs": stale_runtime_inputs,
         "credential_sources": {
             "token_file": token_file,
             "env_token": env_token,

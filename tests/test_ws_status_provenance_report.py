@@ -4,10 +4,45 @@ import json
 import os
 
 from core.ws_status_provenance_report import build_ws_status_provenance_report
+from core.runtime_boot_identity import ENV_BOOT_EPOCH, ENV_RUN_ID
 
 
-def _write_json(path, payload):
-    path.write_text(json.dumps(payload), encoding="utf-8")
+_STATUS_RUNTIME_FILES = {
+    "engine_cycle_status.json": "test.engine",
+    "suggestions_status.json": "test.suggestions",
+    "runtime_health_latest.json": "test.runtime_health",
+    "feed_runtime_latest.json": "test.feed_runtime",
+}
+
+
+_STATUS_RUNTIME_FILES = {
+    "engine_cycle_status.json": "test.engine",
+    "suggestions_status.json": "test.suggestions",
+    "runtime_health_latest.json": "test.runtime_health",
+    "feed_runtime_latest.json": "test.feed_runtime",
+}
+
+
+def _write_json(path: Path, payload: dict) -> Path:
+    data = dict(payload)
+    writer = _STATUS_RUNTIME_FILES.get(path.name)
+
+    # Existing provenance tests are testing WS provenance, not stale-runtime rejection.
+    # EDGE-16 requires these fake runtime status files to look like current-run files.
+    if writer and not data.get("run_id"):
+        os.environ[ENV_RUN_ID] = "run-ws-status-provenance-test"
+        os.environ[ENV_BOOT_EPOCH] = "100.0"
+        data.update(
+            {
+                "run_id": os.environ[ENV_RUN_ID],
+                "boot_epoch": float(os.environ[ENV_BOOT_EPOCH]),
+                "pid": os.getpid(),
+                "writer": writer,
+                "schema_version": 1,
+            }
+        )
+
+    path.write_text(json.dumps(data), encoding="utf-8")
     return path
 
 

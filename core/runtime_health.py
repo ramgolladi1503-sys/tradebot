@@ -14,6 +14,7 @@ from config import config as cfg
 from core.feed_debug import get_feed_debug
 from core.freshness_sla import get_freshness_status
 from core.time_utils import is_market_open_ist, now_utc_epoch
+from core.runtime_boot_identity import stamp_runtime_payload
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
@@ -158,6 +159,10 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
 
 def write_runtime_health_snapshot(orchestrator: Any | None = None, path: str | Path | None = None) -> dict[str, Any]:
     payload = get_runtime_health(orchestrator=orchestrator)
+    payload = stamp_runtime_payload(
+        payload,
+        writer="runtime_health",
+    )
     target = Path(path or getattr(cfg, "RUNTIME_HEALTH_PATH", str(logs_dir() / "runtime_health_latest.json")))
     _atomic_write(target, payload)
     return payload
