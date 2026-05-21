@@ -110,6 +110,14 @@ class BootSafetyDecision:
     fatal_reasons: tuple[str, ...]
     warnings: tuple[str, ...]
 
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def append(self) -> bool:
+        return False
+
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["unsafe_flags"] = list(self.unsafe_flags)
