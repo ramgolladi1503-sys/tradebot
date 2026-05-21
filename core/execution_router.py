@@ -12,6 +12,7 @@ from core.execution.execution_guard import evaluate_execution_guard
 from core.execution_engine import ExecutionEngine
 from core.paper_fill_simulator import PaperFillSimulator
 from core.paper_outcome_journal import record_paper_outcome
+from core.paper_runtime_setup_identity import attach_runtime_setup_identity
 from core.trade_store import insert_execution_stat
 from core.fill_quality import log_fill_quality
 from core.execution_quality import execution_quality_score
@@ -562,6 +563,7 @@ class ExecutionRouter:
                 "entry_order_outcome_only": True,
             },
         }
+        payload = attach_runtime_setup_identity(payload, trade)
         try:
             return record_paper_outcome(payload)
         except Exception as exc:
