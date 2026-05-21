@@ -30,10 +30,9 @@ def test_lifecycle_event_is_boot_stamped(tmp_path, monkeypatch):
     assert latest["last_event"] == "FEED_START_REQUESTED"
 
     rows = (tmp_path / "feed_startup_lifecycle.jsonl").read_text().splitlines()
-    assert len(rows) == 1
-    row = json.loads(rows[0])
-    assert row["event"] == "FEED_START_REQUESTED"
-    assert row["writer"] == "feed_startup_lifecycle.event"
+    event_rows = [json.loads(row) for row in rows]
+    assert [row["event"] for row in event_rows] == ["FEED_START_REQUESTED"]
+    assert event_rows[0]["writer"] == "feed_startup_lifecycle.event"
 
 
 def test_current_run_events_are_preserved(tmp_path, monkeypatch):
