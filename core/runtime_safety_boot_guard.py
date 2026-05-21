@@ -109,8 +109,6 @@ class BootSafetyDecision:
     unsafe_sources: dict[str, list[str]]
     fatal_reasons: tuple[str, ...]
     warnings: tuple[str, ...]
-    is_order_action: bool = False
-    append: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -118,6 +116,7 @@ class BootSafetyDecision:
         payload["fatal_reasons"] = list(self.fatal_reasons)
         payload["warnings"] = list(self.warnings)
         payload["unsafe_sources"] = {key: list(value) for key, value in self.unsafe_sources.items()}
+        payload.update({"is_order_action": False, "append": False})
         return payload
 
 
