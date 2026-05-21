@@ -48,17 +48,23 @@ def _current_run_events(payload: Mapping[str, Any] | None) -> list[dict[str, Any
     return [dict(event) for event in events if isinstance(event, dict)]
 
 
+def _is_safe_token_metadata_key(key_lower: str) -> bool:
+    return (
+        key_lower.endswith("tail4")
+        or key_lower.endswith("len")
+        or key_lower.endswith("present")
+        or key_lower.endswith("token_count")
+        or key_lower.endswith("tokens_count")
+        or key_lower in {"token_count", "tokens"}
+    )
+
+
 def _safe_details(details: Mapping[str, Any] | None) -> dict[str, Any]:
     safe: dict[str, Any] = {}
     for raw_key, value in dict(details or {}).items():
         key = str(raw_key)
         key_lower = key.lower()
-        if "token" in key_lower and not (
-            key_lower.endswith("tail4")
-            or key_lower.endswith("len")
-            or key_lower.endswith("present")
-            or key_lower in {"token_count", "tokens"}
-        ):
+        if "token" in key_lower and not _is_safe_token_metadata_key(key_lower):
             safe[key] = "<redacted>"
         else:
             safe[key] = value
