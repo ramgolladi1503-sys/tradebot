@@ -4,10 +4,11 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any
-from core.runtime_boot_identity import RuntimeBootIdentity, classify_runtime_payload_freshness
 
 from core.events import write_json_atomic
+from core.feed_startup_lifecycle import read_feed_startup_lifecycle
 from core.paths import ensure_dir, logs_dir, reports_dir
+from core.runtime_boot_identity import RuntimeBootIdentity, classify_runtime_payload_freshness
 
 REPORT_VERSION = 1
 FRESH_WINDOW_SEC = 180.0
@@ -211,6 +212,7 @@ def build_ws_status_provenance_report(
     depth_log_path: str | Path | None = None,
     paper_log_path: str | Path | None = None,
     startup_recovery_path: str | Path | None = None,
+    feed_startup_lifecycle_path: str | Path | None = None,
     base_logs_dir: str | Path | None = None,
     now_epoch: float | None = None,
 ) -> dict[str, Any]:
@@ -225,11 +227,13 @@ def build_ws_status_provenance_report(
     depth_target = Path(depth_log_path).expanduser() if depth_log_path is not None else base / "depth_ws_watchdog.log"
     paper_target = Path(paper_log_path).expanduser() if paper_log_path is not None else _latest_path(base, "paper_ws_proof_*.log") or _latest_path(base, "paper_market_*.log")
     startup_target = Path(startup_recovery_path).expanduser() if startup_recovery_path is not None else base / "startup_recovery.jsonl"
+    lifecycle_target = Path(feed_startup_lifecycle_path).expanduser() if feed_startup_lifecycle_path is not None else base / "feed_startup_lifecycle_latest.json"
 
     engine_status = _read_json(engine_target)
     suggestions_status = _read_json(suggestions_target)
     runtime_health = _read_json(runtime_target)
     feed_runtime = _read_json(feed_target)
+    feed_startup_lifecycle = read_feed_startup_lifecycle(lifecycle_target)
 
     observed_runtime_identity = _runtime_identity_from_status_payloads(
         engine_status,
@@ -286,6 +290,7 @@ def build_ws_status_provenance_report(
         "depth_log": _file_meta(depth_target, now_epoch=now),
         "paper_log": _file_meta(paper_target, now_epoch=now),
         "startup_recovery": _file_meta(startup_target, now_epoch=now),
+        "feed_startup_lifecycle": _file_meta(lifecycle_target, now_epoch=now),
     }
     conclusion = _conclusion(
         status_has_failure=status_has_failure,
@@ -326,8 +331,10 @@ def build_ws_status_provenance_report(
             "depth_log_path": str(depth_target),
             "paper_log_path": str(paper_target) if paper_target is not None else None,
             "startup_recovery_path": str(startup_target),
+            "feed_startup_lifecycle_path": str(lifecycle_target),
         },
         "file_freshness": file_freshness,
+        "feed_startup_lifecycle": feed_startup_lifecycle,
         "observed_runtime_identity": {
             "run_id": observed_runtime_identity.run_id if observed_runtime_identity else None,
             "boot_epoch": observed_runtime_identity.boot_epoch if observed_runtime_identity else None,

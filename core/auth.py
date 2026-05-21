@@ -8,6 +8,7 @@ from typing import Tuple
 
 from config import config as cfg
 from core.auth_manager import resolve_access_token
+from core.feed_startup_lifecycle import record_feed_startup_event
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +217,25 @@ def get_kite_ticker(
 
     import core.kite_depth_ws as ws
 
+    record_feed_startup_event(
+        "KITE_TICKER_CREATE_ATTEMPTED",
+        source="core.auth.get_kite_ticker",
+        details={
+            "api_key_present": bool(resolved_api_key),
+            "api_key_tail4": _tail4(resolved_api_key),
+            "access_token_present": bool(resolved_access_token),
+            "access_token_len": len(str(resolved_access_token or "")),
+            "access_token_tail4": _tail4(resolved_access_token),
+            "debug": bool(debug),
+        },
+    )
     ticker_cls = getattr(ws, "KiteTicker", None)
     if ticker_cls is None:
+        record_feed_startup_event(
+            "KITE_TICKER_CREATE_FAILED",
+            source="core.auth.get_kite_ticker",
+            error="kiteconnect_not_installed",
+        )
         raise RuntimeError("kiteconnect_not_installed")
     logger.info(
         "kite_ticker_initialized api_key_tail4=%s access_token_tail4=%s caller_module=%s",
@@ -225,4 +243,18 @@ def get_kite_ticker(
         _tail4(resolved_access_token),
         _caller_module_name(),
     )
-    return ticker_cls(resolved_api_key, resolved_access_token, debug=debug)
+    try:
+        ticker = ticker_cls(resolved_api_key, resolved_access_token, debug=debug)
+    except Exception as exc:
+        record_feed_startup_event(
+            "KITE_TICKER_CREATE_FAILED",
+            source="core.auth.get_kite_ticker",
+            error=f"{type(exc).__name__}:{exc}",
+        )
+        raise
+    record_feed_startup_event(
+        "KITE_TICKER_CREATED",
+        source="core.auth.get_kite_ticker",
+        details={"kite_id": id(ticker)},
+    )
+    return ticker
