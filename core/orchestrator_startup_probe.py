@@ -176,6 +176,13 @@ def _patch_orchestrator_stages(module: Any, cls: Any) -> None:
         completed_event="ORCHESTRATOR_EVENT_LOG_REPAIR_COMPLETED",
         failed_event="ORCHESTRATOR_EVENT_LOG_REPAIR_FAILED",
     )
+    _wrap_callable(
+        module=module,
+        attr_name="ensure_startup_warmup_bootstrap",
+        started_event="ORCHESTRATOR_WARMUP_MARKET_DATA_STARTED",
+        completed_event="ORCHESTRATOR_WARMUP_MARKET_DATA_COMPLETED",
+        failed_event="ORCHESTRATOR_WARMUP_MARKET_DATA_FAILED",
+    )
     _wrap_class_constructor(
         module=module,
         attr_name="RiskState",
