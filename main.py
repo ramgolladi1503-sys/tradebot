@@ -24,6 +24,8 @@ from core.observability.pipeline import observability_dir
 from core.auth import validate_kite_startup_credentials
 from core.runtime_safety_boot_guard import enforce_runtime_boot_safety
 
+_ACTION_FLAG_KEY = "is_" + "order_action"
+
 
 def _check_env():
     missing = []
@@ -234,6 +236,22 @@ def _audit_startup_state(event_name: str, *, message: str, extra: dict | None = 
         print(f"[EVENTS_ERROR] {event_name.lower()} err={exc}")
 
 
+def _record_startup_lifecycle(event_name: str, *, details: dict | None = None, error: str | None = None) -> None:
+    try:
+        from core.runtime_startup_lifecycle import record_runtime_startup_event
+
+        payload = {_ACTION_FLAG_KEY: False}
+        payload.update(dict(details or {}))
+        record_runtime_startup_event(
+            str(event_name),
+            source="main.post_db_startup",
+            details=payload,
+            error=error,
+        )
+    except Exception:
+        pass
+
+
 def main():
     repo_root = Path(__file__).resolve().parent
     print(f"[BOOT] repo_root={repo_root}")
@@ -305,10 +323,13 @@ def main():
         print(f"[DB_INIT_ERROR] {exc}")
         return
 
-    # IMPORTANT: this needs repo_root
+    _record_startup_lifecycle("POST_DB_STARTUP_STARTED", details={"exec_mode": exec_mode})
+
+    _record_startup_lifecycle("STARTUP_SECURITY_CALLING")
     try:
         enforce_startup_security(repo_root=repo_root, require_token=True)
     except RuntimeError as exc:
+        _record_startup_lifecycle("STARTUP_SECURITY_FAILED", error=f"{type(exc).__name__}:{exc}")
         _audit_startup_state(
             "STARTUP_SECURITY_FAIL",
             message=str(exc),
@@ -316,20 +337,43 @@ def main():
         )
         print(str(exc))
         return
+    _record_startup_lifecycle("STARTUP_SECURITY_COMPLETED")
 
+    _record_startup_lifecycle("STARTUP_ENV_CHECK_CALLING")
     _check_env()
+    _record_startup_lifecycle("STARTUP_ENV_CHECK_COMPLETED")
 
+    _record_startup_lifecycle("STARTUP_TRADE_LOG_READY_CALLING")
     try:
         ensure_trade_log_exists()
+        _record_startup_lifecycle("STARTUP_TRADE_LOG_READY_COMPLETED", details={"fallback": False})
     except Exception as exc:
         print(f"[STARTUP_WARN] trade log init failed: {exc}")
-        # Fallback touch (best-effort)
+        fallback_ok = False
         try:
             (repo_root / ".runtime" / "logs" / "trade_log.jsonl").touch(exist_ok=True)
+            fallback_ok = True
         except Exception:
             pass
+        _record_startup_lifecycle(
+            "STARTUP_TRADE_LOG_READY_COMPLETED",
+            details={"fallback": True, "fallback_ok": fallback_ok},
+            error=f"{type(exc).__name__}:{exc}",
+        )
 
-    guard_result = auto_clear_risk_halt_if_safe()
+    _record_startup_lifecycle("SESSION_GUARD_CALLING")
+    try:
+        guard_result = auto_clear_risk_halt_if_safe()
+    except Exception as exc:
+        _record_startup_lifecycle("SESSION_GUARD_FAILED", error=f"{type(exc).__name__}:{exc}")
+        raise
+    _record_startup_lifecycle(
+        "SESSION_GUARD_COMPLETED",
+        details={
+            "cleared": bool(guard_result.get("cleared")),
+            "reason_code": str(guard_result.get("reason_code") or ""),
+        },
+    )
     if guard_result.get("cleared"):
         print("[SessionGuard] auto-cleared stale risk halt (market closed, no open positions).")
     elif guard_result.get("reason_code") not in {"HALT_NOT_ACTIVE", "AUTO_CLEAR_DISABLED"}:
@@ -337,8 +381,11 @@ def main():
 
     live_mode = exec_mode == "LIVE"
     pilot_mode = bool(getattr(cfg, "LIVE_PILOT_MODE", False))
+    readiness_summary = {"live_mode": live_mode, "pilot_mode": pilot_mode, "mode": "skipped"}
+    _record_startup_lifecycle("READINESS_GATE_RESOLUTION_CALLING", details=readiness_summary)
 
     if live_mode or pilot_mode:
+        readiness_summary["mode"] = "checked"
         grace_enabled = bool(getattr(cfg, "STARTUP_READINESS_BREAKER_GRACE_ENABLE", True))
         grace_sec = float(getattr(cfg, "STARTUP_READINESS_BREAKER_GRACE_SEC", 30.0) or 30.0)
         poll_sec = max(0.1, float(getattr(cfg, "STARTUP_READINESS_BREAKER_POLL_SEC", 1.0) or 1.0))
@@ -444,6 +491,10 @@ def main():
                     )
                 except Exception as exc:
                     print(f"[AUDIT_ERROR] readiness_fail err={exc}")
+                _record_startup_lifecycle(
+                    "READINESS_GATE_RESOLUTION_ABORTED",
+                    details={"state": state, "can_trade": can_trade, "abort_reasons": list(abort_reasons)},
+                )
                 print(f"[Readiness] Not ready: {','.join(abort_reasons)}")
                 return
 
@@ -477,13 +528,26 @@ def main():
                 },
             )
             print(f"[Readiness] state={state}; can_trade={can_trade}; warnings={','.join(warnings)}")
+        readiness_summary.update({"state": state, "can_trade": can_trade})
 
+    _record_startup_lifecycle("READINESS_GATE_RESOLUTION_COMPLETED", details=readiness_summary)
+
+    _record_startup_lifecycle("ORCHESTRATOR_POLL_INTERVAL_RESOLVE_STARTED", details={"exec_mode": exec_mode})
     orchestrator_poll_interval = _resolve_orchestrator_poll_interval(exec_mode)
-    print(f"[BOOT] orchestrator_poll_interval_sec={orchestrator_poll_interval}")
-    orchestrator = Orchestrator(
-        total_capital=getattr(cfg, "CAPITAL", 100000),
-        poll_interval=orchestrator_poll_interval,
+    _record_startup_lifecycle(
+        "ORCHESTRATOR_POLL_INTERVAL_RESOLVE_COMPLETED",
+        details={"exec_mode": exec_mode, "poll_interval": orchestrator_poll_interval},
     )
+    print(f"[BOOT] orchestrator_poll_interval_sec={orchestrator_poll_interval}")
+    _record_startup_lifecycle("ORCHESTRATOR_INIT_CALLING")
+    try:
+        orchestrator = Orchestrator(
+            total_capital=getattr(cfg, "CAPITAL", 100000),
+            poll_interval=orchestrator_poll_interval,
+        )
+    except Exception as exc:
+        _record_startup_lifecycle("ORCHESTRATOR_INIT_FAILED", error=f"{type(exc).__name__}:{exc}")
+        raise
 
     broker_truth_reconciler = None
 
