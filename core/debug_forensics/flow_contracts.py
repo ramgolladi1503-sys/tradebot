@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from core.debug_forensics.models import FlowContract
+
+
+STARTUP_EXPECTED_EVENTS: tuple[str, ...] = (
+    "MAIN_BOOT_STARTED",
+    "MAIN_SAFETY_VALIDATED",
+    "DB_READY_COMPLETED",
+    "ORCHESTRATOR_INIT_ENTERED",
+    "ORCHESTRATOR_TRADE_LOG_READY_COMPLETED",
+    "ORCHESTRATOR_EVENT_LOG_REPAIR_COMPLETED",
+    "ORCHESTRATOR_AUTH_WARM_CHECK_COMPLETED",
+    "ORCHESTRATOR_RISK_STATE_INIT_COMPLETED",
+    "ORCHESTRATOR_PREDICTOR_INIT_COMPLETED",
+    "ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED",
+    "ORCHESTRATOR_EXECUTION_ROUTER_INIT_COMPLETED",
+    "ORCHESTRATOR_TRADE_BUILDER_INIT_COMPLETED",
+    "ORCHESTRATOR_WARMUP_STARTED",
+    "ORCHESTRATOR_WARMUP_MARKET_DATA_STARTED",
+    "MARKET_DATA_WARMUP_ENTERED",
+    "MARKET_DATA_WARMUP_SEED_STARTED",
+    "MARKET_DATA_WARMUP_SEED_COMPLETED",
+    "MARKET_DATA_WARMUP_COMPLETED",
+    "ORCHESTRATOR_WARMUP_MARKET_DATA_COMPLETED",
+    "ORCHESTRATOR_WARMUP_COMPLETED",
+    "ORCHESTRATOR_INIT_COMPLETED",
+    "LIVE_MONITORING_CALLING",
+    "LIVE_MONITORING_ENTERED",
+    "ORCHESTRATOR_CYCLE_STARTED",
+    "RUNTIME_STATUS_WRITE_ATTEMPTED",
+    "RUNTIME_STATUS_WRITE_COMPLETED",
+    "ORCHESTRATOR_CYCLE_COMPLETED",
+)
+
+FORBIDDEN_STARTUP_EVENTS: tuple[str, ...] = (
+    "BROKER_ORDER_SUBMITTED",
+    "BROKER_ORDER_MODIFIED",
+    "BROKER_ORDER_CANCELLED",
+    "LIVE_ORDER_PLACED",
+    "ORDER_PLACED",
+    "ORDER_SUBMITTED",
+)
+
+STARTUP_FLOW_CONTRACT = FlowContract(
+    profile="startup",
+    expected_events=STARTUP_EXPECTED_EVENTS,
+    terminal_success_events=("ORCHESTRATOR_CYCLE_COMPLETED", "LIVE_MONITORING_RETURNED"),
+    forbidden_events=FORBIDDEN_STARTUP_EVENTS,
+    readonly_required=True,
+)
+
+FLOW_CONTRACTS: dict[str, FlowContract] = {
+    STARTUP_FLOW_CONTRACT.profile: STARTUP_FLOW_CONTRACT,
+}
+
+
+def get_flow_contract(profile: str) -> FlowContract:
+    key = str(profile or "startup").strip().lower() or "startup"
+    try:
+        return FLOW_CONTRACTS[key]
+    except KeyError as exc:
+        supported = ", ".join(sorted(FLOW_CONTRACTS))
+        raise ValueError(f"unsupported debug forensics profile: {profile!r}; supported: {supported}") from exc
