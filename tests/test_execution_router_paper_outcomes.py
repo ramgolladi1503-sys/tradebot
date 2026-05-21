@@ -20,6 +20,11 @@ def _trade(**overrides):
         "execution_score": 0.8,
         "priority_score": 0.82,
         "final_score": 0.84,
+        "setup_id": "orb_breakout_v1",
+        "regime_key": "trend_morning",
+        "entry_rule_id": "orb_high_break_with_volume",
+        "exit_rule_id": "target_stop_or_time_exit",
+        "cost_model_version": "cost_v1",
     }
     payload.update(overrides)
     return SimpleNamespace(**payload)
@@ -73,6 +78,11 @@ def test_record_paper_execution_outcome_maps_filled_to_executed(monkeypatch):
     assert payload["slippage_cost"] == 3.5
     assert payload["slippage_adjusted_pnl"] == 121.5
     assert payload["metadata"]["entry_order_outcome_only"] is True
+    assert payload["setup_id"] == "orb_breakout_v1"
+    assert payload["regime_key"] == "trend_morning"
+    assert payload["entry_rule_id"] == "orb_high_break_with_volume"
+    assert payload["exit_rule_id"] == "target_stop_or_time_exit"
+    assert payload["cost_model_version"] == "cost_v1"
 
 
 def test_record_paper_execution_outcome_maps_abort_states(monkeypatch):
