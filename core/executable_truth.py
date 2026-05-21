@@ -9,6 +9,7 @@ from config import config as cfg
 EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
 FALLBACK_DRIVEN_REASON = "fallback_driven_data"
 DEGRADED_DATA_REASON = "degraded_data"
+DATA_NOT_LIVE_REASON = "data_not_live"
 
 _FALLBACK_CHAIN_SOURCES = {
     "synthetic_chain",
@@ -71,6 +72,21 @@ def _append_unique(reasons: list[str], reason: str | None) -> None:
         reasons.append(text)
 
 
+def _advisory_reason(candidate: Any, flags: dict[str, Any]) -> str:
+    runtime_mode = str(
+        _coalesce(
+            flags.get("runtime_mode"),
+            _candidate_get(candidate, "execution_mode"),
+            _candidate_get(candidate, "mode"),
+            flags.get("market_mode"),
+        )
+        or ""
+    ).strip().upper()
+    if runtime_mode == "LIVE":
+        return DATA_NOT_LIVE_REASON
+    return DEGRADED_DATA_REASON
+
+
 def classify_executable_truth(
     candidate: Any,
     *,
@@ -114,16 +130,17 @@ def classify_executable_truth(
     if chain_source in _FALLBACK_CHAIN_SOURCES:
         _append_unique(reasons, FALLBACK_DRIVEN_REASON)
 
+    execution_block_type = str(flags.get("execution_block_type") or "").strip().lower()
+    advisory_block_reason = _advisory_reason(candidate, flags) if execution_block_type == "advisory" else None
+    if advisory_block_reason:
+        _append_unique(reasons, advisory_block_reason)
+
     if _truthy(_coalesce(_candidate_get(candidate, "planning_only"), flags.get("planning_only"))):
         _append_unique(reasons, "planning_only")
     if _truthy(_coalesce(_candidate_get(candidate, "advisory_only"), flags.get("advisory_only"))):
         _append_unique(reasons, "advisory_only")
     if _truthy(_coalesce(_candidate_get(candidate, "debug_candidate"), flags.get("debug_candidate"))):
         _append_unique(reasons, "debug_candidate")
-
-    execution_block_type = str(flags.get("execution_block_type") or "").strip().lower()
-    if execution_block_type == "advisory":
-        _append_unique(reasons, DEGRADED_DATA_REASON)
 
     state = str(_coalesce(data_state, _candidate_get(candidate, "data_state"), flags.get("data_state")) or "").strip().upper()
     if state == "DATA_STALE":
