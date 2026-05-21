@@ -79,6 +79,27 @@ def _enabled_aliases(*, config: Any, env: Mapping[str, Any] | None, aliases: tup
     return tuple(enabled)
 
 
+def _record_boot_safety_event(event: str, decision: "BootSafetyDecision", *, error: str | None = None) -> None:
+    try:
+        from core.runtime_startup_lifecycle import record_runtime_startup_event
+
+        record_runtime_startup_event(
+            event,
+            source="core.runtime_safety_boot_guard.enforce_runtime_boot_safety",
+            details={
+                "mode": decision.mode,
+                "allowed": bool(decision.allowed),
+                "fatal_reasons": list(decision.fatal_reasons),
+                "warnings": list(decision.warnings),
+                "unsafe_flags_count": len(decision.unsafe_flags),
+                "is_order_action": False,
+            },
+            error=error,
+        )
+    except Exception:
+        pass
+
+
 @dataclass(frozen=True)
 class BootSafetyDecision:
     schema_version: int
@@ -171,7 +192,13 @@ def enforce_runtime_boot_safety(
     decision = assess_runtime_boot_safety(mode=mode, config=config, env=env)
     write_boot_safety_report(decision, path=report_path)
     if not decision.allowed:
+        _record_boot_safety_event(
+            "MAIN_SAFETY_VALIDATION_FAILED",
+            decision,
+            error="runtime_boot_safety_failed:" + ",".join(decision.fatal_reasons),
+        )
         raise RuntimeError("runtime_boot_safety_failed:" + ",".join(decision.fatal_reasons))
+    _record_boot_safety_event("MAIN_SAFETY_VALIDATED", decision)
     return decision
 
 
