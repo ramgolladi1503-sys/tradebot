@@ -103,7 +103,7 @@ def analyze_evidence(evidence: EvidenceLoadResult) -> ForensicsReport:
     names = _event_names(evidence)
     seen = set(names)
     forbidden_seen = sorted(event for event in seen if event in set(contract.forbidden_events))
-    order_action_events = [event.event for event in evidence.events if event.is_order_action]
+    action_events = [event.event for event in evidence.events if event.action_evidence]
 
     if forbidden_seen:
         findings.append(
@@ -114,13 +114,13 @@ def analyze_evidence(evidence: EvidenceLoadResult) -> ForensicsReport:
                 evidence={"events": forbidden_seen},
             )
         )
-    if order_action_events:
+    if action_events:
         findings.append(
             ForensicsFinding(
                 severity=Severity.SAFETY_VIOLATION,
-                code="ORDER_ACTION_EVIDENCE_SEEN",
-                message="Startup forensics requires read-only evidence, but order-action evidence was found.",
-                evidence={"events": order_action_events},
+                code="ACTION_EVIDENCE_SEEN",
+                message="Startup forensics requires read-only evidence, but action evidence was found.",
+                evidence={"events": action_events},
             )
         )
 
@@ -170,5 +170,4 @@ def analyze_evidence(evidence: EvidenceLoadResult) -> ForensicsReport:
             "profitability claims",
             "broad refactors",
         ),
-        is_order_action=False,
     )
