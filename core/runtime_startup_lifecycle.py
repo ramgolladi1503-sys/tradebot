@@ -15,6 +15,7 @@ EVENTS_NAME = "runtime_startup_lifecycle.jsonl"
 MAX_EVENTS = 200
 _PROBE_INSTALL_ATTEMPTED = False
 _WARMUP_PROBE_INSTALL_ATTEMPTED = False
+_RECON_PROBE_INSTALL_ATTEMPTED = False
 
 
 def runtime_startup_lifecycle_path() -> Path:
@@ -96,6 +97,20 @@ def _install_market_data_warmup_probe_once() -> None:
     try:
         module = importlib.import_module("core." + "market_data_warmup_probe")
         installer = getattr(module, "install_market_data_warmup_probe", None)
+        if callable(installer):
+            installer()
+    except Exception:
+        pass
+
+
+def _install_recon_once_probe_once() -> None:
+    global _RECON_PROBE_INSTALL_ATTEMPTED
+    if _RECON_PROBE_INSTALL_ATTEMPTED:
+        return
+    _RECON_PROBE_INSTALL_ATTEMPTED = True
+    try:
+        module = importlib.import_module("core." + "recon_once_probe")
+        installer = getattr(module, "install_recon_once_probe", None)
         if callable(installer):
             installer()
     except Exception:
@@ -200,6 +215,11 @@ def record_runtime_startup_event(
         "market_data_warmup_completed": _flag(previous_flags, "market_data_warmup_completed", event_name, "MARKET_DATA_WARMUP_COMPLETED"),
         "market_data_warmup_seed_completed": _flag(previous_flags, "market_data_warmup_seed_completed", event_name, "MARKET_DATA_WARMUP_SEED_COMPLETED"),
         "market_data_warmup_symbol_seed_completed": _flag(previous_flags, "market_data_warmup_symbol_seed_completed", event_name, "MARKET_DATA_WARMUP_SYMBOL_SEED_COMPLETED"),
+        "recon_once_completed": _flag(previous_flags, "recon_once_completed", event_name, "RECON_ONCE_COMPLETED"),
+        "recon_once_broker_resolve_completed": _flag(previous_flags, "recon_once_broker_resolve_completed", event_name, "RECON_ONCE_BROKER_RESOLVE_COMPLETED"),
+        "recon_once_broker_orders_fetch_completed": _flag(previous_flags, "recon_once_broker_orders_fetch_completed", event_name, "RECON_ONCE_BROKER_ORDERS_FETCH_COMPLETED"),
+        "recon_once_broker_positions_fetch_completed": _flag(previous_flags, "recon_once_broker_positions_fetch_completed", event_name, "RECON_ONCE_BROKER_POSITIONS_FETCH_COMPLETED"),
+        "recon_once_local_state_load_completed": _flag(previous_flags, "recon_once_local_state_load_completed", event_name, "RECON_ONCE_LOCAL_STATE_LOAD_COMPLETED"),
         "live_monitoring_calling": _flag(previous_flags, "live_monitoring_calling", event_name, "LIVE_MONITORING_CALLING"),
         "live_monitoring_returned": _flag(previous_flags, "live_monitoring_returned", event_name, "LIVE_MONITORING_RETURNED"),
         "feed_start_request_boundary_reached": _flag(previous_flags, "feed_start_request_boundary_reached", event_name, "FEED_START_REQUEST_BOUNDARY_REACHED"),
@@ -225,5 +245,6 @@ def record_runtime_startup_event(
     return latest
 
 
+_install_recon_once_probe_once()
 _install_market_data_warmup_probe_once()
 _install_orchestrator_startup_probe_once()
