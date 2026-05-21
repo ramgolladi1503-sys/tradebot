@@ -14,6 +14,7 @@ LATEST_NAME = "runtime_startup_lifecycle_latest.json"
 EVENTS_NAME = "runtime_startup_lifecycle.jsonl"
 MAX_EVENTS = 200
 _PROBE_INSTALL_ATTEMPTED = False
+_WARMUP_PROBE_INSTALL_ATTEMPTED = False
 
 
 def runtime_startup_lifecycle_path() -> Path:
@@ -85,6 +86,20 @@ def _safe_details(details: Mapping[str, Any] | None) -> dict[str, Any]:
         else:
             safe[key] = value
     return safe
+
+
+def _install_market_data_warmup_probe_once() -> None:
+    global _WARMUP_PROBE_INSTALL_ATTEMPTED
+    if _WARMUP_PROBE_INSTALL_ATTEMPTED:
+        return
+    _WARMUP_PROBE_INSTALL_ATTEMPTED = True
+    try:
+        module = importlib.import_module("core." + "market_data_warmup_probe")
+        installer = getattr(module, "install_market_data_warmup_probe", None)
+        if callable(installer):
+            installer()
+    except Exception:
+        pass
 
 
 def _install_orchestrator_startup_probe_once() -> None:
@@ -182,6 +197,9 @@ def record_runtime_startup_event(
         "orchestrator_execution_router_completed": _flag(previous_flags, "orchestrator_execution_router_completed", event_name, "ORCHESTRATOR_EXECUTION_ROUTER_INIT_COMPLETED"),
         "orchestrator_trade_builder_completed": _flag(previous_flags, "orchestrator_trade_builder_completed", event_name, "ORCHESTRATOR_TRADE_BUILDER_INIT_COMPLETED"),
         "orchestrator_warmup_completed": _flag(previous_flags, "orchestrator_warmup_completed", event_name, "ORCHESTRATOR_WARMUP_COMPLETED"),
+        "market_data_warmup_completed": _flag(previous_flags, "market_data_warmup_completed", event_name, "MARKET_DATA_WARMUP_COMPLETED"),
+        "market_data_warmup_seed_completed": _flag(previous_flags, "market_data_warmup_seed_completed", event_name, "MARKET_DATA_WARMUP_SEED_COMPLETED"),
+        "market_data_warmup_symbol_seed_completed": _flag(previous_flags, "market_data_warmup_symbol_seed_completed", event_name, "MARKET_DATA_WARMUP_SYMBOL_SEED_COMPLETED"),
         "live_monitoring_calling": _flag(previous_flags, "live_monitoring_calling", event_name, "LIVE_MONITORING_CALLING"),
         "live_monitoring_returned": _flag(previous_flags, "live_monitoring_returned", event_name, "LIVE_MONITORING_RETURNED"),
         "feed_start_request_boundary_reached": _flag(previous_flags, "feed_start_request_boundary_reached", event_name, "FEED_START_REQUEST_BOUNDARY_REACHED"),
@@ -207,4 +225,5 @@ def record_runtime_startup_event(
     return latest
 
 
+_install_market_data_warmup_probe_once()
 _install_orchestrator_startup_probe_once()
