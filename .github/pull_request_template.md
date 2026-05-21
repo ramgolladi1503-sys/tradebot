@@ -6,6 +6,30 @@ Describe exactly what changed.
 
 Describe the bug, risk, feature, or cleanup this PR addresses.
 
+## Agent review evidence
+
+Every PR must include an agent review evidence file under `docs/agent_reviews/*.md`.
+
+Required evidence sections:
+
+- Agent Work Contract
+- Scope Guard
+- Grill Me Review
+- Hermes Review
+- GSD Review
+- QA / Safety Review
+- Acceptance Proof
+- Runtime Proof Required After Merge
+- What This PR Does Not Prove
+- Human Approval
+
+Checklist:
+
+- [ ] Added/updated `docs/agent_reviews/<PR-or-EDGE-name>.md`
+- [ ] PR body summarizes the agent review result
+- [ ] High-risk path review included if touching config/auth/feed/orchestrator/execution/risk/strategies
+- [ ] Runtime proof command listed if runtime behavior/evidence is affected
+
 ## Type of change
 
 - [ ] Bug fix
@@ -90,7 +114,9 @@ Results / screenshots / logs:
 - [ ] No private config or operational credentials are committed
 - [ ] README/docs updated if behavior changed
 - [ ] Tests added or updated where needed
+- [ ] Agent review evidence file added/updated
 - [ ] CI passes
+- [ ] Agent Review Evidence Gate passes
 - [ ] Portfolio CI passes
 - [ ] All conversations are resolved
 - [ ] Release checklist reviewed for runtime-sensitive changes
