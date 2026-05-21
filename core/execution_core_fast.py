@@ -65,10 +65,13 @@ class FastExecutionCore:
         return float(latest)
 
     def should_run_cycle(self, now_mono: float) -> tuple[bool, float]:
+        cycle_due = bool((now_mono - self.last_cycle_mono) >= self.max_cycle_interval_sec())
+        if cycle_due:
+            return True, float(self.last_feed_epoch)
+
         feed_epoch = self.latest_feed_epoch()
         feed_changed = bool(feed_epoch > 0.0 and feed_epoch > self.last_feed_epoch)
-        cycle_due = bool((now_mono - self.last_cycle_mono) >= self.max_cycle_interval_sec())
-        return bool(feed_changed or cycle_due), float(feed_epoch)
+        return bool(feed_changed), float(feed_epoch)
 
     def run_one_cycle(self, *, feed_epoch: float | None = None) -> Any:
         result = self.orch._legacy_live_monitoring(run_once=True)
