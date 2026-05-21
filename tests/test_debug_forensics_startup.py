@@ -63,6 +63,84 @@ def test_startup_forensics_detects_first_missing_event(tmp_path):
     assert "WebSocket" in "\n".join(report.killed_hypotheses)
 
 
+def test_startup_forensics_reports_fast_engine_evaluate_boundary(tmp_path):
+    events = [
+        "MAIN_BOOT_STARTED",
+        "MAIN_SAFETY_VALIDATED",
+        "DB_READY_COMPLETED",
+        "ORCHESTRATOR_INIT_ENTERED",
+        "ORCHESTRATOR_TRADE_LOG_READY_COMPLETED",
+        "ORCHESTRATOR_EVENT_LOG_REPAIR_COMPLETED",
+        "ORCHESTRATOR_AUTH_WARM_CHECK_COMPLETED",
+        "ORCHESTRATOR_RISK_STATE_INIT_COMPLETED",
+        "ORCHESTRATOR_PREDICTOR_INIT_COMPLETED",
+        "ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED",
+        "ORCHESTRATOR_EXECUTION_ROUTER_INIT_COMPLETED",
+        "ORCHESTRATOR_TRADE_BUILDER_INIT_COMPLETED",
+        "ORCHESTRATOR_WARMUP_STARTED",
+        "ORCHESTRATOR_WARMUP_MARKET_DATA_STARTED",
+        "MARKET_DATA_WARMUP_ENTERED",
+        "MARKET_DATA_WARMUP_SEED_STARTED",
+        "MARKET_DATA_WARMUP_SEED_COMPLETED",
+        "MARKET_DATA_WARMUP_COMPLETED",
+        "ORCHESTRATOR_WARMUP_MARKET_DATA_COMPLETED",
+        "ORCHESTRATOR_WARMUP_COMPLETED",
+        "ORCHESTRATOR_INIT_COMPLETED",
+        "LIVE_MONITORING_CALLING",
+        "LIVE_MONITORING_ENTERED",
+        "ORCHESTRATOR_CYCLE_STARTED",
+        "RUNTIME_STATUS_WRITE_ATTEMPTED",
+    ]
+    log_dir = _write_evidence(tmp_path, events)
+
+    evidence = load_runtime_startup_evidence(logs_path=log_dir)
+    report = analyze_evidence(evidence)
+
+    assert report.evidence_valid is True
+    assert report.last_confirmed_event == "RUNTIME_STATUS_WRITE_ATTEMPTED"
+    assert report.first_missing_event == "FAST_ENGINE_EVALUATE_STARTED"
+
+
+def test_startup_forensics_reports_fast_engine_execute_boundary(tmp_path):
+    events = [
+        "MAIN_BOOT_STARTED",
+        "MAIN_SAFETY_VALIDATED",
+        "DB_READY_COMPLETED",
+        "ORCHESTRATOR_INIT_ENTERED",
+        "ORCHESTRATOR_TRADE_LOG_READY_COMPLETED",
+        "ORCHESTRATOR_EVENT_LOG_REPAIR_COMPLETED",
+        "ORCHESTRATOR_AUTH_WARM_CHECK_COMPLETED",
+        "ORCHESTRATOR_RISK_STATE_INIT_COMPLETED",
+        "ORCHESTRATOR_PREDICTOR_INIT_COMPLETED",
+        "ORCHESTRATOR_EXECUTION_ENGINE_INIT_COMPLETED",
+        "ORCHESTRATOR_EXECUTION_ROUTER_INIT_COMPLETED",
+        "ORCHESTRATOR_TRADE_BUILDER_INIT_COMPLETED",
+        "ORCHESTRATOR_WARMUP_STARTED",
+        "ORCHESTRATOR_WARMUP_MARKET_DATA_STARTED",
+        "MARKET_DATA_WARMUP_ENTERED",
+        "MARKET_DATA_WARMUP_SEED_STARTED",
+        "MARKET_DATA_WARMUP_SEED_COMPLETED",
+        "MARKET_DATA_WARMUP_COMPLETED",
+        "ORCHESTRATOR_WARMUP_MARKET_DATA_COMPLETED",
+        "ORCHESTRATOR_WARMUP_COMPLETED",
+        "ORCHESTRATOR_INIT_COMPLETED",
+        "LIVE_MONITORING_CALLING",
+        "LIVE_MONITORING_ENTERED",
+        "ORCHESTRATOR_CYCLE_STARTED",
+        "RUNTIME_STATUS_WRITE_ATTEMPTED",
+        "FAST_ENGINE_EVALUATE_STARTED",
+        "FAST_ENGINE_EVALUATE_COMPLETED",
+    ]
+    log_dir = _write_evidence(tmp_path, events)
+
+    evidence = load_runtime_startup_evidence(logs_path=log_dir)
+    report = analyze_evidence(evidence)
+
+    assert report.evidence_valid is True
+    assert report.last_confirmed_event == "FAST_ENGINE_EVALUATE_COMPLETED"
+    assert report.first_missing_event == "FAST_ENGINE_EXECUTE_STARTED"
+
+
 def test_startup_forensics_rejects_action_evidence(tmp_path):
     log_dir = _write_evidence(
         tmp_path,
@@ -96,7 +174,7 @@ def test_startup_forensics_rejects_mixed_boot_epoch(tmp_path):
     assert any(finding.severity == Severity.INSUFFICIENT_EVIDENCE for finding in report.findings)
 
 
-def test_startup_forensics_rejects_non_monotonic_events(tmp_path):
+def test_startup_forensics_rejects_large_non_monotonic_events(tmp_path):
     log_dir = _write_evidence(
         tmp_path,
         [
@@ -109,6 +187,21 @@ def test_startup_forensics_rejects_non_monotonic_events(tmp_path):
 
     assert evidence.valid is False
     assert any("non_monotonic_event_ts" in error for error in evidence.validation_errors)
+
+
+def test_startup_forensics_warns_on_minor_non_monotonic_events(tmp_path):
+    log_dir = _write_evidence(
+        tmp_path,
+        [
+            _event("MAIN_BOOT_STARTED", ts_epoch=1001.100),
+            _event("MAIN_SAFETY_VALIDATED", ts_epoch=1001.099),
+        ],
+    )
+
+    evidence = load_runtime_startup_evidence(logs_path=log_dir)
+
+    assert evidence.valid is True
+    assert any("non_monotonic_event_ts" in warning for warning in evidence.validation_warnings)
 
 
 def test_startup_forensics_writes_json_and_markdown_reports(tmp_path):

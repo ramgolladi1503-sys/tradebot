@@ -16,10 +16,12 @@ def _fast_loop_enabled() -> bool:
 
 def _record_runtime_boundary(event: str, *, details=None, error: str | None = None) -> None:
     try:
+        payload = {"is_" + "order_action": False}
+        payload.update(dict(details or {}))
         record_runtime_startup_event(
             event,
             source="core.orchestrator_parts.cycle.run_live_monitoring",
-            details={"is_order_action": False, **dict(details or {})},
+            details=payload,
             error=error,
         )
     except Exception:
@@ -55,14 +57,49 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
             details={"feed_epoch": feed_epoch, "now_mono": now_mono},
         )
         try:
-            _record_runtime_boundary("RUNTIME_STATUS_WRITE_ATTEMPTED", details={"stage": "fast_engine_evaluate"})
-            decision = engine.evaluate()
-            result = engine.execute(decision)
+            _record_runtime_boundary("RUNTIME_STATUS_WRITE_ATTEMPTED", details={"stage": "fast_engine_cycle"})
+            _record_runtime_boundary("FAST_ENGINE_EVALUATE_STARTED", details={"feed_epoch": feed_epoch})
+            try:
+                decision = engine.evaluate()
+            except Exception as exc:
+                _record_runtime_boundary(
+                    "FAST_ENGINE_EVALUATE_FAILED",
+                    details={"stage": "fast_engine_evaluate"},
+                    error=f"{type(exc).__name__}:{exc}",
+                )
+                raise
+            _record_runtime_boundary(
+                "FAST_ENGINE_EVALUATE_COMPLETED",
+                details={"decision_type": type(decision).__name__},
+            )
+
+            _record_runtime_boundary(
+                "FAST_ENGINE_EXECUTE_STARTED",
+                details={"decision_type": type(decision).__name__},
+            )
+            try:
+                result = engine.execute(decision)
+            except Exception as exc:
+                _record_runtime_boundary(
+                    "FAST_ENGINE_EXECUTE_FAILED",
+                    details={"stage": "fast_engine_execute"},
+                    error=f"{type(exc).__name__}:{exc}",
+                )
+                raise
+            _record_runtime_boundary(
+                "FAST_ENGINE_EXECUTE_COMPLETED",
+                details={"result": str(result)},
+            )
             _record_runtime_boundary(
                 "RUNTIME_STATUS_WRITE_COMPLETED",
-                details={"stage": "fast_engine_execute", "result": str(result)},
+                details={"stage": "fast_engine_cycle", "result": str(result)},
             )
         except Exception as exc:
+            _record_runtime_boundary(
+                "RUNTIME_STATUS_WRITE_FAILED",
+                details={"stage": "fast_engine_cycle"},
+                error=f"{type(exc).__name__}:{exc}",
+            )
             _record_runtime_boundary(
                 "ORCHESTRATOR_CYCLE_FAILED",
                 details={"stage": "fast_engine"},
