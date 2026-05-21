@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from config import config as cfg
+from core.feed_startup_lifecycle import record_feed_startup_event
 from core.fs_utils import ensure_parent_dir
 from core.paths import trade_db_path
 from core.time_utils import now_utc_epoch
@@ -132,6 +133,18 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
             )
     except Exception:
         return False
+    record_feed_startup_event(
+        "FEED_RUNTIME_SNAPSHOT_WRITTEN",
+        source="core.feed.runtime_store.write_runtime_snapshot",
+        details={
+            "source": source,
+            "ws_connected": payload.get("ws_connected"),
+            "runtime_state": runtime_state,
+            "subscribed_tokens_count": tokens_count,
+            "intended_tokens_count": intended_tokens_count,
+        },
+        now_epoch=ts_epoch,
+    )
     return True
 
 
