@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from core.runtime_boot_identity import classify_runtime_payload_freshness, stamp
 LATEST_NAME = "runtime_startup_lifecycle_latest.json"
 EVENTS_NAME = "runtime_startup_lifecycle.jsonl"
 MAX_EVENTS = 200
+_PROBE_INSTALL_ATTEMPTED = False
 
 
 def runtime_startup_lifecycle_path() -> Path:
@@ -69,6 +71,20 @@ def _safe_details(details: Mapping[str, Any] | None) -> dict[str, Any]:
         else:
             safe[key] = value
     return safe
+
+
+def _install_orchestrator_startup_probe_once() -> None:
+    global _PROBE_INSTALL_ATTEMPTED
+    if _PROBE_INSTALL_ATTEMPTED:
+        return
+    _PROBE_INSTALL_ATTEMPTED = True
+    try:
+        module = importlib.import_module("core." + "orchestrator_startup_probe")
+        installer = getattr(module, "install_orchestrator_startup_probe", None)
+        if callable(installer):
+            installer()
+    except Exception:
+        pass
 
 
 def read_runtime_startup_lifecycle(path: str | Path | None = None) -> dict[str, Any]:
@@ -141,7 +157,7 @@ def record_runtime_startup_event(
         "startup_security_completed": _flag(previous_flags, "startup_security_completed", event_name, "STARTUP_SECURITY_COMPLETED"),
         "session_guard_calling": _flag(previous_flags, "session_guard_calling", event_name, "SESSION_GUARD_CALLING"),
         "session_guard_completed": _flag(previous_flags, "session_guard_completed", event_name, "SESSION_GUARD_COMPLETED"),
-        "orchestrator_init_started": _flag(previous_flags, "orchestrator_init_started", event_name, "ORCHESTRATOR_INIT_STARTED"),
+        "orchestrator_init_started": _flag(previous_flags, "orchestrator_init_started", event_name, "ORCHESTRATOR_INIT_STARTED", "ORCHESTRATOR_INIT_ENTERED"),
         "orchestrator_init_completed": _flag(previous_flags, "orchestrator_init_completed", event_name, "ORCHESTRATOR_INIT_COMPLETED"),
         "live_monitoring_calling": _flag(previous_flags, "live_monitoring_calling", event_name, "LIVE_MONITORING_CALLING"),
         "live_monitoring_returned": _flag(previous_flags, "live_monitoring_returned", event_name, "LIVE_MONITORING_RETURNED"),
@@ -166,3 +182,6 @@ def record_runtime_startup_event(
     )
     write_json_atomic(latest_path, latest)
     return latest
+
+
+_install_orchestrator_startup_probe_once()
