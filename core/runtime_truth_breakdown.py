@@ -7,6 +7,7 @@ from typing import Any
 
 from core.events import write_json_atomic
 from core.paths import ensure_dir, logs_dir, reports_dir
+from core.runtime_boot_identity import classify_runtime_payload_freshness
 
 REPORT_VERSION = 1
 STALE_FILE_THRESHOLD_SEC = 300.0
@@ -207,6 +208,26 @@ def build_runtime_truth_breakdown(
     runtime_health = _read_json(runtime_health_target)
     feed_runtime = _read_json(feed_runtime_target)
     engine_status = _read_json(engine_status_target)
+
+    runtime_status_freshness = {
+        "runtime_health_latest": classify_runtime_payload_freshness(
+            runtime_health,
+            path=runtime_health_target,
+        ),
+        "feed_runtime_latest": classify_runtime_payload_freshness(
+            feed_runtime,
+            path=feed_runtime_target,
+        ),
+        "engine_cycle_status": classify_runtime_payload_freshness(
+            engine_status,
+            path=engine_status_target,
+        ),
+    }
+    stale_runtime_inputs = [
+        name
+        for name, freshness in runtime_status_freshness.items()
+        if not bool(freshness.get("is_current_run"))
+    ]
     auth_health_rows = _read_jsonl_tail(auth_health_target)
     auth_event_rows = _read_jsonl_tail(auth_events_target)
     paper_lines = _read_lines(paper_log_target)
@@ -249,6 +270,8 @@ def build_runtime_truth_breakdown(
             "paper_log_path": str(paper_log_target) if paper_log_target is not None else None,
         },
         "file_freshness": file_freshness,
+        "runtime_status_freshness": runtime_status_freshness,
+        "stale_runtime_inputs": stale_runtime_inputs,
         "rest_auth": {
             "latest_ok": latest_auth.get("ok"),
             "latest_auth_state": latest_auth.get("auth_state"),

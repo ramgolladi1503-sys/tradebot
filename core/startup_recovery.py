@@ -9,6 +9,7 @@ from typing import Any, Callable
 from core.auth_manager import set_auth_required_state
 from core.events import write_json_atomic
 from core.paths import locks_dir, logs_dir, runtime_dir
+from core.runtime_boot_identity import stamp_runtime_payload
 
 
 def _pid_alive(pid: int) -> bool:
@@ -220,10 +221,34 @@ def publish_auth_blocked_startup_state(
         },
     }
 
-    write_json_atomic(target_logs_root / "suggestions_status.json", suggestions_payload)
-    write_json_atomic(target_logs_root / "engine_cycle_status.json", engine_payload)
-    write_json_atomic(target_logs_root / "feed_runtime_latest.json", feed_payload)
-    write_json_atomic(target_logs_root / "runtime_health_latest.json", runtime_health_payload)
+    write_json_atomic(
+        target_logs_root / "suggestions_status.json",
+        stamp_runtime_payload(
+            suggestions_payload,
+            writer="startup_recovery.suggestions_status",
+        ),
+    )
+    write_json_atomic(
+        target_logs_root / "engine_cycle_status.json",
+        stamp_runtime_payload(
+            engine_payload,
+            writer="startup_recovery.engine_cycle_status",
+        ),
+    )
+    write_json_atomic(
+        target_logs_root / "feed_runtime_latest.json",
+        stamp_runtime_payload(
+            feed_payload,
+            writer="startup_recovery.feed_runtime",
+        ),
+    )
+    write_json_atomic(
+        target_logs_root / "runtime_health_latest.json",
+        stamp_runtime_payload(
+            runtime_health_payload,
+            writer="startup_recovery.runtime_health",
+        ),
+    )
     _append_startup_recovery_event(
         target_logs_root,
         {
