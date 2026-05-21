@@ -36,6 +36,10 @@ from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer, get_rotating_logger
 from core.run_lock import RunLock
 from core.runtime_lifecycle import lifecycle
+from core.ws_handshake_credential_proof import (
+    build_ws_auth_failure_proof_event,
+    build_ws_handshake_attempt_event,
+)
 from core.blocker_lifecycle import (
     build_feed_owner_key,
     evaluate_feed_symbol_blockers,
@@ -3390,6 +3394,26 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     )
     _log_ws("FEED_CREDENTIAL_STATS", {**stats_api, **stats_token, "tokens": len(tokens)})
 
+    handshake_proof = build_ws_handshake_attempt_event(
+        public_key=api_key,
+        access_token=access_token,
+        token_count=len(tokens),
+        profile_verified=bool(computed_profile_verified),
+    )
+    _log_ws(
+        "FEED_WS_HANDSHAKE_CREDENTIAL_PROOF",
+        {key: value for key, value in handshake_proof.items() if key != "event"},
+    )
+    logger.info(
+        "feed_ws_handshake_credential_proof public_key_tail4=%s access_token_tail4=%s access_token_len=%s access_token_has_internal_whitespace=%s token_count=%s profile_verified=%s",
+        handshake_proof.get("public_key_tail4"),
+        handshake_proof.get("access_token_tail4"),
+        handshake_proof.get("access_token_len"),
+        handshake_proof.get("access_token_has_internal_whitespace"),
+        handshake_proof.get("token_count"),
+        handshake_proof.get("profile_verified"),
+    )
+
     with _KITE_TICKER_LOCK:
         if _KITE_TICKER is not None:
             logger.info("kite_ws_existing_instance_detected_closing")
@@ -3630,6 +3654,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         except Exception:
             code_int = None
         if is_auth_error(code=code_int, reason_text=reason_text):
+            failure_proof = build_ws_auth_failure_proof_event(
+                public_key=api_key,
+                access_token=access_token,
+                code=code_int,
+                reason=reason_text,
+                auth_required_latch=bool(_AUTH_REQUIRED_LATCH),
+            )
+            _log_ws(
+                "FEED_WS_AUTH_FAILURE_PROOF",
+                {key: value for key, value in failure_proof.items() if key != "event"},
+            )
             _mark_auth_required(_auth_error_text(code, reason_text), code=code_int, source="kite_depth_ws_error")
             return
         reason_lower = reason_text.lower()
@@ -3669,6 +3704,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_close(ws, code, reason):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         if _AUTH_REQUIRED_LATCH:
+            close_failure_proof = build_ws_auth_failure_proof_event(
+                public_key=api_key,
+                access_token=access_token,
+                code=code,
+                reason=str(reason),
+                auth_required_latch=True,
+                source="kite_depth_ws_close_auth_required",
+            )
+            _log_ws(
+                "FEED_WS_AUTH_FAILURE_PROOF",
+                {key: value for key, value in close_failure_proof.items() if key != "event"},
+            )
             _log_ws("FEED_CLOSE_AUTH_REQUIRED", {"code": code, "reason": str(reason)})
             _RUNTIME_STATE = "AUTH_BLOCKED"
             _LAST_RUNTIME_ERROR = f"{code}:{reason}"[:1000]
