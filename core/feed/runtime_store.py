@@ -77,6 +77,24 @@ def _coerce_epoch(value: Any) -> float | None:
         return None
 
 
+def _startup_event_for_runtime_source(source: str, runtime_state: str) -> str | None:
+    source_text = str(source or "")
+    state_text = str(runtime_state or "").strip().upper()
+    if source_text == "start_depth_ws:starting":
+        return "START_DEPTH_WS_ENTERED"
+    if source_text.startswith("start_depth_ws:auth_blocked") or state_text == "AUTH_BLOCKED":
+        return "AUTH_BLOCKED"
+    if source_text.startswith("start_depth_ws:connect_failed"):
+        return "START_FAILED"
+    if source_text.startswith("start_depth_ws:lock_blocked"):
+        return "START_FAILED"
+    if source_text.startswith("start_depth_ws:import_missing"):
+        return "START_FAILED"
+    if source_text.startswith("start_depth_ws:subscribe_failed"):
+        return "START_FAILED"
+    return None
+
+
 def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
     if not isinstance(payload, dict):
         return False
@@ -133,16 +151,26 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
             )
     except Exception:
         return False
+    lifecycle_details = {
+        "source": source,
+        "ws_connected": payload.get("ws_connected"),
+        "runtime_state": runtime_state,
+        "subscribed_tokens_count": tokens_count,
+        "intended_tokens_count": intended_tokens_count,
+    }
+    startup_event = _startup_event_for_runtime_source(source, runtime_state)
+    if startup_event:
+        record_feed_startup_event(
+            startup_event,
+            source="core.feed.runtime_store.write_runtime_snapshot",
+            details=lifecycle_details,
+            error=last_error,
+            now_epoch=ts_epoch,
+        )
     record_feed_startup_event(
         "FEED_RUNTIME_SNAPSHOT_WRITTEN",
         source="core.feed.runtime_store.write_runtime_snapshot",
-        details={
-            "source": source,
-            "ws_connected": payload.get("ws_connected"),
-            "runtime_state": runtime_state,
-            "subscribed_tokens_count": tokens_count,
-            "intended_tokens_count": intended_tokens_count,
-        },
+        details=lifecycle_details,
         now_epoch=ts_epoch,
     )
     return True
