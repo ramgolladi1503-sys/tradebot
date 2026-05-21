@@ -1,5 +1,18 @@
 # EDGE-22 — Agent Review Enforcement Gate
 
+## Evidence Contract Fields
+
+- mode: CI_PROCESS
+- candidate_id: EDGE-22-agent-review-enforcement-gate
+- decision: ENFORCE_AGENT_REVIEW_EVIDENCE_GATE
+- reason: Future PRs must include explicit mini-agent review evidence before merge.
+- timestamp: 2026-05-21T11:40:00Z
+- is_order_action: false
+- broker_api_called: false
+- live_order_action: false
+- broker_order_action: false
+- source: docs/agent_reviews/EDGE-22-agent-review-enforcement-gate.md
+
 ## Review Type
 
 - [x] Pre-merge review
@@ -29,7 +42,7 @@
   - No strategy, scoring, ranking, threshold, or dashboard changes.
 - Acceptance tests:
   - Validator fails when no docs/agent_reviews/*.md file is changed.
-  - Validator fails when required sections are missing.
+  - Validator fails when required sections are absent.
   - Validator fails when high-risk files change without High-Risk Path Review.
   - GitHub Actions runs the validator on pull_request events.
 - Runtime proof required: none. This PR is CI/process only.
