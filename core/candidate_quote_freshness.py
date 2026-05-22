@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from config import config as cfg
+from core.quote_age_truth import QUOTE_AGE_TIMESTAMP_MISMATCH, classify_quote_age_truth
 
 QUOTE_FRESHNESS_BLOCK_REASON = "quote_freshness_contract_failed"
 OPTION_FEED_BLOCK_REASON_OK = "OK"
@@ -153,6 +154,14 @@ def _edge32_field_present(candidate: Any, flags: dict[str, Any], field: str) -> 
     return value not in (None, "", "None")
 
 
+def _quote_age_mismatch_tolerance_sec() -> float:
+    raw = getattr(cfg, "QUOTE_AGE_MISMATCH_TOLERANCE_SEC", 5.0)
+    try:
+        return max(0.0, float(raw))
+    except Exception:
+        return 5.0
+
+
 def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnessDecision:
     """Validate per-candidate quote freshness proof for executable candidates."""
     flags = _source_flags(candidate)
@@ -175,14 +184,22 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
     uses_legacy_identity = _missing_identity(explicit_token) and has_legacy_identity
     option_token = explicit_token if not _missing_identity(explicit_token) else legacy_identity
 
-    quote_age_sec = _safe_float(
-        _coalesce(
-            _candidate_get(candidate, "quote_age_sec"),
-            flags.get("quote_age_sec"),
-            _candidate_get(candidate, "price_age_sec"),
-            flags.get("price_age_sec"),
-        )
+    quote_age_decision = classify_quote_age_truth(
+        candidate,
+        mismatch_tolerance_sec=_quote_age_mismatch_tolerance_sec(),
     )
+    quote_age_sec = quote_age_decision.effective_age_sec
+    if quote_age_decision.reason_code == QUOTE_AGE_TIMESTAMP_MISMATCH:
+        _append_unique(reasons, QUOTE_AGE_TIMESTAMP_MISMATCH)
+    elif quote_age_sec is None:
+        quote_age_sec = _safe_float(
+            _coalesce(
+                _candidate_get(candidate, "quote_age_sec"),
+                flags.get("quote_age_sec"),
+                _candidate_get(candidate, "price_age_sec"),
+                flags.get("price_age_sec"),
+            )
+        )
     has_full_edge32_payload = any(
         _edge32_field_present(candidate, flags, field)
         for field in (
@@ -273,6 +290,7 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
             "option_feed_block_reason": option_feed_block_reason,
             "legacy_fresh_fixture": legacy_fresh_fixture,
             "has_full_edge32_payload": has_full_edge32_payload,
+            "quote_age_truth": quote_age_decision.__dict__,
             "ltp_age_sec": ltp_age_sec,
             "bid_age_sec": bid_age_sec,
             "ask_age_sec": ask_age_sec,
