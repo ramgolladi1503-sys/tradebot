@@ -2,9 +2,9 @@
 
 mode: docs_only
 candidate_id: pr199_observability_architecture
-recommendation: approve_docs_only_architecture_record
+decision: approve_docs_only_architecture_record
 reason: user_requested_observability_architecture_roadmap_recorded_in_repo_with_no_runtime_change
-timestamp: 2026-05-22T19:20:00Z
+timestamp: 2026-05-22T19:25:00Z
 is_order_action: false
 broker_api_called: false
 source: docs/observability/OBSERVABILITY_ARCHITECTURE.md
