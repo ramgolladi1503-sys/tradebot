@@ -72,9 +72,9 @@ def select_expiry(
     if mode == "MONTHLY":
         monthly = _monthly_expiry_candidates(expiries)
         future = [exp for exp in monthly if exp >= today]
-        return future[0] if future else monthly[-1]
+        return future[0] if future else None
     future = [exp for exp in expiries if exp >= today]
-    return future[0] if future else expiries[-1]
+    return future[0] if future else None
 
 
 def select_next_expiry(
@@ -156,6 +156,7 @@ def resolve_registry_contract(
 ) -> dict | None:
     sym = str(symbol or "").upper()
     seg = str(registry_payload.get("segment") or option_segment(option_exchange(sym))).upper()
+    today = today or date.today()
     try:
         strike_val = float(strike)
     except Exception:
@@ -175,6 +176,15 @@ def resolve_registry_contract(
         return None
     requested = coerce_expiry_date(requested_expiry)
     chosen = None
+    if requested is not None and requested < today:
+        logger.warning(
+            "[EXPIRED_CONTRACT_REJECTED] context=%s symbol=%s requested_expiry=%s today=%s",
+            "resolve_registry_contract",
+            sym,
+            requested.isoformat(),
+            today.isoformat(),
+        )
+        return None
     if requested is not None and requested in expiry_candidates:
         chosen = requested
     elif requested is not None:
@@ -188,9 +198,17 @@ def resolve_registry_contract(
         chosen = select_expiry(
             expiry_candidates,
             selection_mode=selection_mode,
-            today=today or date.today(),
+            today=today,
         )
-    if chosen is None:
+    if chosen is None or chosen < today:
+        logger.warning(
+            "[EXPIRED_CONTRACT_REJECTED] context=%s symbol=%s requested_expiry=%s available_expiries=%s today=%s",
+            "resolve_registry_contract",
+            sym,
+            requested.isoformat() if requested is not None else None,
+            [d.isoformat() for d in expiry_candidates],
+            today.isoformat(),
+        )
         return None
     key = (sym, seg, strike_val, opt_type, chosen)
     entry = reg.get(key)

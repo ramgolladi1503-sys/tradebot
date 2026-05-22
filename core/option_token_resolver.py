@@ -16,7 +16,7 @@ from core.instruments import build_option_registry, log_requested_expiry_missing
 from core.kite_client import kite_client
 from core.log_writer import get_jsonl_writer
 from core.paths import data_root, logs_dir
-from core.time_utils import utc_now
+from core.time_utils import now_ist, utc_now
 
 _LOG_PATH = logs_dir() / "option_token_resolution.jsonl"
 _LOGGER = get_jsonl_writer(_LOG_PATH)
@@ -33,9 +33,15 @@ class TokenCoverageError(Exception):
         self.evidence = dict(evidence or {})
 
 
+def _trading_date() -> date:
+    return now_ist().date()
+
+
 def _coerce_expiry(value: Any) -> date | None:
     if value is None:
         return None
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date):
         return value
     try:
@@ -47,6 +53,57 @@ def _coerce_expiry(value: Any) -> date | None:
 
 def _norm_text(value: Any) -> str:
     return str(value or "").strip().upper()
+
+
+def _expiry_payload(value: date | None) -> str | None:
+    return value.isoformat() if isinstance(value, date) else None
+
+
+def _is_expired_contract(expiry: date | None, *, today: date | None = None) -> bool:
+    if expiry is None:
+        return False
+    return expiry < (today or _trading_date())
+
+
+def _log_expired_contract_rejected(
+    *,
+    sym: str,
+    exchange: str,
+    segment: str,
+    expiry: date,
+    strike: float,
+    opt_type: str,
+    data_source: str,
+    resolution_path: str,
+    tradingsymbol: Any = None,
+    instrument_token: Any = None,
+    requested_expiry: date | None = None,
+    resolved_expiry: date | None = None,
+) -> None:
+    today = _trading_date()
+    _LOGGER.write(
+        {
+            "ts": utc_now().isoformat(),
+            "event": "OPTION_TOKEN_EXPIRED_CONTRACT_REJECTED",
+            "code": "EXPIRED_CONTRACT_SELECTED",
+            "symbol": sym,
+            "exchange": exchange,
+            "segment": segment,
+            "expiry": expiry.isoformat(),
+            "strike": float(strike),
+            "option_type": opt_type,
+            "tradingsymbol": tradingsymbol,
+            "instrument_token": instrument_token,
+            "requested_expiry": _expiry_payload(requested_expiry),
+            "resolved_expiry": _expiry_payload(resolved_expiry or expiry),
+            "trading_date": today.isoformat(),
+            "data_source": data_source,
+            "resolution_path": resolution_path,
+            "execution_grade": False,
+            "advisory_only": True,
+            "reason": "expired_contract_selected",
+        }
+    )
 
 
 def _load_local_instruments_cache(exchange: str) -> list[dict]:
@@ -247,6 +304,8 @@ def _find_safe_fallback_contract(
     candidates = []
     for key, value in _fallback_candidate_rows(registry, sym=sym, segment=segment, opt_type=opt_type):
         key_sym, key_segment, key_strike, key_opt_type, key_expiry = key
+        if _is_expired_contract(key_expiry):
+            continue
         try:
             strike_distance = abs(float(key_strike) - float(requested_strike))
         except Exception:
@@ -344,12 +403,14 @@ def _allow_exact_match_below_threshold(data_source: str) -> bool:
     return source in {"local_cache", "file_cache"}
 
 
-def _token_payload_from_exact_match(*, token: int, entry: dict, exchange: str, segment: str) -> dict:
+def _token_payload_from_exact_match(*, token: int, entry: dict, exchange: str, segment: str, expiry: date) -> dict:
     return {
         "instrument_token": token,
         "tradingsymbol": entry.get("tradingsymbol"),
         "exchange": exchange,
         "segment": segment,
+        "expiry": expiry,
+        "resolved_expiry": expiry,
         "resolution_path": "exact_contract_match",
         "fallback_candidate": False,
         "candidate_origin": "exact_contract",
@@ -382,6 +443,20 @@ def resolve_option_token(
         return None
     exchange = (exchange or ("BFO" if sym == "SENSEX" else "NFO")).upper()
     segment = "NFO-OPT" if exchange == "NFO" else "BFO-OPT"
+    if _is_expired_contract(exp):
+        _log_expired_contract_rejected(
+            sym=sym,
+            exchange=exchange,
+            segment=segment,
+            expiry=exp,
+            strike=strike_val,
+            opt_type=opt_type,
+            data_source="input",
+            resolution_path="requested_expiry_rejected",
+            requested_expiry=exp,
+            resolved_expiry=exp,
+        )
+        return None
     data, data_source = _load_instruments(exchange)
     if not data:
         _LOGGER.write(
@@ -420,9 +495,25 @@ def resolve_option_token(
     key = (sym, segment, strike_val, opt_type, exp)
     entry = registry.get(key)
     exact_match_exists = isinstance(entry, dict) and entry.get("instrument_token")
+    if exact_match_exists and _is_expired_contract(exp):
+        _log_expired_contract_rejected(
+            sym=sym,
+            exchange=exchange,
+            segment=segment,
+            expiry=exp,
+            strike=strike_val,
+            opt_type=opt_type,
+            data_source=data_source,
+            resolution_path="exact_contract_match",
+            tradingsymbol=entry.get("tradingsymbol"),
+            instrument_token=entry.get("instrument_token"),
+            requested_expiry=exp,
+            resolved_expiry=exp,
+        )
+        return None
     if _allow_exact_match_below_threshold(data_source) and exact_match_exists:
         token = int(entry.get("instrument_token"))
-        payload = _token_payload_from_exact_match(token=token, entry=entry, exchange=exchange, segment=segment)
+        payload = _token_payload_from_exact_match(token=token, entry=entry, exchange=exchange, segment=segment, expiry=exp)
         _LOGGER.write(
             {
                 "ts": utc_now().isoformat(),
@@ -436,22 +527,24 @@ def resolve_option_token(
                 "exchange": exchange,
                 "data_source": data_source,
                 "resolution_path": "exact_contract_match",
+                "execution_grade": True,
             }
         )
         return payload
-    _enforce_token_coverage_threshold(
-        sym=sym,
-        exchange=exchange,
-        segment=segment,
-        exp=exp,
-        strike_val=strike_val,
-        opt_type=opt_type,
-        rows_for_expiry=rows_for_expiry,
-        data_source=data_source,
-    )
+    if rows_for_expiry:
+        _enforce_token_coverage_threshold(
+            sym=sym,
+            exchange=exchange,
+            segment=segment,
+            exp=exp,
+            strike_val=strike_val,
+            opt_type=opt_type,
+            rows_for_expiry=rows_for_expiry,
+            data_source=data_source,
+        )
     if exact_match_exists:
         token = int(entry.get("instrument_token"))
-        payload = _token_payload_from_exact_match(token=token, entry=entry, exchange=exchange, segment=segment)
+        payload = _token_payload_from_exact_match(token=token, entry=entry, exchange=exchange, segment=segment, expiry=exp)
         _LOGGER.write(
             {
                 "ts": utc_now().isoformat(),
@@ -465,6 +558,7 @@ def resolve_option_token(
                 "exchange": exchange,
                 "data_source": data_source,
                 "resolution_path": "exact_contract_match",
+                "execution_grade": True,
             }
         )
         return payload
@@ -478,6 +572,23 @@ def resolve_option_token(
         opt_type=opt_type,
     )
     if fallback:
+        resolved_expiry = _coerce_expiry(fallback.get("resolved_expiry"))
+        if _is_expired_contract(resolved_expiry):
+            _log_expired_contract_rejected(
+                sym=sym,
+                exchange=exchange,
+                segment=segment,
+                expiry=resolved_expiry or exp,
+                strike=strike_val,
+                opt_type=opt_type,
+                data_source=data_source,
+                resolution_path="safe_nearest_contract_fallback",
+                tradingsymbol=fallback.get("tradingsymbol"),
+                instrument_token=fallback.get("instrument_token"),
+                requested_expiry=exp,
+                resolved_expiry=resolved_expiry,
+            )
+            return None
         _LOGGER.write(
             {
                 "ts": utc_now().isoformat(),
@@ -497,6 +608,7 @@ def resolve_option_token(
                 "resolved_strike": fallback.get("resolved_strike"),
                 "expiry_distance_days": fallback.get("expiry_distance_days"),
                 "strike_distance": fallback.get("strike_distance"),
+                "execution_grade": False,
             }
         )
         return {
@@ -504,13 +616,14 @@ def resolve_option_token(
             "tradingsymbol": fallback.get("tradingsymbol"),
             "exchange": exchange,
             "segment": segment,
+            "expiry": fallback.get("resolved_expiry"),
+            "resolved_expiry": fallback.get("resolved_expiry"),
             "resolution_path": "safe_nearest_contract_fallback",
             "fallback_candidate": True,
             "candidate_origin": "fallback",
             "execution_grade": False,
             "advisory_only": True,
             "requested_expiry": fallback.get("requested_expiry"),
-            "resolved_expiry": fallback.get("resolved_expiry"),
             "requested_strike": fallback.get("requested_strike"),
             "resolved_strike": fallback.get("resolved_strike"),
         }

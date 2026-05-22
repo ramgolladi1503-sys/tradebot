@@ -7,6 +7,9 @@ from config import config as cfg
 import core.option_token_resolver as resolver
 
 
+FUTURE_EXPIRY = "2026-05-26"
+
+
 class _CaptureLogger:
     def __init__(self) -> None:
         self.rows: list[dict] = []
@@ -20,11 +23,11 @@ def _instrument_row(*, token: int, strike: float, opt_type: str) -> dict:
     return {
         "segment": "NFO-OPT",
         "name": "NIFTY",
-        "expiry": "2026-03-02",
+        "expiry": FUTURE_EXPIRY,
         "strike": float(strike),
         "instrument_type": str(opt_type).upper(),
         "instrument_token": int(token),
-        "tradingsymbol": f"NIFTY26MAR{int(strike)}{str(opt_type).upper()}",
+        "tradingsymbol": f"NIFTY26MAY{int(strike)}{str(opt_type).upper()}",
     }
 
 
@@ -55,7 +58,7 @@ def test_resolver_prefers_local_cache_and_logs_registry_stats(monkeypatch, tmp_p
 
     out = resolver.resolve_option_token(
         symbol="NIFTY",
-        expiry_date="2026-03-02",
+        expiry_date=FUTURE_EXPIRY,
         strike=24600.0,
         option_type="PE",
         exchange="NFO",
@@ -86,7 +89,7 @@ def test_resolver_logs_under_min_token_count(monkeypatch, tmp_path):
     with pytest.raises(resolver.TokenCoverageError) as exc_info:
         resolver.resolve_option_token(
             symbol="NIFTY",
-            expiry_date="2026-03-02",
+            expiry_date=FUTURE_EXPIRY,
             strike=24700.0,
             option_type="CE",
             exchange="NFO",
@@ -117,7 +120,7 @@ def test_resolver_returns_exact_contract_match_even_when_coverage_is_below_thres
 
     out = resolver.resolve_option_token(
         symbol="NIFTY",
-        expiry_date="2026-03-02",
+        expiry_date=FUTURE_EXPIRY,
         strike=24650.0,
         option_type="CE",
         exchange="NFO",
@@ -147,7 +150,7 @@ def test_resolver_marks_safe_nearest_contract_fallback_as_advisory_only(monkeypa
 
     out = resolver.resolve_option_token(
         symbol="NIFTY",
-        expiry_date="2026-03-02",
+        expiry_date=FUTURE_EXPIRY,
         strike=24700.0,
         option_type="CE",
         exchange="NFO",
@@ -178,7 +181,7 @@ def test_resolver_returns_none_and_logs_not_found_when_no_exact_or_safe_fallback
 
     out = resolver.resolve_option_token(
         symbol="NIFTY",
-        expiry_date="2026-03-02",
+        expiry_date=FUTURE_EXPIRY,
         strike=24700.0,
         option_type="CE",
         exchange="NFO",
