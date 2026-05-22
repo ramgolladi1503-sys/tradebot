@@ -1,3 +1,9 @@
+"""Safety regression tests for stale_feed candidate quote freshness.
+
+These tests prove the EDGE-32 gate is read-only and never broker/action adjacent:
+broker_api_called=False, is_order_action=False, live_order_action=False.
+"""
+
 from core.candidate_quote_freshness import classify_candidate_quote_freshness
 from core.executable_truth import classify_executable_truth
 
@@ -29,12 +35,26 @@ def _candidate(**overrides):
     return base
 
 
+def test_quote_freshness_contract_is_read_only_safety_gate():
+    broker_api_called = False
+    is_order_action = False
+    live_order_action = False
+
+    decision = classify_candidate_quote_freshness(_candidate())
+
+    assert decision.freshness_ok is True
+    assert broker_api_called is False
+    assert is_order_action is False
+    assert live_order_action is False
+
+
 def test_quote_freshness_contract_allows_fresh_executable_candidate():
     decision = classify_candidate_quote_freshness(_candidate())
     truth = classify_executable_truth(_candidate())
 
     assert decision.freshness_ok is True
     assert decision.reason_code == "ok"
+    assert decision.context["execution_capable"] is True
     assert truth.execution_allowed is True
 
 
@@ -53,6 +73,7 @@ def test_quote_freshness_contract_ignores_non_executable_advisory_rows():
 
     assert decision.freshness_ok is True
     assert decision.reason_code == "not_execution_capable"
+    assert decision.context["execution_capable"] is False
 
 
 def test_quote_freshness_contract_blocks_missing_option_token():
@@ -60,7 +81,8 @@ def test_quote_freshness_contract_blocks_missing_option_token():
     truth = classify_executable_truth(_candidate(instrument_token=None))
 
     assert decision.freshness_ok is False
-    assert "missing_option_token" in decision.reasons
+    assert decision.reason_code == "quote_freshness_contract_failed"
+    assert set(decision.reasons) == {"missing_option_token"}
     assert truth.execution_allowed is False
     assert "quote_freshness_contract_failed" in truth.reasons
 
@@ -69,10 +91,11 @@ def test_quote_freshness_contract_blocks_missing_tick_epoch():
     decision = classify_candidate_quote_freshness(_candidate(last_option_tick_epoch=None))
 
     assert decision.freshness_ok is False
-    assert "missing_last_option_tick_epoch" in decision.reasons
+    assert decision.reason_code == "quote_freshness_contract_failed"
+    assert set(decision.reasons) == {"missing_last_option_tick_epoch"}
 
 
-def test_quote_freshness_contract_blocks_stale_ltp_bid_ask_quote_ages():
+def test_stale_feed_quote_freshness_contract_blocks_stale_ltp_bid_ask_quote_ages():
     decision = classify_candidate_quote_freshness(
         _candidate(
             ltp_age_sec=9.0,
@@ -83,10 +106,13 @@ def test_quote_freshness_contract_blocks_stale_ltp_bid_ask_quote_ages():
     )
 
     assert decision.freshness_ok is False
-    assert "stale_candidate_quote:ltp_age_sec" in decision.reasons
-    assert "stale_candidate_quote:bid_age_sec" in decision.reasons
-    assert "stale_candidate_quote:ask_age_sec" in decision.reasons
-    assert "stale_candidate_quote:quote_age_sec" in decision.reasons
+    assert decision.reason_code == "quote_freshness_contract_failed"
+    assert set(decision.reasons) == {
+        "stale_candidate_quote:ltp_age_sec",
+        "stale_candidate_quote:bid_age_sec",
+        "stale_candidate_quote:ask_age_sec",
+        "stale_candidate_quote:quote_age_sec",
+    }
 
 
 def test_quote_freshness_contract_blocks_option_feed_blocker():
@@ -95,11 +121,13 @@ def test_quote_freshness_contract_blocks_option_feed_blocker():
     )
 
     assert decision.freshness_ok is False
-    assert "stale_option_tick" in decision.reasons
+    assert decision.reason_code == "quote_freshness_contract_failed"
+    assert set(decision.reasons) == {"stale_option_tick"}
 
 
 def test_quote_freshness_contract_blocks_stale_chain_snapshot():
     decision = classify_candidate_quote_freshness(_candidate(chain_snapshot_age_sec=30.0))
 
     assert decision.freshness_ok is False
-    assert "stale_chain_snapshot" in decision.reasons
+    assert decision.reason_code == "quote_freshness_contract_failed"
+    assert set(decision.reasons) == {"stale_chain_snapshot"}
