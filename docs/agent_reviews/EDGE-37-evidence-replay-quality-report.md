@@ -3,7 +3,9 @@
 mode: PAPER
 candidate_id: EDGE-37
 source: docs/agent_reviews/EDGE-37-evidence-replay-quality-report.md
+timestamp: 2026-05-22T19:42:00+05:30
 decision: add offline/read-only evidence replay reporting for live diagnostic bundles
+reason: live diagnostic evidence needs repeatable replay analysis before token, quote-age, fallback, and feed recovery fixes
 is_order_action: false
 broker_api_called: false
 live_order_action: false
@@ -122,6 +124,29 @@ Acceptance requires:
 - Missing files are reported, not hidden.
 - Report includes evidence map.
 - Report is read-only and broker-free.
+
+## Runtime Proof Required After Merge
+
+After merge, run the CLI against the May 22 diagnostic bundle on the local machine:
+
+```bash
+python scripts/analyze_live_diag_evidence.py runtime/evidence/live_diag_20260522_evidence.tar.gz --today 2026-05-22
+```
+
+Required runtime proof:
+
+- The command completes without broker calls.
+- The report classifies expired contract evidence if present.
+- The report classifies quote timestamp/age mismatch if present.
+- The report classifies fallback/rest/tick-store rows if present.
+- The report classifies zero executable opportunities if present.
+- The report output is preserved as a local artifact for EDGE-39/40/41 planning.
+
+## What This PR Does Not Prove
+
+This PR does not prove live trading readiness, strategy profitability, broker readiness, order placement safety, feed recovery success, token resolver correctness, fallback firewall correctness, quote timestamp runtime enforcement, dashboard correctness, or paper-trading expectancy.
+
+It only proves that captured evidence can be replayed into a structured report.
 
 ## Expected verdict for May 22 diagnostic evidence
 
