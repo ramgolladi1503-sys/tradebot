@@ -26,6 +26,7 @@ def _build_snapshot(root: Path) -> Path:
     snapshot = root / "runtime" / "evidence" / "live_diag_manual_20260522_143341"
     latest = snapshot / "runtime_latest"
     logs = snapshot / "runtime_logs"
+    observation_ts_epoch = 1779441061.0
 
     _write_json(
         latest / "feed_runtime_latest.json",
@@ -36,6 +37,7 @@ def _build_snapshot(root: Path) -> Path:
             "last_tick_age_sec": 0.2,
             "option_last_tick_age_by_symbol": {"NIFTY": 0.2, "BANKNIFTY": 602128.0},
             "option_feed_block_reason_by_symbol": {"NIFTY": "OK", "BANKNIFTY": "quote_exceeds_threshold"},
+            "ts_epoch": observation_ts_epoch,
         },
     )
     _write_json(
@@ -47,6 +49,7 @@ def _build_snapshot(root: Path) -> Path:
                 "freshness_reason": "quote_exceeds_threshold",
                 "quote_age_sec": 602128.0,
                 "freshness_threshold_sec": 900.0,
+                "ts_epoch": observation_ts_epoch,
             },
             "NIFTY": {
                 "symbol": "NIFTY",
@@ -54,10 +57,11 @@ def _build_snapshot(root: Path) -> Path:
                 "freshness_reason": "quote_within_threshold",
                 "quote_age_sec": 1.0,
                 "freshness_threshold_sec": 900.0,
+                "ts_epoch": observation_ts_epoch,
             },
         },
     )
-    _write_json(latest / "runtime_health_latest.json", {"status": "WARN"})
+    _write_json(latest / "runtime_health_latest.json", {"status": "WARN", "ts_epoch": observation_ts_epoch})
     _write_json(
         latest / "top_opportunities_latest.json",
         {
@@ -66,6 +70,7 @@ def _build_snapshot(root: Path) -> Path:
             "source_candidate_count": 0,
             "phase2_reason": "no_rankable_candidates",
             "selector_outcome": "NO_EXECUTABLE_OPPORTUNITY",
+            "ts_epoch": observation_ts_epoch,
         },
     )
     _write_json(
@@ -79,6 +84,7 @@ def _build_snapshot(root: Path) -> Path:
                     "instrument_token": 123,
                     "quote_source": "live",
                     "quote_age_sec": 1.0,
+                    "ts_epoch": observation_ts_epoch,
                 }
             ]
         },
@@ -90,14 +96,15 @@ def _build_snapshot(root: Path) -> Path:
             "resolved_expiry": "2026-05-19",
             "instrument_token": 123,
             "resolution_path": "exact_contract_match",
+            "ts_epoch": observation_ts_epoch,
         },
     )
 
     _write_jsonl(
         logs / "freshness_decisions_tail.jsonl",
         [
-            {"symbol": "BANKNIFTY", "fresh": False, "reason": "quote_exceeds_threshold", "quote_age_sec": 602128.0},
-            {"symbol": "NIFTY", "fresh": True, "reason": "quote_within_threshold", "quote_age_sec": 1.0},
+            {"symbol": "BANKNIFTY", "fresh": False, "reason": "quote_exceeds_threshold", "quote_age_sec": 602128.0, "ts_epoch": observation_ts_epoch},
+            {"symbol": "NIFTY", "fresh": True, "reason": "quote_within_threshold", "quote_age_sec": 1.0, "ts_epoch": observation_ts_epoch},
         ],
     )
     _write_jsonl(
@@ -111,6 +118,7 @@ def _build_snapshot(root: Path) -> Path:
                 "reject_reason": "no_signal",
                 "quote_source": "rest_fallback",
                 "execution_allowed": False,
+                "ts_epoch": observation_ts_epoch,
             }
         ],
     )
@@ -130,10 +138,11 @@ def _build_snapshot(root: Path) -> Path:
                 "current_ltp": 731.75,
                 "best_bid": 386.4,
                 "best_ask": 387.45,
+                "ts_epoch": observation_ts_epoch,
             }
         ],
     )
-    _write_jsonl(logs / "trade_lifecycle_tail.jsonl", [{"trade_id": "t2", "stage": "review", "status": "blocked"}])
+    _write_jsonl(logs / "trade_lifecycle_tail.jsonl", [{"trade_id": "t2", "stage": "review", "status": "blocked", "ts_epoch": observation_ts_epoch}])
     return snapshot
 
 
