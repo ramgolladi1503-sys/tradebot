@@ -68,8 +68,7 @@ def test_valid_local_exact_match_remains_execution_grade(monkeypatch):
 
     result = resolver.resolve_option_token("NIFTY", "2026-05-26", 26000, "CE")
 
-    assert result is not None
-    assert result["instrument_token"] == 202
+    assert result and result["instrument_token"] == 202
     assert result["resolution_path"] == "exact_contract_match"
     assert result["execution_grade"] is True
     assert result["advisory_only"] is False
@@ -92,8 +91,7 @@ def test_safe_fallback_skips_expired_contract_and_uses_future_contract(monkeypat
 
     result = resolver.resolve_option_token("NIFTY", "2026-05-22", 26000, "CE")
 
-    assert result is not None
-    assert result["instrument_token"] == 302
+    assert result and result["instrument_token"] == 302
     assert result["resolution_path"] == "safe_nearest_contract_fallback"
     assert result["execution_grade"] is False
     assert result["advisory_only"] is True
