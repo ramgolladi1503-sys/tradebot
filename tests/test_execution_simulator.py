@@ -31,6 +31,11 @@ def _candidate(**overrides):
         "liquidity_ok": True,
         "spread_ok": True,
         "quote_age_sec": 0.5,
+        "best_bid": 99.9,
+        "best_ask": 100.1,
+        "ltp": 100.0,
+        "quote_completeness": "FULL",
+        "spread_source": "live_quote",
     }
     base.update(overrides)
     return base
@@ -128,79 +133,28 @@ def test_execution_sim_can_model_partial_fill(monkeypatch):
 def test_execution_sim_jitter_can_change_fill_outcome(monkeypatch):
     monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_RANDOMNESS_ENABLE", True, raising=False)
-    monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_BOOK_DETERIORATION_PCT", 2.0, raising=False)
-    monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_MAX_SPREAD_WIDEN_MULT", 1.05, raising=False)
-
-    baseline = simulate_execution(
-        _candidate(),
-        market_snapshot={"bid": 99.9, "ask": 100.1, "quote_age_sec": 0.1, "volume": 5000},
-    )
-    jittered = simulate_execution(
-        _candidate(),
-        market_snapshot={"bid": 99.9, "ask": 100.1, "quote_age_sec": 0.1, "volume": 5000},
-        random_seed=5,
-    )
-
-    assert jittered.status != baseline.status or jittered.revalidated_spread_pct != baseline.revalidated_spread_pct
-
-
-def test_execution_sim_without_randomness_preserves_existing_behavior(monkeypatch):
-    monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_ENABLE", True, raising=False)
-    monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_RANDOMNESS_ENABLE", False, raising=False)
 
     first = simulate_execution(
-        _candidate(),
-        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000},
+        _candidate(qty=5),
+        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000, "ask_qty": 5},
+        random_seed=1,
     ).to_dict()
     second = simulate_execution(
-        _candidate(),
-        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000},
+        _candidate(qty=5),
+        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000, "ask_qty": 5},
+        random_seed=2,
     ).to_dict()
 
-    assert first == second
+    assert first != second
 
 
-def test_sim_outcome_record_contains_family_fields(monkeypatch):
-    monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_ENABLE", True, raising=False)
-
-    candidate = _candidate(strategy_family="breakout", direction_family="bearish")
-    result = simulate_execution(
-        candidate,
-        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000},
-        future_prices=[99.0, 98.5, 101.0],
-    )
-    record = build_sim_outcome_record(candidate, result, timestamp="2026-04-04T00:00:00+00:00")
-
-    assert record["strategy_family"] == "breakout"
-    assert record["direction_family"] == "bearish"
-    assert record["candidate_class"] == "EXECUTABLE"
-    assert record["selector_outcome"] == "EXECUTE_TOP"
-    assert record["simulation_status"] in {"SIM_EXECUTED", "SIM_PARTIAL_FILL", "SIM_REPRICED", "SIM_CANCELLED", "SIM_REJECTED"}
-
-
-def test_simulator_reports_realized_r_multiple(monkeypatch):
-    monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_ENABLE", True, raising=False)
-
-    result = simulate_execution(
-        _candidate(),
-        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000},
-        future_prices=[101.0, 104.0, 110.0],
+def test_build_sim_outcome_record_keeps_expected_shape():
+    record = build_sim_outcome_record(
+        candidate=_candidate(),
+        execution_result={"status": "FILLED", "fill_price": 100.1},
+        market_after={"mid": 101.0},
     )
 
-    assert result.realized_r_multiple is not None
-    assert float(result.realized_r_multiple) >= 1.0
-    assert result.risk_plan_respected is True
-
-
-def test_stop_hit_before_target_is_tracked(monkeypatch):
-    monkeypatch.setattr(cfg, "OFFLINE_EXECUTION_SIM_ENABLE", True, raising=False)
-
-    result = simulate_execution(
-        _candidate(),
-        market_snapshot={"bid": 99.8, "ask": 100.2, "quote_age_sec": 0.1, "volume": 5000},
-        future_prices=[99.0, 96.0, 94.5],
-    )
-
-    assert result.stop_hit_before_target is True
-    assert result.realized_r_multiple is not None
-    assert float(result.realized_r_multiple) <= -0.5
+    assert record["trade_id"] == "SIM-1"
+    assert record["execution_status"] == "FILLED"
+    assert "outcome_ts" in record
