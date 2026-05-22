@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tarfile
 import tempfile
-from collections import Counter, defaultdict
+from collections import Counter
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
@@ -37,15 +37,6 @@ FALLBACK_SOURCES = {
     "quote_fallback",
     "close_fallback",
     "derived_fallback",
-}
-
-QUOTE_BLOCK_STATUSES = {
-    "PRICE_MISMATCH",
-    "REST_FALLBACK",
-    "STALE_OPTION_LTP",
-    "NO_LIVE_OPTION_FEED",
-    "QUOTE_AGE_MISMATCH",
-    "MISSING_OPTION_TOKEN",
 }
 
 
@@ -97,15 +88,6 @@ def _safe_float(value: Any) -> float | None:
         if value in (None, "", "None"):
             return None
         return float(value)
-    except Exception:
-        return None
-
-
-def _safe_int(value: Any) -> int | None:
-    try:
-        if value in (None, "", "None"):
-            return None
-        return int(float(value))
     except Exception:
         return None
 
@@ -168,6 +150,53 @@ def _coerce_date(value: Any) -> date | None:
         return datetime.strptime(text.split("T", 1)[0], "%Y-%m-%d").date()
     except Exception:
         return None
+
+
+def _coerce_epoch_seconds(value: Any) -> float | None:
+    numeric = _safe_float(value)
+    if numeric is not None:
+        if numeric > 10_000_000_000:
+            return float(numeric) / 1000.0
+        return float(numeric)
+    text = _text(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return float(parsed.timestamp())
+    except Exception:
+        return None
+
+
+def _row_observation_epoch(row: dict[str, Any]) -> float | None:
+    for field in (
+        "decision_ts_epoch",
+        "generated_at_epoch",
+        "snapshot_ts_epoch",
+        "display_ts_epoch",
+        "event_ts_epoch",
+        "timestamp_epoch",
+        "ts_epoch",
+        "created_at_epoch",
+    ):
+        epoch = _coerce_epoch_seconds(row.get(field))
+        if epoch is not None:
+            return epoch
+    for field in (
+        "decision_ts",
+        "generated_at",
+        "snapshot_ts",
+        "timestamp",
+        "ts_utc",
+        "ts_ist",
+        "created_at",
+    ):
+        epoch = _coerce_epoch_seconds(row.get(field))
+        if epoch is not None:
+            return epoch
+    return None
 
 
 def _infer_today(source: Path, options: EvidenceReplayOptions) -> date:
@@ -298,7 +327,6 @@ def _detect_quote_age_mismatches(
     *,
     options: EvidenceReplayOptions,
 ) -> None:
-    now_epoch = datetime.now(tz=timezone.utc).timestamp()
     for row in rows:
         quote_ts_epoch = _safe_float(
             row.get("quote_ts_epoch")
@@ -312,9 +340,10 @@ def _detect_quote_age_mismatches(
             or row.get("price_age_sec")
             or row.get("option_ltp_age_sec")
         )
-        if quote_ts_epoch is None or reported_age is None:
+        observation_epoch = _row_observation_epoch(row)
+        if quote_ts_epoch is None or reported_age is None or observation_epoch is None:
             continue
-        age_from_ts = max(0.0, float(now_epoch) - float(quote_ts_epoch))
+        age_from_ts = max(0.0, float(observation_epoch) - float(quote_ts_epoch))
         delta = abs(float(age_from_ts) - float(reported_age))
         if delta <= float(options.quote_age_mismatch_tolerance_sec):
             continue
@@ -324,6 +353,7 @@ def _detect_quote_age_mismatches(
                 "symbol": _upper(row.get("symbol") or row.get("underlying")) or None,
                 "trade_id": row.get("trade_id"),
                 "quote_ts_epoch": quote_ts_epoch,
+                "observation_epoch": observation_epoch,
                 "reported_age_sec": reported_age,
                 "age_from_timestamp_sec": round(age_from_ts, 6),
                 "delta_sec": round(delta, 6),
