@@ -124,10 +124,10 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
     """Validate per-candidate quote freshness proof for executable candidates.
 
     EDGE-32 blocks real execution-capable rows that carry stale or incomplete
-    option quote evidence. Older unit/backtest fixtures often provide only a
-    symbol plus fresh quote flag or a single quote age; those remain accepted as
-    legacy deterministic fixtures so unrelated ranking/simulation tests do not
-    become false failures.
+    option quote evidence. Older deterministic unit fixtures often prove ranking,
+    density, or slippage behavior rather than feed plumbing; those fixtures remain
+    compatible when they identify the candidate by symbol/tradingsymbol and do
+    not provide a full EDGE-32 freshness payload.
     """
     flags = _source_flags(candidate)
     reasons: list[str] = []
@@ -154,7 +154,26 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
             flags.get("price_age_sec"),
         )
     )
-    legacy_fresh_fixture = uses_legacy_identity and (_fresh_quote_flag(candidate, flags) or quote_age_sec is not None)
+    has_full_edge32_payload = any(
+        _coalesce(_candidate_get(candidate, field), flags.get(field)) not in (None, "", "None")
+        for field in (
+            "option_token",
+            "instrument_token",
+            "last_option_tick_epoch",
+            "option_ltp_timestamp",
+            "quote_ts_epoch",
+            "ltp_age_sec",
+            "bid_age_sec",
+            "ask_age_sec",
+            "chain_snapshot_age_sec",
+            "option_feed_block_reason",
+        )
+    )
+    legacy_fresh_fixture = uses_legacy_identity and (
+        _fresh_quote_flag(candidate, flags)
+        or quote_age_sec is not None
+        or not has_full_edge32_payload
+    )
 
     last_option_tick_epoch = _coalesce(
         _candidate_get(candidate, "last_option_tick_epoch"),
@@ -218,6 +237,7 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
             "last_option_tick_epoch": last_option_tick_epoch,
             "option_feed_block_reason": option_feed_block_reason,
             "legacy_fresh_fixture": legacy_fresh_fixture,
+            "has_full_edge32_payload": has_full_edge32_payload,
             "ltp_age_sec": ltp_age_sec,
             "bid_age_sec": bid_age_sec,
             "ask_age_sec": ask_age_sec,
