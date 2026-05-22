@@ -623,7 +623,6 @@ def resolve_option_token(
             "execution_grade": False,
             "advisory_only": True,
             "requested_expiry": fallback.get("requested_expiry"),
-            "resolved_expiry": fallback.get("resolved_expiry"),
             "requested_strike": fallback.get("requested_strike"),
             "resolved_strike": fallback.get("resolved_strike"),
         }
