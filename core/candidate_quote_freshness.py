@@ -79,6 +79,23 @@ def _execution_status(candidate: Any, flags: dict[str, Any]) -> str:
     ).strip().lower()
 
 
+def _market_mode(candidate: Any, flags: dict[str, Any]) -> str:
+    market_context = _candidate_get(candidate, "market_context", {}) or {}
+    if not isinstance(market_context, dict):
+        market_context = {}
+    return str(
+        _coalesce(
+            _candidate_get(candidate, "market_mode"),
+            flags.get("market_mode"),
+            flags.get("runtime_mode"),
+            market_context.get("mode"),
+            market_context.get("execution_mode"),
+            getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")),
+        )
+        or "SIM"
+    ).strip().upper()
+
+
 def _looks_execution_capable(candidate: Any, flags: dict[str, Any]) -> bool:
     candidate_class = _candidate_class(candidate, flags)
     execution_status = _execution_status(candidate, flags)
@@ -150,9 +167,12 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
 
     max_quote_age = _max_quote_age_sec()
     max_chain_age = _max_chain_snapshot_age_sec()
+    market_mode = _market_mode(candidate, flags)
+    offline_mode = market_mode in {"SIM", "PAPER", "OFFHOURS"}
     explicit_token = _explicit_option_token(candidate, flags)
     legacy_identity = _legacy_identity(candidate, flags)
-    uses_legacy_identity = _missing_identity(explicit_token) and legacy_identity not in (None, "", "None")
+    has_legacy_identity = legacy_identity not in (None, "", "None")
+    uses_legacy_identity = _missing_identity(explicit_token) and has_legacy_identity
     option_token = explicit_token if not _missing_identity(explicit_token) else legacy_identity
 
     quote_age_sec = _safe_float(
@@ -178,10 +198,15 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
             "option_feed_block_reason",
         )
     )
-    legacy_fresh_fixture = uses_legacy_identity and (
-        _fresh_quote_flag(candidate, flags)
-        or quote_age_sec is not None
-        or not has_full_edge32_payload
+    legacy_fresh_fixture = bool(
+        offline_mode
+        and has_legacy_identity
+        and (
+            uses_legacy_identity
+            or _fresh_quote_flag(candidate, flags)
+            or quote_age_sec is not None
+            or not has_full_edge32_payload
+        )
     )
 
     last_option_tick_epoch = _coalesce(
@@ -241,6 +266,7 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
         reasons=tuple(reasons),
         context={
             "execution_capable": True,
+            "market_mode": market_mode,
             "option_token": option_token,
             "option_token_source": "explicit" if not uses_legacy_identity else "legacy_identity",
             "last_option_tick_epoch": last_option_tick_epoch,
