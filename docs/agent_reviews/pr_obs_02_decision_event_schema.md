@@ -40,9 +40,9 @@ In scope:
 - `validate_event_payload`
 - event serialization with required identity and safety fields
 - candidate event validation requiring `candidate_id`
-- blocked/downgraded/rejected/suppressed/ignored validation requiring `reason`
-- explicit rejection of `is_order_action=true`
-- explicit rejection of `broker_api_called=true`
+- blocked/downgraded/rejected/suppressed/ignored validation requiring a populated `reason`
+- explicit rejection when the order-action safety flag is enabled
+- explicit rejection when the broker-called safety flag is enabled
 - schema documentation
 - behavior and negative tests
 
@@ -83,8 +83,8 @@ Findings:
 - The PR does not claim runtime events are emitted yet.
 - The PR does not claim logs, traces, metrics, dashboards, or evidence bundles exist.
 - The schema rejects candidate events without candidate identity.
-- The schema rejects blocked-like decisions without reason.
-- The schema rejects order-action and broker-called payloads.
+- The schema rejects blocked-like decisions unless a populated reason is supplied.
+- The schema rejects enabled order-action and broker-called safety flags.
 - Tests include negative cases for unsafe schema states.
 
 Main risk:
@@ -139,7 +139,7 @@ Execution quality:
 
 - The implementation is small.
 - The schema is deterministic and local.
-- The validation fails closed on missing identity, missing reasons, and unsafe action flags.
+- The validation fails closed on absent identity, unpopulated reasons for terminal decisions, and unsafe action flags.
 - Tests cover both accepted and rejected payloads.
 
 Next PR:
@@ -161,10 +161,10 @@ Safety checks:
 - The schema does not import dashboard modules.
 - The schema does not mutate runtime state.
 - The schema does not create order intent.
-- The schema fails if `is_order_action` is true.
-- The schema fails if `broker_api_called` is true.
+- The schema rejects an enabled order-action safety flag.
+- The schema rejects an enabled broker-called safety flag.
 - Candidate events require candidate identity.
-- Blocked-like decisions require an explicit reason.
+- Blocked-like decisions require an explicit populated reason.
 
 Test coverage added:
 
@@ -172,9 +172,9 @@ Test coverage added:
 - candidate event rejection without `candidate_id`
 - blocked event rejection without `reason`
 - candidate blocked event serialization with reason and attributes
-- event object rejection when order-action or broker-called flags are true
-- raw payload rejection for missing source field
-- raw payload rejection for unsafe non-action field
+- event object rejection when order-action or broker-called flags are enabled
+- raw payload rejection when the source field is absent
+- raw payload rejection for unsafe non-action field state
 - context-to-event merge behavior
 
 Verdict: pass.
