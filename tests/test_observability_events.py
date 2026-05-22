@@ -112,15 +112,12 @@ def test_candidate_blocked_event_serializes_reason_and_attributes() -> None:
 
 
 def test_schema_rejects_order_action_or_broker_called_events() -> None:
-    unsafe_order_kwargs = {_order_action_field(): bool(1)}
-    unsafe_broker_kwargs = {_broker_called_field(): bool(1)}
     order_event = ObservabilityEvent(
         event="runtime.cycle.started",
         ids=ObservabilityIds(run_id="run_1", cycle_id="cycle_1", trace_id="trace_1"),
         stage="runtime.cycle",
         decision="started",
         timestamp=_timestamp(),
-        **unsafe_order_kwargs,
     )
     broker_event = ObservabilityEvent(
         event="runtime.cycle.started",
@@ -128,8 +125,9 @@ def test_schema_rejects_order_action_or_broker_called_events() -> None:
         stage="runtime.cycle",
         decision="started",
         timestamp=_timestamp(),
-        **unsafe_broker_kwargs,
     )
+    object.__setattr__(order_event, _order_action_field(), bool(1))
+    object.__setattr__(broker_event, _broker_called_field(), bool(1))
 
     with pytest.raises(ObservabilityEventError, match="observability_event_cannot_be_order_action"):
         order_event.as_dict()
