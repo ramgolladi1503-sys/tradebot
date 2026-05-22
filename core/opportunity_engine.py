@@ -417,12 +417,16 @@ def _is_unit_allocator_scope(scope: str | None) -> bool:
     return str(scope or "").strip().lower() == "unit:allocator"
 
 
+def _is_unit_density_scope(scope: str | None) -> bool:
+    return str(scope or "").strip().lower().startswith("unit:density")
+
+
 def _should_run_capital_allocator_for_scope(scope: str | None) -> bool:
     return (not _is_unit_scope(scope)) or _is_unit_allocator_scope(scope)
 
 
 def _should_run_density_controller_for_scope(scope: str | None) -> bool:
-    return not _is_unit_scope(scope)
+    return (not _is_unit_scope(scope)) or _is_unit_density_scope(scope)
 
 
 def _candidate_market_mode(candidate: Any) -> str:
@@ -2405,7 +2409,7 @@ def annotate_ranked_opportunities(
     if _should_run_density_controller_for_scope(scope):
         annotated = _apply_trade_density_controller(annotated)
     annotated = [stamp_lifecycle_stage(candidate, "ranked_snapshot") for candidate in annotated]
-    if _is_unit_scope(scope) and not _is_unit_allocator_scope(scope):
+    if _is_unit_scope(scope) and not _is_unit_allocator_scope(scope) and not _is_unit_density_scope(scope):
         # Final guardrail for unit scopes: restore deterministic top-N executable
         # selection after non-allocator unit paths, while still failing closed when
         # executable truth or execution-quality policy rejects the candidate.
