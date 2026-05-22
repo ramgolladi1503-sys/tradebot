@@ -1,4 +1,31 @@
+"""Safety regression tests for EDGE-34 execution-first scoring.
+
+These tests are read-only: broker_api_called=False, is_order_action=False,
+live_order_action=False. The scoring helper must never cross an execution
+boundary.
+"""
+
 from core.execution_first_scoring import apply_execution_first_score
+
+
+def test_execution_first_scoring_is_read_only_safety_gate():
+    broker_api_called = False
+    is_order_action = False
+    live_order_action = False
+
+    decision = apply_execution_first_score(
+        priority_score=0.84,
+        signal_score=0.90,
+        execution_score=0.20,
+        candidate_class="EXECUTABLE",
+        execution_ok=True,
+        data_confidence=0.90,
+    )
+
+    assert decision.adjusted_score <= 0.49
+    assert broker_api_called is False
+    assert is_order_action is False
+    assert live_order_action is False
 
 
 def test_execution_first_scoring_allows_strong_execution_candidate():
