@@ -531,16 +531,17 @@ def resolve_option_token(
             }
         )
         return payload
-    _enforce_token_coverage_threshold(
-        sym=sym,
-        exchange=exchange,
-        segment=segment,
-        exp=exp,
-        strike_val=strike_val,
-        opt_type=opt_type,
-        rows_for_expiry=rows_for_expiry,
-        data_source=data_source,
-    )
+    if rows_for_expiry:
+        _enforce_token_coverage_threshold(
+            sym=sym,
+            exchange=exchange,
+            segment=segment,
+            exp=exp,
+            strike_val=strike_val,
+            opt_type=opt_type,
+            rows_for_expiry=rows_for_expiry,
+            data_source=data_source,
+        )
     if exact_match_exists:
         token = int(entry.get("instrument_token"))
         payload = _token_payload_from_exact_match(token=token, entry=entry, exchange=exchange, segment=segment, expiry=exp)
