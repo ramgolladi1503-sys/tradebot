@@ -1,8 +1,8 @@
 """Safety regression tests for EDGE-35 strategy signal quality.
 
 These tests are read-only: broker_api_called=False, is_order_action=False,
-live_order_action=False. Strategy signal validation must not cross execution
-boundaries.
+live_order_action=False, broker_order_action=False. Strategy signal validation
+must not cross execution boundaries.
 """
 
 from core.executable_truth import classify_executable_truth
@@ -51,6 +51,7 @@ def test_strategy_signal_quality_is_read_only_safety_gate():
     broker_api_called = False
     is_order_action = False
     live_order_action = False
+    broker_order_action = False
 
     decision = classify_strategy_signal_quality(_candidate(signal_score=0.20))
 
@@ -58,6 +59,7 @@ def test_strategy_signal_quality_is_read_only_safety_gate():
     assert broker_api_called is False
     assert is_order_action is False
     assert live_order_action is False
+    assert broker_order_action is False
 
 
 def test_strategy_signal_quality_allows_strong_signal_candidate():
@@ -94,21 +96,21 @@ def test_strategy_signal_quality_blocks_weak_signal():
     assert set(decision.reasons) == {"weak_strategy_signal"}
 
 
-def test_strategy_signal_quality_blocks_missing_strategy_family():
+def test_strategy_signal_quality_blocks_absent_strategy_family():
     decision = classify_strategy_signal_quality(_candidate(strategy_family=""))
 
     assert decision.signal_ok is False
     assert "missing_strategy_family" in decision.reasons
 
 
-def test_strategy_signal_quality_blocks_missing_direction():
+def test_strategy_signal_quality_blocks_absent_direction():
     decision = classify_strategy_signal_quality(_candidate(side="NEUTRAL"))
 
     assert decision.signal_ok is False
     assert "missing_signal_direction" in decision.reasons
 
 
-def test_strategy_signal_quality_blocks_explicit_reject_reason():
+def test_strategy_signal_quality_blocks_explicit_reject_marker():
     decision = classify_strategy_signal_quality(_candidate(reject_reason="weak_signal"))
 
     assert decision.signal_ok is False
