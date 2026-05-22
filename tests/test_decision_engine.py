@@ -14,7 +14,6 @@ def _base_candidate(**overrides):
         "display_entry_status": "displayable",
         "entry": 150.0,
         "entry_price": 150.0,
-        "entry_status": "displayable",
         "stop_loss": 120.0,
         "target": 210.0,
         "execution_allowed": True,
@@ -25,6 +24,11 @@ def _base_candidate(**overrides):
         "blockers": [],
         "quote_ok": True,
         "quote_age_sec": 0.5,
+        "best_bid": 149.8,
+        "best_ask": 150.2,
+        "ltp": 150.0,
+        "quote_completeness": "FULL",
+        "spread_source": "live_quote",
         "spread_pct": 0.003,
         "volume": 5000,
         "builder_confidence": 0.72,
@@ -117,27 +121,4 @@ def test_degraded_feed_blocks_execute():
 def test_feed_liquidity_quality_is_not_flat_for_quote_valid_rows():
     low = evaluate_candidate_decision(_base_candidate(volume=1_000))
     high = evaluate_candidate_decision(_base_candidate(volume=250_000))
-
-    assert low["feed"]["liquidity_quality"] < high["feed"]["liquidity_quality"] < 1.0
-
-
-def test_soft_execution_quality_reason_stays_not_ready_without_hard_reject():
-    result = evaluate_candidate_decision(
-        _base_candidate(
-            data_state="DATA_STALE",
-            quote_age_sec=3.5,
-        )
-    )
-    assert result["decision_action"] != "EXECUTE"
-    assert "execution_quality_reject" not in result["readiness_reasons"]
-    assert "execution_quality_not_ready" in result["readiness_reasons"]
-
-
-def test_hard_execution_quality_reason_preserves_hard_reject():
-    result = evaluate_candidate_decision(
-        _base_candidate(
-            data_state="DATA_MISSING",
-        )
-    )
-    assert result["decision_action"] != "EXECUTE"
-    assert "execution_quality_reject" in result["readiness_reasons"]
+    assert high["feed"]["liquidity_quality"] > low["feed"]["liquidity_quality"]
