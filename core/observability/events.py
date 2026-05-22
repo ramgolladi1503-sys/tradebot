@@ -57,8 +57,8 @@ class ObservabilityEvent:
     reason: str | None = None
     execution_mode: str | None = None
     attributes: Mapping[str, object] = field(default_factory=dict)
-    is_order_action: bool = False
-    broker_api_called: bool = False
+    is_order_action = False
+    broker_api_called = False
 
     @classmethod
     def from_context(
