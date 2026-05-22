@@ -150,11 +150,11 @@ def test_execution_sim_jitter_can_change_fill_outcome(monkeypatch):
 
 def test_build_sim_outcome_record_keeps_expected_shape():
     record = build_sim_outcome_record(
-        candidate=_candidate(),
-        execution_result={"status": "FILLED", "fill_price": 100.1},
-        market_after={"mid": 101.0},
+        _candidate(),
+        {"status": "FILLED", "fill_status": "FILLED", "fill_price": 100.1},
+        timestamp="2026-05-22T00:00:00+05:30",
     )
 
     assert record["trade_id"] == "SIM-1"
-    assert record["execution_status"] == "FILLED"
-    assert "outcome_ts" in record
+    assert record["simulation_status"] == "FILLED"
+    assert record["timestamp"] == "2026-05-22T00:00:00+05:30"
