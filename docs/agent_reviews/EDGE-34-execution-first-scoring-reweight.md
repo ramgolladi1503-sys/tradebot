@@ -5,7 +5,7 @@ candidate_id: EDGE-34
 source: docs/agent_reviews/EDGE-34-execution-first-scoring-reweight.md
 timestamp: 2026-05-22T11:45:00+05:30
 decision: add deterministic execution-first score adjustment primitive
-reason: high signal score must not hide weak tradability, stale quote, missing liquidity, spread uncertainty, or low data confidence when the helper is explicitly applied
+reason: high signal score must not hide weak tradability, stale quote, liquidity gaps, spread uncertainty, or low data confidence when the helper is explicitly applied
 is_order_action: false
 broker_api_called: false
 live_order_action: false
@@ -44,7 +44,7 @@ Implement a side-effect-free execution-first score adjustment helper so executab
 1. Can high signal override bad execution inside this helper?
    - No. Weak execution score caps executable candidates.
 
-2. Can stale quote, missing liquidity, spread uncertainty, or low data confidence silently survive inside this helper?
+2. Can stale quote, liquidity gaps, spread uncertainty, or low data confidence silently survive inside this helper?
    - No. They apply explicit execution-first penalties.
 
 3. Are non-executable/advisory rows reweighted by this helper?
