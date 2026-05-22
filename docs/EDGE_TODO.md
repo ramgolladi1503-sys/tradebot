@@ -6,7 +6,6 @@ Rule: when an EDGE PR is completed and merged, remove that item from this list i
 
 ## Remaining EDGE PRs
 
-- [ ] EDGE-37 — Evidence Replay Quality Report
 - [ ] EDGE-38 — Runtime Evidence Capture Guard
 - [ ] EDGE-39 — Expired Contract Token Resolution Guard
 - [ ] EDGE-40 — Quote Timestamp/Age Consistency Guard
@@ -33,11 +32,11 @@ Do not start strategy tuning before market truth is fixed.
 
 Immediate priority order:
 
-1. EDGE-37 — Evidence Replay Quality Report
-2. EDGE-39 — Expired Contract Token Resolution Guard
-3. EDGE-40 — Quote Timestamp/Age Consistency Guard
-4. EDGE-41 — Fallback Execution Firewall
-5. EDGE-44 — Feed Recovery Runtime Wiring
+1. EDGE-39 — Expired Contract Token Resolution Guard
+2. EDGE-40 — Quote Timestamp/Age Consistency Guard
+3. EDGE-41 — Fallback Execution Firewall
+4. EDGE-44 — Feed Recovery Runtime Wiring
+5. EDGE-38 — Runtime Evidence Capture Guard
 
 ## Scope guard
 
