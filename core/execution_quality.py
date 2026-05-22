@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from config import config as cfg
+from core.executable_truth import classify_executable_truth
 from core.liquidity_truth import assess_liquidity_quality
 from core.order_policy import choose_order_policy
 from core.slippage_model import estimate_slippage
@@ -177,6 +178,25 @@ def _execution_quality_score(
     )
 
 
+def _firebreak_reject_decision(candidate: Any, reason_code: str, context: dict[str, Any], *, data_confidence: float | None) -> ExecutionQualityDecision:
+    order_policy = "advisory" if reason_code in {"fallback_driven_data", "degraded_data", "data_not_live", "planning_only", "advisory_only", "debug_candidate"} else "reject"
+    return ExecutionQualityDecision(
+        expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
+        spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
+        executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
+        execution_ok=False,
+        order_policy=order_policy,
+        reason_code=reason_code,
+        reason=reason_code,
+        slippage_risk=1.0,
+        depth_score=0.0,
+        fill_probability=0.0,
+        execution_quality_score=0.0,
+        data_confidence=data_confidence,
+        context=dict(context or {}),
+    )
+
+
 def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecision:
     if not bool(getattr(cfg, "EXECUTION_QUALITY_ENABLE", True)):
         return ExecutionQualityDecision(
@@ -205,126 +225,23 @@ def evaluate_pretrade_execution_quality(candidate: Any) -> ExecutionQualityDecis
     data_confidence = _safe_float(
         _candidate_get(candidate, "data_confidence", source_flags.get("data_confidence"))
     )
-    fallback_driven = bool(
-        source_flags.get("fallback_candidate")
-        or source_flags.get("recovered_fallback")
-        or _candidate_get(candidate, "planning_only", False)
-        or str(_candidate_get(candidate, "chain_source") or source_flags.get("chain_source") or "").strip().lower()
-        in {"synthetic_chain", "close_fallback", "quote_fallback", "recovered_fallback"}
+
+    firebreak = classify_executable_truth(
+        candidate,
+        data_state=data_state,
+        fresh_quote_ok=fresh_quote_ok,
+        liquidity_ok=liquidity_ok,
+        spread_ok=spread_ok,
+        data_confidence=data_confidence,
     )
-    execution_block_type = str(source_flags.get("execution_block_type") or "").strip().lower()
-    if execution_block_type == "advisory":
-        runtime_mode = str(
-            source_flags.get("runtime_mode")
-            or _candidate_get(candidate, "execution_mode")
-            or _candidate_get(candidate, "mode")
-            or ""
-        ).strip().upper()
-        if runtime_mode in {"PAPER", "SIM"}:
-            return ExecutionQualityDecision(
-                expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-                spread_penalty=0.02,
-                executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry"))
-                or _safe_float(_candidate_get(candidate, "entry_price")),
-                execution_ok=True,
-                order_policy="limit",
-                reason_code="degraded_data",
-                reason="degraded_data",
-                slippage_risk=0.25,
-                depth_score=0.45,
-                fill_probability=0.55,
-                execution_quality_score=0.58,
-            )
-        return ExecutionQualityDecision(
-            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-            spread_penalty=0.0,
-            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
-            execution_ok=False,
-            order_policy="advisory",
-            reason_code="data_not_live",
-            reason="data_not_live",
-            slippage_risk=1.0,
-            depth_score=0.0,
-            fill_probability=0.0,
-            execution_quality_score=0.0,
-        )
-    if fallback_driven:
-        return ExecutionQualityDecision(
-            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
-            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
-            execution_ok=False,
-            order_policy="advisory",
-            reason_code="fallback_driven_data",
-            reason="fallback_driven_data",
+    if not firebreak.execution_allowed:
+        context = dict(firebreak.context or {})
+        context["firebreak_reasons"] = list(firebreak.reasons)
+        return _firebreak_reject_decision(
+            candidate,
+            firebreak.reason_code,
+            context,
             data_confidence=data_confidence,
-            context={"data_state": data_state or None},
-        )
-    if data_state in {"DATA_STALE", "DATA_INCONSISTENT", "DATA_MISSING"}:
-        reason_code = {
-            "DATA_STALE": "stale_quote",
-            "DATA_INCONSISTENT": "inconsistent_quote",
-            "DATA_MISSING": "missing_quote",
-        }.get(data_state, "data_invalid")
-        return ExecutionQualityDecision(
-            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
-            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
-            execution_ok=False,
-            order_policy="reject",
-            reason_code=reason_code,
-            reason=reason_code,
-            data_confidence=data_confidence,
-            context={"data_state": data_state},
-        )
-    min_data_confidence = float(getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20) or 0.20)
-    if data_confidence is not None and float(data_confidence) < min_data_confidence:
-        return ExecutionQualityDecision(
-            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
-            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
-            execution_ok=False,
-            order_policy="reject",
-            reason_code="low_data_confidence",
-            reason="low_data_confidence",
-            data_confidence=data_confidence,
-            context={"data_state": data_state or None},
-        )
-    if fresh_quote_ok is False:
-        return ExecutionQualityDecision(
-            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
-            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
-            execution_ok=False,
-            order_policy="reject",
-            reason_code="stale_quote",
-            reason="stale_quote",
-            data_confidence=data_confidence,
-            context={"data_state": data_state or None},
-        )
-    if spread_ok is False:
-        return ExecutionQualityDecision(
-            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
-            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
-            execution_ok=False,
-            order_policy="reject",
-            reason_code="unverified_spread",
-            reason="unverified_spread",
-            data_confidence=data_confidence,
-            context={"data_state": data_state or None},
-        )
-    if liquidity_ok is False:
-        return ExecutionQualityDecision(
-            expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
-            spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
-            executable_price_estimate=_safe_float(_candidate_get(candidate, "execution_entry")),
-            execution_ok=False,
-            order_policy="reject",
-            reason_code="missing_liquidity_validation",
-            reason="missing_liquidity_validation",
-            data_confidence=data_confidence,
-            context={"data_state": data_state or None},
         )
 
     bid = _safe_float(_candidate_get(candidate, "best_bid"))
