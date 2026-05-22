@@ -15,11 +15,13 @@ broker_order_action: false
 
 ### Scope
 
-Add a fail-closed guard in option token resolution so expired requested expiries and expired resolved fallback contracts cannot return execution-grade token payloads.
+Add a fail-closed guard in option token resolution and instrument expiry selection so expired requested expiries and expired resolved fallback contracts cannot return execution-grade token payloads.
 
 ### Files changed
 
+- `core/instruments.py`
 - `core/option_token_resolver.py`
+- `tests/test_instruments_expiry_fail_closed.py`
 - `tests/test_option_token_resolver_expired_contract_guard.py`
 - `docs/EDGE_TODO.md`
 - `docs/agent_reviews/EDGE-39-expired-contract-token-resolution-guard.md`
@@ -49,7 +51,7 @@ Add a fail-closed guard in option token resolution so expired requested expiries
    - No. Expired requested expiry is rejected before loading instruments, and exact-match payloads include expiry evidence.
 
 5. Does this call broker APIs?
-   - No. The change is limited to token resolver guard logic and tests with monkeypatched instrument data.
+   - No. The change is limited to pure token/instrument resolver guard logic and tests with monkeypatched instrument data.
 
 ## Hermes Review
 
@@ -81,6 +83,8 @@ Add a fail-closed guard in option token resolution so expired requested expiries
 - Expired local exact matches cannot become execution-grade.
 - Safe nearest fallback skips expired contracts.
 - Expired fallback candidates return `None` if no future contract exists.
+- `select_expiry()` no longer selects the last expired expiry when all expiries are old.
+- `resolve_registry_contract()` fails closed when requested or selected expiry is expired.
 - Rejection event includes `EXPIRED_CONTRACT_SELECTED` evidence.
 - TODO list removes EDGE-39 after implementation.
 
@@ -93,7 +97,7 @@ Add a fail-closed guard in option token resolution so expired requested expiries
 
 ## Scope Guard
 
-The change is narrow: only `core/option_token_resolver.py` and focused tests were changed for product behavior.
+The change is narrow: only instrument expiry selection, option token resolution, focused tests, TODO, and evidence docs changed.
 
 ## QA / Safety Review
 
@@ -105,11 +109,16 @@ The change is narrow: only `core/option_token_resolver.py` and focused tests wer
 - Safe fallback skips expired contracts and can choose a future fallback.
 - Safe fallback returns `None` when only expired contracts exist.
 - Expired rejection event contains non-action evidence fields.
+- `select_expiry()` returns `None` when all expiries are expired.
+- `select_expiry()` allows same-day expiry.
+- `resolve_registry_contract()` rejects expired requested expiry.
+- `resolve_registry_contract()` does not fallback to expired expiry when only old expiries exist.
+- `resolve_registry_contract()` selects future expiry when available.
 
 ### Commands to run locally
 
 ```bash
-pytest tests/test_option_token_resolver_expired_contract_guard.py -q
+pytest tests/test_option_token_resolver_expired_contract_guard.py tests/test_instruments_expiry_fail_closed.py -q
 ```
 
 ## Acceptance Proof
