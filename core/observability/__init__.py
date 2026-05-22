@@ -24,6 +24,10 @@ from core.observability.json_logger import (
     event_to_json_line,
     payload_to_json_line,
 )
+from core.observability.runtime_cycle import (
+    RuntimeCycleEventEmitter,
+    RuntimeCycleEventError,
+)
 
 __all__ = [
     "ObservabilityContext",
@@ -35,6 +39,8 @@ __all__ = [
     "ObservabilityJsonLogRecord",
     "ObservabilityJsonLogger",
     "REQUIRED_EVENT_FIELDS",
+    "RuntimeCycleEventEmitter",
+    "RuntimeCycleEventError",
     "build_candidate_id",
     "build_cycle_id",
     "build_run_id",
