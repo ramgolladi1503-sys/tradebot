@@ -90,6 +90,5 @@ def test_resolve_registry_contract_selects_future_expiry_when_no_request_given()
         today=date(2026, 5, 22),
     )
 
-    assert result is not None
-    assert result["instrument_token"] == 202
+    assert result and result["instrument_token"] == 202
     assert result["expiry"] == date(2026, 5, 26)
