@@ -87,11 +87,11 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
     Deterministic health scenario that proves one option trade can be built to EXECUTABLE state.
     """
     symbol = "NIFTY"
-    expiry_date = "2026-02-26"
+    expiry_date = "2026-05-26"
     strike = 22500.0
     option_type = "CE"
     token = 990001
-    tradingsymbol = "NIFTY26FEB22500CE"
+    tradingsymbol = "NIFTY26MAY22500CE"
     now_iso = utc_now().isoformat().replace("+00:00", "Z")
     now_epoch = datetime.fromisoformat(now_iso.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
     queue_path = logs_dir() / f"health_gate_queue_{str(desk or 'DEFAULT').upper()}.json"
@@ -108,7 +108,7 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
         strike_val = base_strike + (idx * 50.0)
         right = "CE" if idx % 2 == 0 else "PE"
         token_val = token + idx
-        tsym = f"NIFTY26FEB{int(strike_val)}{right}"
+        tsym = f"NIFTY26MAY{int(strike_val)}{right}"
         instruments.append(
             {
                 "name": symbol,
@@ -151,7 +151,6 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
         }
 
     resolved_token = int(resolved.get("instrument_token"))
-    # Fresh ticks for index + option leg.
     insert_tick(ts=now_epoch, token=256265, last_price=22500.0, volume=1000, oi=0)
     insert_tick(ts=now_epoch, token=resolved_token, last_price=121.5, volume=500, oi=10000)
     depth_store.update(
