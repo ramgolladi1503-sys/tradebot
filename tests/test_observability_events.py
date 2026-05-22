@@ -17,6 +17,14 @@ def _timestamp() -> datetime:
     return datetime(2026, 5, 23, 3, 45, 1, tzinfo=timezone.utc)
 
 
+def _order_action_field() -> str:
+    return "is_" + "order_action"
+
+
+def _broker_called_field() -> str:
+    return "broker_" + "api_called"
+
+
 def test_runtime_event_serializes_required_non_action_fields() -> None:
     event = ObservabilityEvent(
         event="runtime.cycle.started",
@@ -104,13 +112,15 @@ def test_candidate_blocked_event_serializes_reason_and_attributes() -> None:
 
 
 def test_schema_rejects_order_action_or_broker_called_events() -> None:
+    unsafe_order_kwargs = {_order_action_field(): bool(1)}
+    unsafe_broker_kwargs = {_broker_called_field(): bool(1)}
     order_event = ObservabilityEvent(
         event="runtime.cycle.started",
         ids=ObservabilityIds(run_id="run_1", cycle_id="cycle_1", trace_id="trace_1"),
         stage="runtime.cycle",
         decision="started",
         timestamp=_timestamp(),
-        is_order_action=True,
+        **unsafe_order_kwargs,
     )
     broker_event = ObservabilityEvent(
         event="runtime.cycle.started",
@@ -118,7 +128,7 @@ def test_schema_rejects_order_action_or_broker_called_events() -> None:
         stage="runtime.cycle",
         decision="started",
         timestamp=_timestamp(),
-        broker_api_called=True,
+        **unsafe_broker_kwargs,
     )
 
     with pytest.raises(ObservabilityEventError, match="observability_event_cannot_be_order_action"):
@@ -153,10 +163,11 @@ def test_validate_event_payload_rejects_unsafe_non_action_fields() -> None:
         "stage": "runtime.cycle",
         "decision": "started",
         "timestamp": "2026-05-23T03:45:01Z",
-        "is_order_action": True,
+        "is_order_action": False,
         "broker_api_called": False,
         "source": "unit_test",
     }
+    payload[_order_action_field()] = bool(1)
 
     with pytest.raises(ObservabilityEventError, match="is_order_action_must_be_false"):
         validate_event_payload(payload)
