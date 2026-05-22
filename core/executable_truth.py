@@ -5,6 +5,7 @@ from typing import Any
 
 from config import config as cfg
 from core.candidate_quote_freshness import classify_candidate_quote_freshness
+from core.option_spread_truth import classify_option_spread_truth
 
 EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
 FALLBACK_DRIVEN_REASON = "fallback_driven_data"
@@ -164,6 +165,13 @@ def classify_executable_truth(
         _append_unique(reasons, freshness.reason_code)
         for freshness_reason in freshness.reasons:
             _append_unique(reasons, freshness_reason)
+
+    spread_truth = classify_option_spread_truth(candidate)
+    context["spread_truth"] = dict(spread_truth.context or {})
+    if not spread_truth.spread_ok:
+        _append_unique(reasons, spread_truth.reason_code)
+        for spread_reason in spread_truth.reasons:
+            _append_unique(reasons, spread_reason)
 
     confidence = _safe_float(_coalesce(data_confidence, _candidate_get(candidate, "data_confidence"), flags.get("data_confidence")))
     min_confidence = float(getattr(cfg, "EXECUTABLE_TRUTH_MIN_DATA_CONFIDENCE", getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20)) or 0.20)
