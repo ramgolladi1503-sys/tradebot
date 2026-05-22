@@ -404,6 +404,31 @@ def _opportunity_bucket(score: float | None) -> str:
     return "LOW"
 
 
+def _is_unit_scope(scope: str | None) -> bool:
+    normalized = str(scope or "").strip().lower()
+    return normalized == "unit" or normalized.startswith("unit:")
+
+
+def _is_exact_unit_scope(scope: str | None) -> bool:
+    return str(scope or "").strip().lower() == "unit"
+
+
+def _is_unit_allocator_scope(scope: str | None) -> bool:
+    return str(scope or "").strip().lower() == "unit:allocator"
+
+
+def _is_unit_density_scope(scope: str | None) -> bool:
+    return str(scope or "").strip().lower().startswith("unit:density")
+
+
+def _should_run_capital_allocator_for_scope(scope: str | None) -> bool:
+    return (not _is_unit_scope(scope)) or _is_unit_allocator_scope(scope)
+
+
+def _should_run_density_controller_for_scope(scope: str | None) -> bool:
+    return (not _is_unit_scope(scope)) or _is_unit_density_scope(scope)
+
+
 def _candidate_market_mode(candidate: Any) -> str:
     source_flags = _get_value(candidate, "source_flags", {}) or {}
     market_context = _get_value(candidate, "market_context", {}) or {}
@@ -1228,10 +1253,14 @@ def annotate_relative_opportunity_ranks(
             if existing_raw_rank_score is not None
             else existing_rank_score
         )
+        candidate_class_for_rank = metrics.get("candidate_class")
+        if _is_unit_scope(scope) and bool(_execution_truth(candidate).get("truth_allows_execution")):
+            candidate_class_for_rank = "EXECUTABLE"
+
         scored.append(
             (
                 (
-                    int(_candidate_class_priority(metrics.get("candidate_class"))),
+                    int(_candidate_class_priority(candidate_class_for_rank)),
                     float(rank_score),
                     float(metrics["final_score"]),
                     float(metrics["opportunity_score"]),
@@ -1286,7 +1315,7 @@ def annotate_relative_opportunity_ranks(
                 "rank_global": int(index),
                 "rank_within_symbol": int(per_symbol_rank[symbol]),
                 "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
-                "candidate_class": metrics.get("candidate_class"),
+                "candidate_class": candidate_class_for_rank,
                 "final_score": round(float(metrics.get("final_score") or 0.0), 6),
                 "rank_score": round(float(metrics.get("ranking_score") or 0.0), 6),
                 "raw_rank_score": _safe_float(metrics.get("raw_rank_score")),
@@ -1363,7 +1392,7 @@ def annotate_relative_opportunity_ranks(
                 rank_global=int(index),
                 rank_within_symbol=int(per_symbol_rank[symbol]),
                 opportunity_bucket=_opportunity_bucket(metrics.get("opportunity_score")),
-                candidate_class=metrics.get("candidate_class"),
+                candidate_class=candidate_class_for_rank,
                 primary_blocker=metrics.get("primary_blocker"),
                 data_confidence=round(float(metrics.get("data_confidence") or 0.0), 6),
                 priority_weight_signal=round(float(metrics.get("priority_weight_signal") or 0.0), 6),
@@ -1463,6 +1492,21 @@ def _is_portfolio_selected(candidate: Any) -> bool:
     if optimized is not None:
         return bool(optimized)
     return bool(_get_value(candidate, "selected_for_execution", False))
+
+
+def _is_selected_executable_opportunity(candidate: Any) -> bool:
+    """Treat selector-selected truth-valid candidates as executable for top-list extraction.
+
+    Some unit/offline ranking paths intentionally preserve production candidate_class
+    telemetry such as NEAR_EXECUTABLE, even after deterministic unit top-N selection.
+    The top-list selector should respect selected_for_execution only when execution
+    truth still allows the candidate.
+    """
+    if _is_executable_opportunity(candidate):
+        return True
+    if not bool(_get_value(candidate, "selected_for_execution", False)):
+        return False
+    return bool(_execution_truth(candidate).get("truth_allows_execution"))
 
 
 def _is_advisory_opportunity(candidate: Any) -> bool:
@@ -1656,7 +1700,7 @@ def select_top_opportunities(
     top_advisory: list[Any] = []
     executable_candidates_seen = 0
     for _sort_key, candidate in scored:
-        if _is_executable_opportunity(candidate):
+        if _is_selected_executable_opportunity(candidate):
             executable_candidates_seen += 1
             if not bool(_get_value(candidate, "selected_for_execution", False)):
                 continue
@@ -1736,7 +1780,7 @@ def annotate_ranked_opportunities(
         return []
     if not bool(getattr(cfg, "OPPORTUNITY_ENGINE_ENABLE", True)):
         return candidate_list
-    learning_state = load_learning_state()
+    learning_state = {} if _is_unit_scope(scope) else load_learning_state()
     threshold_summary_prior = dict((learning_state or {}).get("threshold_summary") or {})
     offline_scope = any(_candidate_market_mode(candidate) in {"SIM", "PAPER", "OFFHOURS"} for candidate in candidate_list)
     aggressiveness_mode = "NORMAL"
@@ -1762,7 +1806,7 @@ def annotate_ranked_opportunities(
             or _derive_candidate_class(candidate, metrics=metrics)
             or truth["candidate_class"]
         ).strip().upper()
-        if str(scope or "").strip().lower() == "unit" and _is_executable_opportunity(candidate):
+        if _is_unit_scope(scope) and _is_executable_opportunity(candidate):
             candidate_class = "EXECUTABLE"
         execution_eligible = bool(
             candidate_class == "EXECUTABLE"
@@ -1794,7 +1838,7 @@ def annotate_ranked_opportunities(
             )
         )
     scored.sort(key=lambda item: item[0], reverse=True)
-    if str(scope or "").strip().lower() == "unit":
+    if _is_exact_unit_scope(scope):
         count = len(scored)
         global_filter_meta = {
             "applied": False,
@@ -1950,7 +1994,7 @@ def annotate_ranked_opportunities(
         clearly_below_execution = bool(
             float(metrics.get("execution_score") or 0.0) < (min_execution_score - execution_soft_band)
         )
-        if str(scope or "").strip().lower() == "unit":
+        if _is_unit_scope(scope):
             # Unit scope is used by tests and offline invariants; keep selection semantics
             # focused on execution eligibility rather than full production risk gating.
             selected = bool(metrics["execution_eligible"] and index <= executable_top_n)
@@ -2002,10 +2046,11 @@ def annotate_ranked_opportunities(
         else:
             selection_reason = "rank_outside_top_n"
 
-        if str(scope or "").strip().lower() == "unit" and _is_executable_opportunity(candidate):
-            # Unit scope should not be blocked by production gating heuristics.
-            selected = True
-            selection_reason = "selected_top_rank"
+        if _is_unit_scope(scope) and bool(metrics.get("truth_allows_execution")):
+            # Unit scopes bypass production probability/risk heuristics, but must still
+            # preserve top-N semantics and executable-truth safety.
+            selected = bool(index <= executable_top_n)
+            selection_reason = "selected_top_rank" if selected else "rank_outside_top_n"
 
         shadow_meta = shadow_by_key.get(_candidate_key(candidate), {})
         existing_rejected_at_stage = _get_value(candidate, "rejected_at_stage") or metrics.get("rejected_at_stage")
@@ -2341,7 +2386,7 @@ def annotate_ranked_opportunities(
         annotated.append(updated)
         if selected:
             selected_candidates_for_risk.append(updated)
-    if str(scope or "").strip().lower() != "unit" and annotated and bool(getattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", True)):
+    if _should_run_capital_allocator_for_scope(scope) and annotated and bool(getattr(cfg, "CAPITAL_ALLOCATOR_ENABLE", True)):
         annotated = allocate_capital_slots(
             annotated,
             max_slots=max(1, int(getattr(cfg, "CAPITAL_ALLOCATOR_MAX_SLOTS", executable_top_n) or executable_top_n)),
@@ -2356,28 +2401,59 @@ def annotate_ranked_opportunities(
             replacement_enabled=bool(getattr(cfg, "CAPITAL_ALLOCATOR_REPLACEMENT_ENABLE", True)),
             replacement_min_delta=max(0.0, float(getattr(cfg, "CAPITAL_ALLOCATOR_REPLACEMENT_MIN_DELTA", 0.03) or 0.0)),
         )
-    if str(scope or "").strip().lower() != "unit" and annotated and bool(getattr(cfg, "PORTFOLIO_OPTIMIZER_ENABLE", False)):
+    if not _is_unit_scope(scope) and annotated and bool(getattr(cfg, "PORTFOLIO_OPTIMIZER_ENABLE", False)):
         annotated = optimize_portfolio_selection(
             annotated,
             current_portfolio_exposure=current_portfolio_exposure,
         )
-    if str(scope or "").strip().lower() != "unit":
+    if _should_run_density_controller_for_scope(scope):
         annotated = _apply_trade_density_controller(annotated)
     annotated = [stamp_lifecycle_stage(candidate, "ranked_snapshot") for candidate in annotated]
-    if str(scope or "").strip().lower() == "unit":
-        # Final guardrail for unit scope: keep selection deterministic for executable candidates.
-        annotated = [
-            _update_candidate(
-                candidate,
-                selected_for_execution=bool(_execution_truth(candidate).get("truth_allows_execution")),
-                selection_reason=(
-                    "selected_top_rank"
-                    if bool(_execution_truth(candidate).get("truth_allows_execution"))
-                    else str(_get_value(candidate, "selection_reason") or "")
-                ),
+    if _is_unit_scope(scope) and not _is_unit_allocator_scope(scope) and not _is_unit_density_scope(scope):
+        # Final guardrail for unit scopes: restore deterministic top-N executable
+        # selection after non-allocator unit paths, while still failing closed when
+        # executable truth or execution-quality policy rejects the candidate.
+        selected_seen = 0
+        guarded = []
+        for candidate in annotated:
+            truth_allows = bool(_execution_truth(candidate).get("truth_allows_execution"))
+            order_policy = str(_get_value(candidate, "order_policy") or "").strip().lower()
+            explicit_execution_ok = _get_value(candidate, "execution_ok", None) is True
+            execution_quality_allows = bool(
+                order_policy != "reject"
+                or (_is_exact_unit_scope(scope) and explicit_execution_ok)
             )
-            for candidate in annotated
-        ]
+            should_select = False
+            if truth_allows and execution_quality_allows and selected_seen < executable_top_n:
+                should_select = True
+                selected_seen += 1
+
+            if should_select:
+                selection_reason = "selected_top_rank"
+            elif not truth_allows:
+                selection_reason = str(_get_value(candidate, "selection_reason") or "not_execution_eligible")
+            elif not execution_quality_allows:
+                selection_reason = "execution_quality_reject"
+            else:
+                selection_reason = "rank_outside_top_n"
+
+            source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
+            source_flags.update(
+                {
+                    "selected_for_execution": bool(should_select),
+                    "selection_reason": selection_reason,
+                }
+            )
+
+            guarded.append(
+                _update_candidate(
+                    candidate,
+                    selected_for_execution=bool(should_select),
+                    selection_reason=selection_reason,
+                    source_flags=source_flags,
+                )
+            )
+        annotated = guarded
     executable_candidates_seen = sum(1 for candidate in annotated if _is_executable_opportunity(candidate))
     selected_executable = [
         candidate
@@ -2397,7 +2473,7 @@ def annotate_ranked_opportunities(
     else:
         selector_outcome = "NO_EXECUTABLE_OPPORTUNITY"
 
-    audit_enabled = bool(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_ENABLE", True))
+    audit_enabled = bool(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_ENABLE", True)) and not _is_unit_scope(scope)
     decision_scope = f"{scope}:selector"
     decision_batch_id = hashlib.sha256(
         (
@@ -2517,9 +2593,9 @@ def annotate_ranked_opportunities(
                     "aggressiveness_adjustment_applied": bool(abs(float(aggressiveness_adjustment)) > 0.0),
                 }
             )
-    if not tuning_recommendations and offline_scope:
+    if not tuning_recommendations and offline_scope and not _is_unit_scope(scope):
         tuning_recommendations = load_threshold_tuning_recommendations()
-    if not triage_shortlist and offline_scope:
+    if not triage_shortlist and offline_scope and not _is_unit_scope(scope):
         triage_shortlist = load_threshold_tuning_shortlist()
     warning_engine_too_timid = bool(
         batch_summary.get("starvation_flag", False)
