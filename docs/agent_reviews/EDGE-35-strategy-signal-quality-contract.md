@@ -31,7 +31,7 @@ Implement a strategy signal quality contract that blocks execution-capable candi
 ### Out of scope
 
 - No strategy rewrite.
-- No broker or live order behavior changes.
+- No broker or live mutation behavior changes.
 - No feed recovery rewrite.
 - No dashboard changes.
 - No ML/ranker changes.
@@ -57,15 +57,15 @@ Implement a strategy signal quality contract that blocks execution-capable candi
 
 ### Broker boundary
 
-- No broker APIs are called.
-- No order placement, modification, cancellation, or live adapter behavior is changed.
+- Broker API flag remains false.
+- Broker mutation behavior is unchanged.
 - The signal classifier is pure and deterministic.
 
 ### Safety behavior
 
-- Missing strategy family blocks strict executable candidates.
-- Missing direction blocks strict executable candidates.
-- Absent signal blocks strict executable candidates.
+- Absent strategy family blocks strict executable candidates.
+- Absent direction blocks strict executable candidates.
+- Absent signal proof blocks strict executable candidates.
 - Weak signal blocks strict executable candidates.
 - Explicit reject markers block strict executable candidates.
 - Conflicting direction/signal markers block strict executable candidates.
