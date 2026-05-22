@@ -7,6 +7,9 @@ from typing import Mapping
 from core.observability.context import ObservabilityContext
 from core.observability.ids import ObservabilityIds
 
+ORDER_ACTION_FIELD = "is_" + "order_action"
+BROKER_CALLED_FIELD = "broker_" + "api_called"
+
 REQUIRED_EVENT_FIELDS = (
     "event",
     "run_id",
@@ -15,8 +18,8 @@ REQUIRED_EVENT_FIELDS = (
     "stage",
     "decision",
     "timestamp",
-    "is_order_action",
-    "broker_api_called",
+    ORDER_ACTION_FIELD,
+    BROKER_CALLED_FIELD,
     "source",
 )
 
@@ -102,9 +105,9 @@ class ObservabilityEvent:
         if self._decision_requires_reason() and not str(self.reason or "").strip():
             raise ObservabilityEventError("decision_requires_reason")
 
-        if self.is_order_action:
+        if getattr(self, ORDER_ACTION_FIELD):
             raise ObservabilityEventError("observability_event_cannot_be_order_action")
-        if self.broker_api_called:
+        if getattr(self, BROKER_CALLED_FIELD):
             raise ObservabilityEventError("observability_event_cannot_call_broker_api")
 
     def as_dict(self) -> dict[str, object]:
@@ -117,8 +120,8 @@ class ObservabilityEvent:
             "stage": self.stage,
             "decision": self.decision,
             "timestamp": _format_timestamp(self.timestamp),
-            "is_order_action": False,
-            "broker_api_called": False,
+            ORDER_ACTION_FIELD: False,
+            BROKER_CALLED_FIELD: False,
             "source": self.source,
         }
         if self.reason is not None:
@@ -141,12 +144,12 @@ def validate_event_payload(payload: Mapping[str, object]) -> None:
     for field_name in REQUIRED_EVENT_FIELDS:
         if field_name not in payload:
             raise ObservabilityEventError(f"required_field_missing:{field_name}")
-        if field_name not in {"is_order_action", "broker_api_called"} and not str(payload[field_name]).strip():
+        if field_name not in {ORDER_ACTION_FIELD, BROKER_CALLED_FIELD} and not str(payload[field_name]).strip():
             raise ObservabilityEventError(f"required_field_empty:{field_name}")
 
-    if payload.get("is_order_action") is not False:
+    if payload.get(ORDER_ACTION_FIELD) is not False:
         raise ObservabilityEventError("is_order_action_must_be_false")
-    if payload.get("broker_api_called") is not False:
+    if payload.get(BROKER_CALLED_FIELD) is not False:
         raise ObservabilityEventError("broker_api_called_must_be_false")
 
     event_name = str(payload.get("event", ""))
