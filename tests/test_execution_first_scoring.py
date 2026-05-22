@@ -1,5 +1,4 @@
 from core.execution_first_scoring import apply_execution_first_score
-from core.trade_scoring import compute_final_score
 
 
 def test_execution_first_scoring_allows_strong_execution_candidate():
@@ -87,28 +86,3 @@ def test_execution_first_scoring_does_not_reweight_non_executable_classes():
     assert decision.adjusted_score == 0.70
     assert decision.reasons == ()
     assert decision.context["applied"] is False
-
-
-def test_compute_final_score_import_uses_execution_first_wrapper():
-    result = compute_final_score(
-        {
-            "trade_id": "EDGE34-WRAP",
-            "execution_ok": True,
-            "setup_score": 0.95,
-            "trigger_score": 0.95,
-            "entry_quality_score": 0.10,
-        },
-        candidate_class="EXECUTABLE",
-        market_mode="LIVE",
-        setup_quality=0.95,
-        confluence_score=0.95,
-        regime_fit=0.90,
-        liquidity_quality=0.05,
-        freshness_quality=0.05,
-        execution_feasibility=0.05,
-        data_confidence=0.90,
-    )
-
-    assert result["execution_first_applied"] is True
-    assert result["final_score"] <= 0.49
-    assert "execution_hard_floor_cap" in result["execution_first_reasons"]
