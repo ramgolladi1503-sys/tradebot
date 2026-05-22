@@ -74,13 +74,14 @@ class EvidenceReplayReport:
     totals: dict[str, Any]
     evidence_map: dict[str, str]
     verdict: str
-    broker_api_called: bool = False
-    is_order_action: bool = False
-    live_order_action: bool = False
-    broker_order_action: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload["broker_api_called"] = False
+        payload["is_order_action"] = False
+        payload["live_order_action"] = False
+        payload["broker_order_action"] = False
+        return payload
 
 
 def _safe_float(value: Any) -> float | None:
