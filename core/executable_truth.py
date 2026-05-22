@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from config import config as cfg
+from core.candidate_quote_freshness import classify_candidate_quote_freshness
 
 EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
 FALLBACK_DRIVEN_REASON = "fallback_driven_data"
@@ -101,6 +102,7 @@ def classify_executable_truth(
 ) -> ExecutableTruthDecision:
     flags = _source_flags(candidate)
     reasons: list[str] = []
+    context: dict[str, Any] = {}
     chain_source = str(
         _coalesce(
             _candidate_get(candidate, "chain_source"),
@@ -156,22 +158,32 @@ def classify_executable_truth(
     if liquidity_ok is False:
         _append_unique(reasons, "missing_liquidity_validation")
 
+    freshness = classify_candidate_quote_freshness(candidate)
+    context["quote_freshness"] = dict(freshness.context or {})
+    if not freshness.freshness_ok:
+        _append_unique(reasons, freshness.reason_code)
+        for freshness_reason in freshness.reasons:
+            _append_unique(reasons, freshness_reason)
+
     confidence = _safe_float(_coalesce(data_confidence, _candidate_get(candidate, "data_confidence"), flags.get("data_confidence")))
     min_confidence = float(getattr(cfg, "EXECUTABLE_TRUTH_MIN_DATA_CONFIDENCE", getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20)) or 0.20)
     if confidence is not None and confidence < min_confidence:
         _append_unique(reasons, "low_data_confidence")
 
     allowed = not reasons
-    return ExecutableTruthDecision(
-        execution_allowed=allowed,
-        reason_code="ok" if allowed else reasons[0],
-        reasons=tuple(reasons),
-        context={
+    context.update(
+        {
             "firebreak_code": EXECUTABLE_TRUTH_FIREBREAK_CODE,
             "data_state": state or None,
             "chain_source": chain_source or None,
             "execution_block_type": execution_block_type or None,
             "data_confidence": confidence,
             "min_data_confidence": min_confidence,
-        },
+        }
+    )
+    return ExecutableTruthDecision(
+        execution_allowed=allowed,
+        reason_code="ok" if allowed else reasons[0],
+        reasons=tuple(reasons),
+        context=context,
     )
