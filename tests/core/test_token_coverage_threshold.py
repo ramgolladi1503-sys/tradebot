@@ -8,7 +8,10 @@ from config import config as cfg
 import core.option_token_resolver as resolver
 
 
-def _instrument_row(*, token: int, strike: float, opt_type: str, expiry: str = "2026-03-02") -> dict:
+FUTURE_EXPIRY = "2026-05-26"
+
+
+def _instrument_row(*, token: int, strike: float, opt_type: str, expiry: str = FUTURE_EXPIRY) -> dict:
     return {
         "segment": "NFO-OPT",
         "name": "NIFTY",
@@ -30,7 +33,6 @@ class _CaptureLogger:
 
 
 def _make_contracts(count: int) -> list[dict]:
-    # Build CE/PE rows on distinct strikes for the same expiry.
     contracts: list[dict] = []
     strike = 24000.0
     token = 1_000_000
@@ -55,7 +57,7 @@ def test_token_coverage_below_threshold_raises(monkeypatch):
     with pytest.raises(resolver.TokenCoverageError) as exc_info:
         resolver.resolve_option_token(
             symbol="NIFTY",
-            expiry_date=date(2026, 3, 2),
+            expiry_date=date(2026, 5, 26),
             strike=24000.0,
             option_type="CE",
             exchange="NFO",
@@ -76,7 +78,7 @@ def test_token_coverage_above_threshold_returns_token(monkeypatch):
 
     out = resolver.resolve_option_token(
         symbol="NIFTY",
-        expiry_date="2026-03-02",
+        expiry_date=FUTURE_EXPIRY,
         strike=24000.0,
         option_type="CE",
         exchange="NFO",
