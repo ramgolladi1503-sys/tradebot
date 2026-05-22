@@ -1,9 +1,4 @@
-"""Read-only observability helpers for Tradebot.
-
-The observability package must not mutate trading behavior. It only creates
-stable identifiers, context payloads, and validated event dictionaries that
-later tracing, logging, metrics, and evidence writers can reuse.
-"""
+"""Observability helpers for Tradebot."""
 
 from core.observability.context import ObservabilityContext
 from core.observability.events import (
@@ -22,6 +17,13 @@ from core.observability.ids import (
     build_trace_id,
     normalize_identity_component,
 )
+from core.observability.json_logger import (
+    ObservabilityJsonLogError,
+    ObservabilityJsonLogRecord,
+    ObservabilityJsonLogger,
+    event_to_json_line,
+    payload_to_json_line,
+)
 
 __all__ = [
     "ObservabilityContext",
@@ -29,12 +31,17 @@ __all__ = [
     "ObservabilityEventError",
     "ObservabilityIdentityError",
     "ObservabilityIds",
+    "ObservabilityJsonLogError",
+    "ObservabilityJsonLogRecord",
+    "ObservabilityJsonLogger",
     "REQUIRED_EVENT_FIELDS",
     "build_candidate_id",
     "build_cycle_id",
     "build_run_id",
     "build_span_id",
     "build_trace_id",
+    "event_to_json_line",
     "normalize_identity_component",
+    "payload_to_json_line",
     "validate_event_payload",
 ]
