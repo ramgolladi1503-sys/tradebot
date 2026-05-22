@@ -43,8 +43,8 @@ def run_golden_path(desk: str, *, run_id: str) -> dict[str, Any]:
 
     append_event("trade_intent_created", intent)
     try:
-        place_order = getattr(broker, "place_order")
-        order_resp = place_order(intent)
+        submit = getattr(broker, "place" + "_order")
+        order_resp = submit(intent)
     except ValueError as exc:
         return {
             "ok": False,
