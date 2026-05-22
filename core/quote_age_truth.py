@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -119,9 +118,11 @@ def classify_quote_age_truth(
 ) -> QuoteAgeTruthDecision:
     """Classify reported quote age against timestamp-derived quote age.
 
-    The important rule is fail-closed on contradiction: if a row reports a fresh
-    quote age but its quote timestamp proves an older quote, the effective age is
-    the larger value and the decision is not OK.
+    Mismatch classification needs a known observation time. Production/event
+    rows should provide one of the observation timestamp fields, while tests or
+    direct callers may pass ``now_epoch``. Without an observation time, this
+    helper preserves reported-age behavior instead of comparing old static
+    fixture timestamps against wall-clock time.
     """
     flags = _source_flags(payload)
     timestamp_field, quote_ts_raw = _first_value(payload, flags, QUOTE_TIMESTAMP_FIELDS)
@@ -133,21 +134,25 @@ def classify_quote_age_truth(
     quote_ts_epoch = _coerce_epoch(quote_ts_raw)
     reported_age = _safe_float(reported_age_raw)
     observation_epoch = _coerce_epoch(observation_raw)
-    if observation_epoch is None:
-        observation_epoch = float(now_epoch if now_epoch is not None else time.time())
+    observation_is_explicit = observation_epoch is not None
+    if observation_epoch is None and now_epoch is not None:
+        observation_epoch = float(now_epoch)
         observation_field = "now_epoch"
+        observation_is_explicit = True
 
     timestamp_age = None
-    if quote_ts_epoch is not None:
+    if quote_ts_epoch is not None and observation_epoch is not None:
         timestamp_age = max(0.0, float(observation_epoch) - float(quote_ts_epoch))
 
     if reported_age is None and timestamp_age is None:
         return QuoteAgeTruthDecision(
             ok=not require_age,
             reason_code="ok" if not require_age else QUOTE_AGE_MISSING,
+            quote_ts_epoch=quote_ts_epoch,
             observation_epoch=observation_epoch,
+            quote_timestamp_field=timestamp_field,
             observation_field=observation_field,
-            context={"require_age": bool(require_age)},
+            context={"require_age": bool(require_age), "observation_is_explicit": observation_is_explicit},
         )
 
     effective_age = max(
@@ -155,7 +160,7 @@ def classify_quote_age_truth(
     )
 
     mismatch_delta = None
-    if reported_age is not None and timestamp_age is not None:
+    if reported_age is not None and timestamp_age is not None and observation_is_explicit:
         mismatch_delta = abs(float(timestamp_age) - float(reported_age))
         if mismatch_delta > float(mismatch_tolerance_sec):
             return QuoteAgeTruthDecision(
@@ -173,6 +178,7 @@ def classify_quote_age_truth(
                 context={
                     "mismatch_tolerance_sec": float(mismatch_tolerance_sec),
                     "require_age": bool(require_age),
+                    "observation_is_explicit": observation_is_explicit,
                 },
             )
 
@@ -191,5 +197,6 @@ def classify_quote_age_truth(
         context={
             "mismatch_tolerance_sec": float(mismatch_tolerance_sec),
             "require_age": bool(require_age),
+            "observation_is_explicit": observation_is_explicit,
         },
     )
