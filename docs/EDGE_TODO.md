@@ -7,7 +7,6 @@ Rule: when an EDGE PR is completed and merged, remove that item from this list i
 ## Remaining EDGE PRs
 
 - [ ] EDGE-38 - Runtime Evidence Capture Guard
-- [ ] EDGE-40 - Quote Timestamp/Age Consistency Guard
 - [ ] EDGE-41 - Fallback Execution Firewall
 - [ ] EDGE-42 - Quote Truth Single Source of Truth
 - [ ] EDGE-43 - Feed Health Split-Brain Fix
@@ -31,11 +30,11 @@ Do not start strategy tuning before market truth is fixed.
 
 Immediate priority order:
 
-1. EDGE-40 - Quote Timestamp/Age Consistency Guard
-2. EDGE-41 - Fallback Execution Firewall
-3. EDGE-44 - Feed Recovery Runtime Wiring
-4. EDGE-38 - Runtime Evidence Capture Guard
-5. EDGE-42 - Quote Truth Single Source of Truth
+1. EDGE-41 - Fallback Execution Firewall
+2. EDGE-44 - Feed Recovery Runtime Wiring
+3. EDGE-38 - Runtime Evidence Capture Guard
+4. EDGE-42 - Quote Truth Single Source of Truth
+5. EDGE-43 - Feed Health Split-Brain Fix
 
 ## Scope guard
 
