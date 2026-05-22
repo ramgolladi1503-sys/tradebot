@@ -90,7 +90,20 @@ def classify_option_spread_truth(candidate: Any) -> OptionSpreadTruthDecision:
     reasons: list[str] = []
     bid = _safe_float(_coalesce(_candidate_get(candidate, "best_bid"), flags.get("best_bid"), _candidate_get(candidate, "opt_bid"), flags.get("opt_bid"), _candidate_get(candidate, "bid"), flags.get("bid")))
     ask = _safe_float(_coalesce(_candidate_get(candidate, "best_ask"), flags.get("best_ask"), _candidate_get(candidate, "opt_ask"), flags.get("opt_ask"), _candidate_get(candidate, "ask"), flags.get("ask")))
-    ltp = _safe_float(_coalesce(_candidate_get(candidate, "ltp"), flags.get("ltp"), _candidate_get(candidate, "option_ltp"), flags.get("option_ltp"), _candidate_get(candidate, "execution_entry"), flags.get("execution_entry")))
+    ltp = _safe_float(
+        _coalesce(
+            _candidate_get(candidate, "ltp"),
+            flags.get("ltp"),
+            _candidate_get(candidate, "option_ltp"),
+            flags.get("option_ltp"),
+            _candidate_get(candidate, "opt_ltp"),
+            flags.get("opt_ltp"),
+            _candidate_get(candidate, "current_ltp"),
+            flags.get("current_ltp"),
+            _candidate_get(candidate, "execution_entry"),
+            flags.get("execution_entry"),
+        )
+    )
     spread_pct = _safe_float(_coalesce(_candidate_get(candidate, "spread_pct"), flags.get("spread_pct")))
     spread_source = str(_coalesce(_candidate_get(candidate, "spread_source"), flags.get("spread_source"), _candidate_get(candidate, "quote_source"), flags.get("quote_source")) or "").strip().lower()
     quote_completeness = str(_coalesce(_candidate_get(candidate, "quote_completeness"), flags.get("quote_completeness"), "FULL") or "FULL").strip().upper()
