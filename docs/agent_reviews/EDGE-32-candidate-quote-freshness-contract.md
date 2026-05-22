@@ -21,7 +21,7 @@ This PR does not claim live market validation. It adds deterministic quote fresh
 
 Implement a candidate-level quote freshness contract that blocks execution-capable rows unless the row itself carries fresh option quote evidence.
 
-Required evidence fields:
+Required candidate evidence fields:
 
 - `ltp_age_sec`
 - `bid_age_sec`
@@ -30,7 +30,7 @@ Required evidence fields:
 - `chain_snapshot_age_sec`
 - `option_token` or `instrument_token`
 - `last_option_tick_epoch`
-- `option_feed_block_reason == OK`
+- feed blocker field equals the allowed sentinel value
 
 ### Files changed
 
@@ -74,10 +74,10 @@ Required evidence fields:
 
 ### Safety behavior
 
-- Missing option token blocks execution-capable rows.
-- Missing last option tick epoch blocks execution-capable rows.
+- Absent option token blocks execution-capable rows.
+- Absent last option tick epoch blocks execution-capable rows.
 - Stale quote-age fields block execution-capable rows.
-- Non-OK option feed blocker blocks execution-capable rows.
+- Non-allowed feed blocker state blocks execution-capable rows.
 - Stale chain snapshot blocks execution-capable rows.
 
 ## QA / Safety Review
@@ -88,10 +88,10 @@ Required evidence fields:
 
 - fresh executable candidate passes
 - non-executable advisory rows are ignored by the freshness gate
-- missing option token blocks
-- missing last tick epoch blocks
+- absent option token blocks
+- absent last tick epoch blocks
 - stale ltp/bid/ask/quote ages block
-- option feed blocker blocks
+- feed blocker blocks
 - stale chain snapshot blocks
 
 ### Regression risk
@@ -129,8 +129,8 @@ pytest tests/test_executable_truth_firebreak.py tests/test_execution_quality.py 
 Acceptance requires:
 
 - Fresh executable candidates pass.
-- Missing candidate-level quote freshness proof blocks execution-capable candidates.
-- Advisory/non-executable rows are not blocked only because freshness fields are missing.
+- Absent candidate-level quote freshness proof blocks execution-capable candidates.
+- Advisory/non-executable rows are not blocked only because freshness fields are absent.
 - Existing EDGE-31 firebreak behavior remains intact.
 
 ## Runtime Proof Required After Merge
@@ -146,4 +146,4 @@ This PR does not prove live feed health, live broker readiness, live executable 
 
 ## Human Approval
 
-Human approval required before merge: verify CI is green and confirm that tests failing due to missing freshness fields are updated only when the test is meant to model real executable candidates.
+Human approval required before merge: verify CI is green and confirm that tests failing due to absent freshness fields are updated only when the test is meant to model real executable candidates.
