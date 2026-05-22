@@ -39,6 +39,15 @@ def _coalesce(*values: Any) -> Any:
     return None
 
 
+def _missing_identity(value: Any) -> bool:
+    if value in (None, "", "None"):
+        return True
+    try:
+        return float(value) <= 0.0
+    except Exception:
+        return False
+
+
 def _safe_float(value: Any) -> float | None:
     try:
         if value in (None, "", "None"):
@@ -120,15 +129,15 @@ def _explicit_option_token(candidate: Any, flags: dict[str, Any]) -> Any:
     )
 
 
-def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnessDecision:
-    """Validate per-candidate quote freshness proof for executable candidates.
+def _edge32_field_present(candidate: Any, flags: dict[str, Any], field: str) -> bool:
+    value = _coalesce(_candidate_get(candidate, field), flags.get(field))
+    if field in {"option_token", "instrument_token"}:
+        return not _missing_identity(value)
+    return value not in (None, "", "None")
 
-    EDGE-32 blocks real execution-capable rows that carry stale or incomplete
-    option quote evidence. Older deterministic unit fixtures often prove ranking,
-    density, or slippage behavior rather than feed plumbing; those fixtures remain
-    compatible when they identify the candidate by symbol/tradingsymbol and do
-    not provide a full EDGE-32 freshness payload.
-    """
+
+def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnessDecision:
+    """Validate per-candidate quote freshness proof for executable candidates."""
     flags = _source_flags(candidate)
     reasons: list[str] = []
     execution_capable = _looks_execution_capable(candidate, flags)
@@ -143,8 +152,8 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
     max_chain_age = _max_chain_snapshot_age_sec()
     explicit_token = _explicit_option_token(candidate, flags)
     legacy_identity = _legacy_identity(candidate, flags)
-    uses_legacy_identity = explicit_token in (None, "", "None") and legacy_identity not in (None, "", "None")
-    option_token = explicit_token if explicit_token not in (None, "", "None") else legacy_identity
+    uses_legacy_identity = _missing_identity(explicit_token) and legacy_identity not in (None, "", "None")
+    option_token = explicit_token if not _missing_identity(explicit_token) else legacy_identity
 
     quote_age_sec = _safe_float(
         _coalesce(
@@ -155,7 +164,7 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
         )
     )
     has_full_edge32_payload = any(
-        _coalesce(_candidate_get(candidate, field), flags.get(field)) not in (None, "", "None")
+        _edge32_field_present(candidate, flags, field)
         for field in (
             "option_token",
             "instrument_token",
@@ -191,7 +200,7 @@ def classify_candidate_quote_freshness(candidate: Any) -> CandidateQuoteFreshnes
         )
     ).strip()
 
-    if option_token in (None, "", "None"):
+    if _missing_identity(option_token):
         _append_unique(reasons, OPTION_TOKEN_MISSING_REASON)
     if last_option_tick_epoch in (None, "", "None") and not legacy_fresh_fixture:
         _append_unique(reasons, LAST_OPTION_TICK_MISSING_REASON)
