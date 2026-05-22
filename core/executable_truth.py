@@ -6,6 +6,7 @@ from typing import Any
 from config import config as cfg
 from core.candidate_quote_freshness import classify_candidate_quote_freshness
 from core.option_spread_truth import classify_option_spread_truth
+from core.strategy_signal_quality import classify_strategy_signal_quality
 
 EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
 FALLBACK_DRIVEN_REASON = "fallback_driven_data"
@@ -158,6 +159,13 @@ def classify_executable_truth(
         liquidity_ok = _coalesce(_candidate_get(candidate, "liquidity_ok"), flags.get("liquidity_ok"))
     if liquidity_ok is False:
         _append_unique(reasons, "missing_liquidity_validation")
+
+    signal_quality = classify_strategy_signal_quality(candidate)
+    context["strategy_signal_quality"] = dict(signal_quality.context or {})
+    if not signal_quality.signal_ok:
+        _append_unique(reasons, signal_quality.reason_code)
+        for signal_reason in signal_quality.reasons:
+            _append_unique(reasons, signal_reason)
 
     freshness = classify_candidate_quote_freshness(candidate)
     context["quote_freshness"] = dict(freshness.context or {})
