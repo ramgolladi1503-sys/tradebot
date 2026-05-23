@@ -11,16 +11,20 @@ from core.order_policy import choose_order_policy
 from core.slippage_model import estimate_slippage
 
 
-_ADVISORY_FIREBREAK_REASONS = {
+_EDGE41_DEGRADED_FIREBREAK_REASONS = {
     "fallback_driven_data",
+    "price_mismatch_quote",
+    "stale_option_ltp",
+    "subscription_failed_quote",
+}
+
+_ADVISORY_FIREBREAK_REASONS = {
+    *_EDGE41_DEGRADED_FIREBREAK_REASONS,
     "degraded_data",
     "data_not_live",
     "planning_only",
     "advisory_only",
     "debug_candidate",
-    "price_mismatch_quote",
-    "stale_option_ltp",
-    "subscription_failed_quote",
     "stale_quote",
     "inconsistent_quote",
     "missing_quote",
@@ -79,27 +83,22 @@ def _candidate_source_flags(candidate: Any) -> dict[str, Any]:
 
 
 def _stamp_firebreak_block(candidate: Any, *, reason_code: str, order_policy: str) -> None:
-    """Best-effort safety stamp so downstream offline selectors cannot re-enable a firebreak block."""
+    """Best-effort EDGE-41 stamp so degraded quote evidence cannot be re-selected."""
 
-    advisory_policy = str(order_policy or "").strip().lower() == "advisory"
     flags = _candidate_source_flags(candidate)
     flags.update(
         {
             "execution_firebreak_blocked": True,
             "execution_firebreak_reason": reason_code,
-            "execution_block_type": "advisory" if advisory_policy else "hard_block",
+            "execution_block_type": "advisory" if str(order_policy or "").strip().lower() == "advisory" else "hard_block",
             "selected_for_execution": False,
         }
     )
     _candidate_set(candidate, "source_flags", flags)
+    _candidate_set(candidate, "execution_firebreak_blocked", True)
+    _candidate_set(candidate, "execution_firebreak_reason", reason_code)
     _candidate_set(candidate, "execution_ok", False)
     _candidate_set(candidate, "selected_for_execution", False)
-    _candidate_set(candidate, "execution_status", "advisory_only" if advisory_policy else "blocked")
-    if advisory_policy:
-        _candidate_set(candidate, "candidate_class", "ADVISORY_ONLY")
-        _candidate_set(candidate, "permission", "ADVISORY_ONLY")
-        _candidate_set(candidate, "final_action", "ADVISORY_ONLY")
-        _candidate_set(candidate, "readiness", "ADVISORY_ONLY")
 
 
 def _clamp01(value: Any, *, default: float | None = None) -> float | None:
@@ -235,7 +234,8 @@ def _execution_quality_score(
 
 def _firebreak_reject_decision(candidate: Any, reason_code: str, context: dict[str, Any], *, data_confidence: float | None) -> ExecutionQualityDecision:
     order_policy = "advisory" if reason_code in _ADVISORY_FIREBREAK_REASONS else "reject"
-    _stamp_firebreak_block(candidate, reason_code=reason_code, order_policy=order_policy)
+    if reason_code in _EDGE41_DEGRADED_FIREBREAK_REASONS:
+        _stamp_firebreak_block(candidate, reason_code=reason_code, order_policy=order_policy)
     return ExecutionQualityDecision(
         expected_slippage=_safe_float(_candidate_get(candidate, "expected_slippage")),
         spread_penalty=float(getattr(cfg, "EXECUTION_QUALITY_MAX_SCORE_PENALTY", 0.22) or 0.22),
