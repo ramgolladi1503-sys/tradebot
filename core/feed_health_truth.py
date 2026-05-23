@@ -85,7 +85,11 @@ def _normalize_reason(reason: Any) -> str:
 
 
 def _symbols_from_payload(payload: dict[str, Any], requested_symbols: tuple[str, ...]) -> tuple[str, ...]:
-    symbols: set[str] = {_normalize_symbol(symbol) for symbol in requested_symbols if _normalize_symbol(symbol)}
+    requested = tuple(_normalize_symbol(symbol) for symbol in requested_symbols if _normalize_symbol(symbol))
+    if requested:
+        return requested
+
+    symbols: set[str] = set()
     for key in (
         "option_feed_block_reason_by_symbol",
         "option_last_tick_age_by_symbol",
