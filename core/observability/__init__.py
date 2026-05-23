@@ -36,8 +36,15 @@ from core.observability.runtime_cycle import (
     RuntimeCycleEventEmitter,
     RuntimeCycleEventError,
 )
+from core.observability.tracing import (
+    CORE_OBSERVABILITY_SPANS,
+    ObservabilityTracer,
+    TraceSpanResult,
+    trace_attributes,
+)
 
 __all__ = [
+    "CORE_OBSERVABILITY_SPANS",
     "CandidateLifecycleEventEmitter",
     "CandidateLifecycleEventError",
     "FeedStateEventEmitter",
@@ -50,9 +57,11 @@ __all__ = [
     "ObservabilityJsonLogError",
     "ObservabilityJsonLogRecord",
     "ObservabilityJsonLogger",
+    "ObservabilityTracer",
     "REQUIRED_EVENT_FIELDS",
     "RuntimeCycleEventEmitter",
     "RuntimeCycleEventError",
+    "TraceSpanResult",
     "build_candidate_id",
     "build_cycle_id",
     "build_run_id",
@@ -61,5 +70,6 @@ __all__ = [
     "event_to_json_line",
     "normalize_identity_component",
     "payload_to_json_line",
+    "trace_attributes",
     "validate_event_payload",
 ]
