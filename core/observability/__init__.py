@@ -11,6 +11,13 @@ from core.observability.events import (
     REQUIRED_EVENT_FIELDS,
     validate_event_payload,
 )
+from core.observability.evidence_bundle import (
+    EVIDENCE_FILENAMES,
+    ObservabilityEvidenceBundle,
+    ObservabilityEvidenceBundleError,
+    build_observability_evidence_bundle,
+    write_observability_evidence_bundle,
+)
 from core.observability.feed_state import (
     FeedStateEventEmitter,
     FeedStateEventError,
@@ -53,6 +60,7 @@ from core.observability.tracing import (
 __all__ = [
     "CORE_OBSERVABILITY_SPANS",
     "DEFAULT_OBSERVABILITY_METRICS",
+    "EVIDENCE_FILENAMES",
     "CandidateLifecycleEventEmitter",
     "CandidateLifecycleEventError",
     "FeedStateEventEmitter",
@@ -61,6 +69,8 @@ __all__ = [
     "ObservabilityContext",
     "ObservabilityEvent",
     "ObservabilityEventError",
+    "ObservabilityEvidenceBundle",
+    "ObservabilityEvidenceBundleError",
     "ObservabilityIdentityError",
     "ObservabilityIds",
     "ObservabilityJsonLogError",
@@ -76,6 +86,7 @@ __all__ = [
     "build_candidate_id",
     "build_cycle_id",
     "build_default_metrics_registry",
+    "build_observability_evidence_bundle",
     "build_run_id",
     "build_span_id",
     "build_trace_id",
@@ -84,4 +95,5 @@ __all__ = [
     "payload_to_json_line",
     "trace_attributes",
     "validate_event_payload",
+    "write_observability_evidence_bundle",
 ]
