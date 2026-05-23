@@ -65,6 +65,30 @@ services:
     networks:
       - tradebot-observability
 
+  loki:
+    image: grafana/loki:3.2.1
+    command:
+      - -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml:ro
+    ports:
+      - "3100:3100"
+    networks:
+      - tradebot-observability
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    command:
+      - -config.file=/etc/promtail/config.yaml
+    volumes:
+      - ./observability/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - ./logs:/var/log/tradebot/logs:ro
+      - ./runtime:/var/log/tradebot/runtime:ro
+    depends_on:
+      - loki
+    networks:
+      - tradebot-observability
+
   grafana:
     image: grafana/grafana-oss:11.3.0
     environment:
@@ -80,6 +104,7 @@ services:
     depends_on:
       - prometheus
       - tempo
+      - loki
     networks:
       - tradebot-observability
 

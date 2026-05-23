@@ -1,0 +1,47 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: tradebot-structured-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: tradebot-logs
+          service: tradebot
+          source: local-file
+          __path__: /var/log/tradebot/logs/**/*.log,/var/log/tradebot/runtime/**/*.log,/var/log/tradebot/runtime/**/*.jsonl
+    pipeline_stages:
+      - json:
+          expressions:
+            trace_id: trace_id
+            candidate_id: candidate_id
+            cycle_id: cycle_id
+            run_id: run_id
+            strategy_id: strategy_id
+            stage: stage
+            decision: decision
+            reason: reason
+            fallback_state: fallback_state
+            execution_mode: execution_mode
+      - labels:
+          service:
+          source:
+          execution_mode:
+      - structured_metadata:
+          trace_id:
+          candidate_id:
+          cycle_id:
+          run_id:
+          strategy_id:
+          stage:
+          decision:
+          reason:
+          fallback_state:
