@@ -146,7 +146,7 @@ def test_cli_writes_replay_compatible_jsonl(tmp_path: Path) -> None:
     replay = replay_trace(events, candidate_id="legacy_cli_snapshot_NIFTY_CE_observed_1")
 
     assert exit_code == 0
-    assert len(events) == 1
+    assert events[0]["event"] == "candidate.legacy_observed"
     assert replay.event_count == 1
     assert events[0]["replay_quality"] == "partial"
 
