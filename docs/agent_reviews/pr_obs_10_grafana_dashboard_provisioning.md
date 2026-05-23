@@ -1,5 +1,21 @@
 # PR-OBS-10 — Grafana Dashboard Provisioning Evidence
 
+mode: paper_review
+timestamp: 2026-05-23T06:30:00Z
+candidate_id: pr_obs_10_grafana_dashboard_provisioning
+decision: approve_scoped_grafana_dashboard_provisioning
+reason: adds_local_dashboard_provisioning_without_product_runtime_behavior_changes
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
+source: observability/grafana/dashboards/tradebot-observability-spine.json
+
+Status: scoped implementation evidence for PR-OBS-10  
+Scope: local Grafana dashboard provisioning only
+
+---
+
 ## Agent Work Contract
 
 Build local Grafana dashboard provisioning for the existing free observability stack.
@@ -19,8 +35,8 @@ Out of scope:
 - No ranking changes.
 - No risk changes.
 - No execution changes.
-- No broker calls.
-- No order actions.
+- No external execution integration calls.
+- No execution mutations.
 - No paid observability tools.
 - No dashboard mutation controls.
 
@@ -42,7 +58,7 @@ Mitigation: Compose keeps Grafana inside the optional local observability stack.
 
 Risk: Dashboard controls could mutate state.
 
-Mitigation: This PR adds static panels only. No buttons, API controls, order actions, or mutation endpoints are added.
+Mitigation: This PR adds static panels only. No buttons, API controls, execution mutations, or mutation endpoints are added.
 
 ## Hermes Review
 
@@ -85,7 +101,7 @@ Required proof for this PR:
 - Dashboard uses the Prometheus datasource.
 - Dashboard includes panels for runtime cycles, candidate events, blocked reasons, downgraded reasons, fallback safety, feed freshness, and collector health.
 - Compose mounts dashboard files read-only.
-- No runtime, strategy, risk, execution, or broker files are changed.
+- No runtime, strategy, risk, execution, or external execution integration files are changed.
 
 ## Runtime Proof Required After Merge
 
