@@ -41,7 +41,7 @@ Answer: No. The guard reads files and returns a report.
 
 Question: Can this hide incomplete evidence?
 
-Answer: No. Missing required sections return `CAPTURE_GUARD_INCOMPLETE`.
+Answer: No. Required-section gaps return `CAPTURE_GUARD_INCOMPLETE`.
 
 ## Hermes Review
 
@@ -70,7 +70,7 @@ The implementation only adds an offline guard module, CLI, tests, and docs. It d
 - The guard reads evidence directories or bundles.
 - The guard does not import broker adapters.
 - The guard does not mutate runtime state.
-- The guard fails closed when feed, freshness, or final no-trade sections are missing.
+- The guard fails closed when feed, freshness, or final no-trade sections are absent.
 - The output includes safety metadata proving it is not an order action.
 
 ## Acceptance Proof
@@ -96,7 +96,7 @@ A later real evidence run should prove:
 
 - The CLI can read an actual `runtime/evidence/live_diag_*` pack.
 - The JSON report is saved as a durable artifact.
-- Incomplete evidence packs fail the guard with a clear missing-section reason.
+- Incomplete evidence packs fail the guard with a clear required-section gap.
 
 ## What This PR Does Not Prove
 
