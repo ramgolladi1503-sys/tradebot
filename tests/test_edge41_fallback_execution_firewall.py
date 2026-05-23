@@ -147,13 +147,14 @@ def test_fallback_candidate_cannot_be_selected_or_top_executable() -> None:
         score_inputs_used={"rr_source": "fallback_estimated"},
     )
 
-    ranked = annotate_ranked_opportunities([candidate], scope="unit:edge41", top_n=1)
+    ranked = annotate_ranked_opportunities([candidate], scope="edge41", top_n=1)
     selected = ranked[0]
     top = select_top_opportunities(ranked, executable_top_n=1, advisory_top_n=5)
 
     assert selected["selected_for_execution"] is False
-    assert selected["selection_reason"] != "selected_top_rank"
-    assert selected["truth_allows_execution"] is False
+    assert selected["selection_reason"] == "execution_quality_reject"
     assert selected["execution_ok"] is False
+    assert selected["order_policy"] == "advisory"
+    assert selected["order_policy_reason"] == FALLBACK_DRIVEN_REASON
     assert top["top_executable_opportunities"] == []
     assert top["selector_outcome"] != "EXECUTE_TOP"
