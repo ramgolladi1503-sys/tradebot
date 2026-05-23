@@ -1,5 +1,9 @@
 """Observability helpers for Tradebot."""
 
+from core.observability.candidate_lifecycle import (
+    CandidateLifecycleEventEmitter,
+    CandidateLifecycleEventError,
+)
 from core.observability.context import ObservabilityContext
 from core.observability.events import (
     ObservabilityEvent,
@@ -30,6 +34,8 @@ from core.observability.runtime_cycle import (
 )
 
 __all__ = [
+    "CandidateLifecycleEventEmitter",
+    "CandidateLifecycleEventError",
     "ObservabilityContext",
     "ObservabilityEvent",
     "ObservabilityEventError",
