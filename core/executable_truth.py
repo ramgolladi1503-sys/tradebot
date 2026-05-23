@@ -41,9 +41,6 @@ _PRICE_MISMATCH_STATUSES = {
 
 _STALE_QUOTE_STATUSES = {
     "STALE_OPTION_LTP",
-    "STALE_QUOTE",
-    "QUOTE_EXCEEDS_THRESHOLD",
-    "QUOTE_EXCEEDS_SLA",
 }
 
 _SUBSCRIPTION_FAILED_STATUSES = {
@@ -229,7 +226,7 @@ def _fallback_execution_reasons(candidate: Any, flags: dict[str, Any]) -> tuple[
             _append_unique(reasons, FALLBACK_DRIVEN_REASON)
         if "price_mismatch" in text:
             _append_unique(reasons, PRICE_MISMATCH_REASON)
-        if "stale" in text:
+        if "stale_option_ltp" in text:
             _append_unique(reasons, STALE_OPTION_LTP_REASON)
         if "subscription_failed" in text:
             _append_unique(reasons, SUBSCRIPTION_FAILED_REASON)
@@ -257,8 +254,6 @@ def classify_executable_truth(
         _append_unique(reasons, fallback_reason)
 
     execution_block_type = str(flags.get("execution_block_type") or "").strip().lower()
-    if execution_block_type == "advisory":
-        _append_unique(reasons, _advisory_reason(candidate, flags))
 
     if _truthy(_coalesce(_candidate_get(candidate, "planning_only"), flags.get("planning_only"))):
         _append_unique(reasons, "planning_only")
