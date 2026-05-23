@@ -87,6 +87,34 @@ Required proof for this PR:
 - Compose mounts dashboard files read-only.
 - No runtime, strategy, risk, execution, or broker files are changed.
 
+## Runtime Proof Required After Merge
+
+Manual proof is required after merge because Grafana provisioning is best validated with the local Docker stack:
+
+```bash
+docker compose -f docker-compose.observability.yml config
+docker compose -f docker-compose.observability.yml up --build
+```
+
+Expected manual result:
+
+- Grafana starts at `http://127.0.0.1:3000`.
+- The `Tradebot` folder appears.
+- The `Tradebot Observability Spine` dashboard appears.
+- Prometheus datasource is selected by the dashboard panels.
+- Empty panels are acceptable until later PRs wire runtime and candidate metrics.
+
+## What This PR Does Not Prove
+
+- It does not prove runtime-cycle metrics are emitted.
+- It does not prove candidate lifecycle metrics are emitted.
+- It does not prove feed freshness is solved.
+- It does not prove fallback contamination is solved.
+- It does not prove strategy quality.
+- It does not prove ranking quality.
+- It does not prove execution readiness.
+- It does not prove profitability.
+
 ## Human Approval
 
 Ready for human review after CI passes.
