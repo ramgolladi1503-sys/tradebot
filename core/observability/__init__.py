@@ -32,6 +32,13 @@ from core.observability.json_logger import (
     event_to_json_line,
     payload_to_json_line,
 )
+from core.observability.metrics import (
+    DEFAULT_OBSERVABILITY_METRICS,
+    MetricSample,
+    ObservabilityMetricError,
+    ObservabilityMetricsRegistry,
+    build_default_metrics_registry,
+)
 from core.observability.runtime_cycle import (
     RuntimeCycleEventEmitter,
     RuntimeCycleEventError,
@@ -45,10 +52,12 @@ from core.observability.tracing import (
 
 __all__ = [
     "CORE_OBSERVABILITY_SPANS",
+    "DEFAULT_OBSERVABILITY_METRICS",
     "CandidateLifecycleEventEmitter",
     "CandidateLifecycleEventError",
     "FeedStateEventEmitter",
     "FeedStateEventError",
+    "MetricSample",
     "ObservabilityContext",
     "ObservabilityEvent",
     "ObservabilityEventError",
@@ -57,6 +66,8 @@ __all__ = [
     "ObservabilityJsonLogError",
     "ObservabilityJsonLogRecord",
     "ObservabilityJsonLogger",
+    "ObservabilityMetricError",
+    "ObservabilityMetricsRegistry",
     "ObservabilityTracer",
     "REQUIRED_EVENT_FIELDS",
     "RuntimeCycleEventEmitter",
@@ -64,6 +75,7 @@ __all__ = [
     "TraceSpanResult",
     "build_candidate_id",
     "build_cycle_id",
+    "build_default_metrics_registry",
     "build_run_id",
     "build_span_id",
     "build_trace_id",
