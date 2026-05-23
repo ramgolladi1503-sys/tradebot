@@ -11,6 +11,10 @@ from core.observability.events import (
     REQUIRED_EVENT_FIELDS,
     validate_event_payload,
 )
+from core.observability.feed_state import (
+    FeedStateEventEmitter,
+    FeedStateEventError,
+)
 from core.observability.ids import (
     ObservabilityIdentityError,
     ObservabilityIds,
@@ -36,6 +40,8 @@ from core.observability.runtime_cycle import (
 __all__ = [
     "CandidateLifecycleEventEmitter",
     "CandidateLifecycleEventError",
+    "FeedStateEventEmitter",
+    "FeedStateEventError",
     "ObservabilityContext",
     "ObservabilityEvent",
     "ObservabilityEventError",
