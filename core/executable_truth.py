@@ -250,10 +250,27 @@ def classify_executable_truth(
     validation_statuses = _quote_validation_statuses(candidate, flags)
     chain_source = sorted(quote_sources)[0] if quote_sources else ""
 
-    for fallback_reason in _fallback_execution_reasons(candidate, flags):
-        _append_unique(reasons, fallback_reason)
-
+    fallback_reasons = list(_fallback_execution_reasons(candidate, flags))
     execution_block_type = str(flags.get("execution_block_type") or "").strip().lower()
+    if execution_block_type == "advisory":
+        # Generic advisory rows must remain blocked from execution, but they are
+        # diagnostic/advisory evidence rather than irreversible EDGE-41 degraded
+        # quote firebreak rows. Keep severe fallback/mismatch/subscription markers
+        # ahead of the generic advisory reason, but allow non-live advisory stale
+        # data to preserve the existing data_not_live/degraded_data contract.
+        severe_reasons = [
+            reason
+            for reason in fallback_reasons
+            if reason in {FALLBACK_DRIVEN_REASON, PRICE_MISMATCH_REASON, SUBSCRIPTION_FAILED_REASON}
+        ]
+        for fallback_reason in severe_reasons:
+            _append_unique(reasons, fallback_reason)
+        _append_unique(reasons, _advisory_reason(candidate, flags))
+        for fallback_reason in fallback_reasons:
+            _append_unique(reasons, fallback_reason)
+    else:
+        for fallback_reason in fallback_reasons:
+            _append_unique(reasons, fallback_reason)
 
     if _truthy(_coalesce(_candidate_get(candidate, "planning_only"), flags.get("planning_only"))):
         _append_unique(reasons, "planning_only")
