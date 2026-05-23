@@ -12,6 +12,9 @@ EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
 FALLBACK_DRIVEN_REASON = "fallback_driven_data"
 DEGRADED_DATA_REASON = "degraded_data"
 DATA_NOT_LIVE_REASON = "data_not_live"
+PRICE_MISMATCH_REASON = "price_mismatch_quote"
+STALE_OPTION_LTP_REASON = "stale_option_ltp"
+SUBSCRIPTION_FAILED_REASON = "subscription_failed_quote"
 
 _FALLBACK_CHAIN_SOURCES = {
     "synthetic_chain",
@@ -20,6 +23,29 @@ _FALLBACK_CHAIN_SOURCES = {
     "recovered_fallback",
     "fallback_close",
     "fallback_last_atm",
+    "rest_fallback",
+    "fallback",
+    "fallback_recovered",
+}
+
+_FALLBACK_RR_SOURCES = {
+    "fallback_estimated",
+    "estimated_fallback",
+    "fallback",
+}
+
+_PRICE_MISMATCH_STATUSES = {
+    "PRICE_MISMATCH",
+    "QUOTE_PRICE_MISMATCH",
+}
+
+_STALE_QUOTE_STATUSES = {
+    "STALE_OPTION_LTP",
+}
+
+_SUBSCRIPTION_FAILED_STATUSES = {
+    "SUBSCRIPTION_FAILED",
+    "OPTION_SUBSCRIPTION_FAILED",
 }
 
 
@@ -72,6 +98,22 @@ def _append_unique(reasons: list[str], reason: str | None) -> None:
         reasons.append(text)
 
 
+def _normalized_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalized_lower(value: Any) -> str:
+    return _normalized_text(value).lower()
+
+
+def _normalized_upper(value: Any) -> str:
+    return _normalized_text(value).upper()
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
 def _configured_mode() -> str:
     return str(_coalesce(getattr(cfg, "EXECUTION_MODE", None), getattr(cfg, "TRADING_MODE", None)) or "").strip().upper()
 
@@ -93,6 +135,105 @@ def _advisory_reason(candidate: Any, flags: dict[str, Any]) -> str:
     return DEGRADED_DATA_REASON
 
 
+def _quote_truth_maps(candidate: Any, flags: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    quote_truth = _mapping(flags.get("quote_truth"))
+    quote_truth_snapshot = _mapping(flags.get("quote_truth_snapshot"))
+    return quote_truth, quote_truth_snapshot
+
+
+def _quote_sources(candidate: Any, flags: dict[str, Any]) -> set[str]:
+    quote_truth, quote_truth_snapshot = _quote_truth_maps(candidate, flags)
+    values = {
+        _candidate_get(candidate, "chain_source"),
+        flags.get("chain_source"),
+        _candidate_get(candidate, "price_source"),
+        flags.get("price_source"),
+        _candidate_get(candidate, "quote_source"),
+        flags.get("quote_source"),
+        _candidate_get(candidate, "option_ltp_source"),
+        flags.get("option_ltp_source"),
+        quote_truth.get("quote_source"),
+        quote_truth.get("option_ltp_source"),
+        quote_truth_snapshot.get("quote_source"),
+        quote_truth_snapshot.get("option_ltp_source"),
+    }
+    return {_normalized_lower(value) for value in values if _normalized_text(value)}
+
+
+def _quote_validation_statuses(candidate: Any, flags: dict[str, Any]) -> set[str]:
+    quote_truth, quote_truth_snapshot = _quote_truth_maps(candidate, flags)
+    values = {
+        _candidate_get(candidate, "quote_validation_status"),
+        flags.get("quote_validation_status"),
+        _candidate_get(candidate, "validation_issue_code"),
+        flags.get("validation_issue_code"),
+        quote_truth.get("quote_validation_status"),
+        quote_truth_snapshot.get("quote_validation_status"),
+    }
+    return {_normalized_upper(value) for value in values if _normalized_text(value)}
+
+
+def _score_inputs(candidate: Any, flags: dict[str, Any]) -> dict[str, Any]:
+    direct = _mapping(_candidate_get(candidate, "score_inputs_used"))
+    flagged = _mapping(flags.get("score_inputs_used"))
+    merged = dict(flagged)
+    merged.update(direct)
+    return merged
+
+
+def _fallback_execution_reasons(candidate: Any, flags: dict[str, Any]) -> tuple[str, ...]:
+    reasons: list[str] = []
+    quote_sources = _quote_sources(candidate, flags)
+    validation_statuses = _quote_validation_statuses(candidate, flags)
+    score_inputs = _score_inputs(candidate, flags)
+
+    if any(
+        _truthy(_coalesce(_candidate_get(candidate, field), flags.get(field)))
+        for field in (
+            "fallback_candidate",
+            "recovered_fallback",
+            "fallback_used",
+            "contract_resolution_fallback_used",
+        )
+    ):
+        _append_unique(reasons, FALLBACK_DRIVEN_REASON)
+
+    if _normalized_lower(_candidate_get(candidate, "fallback_state")) in {"recovered_fallback", "fallback_recovered"}:
+        _append_unique(reasons, FALLBACK_DRIVEN_REASON)
+    if _normalized_lower(flags.get("fallback_state")) in {"recovered_fallback", "fallback_recovered"}:
+        _append_unique(reasons, FALLBACK_DRIVEN_REASON)
+
+    if quote_sources.intersection(_FALLBACK_CHAIN_SOURCES):
+        _append_unique(reasons, FALLBACK_DRIVEN_REASON)
+
+    rr_source = _normalized_lower(score_inputs.get("rr_source"))
+    if rr_source in _FALLBACK_RR_SOURCES:
+        _append_unique(reasons, FALLBACK_DRIVEN_REASON)
+
+    if validation_statuses.intersection(_PRICE_MISMATCH_STATUSES):
+        _append_unique(reasons, PRICE_MISMATCH_REASON)
+    if validation_statuses.intersection(_STALE_QUOTE_STATUSES):
+        _append_unique(reasons, STALE_OPTION_LTP_REASON)
+    if validation_statuses.intersection(_SUBSCRIPTION_FAILED_STATUSES):
+        _append_unique(reasons, SUBSCRIPTION_FAILED_REASON)
+
+    if "subscription_failed" in quote_sources:
+        _append_unique(reasons, SUBSCRIPTION_FAILED_REASON)
+
+    for blocker in _candidate_get(candidate, "tradable_reasons_blocking", []) or []:
+        text = _normalized_lower(blocker)
+        if "fallback" in text:
+            _append_unique(reasons, FALLBACK_DRIVEN_REASON)
+        if "price_mismatch" in text:
+            _append_unique(reasons, PRICE_MISMATCH_REASON)
+        if "stale_option_ltp" in text:
+            _append_unique(reasons, STALE_OPTION_LTP_REASON)
+        if "subscription_failed" in text:
+            _append_unique(reasons, SUBSCRIPTION_FAILED_REASON)
+
+    return tuple(reasons)
+
+
 def classify_executable_truth(
     candidate: Any,
     *,
@@ -105,32 +246,31 @@ def classify_executable_truth(
     flags = _source_flags(candidate)
     reasons: list[str] = []
     context: dict[str, Any] = {}
-    chain_source = str(
-        _coalesce(
-            _candidate_get(candidate, "chain_source"),
-            flags.get("chain_source"),
-            _candidate_get(candidate, "price_source"),
-            flags.get("quote_source"),
-        )
-        or ""
-    ).strip().lower()
+    quote_sources = _quote_sources(candidate, flags)
+    validation_statuses = _quote_validation_statuses(candidate, flags)
+    chain_source = sorted(quote_sources)[0] if quote_sources else ""
 
-    if any(
-        _truthy(_coalesce(_candidate_get(candidate, field), flags.get(field)))
-        for field in (
-            "fallback_candidate",
-            "recovered_fallback",
-            "fallback_used",
-            "contract_resolution_fallback_used",
-        )
-    ):
-        _append_unique(reasons, FALLBACK_DRIVEN_REASON)
-    if chain_source in _FALLBACK_CHAIN_SOURCES:
-        _append_unique(reasons, FALLBACK_DRIVEN_REASON)
-
+    fallback_reasons = list(_fallback_execution_reasons(candidate, flags))
     execution_block_type = str(flags.get("execution_block_type") or "").strip().lower()
     if execution_block_type == "advisory":
+        # Generic advisory rows must remain blocked from execution, but they are
+        # diagnostic/advisory evidence rather than irreversible EDGE-41 degraded
+        # quote firebreak rows. Keep severe fallback/mismatch/subscription markers
+        # ahead of the generic advisory reason, but allow non-live advisory stale
+        # data to preserve the existing data_not_live/degraded_data contract.
+        severe_reasons = [
+            reason
+            for reason in fallback_reasons
+            if reason in {FALLBACK_DRIVEN_REASON, PRICE_MISMATCH_REASON, SUBSCRIPTION_FAILED_REASON}
+        ]
+        for fallback_reason in severe_reasons:
+            _append_unique(reasons, fallback_reason)
         _append_unique(reasons, _advisory_reason(candidate, flags))
+        for fallback_reason in fallback_reasons:
+            _append_unique(reasons, fallback_reason)
+    else:
+        for fallback_reason in fallback_reasons:
+            _append_unique(reasons, fallback_reason)
 
     if _truthy(_coalesce(_candidate_get(candidate, "planning_only"), flags.get("planning_only"))):
         _append_unique(reasons, "planning_only")
@@ -192,6 +332,8 @@ def classify_executable_truth(
             "firebreak_code": EXECUTABLE_TRUTH_FIREBREAK_CODE,
             "data_state": state or None,
             "chain_source": chain_source or None,
+            "quote_sources": sorted(quote_sources),
+            "quote_validation_statuses": sorted(validation_statuses),
             "execution_block_type": execution_block_type or None,
             "data_confidence": confidence,
             "min_data_confidence": min_confidence,
