@@ -6,6 +6,13 @@ from typing import Any
 from config import config as cfg
 from core.candidate_quote_freshness import classify_candidate_quote_freshness
 from core.option_spread_truth import classify_option_spread_truth
+from core.quote_truth import (
+    QUOTE_PRICE_MISMATCH_REASON,
+    QUOTE_SOURCE_FALLBACK_REASON,
+    QUOTE_SOURCE_SUBSCRIPTION_FAILED_REASON,
+    QUOTE_STALE_REASON,
+    classify_quote_truth,
+)
 from core.strategy_signal_quality import classify_strategy_signal_quality
 
 EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
@@ -234,6 +241,23 @@ def _fallback_execution_reasons(candidate: Any, flags: dict[str, Any]) -> tuple[
     return tuple(reasons)
 
 
+def _canonical_quote_truth_reasons(candidate: Any) -> tuple[list[str], dict[str, Any]]:
+    decision = classify_quote_truth(candidate)
+    reasons: list[str] = []
+    for reason in decision.reasons:
+        if reason == QUOTE_SOURCE_FALLBACK_REASON:
+            _append_unique(reasons, FALLBACK_DRIVEN_REASON)
+        elif reason == QUOTE_SOURCE_SUBSCRIPTION_FAILED_REASON:
+            _append_unique(reasons, SUBSCRIPTION_FAILED_REASON)
+        elif reason == QUOTE_PRICE_MISMATCH_REASON:
+            _append_unique(reasons, PRICE_MISMATCH_REASON)
+        elif reason == QUOTE_STALE_REASON:
+            _append_unique(reasons, STALE_OPTION_LTP_REASON)
+        else:
+            _append_unique(reasons, reason)
+    return reasons, decision.to_payload()
+
+
 def classify_executable_truth(
     candidate: Any,
     *,
@@ -249,8 +273,12 @@ def classify_executable_truth(
     quote_sources = _quote_sources(candidate, flags)
     validation_statuses = _quote_validation_statuses(candidate, flags)
     chain_source = sorted(quote_sources)[0] if quote_sources else ""
+    quote_truth_reasons, quote_truth_payload = _canonical_quote_truth_reasons(candidate)
+    context["quote_truth"] = quote_truth_payload
 
     fallback_reasons = list(_fallback_execution_reasons(candidate, flags))
+    for quote_truth_reason in quote_truth_reasons:
+        _append_unique(fallback_reasons, quote_truth_reason)
     execution_block_type = str(flags.get("execution_block_type") or "").strip().lower()
     if execution_block_type == "advisory":
         # Generic advisory rows must remain blocked from execution, but they are
