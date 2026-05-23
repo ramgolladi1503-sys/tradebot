@@ -69,12 +69,6 @@ This PR improves post-run debugging by making one trace, candidate, or cycle ins
 
 ## QA / Safety Review
 
-Acceptance command:
-
-```bash
-python -m pytest tests/test_replay_trace.py
-```
-
 Coverage:
 
 ```text
@@ -87,6 +81,30 @@ Missing-target failure.
 CLI JSON output.
 CLI text output.
 ```
+
+## Acceptance Proof
+
+Command:
+
+```bash
+python -m pytest tests/test_replay_trace.py
+```
+
+Required proof:
+
+```text
+Replay path is deterministic.
+Invalid observability event input fails closed.
+Only one replay identifier is accepted.
+```
+
+## Runtime Proof Required After Merge
+
+Run the CLI against a real post-run observability JSONL file and attach the replay output for one trace, one candidate, and one cycle.
+
+## What This PR Does Not Prove
+
+This PR does not prove trading quality, profitability, runtime latency, or production data completeness. It only proves the read-only replay helper over serialized observability events.
 
 ## Human Approval
 
