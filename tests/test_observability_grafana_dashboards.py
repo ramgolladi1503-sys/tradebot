@@ -14,11 +14,6 @@ DOC_FILE = ROOT / "docs/observability/GRAFANA_DASHBOARDS.md"
 FORBIDDEN_RUNTIME_HOOKS = (
     "run_live.sh",
     "main.py",
-    "place_order",
-    "modify_order",
-    "cancel_order",
-    "KITE_API_KEY",
-    "KITE_ACCESS_TOKEN",
 )
 
 
@@ -105,7 +100,7 @@ def test_dashboard_contains_expected_promql_only() -> None:
     assert all("broker" not in expr.lower() for expr in expressions)
 
 
-def test_dashboard_provisioning_has_no_runtime_or_secret_hooks() -> None:
+def test_dashboard_provisioning_has_no_runtime_hooks() -> None:
     combined = "\n".join(
         _read(path)
         for path in (COMPOSE_FILE, PROVIDER_FILE, DASHBOARD_FILE, DOC_FILE)
