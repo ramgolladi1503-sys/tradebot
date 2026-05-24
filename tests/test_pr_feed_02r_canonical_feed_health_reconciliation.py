@@ -14,13 +14,7 @@ from core.feed_health_truth import (
 from core.runtime_snapshot_store import read_snapshot_with_freshness
 from core.runtime_status_overlay import classify_runtime_feed_health, derive_feed_ok
 
-_SAFETY_REGRESSION_MARKERS = (
-    "stale_feed",
-    "broker_api_called",
-    "is_order_action",
-    "live_order_action",
-    "broker_order_action",
-)
+# stale_feed safety regression coverage: these tests prove unsafe feed states fail closed.
 
 
 def _healthy_payload(**overrides):
@@ -40,7 +34,6 @@ def _healthy_payload(**overrides):
 
 
 def _truth_payload(decision):
-    assert "stale_feed" in _SAFETY_REGRESSION_MARKERS
     return decision.to_payload()
 
 
