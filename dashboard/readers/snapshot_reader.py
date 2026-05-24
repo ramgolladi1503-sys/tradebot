@@ -4,17 +4,19 @@ import json
 from pathlib import Path
 from typing import Any
 
-from core.runtime_snapshot_store import read_snapshot
+from core.runtime_snapshot_store import read_snapshot, read_snapshot_with_freshness
 
 
 def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
     target = Path(path).expanduser()
+    freshness = _read_dashboard_snapshot_freshness(target)
     if not target.exists():
         return {
             "state": "missing",
             "path": str(target),
             "errors": [f"missing:{target}"],
             "payload": {},
+            **freshness,
         }
     try:
         envelope = read_snapshot(target)
@@ -24,6 +26,7 @@ def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
             "path": str(target),
             "errors": [f"read_error:{type(exc).__name__}:{exc}"],
             "payload": {},
+            **freshness,
         }
     if not isinstance(envelope, dict):
         return {
@@ -31,6 +34,7 @@ def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
             "path": str(target),
             "errors": ["snapshot_envelope_not_object"],
             "payload": {},
+            **freshness,
         }
     payload = envelope.get("payload")
     if not isinstance(payload, dict):
@@ -39,6 +43,7 @@ def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
             "path": str(target),
             "errors": ["snapshot_payload_not_object"],
             "payload": {},
+            **freshness,
         }
     try:
         json.dumps(payload, default=str)
@@ -48,6 +53,7 @@ def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
             "path": str(target),
             "errors": [f"payload_not_json_serializable:{type(exc).__name__}:{exc}"],
             "payload": {},
+            **freshness,
         }
     return {
         "state": "ok",
@@ -57,4 +63,23 @@ def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
         "generated_at": envelope.get("generated_at"),
         "producer": envelope.get("producer"),
         "schema_version": envelope.get("schema_version"),
+        **freshness,
+    }
+
+
+def _read_dashboard_snapshot_freshness(path: Path) -> dict[str, Any]:
+    result = read_snapshot_with_freshness(path, artifact_name=path.name)
+    freshness = result.get("freshness") if isinstance(result, dict) else None
+    if not isinstance(freshness, dict):
+        freshness = {}
+    blockers = result.get("blockers") if isinstance(result, dict) else []
+    if not isinstance(blockers, list):
+        blockers = []
+    return {
+        "fresh": bool(result.get("fresh")) if isinstance(result, dict) else False,
+        "freshness_status": str(freshness.get("status") or "unknown"),
+        "freshness_age_seconds": freshness.get("age_seconds"),
+        "freshness_timestamp_source": freshness.get("timestamp_source"),
+        "freshness_blockers": list(blockers),
+        "freshness": freshness,
     }
