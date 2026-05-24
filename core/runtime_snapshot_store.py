@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from core.events import write_json_atomic
+from core.latest_artifact_freshness_guard import (
+    DEFAULT_MAX_AGE_SECONDS,
+    LatestArtifactFreshnessDecision,
+    assess_latest_artifact_freshness,
+)
 from core.paths import runtime_dir
 
 
@@ -62,3 +67,89 @@ def read_snapshot(path: str | Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("snapshot_envelope_not_object")
     return raw
+
+
+def read_snapshot_with_freshness(
+    path: str | Path,
+    *,
+    artifact_name: str | None = None,
+    now_epoch: float | None = None,
+    max_age_seconds: float = DEFAULT_MAX_AGE_SECONDS,
+) -> dict[str, Any]:
+    """Read a snapshot and attach EDGE-50 freshness evidence.
+
+    The helper is read-only. It does not change the existing read_snapshot()
+    contract, write files, call brokers, or make runtime decisions.
+    """
+    target = Path(path).expanduser()
+    name = str(artifact_name or target.name)
+    try:
+        snapshot = read_snapshot(target)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        decision = assess_latest_artifact_freshness(
+            name,
+            path=target,
+            now_epoch=now_epoch,
+            max_age_seconds=max_age_seconds,
+        )
+        return _snapshot_freshness_payload(None, decision)
+
+    freshness_payload = _snapshot_freshness_input(snapshot)
+    decision = assess_latest_artifact_freshness(
+        name,
+        path=target,
+        payload=freshness_payload,
+        now_epoch=now_epoch,
+        max_age_seconds=max_age_seconds,
+    )
+    return _snapshot_freshness_payload(snapshot, decision)
+
+
+def _snapshot_freshness_payload(
+    snapshot: dict[str, Any] | None,
+    decision: LatestArtifactFreshnessDecision,
+) -> dict[str, Any]:
+    return {
+        "schema_version": SNAPSHOT_WRAPPER_SCHEMA_VERSION,
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "live_order_action": False,
+        "broker_order_action": False,
+        "snapshot": snapshot,
+        "freshness": decision.to_payload(),
+        "fresh": bool(decision.fresh),
+        "blockers": list(decision.reasons if not decision.fresh else ()),
+    }
+
+
+def _snapshot_freshness_input(snapshot: dict[str, Any]) -> dict[str, Any]:
+    generated_at = snapshot.get("generated_at")
+    generated_epoch = _parse_snapshot_epoch(generated_at)
+    payload: dict[str, Any] = {
+        "source_generated_at": generated_at,
+        "producer": snapshot.get("producer"),
+    }
+    if generated_epoch is not None:
+        payload["generated_epoch"] = generated_epoch
+    return payload
+
+
+def _parse_snapshot_epoch(value: Any) -> float | None:
+    if value in (None, "", "None"):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    try:
+        normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return float(parsed.timestamp())
