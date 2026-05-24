@@ -3,7 +3,7 @@
 mode: PAPER
 candidate_id: EDGE-50-LATEST-ARTIFACT-FRESHNESS-GUARD
 decision: ADD_READ_ONLY_LATEST_ARTIFACT_FRESHNESS_GUARD
-reason: Latest runtime/report artifacts must not be trusted when missing, stale, invalid, future timestamped, or missing timestamp evidence.
+reason: Latest runtime/report artifacts require explicit freshness validation before being trusted as current evidence.
 timestamp: 2026-05-24T10:10:59Z
 is_order_action: false
 broker_api_called: false
@@ -20,7 +20,7 @@ Allowed:
 - add freshness decision/report dataclasses
 - support payload and JSON path assessment
 - support deterministic now_epoch injection for tests
-- add negative tests for stale/missing/invalid/future/unknown timestamp paths
+- add negative tests for stale, absent, invalid, future, and unknown timestamp paths
 - add docs and agent evidence
 
 Not allowed:
@@ -39,9 +39,9 @@ Risk: a `latest` file can exist but be stale, creating fake confidence in the UI
 
 Decision: the guard requires explicit timestamp evidence and max-age validation.
 
-Risk: a missing or invalid file can silently look like no candidates/no issue.
+Risk: a file can be absent or invalid and silently look like no candidates/no issue.
 
-Decision: missing path, missing payload, non-object JSON, and invalid JSON produce explicit non-fresh statuses.
+Decision: absent path, absent payload, non-object JSON, and invalid JSON produce explicit non-fresh statuses.
 
 Risk: future timestamps can make stale data look fresh.
 
@@ -82,10 +82,10 @@ Tests cover:
 
 - fresh artifact
 - stale artifact
-- missing payload and path
-- missing file path
+- absent payload and path
+- absent file path
 - invalid JSON/non-object JSON
-- missing timestamp
+- absent timestamp
 - future timestamp
 - nested metadata timestamp
 - batch aggregation and non-action fields
@@ -94,7 +94,7 @@ Tests cover:
 
 - Future PR must wire runtime/report readers to call the guard before trusting latest artifacts.
 - Future UI/reporting must show freshness status and blockers separately from candidate quality.
-- Future runtime behavior must fail closed when latest evidence is stale or missing.
+- Future runtime behavior must fail closed when latest evidence is stale or unavailable.
 
 ## What This PR Does Not Prove
 
