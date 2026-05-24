@@ -8,6 +8,7 @@ from typing import Any
 from config import config as cfg
 from core.auth_manager import runtime_auth_snapshot
 from core.events import write_json_atomic
+from core.feed_health_truth import FeedHealthTruthDecision, classify_feed_health_truth
 from core.paths import logs_dir
 
 
@@ -33,36 +34,52 @@ def derive_effective_ws_connected(feed_payload: dict[str, Any]) -> bool | None:
     return True
 
 
-def derive_feed_ok(feed_payload: dict[str, Any]) -> bool:
-    explicit = feed_payload.get("feed_ok")
-    if isinstance(explicit, bool):
-        return explicit
-    state_machine = feed_payload.get("state_machine") or {}
-    state = str(state_machine.get("state") or "").strip().upper()
-    runtime_state = str(feed_payload.get("runtime_state") or "").strip().upper()
-    option_blockers = feed_payload.get("option_feed_block_reason_by_symbol") or {}
-    option_ok = True
-    if isinstance(option_blockers, dict) and option_blockers:
-        option_ok = all(str(v or "").strip().upper() == "OK" for v in option_blockers.values())
-    last_tick_age_sec = feed_payload.get("last_tick_age_sec")
-    last_depth_age_sec = feed_payload.get("last_depth_age_sec")
-    try:
-        last_tick_age_val = float(last_tick_age_sec) if last_tick_age_sec is not None else None
-    except Exception:
-        last_tick_age_val = None
-    try:
-        last_depth_age_val = float(last_depth_age_sec) if last_depth_age_sec is not None else None
-    except Exception:
-        last_depth_age_val = None
-    effective_ws = derive_effective_ws_connected(feed_payload)
-    return bool(
-        effective_ws is True
-        and state == "LIVE"
-        and runtime_state == "RUNNING"
-        and option_ok
-        and (last_tick_age_val is None or last_tick_age_val <= float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)))
-        and (last_depth_age_val is None or last_depth_age_val <= float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)))
+def _runtime_symbols(feed_payload: dict[str, Any]) -> tuple[str, ...]:
+    symbols: set[str] = set()
+    for key in (
+        "option_feed_block_reason_by_symbol",
+        "option_last_tick_age_by_symbol",
+        "symbol_feed_ok_by_symbol",
+        "feed_ok_by_symbol",
+    ):
+        values = feed_payload.get(key)
+        if not isinstance(values, dict):
+            continue
+        for symbol in values:
+            text = str(symbol or "").strip().upper()
+            if text:
+                symbols.add(text)
+    return tuple(sorted(symbols))
+
+
+def _canonical_feed_health_payload(feed_payload: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(feed_payload)
+    effective_ws_connected = derive_effective_ws_connected(feed_payload)
+    if effective_ws_connected is not None:
+        payload["effective_ws_connected"] = effective_ws_connected
+    return payload
+
+
+def classify_runtime_feed_health(feed_payload: dict[str, Any]) -> FeedHealthTruthDecision:
+    """Return the canonical feed-health decision used by runtime overlays.
+
+    This keeps runtime overlay visibility aligned with core.feed_health_truth
+    instead of maintaining a separate feed_ok policy in this module.
+    """
+    if not isinstance(feed_payload, dict):
+        return classify_feed_health_truth(None)
+    payload = _canonical_feed_health_payload(feed_payload)
+    return classify_feed_health_truth(
+        payload,
+        symbols=_runtime_symbols(payload),
+        max_option_tick_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        max_ltp_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        max_depth_age_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
     )
+
+
+def derive_feed_ok(feed_payload: dict[str, Any]) -> bool:
+    return bool(classify_runtime_feed_health(feed_payload).feed_ok)
 
 
 def _primary_feed_blocker(feed_payload: dict[str, Any]) -> str:
@@ -72,6 +89,9 @@ def _primary_feed_blocker(feed_payload: dict[str, Any]) -> str:
             text = str(value or "").strip().upper()
             if text and text != "OK":
                 return text
+    decision = classify_runtime_feed_health(feed_payload)
+    if decision.reasons:
+        return str(decision.reasons[0]).strip().upper()
     state_machine = feed_payload.get("state_machine") or {}
     reason = str(state_machine.get("reason") or "").strip()
     if reason:
@@ -96,8 +116,10 @@ def publish_feed_unhealthy_status_overlay(
     if not bool(feed_payload.get("market_open", False)):
         return False
 
-    effective_ws_connected = derive_effective_ws_connected(feed_payload)
-    feed_ok = derive_feed_ok(feed_payload)
+    feed_truth = classify_runtime_feed_health(feed_payload)
+    feed_truth_payload = feed_truth.to_payload()
+    effective_ws_connected = feed_truth.websocket_ok
+    feed_ok = bool(feed_truth.feed_ok)
 
     target_logs_root = Path(logs_root) if logs_root is not None else logs_dir()
     target_logs_root.mkdir(parents=True, exist_ok=True)
@@ -144,6 +166,7 @@ def publish_feed_unhealthy_status_overlay(
                 "missing_option_tokens_count": missing_option_tokens_count,
                 "overlay_source": "feed_runtime_overlay",
                 "overlay_state": "feed_recovered_waiting_cycle_refresh",
+                "feed_health_truth": feed_truth_payload,
             }
         )
         write_json_atomic(suggestions_path, suggestions_payload)
@@ -171,6 +194,7 @@ def publish_feed_unhealthy_status_overlay(
                 "last_error": str(feed_payload.get("last_error") or ""),
                 "overlay_source": "feed_runtime_overlay",
                 "overlay_state": "feed_recovered_waiting_cycle_refresh",
+                "feed_health_truth": feed_truth_payload,
             }
         )
         write_json_atomic(engine_path, engine_payload)
@@ -197,6 +221,7 @@ def publish_feed_unhealthy_status_overlay(
                     "subscribed_tokens_count": subscribed_tokens_count,
                     "subscriptions_count": subscribed_tokens_count,
                     "missing_option_tokens_count": missing_option_tokens_count,
+                    "feed_health_truth": feed_truth_payload,
                 },
             }
         )
@@ -227,6 +252,7 @@ def publish_feed_unhealthy_status_overlay(
             "missing_option_tokens_count": missing_option_tokens_count,
             "overlay_source": "feed_runtime_overlay",
             "overlay_state": "feed_unhealthy",
+            "feed_health_truth": feed_truth_payload,
         }
     )
     write_json_atomic(suggestions_path, suggestions_payload)
@@ -254,6 +280,7 @@ def publish_feed_unhealthy_status_overlay(
             "last_error": str(feed_payload.get("last_error") or ""),
             "overlay_source": "feed_runtime_overlay",
             "overlay_state": "feed_unhealthy",
+            "feed_health_truth": feed_truth_payload,
         }
     )
     write_json_atomic(engine_path, engine_payload)
@@ -280,6 +307,7 @@ def publish_feed_unhealthy_status_overlay(
                 "subscribed_tokens_count": subscribed_tokens_count,
                 "subscriptions_count": subscribed_tokens_count,
                 "missing_option_tokens_count": missing_option_tokens_count,
+                "feed_health_truth": feed_truth_payload,
             },
         }
     )
