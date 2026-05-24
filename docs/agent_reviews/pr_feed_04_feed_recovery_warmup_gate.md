@@ -4,7 +4,7 @@
 
 ### Goal
 
-Add a small read-only feed recovery warmup gate that prevents executable ranking output from resuming immediately after a feed recovery transition until explicit warmup evidence is satisfied.
+Add a read-only feed recovery warmup gate that prevents executable ranking output from resuming immediately after a feed recovery transition until explicit warmup evidence is satisfied.
 
 ### Files changed
 
@@ -12,6 +12,17 @@ Add a small read-only feed recovery warmup gate that prevents executable ranking
 - `tests/test_pr_feed_04_feed_recovery_warmup_gate.py`
 - `docs/PR_FEED_04_FEED_RECOVERY_WARMUP_GATE.md`
 - `docs/agent_reviews/pr_feed_04_feed_recovery_warmup_gate.md`
+
+### Evidence Contract Fields
+
+mode: PAPER
+candidate_id: PR_FEED_04_FEED_RECOVERY_WARMUP_GATE
+decision: READ_ONLY_FEED_RECOVERY_WARMUP_GATE
+reason: Feed recovery warmup blocks executable ranking output until elapsed-time and healthy-sample evidence is satisfied.
+timestamp: 2026-05-24T19:52:14Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/pr_feed_04_feed_recovery_warmup_gate.md
 
 ### Non-goals
 
@@ -21,7 +32,7 @@ Add a small read-only feed recovery warmup gate that prevents executable ranking
 - No token-selection changes.
 - No strategy changes.
 - No dashboard UI changes.
-- No broker calls.
+- No external execution API calls.
 - No order intent.
 - No live execution behavior.
 
@@ -87,7 +98,7 @@ Confirmed not touched:
 - Token selection.
 - Strategy code.
 - Dashboard UI.
-- Broker adapters.
+- External execution adapters.
 - Live execution paths.
 
 ## Acceptance Proof
