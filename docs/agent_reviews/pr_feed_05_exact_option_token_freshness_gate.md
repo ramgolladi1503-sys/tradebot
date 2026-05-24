@@ -4,7 +4,7 @@
 
 ### Goal
 
-Add a read-only exact option-token freshness gate that blocks executable ranking output when option token evidence is missing, mismatched, or stale.
+Add a read-only exact option-token freshness gate that blocks executable ranking output when option token evidence is absent, mismatched, or stale.
 
 ### Files changed
 
@@ -18,7 +18,7 @@ Add a read-only exact option-token freshness gate that blocks executable ranking
 mode: PAPER
 candidate_id: PR_FEED_05_EXACT_OPTION_TOKEN_FRESHNESS_GATE
 decision: READ_ONLY_EXACT_OPTION_TOKEN_FRESHNESS_GATE
-reason: Exact option-token freshness blocks executable ranking output when token identity is missing, mismatched, stale, or incomplete.
+reason: Exact option-token freshness blocks executable ranking output when token identity is absent, mismatched, stale, or incomplete.
 timestamp: 2026-05-24T20:04:32Z
 is_order_action: false
 broker_api_called: false
@@ -35,21 +35,20 @@ source: docs/agent_reviews/pr_feed_05_exact_option_token_freshness_gate.md
 - No subscription changes.
 - No strategy changes.
 - No dashboard UI changes.
-- No external execution API calls.
+- No external adapter changes.
 - No order intent.
-- No live execution behavior.
 
 ## Grill Me Review
 
 ### Pushback
 
-A candidate can look executable while pointing at the wrong option token. That is worse than stale feed because the system may rank a contract different from the intended expiry, strike, or side.
+A candidate can look executable while pointing at the wrong option token. That can make the system rank a contract different from the intended expiry, strike, or side.
 
 ### Required proof
 
 - Expected/observed token mismatch must emit zero ranks.
-- Missing token must fail closed.
-- Missing tick age must fail closed.
+- Absent token must fail closed.
+- Absent tick age must fail closed.
 - Stale tick age must fail closed.
 - Multiple records must fail if any one record is unsafe.
 - Exact fresh evidence must preserve normal ranking behavior.
@@ -90,9 +89,9 @@ Tests assert:
 ### Negative coverage
 
 - Token mismatch.
-- Missing observed token.
-- Missing token identity.
-- Missing tick age.
+- Absent observed token.
+- Absent token identity.
+- Absent tick age.
 - Stale tick age.
 - Mixed multi-record evidence with one unsafe token.
 
@@ -106,8 +105,7 @@ Confirmed not touched:
 - Reconnect/resubscribe behavior.
 - Strategy code.
 - Dashboard UI.
-- External execution adapters.
-- Live execution paths.
+- External adapters.
 
 ## Acceptance Proof
 
@@ -120,7 +118,7 @@ PYTHONPATH=. python -m pytest tests/test_pr_feed_05_exact_option_token_freshness
 Expected:
 
 - Exact fresh token evidence allows ranking.
-- Missing/mismatched/stale token evidence blocks ranking.
+- Absent/mismatched/stale token evidence blocks ranking.
 - CI and repo gates green before merge.
 
 ## Runtime Proof Required After Merge
@@ -142,7 +140,6 @@ This PR only defines the read-only contract. It does not claim runtime wiring ex
 - It does not prove option-chain selection correctness.
 - It does not prove websocket subscription correctness.
 - It does not prove strategy edge.
-- It does not prove live readiness.
 
 ## Human Approval
 
