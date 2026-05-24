@@ -7,6 +7,8 @@ reason: Reconciles runtime overlay feed decisions with the canonical feed-health
 timestamp: 2026-05-24T18:45:00Z
 is_order_action: false
 broker_api_called: false
+live_order_action: false
+broker_order_action: false
 source: docs/agent_reviews/pr_feed_02r_canonical_feed_health_reconciliation.md
 
 ## Agent Work Contract
