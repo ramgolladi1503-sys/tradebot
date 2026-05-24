@@ -35,6 +35,9 @@ class OpportunitySelectionEvidenceRecord:
 
 @dataclass(frozen=True)
 class OpportunitySelectorEvidenceReport:
+    is_order_action = False
+    append = False
+
     schema_version: int
     read_only: bool
     source_rank_count: int
@@ -49,8 +52,6 @@ class OpportunitySelectorEvidenceReport:
     rejection_reasons: tuple[str, ...]
     warnings: tuple[str, ...]
     safety_flags: tuple[str, ...]
-    is_order_action: bool = False
-    append: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
 
@@ -109,8 +110,6 @@ def build_opportunity_selector_evidence(
     return OpportunitySelectorEvidenceReport(
         schema_version=SELECTOR_EVIDENCE_SCHEMA_VERSION,
         read_only=True,
-        is_order_action=False,
-        append=False,
         source_rank_count=len(ranks),
         selected_count=len(selected_candidates),
         not_selected_count=max(0, len(ranks) - len(selected_candidates)),
