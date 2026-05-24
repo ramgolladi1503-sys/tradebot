@@ -52,9 +52,9 @@ def test_build_home_freshness_artifacts_expands_paths():
         }
     )
 
-    assert set(artifacts) == {"advisory_latest", "top_opportunities_latest"}
-    assert all(isinstance(path, Path) for path in artifacts.values())
-    assert str(artifacts["advisory_latest"]).startswith(str(Path.home()))
+    assert artifacts["advisory_latest"] == Path.home() / "advisory_latest.json"
+    assert artifacts["top_opportunities_latest"] == Path("/tmp/top_opportunities_latest.json")
+    assert artifacts["advisory_latest"] != Path("~/advisory_latest.json")
 
 
 def test_render_home_freshness_panel_uses_home_artifact_names():
