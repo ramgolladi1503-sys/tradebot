@@ -93,8 +93,6 @@ def _symbols_from_payload(payload: dict[str, Any], requested_symbols: tuple[str,
     for key in (
         "option_feed_block_reason_by_symbol",
         "option_last_tick_age_by_symbol",
-        "symbol_feed_ok_by_symbol",
-        "feed_ok_by_symbol",
     ):
         values = payload.get(key)
         if isinstance(values, dict):
