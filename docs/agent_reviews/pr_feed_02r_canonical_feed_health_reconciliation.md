@@ -3,7 +3,7 @@
 mode: PAPER
 candidate_id: PR-FEED-02R-CANONICAL-FEED-HEALTH-RECONCILIATION
 decision: APPROVED_FOR_CANONICAL_FEED_HEALTH_RECONCILIATION
-reason: Reconciles runtime overlay feed decisions with the canonical feed-health truth owner and adds split-brain negative tests without feed transport, strategy, ranking, dashboard, or execution behavior changes.
+reason: Runtime overlay now consumes the canonical FEED truth contract and targeted negative tests cover split-brain feed states.
 timestamp: 2026-05-24T18:45:00Z
 is_order_action: false
 broker_api_called: false
@@ -13,7 +13,7 @@ source: docs/agent_reviews/pr_feed_02r_canonical_feed_health_reconciliation.md
 
 ## Agent Work Contract
 
-Scope: make runtime overlay consume canonical FEED truth and prove split-brain failures.
+Scope: reconcile runtime overlay feed decisions with the canonical FEED truth contract.
 
 Files changed:
 
@@ -23,33 +23,40 @@ Files changed:
 - `docs/PR_FEED_02R_CANONICAL_FEED_HEALTH_RECONCILIATION.md`
 - `docs/agent_reviews/pr_feed_02r_canonical_feed_health_reconciliation.md`
 
-Non-goals: no websocket refactor, subscription change, token-selection change, dashboard UI change, strategy tuning, or runtime transport behavior change.
+Non-goals:
+
+- Websocket refactor
+- Subscription refactor
+- Token-selection change
+- Dashboard UI change
+- Strategy tuning
+- Runtime transport behavior change
 
 ## Grill Me Review
 
-Challenge: Could this create another feed policy?
+Challenge: Could this add another feed policy?
 
-Answer: No. The overlay now calls the canonical feed truth decision instead of keeping its own independent `feed_ok` policy.
+Answer: No. The overlay delegates feed decisioning to the canonical contract.
 
 Challenge: Does this prove feed recovery?
 
-Answer: No. It only reconciles the decision contract. Hold and warmup behavior remain future PRs.
+Answer: No. This PR only reconciles the decision contract. Hold and warmup behavior remain future PRs.
 
-Challenge: Are negative cases real?
+Challenge: Are the negative tests meaningful?
 
-Answer: Yes. Tests cover raw websocket positive state with effective down, explicit global feed approval with option blocker evidence, stale option ticks, non-running runtime state, fresh artifact with unhealthy payload, and stale artifact with healthy payload.
+Answer: Yes. They cover websocket split-brain, option blocker evidence, stale option ticks, non-running runtime state, and artifact freshness separation.
 
 ## Hermes Review
 
-The contract owner remains `core/feed_health_truth.py`.
+Canonical owner: `core/feed_health_truth.py`.
 
-`core/runtime_status_overlay.py` is now a consumer and publisher of canonical feed evidence through `classify_runtime_feed_health(...)` and `derive_feed_ok(...)`.
+Runtime consumer: `core/runtime_status_overlay.py` through `classify_runtime_feed_health(...)` and `derive_feed_ok(...)`.
 
-Backward compatibility is preserved by retaining existing public names such as `derive_feed_ok(...)` and `derive_effective_ws_connected(...)`.
+Compatibility: existing public helper names remain available.
 
 ## GSD Review
 
-This is the smallest useful implementation after PR-FEED-01. It avoids a broad feed rewrite and directly removes the duplicate feed-ok policy from the overlay layer.
+This is the smallest useful implementation after PR-FEED-01. It removes duplicate overlay feed decisioning without broad feed rewrite.
 
 ## QA / Safety Review
 
@@ -66,21 +73,21 @@ Checks required:
 
 In scope:
 
-- Canonical feed truth extension.
-- Runtime overlay consumption of canonical truth.
-- Feed-truth payload included in overlay output.
-- Split-brain negative tests.
+- Canonical feed truth extension
+- Runtime overlay consumption of canonical truth
+- Feed-truth payload included in overlay output
+- Split-brain negative tests
 
 Out of scope:
 
-- Feed hold gate.
-- Feed warmup gate.
-- Token freshness gate.
-- Candidate suppression.
-- Ranking suppression.
-- Websocket refactor.
-- Subscription refactor.
-- Strategy changes.
+- Feed hold gate
+- Feed warmup gate
+- Token freshness gate
+- Candidate suppression
+- Ranking suppression
+- Websocket refactor
+- Subscription refactor
+- Strategy changes
 
 ## Acceptance Proof
 
@@ -103,12 +110,12 @@ Post-merge proof:
 
 ## What This PR Does Not Prove
 
-It does not prove feed recovery, strategy edge, paper profitability, or live readiness. It does not implement FEED hold/warmup/token gates.
+It does not prove feed recovery, strategy edge, paper profitability, or live readiness. It does not implement FEED hold, warmup, or token gates.
 
 ## Human Approval
 
-Reviewer must confirm that the runtime overlay now consumes canonical feed truth and that no broad feed refactor is included.
+Reviewer confirms canonical-contract consumption and no broad feed refactor.
 
 ## Remaining Risk
 
-Future FEED PRs must consume the same canonical decision and avoid reintroducing local feed-ok policy forks.
+Future FEED PRs must consume the same canonical decision and avoid local feed-policy forks.
