@@ -47,7 +47,7 @@ Canonical feed truth now considers:
 - Depth tick age above SLA
 - Per-symbol option blocker not OK
 - Per-symbol option tick age above max threshold
-- Symbol feed unknown/unsafe evidence
+- Symbol feed unknown evidence
 
 Runtime overlay now exposes:
 
@@ -61,7 +61,7 @@ classify_runtime_feed_health(feed_payload)
 
 Tests prove:
 
-1. Raw websocket connected cannot hide state-machine DOWN / no-message conditions.
+1. Raw websocket connected cannot hide state-machine DOWN or no-message conditions.
 2. Explicit `feed_ok=true` cannot override unsafe option blocker evidence.
 3. Global feed OK cannot make stale symbol option ticks safe.
 4. Runtime state and LTP age are part of the canonical runtime decision.
@@ -73,8 +73,8 @@ Tests prove:
 - Runtime overlay feed decisions use canonical feed truth.
 - Split-brain negative tests exist.
 - Existing EDGE-43 feed-truth tests remain compatible.
-- No feed transport behavior is changed.
-- No strategy/ranking/dashboard behavior is changed.
+- Feed transport behavior is unchanged.
+- Strategy, ranking, and dashboard behavior are unchanged.
 - CI and repo gates are green.
 
 ## Next PR
@@ -85,4 +85,4 @@ After this PR is merged and green:
 PR-FEED-03 — Feed Hold Gate
 ```
 
-PR-FEED-03 should consume the canonical feed-health decision and block unsafe feed states before executable/ranking paths.
+PR-FEED-03 should consume the canonical feed-health decision and prevent unsafe feed states from entering candidate or ranking paths.
