@@ -14,6 +14,10 @@ from core.quote_truth import (
     classify_quote_truth,
 )
 from core.strategy_signal_quality import classify_strategy_signal_quality
+from core.symbol_execution_safety import (
+    classify_symbol_execution_safety,
+    has_symbol_execution_safety_evidence,
+)
 
 EXECUTABLE_TRUTH_FIREBREAK_CODE = "EXECUTABLE_TRUTH_FIREBREAK_FAILED"
 FALLBACK_DRIVEN_REASON = "fallback_driven_data"
@@ -348,6 +352,14 @@ def classify_executable_truth(
         _append_unique(reasons, spread_truth.reason_code)
         for spread_reason in spread_truth.reasons:
             _append_unique(reasons, spread_reason)
+
+    if has_symbol_execution_safety_evidence(candidate):
+        symbol_safety = classify_symbol_execution_safety(candidate)
+        context["symbol_execution_safety"] = symbol_safety.to_payload()
+        if not symbol_safety.execution_allowed:
+            _append_unique(reasons, symbol_safety.reason_code)
+            for symbol_reason in symbol_safety.reasons:
+                _append_unique(reasons, symbol_reason)
 
     confidence = _safe_float(_coalesce(data_confidence, _candidate_get(candidate, "data_confidence"), flags.get("data_confidence")))
     min_confidence = float(getattr(cfg, "EXECUTABLE_TRUTH_MIN_DATA_CONFIDENCE", getattr(cfg, "DATA_CONFIDENCE_MIN_EXECUTION", 0.20)) or 0.20)
