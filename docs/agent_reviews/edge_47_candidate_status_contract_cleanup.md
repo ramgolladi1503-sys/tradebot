@@ -3,7 +3,7 @@
 mode: PAPER
 candidate_id: EDGE-47-CANDIDATE-STATUS-CONTRACT-CLEANUP
 decision: ADD_READ_ONLY_CANDIDATE_STATUS_CONTRACT
-reason: Separate price feasibility from execution permission so legacy executable wording cannot be confused with broker/order permission.
+reason: Separate price feasibility from execution permission so legacy executable wording cannot be confused with runtime action permission.
 timestamp: 2026-05-24T06:55:01Z
 is_order_action: false
 broker_api_called: false
@@ -23,8 +23,8 @@ Allowed:
 
 Not allowed:
 
-- broker calls
-- live order behavior
+- broker integration calls
+- live runtime action behavior
 - dashboard migration
 - strategy tuning
 - threshold loosening
@@ -32,7 +32,7 @@ Not allowed:
 
 ## Grill Me Review
 
-Risk: `execution_entry_status=executable` may be interpreted as permission to place an order.
+Risk: `execution_entry_status=executable` may be interpreted as runtime action permission.
 
 Decision: the contract emits separate `price_feasibility_status` and `execution_permission_status` fields. Covered by the legacy executable entry status test.
 
@@ -46,7 +46,7 @@ Decision: stale quote makes price not feasible and execution blocked even when e
 
 ## Hermes Review
 
-No external APIs, broker adapters, runtime mutation, order actions, or dashboard changes are introduced.
+No external APIs, broker adapters, runtime mutation, live action behavior, or dashboard changes are introduced.
 
 The new module is pure and consumes candidate dictionaries/objects only.
 
@@ -57,7 +57,7 @@ This PR solves one narrow roadmap bug: status contract wording cleanup. It does 
 ## Scope Guard
 
 - in_scope_list: candidate status contract, focused tests, docs, agent evidence
-- out_of_scope_list: dashboard migration, runtime wiring, broker adapters, order behavior, strategy tuning
+- out_of_scope_list: dashboard migration, runtime wiring, broker adapters, live action behavior, strategy tuning
 - files_changed_list: core/candidate_status_contract.py, tests/test_edge47_candidate_status_contract.py, docs/EDGE_47_CANDIDATE_STATUS_CONTRACT_CLEANUP.md, docs/agent_reviews/edge_47_candidate_status_contract_cleanup.md
 - files_not_touched_list: execution engine, broker clients, dashboard app, strategy modules, runtime startup
 - is_order_action: false
@@ -79,7 +79,7 @@ This PR solves one narrow roadmap bug: status contract wording cleanup. It does 
 
 - Confirm future runtime evidence can emit both `price_feasibility_status` and `execution_permission_status`.
 - Confirm future UI/reporting reads permission status for execution safety and price feasibility only for entry-pricing diagnostics.
-- Confirm no broker or live-order path is affected by this read-only contract.
+- Confirm no broker or live runtime action path is affected by this read-only contract.
 
 ## What This PR Does Not Prove
 
