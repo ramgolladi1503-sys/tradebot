@@ -89,6 +89,10 @@ PYTHONPATH=. python -m pytest tests/test_edge55_ui_app_shell_home_freshness_call
 
 Expected: all EDGE-55 tests pass.
 
+## Runtime Proof Required After Merge
+
+After merge, run the Streamlit dashboard locally and verify the Home tab renders the `Home Latest Artifact Freshness` panel below the shell header. Confirm that switching to a non-Home tab does not render that panel.
+
 ## What This PR Does Not Prove
 
 - screenshot-level Home rendering proof
