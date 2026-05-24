@@ -77,6 +77,10 @@ _UNTRUSTED_QUOTE_SOURCES = {
     "stale_ltp",
     "none",
 }
+_ADVISORY_ONLY_QUOTE_SOURCES = {
+    "recovered_fallback",
+    "rest_fallback",
+}
 _LAST_EXECUTION_FALLBACK_SOURCES = {"tick_store", "rest_fallback"}
 
 
@@ -122,39 +126,20 @@ def _safe_lower_text(value: Any) -> str | None:
     return text or None
 
 
+def _is_advisory_only_quote_source(value: Any) -> bool:
+    return (_safe_lower_text(value) or "none") in _ADVISORY_ONLY_QUOTE_SOURCES
+
+
 def should_allow_last_execution_fallback(row: Mapping[str, Any]) -> bool:
+    """Last-price fallback is never execution-grade.
+
+    A current/last LTP can be useful as a display reference, but it must not
+    create an executable entry. Execution-grade entries require a trusted bid or
+    ask, not recovered or retained fallback data.
+    """
     if not isinstance(row, Mapping):
         return False
-    try:
-        enabled = bool(getattr(cfg, "EXECUTION_ENTRY_ALLOW_LAST_FALLBACK", True))
-    except Exception:
-        enabled = True
-    if not enabled:
-        return False
-    permission = str(row.get("permission") or "").strip().upper()
-    final_action = str(row.get("final_action") or "").strip().upper()
-    readiness = str(row.get("readiness") or "").strip().upper()
-    if permission == "BLOCK" or final_action == "BLOCK" or readiness == "BLOCKED":
-        return False
-    if bool(row.get("unresolved_contract")) or bool(row.get("approval_blocked")):
-        return False
-    entry_value = (
-        _safe_float(row.get("entry"))
-        or _safe_float(row.get("display_entry"))
-        or _safe_float(row.get("entry_price"))
-    )
-    current_ltp = (
-        _safe_float(row.get("current_ltp"))
-        or _safe_float(row.get("last_price"))
-        or _safe_float(row.get("ltp"))
-        or _safe_float(row.get("last"))
-    )
-    option_ltp_source = _safe_lower_text(row.get("option_ltp_source") or row.get("quote_source"))
-    return bool(
-        entry_value is not None
-        and current_ltp is not None
-        and option_ltp_source in _LAST_EXECUTION_FALLBACK_SOURCES
-    )
+    return False
 
 
 def derive_execution_entry_recovery(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -190,7 +175,10 @@ def derive_execution_entry_recovery(row: Mapping[str, Any]) -> dict[str, Any]:
         return numeric
 
     quote_source_key = _safe_lower_text(row.get("option_ltp_source") or row.get("quote_source")) or "none"
-    trusted_quote_source = quote_source_key not in _UNTRUSTED_QUOTE_SOURCES
+    trusted_quote_source = (
+        quote_source_key not in _UNTRUSTED_QUOTE_SOURCES
+        and quote_source_key not in _ADVISORY_ONLY_QUOTE_SOURCES
+    )
     hard_blockers = [
         str(code or "").strip()
         for code in list(row.get("hard_blockers") or [])
@@ -232,6 +220,23 @@ def derive_execution_entry_recovery(row: Mapping[str, Any]) -> dict[str, Any]:
             "execution_entry_source": "none",
             "execution_entry_status": "missing",
             "derivation_reason": "blocked_without_reference",
+            "derivation_source_chain": derivation_source_chain,
+        }
+
+    if quote_source_key in _ADVISORY_ONLY_QUOTE_SOURCES:
+        if any(value is not None for value in (current_ltp, ask, best_ask, mid_price, mark_price, display_entry, entry)):
+            return {
+                "execution_entry": None,
+                "execution_entry_source": "none",
+                "execution_entry_status": "non_executable",
+                "derivation_reason": "fallback_reference_advisory_only",
+                "derivation_source_chain": derivation_source_chain,
+            }
+        return {
+            "execution_entry": None,
+            "execution_entry_source": "none",
+            "execution_entry_status": "missing",
+            "derivation_reason": "fallback_reference_missing",
             "derivation_source_chain": derivation_source_chain,
         }
 
@@ -364,6 +369,7 @@ def build_entry_state(
     quote_source_key = _safe_lower_text(quote_source) or "none"
     age_val = _safe_float(quote_age_sec)
     trusted_quote_source = quote_source_key not in _UNTRUSTED_QUOTE_SOURCES
+    execution_quote_trusted = trusted_quote_source and quote_source_key not in _ADVISORY_ONLY_QUOTE_SOURCES
 
     raw_bid = _valid_positive_quote(bid)
     raw_ask = _valid_positive_quote(ask)
@@ -379,11 +385,11 @@ def build_entry_state(
     if display_mid is None and display_bid is not None and display_ask is not None:
         display_mid = (display_bid + display_ask) / 2.0
 
-    execution_bid = _valid_quote_by_age(bid, age_val, exec_max_age_sec)
-    execution_ask = _valid_quote_by_age(ask, age_val, exec_max_age_sec)
+    execution_bid = _valid_quote_by_age(bid, age_val, exec_max_age_sec) if execution_quote_trusted else None
+    execution_ask = _valid_quote_by_age(ask, age_val, exec_max_age_sec) if execution_quote_trusted else None
     execution_entry = execution_ask if direction_key == "BUY" else execution_bid
     execution_entry_source = "ask" if direction_key == "BUY" else "bid"
-    execution_last = _valid_quote_by_age(last, age_val, exec_max_age_sec)
+    execution_last = _valid_quote_by_age(last, age_val, exec_max_age_sec) if execution_quote_trusted else None
     if execution_entry is None and bool(allow_last_execution) and execution_last is not None:
         execution_entry = execution_last
         execution_entry_source = "last"
