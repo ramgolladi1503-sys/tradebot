@@ -5,6 +5,10 @@ from typing import Any
 
 GLOBAL_FEED_UNHEALTHY_REASON = "global_feed_unhealthy"
 WEBSOCKET_DISCONNECTED_REASON = "websocket_disconnected"
+FEED_STATE_UNSAFE_REASON = "feed_state_unsafe"
+RUNTIME_STATE_UNSAFE_REASON = "runtime_state_unsafe"
+LTP_TICKS_STALE_REASON = "ltp_ticks_stale"
+DEPTH_TICKS_STALE_REASON = "depth_ticks_stale"
 OPTION_FEED_BLOCKED_REASON = "option_feed_blocked"
 OPTION_TICKS_STALE_REASON = "option_ticks_stale"
 OPTION_AGE_MISSING_REASON = "option_age_missing"
@@ -12,6 +16,8 @@ SYMBOL_FEED_UNKNOWN_REASON = "symbol_feed_unknown"
 FEED_HEALTH_TRUTH_BLOCK_REASON = "feed_health_truth_failed"
 
 _OPTION_OK_CODES = {"", "OK", "NONE", "HEALTHY", "FRESH"}
+_SAFE_RUNTIME_STATES = {"", "RUNNING", "LIVE", "HEALTHY", "OK"}
+_SAFE_FEED_STATES = {"", "LIVE", "RUNNING", "HEALTHY", "OK"}
 
 
 @dataclass(frozen=True)
@@ -57,6 +63,13 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _safe_non_negative_float(value: Any, default: float) -> float:
+    out = _safe_float(value)
+    if out is None:
+        return float(default)
+    return max(0.0, float(out))
+
+
 def _bool_or_none(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
@@ -82,6 +95,10 @@ def _normalize_symbol(symbol: Any) -> str:
 
 def _normalize_reason(reason: Any) -> str:
     return str(reason or "").strip().upper()
+
+
+def _normalize_state(value: Any) -> str:
+    return str(value or "").strip().upper()
 
 
 def _symbols_from_payload(payload: dict[str, Any], requested_symbols: tuple[str, ...]) -> tuple[str, ...]:
@@ -116,6 +133,19 @@ def _global_websocket_ok(payload: dict[str, Any]) -> bool | None:
     if effective is not None:
         return effective
     return _bool_or_none(payload.get("ws_connected"))
+
+
+def _runtime_state(payload: dict[str, Any]) -> str:
+    state = _normalize_state(payload.get("runtime_state"))
+    if state:
+        return state
+    state_machine = _mapping(payload.get("state_machine"))
+    return _normalize_state(state_machine.get("runtime_state"))
+
+
+def _feed_state(payload: dict[str, Any]) -> str:
+    state_machine = _mapping(payload.get("state_machine"))
+    return _normalize_state(state_machine.get("state"))
 
 
 def classify_symbol_feed_truth(
@@ -160,11 +190,13 @@ def classify_feed_health_truth(
     *,
     symbols: tuple[str, ...] | list[str] = (),
     max_option_tick_age_sec: float = 3.0,
+    max_ltp_age_sec: float | None = None,
+    max_depth_age_sec: float | None = None,
 ) -> FeedHealthTruthDecision:
-    """Reconcile global feed health and per-symbol option feed health.
+    """Reconcile global, runtime, websocket, and per-symbol feed health.
 
     This is read-only evidence. It does not reconnect, resubscribe, mutate
-    runtime state, or call any broker APIs.
+    runtime state, write files, or call external execution APIs.
     """
     if not isinstance(payload, dict):
         return FeedHealthTruthDecision(
@@ -174,12 +206,19 @@ def classify_feed_health_truth(
             context={},
         )
 
+    max_option_age = _safe_non_negative_float(max_option_tick_age_sec, 3.0)
+    max_ltp_age = _safe_non_negative_float(max_ltp_age_sec, 2.5) if max_ltp_age_sec is not None else None
+    max_depth_age = _safe_non_negative_float(max_depth_age_sec, 6.0) if max_depth_age_sec is not None else None
     global_feed_ok = _bool_or_none(payload.get("feed_ok"))
     websocket_ok = _global_websocket_ok(payload)
+    runtime_state = _runtime_state(payload)
+    feed_state = _feed_state(payload)
+    last_tick_age = _safe_float(payload.get("last_tick_age_sec"))
+    last_depth_age = _safe_float(payload.get("last_depth_age_sec"))
     requested_symbols = tuple(_normalize_symbol(symbol) for symbol in symbols if _normalize_symbol(symbol))
     symbol_names = _symbols_from_payload(payload, requested_symbols)
     symbol_truths = tuple(
-        classify_symbol_feed_truth(payload, symbol, max_option_tick_age_sec=max(0.0, float(max_option_tick_age_sec)))
+        classify_symbol_feed_truth(payload, symbol, max_option_tick_age_sec=max_option_age)
         for symbol in symbol_names
     )
 
@@ -188,6 +227,14 @@ def classify_feed_health_truth(
         _append_unique(reasons, GLOBAL_FEED_UNHEALTHY_REASON)
     if websocket_ok is False:
         _append_unique(reasons, WEBSOCKET_DISCONNECTED_REASON)
+    if feed_state and feed_state not in _SAFE_FEED_STATES:
+        _append_unique(reasons, FEED_STATE_UNSAFE_REASON)
+    if runtime_state and runtime_state not in _SAFE_RUNTIME_STATES:
+        _append_unique(reasons, RUNTIME_STATE_UNSAFE_REASON)
+    if max_ltp_age is not None and last_tick_age is not None and last_tick_age > max_ltp_age:
+        _append_unique(reasons, LTP_TICKS_STALE_REASON)
+    if max_depth_age is not None and last_depth_age is not None and last_depth_age > max_depth_age:
+        _append_unique(reasons, DEPTH_TICKS_STALE_REASON)
     for symbol_truth in symbol_truths:
         for reason in symbol_truth.reasons:
             _append_unique(reasons, f"{symbol_truth.symbol}:{reason}")
@@ -203,6 +250,12 @@ def classify_feed_health_truth(
         context={
             "symbols_requested": list(requested_symbols),
             "symbols_evaluated": list(symbol_names),
-            "max_option_tick_age_sec": max(0.0, float(max_option_tick_age_sec)),
+            "max_option_tick_age_sec": max_option_age,
+            "max_ltp_age_sec": max_ltp_age,
+            "max_depth_age_sec": max_depth_age,
+            "runtime_state": runtime_state or None,
+            "feed_state": feed_state or None,
+            "last_tick_age_sec": last_tick_age,
+            "last_depth_age_sec": last_depth_age,
         },
     )
