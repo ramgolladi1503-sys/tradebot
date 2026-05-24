@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime_snapshot_store import read_snapshot, read_snapshot_with_freshness
+from core.top_opportunity_executable_truth import normalize_top_opportunity_payload
 
 
 def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
@@ -45,6 +46,7 @@ def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
             "payload": {},
             **freshness,
         }
+    payload = _normalize_dashboard_snapshot_payload(payload)
     try:
         json.dumps(payload, default=str)
     except Exception as exc:
@@ -65,6 +67,25 @@ def read_snapshot_payload(path: str | Path) -> dict[str, Any]:
         "schema_version": envelope.get("schema_version"),
         **freshness,
     }
+
+
+def _normalize_dashboard_snapshot_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not _looks_like_top_opportunity_payload(payload):
+        return payload
+    normalized, report = normalize_top_opportunity_payload(payload)
+    out = dict(normalized)
+    out["top_opportunity_truth_report"] = report.to_dict()
+    return out
+
+
+def _looks_like_top_opportunity_payload(payload: dict[str, Any]) -> bool:
+    return bool(
+        isinstance(payload, dict)
+        and (
+            "top_executable_opportunities" in payload
+            or "top_advisory_opportunities" in payload
+        )
+    )
 
 
 def _read_dashboard_snapshot_freshness(path: Path) -> dict[str, Any]:
