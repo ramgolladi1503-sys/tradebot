@@ -98,6 +98,19 @@ def _feed_payload(candidate: Any) -> dict[str, Any]:
     return payload
 
 
+def has_symbol_execution_safety_evidence(candidate: Any) -> bool:
+    """Return true when EDGE-45 has symbol/feed evidence to evaluate.
+
+    Legacy executable-truth unit fixtures sometimes exercise only quote,
+    spread, or strategy contracts and intentionally omit symbol/feed payloads.
+    Those should not be retroactively failed by EDGE-45. Real candidates that
+    carry symbol identity or feed-health evidence are still gated.
+    """
+    if resolve_candidate_symbol(candidate):
+        return True
+    return bool(_feed_payload(candidate))
+
+
 def _map_feed_reason(reason: str) -> str:
     lower = str(reason or "").strip().lower()
     if lower.endswith(":option_ticks_stale"):
