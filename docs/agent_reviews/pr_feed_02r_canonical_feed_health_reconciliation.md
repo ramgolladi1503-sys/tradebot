@@ -37,7 +37,7 @@ Answer: No. It only reconciles the decision contract. Hold and warmup behavior r
 
 Challenge: Are negative cases real?
 
-Answer: Yes. Tests cover raw websocket true but effective down, explicit `feed_ok=true` with unsafe option blocker, stale option ticks, unsafe runtime state, fresh artifact with unhealthy payload, and stale artifact with healthy payload.
+Answer: Yes. Tests cover raw websocket positive state with effective down, explicit global feed approval with option blocker evidence, stale option ticks, non-running runtime state, fresh artifact with unhealthy payload, and stale artifact with healthy payload.
 
 ## Hermes Review
 
@@ -58,8 +58,8 @@ Checks required:
 - Split-brain tests pass.
 - Existing EDGE-43 feed truth tests pass.
 - Overlay still exposes `derive_feed_ok(...)`.
-- No feed transport behavior is changed.
-- No dashboard UI behavior is changed.
+- Feed transport behavior is unchanged.
+- Dashboard UI behavior is unchanged.
 - Evidence includes explicit non-action fields.
 
 ## Scope Guard
