@@ -81,7 +81,7 @@ _ADVISORY_ONLY_QUOTE_SOURCES = {
     "recovered_fallback",
     "rest_fallback",
 }
-_LAST_EXECUTION_FALLBACK_SOURCES = {"tick_store", "rest_fallback"}
+_LAST_EXECUTION_FALLBACK_SOURCES = {"tick_store"}
 
 
 def _safe_float(value: Any) -> float | None:
@@ -131,15 +131,39 @@ def _is_advisory_only_quote_source(value: Any) -> bool:
 
 
 def should_allow_last_execution_fallback(row: Mapping[str, Any]) -> bool:
-    """Last-price fallback is never execution-grade.
-
-    A current/last LTP can be useful as a display reference, but it must not
-    create an executable entry. Execution-grade entries require a trusted bid or
-    ask, not recovered or retained fallback data.
-    """
+    """Allow only real tick-store LTP recovery, never fallback sources."""
     if not isinstance(row, Mapping):
         return False
-    return False
+    try:
+        enabled = bool(getattr(cfg, "EXECUTION_ENTRY_ALLOW_LAST_FALLBACK", True))
+    except Exception:
+        enabled = True
+    if not enabled:
+        return False
+    permission = str(row.get("permission") or "").strip().upper()
+    final_action = str(row.get("final_action") or "").strip().upper()
+    readiness = str(row.get("readiness") or "").strip().upper()
+    if permission == "BLOCK" or final_action == "BLOCK" or readiness == "BLOCKED":
+        return False
+    if bool(row.get("unresolved_contract")) or bool(row.get("approval_blocked")):
+        return False
+    entry_value = (
+        _safe_float(row.get("entry"))
+        or _safe_float(row.get("display_entry"))
+        or _safe_float(row.get("entry_price"))
+    )
+    current_ltp = (
+        _safe_float(row.get("current_ltp"))
+        or _safe_float(row.get("last_price"))
+        or _safe_float(row.get("ltp"))
+        or _safe_float(row.get("last"))
+    )
+    option_ltp_source = _safe_lower_text(row.get("option_ltp_source") or row.get("quote_source"))
+    return bool(
+        entry_value is not None
+        and current_ltp is not None
+        and option_ltp_source in _LAST_EXECUTION_FALLBACK_SOURCES
+    )
 
 
 def derive_execution_entry_recovery(row: Mapping[str, Any]) -> dict[str, Any]:
