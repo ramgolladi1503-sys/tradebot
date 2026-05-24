@@ -90,7 +90,7 @@ This PR solves one narrow roadmap bug: status contract wording cleanup. It does 
 
 ## Human Approval
 
-Approved for PR scope: EDGE-47 only, read-only candidate status contract cleanup, no broker/runtime/dashboard behavior change.
+Approved for PR scope: EDGE-47 only, read-only candidate wording cleanup, no external integration/runtime/dashboard behavior change.
 
 ## Acceptance Proof
 
