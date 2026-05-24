@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from core.candidate_ranking import CandidateRankRecord
 from core.opportunity_scoring import ADVISORY_ONLY, NEEDS_CONFIRMATION, SCORE_ELIGIBLE
 from core.opportunity_selector_evidence import build_opportunity_selector_evidence
@@ -55,6 +57,21 @@ def test_selector_evidence_selects_only_score_eligible_executable_unblocked_cand
     assert report.records[1].selector_reason == "not_selected_blocked_candidate"
     assert report.records[2].selector_reason == "not_selected_score_eligibility_advisory_only"
     assert "stale_quote" in report.rejection_reasons
+
+
+def test_selector_evidence_rejects_safety_flagged_executable_rows():
+    report = build_opportunity_selector_evidence(
+        [
+            _rank(1, "fallback-looking", final_score=0.84, safety_flags=("fallback_data",)),
+        ],
+        selection_limit=3,
+    )
+
+    assert report.selected_count == 0
+    assert report.no_selection_reason == "all_selector_candidates_unsafe_or_blocked"
+    assert report.records[0].selector_reason == "not_selected_safety_flags_present"
+    assert "fallback_data" in report.safety_flags
+    assert "fallback_data" in report.rejection_reasons
 
 
 def test_selector_evidence_reports_no_ranked_candidates():
@@ -121,3 +138,8 @@ def test_selector_evidence_reports_selection_limit_zero():
     assert report.selected_count == 0
     assert report.no_selection_reason == "selection_limit_zero"
     assert report.records[0].selector_reason == "not_selected_selection_limit_or_tiebreak"
+
+
+def test_selector_evidence_rejects_invalid_rank_record_shape():
+    with pytest.raises(TypeError, match="selector_evidence_expected_candidate_rank_record"):
+        build_opportunity_selector_evidence([{"strategy_id": "fake"}], selection_limit=3)
