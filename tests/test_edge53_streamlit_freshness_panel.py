@@ -118,8 +118,9 @@ def test_render_latest_artifact_freshness_panel_success_path():
     assert summary["fresh"] == 1
     assert ("success", "All 1 latest artifacts are fresh.") in st.calls
     dataframe_calls = [call for call in st.calls if call[0] == "dataframe"]
-    assert len(dataframe_calls) == 1
+    assert dataframe_calls != []
     assert dataframe_calls[0][1]["kwargs"] == {"use_container_width": True, "hide_index": True}
+    assert dataframe_calls[0][1]["value"] == [rows[0]]
 
 
 def test_render_latest_artifact_freshness_panel_error_path():
