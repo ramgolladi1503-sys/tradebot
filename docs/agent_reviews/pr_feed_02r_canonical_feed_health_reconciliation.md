@@ -5,6 +5,8 @@ candidate_id: PR-FEED-02R-CANONICAL-FEED-HEALTH-RECONCILIATION
 decision: APPROVED
 reason: Runtime overlay consumes canonical FEED truth and split-brain feed tests were added.
 timestamp: 2026-05-24T18:45:00Z
+is_order_action=false
+broker_api_called=false
 source: docs/agent_reviews/pr_feed_02r_canonical_feed_health_reconciliation.md
 
 ## Agent Work Contract
