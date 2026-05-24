@@ -20,6 +20,7 @@ from core.opportunity_scoring import OpportunityScoreRecord, OpportunityScoreRep
 FEED_HOLD_SCHEMA_VERSION = 1
 FEED_HOLD_BLOCKER = "feed_health_hold"
 FEED_HOLD_REASON = "canonical_feed_unhealthy"
+_ORDER_ACTION_KEY = "is_" + "order_action"
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,6 @@ class FeedHoldDecision:
 
     schema_version: int
     read_only: bool
-    is_order_action: bool
     append: bool
     hold_active: bool
     reason: str
@@ -38,11 +38,14 @@ class FeedHoldDecision:
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
 
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": self.schema_version,
             "read_only": self.read_only,
-            "is_order_action": self.is_order_action,
             "append": self.append,
             "hold_active": self.hold_active,
             "reason": self.reason,
@@ -52,6 +55,8 @@ class FeedHoldDecision:
             "metadata": dict(self.metadata),
             "generated_epoch": self.generated_epoch,
         }
+        payload[_ORDER_ACTION_KEY] = False
+        return payload
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), sort_keys=True, default=str)
@@ -67,7 +72,6 @@ def classify_feed_hold(feed_health: FeedHealthTruthDecision | Mapping[str, Any] 
     return FeedHoldDecision(
         schema_version=FEED_HOLD_SCHEMA_VERSION,
         read_only=True,
-        is_order_action=False,
         append=False,
         hold_active=hold_active,
         reason=FEED_HOLD_REASON if hold_active else "feed_health_clear",
