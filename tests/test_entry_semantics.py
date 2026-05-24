@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from core.entry_semantics import build_entry_state
+from core.entry_semantics import (
+    build_entry_state,
+    derive_execution_entry_recovery,
+    should_allow_last_execution_fallback,
+)
 
 
 def test_build_entry_state_buy_uses_fresh_ask_for_execution_and_display():
@@ -197,3 +201,66 @@ def test_build_entry_state_clears_for_instrument_mismatch():
     assert out["entry"] is None
     assert out["entry_status"] == "missing"
     assert out["entry_clear_reason"] == "instrument_mismatch"
+
+
+def test_build_entry_state_recovered_fallback_is_displayable_but_not_executable():
+    out = build_entry_state(
+        symbol="NIFTY",
+        expiry="2026-03-26",
+        strike=23000,
+        right="CE",
+        side="BUY",
+        bid=72.0,
+        ask=72.8,
+        mark=72.4,
+        last=72.5,
+        quote_age_sec=1.0,
+        mode="LIVE",
+        allow_stale_quotes=False,
+        market_open=True,
+        instrument_matches=True,
+        quote_source="recovered_fallback",
+        allow_last_execution=True,
+    )
+
+    assert out["execution_entry"] is None
+    assert out["execution_entry_source"] == "none"
+    assert out["execution_entry_status"] == "non_executable"
+    assert out["display_entry"] == 72.4
+    assert out["display_entry_source"] == "mark"
+    assert out["display_entry_status"] == "displayable"
+
+
+def test_should_allow_last_execution_fallback_is_disabled_for_execution_grade_entries():
+    allowed = should_allow_last_execution_fallback(
+        {
+            "permission": "EXECUTE",
+            "final_action": "EXECUTE",
+            "readiness": "READY",
+            "entry": 72.5,
+            "current_ltp": 72.5,
+            "option_ltp_source": "rest_fallback",
+        }
+    )
+
+    assert allowed is False
+
+
+def test_derive_execution_entry_recovery_marks_rest_fallback_as_non_executable_reference():
+    out = derive_execution_entry_recovery(
+        {
+            "permission": "EXECUTE",
+            "final_action": "EXECUTE",
+            "readiness": "READY",
+            "entry": 72.5,
+            "current_ltp": 72.5,
+            "quote_age_sec": 1.0,
+            "option_ltp_source": "rest_fallback",
+            "market_open": True,
+        }
+    )
+
+    assert out["execution_entry"] is None
+    assert out["execution_entry_source"] == "none"
+    assert out["execution_entry_status"] == "non_executable"
+    assert out["derivation_reason"] == "fallback_reference_advisory_only"
