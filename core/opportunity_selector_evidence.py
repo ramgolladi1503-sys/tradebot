@@ -36,6 +36,9 @@ class OpportunitySelectionEvidenceRecord:
 @dataclass(frozen=True)
 class OpportunitySelectorEvidenceReport:
     is_order_action = False
+    broker_api_called = False
+    live_order_action = False
+    broker_order_action = False
     append = False
 
     schema_version: int
@@ -59,7 +62,10 @@ class OpportunitySelectorEvidenceReport:
         return {
             "schema_version": self.schema_version,
             "read_only": self.read_only,
-            "is_order_action": self.is_order_action,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_order_action": False,
+            "broker_order_action": False,
             "append": self.append,
             "source_rank_count": self.source_rank_count,
             "selected_count": self.selected_count,
