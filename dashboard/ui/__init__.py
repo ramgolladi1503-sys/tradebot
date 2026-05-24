@@ -16,6 +16,12 @@ from .components import (
     notify,
     render_notifications,
 )
+from .freshness_panel import (
+    build_freshness_panel_row,
+    collect_latest_artifact_freshness_rows,
+    render_latest_artifact_freshness_panel,
+    summarize_freshness_panel_rows,
+)
 
 __all__ = [
     "TOKENS",
@@ -34,4 +40,8 @@ __all__ = [
     "confirm_action",
     "notify",
     "render_notifications",
+    "build_freshness_panel_row",
+    "collect_latest_artifact_freshness_rows",
+    "render_latest_artifact_freshness_panel",
+    "summarize_freshness_panel_rows",
 ]
