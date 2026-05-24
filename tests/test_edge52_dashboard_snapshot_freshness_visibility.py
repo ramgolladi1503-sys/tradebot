@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 
 from dashboard.readers.snapshot_reader import read_snapshot_payload
 from core.runtime_snapshot_store import build_snapshot_envelope
+
+
+def _fresh_generated_at() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def test_dashboard_snapshot_reader_exposes_freshness_for_fresh_snapshot(tmp_path):
@@ -13,7 +18,7 @@ def test_dashboard_snapshot_reader_exposes_freshness_for_fresh_snapshot(tmp_path
             build_snapshot_envelope(
                 payload={"rows": []},
                 producer="test",
-                generated_at="2999-01-01T00:00:00Z",
+                generated_at=_fresh_generated_at(),
             )
         ),
         encoding="utf-8",
@@ -83,7 +88,7 @@ def test_dashboard_snapshot_reader_keeps_existing_success_fields(tmp_path):
             build_snapshot_envelope(
                 payload={"rows": [{"symbol": "NIFTY"}]},
                 producer="runtime_snapshot_producer",
-                generated_at="2999-01-01T00:00:00Z",
+                generated_at=_fresh_generated_at(),
                 schema_version=7,
             )
         ),
