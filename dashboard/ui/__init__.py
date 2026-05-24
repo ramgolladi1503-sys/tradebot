@@ -24,14 +24,23 @@ from .freshness_panel import (
 )
 
 
+def _streamlit_module():
+    import streamlit as st
+
+    return st
+
+
+def _render_home_freshness_panel(st_module):
+    from dashboard.home_freshness_panel import render_home_freshness_panel
+
+    return render_home_freshness_panel(st_module)
+
+
 def app_shell(title: str, nav_items: list[str], default_tab: str | None, on_change=None):
     nav = _base_app_shell(title, nav_items, default_tab, on_change=on_change)
     if str(nav or "") == "Home":
         try:
-            import streamlit as st
-            from dashboard.home_freshness_panel import render_home_freshness_panel
-
-            render_home_freshness_panel(st)
+            _render_home_freshness_panel(_streamlit_module())
         except Exception:
             pass
     return nav
