@@ -93,11 +93,7 @@ def build_opportunity_selector_evidence(
     """
     ranks, source_metadata = _coerce_ranks(ranking_report)
     normalized_limit = max(0, int(selection_limit or 0))
-    selected_candidates = tuple(
-        rank
-        for rank in ranks
-        if rank.executable_candidate and rank.score_eligibility == SCORE_ELIGIBLE and not rank.blockers
-    )[:normalized_limit]
+    selected_candidates = tuple(rank for rank in ranks if _is_selectable(rank))[:normalized_limit]
     selected_ids = {rank.strategy_id for rank in selected_candidates}
     records = tuple(_evidence_record(rank, rank.strategy_id in selected_ids) for rank in ranks)
     rejection_reasons = tuple(sorted(set(reason for record in records if not record.selected for reason in _record_reasons(record))))
@@ -106,6 +102,7 @@ def build_opportunity_selector_evidence(
     executable_count = sum(1 for rank in ranks if rank.executable_candidate)
     eligible_count = sum(1 for rank in ranks if rank.score_eligibility == SCORE_ELIGIBLE)
     blocked_count = sum(1 for rank in ranks if rank.blockers)
+    safety_flagged_count = sum(1 for rank in ranks if rank.safety_flags)
 
     return OpportunitySelectorEvidenceReport(
         schema_version=SELECTOR_EVIDENCE_SCHEMA_VERSION,
@@ -116,7 +113,15 @@ def build_opportunity_selector_evidence(
         executable_source_count=executable_count,
         score_eligible_source_count=eligible_count,
         blocked_source_count=blocked_count,
-        no_selection_reason=_no_selection_reason(ranks, selected_candidates, normalized_limit, eligible_count, executable_count),
+        no_selection_reason=_no_selection_reason(
+            ranks,
+            selected_candidates,
+            normalized_limit,
+            eligible_count,
+            executable_count,
+            blocked_count,
+            safety_flagged_count,
+        ),
         selected_strategy_ids=tuple(rank.strategy_id for rank in selected_candidates),
         records=records,
         rejection_reasons=rejection_reasons,
@@ -132,6 +137,15 @@ def build_opportunity_selector_evidence(
             "live_order_action": False,
             "broker_order_action": False,
         },
+    )
+
+
+def _is_selectable(rank: CandidateRankRecord) -> bool:
+    return bool(
+        rank.executable_candidate
+        and rank.score_eligibility == SCORE_ELIGIBLE
+        and not rank.blockers
+        and not rank.safety_flags
     )
 
 
@@ -193,6 +207,8 @@ def _no_selection_reason(
     selection_limit: int,
     eligible_count: int,
     executable_count: int,
+    blocked_count: int,
+    safety_flagged_count: int,
 ) -> str | None:
     if selected_candidates:
         return None
@@ -204,6 +220,8 @@ def _no_selection_reason(
         return "no_score_eligible_candidates"
     if executable_count <= 0:
         return "no_executable_candidates"
+    if blocked_count or safety_flagged_count:
+        return "all_selector_candidates_unsafe_or_blocked"
     return "all_selector_candidates_blocked"
 
 
