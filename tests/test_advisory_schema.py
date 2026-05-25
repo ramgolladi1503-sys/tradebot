@@ -816,3 +816,29 @@ def test_review_queue_normalizer_does_not_make_legacy_compat_execution_source_ex
     else:
         raise AssertionError("expected AdvisorySchemaError for executable compat source")
 
+def test_review_queue_normalizes_legacy_sources_at_all_schema_boundaries():
+    source = open("core/review_queue.py", "r", encoding="utf-8").read()
+
+    assert (
+        "advisory_payload = _normalize_blocked_candidate_lifecycle_schema(advisory_payload)\n"
+        "    _print_final_emit_truth(advisory_payload)"
+    ) in source
+
+    assert (
+        "advisory_payload = _backfill_instrument_identity(advisory_payload)\n"
+        "    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)\n"
+        "    try:\n"
+        "        advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)"
+    ) in source
+
+    assert (
+        "advisory_payload = _ensure_blocked_advisory_hard_blockers(advisory_payload)\n"
+        "    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)\n"
+        "    advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)"
+    ) in source
+
+    assert (
+        "advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)\n"
+        "    emission_target = \"rejected_candidates\" if _is_blocked_contract_row(entry) else \"suggestions\""
+    ) in source
+
