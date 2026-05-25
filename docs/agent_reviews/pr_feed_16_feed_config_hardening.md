@@ -110,6 +110,16 @@ Expected:
 - previous feed policy tests remain green.
 - invalid config fails closed.
 
+## Runtime Proof Required After Merge
+
+When PR-FEED-20 or later runtime wiring consumes this config contract, capture evidence proving:
+
+- Default config audit emits `config_ok=true`.
+- Any supplied runtime feed-policy config is audited before feed truth is trusted.
+- Invalid config emits `feed_policy_config_invalid` and `feed_ok=false`.
+- LIVE remains stricter than PAPER and PAPER remains stricter than SIM.
+- The evidence payload remains read-only with `is_order_action=false` and `broker_api_called=false`.
+
 ## What This PR Does Not Prove
 
 - It does not prove websocket recovery.
