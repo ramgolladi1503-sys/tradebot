@@ -94,6 +94,16 @@ No runtime proof is required for EDGE-73 because this PR is not wired into runti
 
 Future runtime proof is required only when a later scoped PR reads readiness summaries from runtime, ranking, or dashboard code.
 
+## What This PR Does Not Prove
+
+- Strategy profitability
+- Strategy expectancy
+- Signal quality
+- Candidate ranking quality
+- Runtime integration
+- Dashboard usability
+- Paper or live readiness
+
 ## Human Approval
 
 Ready for review after CI passes.
