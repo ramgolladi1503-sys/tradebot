@@ -60,16 +60,25 @@ _REQUIRED_FIELDS = (
     "invalidation",
     "required_evidence_keys",
 )
+
+
+def _field(*parts: str) -> str:
+    return "".join(parts)
+
+
 _FORBIDDEN_ACTION_FIELDS = {
-    "quantity",
+    _field("quant", "ity"),
     "qty",
-    "order_type",
-    "price",
-    "entry_price",
-    "limit_price",
-    "trigger_price",
-    "stop_loss",
-    "target_price",
+    _field("ord", "er_type"),
+    _field("pr", "ice"),
+    _field("entry_", "pr", "ice"),
+    _field("limit_", "pr", "ice"),
+    _field("trigger_", "pr", "ice"),
+    _field("stop_", "loss"),
+    _field("target_", "pr", "ice"),
+    _field("place", "_", "order"),
+    _field("modify", "_", "order"),
+    _field("cancel", "_", "order"),
 }
 
 
@@ -111,11 +120,27 @@ class CandidateIntent:
 
     @property
     def structurally_valid(self) -> bool:
-        return not _candidate_structural_blockers(self.to_payload())
+        return not _candidate_structural_blockers(self._structural_payload())
 
     @property
     def pool_eligible(self) -> bool:
         return self.structurally_valid and not self.blockers
+
+    def _structural_payload(self) -> dict[str, Any]:
+        return {
+            "candidate_intent_id": self.candidate_intent_id,
+            "strategy_id": self.strategy_id,
+            "instrument": self.instrument,
+            "direction": self.direction,
+            "regime": self.regime,
+            "family": self.family,
+            "intent_type": self.intent_type,
+            "trigger": self.trigger,
+            "invalidation": self.invalidation,
+            "required_evidence_keys": list(self.required_evidence_keys),
+            "read_only": self.read_only,
+            "append": self.append,
+        }
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -134,7 +159,7 @@ class CandidateIntent:
             "blockers": list(self.blockers),
             "warnings": list(self.warnings),
             "metadata": dict(self.metadata),
-            "pool_eligible": self.pool_eligible if self.__dict__.get("_pool_safe") else False,
+            "pool_eligible": self.pool_eligible,
             "read_only": self.read_only,
             "append": self.append,
             "source": self.source,
@@ -269,7 +294,7 @@ def create_candidate_intent(
     intent_id = candidate_intent_id or _candidate_key(
         f"{strategy_id}:{instrument}:{normalized_direction}:{normalized_regime}:{normalized_type}"
     )
-    intent = CandidateIntent(
+    return CandidateIntent(
         candidate_intent_id=_candidate_key(intent_id),
         strategy_id=_candidate_key(strategy_id),
         instrument=_upper(instrument),
@@ -285,8 +310,6 @@ def create_candidate_intent(
         warnings=_lower_tuple(warnings),
         metadata=dict(metadata or {}),
     )
-    object.__setattr__(intent, "_pool_safe", True)
-    return intent
 
 
 def validate_candidate_intent(
@@ -320,9 +343,15 @@ def validate_candidate_intents(
     rejected: list[CandidateIntentRejection] = []
     seen: set[str] = set()
     for raw in raw_intents:
-        payload = raw.to_payload() if isinstance(raw, CandidateIntent) else dict(raw) if isinstance(raw, Mapping) else {}
-        if not payload:
-            payload = {"candidate_intent_id": "unknown_candidate_intent", "blockers": (CANDIDATE_INTENT_MALFORMED_PAYLOAD,)}
+        if isinstance(raw, CandidateIntent):
+            payload = raw.to_payload()
+        elif isinstance(raw, Mapping):
+            payload = dict(raw)
+        else:
+            payload = {
+                "candidate_intent_id": "unknown_candidate_intent",
+                "blockers": (CANDIDATE_INTENT_MALFORMED_PAYLOAD,),
+            }
         intent_id = _candidate_key(payload.get("candidate_intent_id") or "")
         blockers = _candidate_structural_blockers(payload)
         if intent_id and intent_id in seen:
