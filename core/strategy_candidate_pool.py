@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from core.strategy_eligibility import (
-    STRATEGY_ELIGIBILITY_SOURCE,
     StrategyEligibilityReport,
     evaluate_strategy_eligibility,
 )
