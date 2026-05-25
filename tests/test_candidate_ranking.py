@@ -1,6 +1,10 @@
 import json
 
-from core.candidate_ranking import rank_candidates
+from core.candidate_ranking import (
+    RANKING_FEED_RISK_SAFETY_FLAG,
+    RANKING_FEED_RISK_SUPPRESSION_REASON,
+    rank_candidates,
+)
 from core.directional_balance import analyze_directional_balance
 from core.opportunity_scoring import (
     ADVISORY_ONLY,
@@ -104,6 +108,7 @@ def test_ranking_report_is_read_only_and_preserves_source_metadata():
     assert report.metadata["ranker"] == "candidate_ranking_v1"
     assert report.metadata["scope"] == "read_only_no_execution_no_score_mutation"
     assert report.metadata["source_scorer"] == "opportunity_score_v1"
+    assert report.metadata["feed_risk_suppression"] == "enabled"
 
 
 def test_executable_candidates_rank_above_higher_scored_suppressed_candidates():
@@ -160,15 +165,93 @@ def test_safety_state_orders_equally_eligible_candidates_before_score():
         "risky",
         final_score=0.65,
         eligibility=NEEDS_CONFIRMATION,
-        downgrade_reasons=("fallback_quote_data",),
-        blockers=("FALLBACK_QUOTE_ONLY",),
-        safety_flags=("fallback_data",),
+        downgrade_reasons=("wide_spread",),
+        blockers=("WIDE_SPREAD",),
+        safety_flags=("wide_spread",),
     )
 
     report = rank_candidates([risky, clean])
 
     assert [rank.strategy_id for rank in report.ranks] == ["clean", "risky"]
+    assert report.ranks[1].score_eligibility == NEEDS_CONFIRMATION
     assert "safety_flags=1" in report.ranks[1].rank_reason
+
+
+def test_feed_risky_executable_candidate_is_suppressed_even_with_high_score():
+    clean = _score("clean", final_score=0.55, eligibility=SCORE_ELIGIBLE)
+    risky = _score(
+        "risky_feed",
+        final_score=0.99,
+        eligibility=SCORE_ELIGIBLE,
+        warnings=("NO_LIVE_OPTION_FEED",),
+    )
+
+    report = rank_candidates([risky, clean])
+
+    assert [rank.strategy_id for rank in report.ranks] == ["clean", "risky_feed"]
+    assert report.executable_count == 1
+    assert report.suppressed_count == 1
+    risky_rank = report.ranks[1]
+    assert risky_rank.score_eligibility == SUPPRESSED_BY_DOWNGRADE
+    assert risky_rank.bucket == "SUPPRESSED_CANDIDATE"
+    assert risky_rank.executable_candidate is False
+    assert RANKING_FEED_RISK_SUPPRESSION_REASON in risky_rank.downgrade_reasons
+    assert RANKING_FEED_RISK_SAFETY_FLAG in risky_rank.safety_flags
+    assert "feed_risk_suppressed=true" in risky_rank.rank_reason
+    assert report.metadata["feed_risk_suppressed_count"] == 1
+
+
+def test_feed_risky_near_executable_candidate_is_suppressed_before_advisory():
+    advisory = _score("advisory", final_score=0.35, eligibility=ADVISORY_ONLY)
+    near_feed_risk = _score(
+        "near_feed_risk",
+        final_score=0.65,
+        eligibility=NEEDS_CONFIRMATION,
+        safety_flags=("stale_feed",),
+    )
+
+    report = rank_candidates([near_feed_risk, advisory])
+
+    assert [rank.strategy_id for rank in report.ranks] == ["advisory", "near_feed_risk"]
+    assert report.near_executable_count == 0
+    assert report.advisory_count == 1
+    assert report.suppressed_count == 1
+    assert report.ranks[1].score_eligibility == SUPPRESSED_BY_DOWNGRADE
+    assert RANKING_FEED_RISK_SUPPRESSION_REASON in report.ranks[1].downgrade_reasons
+
+
+def test_feed_risk_suppression_does_not_mutate_source_score_record():
+    risky = _score(
+        "risky_source",
+        final_score=0.99,
+        eligibility=SCORE_ELIGIBLE,
+        blockers=("SUBSCRIPTION_FAILED",),
+    )
+
+    report = rank_candidates([risky])
+
+    assert risky.score_eligibility == SCORE_ELIGIBLE
+    assert risky.bucket == "EXECUTABLE_CANDIDATE"
+    assert risky.executable_candidate is True
+    assert report.ranks[0].score_eligibility == SUPPRESSED_BY_DOWNGRADE
+    assert report.ranks[0].bucket == "SUPPRESSED_CANDIDATE"
+    assert report.ranks[0].executable_candidate is False
+
+
+def test_advisory_feed_risk_stays_advisory_not_double_suppressed():
+    advisory = _score(
+        "advisory_feed_risk",
+        final_score=0.35,
+        eligibility=ADVISORY_ONLY,
+        safety_flags=("fallback_data",),
+    )
+
+    report = rank_candidates([advisory])
+
+    assert report.advisory_count == 1
+    assert report.suppressed_count == 0
+    assert report.ranks[0].score_eligibility == ADVISORY_ONLY
+    assert RANKING_FEED_RISK_SUPPRESSION_REASON not in report.ranks[0].downgrade_reasons
 
 
 def test_deterministic_tie_breakers_do_not_depend_on_input_order():
@@ -231,6 +314,7 @@ def test_missing_data_safe_empty_input():
     assert report.blockers == ()
     assert report.warnings == ()
     assert report.safety_flags == ()
+    assert report.metadata["feed_risk_suppressed_count"] == 0
 
 
 def test_ranking_rejects_non_score_record_input():
@@ -257,4 +341,5 @@ def test_ranking_report_is_json_serializable():
 
     assert "candidate_ranking_v1" in payload
     assert "read_only_no_execution_no_score_mutation" in payload
+    assert "feed_risk_suppression" in payload
     json.loads(payload)
