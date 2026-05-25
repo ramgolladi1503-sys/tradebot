@@ -35,11 +35,11 @@ Answer: that is intended for live safety. A memory-tick absence should fail clos
 
 ## Hermes Review
 
-Backward compatibility is preserved for normal callers. get_ltp(token) still allows DB fallback. Only decision_path=True changes default behavior.
+Backward compatibility is preserved for normal callers. get_ltp(token) still allows DB fallback. Only decision-path reads change default behavior.
 
 ## GSD Review
 
-The smallest safe seam is tick_store.get_ltp because review_queue already passes decision_path=True. This avoids a review_queue rewrite.
+The narrowest implementation seam is tick_store.get_ltp because review_queue already marks this quote read as a decision-path lookup. This avoids a review_queue rewrite.
 
 ## QA / Safety Review
 
