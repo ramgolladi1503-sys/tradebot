@@ -106,8 +106,8 @@ Expected:
 After merge, capture a paper-mode runtime candidate-cycle sample proving:
 
 - `feed_health_input_present=true` when feed truth is supplied.
-- `feed_hold_active=true` when feed truth is unsafe.
-- unsafe feed truth produces zero ranked output.
+- `feed_hold_active=true` when feed truth is unhealthy.
+- unhealthy feed truth produces zero ranked output.
 - healthy feed truth preserves normal ranking behavior.
 - no feed lifecycle or strategy behavior changed.
 
