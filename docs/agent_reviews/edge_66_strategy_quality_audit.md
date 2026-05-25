@@ -53,6 +53,15 @@ Answer: No. Warning-only records are deliberately non-blocking metadata risks. A
 - No unrelated cleanup.
 - Tests cover pass, warning, blocker, empty registry, existing registry, and payload evidence.
 
+## QA / Safety Review
+
+- Safety boundary: audit output is non-action evidence only.
+- Broker boundary: no broker adapters, no order APIs, no live calls, and no broker payload generation.
+- Strategy boundary: no strategy modules are imported and no strategy callables are executed.
+- Runtime boundary: no runtime files are written and no runtime selection behavior is changed.
+- Failure handling: invalid registry metadata is surfaced as audit blockers instead of being hidden.
+- Test safety: tests use metadata-only `StrategySpec` objects and registry inputs.
+
 ## Scope Guard
 
 This PR must not:
@@ -70,6 +79,29 @@ This PR must not:
 ```bash
 PYTHONPATH=. python -m pytest tests/test_edge_66_strategy_quality_audit.py
 ```
+
+## Runtime Proof Required After Merge
+
+No runtime proof is required for EDGE-66 because this PR is not wired into runtime execution.
+
+Future runtime proof is required only when a later scoped PR reads this audit from runtime or dashboard code. That proof must show:
+
+- read-only usage only
+- no strategy execution from audit records
+- no broker calls
+- no order actions
+- no mutation of runtime decision artifacts
+
+## What This PR Does Not Prove
+
+- Strategy profitability
+- Strategy hypothesis validity
+- Regime-specific expectancy
+- Candidate generation quality
+- Candidate ranking quality
+- Runtime/live trading readiness
+- Dashboard usability
+- Broker/order safety beyond preserving non-action audit metadata
 
 ## Human Approval
 
