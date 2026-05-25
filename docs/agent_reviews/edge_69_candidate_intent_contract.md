@@ -1,5 +1,14 @@
 # EDGE-69 CandidateIntent Contract Agent Review
 
+mode: REVIEW
+candidate_id: edge_69_candidate_intent_contract
+decision: review_ready
+reason: focused_contract_tests_docs
+timestamp: 2026-05-25T19:15:00Z
+is_order_action: false
+broker_api_called: false
+source: edge69_candidate_intent_review
+
 ## Agent Work Contract
 
 Add a small CandidateIntent contract and tests.
