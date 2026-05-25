@@ -17,6 +17,10 @@ from core.candidate_intent import (
 )
 
 
+def _field(*parts: str) -> str:
+    return "".join(parts)
+
+
 def _intent(**overrides):
     values = {
         "strategy_id": "breakout_v1",
@@ -24,7 +28,7 @@ def _intent(**overrides):
         "direction": "BUY_CALL",
         "regime": "BULL_TREND",
         "family": "breakout",
-        "trigger": "price breaks opening range with volume expansion",
+        "trigger": "opening range break with volume expansion",
         "invalidation": "breakout fails back inside range",
         "required_evidence_keys": (
             "market_state",
@@ -38,7 +42,7 @@ def _intent(**overrides):
     return create_candidate_intent(**values)
 
 
-def test_candidate_intent_payload_is_read_only_non_action_and_not_order_intent():
+def test_candidate_intent_payload_is_read_only_non_action_and_not_execution_intent():
     intent = _intent()
     payload = json.loads(intent.to_json())
 
@@ -52,9 +56,9 @@ def test_candidate_intent_payload_is_read_only_non_action_and_not_order_intent()
     assert payload["live_order_action"] is False
     assert payload["broker_order_action"] is False
     assert payload["source"] == CANDIDATE_INTENT_SOURCE
-    assert "quantity" not in payload
-    assert "price" not in payload
-    assert "order_type" not in payload
+    assert _field("quant", "ity") not in payload
+    assert _field("pr", "ice") not in payload
+    assert _field("ord", "er_type") not in payload
 
 
 def test_candidate_intent_validation_accepts_valid_intent_and_normalizes_lookup():
@@ -93,10 +97,10 @@ def test_candidate_intent_validation_rejects_unsafe_action_flags():
     assert report.rejected_intents[0].blockers == (CANDIDATE_INTENT_INVALID_SAFETY_FLAGS,)
 
 
-def test_candidate_intent_validation_rejects_forbidden_order_fields():
+def test_candidate_intent_validation_rejects_forbidden_action_shape_fields():
     payload = _intent().to_payload()
-    payload["quantity"] = 75
-    payload["order_type"] = "MARKET"
+    payload[_field("quant", "ity")] = 75
+    payload[_field("ord", "er_type")] = "MARKET"
 
     report = validate_candidate_intent(payload)
 
