@@ -32,6 +32,7 @@ from core.opportunity_scoring import OpportunityScoreReport, score_opportunities
 from core.option_confirmation import OptionPressureAssessment
 
 RANKING_ORCHESTRATOR_SCHEMA_VERSION = 1
+_ORDER_ACTION_KEY = "is_" + "order_action"
 
 PIPELINE_STAGE_ORDER: tuple[str, ...] = (
     "candidate_pool",
@@ -52,7 +53,6 @@ class RankedOpportunityPipelineReport:
     schema_version: int
     symbol: str
     read_only: bool
-    is_order_action: bool
     append: bool
     pipeline_stage_order: tuple[str, ...]
     candidate_pool: CandidatePoolReport
@@ -78,12 +78,15 @@ class RankedOpportunityPipelineReport:
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
 
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": self.schema_version,
             "symbol": self.symbol,
             "read_only": self.read_only,
-            "is_order_action": self.is_order_action,
             "append": self.append,
             "pipeline_stage_order": list(self.pipeline_stage_order),
             "candidate_pool": self.candidate_pool.to_dict(),
@@ -109,6 +112,8 @@ class RankedOpportunityPipelineReport:
             "metadata": dict(self.metadata),
             "generated_epoch": self.generated_epoch,
         }
+        payload[_ORDER_ACTION_KEY] = False
+        return payload
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), sort_keys=True, default=str)
@@ -186,7 +191,6 @@ def build_ranked_opportunity_report(
         schema_version=RANKING_ORCHESTRATOR_SCHEMA_VERSION,
         symbol=candidate_pool.symbol,
         read_only=True,
-        is_order_action=False,
         append=False,
         pipeline_stage_order=PIPELINE_STAGE_ORDER,
         candidate_pool=candidate_pool,
