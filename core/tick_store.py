@@ -730,8 +730,19 @@ def get_ltp(
     token: int | str | None,
     *,
     decision_path: bool = False,
+    allow_db: bool | None = None,
 ) -> tuple[float | None, float | None]:
-    tick = get_last_tick(token, allow_db=True, decision_path=decision_path)
+    """Return latest LTP while keeping decision-path reads non-blocking by default.
+
+    Live/advisory decision paths must not fall through to SQLite when the in-memory
+    WebSocket tick is missing. SQLite reads can flush pending writes, initialize the
+    DB, and block behind locks; callers that explicitly need historical DB fallback
+    can still pass allow_db=True.
+    """
+
+    if allow_db is None:
+        allow_db = not bool(decision_path)
+    tick = get_last_tick(token, allow_db=bool(allow_db), decision_path=decision_path)
     if not isinstance(tick, dict):
         return None, None
     return tick.get("ltp"), tick.get("ts_epoch")
