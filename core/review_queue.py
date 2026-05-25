@@ -3592,8 +3592,8 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         )
     advisory_payload = _normalize_blocked_candidate_lifecycle_schema(advisory_payload)
     _print_final_emit_truth(advisory_payload)
-    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)
     advisory_payload = _backfill_instrument_identity(advisory_payload)
+    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)
     try:
         advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
     except AdvisorySchemaError as exc:
@@ -8411,6 +8411,7 @@ def _build_canonical_advisory_entry(
     advisory_payload["row_kind"] = _derive_review_queue_row_kind(advisory_payload)
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
     advisory_payload = _ensure_blocked_advisory_hard_blockers(advisory_payload)
+    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)
     advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
     return _repair_live_feed_failure_provenance(advisory_entry)
 
@@ -8463,6 +8464,7 @@ def _record_advisory_validation_failure(
     advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload["row_kind"] = _derive_review_queue_row_kind(advisory_payload)
     advisory_payload["non_canonical_levels"] = bool(advisory_payload.get("non_canonical_levels")) or advisory_payload["row_kind"] != CANONICAL_ROW_KIND
+    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)
     emission_target = "rejected_candidates" if _is_blocked_contract_row(entry) else "suggestions"
     diagnostic = _build_advisory_emit_failure_payload(
         entry,
