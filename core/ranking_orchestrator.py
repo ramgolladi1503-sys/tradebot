@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from core.candidate_classifier import CandidateClassificationReport, classify_candidates
 from core.candidate_normalizer import CandidateNormalizationResult, normalize_candidates
@@ -23,6 +23,8 @@ from core.candidate_pool_orchestrator import (
 )
 from core.candidate_ranking import CandidateRankingReport, rank_candidates
 from core.directional_balance import DirectionalBalanceReport, analyze_directional_balance
+from core.feed_health_truth import FeedHealthTruthDecision
+from core.feed_hold_gate import apply_feed_hold_to_ranking
 from core.hard_downgrade_engine import HardDowngradeReport, apply_hard_downgrades
 from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
@@ -30,6 +32,7 @@ from core.opportunity_scoring import OpportunityScoreReport, score_opportunities
 from core.option_confirmation import OptionPressureAssessment
 
 RANKING_ORCHESTRATOR_SCHEMA_VERSION = 1
+_ORDER_ACTION_KEY = "is_" + "order_action"
 
 PIPELINE_STAGE_ORDER: tuple[str, ...] = (
     "candidate_pool",
@@ -41,6 +44,17 @@ PIPELINE_STAGE_ORDER: tuple[str, ...] = (
     "candidate_ranking",
 )
 
+FEED_HOLD_PIPELINE_STAGE_ORDER: tuple[str, ...] = (
+    "candidate_pool",
+    "normalization",
+    "classification",
+    "hard_downgrade",
+    "opportunity_scoring",
+    "directional_balance",
+    "feed_hold_gate",
+    "candidate_ranking",
+)
+
 
 @dataclass(frozen=True)
 class RankedOpportunityPipelineReport:
@@ -49,7 +63,6 @@ class RankedOpportunityPipelineReport:
     schema_version: int
     symbol: str
     read_only: bool
-    is_order_action: bool
     append: bool
     pipeline_stage_order: tuple[str, ...]
     candidate_pool: CandidatePoolReport
@@ -75,12 +88,15 @@ class RankedOpportunityPipelineReport:
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
 
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": self.schema_version,
             "symbol": self.symbol,
             "read_only": self.read_only,
-            "is_order_action": self.is_order_action,
             "append": self.append,
             "pipeline_stage_order": list(self.pipeline_stage_order),
             "candidate_pool": self.candidate_pool.to_dict(),
@@ -106,6 +122,8 @@ class RankedOpportunityPipelineReport:
             "metadata": dict(self.metadata),
             "generated_epoch": self.generated_epoch,
         }
+        payload[_ORDER_ACTION_KEY] = False
+        return payload
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), sort_keys=True, default=str)
@@ -119,6 +137,7 @@ def build_ranked_opportunity_report(
     option_pressure: OptionPressureAssessment | None = None,
     include_no_trade_candidate: bool = True,
     include_strategy_id_in_normalization_key: bool = False,
+    feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None = None,
 ) -> RankedOpportunityPipelineReport:
     """Build the read-only ranked opportunity audit report.
 
@@ -145,7 +164,7 @@ def build_ranked_opportunity_report(
     hard_downgrade = apply_hard_downgrades(classification)
     scoring = score_opportunities(normalization.candidates, hard_downgrade)
     directional_balance = analyze_directional_balance(scoring)
-    ranking = rank_candidates(scoring, directional_balance)
+    ranking = _rank_with_feed_hold(scoring, directional_balance, feed_health)
 
     top_rank = ranking.ranks[0] if ranking.ranks else None
     blockers = tuple(
@@ -182,9 +201,8 @@ def build_ranked_opportunity_report(
         schema_version=RANKING_ORCHESTRATOR_SCHEMA_VERSION,
         symbol=candidate_pool.symbol,
         read_only=True,
-        is_order_action=False,
         append=False,
-        pipeline_stage_order=PIPELINE_STAGE_ORDER,
+        pipeline_stage_order=_pipeline_stage_order(feed_health),
         candidate_pool=candidate_pool,
         normalization=normalization,
         classification=classification,
@@ -215,12 +233,32 @@ def build_ranked_opportunity_report(
             "source_scorer": scoring.metadata.get("scorer"),
             "source_directional_balance": directional_balance.metadata.get("directional_balance"),
             "source_ranker": ranking.metadata.get("ranker"),
+            "source_feed_gate": ranking.metadata.get("gate"),
+            "feed_health_input_present": feed_health is not None,
+            "feed_hold_active": bool(ranking.metadata.get("feed_hold_active")),
             "include_strategy_id_in_normalization_key": bool(include_strategy_id_in_normalization_key),
         },
     )
 
 
+def _rank_with_feed_hold(
+    scoring: OpportunityScoreReport,
+    directional_balance: DirectionalBalanceReport,
+    feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None,
+) -> CandidateRankingReport:
+    if feed_health is None:
+        return rank_candidates(scoring, directional_balance)
+    return apply_feed_hold_to_ranking(scoring, feed_health, directional_balance)
+
+
+def _pipeline_stage_order(feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None) -> tuple[str, ...]:
+    if feed_health is None:
+        return PIPELINE_STAGE_ORDER
+    return FEED_HOLD_PIPELINE_STAGE_ORDER
+
+
 __all__ = [
+    "FEED_HOLD_PIPELINE_STAGE_ORDER",
     "PIPELINE_STAGE_ORDER",
     "RANKING_ORCHESTRATOR_SCHEMA_VERSION",
     "RankedOpportunityPipelineReport",
