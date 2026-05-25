@@ -97,13 +97,14 @@ def test_normalization_rejects_duplicate_candidates_without_mutating_first_candi
     candidate = pool.candidates[0]
 
     report = normalize_strategy_candidates((candidate, candidate))
+    payload = report.to_payload()
 
     assert report.valid is True
+    assert payload["rejected_count"] == 1
     assert report.canonical_candidate_ids == ("sample_strategy:nifty:buy_call:bull_trend",)
     assert report.rejected_candidates[0].status == NORMALIZATION_STATUS_DUPLICATE_REJECTED
     assert report.rejected_candidates[0].canonical_candidate_id == "sample_strategy:nifty:buy_call:bull_trend"
     assert report.rejected_candidates[0].blockers == (NORMALIZATION_DUPLICATE_CANDIDATE,)
-    assert report.rejected_count == 1 if hasattr(report, "rejected_count") else True
     assert NORMALIZATION_DUPLICATE_CANDIDATE in report.warnings
 
 
@@ -122,9 +123,10 @@ def test_normalization_rejects_dict_duplicate_after_case_and_spacing_normalizati
     )
 
     report = normalize_strategy_candidates((candidate, duplicate_payload))
+    payload = report.to_payload()
 
     assert report.canonical_candidate_ids == ("sample_strategy:nifty:buy_call:bull_trend",)
-    assert report.rejected_candidates == report.rejected_candidates[:1]
+    assert payload["rejected_count"] == 1
     assert report.rejected_candidates[0].blockers == (NORMALIZATION_DUPLICATE_CANDIDATE,)
 
 
