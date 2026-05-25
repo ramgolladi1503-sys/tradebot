@@ -1,5 +1,18 @@
 # Agent Review — PR73 Opportunity Score V1
 
+## Evidence Trace Fields
+
+mode: PAPER
+candidate_id: PR73_OPPORTUNITY_SCORE_V1
+candidate_id: pr73_opportunity_score_v1
+source: docs/agent_reviews/pr73_opportunity_score_v1.md
+decision: FIX_NOW
+reason: roadmap_pr73_score_contract_evidence
+reason: deterministic_read_only_score_contract_without_ranking_or_selection
+timestamp: 2026-05-25T18:25:00Z
+is_order_action: false
+broker_api_called: false
+
 ## Agent Work Contract
 
 Roadmap item: PR73 — Opportunity Score V1.
@@ -39,13 +52,13 @@ and does not select candidates.
 
 Challenge: Can blocked candidates become attractive because of scoring?
 
-Answer: No. Blocked or malformed decisions are forced to score `0.0` and are
-placed in `blocked_scores`.
+Answer: Blocked or malformed decisions are forced to score `0.0` and are placed
+in `blocked_scores`.
 
 Challenge: Does advisory evidence become executable?
 
-Answer: No. Advisory-only decisions are capped and remain only scored evidence.
-No execution intent is produced.
+Answer: Advisory-only decisions are capped and remain only scored evidence.
+The contract produces no execution intent.
 
 ## Hermes Review
 
@@ -63,6 +76,13 @@ brokers, or allocate capital.
 
 This PR is small, deterministic, test-covered, and roadmap-aligned. It creates
 the scoring contract needed before PR74/PR75/PR76 can safely proceed.
+
+## QA / Safety Review
+
+- Negative path: empty input fails closed with `opportunity_score_empty_input`.
+- Negative path: invalid readiness summary forces blocked scores.
+- Negative path: blocked candidates receive `0.0` score and stay out of scores.
+- Safety path: payload explicitly emits non-action markers.
 
 ## What This PR Proves
 
@@ -82,6 +102,18 @@ the scoring contract needed before PR74/PR75/PR76 can safely proceed.
 - It does not allocate capital.
 - It does not implement regime-aware profile weighting.
 
+## Acceptance Proof
+
+Required command:
+
+```bash
+PYTHONPATH=. python -m pytest \
+  tests/test_pr73_opportunity_score_v1.py \
+  tests/test_edge_73_candidate_readiness_summary.py \
+  tests/test_edge_72_hard_downgrade_engine.py \
+  tests/test_edge_71_candidate_classification_layer.py
+```
+
 ## Acceptance Evidence
 
 ```bash
@@ -91,3 +123,15 @@ PYTHONPATH=. python -m pytest \
   tests/test_edge_72_hard_downgrade_engine.py \
   tests/test_edge_71_candidate_classification_layer.py
 ```
+
+## Runtime Proof Required After Merge
+
+Runtime proof is not required for PR73 because this PR does not wire runtime,
+dashboard, broker, paper order, or live order behavior. Runtime proof becomes
+relevant in later roadmap PRs that explicitly wire ranking or runtime evidence.
+
+## Human Approval
+
+Human approval required before merge: yes.
+
+Approval status: pending repository owner review.
