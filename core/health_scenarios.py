@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
+from config import config as cfg
 from core.broker.mock_broker import MockBroker
 from core.depth_store import depth_store
 from core.events import append_event
@@ -80,6 +81,23 @@ def _patched_instruments(option_contracts: list[dict[str, Any]]):
         yield
     finally:
         kite_client.instruments_cached = original
+
+
+@contextmanager
+def _memory_ticks_allowed_for_health_scenario():
+    had_attr = hasattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS")
+    previous_value = getattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS", None)
+    setattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS", False)
+    try:
+        yield
+    finally:
+        if had_attr:
+            setattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS", previous_value)
+        else:
+            try:
+                delattr(cfg, "DISALLOW_MEMORY_TICK_SOURCE_FOR_DECISIONS")
+            except AttributeError:
+                pass
 
 
 def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
@@ -205,15 +223,16 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
         "strategy_id": "healthcheck",
         "timestamp": now_iso,
     }
-    add_to_queue(
-        trade_payload,
-        queue_path=queue_path,
-        extra={
-            "run_id": str(run_id),
-            "health_scenario": "ONE_TRADE_CAN_BUILD",
-            "final_blocker": None,
-        },
-    )
+    with _memory_ticks_allowed_for_health_scenario():
+        add_to_queue(
+            trade_payload,
+            queue_path=queue_path,
+            extra={
+                "run_id": str(run_id),
+                "health_scenario": "ONE_TRADE_CAN_BUILD",
+                "final_blocker": None,
+            },
+        )
 
     rows = load_queue_rows(queue_path)
     row = None
