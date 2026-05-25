@@ -17,7 +17,7 @@
 mode: PAPER
 candidate_id: EDGE_69_STRATEGY_REGISTRY_CANDIDATE_POOL
 message_decision: STRATEGY_REGISTRY_CANDIDATE_POOL
-strategy_decision: STRATEGY_REGISTRY_CANDIDATE_POOL
+decision: STRATEGY_REGISTRY_CANDIDATE_POOL
 reason: Adds deterministic metadata candidates from contract-eligible strategy specs without runtime wiring, ranking, broker calls, or order intent.
 timestamp: 2026-05-25T16:05:00Z
 is_order_action: false
