@@ -18,6 +18,7 @@ mode: PAPER
 candidate_id: PR246_ADVISORY_ENTRY_SOURCE_NORMALIZATION
 decision: NORMALIZE_LEGACY_DISPLAY_ENTRY_SOURCE_BEFORE_SCHEMA_SERIALIZATION
 reason: Runtime evidence after PR #245 showed advisory rows rejected with `invalid display_entry_source: compat`.
+timestamp: 2026-05-25T06:45:31Z
 is_order_action: false
 broker_api_called: false
 source: docs/agent_reviews/pr246_advisory_entry_source_normalization.md
