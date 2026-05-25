@@ -740,3 +740,79 @@ def test_advisory_schema_accepts_scored_execution_status():
     )
     out = advisory_schema.serialize_advisory_row(row)
     assert out["execution_status"] == "scored"
+
+
+def test_review_queue_normalizes_legacy_compat_display_entry_source_before_schema_emit():
+    from core.review_queue import _normalize_advisory_entry_sources_for_schema
+
+    row = _valid_row(
+        execution_entry=None,
+        execution_entry_source="none",
+        execution_entry_status="non_executable",
+        display_entry=120.0,
+        display_entry_source="compat",
+        display_entry_status="displayable",
+        entry=120.0,
+        entry_source="compat",
+        entry_status="displayable",
+        entry_display_status="displayable",
+        execution_status="advisory_only",
+        readiness="ADVISORY_ONLY",
+        is_executable=False,
+        selected_for_execution=False,
+        quote_source="unknown",
+        quote_age_sec=None,
+        price_age_sec=None,
+        option_age_sec=None,
+        hard_blockers=[],
+        blockers=[],
+        soft_penalties=[],
+    )
+
+    normalized = _normalize_advisory_entry_sources_for_schema(row)
+
+    assert normalized["display_entry_source"] == "last"
+    assert normalized["entry_source"] == "last"
+    assert normalized["display_entry_source_raw"] == "compat"
+    assert normalized["entry_source_raw"] == "compat"
+
+    serialized = advisory_schema.serialize_advisory_row(normalized)
+
+    assert serialized["display_entry_source"] == "last"
+    assert serialized["entry_source"] == "last"
+    assert serialized["execution_entry"] is None
+    assert serialized["execution_entry_source"] == "none"
+    assert serialized["execution_entry_status"] == "non_executable"
+    assert serialized["execution_status"] == "advisory_only"
+
+
+def test_review_queue_normalizer_does_not_make_legacy_compat_execution_source_executable():
+    from core.review_queue import _normalize_advisory_entry_sources_for_schema
+
+    row = _valid_row(
+        execution_entry=120.0,
+        execution_entry_source="compat",
+        execution_entry_status="executable",
+        display_entry=120.0,
+        display_entry_source="compat",
+        entry=120.0,
+        entry_source="compat",
+        execution_status="advisory_only",
+        readiness="ADVISORY_ONLY",
+        is_executable=False,
+        selected_for_execution=False,
+    )
+
+    normalized = _normalize_advisory_entry_sources_for_schema(row)
+
+    assert normalized["display_entry_source"] == "last"
+    assert normalized["entry_source"] == "last"
+    assert normalized["execution_entry_source"] == "compat"
+
+    try:
+        advisory_schema.serialize_advisory_row(normalized)
+    except advisory_schema.AdvisorySchemaError as exc:
+        assert "invalid execution_entry_source: compat" in str(exc)
+    else:
+        raise AssertionError("expected AdvisorySchemaError for executable compat source")
+
