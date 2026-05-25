@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from core.candidate_classifier import CandidateClassificationReport, classify_candidates
 from core.candidate_normalizer import CandidateNormalizationResult, normalize_candidates
@@ -23,6 +23,8 @@ from core.candidate_pool_orchestrator import (
 )
 from core.candidate_ranking import CandidateRankingReport, rank_candidates
 from core.directional_balance import DirectionalBalanceReport, analyze_directional_balance
+from core.feed_health_truth import FeedHealthTruthDecision
+from core.feed_hold_gate import apply_feed_hold_to_ranking
 from core.hard_downgrade_engine import HardDowngradeReport, apply_hard_downgrades
 from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
@@ -38,6 +40,7 @@ PIPELINE_STAGE_ORDER: tuple[str, ...] = (
     "hard_downgrade",
     "opportunity_scoring",
     "directional_balance",
+    "feed_hold_gate",
     "candidate_ranking",
 )
 
@@ -119,6 +122,7 @@ def build_ranked_opportunity_report(
     option_pressure: OptionPressureAssessment | None = None,
     include_no_trade_candidate: bool = True,
     include_strategy_id_in_normalization_key: bool = False,
+    feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None = None,
 ) -> RankedOpportunityPipelineReport:
     """Build the read-only ranked opportunity audit report.
 
@@ -145,7 +149,7 @@ def build_ranked_opportunity_report(
     hard_downgrade = apply_hard_downgrades(classification)
     scoring = score_opportunities(normalization.candidates, hard_downgrade)
     directional_balance = analyze_directional_balance(scoring)
-    ranking = rank_candidates(scoring, directional_balance)
+    ranking = _rank_with_feed_hold(scoring, directional_balance, feed_health)
 
     top_rank = ranking.ranks[0] if ranking.ranks else None
     blockers = tuple(
@@ -215,9 +219,22 @@ def build_ranked_opportunity_report(
             "source_scorer": scoring.metadata.get("scorer"),
             "source_directional_balance": directional_balance.metadata.get("directional_balance"),
             "source_ranker": ranking.metadata.get("ranker"),
+            "source_feed_gate": ranking.metadata.get("gate"),
+            "feed_health_input_present": feed_health is not None,
+            "feed_hold_active": bool(ranking.metadata.get("feed_hold_active")),
             "include_strategy_id_in_normalization_key": bool(include_strategy_id_in_normalization_key),
         },
     )
+
+
+def _rank_with_feed_hold(
+    scoring: OpportunityScoreReport,
+    directional_balance: DirectionalBalanceReport,
+    feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None,
+) -> CandidateRankingReport:
+    if feed_health is None:
+        return rank_candidates(scoring, directional_balance)
+    return apply_feed_hold_to_ranking(scoring, feed_health, directional_balance)
 
 
 __all__ = [
