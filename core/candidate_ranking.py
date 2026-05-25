@@ -25,6 +25,8 @@ from core.opportunity_scoring import (
 )
 
 RANKING_SCHEMA_VERSION = 1
+RANKING_FEED_RISK_SUPPRESSION_REASON = "ranking_feed_risk_suppression"
+RANKING_FEED_RISK_SAFETY_FLAG = "ranking_feed_risk"
 
 ELIGIBILITY_PRIORITY: dict[str, int] = {
     SCORE_ELIGIBLE: 0,
@@ -46,12 +48,35 @@ SAFETY_FLAG_PRIORITY: dict[str, int] = {
     "broker_unavailable": 5,
     "market_closed": 5,
     "fallback_data": 4,
+    "fallback_quote_data": 4,
+    "ranking_feed_risk": 4,
+    "stale_feed": 4,
     "stale_option_ltp": 4,
     "untrusted_quote_source": 4,
+    "no_live_option_feed": 4,
+    "subscription_failed": 4,
     "missing_depth": 3,
     "wide_spread": 3,
     "weak_option_confirmation": 2,
 }
+
+FEED_RISK_TOKENS: frozenset[str] = frozenset(
+    {
+        "fallback",
+        "fallback_data",
+        "fallback_quote_data",
+        "fallback_quote_only",
+        "feed_health_hold",
+        "no_live_option_feed",
+        "price_mismatch",
+        "recovered_fallback",
+        "rest_fallback",
+        "stale_feed",
+        "stale_option_ltp",
+        "subscription_failed",
+        "untrusted_quote_source",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -165,6 +190,9 @@ def rank_candidates(
     blockers = tuple(sorted(set(blocker for rank in ranks for blocker in rank.blockers)))
     warnings = tuple(sorted(set(warning for rank in ranks for warning in rank.warnings) | set(directional_flags)))
     safety_flags = tuple(sorted(set(flag for rank in ranks for flag in rank.safety_flags)))
+    feed_risk_suppressed_count = sum(
+        1 for rank in ranks if RANKING_FEED_RISK_SUPPRESSION_REASON in rank.downgrade_reasons
+    )
 
     return CandidateRankingReport(
         schema_version=RANKING_SCHEMA_VERSION,
@@ -191,6 +219,8 @@ def rank_candidates(
             else None,
             "eligibility_priority": dict(ELIGIBILITY_PRIORITY),
             "bucket_priority": dict(BUCKET_PRIORITY),
+            "feed_risk_suppression": "enabled",
+            "feed_risk_suppressed_count": feed_risk_suppressed_count,
         },
     )
 
@@ -199,6 +229,9 @@ def _rank_record(rank: int, record: OpportunityScoreRecord, directional_flags: t
     family = direction_family(record.direction)
     directional_warnings = _directional_warnings(record, directional_flags)
     sort_key = _sort_key(record, directional_warnings)
+    feed_risk_suppressed = _should_suppress_for_feed_risk(record)
+    score_eligibility = _rank_score_eligibility(record, feed_risk_suppressed)
+    bucket = _rank_bucket(record, feed_risk_suppressed)
     return CandidateRankRecord(
         rank=rank,
         strategy_id=record.strategy_id,
@@ -207,28 +240,33 @@ def _rank_record(rank: int, record: OpportunityScoreRecord, directional_flags: t
         directional_family=family,
         movement_type=record.movement_type,
         final_score=round(float(record.final_score), 6),
-        bucket=record.bucket,
-        score_eligibility=record.score_eligibility,
-        executable_candidate=bool(record.executable_candidate and record.score_eligibility == SCORE_ELIGIBLE),
-        rank_reason=_rank_reason(record, directional_warnings),
-        downgrade_reasons=tuple(sorted(record.downgrade_reasons)),
+        bucket=bucket,
+        score_eligibility=score_eligibility,
+        executable_candidate=bool(record.executable_candidate and score_eligibility == SCORE_ELIGIBLE),
+        rank_reason=_rank_reason(record, directional_warnings, feed_risk_suppressed=feed_risk_suppressed),
+        downgrade_reasons=_rank_downgrade_reasons(record, feed_risk_suppressed),
         blockers=tuple(sorted(record.blockers)),
         warnings=tuple(sorted(record.warnings)),
-        safety_flags=tuple(sorted(record.safety_flags)),
+        safety_flags=_rank_safety_flags(record, feed_risk_suppressed),
         directional_warnings=directional_warnings,
         sort_key=sort_key,
     )
 
 
 def _sort_key(record: OpportunityScoreRecord, directional_warnings: tuple[str, ...]) -> tuple[Any, ...]:
+    feed_risk_suppressed = _should_suppress_for_feed_risk(record)
+    score_eligibility = _rank_score_eligibility(record, feed_risk_suppressed)
+    bucket = _rank_bucket(record, feed_risk_suppressed)
+    safety_flags = _rank_safety_flags(record, feed_risk_suppressed)
+    downgrade_reasons = _rank_downgrade_reasons(record, feed_risk_suppressed)
     return (
-        ELIGIBILITY_PRIORITY.get(record.score_eligibility, 99),
-        _safety_severity(record),
+        ELIGIBILITY_PRIORITY.get(score_eligibility, 99),
+        _safety_severity(record, safety_flags=safety_flags, downgrade_reasons=downgrade_reasons),
         len(tuple(record.blockers)),
-        len(tuple(record.safety_flags)),
+        len(safety_flags),
         len(directional_warnings),
         -round(float(record.final_score), 6),
-        BUCKET_PRIORITY.get(record.bucket, 99),
+        BUCKET_PRIORITY.get(bucket, 99),
         str(record.symbol or ""),
         str(record.direction or ""),
         str(record.movement_type or ""),
@@ -236,9 +274,67 @@ def _sort_key(record: OpportunityScoreRecord, directional_warnings: tuple[str, .
     )
 
 
-def _safety_severity(record: OpportunityScoreRecord) -> int:
+def _should_suppress_for_feed_risk(record: OpportunityScoreRecord) -> bool:
+    if record.score_eligibility not in {SCORE_ELIGIBLE, NEEDS_CONFIRMATION}:
+        return False
+    return _has_feed_risk(record)
+
+
+def _has_feed_risk(record: OpportunityScoreRecord) -> bool:
+    for value in tuple(record.safety_flags) + tuple(record.downgrade_reasons) + tuple(record.blockers) + tuple(record.warnings):
+        normalized = str(value or "").strip().lower()
+        normalized = normalized.replace("-", "_").replace(" ", "_")
+        if not normalized:
+            continue
+        if normalized in FEED_RISK_TOKENS:
+            return True
+        if any(token in normalized for token in FEED_RISK_TOKENS):
+            return True
+    return False
+
+
+def _rank_score_eligibility(record: OpportunityScoreRecord, feed_risk_suppressed: bool) -> str:
+    if feed_risk_suppressed:
+        return SUPPRESSED_BY_DOWNGRADE
+    return record.score_eligibility
+
+
+def _rank_bucket(record: OpportunityScoreRecord, feed_risk_suppressed: bool) -> str:
+    if feed_risk_suppressed:
+        return "SUPPRESSED_CANDIDATE"
+    return record.bucket
+
+
+def _rank_downgrade_reasons(
+    record: OpportunityScoreRecord,
+    feed_risk_suppressed: bool,
+) -> tuple[str, ...]:
+    reasons = set(str(reason).strip() for reason in record.downgrade_reasons if str(reason).strip())
+    if feed_risk_suppressed:
+        reasons.add(RANKING_FEED_RISK_SUPPRESSION_REASON)
+    return tuple(sorted(reasons))
+
+
+def _rank_safety_flags(
+    record: OpportunityScoreRecord,
+    feed_risk_suppressed: bool,
+) -> tuple[str, ...]:
+    flags = set(str(flag).strip() for flag in record.safety_flags if str(flag).strip())
+    if feed_risk_suppressed:
+        flags.add(RANKING_FEED_RISK_SAFETY_FLAG)
+    return tuple(sorted(flags))
+
+
+def _safety_severity(
+    record: OpportunityScoreRecord,
+    *,
+    safety_flags: tuple[str, ...] | None = None,
+    downgrade_reasons: tuple[str, ...] | None = None,
+) -> int:
     values: list[int] = []
-    for flag in tuple(record.safety_flags) + tuple(record.downgrade_reasons) + tuple(record.blockers):
+    flag_values = tuple(record.safety_flags) if safety_flags is None else tuple(safety_flags)
+    reason_values = tuple(record.downgrade_reasons) if downgrade_reasons is None else tuple(downgrade_reasons)
+    for flag in flag_values + reason_values + tuple(record.blockers):
         normalized = str(flag or "").strip().lower()
         values.append(SAFETY_FLAG_PRIORITY.get(normalized, 1 if normalized else 0))
     return max(values, default=0)
@@ -285,17 +381,27 @@ def _directional_warnings(record: OpportunityScoreRecord, directional_flags: tup
     return tuple(sorted(warnings))
 
 
-def _rank_reason(record: OpportunityScoreRecord, directional_warnings: tuple[str, ...]) -> str:
+def _rank_reason(
+    record: OpportunityScoreRecord,
+    directional_warnings: tuple[str, ...],
+    *,
+    feed_risk_suppressed: bool = False,
+) -> str:
+    score_eligibility = _rank_score_eligibility(record, feed_risk_suppressed)
+    bucket = _rank_bucket(record, feed_risk_suppressed)
+    safety_flags = _rank_safety_flags(record, feed_risk_suppressed)
     parts = [
-        f"eligibility={record.score_eligibility}",
-        f"bucket={record.bucket}",
+        f"eligibility={score_eligibility}",
+        f"bucket={bucket}",
         f"score={float(record.final_score):.6f}",
         f"family={direction_family(record.direction)}",
     ]
+    if feed_risk_suppressed:
+        parts.append("feed_risk_suppressed=true")
     if record.blockers:
         parts.append(f"blockers={len(record.blockers)}")
-    if record.safety_flags:
-        parts.append(f"safety_flags={len(record.safety_flags)}")
+    if safety_flags:
+        parts.append(f"safety_flags={len(safety_flags)}")
     if directional_warnings:
         parts.append(f"directional_warnings={len(directional_warnings)}")
     return "; ".join(parts)
@@ -314,6 +420,9 @@ def _coerce_scores(scores: OpportunityScoreReport | Iterable[OpportunityScoreRec
 __all__ = [
     "BUCKET_PRIORITY",
     "ELIGIBILITY_PRIORITY",
+    "FEED_RISK_TOKENS",
+    "RANKING_FEED_RISK_SAFETY_FLAG",
+    "RANKING_FEED_RISK_SUPPRESSION_REASON",
     "RANKING_SCHEMA_VERSION",
     "CandidateRankRecord",
     "CandidateRankingReport",
