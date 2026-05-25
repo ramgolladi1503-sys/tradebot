@@ -7,9 +7,10 @@ from typing import Any
 
 from config import config as cfg
 from core.advisory_schema import AdvisorySchemaError, log_advisory_schema_error, serialize_advisory_row
+from core.feed_health_truth import classify_feed_health_truth
 from core.learning_paths import canonical_suggestions_log_path
 from core.market_snapshot_store import DEFAULT_MARKET_SNAPSHOT_PATH, read_market_snapshot
-from core.paths import logs_dir
+from core.paths import logs_dir, runtime_dir
 from core.time_utils import is_today_local, now_ist
 from core.runtime_snapshot_store import (
     ADVISORY_LATEST_PATH,
@@ -21,6 +22,9 @@ from core.runtime_snapshot_store import (
 
 
 logger = logging.getLogger(__name__)
+
+FEED_HEALTH_TRUTH_LATEST_PATH = runtime_dir() / "feed_health_truth_latest.json"
+FEED_HEALTH_TRUTH_SNAPSHOT_SCHEMA_VERSION = 1
 
 
 def _read_json_payload(path: Path) -> tuple[Any, list[str]]:
@@ -96,6 +100,50 @@ def _row_is_today_local(row: dict[str, Any]) -> bool:
         return is_today_local(ts_value, now=now_ist())
     except Exception:
         return False
+
+
+def _feed_health_symbols(feed_payload: Any) -> tuple[str, ...]:
+    if not isinstance(feed_payload, dict):
+        return ()
+    symbols: set[str] = set()
+    for key in (
+        "option_feed_block_reason_by_symbol",
+        "option_last_tick_age_by_symbol",
+        "symbol_feed_ok_by_symbol",
+        "feed_ok_by_symbol",
+    ):
+        values = feed_payload.get(key)
+        if not isinstance(values, dict):
+            continue
+        symbols.update(str(symbol or "").strip().upper() for symbol in values if str(symbol or "").strip())
+    return tuple(sorted(symbols))
+
+
+def _build_feed_health_truth_latest_payload(feed_payload: Any) -> dict[str, Any]:
+    source_payload = feed_payload if isinstance(feed_payload, dict) else None
+    decision = classify_feed_health_truth(
+        source_payload,
+        symbols=_feed_health_symbols(source_payload),
+        max_option_tick_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_OPTION_TICK_AGE_SEC", 3.0)),
+        max_ltp_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5)),
+        max_depth_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0)),
+    )
+    return {
+        "schema_version": FEED_HEALTH_TRUTH_SNAPSHOT_SCHEMA_VERSION,
+        "read_only": True,
+        "is_order_action": False,
+        "append": False,
+        "source_snapshot": "feed_runtime_latest",
+        "source_payload_present": isinstance(feed_payload, dict) and not bool(feed_payload.get("missing")),
+        "feed_health_truth": decision.to_payload(),
+        "feed_ok": bool(decision.feed_ok),
+        "blockers": list(decision.reasons if not decision.feed_ok else ()),
+        "metadata": {
+            "producer": "runtime_snapshot_producer",
+            "derived_from": "logs/feed_runtime_latest.json",
+            "symbols_evaluated": list(_feed_health_symbols(source_payload)),
+        },
+    }
 
 
 def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
@@ -306,6 +354,7 @@ def produce_and_store_runtime_snapshots(
 
     feed_payload, _feed_notes = _read_json_payload(logs_dir() / "feed_runtime_latest.json")
     outputs["feed_runtime_latest"] = feed_payload
+    outputs["feed_health_truth_latest"] = _build_feed_health_truth_latest_payload(feed_payload)
 
     token_payload, _token_notes = _read_json_payload(logs_dir() / "token_resolution.json")
     outputs["token_resolution_latest"] = token_payload
@@ -314,6 +363,7 @@ def produce_and_store_runtime_snapshots(
         "market_snapshot": MARKET_SNAPSHOT_PATH,
         "advisory_latest": ADVISORY_LATEST_PATH,
         "feed_runtime_latest": FEED_RUNTIME_LATEST_PATH,
+        "feed_health_truth_latest": FEED_HEALTH_TRUTH_LATEST_PATH,
         "token_resolution_latest": TOKEN_RESOLUTION_LATEST_PATH,
     }
     for name, path in paths.items():
