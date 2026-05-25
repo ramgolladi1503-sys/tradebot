@@ -13,6 +13,29 @@ REPO_TOKEN_FILE_PATTERNS: tuple[str, ...] = (
     "**/*access_token*.pkl",
 )
 
+TOKEN_SCAN_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".runtime",
+        "__pycache__",
+        "htmlcov",
+        "logs",
+        "node_modules",
+        "runtime",
+        "venv",
+        ".venv",
+    }
+)
+
+_TOKEN_ARTIFACT_SCAN_CACHE: dict[str, dict[str, object]] = {}
+
+
+def reset_token_artifact_scan_cache() -> None:
+    _TOKEN_ARTIFACT_SCAN_CACHE.clear()
+
 
 def _token_path() -> Path:
     override = os.getenv("TRADING_BOT_TOKEN_PATH", "").strip()
@@ -54,6 +77,7 @@ def write_local_kite_access_token(access_token: str) -> Path:
     except OSError:
         pass
     tmp_path.replace(path)
+    reset_token_artifact_scan_cache()
     return path
 
 
@@ -79,14 +103,40 @@ def _unique_paths(paths: Iterable[Path]) -> list[Path]:
     return sorted(out)
 
 
+def _is_excluded_token_scan_dir(path: Path) -> bool:
+    return path.name in TOKEN_SCAN_EXCLUDED_DIRS
+
+
+def _iter_repo_token_artifact_candidates(root: Path) -> Iterable[Path]:
+    models_dir = root / "models"
+    if models_dir.exists() and models_dir.is_dir():
+        try:
+            yield from models_dir.glob("*token*.pkl")
+        except OSError:
+            return
+
+    stack: list[Path] = [root]
+    while stack:
+        directory = stack.pop()
+        try:
+            children = list(directory.iterdir())
+        except OSError:
+            continue
+
+        for child in children:
+            if child.is_dir():
+                if _is_excluded_token_scan_dir(child):
+                    continue
+                stack.append(child)
+                continue
+
+            if child.is_file() and "access_token" in child.name and child.name.endswith(".pkl"):
+                yield child
+
+
 def find_repo_token_artifacts(repo_root: Path | str) -> list[Path]:
     root = Path(repo_root).resolve()
-    hits: list[Path] = []
-    for pattern in REPO_TOKEN_FILE_PATTERNS:
-        for candidate in root.glob(pattern):
-            if candidate.is_file():
-                hits.append(candidate)
-    return _unique_paths(hits)
+    return _unique_paths(_iter_repo_token_artifact_candidates(root))
 
 
 def _token_artifact_message(repo_root: Path, artifacts: list[Path]) -> str:
@@ -106,11 +156,23 @@ def _token_artifact_message(repo_root: Path, artifacts: list[Path]) -> str:
     )
 
 
-def enforce_no_repo_token_artifacts(repo_root: Path | str) -> None:
+def enforce_no_repo_token_artifacts(repo_root: Path | str, *, force_rescan: bool = False) -> None:
     root = Path(repo_root).resolve()
+    cache_key = str(root)
+
+    if not force_rescan:
+        cached = _TOKEN_ARTIFACT_SCAN_CACHE.get(cache_key)
+        if cached and bool(cached.get("clean")):
+            return
+
     artifacts = find_repo_token_artifacts(root)
     if artifacts:
         raise RuntimeError(_token_artifact_message(root, artifacts))
+
+    _TOKEN_ARTIFACT_SCAN_CACHE[cache_key] = {
+        "clean": True,
+        "ts_epoch": time.time(),
+    }
 
 
 def resolve_kite_access_token(repo_root: Path | str, require_token: bool = True) -> str:
@@ -124,6 +186,7 @@ def resolve_kite_access_token(repo_root: Path | str, require_token: bool = True)
 
 
 def enforce_startup_security(repo_root: Path | str, require_token: bool = True) -> str:
+    enforce_no_repo_token_artifacts(repo_root, force_rescan=True)
     token = resolve_kite_access_token(repo_root=repo_root, require_token=require_token)
     _write_guard_event(repo_root, token_present=bool(token))
     return token
