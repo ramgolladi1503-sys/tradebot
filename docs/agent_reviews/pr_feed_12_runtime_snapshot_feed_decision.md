@@ -108,6 +108,16 @@ Expected:
 - Unsafe feed is blocked.
 - Invalid payload fails closed.
 
+## Runtime Proof Required After Merge
+
+After merge, capture a runtime snapshot sample proving:
+
+- `runtime/feed_health_truth_latest.json` exists.
+- The payload contains `feed_health_truth`.
+- The payload carries `feed_ok` and `blockers`.
+- The payload is derived from `feed_runtime_latest`.
+- The snapshot remains read-only and non-action.
+
 ## What This PR Does Not Prove
 
 - It does not prove websocket recovery.
