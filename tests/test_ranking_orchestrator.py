@@ -6,7 +6,11 @@ from core.feed_health_truth import FeedHealthTruthDecision
 from core.feed_hold_gate import FEED_HOLD_BLOCKER
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
-from core.ranking_orchestrator import PIPELINE_STAGE_ORDER, build_ranked_opportunity_report
+from core.ranking_orchestrator import (
+    FEED_HOLD_PIPELINE_STAGE_ORDER,
+    PIPELINE_STAGE_ORDER,
+    build_ranked_opportunity_report,
+)
 
 
 def _regime(primary="TREND_UP", **scores):
@@ -131,6 +135,7 @@ def test_ranked_opportunity_report_builds_full_read_only_pipeline():
     assert report.is_order_action is False
     assert report.append is False
     assert report.pipeline_stage_order == PIPELINE_STAGE_ORDER
+    assert "feed_hold_gate" not in report.pipeline_stage_order
     assert report.raw_candidate_count == 2
     assert report.normalized_candidate_count == 2
     assert report.ranked_candidate_count == 2
@@ -152,6 +157,7 @@ def test_ranked_pipeline_applies_feed_hold_when_feed_truth_is_unhealthy():
         feed_health=_feed_truth(False, "global_feed_unhealthy", "websocket_disconnected"),
     )
 
+    assert report.pipeline_stage_order == FEED_HOLD_PIPELINE_STAGE_ORDER
     assert report.ranked_candidate_count == 0
     assert report.executable_rank_count == 0
     assert report.near_executable_rank_count == 0
@@ -175,6 +181,7 @@ def test_ranked_pipeline_preserves_ranking_when_feed_truth_is_healthy():
         feed_health=_feed_truth(True),
     )
 
+    assert report.pipeline_stage_order == FEED_HOLD_PIPELINE_STAGE_ORDER
     assert report.ranked_candidate_count == 1
     assert report.executable_rank_count == 1
     assert report.top_rank_strategy_id == "clean"
@@ -193,6 +200,7 @@ def test_ranked_pipeline_accepts_feed_health_mapping_and_fails_closed_when_inval
         feed_health={"feed_ok": False, "effective_ws_connected": False},
     )
 
+    assert report.pipeline_stage_order == FEED_HOLD_PIPELINE_STAGE_ORDER
     assert report.ranked_candidate_count == 0
     assert report.executable_rank_count == 0
     assert FEED_HOLD_BLOCKER in report.blockers
