@@ -3591,8 +3591,8 @@ def _emit_review_queue_logs(entry: dict) -> dict:
             },
         )
     advisory_payload = _normalize_blocked_candidate_lifecycle_schema(advisory_payload)
-    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)
     _print_final_emit_truth(advisory_payload)
+    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)
     advisory_payload = _backfill_instrument_identity(advisory_payload)
     try:
         advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
