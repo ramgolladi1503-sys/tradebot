@@ -2609,6 +2609,66 @@ def _normalize_canonical_quote_source(entry: dict) -> dict:
     out["quote_source"] = "unknown"
     return out
 
+def _normalize_advisory_entry_sources_for_schema(entry: dict) -> dict:
+    """Normalize legacy display-only entry sources before advisory serialization.
+
+    Runtime evidence showed canonical advisory rows being rejected with:
+    invalid display_entry_source: compat
+
+    This is a schema-boundary compatibility repair only:
+    - display_entry_source/entry_source legacy values are mapped to canonical display sources
+    - execution_entry_source remains strict
+    - invalid executable sources are not made executable
+    """
+
+    if not isinstance(entry, dict):
+        return entry
+
+    out = dict(entry)
+
+    def _normalize_display_or_entry_source(field: str, value_field: str) -> None:
+        source = str(out.get(field) or "").strip().lower()
+        if not source or source in ENTRY_SOURCE_ENUM:
+            return
+
+        out.setdefault(f"{field}_raw", source)
+        out.setdefault("entry_source_normalization_reason", "legacy_noncanonical_entry_source")
+
+        if _safe_float(out.get(value_field)) is None:
+            out[field] = "none"
+            return
+
+        replacement = _display_entry_source_for_row(out)
+        out[field] = replacement if replacement in ENTRY_SOURCE_ENUM else "last"
+
+    _normalize_display_or_entry_source("display_entry_source", "display_entry")
+
+    entry_source = str(out.get("entry_source") or "").strip().lower()
+    if entry_source and entry_source not in ENTRY_SOURCE_ENUM:
+        out.setdefault("entry_source_raw", entry_source)
+        out.setdefault("entry_source_normalization_reason", "legacy_noncanonical_entry_source")
+        display_source = str(out.get("display_entry_source") or "").strip().lower()
+        if _safe_float(out.get("entry")) is None:
+            out["entry_source"] = "none"
+        elif display_source in ENTRY_SOURCE_ENUM and display_source != "none":
+            out["entry_source"] = display_source
+        else:
+            replacement = _display_entry_source_for_row(out)
+            out["entry_source"] = replacement if replacement in ENTRY_SOURCE_ENUM else "last"
+
+    execution_source = str(out.get("execution_entry_source") or "").strip().lower()
+    execution_status = str(out.get("execution_entry_status") or "").strip().lower()
+    if execution_source and execution_source not in ENTRY_SOURCE_ENUM:
+        out.setdefault("execution_entry_source_raw", execution_source)
+        out.setdefault("entry_source_normalization_reason", "legacy_noncanonical_entry_source")
+        if _safe_float(out.get("execution_entry")) is None or execution_status != "executable":
+            out["execution_entry_source"] = "none"
+            if execution_status in {"", "missing"}:
+                out["execution_entry_status"] = "non_executable"
+
+    return out
+
+
 
 def _display_entry_reason_for_source(source: str) -> str:
     source_key = str(source or "").strip().lower()
@@ -3532,6 +3592,7 @@ def _emit_review_queue_logs(entry: dict) -> dict:
         )
     advisory_payload = _normalize_blocked_candidate_lifecycle_schema(advisory_payload)
     _print_final_emit_truth(advisory_payload)
+    advisory_payload = _normalize_advisory_entry_sources_for_schema(advisory_payload)
     advisory_payload = _backfill_instrument_identity(advisory_payload)
     try:
         advisory_entry = serialize_advisory_row(advisory_payload, allow_legacy=True)
