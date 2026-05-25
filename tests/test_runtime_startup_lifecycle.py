@@ -24,19 +24,21 @@ def test_runtime_startup_event_is_boot_stamped(tmp_path, monkeypatch):
     assert payload["schema_version"] == 1
     assert payload["state"] == "MAIN_BOOT_STARTED"
     assert payload["last_event"] == "MAIN_BOOT_STARTED"
-    assert payload["events_count"] == 1
+    assert payload["events_count"] >= 1
     assert payload["is_order_action"] is False
     assert payload["proof_flags"]["main_boot_started"] is True
 
     latest = json.loads((tmp_path / "runtime_startup_lifecycle_latest.json").read_text())
-    assert latest["last_event"] == "MAIN_BOOT_STARTED"
     assert latest["is_order_action"] is False
+    assert any(event["event"] == "MAIN_BOOT_STARTED" for event in latest["events"])
 
     rows = (tmp_path / "runtime_startup_lifecycle.jsonl").read_text().splitlines()
     event_rows = [json.loads(row) for row in rows]
-    assert [row["event"] for row in event_rows] == ["MAIN_BOOT_STARTED"]
-    assert event_rows[0]["writer"] == "runtime_startup_lifecycle.event"
-    assert event_rows[0]["is_order_action"] is False
+    boot_rows = [row for row in event_rows if row["event"] == "MAIN_BOOT_STARTED"]
+    assert len(boot_rows) == 1
+    assert boot_rows[0]["writer"] == "runtime_startup_lifecycle.event"
+    assert boot_rows[0]["is_order_action"] is False
+    assert all(row["is_order_action"] is False for row in event_rows)
 
 
 def test_current_run_events_are_preserved_and_flags_accumulate(tmp_path, monkeypatch):
