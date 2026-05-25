@@ -48,7 +48,7 @@ Confirmed not touched:
 
 The implementation keeps unsafe repository artifacts fail-closed. Only clean scan results are cached process-locally.
 
-## Grill Me
+## Grill Me Review
 
 ### Pushback
 
@@ -62,7 +62,7 @@ The previous behavior allowed a security check to run from repeated runtime cred
 - Unsafe artifacts still raise and are not silently ignored.
 - No trading behavior is loosened.
 
-## Hermes
+## Hermes Review
 
 ### Contract clarity
 
@@ -76,7 +76,7 @@ No runtime JSON schema is changed. No evidence schema is changed. No order or br
 
 Unsafe artifact discovery still raises the existing runtime error message. Unsafe states are not cached.
 
-## GSD
+## GSD Review
 
 ### Minimality
 
@@ -98,7 +98,7 @@ after_cached_scan_sec=0.00007
 
 This removes a hidden multi-second filesystem walk from repeated market-data credential resolution.
 
-## QA/Safety
+## QA / Safety Review
 
 Local tests run:
 
