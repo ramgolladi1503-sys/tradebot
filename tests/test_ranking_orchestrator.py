@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from core.feed_health_truth import FeedHealthTruthDecision
+from core.feed_hold_gate import FEED_HOLD_BLOCKER
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.ranking_orchestrator import PIPELINE_STAGE_ORDER, build_ranked_opportunity_report
@@ -102,6 +104,16 @@ def _failing_generator(ctx, regime):
     raise RuntimeError("boom")
 
 
+def _feed_truth(feed_ok=True, *reasons):
+    return FeedHealthTruthDecision(
+        feed_ok=feed_ok,
+        reason_code="ok" if feed_ok else "feed_health_truth_failed",
+        reasons=tuple(reasons),
+        global_feed_ok=feed_ok,
+        websocket_ok=feed_ok,
+    )
+
+
 def test_ranked_opportunity_report_builds_full_read_only_pipeline():
     report = build_ranked_opportunity_report(
         _context(),
@@ -127,6 +139,65 @@ def test_ranked_opportunity_report_builds_full_read_only_pipeline():
     assert report.ranking.ranks[0].rank == 1
     assert report.metadata["orchestrator"] == "ranked_opportunity_pipeline_v1"
     assert report.metadata["source_ranker"] == "candidate_ranking_v1"
+    assert report.metadata["feed_health_input_present"] is False
+    assert report.metadata["feed_hold_active"] is False
+
+
+def test_ranked_pipeline_applies_feed_hold_when_feed_truth_is_unhealthy():
+    report = build_ranked_opportunity_report(
+        _context(),
+        _regime(primary="TREND_UP", TREND_UP=0.8),
+        candidate_generators=[_generator(_candidate("clean", direction="BUY_CALL"))],
+        include_strategy_id_in_normalization_key=True,
+        feed_health=_feed_truth(False, "global_feed_unhealthy", "websocket_disconnected"),
+    )
+
+    assert report.ranked_candidate_count == 0
+    assert report.executable_rank_count == 0
+    assert report.near_executable_rank_count == 0
+    assert report.top_rank_strategy_id is None
+    assert FEED_HOLD_BLOCKER in report.blockers
+    assert "global_feed_unhealthy" in report.blockers
+    assert "websocket_disconnected" in report.blockers
+    assert FEED_HOLD_BLOCKER in report.safety_flags
+    assert report.metadata["source_feed_gate"] == "feed_hold_gate_v1"
+    assert report.metadata["feed_health_input_present"] is True
+    assert report.metadata["feed_hold_active"] is True
+    assert report.ranking.metadata["feed_hold_active"] is True
+
+
+def test_ranked_pipeline_preserves_ranking_when_feed_truth_is_healthy():
+    report = build_ranked_opportunity_report(
+        _context(),
+        _regime(primary="TREND_UP", TREND_UP=0.8),
+        candidate_generators=[_generator(_candidate("clean", direction="BUY_CALL"))],
+        include_strategy_id_in_normalization_key=True,
+        feed_health=_feed_truth(True),
+    )
+
+    assert report.ranked_candidate_count == 1
+    assert report.executable_rank_count == 1
+    assert report.top_rank_strategy_id == "clean"
+    assert FEED_HOLD_BLOCKER not in report.blockers
+    assert report.metadata["source_feed_gate"] is None
+    assert report.metadata["feed_health_input_present"] is True
+    assert report.metadata["feed_hold_active"] is False
+
+
+def test_ranked_pipeline_accepts_feed_health_mapping_and_fails_closed_when_invalid():
+    report = build_ranked_opportunity_report(
+        _context(),
+        _regime(primary="TREND_UP", TREND_UP=0.8),
+        candidate_generators=[_generator(_candidate("clean", direction="BUY_CALL"))],
+        include_strategy_id_in_normalization_key=True,
+        feed_health={"feed_ok": False, "effective_ws_connected": False},
+    )
+
+    assert report.ranked_candidate_count == 0
+    assert report.executable_rank_count == 0
+    assert FEED_HOLD_BLOCKER in report.blockers
+    assert "websocket_disconnected" in report.blockers
+    assert report.metadata["feed_hold_active"] is True
 
 
 def test_ranked_pipeline_keeps_suppressed_fallback_visible_below_safer_candidate():
@@ -214,10 +285,11 @@ def test_ranked_pipeline_report_is_json_serializable():
         _regime(primary="TREND_UP", TREND_UP=0.8),
         candidate_generators=[_generator(_candidate("clean", direction="BUY_CALL"))],
         include_strategy_id_in_normalization_key=True,
+        feed_health=_feed_truth(False, "global_feed_unhealthy"),
     )
 
     payload = report.to_json()
 
     assert "ranked_opportunity_pipeline_v1" in payload
-    assert "candidate_ranking_v1" in payload
+    assert "feed_hold_gate_v1" in payload
     json.loads(payload)
