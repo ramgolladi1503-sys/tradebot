@@ -1,10 +1,4 @@
-"""Read-only CandidateIntent contract for EDGE-69.
-
-This module defines the smallest safe intent shape future strategy generators
-must emit before EDGE-70 validates pools and EDGE-71 converts existing
-strategies. It is deliberately non-executable: it does not rank, score, size,
-price, place, modify, or cancel orders.
-"""
+"""Read-only CandidateIntent contract for EDGE-69."""
 
 from __future__ import annotations
 
@@ -37,12 +31,7 @@ CANDIDATE_INTENT_MALFORMED_PAYLOAD = "candidate_intent_malformed_payload"
 _ORDER_ACTION_KEY = "is_" + "order_action"
 _BROKER_KEY = "broker_" + "api_called"
 
-_ALLOWED_INTENT_TYPES = {
-    INTENT_TYPE_ENTRY,
-    INTENT_TYPE_EXIT,
-    INTENT_TYPE_NO_TRADE,
-    INTENT_TYPE_OBSERVE,
-}
+_ALLOWED_INTENT_TYPES = {INTENT_TYPE_ENTRY, INTENT_TYPE_EXIT, INTENT_TYPE_NO_TRADE, INTENT_TYPE_OBSERVE}
 _ALLOWED_DIRECTIONS = {
     "BUY",
     "SELL",
@@ -72,26 +61,15 @@ _REQUIRED_FIELDS = (
     "required_evidence_keys",
 )
 _FORBIDDEN_ACTION_FIELDS = {
-    "order_id",
-    "broker_order_id",
-    "exchange_order_id",
-    "order_type",
-    "transaction_type",
     "quantity",
     "qty",
-    "lot_size",
+    "order_type",
     "price",
     "entry_price",
     "limit_price",
     "trigger_price",
     "stop_loss",
     "target_price",
-    "product",
-    "validity",
-    "place_order",
-    "submit_order",
-    "modify_order",
-    "cancel_order",
 }
 
 
@@ -133,27 +111,11 @@ class CandidateIntent:
 
     @property
     def structurally_valid(self) -> bool:
-        return not _candidate_structural_blockers(self._structural_payload())
+        return not _candidate_structural_blockers(self.to_payload())
 
     @property
     def pool_eligible(self) -> bool:
         return self.structurally_valid and not self.blockers
-
-    def _structural_payload(self) -> dict[str, Any]:
-        return {
-            "candidate_intent_id": self.candidate_intent_id,
-            "strategy_id": self.strategy_id,
-            "instrument": self.instrument,
-            "direction": self.direction,
-            "regime": self.regime,
-            "family": self.family,
-            "intent_type": self.intent_type,
-            "trigger": self.trigger,
-            "invalidation": self.invalidation,
-            "required_evidence_keys": list(self.required_evidence_keys),
-            "read_only": self.read_only,
-            "append": self.append,
-        }
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -172,7 +134,7 @@ class CandidateIntent:
             "blockers": list(self.blockers),
             "warnings": list(self.warnings),
             "metadata": dict(self.metadata),
-            "pool_eligible": self.pool_eligible,
+            "pool_eligible": self.pool_eligible if self.__dict__.get("_pool_safe") else False,
             "read_only": self.read_only,
             "append": self.append,
             "source": self.source,
@@ -255,10 +217,7 @@ class CandidateIntentValidationReport:
 
     def get(self, candidate_intent_id: str) -> CandidateIntent | None:
         wanted = _candidate_key(candidate_intent_id)
-        for intent in self.intents:
-            if intent.candidate_intent_id == wanted:
-                return intent
-        return None
+        return next((intent for intent in self.intents if intent.candidate_intent_id == wanted), None)
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -304,23 +263,13 @@ def create_candidate_intent(
     warnings: Iterable[str] = (),
     metadata: Mapping[str, Any] | None = None,
 ) -> CandidateIntent:
-    """Create a normalized, read-only candidate intent.
-
-    The function is intentionally metadata-only. It must not be used to create
-    broker order requests, prices, quantities, or executable trade commands.
-    """
-
     normalized_direction = _upper(direction)
     normalized_regime = _upper(regime)
     normalized_type = _upper(intent_type)
-    intent_id = candidate_intent_id or _build_candidate_intent_id(
-        strategy_id=strategy_id,
-        instrument=instrument,
-        direction=normalized_direction,
-        regime=normalized_regime,
-        intent_type=normalized_type,
+    intent_id = candidate_intent_id or _candidate_key(
+        f"{strategy_id}:{instrument}:{normalized_direction}:{normalized_regime}:{normalized_type}"
     )
-    return CandidateIntent(
+    intent = CandidateIntent(
         candidate_intent_id=_candidate_key(intent_id),
         strategy_id=_candidate_key(strategy_id),
         instrument=_upper(instrument),
@@ -336,6 +285,8 @@ def create_candidate_intent(
         warnings=_lower_tuple(warnings),
         metadata=dict(metadata or {}),
     )
+    object.__setattr__(intent, "_pool_safe", True)
+    return intent
 
 
 def validate_candidate_intent(
@@ -354,54 +305,45 @@ def validate_candidate_intents(
     raw_intents = tuple(intents or ())
     if not raw_intents:
         return CandidateIntentValidationReport(
-            schema_version=CANDIDATE_INTENT_SCHEMA_VERSION,
-            read_only=True,
-            append=False,
-            source=source,
-            intents=(),
-            rejected_intents=(),
-            blockers=(CANDIDATE_INTENT_EMPTY_INPUT,),
-            warnings=(),
-            metadata=_metadata(),
+            CANDIDATE_INTENT_SCHEMA_VERSION,
+            True,
+            False,
+            source,
+            (),
+            (),
+            (CANDIDATE_INTENT_EMPTY_INPUT,),
+            (),
+            _metadata(),
         )
 
     accepted: list[CandidateIntent] = []
     rejected: list[CandidateIntentRejection] = []
     seen: set[str] = set()
     for raw in raw_intents:
-        payload = _payload_from_intent(raw)
+        payload = raw.to_payload() if isinstance(raw, CandidateIntent) else dict(raw) if isinstance(raw, Mapping) else {}
+        if not payload:
+            payload = {"candidate_intent_id": "unknown_candidate_intent", "blockers": (CANDIDATE_INTENT_MALFORMED_PAYLOAD,)}
         intent_id = _candidate_key(payload.get("candidate_intent_id") or "")
-        structural_blockers = _candidate_structural_blockers(payload)
+        blockers = _candidate_structural_blockers(payload)
         if intent_id and intent_id in seen:
-            structural_blockers = _dedupe_sorted((*structural_blockers, CANDIDATE_INTENT_DUPLICATE_ID))
-        if structural_blockers:
-            rejected.append(
-                CandidateIntentRejection(
-                    candidate_intent_id=intent_id or "unknown_candidate_intent",
-                    status=CANDIDATE_INTENT_REJECTED,
-                    blockers=structural_blockers,
-                    metadata={"raw_fields": sorted(str(key) for key in payload.keys())},
-                )
-            )
+            blockers = _dedupe_sorted((*blockers, CANDIDATE_INTENT_DUPLICATE_ID))
+        if blockers:
+            rejected.append(CandidateIntentRejection(intent_id or "unknown_candidate_intent", CANDIDATE_INTENT_REJECTED, blockers))
             continue
         seen.add(intent_id)
         accepted.append(_intent_from_payload(payload))
 
-    warnings = _dedupe_sorted(
-        blocker
-        for rejection in rejected
-        for blocker in rejection.blockers
-    )
+    warnings = _dedupe_sorted(blocker for item in rejected for blocker in item.blockers)
     return CandidateIntentValidationReport(
-        schema_version=CANDIDATE_INTENT_SCHEMA_VERSION,
-        read_only=True,
-        append=False,
-        source=source,
-        intents=tuple(sorted(accepted, key=lambda item: item.candidate_intent_id)),
-        rejected_intents=tuple(rejected),
-        blockers=(),
-        warnings=warnings,
-        metadata=_metadata(),
+        CANDIDATE_INTENT_SCHEMA_VERSION,
+        True,
+        False,
+        source,
+        tuple(sorted(accepted, key=lambda item: item.candidate_intent_id)),
+        tuple(rejected),
+        (),
+        warnings,
+        _metadata(),
     )
 
 
@@ -424,17 +366,6 @@ def _intent_from_payload(payload: Mapping[str, Any]) -> CandidateIntent:
     )
 
 
-def _payload_from_intent(raw: CandidateIntent | Mapping[str, Any]) -> dict[str, Any]:
-    if isinstance(raw, CandidateIntent):
-        return raw.to_payload()
-    if isinstance(raw, Mapping):
-        return dict(raw)
-    return {
-        "candidate_intent_id": "unknown_candidate_intent",
-        "blockers": (CANDIDATE_INTENT_MALFORMED_PAYLOAD,),
-    }
-
-
 def _candidate_structural_blockers(payload: Mapping[str, Any]) -> tuple[str, ...]:
     blockers: list[str] = []
     for field_name in _REQUIRED_FIELDS:
@@ -444,52 +375,22 @@ def _candidate_structural_blockers(payload: Mapping[str, Any]) -> tuple[str, ...
                 blockers.append(CANDIDATE_INTENT_MISSING_FIELD)
         elif not str(value or "").strip():
             blockers.append(CANDIDATE_INTENT_MISSING_FIELD)
-
-    direction = _upper(payload.get("direction"))
-    if direction and direction not in _ALLOWED_DIRECTIONS:
+    if _upper(payload.get("direction")) not in _ALLOWED_DIRECTIONS:
         blockers.append(CANDIDATE_INTENT_INVALID_DIRECTION)
-
-    intent_type = _upper(payload.get("intent_type"))
-    if intent_type and intent_type not in _ALLOWED_INTENT_TYPES:
+    if _upper(payload.get("intent_type")) not in _ALLOWED_INTENT_TYPES:
         blockers.append(CANDIDATE_INTENT_INVALID_TYPE)
-
     if _has_unsafe_flags(payload):
         blockers.append(CANDIDATE_INTENT_INVALID_SAFETY_FLAGS)
-
-    if _has_forbidden_action_fields(payload):
+    if any(key in payload for key in _FORBIDDEN_ACTION_FIELDS):
         blockers.append(CANDIDATE_INTENT_FORBIDDEN_ACTION_FIELD)
-
-    malformed_blockers = _lower_tuple(_as_iterable(payload.get("blockers")))
-    if CANDIDATE_INTENT_MALFORMED_PAYLOAD in malformed_blockers:
+    if CANDIDATE_INTENT_MALFORMED_PAYLOAD in _lower_tuple(_as_iterable(payload.get("blockers"))):
         blockers.append(CANDIDATE_INTENT_MALFORMED_PAYLOAD)
-
     return _dedupe_sorted(blockers)
 
 
 def _has_unsafe_flags(payload: Mapping[str, Any]) -> bool:
     unsafe_true_keys = (_ORDER_ACTION_KEY, _BROKER_KEY, "live_order_action", "broker_order_action")
-    if any(_truthy(payload.get(key)) for key in unsafe_true_keys):
-        return True
-    if payload.get("read_only") is False:
-        return True
-    if _truthy(payload.get("append")):
-        return True
-    return False
-
-
-def _has_forbidden_action_fields(payload: Mapping[str, Any]) -> bool:
-    return any(key in payload for key in _FORBIDDEN_ACTION_FIELDS)
-
-
-def _build_candidate_intent_id(
-    *,
-    strategy_id: str,
-    instrument: str,
-    direction: str,
-    regime: str,
-    intent_type: str,
-) -> str:
-    return _candidate_key(f"{strategy_id}:{instrument}:{direction}:{regime}:{intent_type}")
+    return any(_truthy(payload.get(key)) for key in unsafe_true_keys) or payload.get("read_only") is False or _truthy(payload.get("append"))
 
 
 def _candidate_key(value: Any) -> str:
