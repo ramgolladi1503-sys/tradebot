@@ -163,11 +163,12 @@ def test_pr73_blocked_candidates_get_zero_score():
     )
 
     report = score_opportunities(downgrade)
+    blocked_score = report.blocked_scores[0]
 
     assert report.scores == ()
-    assert len(report.blocked_scores) == 1
-    assert report.blocked_scores[0].score == 0.0
-    assert OPPORTUNITY_SCORE_BLOCKED_ZERO in report.blocked_scores[0].blockers
+    assert blocked_score.canonical_candidate_id == "bad"
+    assert blocked_score.score == 0.0
+    assert OPPORTUNITY_SCORE_BLOCKED_ZERO in blocked_score.blockers
 
 
 def test_pr73_fails_closed_on_empty_input():
