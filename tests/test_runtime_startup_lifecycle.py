@@ -35,7 +35,7 @@ def test_runtime_startup_event_is_boot_stamped(tmp_path, monkeypatch):
     rows = (tmp_path / "runtime_startup_lifecycle.jsonl").read_text().splitlines()
     event_rows = [json.loads(row) for row in rows]
     boot_rows = [row for row in event_rows if row["event"] == "MAIN_BOOT_STARTED"]
-    assert len(boot_rows) == 1
+    assert sum(1 for row in event_rows if row["event"] == "MAIN_BOOT_STARTED") == 1
     assert boot_rows[0]["writer"] == "runtime_startup_lifecycle.event"
     assert boot_rows[0]["is_order_action"] is False
     assert all(row["is_order_action"] is False for row in event_rows)
