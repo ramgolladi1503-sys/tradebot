@@ -1,5 +1,15 @@
 # Agent Review Evidence — PR-FEED-13A
 
+mode: PAPER
+candidate_id: PR-FEED-13A-REVIEW-QUEUE-NONBLOCKING-QUOTE
+message_decision: APPROVE_FOR_CI_REVIEW
+decision: APPROVE_FOR_CI_REVIEW
+reason: decision_path_tick_store_ltp_reads_are_memory_only_by_default
+timestamp: 2026-05-25T08:29:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/pr_feed_13a_review_queue_non_blocking_quote_lookup.md
+
 ## Agent Work Contract
 
 Scope: decision-path tick-store quote lookup only.
@@ -21,7 +31,7 @@ No strategy, broker execution, ranking, dashboard, or feed lifecycle changes.
 
 Risk: decision-path callers may lose DB-recovered quote values.
 
-Answer: that is intended for live safety. Missing memory tick should fail closed quickly instead of reading SQLite on the advisory path.
+Answer: that is intended for live safety. A memory-tick absence should fail closed quickly instead of reading SQLite on the advisory path.
 
 ## Hermes Review
 
