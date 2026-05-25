@@ -140,7 +140,7 @@ def _build_feed_health_truth_latest_payload(feed_payload: Any) -> dict[str, Any]
         "blockers": list(decision.reasons if not decision.feed_ok else ()),
         "metadata": {
             "producer": "runtime_snapshot_producer",
-            "derived_from": "logs/feed_runtime_latest.json",
+            "derived_from": "feed_runtime_latest",
             "symbols_evaluated": list(_feed_health_symbols(source_payload)),
         },
     }
