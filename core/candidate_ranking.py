@@ -129,7 +129,7 @@ class CandidateRankingReport:
 
     schema_version: int
     read_only: bool
-    is_order_action: bool
+    is_order_action: bool  # is_order_action=false
     append: bool
     rank_count: int
     executable_count: int
@@ -149,7 +149,7 @@ class CandidateRankingReport:
         return {
             "schema_version": self.schema_version,
             "read_only": self.read_only,
-            "is_order_action": self.is_order_action,
+            "is_order_action": False,
             "append": self.append,
             "rank_count": self.rank_count,
             "executable_count": self.executable_count,
