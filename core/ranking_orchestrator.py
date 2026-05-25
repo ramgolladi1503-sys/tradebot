@@ -41,6 +41,16 @@ PIPELINE_STAGE_ORDER: tuple[str, ...] = (
     "hard_downgrade",
     "opportunity_scoring",
     "directional_balance",
+    "candidate_ranking",
+)
+
+FEED_HOLD_PIPELINE_STAGE_ORDER: tuple[str, ...] = (
+    "candidate_pool",
+    "normalization",
+    "classification",
+    "hard_downgrade",
+    "opportunity_scoring",
+    "directional_balance",
     "feed_hold_gate",
     "candidate_ranking",
 )
@@ -192,7 +202,7 @@ def build_ranked_opportunity_report(
         symbol=candidate_pool.symbol,
         read_only=True,
         append=False,
-        pipeline_stage_order=PIPELINE_STAGE_ORDER,
+        pipeline_stage_order=_pipeline_stage_order(feed_health),
         candidate_pool=candidate_pool,
         normalization=normalization,
         classification=classification,
@@ -241,7 +251,14 @@ def _rank_with_feed_hold(
     return apply_feed_hold_to_ranking(scoring, feed_health, directional_balance)
 
 
+def _pipeline_stage_order(feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None) -> tuple[str, ...]:
+    if feed_health is None:
+        return PIPELINE_STAGE_ORDER
+    return FEED_HOLD_PIPELINE_STAGE_ORDER
+
+
 __all__ = [
+    "FEED_HOLD_PIPELINE_STAGE_ORDER",
     "PIPELINE_STAGE_ORDER",
     "RANKING_ORCHESTRATOR_SCHEMA_VERSION",
     "RankedOpportunityPipelineReport",
