@@ -1,9 +1,4 @@
-"""Read-only candidate readiness summary contract for EDGE-73.
-
-This module consumes EDGE-72 hard downgrade decisions and produces aggregate
-readiness evidence. It does not rank candidates, score edge, select strategies,
-or wire runtime behavior.
-"""
+"""Read-only candidate readiness summary contract for EDGE-73."""
 
 from __future__ import annotations
 
@@ -37,7 +32,6 @@ READINESS_STATE_INVALID = "INVALID"
 
 _ORDER_ACTION_KEY = "is_" + "order_action"
 _BROKER_KEY = "broker_" + "api_called"
-
 
 
 @dataclass(frozen=True)
@@ -79,7 +73,11 @@ class CandidateReadinessSummary:
 
     @property
     def has_only_advisory_candidates(self) -> bool:
-        return self.ready_count == 0 and self.advisory_only_count > 0 and self.blocked_count == 0
+        return (
+            self.ready_count == 0
+            and self.advisory_only_count > 0
+            and self.blocked_count == 0
+        )
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -114,14 +112,16 @@ class CandidateReadinessSummary:
 
 
 def summarize_candidate_readiness(
-    decisions: CandidateHardDowngradeReport | Iterable[CandidateHardDowngradeDecision | Mapping[str, Any]],
+    decisions: CandidateHardDowngradeReport
+    | Iterable[CandidateHardDowngradeDecision | Mapping[str, Any]],
     *,
     source: str = CANDIDATE_READINESS_SUMMARY_SOURCE,
-) 
--> CandidateReadinessSummary:
+) -> CandidateReadinessSummary:
     """Summarize EDGE-72 readiness decisions without ranking or selection."""
 
-    downgrade_invalid = isinstance(decisions, CandidateHardDowngradeReport) and not decisions.valid
+    downgrade_invalid = (
+        isinstance(decisions, CandidateHardDowngradeReport) and not decisions.valid
+    )
     active_decisions, blocked_decisions, downgrade_blockers = _resolve_decisions(decisions)
     report_blockers = _dedupe_sorted(
         (
@@ -141,11 +141,7 @@ def summarize_candidate_readiness(
     unknown_decision_warnings = _dedupe_sorted(
         READINESS_SUMMARY_UNKNOWN_DECISION
         for decision in (*coerced_active, *coerced_blocked)
-        if decision.decision not in {
-            DOWNGRADE_DECISION_CANDIDATE_READY,
-            DOWNGRADE_DECISION_ADVISORY_ONLY,
-            DOWNGRADE_DECISION_BLOCKED,
-        }
+        if decision.decision not in _VALID_DOWNGRADE_DECISIONS
     )
     blockers = _dedupe_sorted((*report_blockers, *malformed_blockers))
 
@@ -164,17 +160,10 @@ def summarize_candidate_readiness(
         for decision in (*coerced_blocked, *coerced_active)
         if decision.decision == DOWNGRADE_DECISION_BLOCKED or blockers
     )
-    valid_decisions = {
-        DOWNGRADE_DECISION_CANDIDATE_READY,
-        DOWNGRADE_DECISION_ADVISORY_ONLY,
-        DOWNGRADE_DECISION_BLOCKED,
-    }
-    invalid_count = len(
-        [
-            decision
-            for decision in (*coerced_active, *coerced_blocked)
-            if decision.decision not in valid_decisions
-        ]
+    invalid_count = sum(
+        1
+        for decision in (*coerced_active, *coerced_blocked)
+        if decision.decision not in _VALID_DOWNGRADE_DECISIONS
     )
 
     reason_counts = _reason_counts((*advisory, *blocked))
@@ -187,7 +176,11 @@ def summarize_candidate_readiness(
     warnings = _dedupe_sorted(
         (
             *unknown_decision_warnings,
-            *(warning for decision in (*coerced_active, *coerced_blocked) for warning in decision.warnings),
+            *(
+                warning
+                for decision in (*coerced_active, *coerced_blocked)
+                for warning in decision.warnings
+            ),
         )
     )
     return CandidateReadinessSummary(
@@ -201,9 +194,15 @@ def summarize_candidate_readiness(
         advisory_only_count=len(advisory),
         blocked_count=len(blocked),
         invalid_count=invalid_count,
-        candidate_ready_ids=tuple(sorted(decision.canonical_candidate_id for decision in ready)),
-        advisory_only_ids=tuple(sorted(decision.canonical_candidate_id for decision in advisory)),
-        blocked_ids=tuple(sorted(decision.canonical_candidate_id for decision in blocked)),
+        candidate_ready_ids=tuple(
+            sorted(decision.canonical_candidate_id for decision in ready)
+        ),
+        advisory_only_ids=tuple(
+            sorted(decision.canonical_candidate_id for decision in advisory)
+        ),
+        blocked_ids=tuple(
+            sorted(decision.canonical_candidate_id for decision in blocked)
+        ),
         reason_counts=reason_counts,
         blockers=blockers,
         warnings=warnings,
@@ -211,21 +210,35 @@ def summarize_candidate_readiness(
     )
 
 
+_VALID_DOWNGRADE_DECISIONS = {
+    DOWNGRADE_DECISION_CANDIDATE_READY,
+    DOWNGRADE_DECISION_ADVISORY_ONLY,
+    DOWNGRADE_DECISION_BLOCKED,
+}
+
+
 def _resolve_decisions(
-    decisions: CandidateHardDowngradeReport | Iterable[CandidateHardDowngradeDecision | Mapping[str, Any]],
+    decisions: CandidateHardDowngradeReport
+    | Iterable[CandidateHardDowngradeDecision | Mapping[str, Any]],
 ) -> tuple[
     tuple[CandidateHardDowngradeDecision | Mapping[str, Any], ...],
     tuple[CandidateHardDowngradeDecision | Mapping[str, Any], ...],
     tuple[str, ...],
 ]:
     if isinstance(decisions, CandidateHardDowngradeReport):
-        return tuple(decisions.decisions), tuple(decisions.blocked_decisions), tuple(decisions.blockers)
+        return (
+            tuple(decisions.decisions),
+            tuple(decisions.blocked_decisions),
+            tuple(decisions.blockers),
+        )
     if decisions is None:
         return (), (), ()
     return tuple(decisions), (), ()
 
 
-def _coerce_decision(decision: CandidateHardDowngradeDecision | Mapping[str, Any]) -> CandidateHardDowngradeDecision:
+def _coerce_decision(
+    decision: CandidateHardDowngradeDecision | Mapping[str, Any],
+) -> CandidateHardDowngradeDecision:
     if isinstance(decision, CandidateHardDowngradeDecision):
         return decision
     if not isinstance(decision, Mapping):
@@ -249,61 +262,127 @@ def _coerce_decision(decision: CandidateHardDowngradeDecision | Mapping[str, Any
         hard_downgraded=_truthy(decision.get("hard_downgraded")),
         candidate_ready=_truthy(decision.get("candidate_ready")),
         advisory_only=_truthy(decision.get("advisory_only")),
-        blocked=_truthy(decision.get("blocked"))ˆ™X\ÛÛœÏWÝ\JXÚ\Ú[Û‹™Ù]
-œ™X\ÛÛœÈŠHÜˆ
+        blocked=_truthy(decision.get("blocked")),
+        reasons=_tuple(decision.get("reasons") or ()),
+        blockers=_tuple(decision.get("blockers") or ()),
+        warnings=_tuple(decision.get("warnings") or ()),
+        labels=_tuple(decision.get("labels") or ()),
+        metadata=_safe_dict(decision.get("metadata")),
+    )
 
-JKˆ›ØÚÙ\œÏWÝ\JXÚ\Ú[Û‹™Ù]
-˜›ØÚÙ\œÈŠHÜˆ
 
-JKˆØ\›š[™ÜÏWÝ\JXÚ\Ú[Û‹™Ù]
-Ø\›š[™ÜÈŠHÜˆ
+def _is_malformed_decision(decision: CandidateHardDowngradeDecision) -> bool:
+    if not decision.canonical_candidate_id:
+        return True
+    if decision.decision == DOWNGRADE_DECISION_BLOCKED:
+        return False
+    return not decision.strategy_id
 
-JKˆX™[ÏWÝ\JXÚ\Ú[Û‹™Ù]
-›X™[ÈŠHÜˆ
 
-JKˆY]Y]OWÜØY™WÙXÝ
-XÚ\Ú[Û‹™Ù]
-›Y]Y]HŠJKˆ
-B‚‚™YˆÚ\×ÛX[›Ü›YYÙXÚ\Ú[ÛŠXÚ\Ú[ÛŽˆØ[™Y]R\™ÝÛ™Ü˜YQXÚ\Ú[ÛŠHOˆ›ÛÛ‚ˆYˆ›ÝXÚ\Ú[Û‹˜Ø[›ÛšXØ[ØØ[™Y]WÚY‚ˆ™]\›ˆYBˆYˆXÚ\Ú[Û‹™XÚ\Ú[ÛˆOHÕÓ‘ÔQWÑPÒTÒSÓ—Ð“ÐÒÑQ‚ˆ™]\›ˆ˜[ÙBˆ™]\›ˆ›ÝXÚ\Ú[Û‹œÝ˜]YÞWÚY‚‚™YˆÜ™XY[™\Ü×ÜÝ]Jˆ
-‹ˆ›ØÚÙ\œÎˆ\VÜÝ‹‹‹—Kˆ™XYWØÛÝ[ˆ[ˆYš\ÛÜžWÛÛ›WØÛÝ[ˆ[ˆ›ØÚÙYØÛÝ[ˆ[ŠHOˆÝŽ‚ˆYˆ›ØÚÙ\œÎ‚ˆ™]\›ˆ‘PQS‘TÔ×ÔÕUWÒS•SQˆYˆ™XYWØÛÝ[ˆ‚ˆ™]\›ˆ‘PQS‘TÔ×ÔÕUWÔ‘PQBˆYˆYš\ÛÜžWÛÛ›WØÛÝ[ˆ[™›ØÚÙYØÛÝ[OH‚ˆ™]\›ˆ‘PQS‘TÔ×ÔÕUWÐQ’TÓÔ–WÓÓ“Bˆ™]\›ˆ‘PQS‘TÔ×ÔÕUWÐ“ÐÒÑQ‚‚™YˆÜ™X\ÛÛ—ØÛÝ[ÊXÚ\Ú[ÛœÎˆ]\˜X›VÐØ[™Y]R\™ÝÛ™Ü˜YQXÚ\Ú[Û—JHOˆXÝÜÝ‹[N‚ˆÛÝ[\ŽˆÛÝ[\–ÜÝ—HHÛÝ[\Š
-Bˆ›ÜˆXÚ\Ú[Ûˆ[ˆXÚ\Ú[ÛœÎ‚ˆ›Üˆ™X\ÛÛˆ[ˆ
+def _readiness_state(
+    *,
+    blockers: tuple[str, ...],
+    ready_count: int,
+    advisory_only_count: int,
+    blocked_count: int,
+) -> str:
+    if blockers:
+        return READINESS_STATE_INVALID
+    if ready_count > 0:
+        return READINESS_STATE_READY
+    if advisory_only_count > 0 and blocked_count == 0:
+        return READINESS_STATE_ADVISORY_ONLY
+    return READINESS_STATE_BLOCKED
 
-™XÚ\Ú[Û‹œ™X\ÛÛœË
-™XÚ\Ú[Û‹˜›ØÚÙ\œÊN‚ˆ^HÝŠ™X\ÛÛˆÜˆˆŠKœÝš\
 
-BˆYˆ^‚ˆÛÝ[\–Ý^H
-ÏHBˆ™]\›ˆXÝ
-ÛÝ[\ŠB‚‚™YˆÜ™Yš^YÙÝÛ™Ü˜YWØ›ØÚÙ\œÊ›ØÚÙ\œÎˆ]\˜X›VÜÝ—JHOˆ\VÜÝ‹‹‹—N‚ˆ™]\›ˆ\Jˆ™ÝÛ™Ü˜YNžØ›ØÚÙ\ŸHˆ›Üˆ›ØÚÙ\ˆ[ˆ›ØÚÙ\œÈYˆÝŠ›ØÚÙ\ˆÜˆˆŠKœÝš\
+def _reason_counts(
+    decisions: Iterable[CandidateHardDowngradeDecision],
+) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for decision in decisions:
+        for reason in (*decision.reasons, *decision.blockers):
+            text = str(reason or "").strip()
+            if text:
+                counter[text] += 1
+    return dict(counter)
 
-JB‚‚™YˆÛY]Y]J
-HOˆXÝÜÝ‹[žWN‚ˆ™]\›ˆÂˆ›[Ù[ŽˆÐS‘QUWÔ‘PQS‘TÔ×ÔÕSSPT–WÔÓÕTÑKˆœØÛÜHŽˆ˜Ø[™Y]WÜ™XY[™\Ü×ÜÝ[[X\žWÛ›×Ü[[YWÝÚ\š[™×Û›×Ü˜[šÚ[™×Û›×ÜØÛÜš[™È‹ˆ™Ù\×Û›ÝÚ[\ÜÜÝ˜]YÞWÛ[Ù[\ÈŽˆYKˆ™Ù\×Û›ÝÙ^XÝ]WÜÝ˜]YÞWØØ[X›\ÈŽˆYKˆ™Ù\×Û›ÝÜ˜[š×ØØ[™Y]\ÈŽˆYKˆ™Ù\×Û›ÝÜØÛÜ™WÙYÙHŽˆYKˆ™Ù\×Û›ÝÜÙ[XÝØØ[™Y]\ÈŽˆYKˆ™Ù\×Û›ÝØ[ØØ]WØØ\][ŽˆYKˆB‚‚™YˆØØ[™Y]WÚÙ^J˜[YNˆ[žJHOˆÝŽ‚ˆ™]\›ˆÝŠ˜[YHÜˆˆŠKœÝš\
 
-K›ÝÙ\Š
-Kœ™\XÙJˆ‹—ÈŠKœ™\XÙJ‹H‹—ÈŠB‚‚™YˆÝ\J˜[YNˆ[žJHOˆ\VÜÝ‹‹‹—N‚ˆYˆ˜[YH\È›Û™N‚ˆ™]\›ˆ
+def _prefixed_downgrade_blockers(blockers: Iterable[str]) -> tuple[str, ...]:
+    return tuple(
+        f"downgrade:{blocker}" for blocker in blockers if str(blocker or "").strip()
+    )
 
-BˆYˆ\Ú[œÝ[˜ÙJ˜[YKÝŠN‚ˆ˜[Y\ÈH
-˜[YK
-Bˆ[Yˆ\Ú[œÝ[˜ÙJ˜[YK]\˜X›JN‚ˆ˜[Y\ÈH\J˜[YJBˆ[ÙN‚ˆ˜[Y\ÈH
-˜[YK
-Bˆ™]\›ˆ\JÝŠ][JKœÝš\
 
-H›Üˆ][H[ˆ˜[Y\ÈYˆÝŠ][JKœÝš\
+def _metadata() -> dict[str, Any]:
+    return {
+        "model": CANDIDATE_READINESS_SUMMARY_SOURCE,
+        "scope": "candidate_readiness_summary_no_runtime_wiring_no_ranking_no_scoring",
+        "does_not_import_strategy_modules": True,
+        "does_not_execute_strategy_callables": True,
+        "does_not_rank_candidates": True,
+        "does_not_score_edge": True,
+        "does_not_select_candidates": True,
+        "does_not_allocate_capital": True,
+    }
 
-JB‚‚™YˆÝ]J˜[YNˆ[žJHOˆ›ÛÛ‚ˆYˆ\Ú[œÝ[˜ÙJ˜[YK›ÛÛ
-N‚ˆ™]\›ˆ˜[YBˆYˆ˜[YH[ˆ
-›Û™Kˆ‹“›Û™HŠN‚ˆ™]\›ˆ˜[ÙBˆYˆ\Ú[œÝ[˜ÙJ˜[YK
-[›Ø]
-JN‚ˆ™]\›ˆ›ÛÛ
-˜[YJBˆ™]\›ˆÝŠ˜[YJKœÝš\
 
-K›ÝÙ\Š
-H[ˆÈŒH‹YH‹žY\È‹›Ûˆ‹žHŸB‚‚™YˆÜØY™WÙXÝ
-˜[YNˆ[žJHOˆXÝÜÝ‹[žWN‚ˆYˆ›Ý\Ú[œÝ[˜ÙJ˜[YKX\[™ÊN‚ˆ™]\›ˆßBˆ™]\›ˆÜÝŠÙ^JNˆÜØY™WÚœÛÛ—Ý˜[YJ][JH›ÜˆÙ^K][H[ˆ˜[YKš][\Ê
-_B‚‚™YˆÜØY™WÚœÛÛ—Ý˜[YJ˜[YNˆ[žJHOˆ[žN‚ˆYˆ\Ú[œÝ[˜ÙJ˜[YKX\[™ÊN‚ˆ™]\›ˆÜÝŠÙ^JNˆÜØY™WÚœÛÛ—Ý˜[YJ][JH›ÜˆÙ^K][H[ˆ˜[YKš][\Ê
-_BˆYˆ\Ú[œÝ[˜ÙJ˜[YK
-\Ý\KÙ]
-JN‚ˆ™]\›ˆ×ÜØY™WÚœÛÛ—Ý˜[YJ][JH›Üˆ][H[ˆ˜[YWBˆYˆ\Ú[œÝ[˜ÙJ˜[YK
-Ý‹[›Ø]›ÛÛ
-JHÜˆ˜[YH\È›Û™N‚ˆ™]\›ˆ˜[YBˆ™]\›ˆÝŠ˜[YJB‚‚™YˆÙY\WÜÛÜY
-˜[Y\Îˆ]\˜X›VÜÝ—JHOˆ\VÜÝ‹‹‹—N‚ˆ™]\›ˆ\JÛÜY
-Ý˜[YH›Üˆ˜[YH[ˆ˜[Y\ÈYˆ˜[Y_JJB‚‚—×Ø[×ÈHÂˆÐS‘QUWÔ‘PQS‘TÔ×ÔÕSSPT–WÔÐÒSPWÕ‘T”ÒSÓˆ‹ˆÐS‘QUWÔ‘PQS‘TÔ×ÔÕSSPT–WÔÓÕTÑH‹ˆØ[™Y]T™XY[™\ÜÔÝ[[X\žH‹ˆ”‘PQS‘TÔ×ÔÕUWÐQ’TÓÔ–WÓÓ“H‹ˆ”‘PQS‘TÔ×ÔÕUWÐ“ÐÒÑQ‹ˆ”‘PQS‘TÔ×ÔÕUWÒS•SQ‹ˆ”‘PQS‘TÔ×ÔÕUWÔ‘PQH‹ˆ”‘PQS‘TÔ×ÔÕSSPT–WÑÕÓ‘ÔQWÒS•SQ‹ˆ”‘PQS‘TÔ×ÔÕSSPT–WÑSTWÒS”U‹ˆ”‘PQS‘TÔ×ÔÕSSPT–WÓPS“Ô“QQÑPÒTÒSÓˆ‹ˆ”‘PQS‘TÔ×ÔÕSSPT–WÕS’Ó“ÕÓ—ÑPÒTÒSÓˆ‹ˆœÝ[[X\š^™WØØ[™Y]WÜ™XY[™\ÜÈ‹—B
+def _candidate_key(value: Any) -> str:
+    return str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _tuple(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        values = (value,)
+    elif isinstance(value, Iterable):
+        values = tuple(value)
+    else:
+        values = (value,)
+    return tuple(str(item).strip() for item in values if str(item).strip())
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value in (None, "", "None"):
+        return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "y"}
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): _safe_json_value(item) for key, item in value.items()}
+
+
+def _safe_json_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _safe_json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_safe_json_value(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _dedupe_sorted(values: Iterable[str]) -> tuple[str, ...]:
+    return tuple(sorted({value for value in values if value}))
+
+
+__all__ = [
+    "CANDIDATE_READINESS_SUMMARY_SCHEMA_VERSION",
+    "CANDIDATE_READINESS_SUMMARY_SOURCE",
+    "CandidateReadinessSummary",
+    "READINESS_STATE_ADVISORY_ONLY",
+    "READINESS_STATE_BLOCKED",
+    "READINESS_STATE_INVALID",
+    "READINESS_STATE_READY",
+    "READINESS_SUMMARY_DOWNGRADE_INVALID",
+    "READINESS_SUMMARY_EMPTY_INPUT",
+    "READINESS_SUMMARY_MALFORMED_DECISION",
+    "READINESS_SUMMARY_UNKNOWN_DECISION",
+    "summarize_candidate_readiness",
+]
