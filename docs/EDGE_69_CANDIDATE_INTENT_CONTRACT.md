@@ -2,7 +2,7 @@
 
 ## Purpose
 
-EDGE-69 locks the smallest safe contract that future strategy generators must emit before any candidate pool validation, strategy conversion, rebuild, ranking, paper truth, or live-pilot work continues.
+EDGE-69 locks the smallest safe contract that future strategy generators must emit before candidate pool validation, strategy conversion, rebuild, ranking, paper truth, or live-pilot work continues.
 
 The problem being fixed is structural: existing code has candidate pools, normalized strategy metadata, scoring, ranking, and older movement candidates, but there was no single `CandidateIntent` contract for future strategy generators to target.
 
@@ -25,8 +25,6 @@ A `CandidateIntent` is:
 - read-only
 - non-action
 - metadata/evidence only
-- not a broker order
-- not a paper order
 - not a ranked candidate
 - not a scored candidate
 - not an executable trade
@@ -65,11 +63,11 @@ The validator rejects structurally unsafe payloads when they contain:
 - invalid direction
 - invalid intent type
 - unsafe action flags
-- forbidden order/action fields
+- forbidden action-shaped fields
 - duplicate candidate intent IDs
 - malformed payload markers
 
-Forbidden order/action fields include examples such as `quantity`, `qty`, `order_type`, `price`, `entry_price`, `limit_price`, `stop_loss`, `target_price`, `place_order`, `submit_order`, `modify_order`, and `cancel_order`.
+Forbidden action-shaped fields include examples such as `quantity`, `qty`, `order_type`, `price`, `entry_price`, `limit_price`, `stop_loss`, and `target_price`.
 
 ## Important behavior
 
@@ -91,8 +89,6 @@ EDGE-69 does not add:
 - NoTradeOracle
 - review queue/UI work
 - paper journal writes
-- broker calls
-- order intent
 - runtime wiring
 
 ## Test command
