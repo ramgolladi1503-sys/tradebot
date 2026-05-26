@@ -40,8 +40,10 @@ def build_no_trade_review_rows(
         evidence_sources = _string_list(payload.get("evidence_sources"))
         warnings = _string_list(payload.get("warnings"))
         generated_epoch = payload.get("generated_epoch")
-        no_trade_required = bool(payload.get("no_trade_required"))
-        status = str(payload.get("status") or ("NO_TRADE_REQUIRED" if no_trade_required else "TRADE_ALLOWED"))
+        status = str(payload.get("status") or "").strip()
+        no_trade_required = bool(payload.get("no_trade_required")) or status == "NO_TRADE_REQUIRED"
+        if not status:
+            status = "NO_TRADE_REQUIRED" if no_trade_required else "TRADE_ALLOWED"
         row_candidate_id = str(candidate_id or payload.get("candidate_id") or f"no_trade_oracle_{idx}")
 
         row = {
