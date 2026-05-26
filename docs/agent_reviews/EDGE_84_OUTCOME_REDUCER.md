@@ -35,15 +35,20 @@ Out of scope:
 - Slippage/cost truth.
 - Strategy promotion or suspension.
 - Dashboard views.
+- Runtime loop wiring.
+- Broker/execution integration.
+- Live-pilot behavior.
 
 ## Scope Guard
 
 - Journal remains truth.
 - Reducer is read-only.
 - Invalid journals block before outcome derivation.
+- No external execution API integration.
+- No broker-state changes.
+- No live order intent.
 - No dashboard behavior change.
-- No scoring behavior change.
-- No ranking behavior change.
+- No scoring or ranking behavior change.
 - No strategy lifecycle decisioning.
 
 ## Grill Me Review
@@ -51,6 +56,10 @@ Out of scope:
 Question: Can this PR write to the journal?
 
 Answer: No. It reads events and returns a derived report only.
+
+Question: Can this PR place or route a trade?
+
+Answer: No. It has no broker integration and all non-action metadata remains false.
 
 Question: Can an invalid journal produce outcomes?
 
@@ -62,15 +71,16 @@ Answer: No. EDGE-85 is responsible for expectancy after this reducer is merged g
 
 Question: Does this PR make strategy lifecycle decisions?
 
-Answer: No. That work is later in the roadmap.
+Answer: No. Promotion/suspension work is later in the roadmap.
 
 ## Hermes Review
 
 Boundary check:
 
+- No runtime loop wiring added.
 - No dashboard controls added.
-- No scoring behavior modified.
-- No ranking behavior modified.
+- No external execution imports added.
+- No ranking/final-quality behavior modified.
 - Non-action metadata remains false.
 
 Verdict: scoped and reducer-only.
@@ -85,7 +95,7 @@ Files changed are narrow:
 - `docs/agent_reviews/EDGE_84_OUTCOME_REDUCER.md`
 - `docs/EDGE_TODO.md`
 
-## QA Safety Review
+## QA / safety review
 
 Tests cover:
 
@@ -102,6 +112,8 @@ Tests cover:
 ## Runtime Proof Required After Merge
 
 After merge, EDGE-84 proves only that paper outcomes can be derived from validated paper-truth evidence.
+
+Any runtime recording or dashboard display must be added in a separate scoped PR with tests and human review.
 
 ## Acceptance Proof
 
@@ -122,11 +134,13 @@ This PR does not prove:
 
 - strategy expectancy
 - slippage/cost accuracy
+- live readiness
 - dashboard correctness
+- runtime integration correctness
 
 ## Human Approval
 
-Human review is required before later product surfaces consume reduced outcomes.
+Human review is required before any later PR wires reduced outcomes into runtime reports, dashboards, or strategy-governance decisions.
 
 ## Next Action
 
