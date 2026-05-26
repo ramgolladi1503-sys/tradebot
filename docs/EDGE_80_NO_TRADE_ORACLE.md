@@ -63,7 +63,7 @@ This is intentional. A no-trade oracle that allows trading when evidence is miss
 
 This PR does not:
 
-- place orders
+- submit orders
 - create order intent
 - call external execution APIs
 - reconnect feeds
