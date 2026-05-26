@@ -112,6 +112,16 @@ This PR does not prove live profitability, final executable quality, paper expec
 
 Those belong to later roadmap items.
 
+## Required Check Context Reconciliation
+
+The pull-request test context passed after the EDGE-80 evidence payload fix.
+
+A required push-context check showed an older torture replay failure for `test_torture_replay_feed_flap_partial_data` while the pull-request context later completed the full suite successfully.
+
+This note intentionally changes no runtime, product, oracle, strategy, dashboard, feed, broker, or test behavior. It exists only to create a fresh branch SHA so GitHub evaluates the required push-context check again before merge.
+
+If the fresh required push check repeats the same torture replay failure, the next action is a scoped torture replay stability fix with evidence, not an EDGE-80 oracle change.
+
 ## Human Approval
 
 Human review is required before any later PR uses this oracle to change execution behavior.
