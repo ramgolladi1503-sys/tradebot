@@ -5,6 +5,8 @@ candidate_id: edge_76_option_chain_confirmation_layer
 decision: review_ready
 reason: pure_option_chain_confirmation_tests_docs
 timestamp: 2026-05-26T06:20:00Z
+is_order_action: false
+broker_api_called: false
 source: edge76_option_chain_confirmation_review
 
 ## Agent Work Contract
