@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-80 — NoTradeOracle, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-81 — NoTrade Evidence in Review Queue/UI, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -23,12 +23,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-79 — Strategy Conflict and Consensus Engine
 - HOTFIX/EDGE-79A — Live Indicator Readiness Diagnostics
 - HOTFIX/EDGE-79B — Market Close Feed State Classifier
+- EDGE-80 — NoTradeOracle
 
 ## Remaining TODO
 
 ### Conflict, no-trade, and final executable quality
 
-- [ ] EDGE-81 — NoTrade Evidence in Review Queue/UI
 - [ ] EDGE-82 — Final Executable Trade Quality Gate
 
 ### Paper truth and expectancy
@@ -67,16 +67,16 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-80 first and merge it green.
-2. Do not start EDGE-81 until EDGE-80 is merged.
+1. Finish EDGE-81 first and merge it green.
+2. Do not start EDGE-82 until EDGE-81 is merged.
 3. Do not add dashboard/UI work beyond explicit NoTrade evidence surfacing until NoTrade and executable-quality evidence are stable.
 4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- No external execution-adapter calls unless a later PR explicitly scopes live-pilot behavior.
-- No execution lifecycle mutation behavior in this roadmap until readiness gates explicitly allow it.
+- No external execution-adapter integration unless a later PR explicitly scopes live-pilot behavior.
+- No execution lifecycle mutation in this roadmap until readiness gates explicitly allow it.
 - No fake scoring, cosmetic dashboard work, or PR-loop progress.
 - No weakening fallback, stale-feed, quote-truth, or executable-quality protections to make the UI look better.
 - Every PR must include focused tests, docs, and agent-review evidence.
