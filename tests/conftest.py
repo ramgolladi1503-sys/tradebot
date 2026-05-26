@@ -43,6 +43,7 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     try:
         from config import config as cfg
 
+        monkeypatch.setattr(cfg, "DRY_RUN", False, raising=False)
         monkeypatch.setattr(cfg, "DATA_ROOT", str(runtime_root), raising=False)
         monkeypatch.setattr(cfg, "LOGS_ROOT", str(runtime_root / "logs"), raising=False)
         monkeypatch.setattr(cfg, "LOCKS_ROOT", str(runtime_root / "locks"), raising=False)
