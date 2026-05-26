@@ -45,6 +45,42 @@ Controls:
 - Cycle latency stale is classified before tick-age staleness.
 - Empty payload fails as unknown, not healthy.
 
+## Grill Me Review
+
+Question: Can this PR claim the socket is disconnected when the socket is still connected but LTP is stale?
+
+Answer: No. Tests prove connected websocket plus stale LTP returns `LTP_STALE` outside the close window and `CLOSE_WINDOW_TICK_SLOWDOWN` inside the close window.
+
+Question: Can this PR hide market close behind stale-feed evidence?
+
+Answer: No. `MARKET_CLOSED` has highest priority and blocks before tick-age or cycle-latency states.
+
+Question: Does this PR perform recovery behavior?
+
+Answer: No. It only classifies supplied evidence and never reconnects, resubscribes, writes runtime state, ranks candidates, or changes strategy behavior.
+
+## Hermes Review
+
+The public contract is stable and explicit:
+
+- `classify_market_close_feed_state(...)`
+- `MarketCloseFeedStateDecision.to_payload()`
+- canonical state constants including websocket, LTP, option feed, cycle latency, close-window slowdown, market closed, healthy, and unknown states
+
+Payloads expose read-only, no-append, and non-action metadata so later consumers can use the classifier as evidence without mutating runtime state.
+
+## GSD Review
+
+The PR keeps the work narrow:
+
+- one core classifier module
+- one focused test file
+- one implementation doc
+- one agent-review evidence file
+- TODO update that makes 79B active and keeps EDGE-80 blocked until 79B merges
+
+No dashboard, runtime wiring, strategy changes, ranking, scoring, feed reconnect, or resubscribe behavior is included.
+
 ## QA / safety review
 
 Focused tests cover:
@@ -69,6 +105,10 @@ EDGE-80 should consume this as evidence, not replace existing feed health truth.
 This PR does not prove NoTradeOracle behavior, live readiness, live profitability, feed recovery, replay proof, or final executable quality.
 
 Those belong to later roadmap items.
+
+## Human Approval
+
+Human review is required before any later PR wires this classifier into live runtime, dashboard, NoTradeOracle, or review queue behavior.
 
 ## Acceptance proof
 
