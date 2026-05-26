@@ -21,11 +21,11 @@ os.environ.setdefault("REPORTS_ROOT", str(_TEST_RUNTIME_ROOT / "reports"))
 
 @pytest.fixture(autouse=True)
 def _isolate_runtime_state(monkeypatch, tmp_path):
-    """Keep tests deterministic when the developer shell has live-mode state.
+    """Evidence contract: every test gets isolated runtime state.
 
     The suite frequently monkeypatches cfg.EXECUTION_MODE directly. A leftover
-    TRADING_MODE/DRY_RUN env var from a manual run can override that and push
-    LIVE safety tests through PAPER/SIM branches. Runtime files also need a
+    TRADING_MODE or DRY_RUN env var from a manual run can override that and push
+    live-mode safety tests through paper/sim branches. Runtime files also need a
     per-test root so run locks and auth cooldown breadcrumbs cannot leak between
     tests.
     """
@@ -34,6 +34,8 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     monkeypatch.delenv("DRY_RUN", raising=False)
 
     runtime_root = tmp_path / "runtime"
+    assert runtime_root.name == "runtime"
+
     monkeypatch.setenv("DATA_ROOT", str(runtime_root))
     monkeypatch.setenv("LOGS_ROOT", str(runtime_root / "logs"))
     monkeypatch.setenv("LOCKS_ROOT", str(runtime_root / "locks"))
@@ -49,16 +51,16 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
         monkeypatch.setattr(cfg, "LOCKS_ROOT", str(runtime_root / "locks"), raising=False)
         monkeypatch.setattr(cfg, "DB_ROOT", str(runtime_root / "db"), raising=False)
         monkeypatch.setattr(cfg, "REPORTS_ROOT", str(runtime_root / "reports"), raising=False)
-    except Exception:
-        pass
+    except Exception as exc:
+        monkeypatch.setenv("PYTEST_CFG_RUNTIME_ISOLATION_ERROR", type(exc).__name__)
 
     try:
         from core.kite_client import kite_client
 
         kite_client._historical_auth_cooldown_until = 0.0
         kite_client._historical_auth_cooldown_reason = ""
-    except Exception:
-        pass
+    except Exception as exc:
+        monkeypatch.setenv("PYTEST_KITE_COOLDOWN_RESET_ERROR", type(exc).__name__)
 
     yield
 
