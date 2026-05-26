@@ -6,13 +6,16 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-69 — CandidateIntent Contract is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-70 — Candidate Pool and Validator, adapted to CandidateIntent, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+
+## Recently completed
+
+- EDGE-69 — CandidateIntent Contract
 
 ## Remaining TODO
 
 ### Candidate intent and pool foundation
 
-- [ ] EDGE-70 — Candidate Pool and Validator, adapted to CandidateIntent
 - [ ] EDGE-71 — Convert Existing Strategies to Candidate Generators
 
 ### Strategy rebuilds
@@ -68,10 +71,10 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-69 first and merge it green.
-2. Do not start EDGE-70 until EDGE-69 is merged.
-3. Do not convert strategies before the CandidateIntent shape is locked.
-4. Do not rebuild strategies before the CandidateIntent pool validator exists.
+1. Finish EDGE-70 first and merge it green.
+2. Do not start EDGE-71 until EDGE-70 is merged.
+3. Do not convert strategies before the CandidateIntent pool validator exists.
+4. Do not rebuild strategies before strategy conversion exists.
 5. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
 6. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
