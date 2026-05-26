@@ -34,6 +34,8 @@ Each decision exposes:
 - `atr_present`
 - `decision_gate_reason`
 
+`indicator_missing_inputs` preserves the contract order `vwap`, `rsi`, `ema`, `atr` so downstream no-trade evidence reads like the indicator readiness model.
+
 ## Behavior
 
 A symbol is ready only when:
