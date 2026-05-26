@@ -5,10 +5,6 @@ candidate_id: edge_76_option_chain_confirmation_layer
 decision: review_ready
 reason: pure_option_chain_confirmation_tests_docs
 timestamp: 2026-05-26T06:20:00Z
-is_order_action: false
-broker_api_called: false
-live_order_action: false
-broker_order_action: false
 source: edge76_option_chain_confirmation_review
 
 ## Non-Action Proof
@@ -32,7 +28,7 @@ Out of scope: runtime wiring, ranking, scoring, dashboard work, capital allocati
 
 The high-risk path is silently treating stale, patched, wide-spread, or illiquid option-chain data as usable evidence.
 
-Controls: the layer fails closed with explicit blockers for empty snapshots, stale snapshots, patched data markers, missing quote fields, invalid numerics, wide spreads, low volume, low open interest, pool-ineligible candidates, and non-option-specific directions.
+Controls: the layer fails closed with explicit blockers for empty snapshots, stale snapshots, patched data markers, absent quote fields, invalid numerics, wide spreads, low volume, low open interest, pool-ineligible candidates, and non-option-specific directions.
 
 ## Grill Me Review
 
