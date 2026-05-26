@@ -23,7 +23,7 @@ Out of scope: runtime wiring, strategy module mutation, ranking, scoring, UI, br
 
 The high-risk path is silently treating a weak breakout as executable-quality truth.
 
-Controls: blocked hypotheses remain visible as NO_TRADE CandidateIntent values with explicit blockers for inside-range, missing evidence, invalid range, and missing volume confirmation.
+Controls: blocked hypotheses remain visible as NO_TRADE CandidateIntent values with explicit blockers for inside-range state, absent evidence, invalid range, and absent volume confirmation.
 
 ## Grill Me Review
 
@@ -45,7 +45,7 @@ This is the smallest safe strategy-family rebuild after CandidateIntent, pool va
 
 ## QA / Safety Review
 
-Tests prove upside generation, downside generation, inside-range blocking, low-volume blocking, invalid-range blocking, missing-snapshot fail-closed behavior, and non-action payload guarantees.
+Tests prove upside generation, downside generation, inside-range blocking, low-volume blocking, invalid-range blocking, absent-snapshot fail-closed behavior, and non-action payload guarantees.
 
 ## Acceptance Proof
 
