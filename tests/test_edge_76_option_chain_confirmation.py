@@ -1,4 +1,7 @@
-"""Safety regressions for EDGE-76 option-chain confirmation."""
+"""Safety regressions for EDGE-76 option-chain confirmation.
+
+Configured safety marker: stale_feed.
+"""
 
 from __future__ import annotations
 
