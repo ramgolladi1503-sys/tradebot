@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -20,6 +21,7 @@ BREAKOUT_INVALID_RANGE = "breakout_invalid_range"
 BREAKOUT_NO_RANGE_BREAK = "breakout_no_range_break"
 BREAKOUT_VOLUME_NOT_CONFIRMED = "breakout_volume_not_confirmed"
 BREAKOUT_INVALID_NUMERIC_INPUT = "breakout_invalid_numeric_input"
+BREAKOUT_INVALID_PARAMETER = "breakout_invalid_parameter"
 
 _ORDER_ACTION_KEY = "is_" + "order_action"
 _BROKER_KEY = "broker_" + "api_called"
@@ -109,6 +111,10 @@ def build_breakout_candidate_intents(
     if not isinstance(market_state, Mapping):
         blockers.append(BREAKOUT_MISSING_MARKET_STATE)
 
+    min_volume_z_value = _threshold(min_volume_z, allow_zero=True)
+    if min_volume_z_value is _INVALID_FLOAT:
+        blockers.append(BREAKOUT_INVALID_PARAMETER)
+
     resolved_instrument = str(instrument or _first_text(payload, _INSTRUMENT_KEYS) or "").strip()
     if not resolved_instrument:
         resolved_instrument = "UNKNOWN"
@@ -144,7 +150,7 @@ def build_breakout_candidate_intents(
         else:
             blockers.append(BREAKOUT_NO_RANGE_BREAK)
         if direction != "NO_TRADE":
-            if float(volume_z) < float(min_volume_z):
+            if float(volume_z) < float(min_volume_z_value):
                 blockers.append(BREAKOUT_VOLUME_NOT_CONFIRMED)
                 warnings.append("breakout_hypothesis_blocked_by_volume")
             else:
@@ -168,7 +174,7 @@ def build_breakout_candidate_intents(
             "input_keys": sorted(str(key) for key in payload.keys()),
             "range_position": _range_position(ltp, range_high, range_low),
             "volume_z": _safe_number(volume_z),
-            "min_volume_z": float(min_volume_z),
+            "min_volume_z": _safe_number(min_volume_z_value),
             "does_not_rank_candidates": True,
             "does_not_score_edge": True,
         },
@@ -190,6 +196,25 @@ def build_breakout_candidate_intents(
 _INVALID_FLOAT = object()
 
 
+def _threshold(value: Any, *, allow_zero: bool) -> float | object:
+    parsed = _to_finite_float(value)
+    if parsed is _INVALID_FLOAT:
+        return _INVALID_FLOAT
+    if parsed < 0 or (parsed == 0 and not allow_zero):
+        return _INVALID_FLOAT
+    return parsed
+
+
+def _to_finite_float(value: Any) -> float | object:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return _INVALID_FLOAT
+    if not math.isfinite(parsed):
+        return _INVALID_FLOAT
+    return parsed
+
+
 def _first_text(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str:
     for key in keys:
         value = payload.get(key)
@@ -205,10 +230,7 @@ def _first_float(payload: Mapping[str, Any], keys: tuple[str, ...], default: flo
         value = payload.get(key)
         if value is None or str(value).strip() == "":
             return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return _INVALID_FLOAT
+        return _to_finite_float(value)
     return default
 
 
@@ -250,6 +272,7 @@ __all__ = [
     "BREAKOUT_CANDIDATE_GENERATOR_SCHEMA_VERSION",
     "BREAKOUT_CANDIDATE_GENERATOR_SOURCE",
     "BREAKOUT_INVALID_NUMERIC_INPUT",
+    "BREAKOUT_INVALID_PARAMETER",
     "BREAKOUT_INVALID_RANGE",
     "BREAKOUT_MISSING_INSTRUMENT",
     "BREAKOUT_MISSING_LTP",
