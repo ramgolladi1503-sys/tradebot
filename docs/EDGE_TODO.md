@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-83 — Paper Truth Journal, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-84 — Outcome Reducer, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -26,12 +26,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-80 — NoTradeOracle
 - EDGE-81 — NoTrade Evidence in Review Queue/UI
 - EDGE-82 — Final Executable Trade Quality Gate
+- EDGE-83 — Paper Truth Journal
 
 ## Remaining TODO
 
 ### Paper truth and expectancy
 
-- [ ] EDGE-84 — Outcome Reducer
 - [ ] EDGE-85 — Strategy Expectancy by Regime
 - [ ] EDGE-86 — Slippage and Cost Truth
 - [ ] EDGE-87 — Strategy Family Kill/Keep Report
@@ -64,9 +64,9 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-83 first and merge it green.
-2. Do not start EDGE-84 until EDGE-83 is merged.
-3. Do not treat the paper journal as outcome truth until EDGE-84 derives state from it.
+1. Finish EDGE-84 first and merge it green.
+2. Do not start EDGE-85 until EDGE-84 is merged.
+3. Do not treat reduced paper outcomes as expectancy until EDGE-85 derives regime-level statistics.
 4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
 ## Scope guard
