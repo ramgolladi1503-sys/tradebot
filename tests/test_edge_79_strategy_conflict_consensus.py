@@ -92,7 +92,7 @@ def test_allows_separate_instruments_without_cross_instrument_conflict():
     )
 
     assert report.consensus_ready is True
-    assert len(report.ready_decisions) == 2
+    assert report.to_payload()["ready_count"] == 2
     assert {decision.instrument for decision in report.ready_decisions} == {"NIFTY", "BANKNIFTY"}
 
 
