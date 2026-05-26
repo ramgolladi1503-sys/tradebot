@@ -2,9 +2,9 @@
 
 The reducer consumes the EDGE-83 paper-truth journal and derives paper state
 from validated journal events. The journal remains the source of truth. This
-module does not append journal events, call brokers, place live trades, rank
-candidates, score opportunities, compute expectancy, or change dashboard/runtime
-behavior.
+module does not append journal events, interact with adapters or runtime
+side-effect paths, rank candidates, score opportunities, compute expectancy, or
+change dashboard/runtime behavior.
 """
 
 from __future__ import annotations
@@ -239,7 +239,7 @@ def reduce_paper_outcomes(events: Iterable[Mapping[str, Any]]) -> PaperOutcomeRe
             "reducer": PAPER_OUTCOME_REDUCER_SOURCE,
             "journal_remains_source_of_truth": True,
             "does_not_append_journal": True,
-            "does_not_call_external_execution": True,
+            "adapter_interaction": False,
             "does_not_compute_expectancy": True,
         },
     )
