@@ -1,8 +1,7 @@
 """Safety regression tests for breakout CandidateIntent generation.
 
-The suite proves blocked breakout hypotheses cannot become pool-ready and
-that serialized evidence remains non-action: is_order_action, broker_api_called,
-and live_order_action are explicitly false.
+The suite proves blocked breakout hypotheses cannot become pool-ready while
+keeping serialized payload evidence read-only and non-action.
 """
 
 from __future__ import annotations
