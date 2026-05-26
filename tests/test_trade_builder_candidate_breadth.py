@@ -128,8 +128,10 @@ def test_candidate_pool_increases_for_broader_ladder_and_next_expiry(monkeypatch
 
     assert baseline_trade is not None
     assert broadened_trade is not None
-    assert len(baseline_builder._last_ranked_candidates) == 1
-    assert len(broadened_builder._last_ranked_candidates) > len(baseline_builder._last_ranked_candidates)
+    baseline_count = len(baseline_builder._last_ranked_candidates)
+    broadened_count = len(broadened_builder._last_ranked_candidates)
+    assert baseline_count == 1
+    assert broadened_count > baseline_count
     origin = (broadened_builder._last_ranked_candidates[0].source_flags or {}).get("candidate_origin") or {}
     assert set(origin) >= {"strike_offset", "setup_family", "expiry_bucket"}
     assert origin["setup_family"] == "continuation"
@@ -148,7 +150,8 @@ def test_duplicate_candidate_rows_are_suppressed(monkeypatch):
     )
 
     assert trade is not None
-    assert len(builder._last_ranked_candidates) == 1
+    ranked_count = len(builder._last_ranked_candidates)
+    assert ranked_count == 1
     assert int(builder._last_scan_summary.get("total_candidates") or 0) == 1
 
 
