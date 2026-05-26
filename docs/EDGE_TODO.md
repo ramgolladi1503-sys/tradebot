@@ -6,18 +6,18 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-71 — Convert Existing Strategies to Candidate Generators, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-72 — Breakout Strategy Rebuild, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
 - EDGE-69 — CandidateIntent Contract
 - EDGE-70 — Candidate Pool and Validator, adapted to CandidateIntent
+- EDGE-71 — Convert Existing Strategies to Candidate Generators
 
 ## Remaining TODO
 
 ### Strategy rebuilds
 
-- [ ] EDGE-72 — Breakout Strategy Rebuild
 - [ ] EDGE-73 — VWAP Strategy Rebuild
 - [ ] EDGE-74 — Mean Reversion Strategy Rebuild
 - [ ] EDGE-75 — Zero Hero Expiry Strategy Rebuild
@@ -68,11 +68,10 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-71 first and merge it green.
-2. Do not start EDGE-72 until EDGE-71 is merged.
-3. Do not rebuild strategies before strategy conversion exists.
-4. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
-5. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
+1. Finish EDGE-72 first and merge it green.
+2. Do not start EDGE-73 until EDGE-72 is merged.
+3. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
+4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
 ## Scope guard
 
