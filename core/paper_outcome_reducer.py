@@ -239,7 +239,7 @@ def reduce_paper_outcomes(events: Iterable[Mapping[str, Any]]) -> PaperOutcomeRe
             "reducer": PAPER_OUTCOME_REDUCER_SOURCE,
             "journal_remains_source_of_truth": True,
             "does_not_append_journal": True,
-            "adapter_interaction": False,
+            "does_not_call_external_execution": True,
             "does_not_compute_expectancy": True,
         },
     )
