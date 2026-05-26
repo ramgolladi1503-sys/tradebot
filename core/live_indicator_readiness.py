@@ -242,7 +242,7 @@ def _decision_for_snapshot(
         "atr": _present(snapshot.get("atr")),
     }
     missing_inputs = _missing_inputs(snapshot)
-    indicator_missing_inputs = tuple(name for name in _REQUIRED_INDICATORS if not present[name])
+    indicator_missing_inputs = tuple(sorted(name for name in _REQUIRED_INDICATORS if not present[name]))
 
     blockers: list[str] = []
     if not symbol:
