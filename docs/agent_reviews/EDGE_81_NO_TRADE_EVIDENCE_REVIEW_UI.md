@@ -35,6 +35,16 @@ Out of scope:
 - Candidate ranking changes.
 - Strategy scoring changes.
 
+## Scope Guard
+
+- Presentation-only adapter.
+- No dashboard action controls.
+- No runtime wiring.
+- No broker or external execution imports.
+- No oracle contract modification.
+- No scoring, ranking, or strategy behavior change.
+- Output remains read-only, no-append, and non-action.
+
 ## Grill Me Review
 
 Question: Can this PR create an executable trade path?
@@ -87,6 +97,28 @@ Tests cover:
 - existing review table rendering
 - malformed payload handling
 
+## Runtime Proof Required After Merge
+
+After merge, EDGE-81 only proves that a read-only row model exists for NoTradeOracle evidence.
+
+Any future runtime integration must be handled by a separate scoped PR with explicit tests and human review. UI visibility must not be treated as executable-quality proof.
+
+## Acceptance Proof
+
+Command:
+
+`PYTHONPATH=. python -m pytest tests/test_edge_81_no_trade_evidence_review_ui.py`
+
+Expected result:
+
+- no-trade primary reason is surfaced
+- evidence sources are preserved
+- table payload remains read-only and no-append
+- non-action metadata remains false
+- JSON payloads are accepted without runtime coupling
+- rows render through the existing review table model
+- malformed payloads are ignored safely
+
 ## What This PR Does Not Prove
 
 This PR does not prove:
@@ -97,6 +129,10 @@ This PR does not prove:
 - strategy profitability
 - feed recovery correctness
 - user/operator UX completeness
+
+## Human Approval
+
+Human review is required before any later PR uses this evidence surface to influence runtime behavior, approvals, or execution eligibility.
 
 ## Next Action
 
