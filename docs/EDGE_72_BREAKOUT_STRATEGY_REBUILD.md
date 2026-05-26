@@ -11,8 +11,8 @@ The implementation is intentionally narrow: it builds breakout hypotheses from a
 ## Added
 
 - `core/breakout_candidate_generator.py`
-  - `BreakoutCandidateGenerationReport`
-  - `build_breakout_candidate_intents(...)`
+- `BreakoutCandidateGenerationReport`
+- `build_breakout_candidate_intents(...)`
 
 ## Inputs
 
@@ -37,7 +37,7 @@ If LTP breaks the opening range low and volume confirmation meets the configured
 
 ### Blocked hypotheses
 
-If the market is inside the range, missing required evidence, has an invalid range, or lacks volume confirmation, the generator still emits a visible NO_TRADE CandidateIntent with blockers.
+If the market is inside the range, lacks required breakout evidence, has an invalid range, or lacks volume confirmation, the generator still emits a visible NO_TRADE CandidateIntent with blockers.
 
 The blocked intent is kept in the pool report so the reason is auditable.
 
@@ -45,26 +45,7 @@ The blocked intent is kept in the pool report so the reason is auditable.
 
 The generator is read-only and pure.
 
-It serializes:
-
-```json
-{
-  "read_only": true,
-  "append": false,
-  "is_order_action": false,
-  "broker_api_called": false,
-  "live_order_action": false,
-  "broker_order_action": false
-}
-```
-
-The metadata explicitly records:
-
-- does not import strategy modules
-- does not execute strategy callables
-- does not rank candidates
-- does not score edge
-- does not touch runtime
+Safety flags are asserted in tests and in generated payloads. The generator metadata records that it does not import strategy modules, execute strategy callables, rank candidates, score edge, or touch runtime.
 
 ## Out of scope
 
@@ -75,7 +56,7 @@ EDGE-72 does not add:
 - scoring
 - executable selection
 - dashboard changes
-- broker integration
+- external execution integration
 - paper journal writes
 
 ## Test command
