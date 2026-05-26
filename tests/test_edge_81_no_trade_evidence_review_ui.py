@@ -48,9 +48,8 @@ def _sample_oracle_report() -> NoTradeOracleReport:
 def test_no_trade_review_rows_surface_primary_reason_without_actions():
     rows = build_no_trade_review_rows(_sample_oracle_report(), candidate_id="cand-1")
 
-    assert len(rows) == 1
+    assert [row["candidate_id"] for row in rows] == ["cand-1"]
     row = rows[0]
-    assert row["candidate_id"] == "cand-1"
     assert row["status"] == "NO_TRADE"
     assert row["candidate_class"] == "NO_TRADE_EVIDENCE"
     assert row["no_trade_required"] is True
@@ -71,6 +70,7 @@ def test_no_trade_review_table_payload_is_read_only_and_non_action():
     assert payload["read_only"] is True
     assert payload["append"] is False
     assert payload["row_count"] == 1
+    assert [row["no_trade_primary_reason"] for row in payload["rows"]] == [FEED_HEALTH_BLOCKED_REASON]
     assert payload[_ACTION_KEY] is False
     assert payload[_BROKER_KEY] is False
     assert payload["live_order_action"] is False
@@ -82,8 +82,7 @@ def test_no_trade_review_rows_accept_json_payload_without_oracle_import_requirem
 
     rows = build_no_trade_review_rows(report)
 
-    assert len(rows) == 1
-    assert rows[0]["no_trade_primary_reason"] == FEED_HEALTH_BLOCKED_REASON
+    assert [row["no_trade_primary_reason"] for row in rows] == [FEED_HEALTH_BLOCKED_REASON]
     assert rows[0]["source"] == NO_TRADE_REVIEW_SOURCE
 
 
@@ -93,7 +92,7 @@ def test_no_trade_review_rows_can_render_in_existing_review_table_model():
 
     display = select_display_df(df, "review")
 
-    assert len(display) == 1
+    assert display.shape[0] == 1
     assert display.iloc[0]["status"] == "NO_TRADE"
     assert display.iloc[0]["trade_key"]
 
@@ -101,6 +100,5 @@ def test_no_trade_review_rows_can_render_in_existing_review_table_model():
 def test_no_trade_review_rows_ignore_unparseable_payloads():
     rows = build_no_trade_review_rows([None, "not-json", {"status": "NO_TRADE_REQUIRED"}])
 
-    assert len(rows) == 1
-    assert rows[0]["status"] == "NO_TRADE"
+    assert [row["status"] for row in rows] == ["NO_TRADE"]
     assert rows[0]["no_trade_primary_reason"] == "no_no_trade_blockers"
