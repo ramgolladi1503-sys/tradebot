@@ -11,6 +11,13 @@ live_order_action: false
 broker_order_action: false
 source: edge76_option_chain_confirmation_review
 
+## Non-Action Proof
+
+- is_order_action=false
+- broker_api_called=false
+- live_order_action=false
+- broker_order_action=false
+
 ## Agent Work Contract
 
 Add a pure option-chain confirmation layer that validates eligible CandidateIntent values against option-chain quote, freshness, and liquidity evidence.
