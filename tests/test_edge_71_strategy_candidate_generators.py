@@ -34,8 +34,8 @@ def test_strategy_output_adapter_generates_candidate_intent_and_pool_entry():
 
     assert report.valid is True
     assert report.pool_ready is True
-    assert len(report.generated_intents) == 1
     intent = report.generated_intents[0]
+    assert report.generated_intents[1:] == ()
     assert intent.strategy_id == "breakout_v1"
     assert intent.instrument == "NIFTY"
     assert intent.direction == "BUY_CALL"
@@ -92,7 +92,11 @@ def test_strategy_output_adapter_rejects_missing_source_fields_without_creating_
     assert report.valid is False
     assert report.pool_ready is False
     assert report.generated_intents == ()
-    assert len(report.rejected_source_payloads) == 3
+    missing_strategy, missing_instrument, missing_direction = report.rejected_source_payloads
+    assert report.rejected_source_payloads[3:] == ()
+    assert missing_strategy["blockers"] == [STRATEGY_CANDIDATE_GENERATOR_MISSING_STRATEGY_ID]
+    assert missing_instrument["blockers"] == [STRATEGY_CANDIDATE_GENERATOR_MISSING_INSTRUMENT]
+    assert missing_direction["blockers"] == [STRATEGY_CANDIDATE_GENERATOR_MISSING_DIRECTION]
     assert STRATEGY_CANDIDATE_GENERATOR_MISSING_STRATEGY_ID in report.warnings
     assert STRATEGY_CANDIDATE_GENERATOR_MISSING_INSTRUMENT in report.warnings
     assert STRATEGY_CANDIDATE_GENERATOR_MISSING_DIRECTION in report.warnings
