@@ -48,6 +48,7 @@ def build_no_trade_review_rows(
 
         row = {
             "candidate_id": row_candidate_id,
+            "trade_key": row_candidate_id,
             "status": "NO_TRADE" if no_trade_required else "REVIEW",
             "candidate_class": "NO_TRADE_EVIDENCE",
             "no_trade_required": no_trade_required,
