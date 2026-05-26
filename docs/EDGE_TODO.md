@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- HOTFIX/EDGE-79A — Live Indicator Readiness Diagnostics, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- HOTFIX/EDGE-79B — Market Close Feed State Classifier, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -21,12 +21,9 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-77 — Strategy-Specific Exit Models
 - EDGE-78 — Strategy Parameter Robustness Tests
 - EDGE-79 — Strategy Conflict and Consensus Engine
+- HOTFIX/EDGE-79A — Live Indicator Readiness Diagnostics
 
 ## Remaining TODO
-
-### Pre-NoTrade hotfix diagnostics
-
-- [ ] HOTFIX/EDGE-79B — Market Close Feed State Classifier
 
 ### Conflict, no-trade, and final executable quality
 
@@ -70,11 +67,10 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish HOTFIX/EDGE-79A first and merge it green.
-2. Do not start HOTFIX/EDGE-79B until HOTFIX/EDGE-79A is merged.
-3. Do not start EDGE-80 until HOTFIX/EDGE-79A and HOTFIX/EDGE-79B are merged.
-4. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
-5. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
+1. Finish HOTFIX/EDGE-79B first and merge it green.
+2. Do not start EDGE-80 until HOTFIX/EDGE-79B is merged.
+3. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
+4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
 ## Scope guard
 
