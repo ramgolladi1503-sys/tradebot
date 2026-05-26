@@ -351,9 +351,10 @@ def _matching_truth(
 
 
 def _identity_matches(selected_identity: Mapping[str, Any], payload: Mapping[str, Any]) -> bool:
-    candidate_id = str(selected_identity.get("candidate_id") or "").strip()
-    if candidate_id and candidate_id == str(payload.get("candidate_id") or payload.get("trade_key") or "").strip():
-        return True
+    selected_candidate_id = str(selected_identity.get("candidate_id") or "").strip()
+    payload_candidate_id = str(payload.get("candidate_id") or payload.get("trade_key") or "").strip()
+    if selected_candidate_id and payload_candidate_id:
+        return selected_candidate_id == payload_candidate_id
     strategy = str(selected_identity.get("strategy_id") or "").strip()
     symbol = str(selected_identity.get("symbol") or "").strip()
     direction = str(selected_identity.get("direction") or "").strip()
