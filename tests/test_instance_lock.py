@@ -1,11 +1,33 @@
-import json
 import os
+import select
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 from core.instance_lock import InstanceLock
+
+
+def _read_child_ready_line(proc: subprocess.Popen[str], *, timeout_sec: float) -> str:
+    if proc.stdout is None:
+        return ""
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            return proc.stdout.read().strip()
+        ready, _, _ = select.select([proc.stdout], [], [], 0.05)
+        if ready:
+            return proc.stdout.readline().strip()
+    return ""
+
+
+def _terminate_child(proc: subprocess.Popen[str]) -> tuple[str, str]:
+    proc.terminate()
+    try:
+        return proc.communicate(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return proc.communicate(timeout=2.0)
 
 
 def test_instance_lock_blocks_second_instance(tmp_path):
@@ -29,27 +51,17 @@ def test_instance_lock_blocks_second_instance(tmp_path):
         env=env,
     )
     try:
-        deadline = time.time() + 3.0
-        while time.time() < deadline:
-            if lock_path.exists():
-                try:
-                    payload = json.loads(lock_path.read_text(encoding="utf-8"))
-                    if int(payload.get("pid", 0)) == proc.pid:
-                        break
-                except Exception:
-                    pass
-            time.sleep(0.05)
-        else:
-            out, err = proc.communicate(timeout=1.0)
-            raise AssertionError(f"holder lock not ready stdout={out} stderr={err}")
+        ready_line = _read_child_ready_line(proc, timeout_sec=5.0)
+        if ready_line != "ACQUIRED":
+            out, err = _terminate_child(proc)
+            raise AssertionError(
+                f"holder lock not ready ready_line={ready_line!r} stdout={out!r} stderr={err!r}"
+            )
 
         lock = InstanceLock(lock_path=lock_path)
         acquired, holder = lock.acquire()
         assert acquired is False
         assert int(holder.get("pid", 0)) == proc.pid
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2.0)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        if proc.poll() is None:
+            _terminate_child(proc)
