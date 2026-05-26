@@ -1,7 +1,7 @@
 """Canonical read-only NoTradeOracle for EDGE-80.
 
 The oracle explains why the bot should not trade from existing evidence.
-It does not place orders, create order intent, call external execution APIs,
+It does not submit orders, create order intent, call external execution APIs,
 append runtime files, reconnect feeds, resubscribe tokens, rank candidates,
 score edge, or change dashboard behavior.
 """
@@ -13,12 +13,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
+from core.candidate_ranking import CandidateRankingReport
 from core.feed_health_truth import FeedHealthTruthDecision, classify_feed_health_truth
 from core.feed_hold_gate import FeedHoldDecision, classify_feed_hold
 from core.live_indicator_readiness import LiveIndicatorReadinessReport
 from core.market_close_feed_state import FEED_STATE_HEALTHY, MarketCloseFeedStateDecision
 from core.opportunity_scoring import OpportunityScoreReport
-from core.candidate_ranking import CandidateRankingReport
 
 NO_TRADE_ORACLE_SCHEMA_VERSION = 1
 NO_TRADE_ORACLE_SOURCE = "no_trade_oracle_v1"
@@ -317,10 +317,12 @@ def build_no_trade_oracle_report(
                     {
                         "blocked_count": len(blocked),
                         "allowed_count": len(allowed),
-                        "blocked_reasons": _dedupe(
-                            str(reason)
-                            for payload in blocked
-                            for reason in _list(payload.get("reasons", (payload.get("reason_code"),)))
+                        "blocked_reasons": list(
+                            _dedupe(
+                                str(reason)
+                                for payload in blocked
+                                for reason in _list(payload.get("reasons", (payload.get("reason_code"),)))
+                            )
                         ),
                     },
                 )
@@ -368,7 +370,7 @@ def build_no_trade_oracle_report(
             "oracle": NO_TRADE_ORACLE_SOURCE,
             "scope": "read_only_explanation_only_no_runtime_wiring",
             "fail_closed_on_missing_evidence": True,
-            "does_not_place_orders": True,
+            "does_not_submit_orders": True,
             "does_not_call_external_execution": True,
             "does_not_append_runtime_files": True,
             "does_not_rank_candidates": True,
