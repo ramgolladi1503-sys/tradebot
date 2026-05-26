@@ -252,15 +252,15 @@ class _OutcomeBuilder:
             self._apply_exit(event)
         elif event_type == PAPER_EVENT_REJECTED:
             self.rejected = True
-            self.blockers.append(REJECTED_CANDIDATE_REASON)
+            self._add_blocker(REJECTED_CANDIDATE_REASON)
         elif event_type == PAPER_EVENT_NOTE_RECORDED:
             self.noted = True
         else:
-            self.blockers.append(UNHANDLED_EVENT_REASON)
+            self._add_blocker(UNHANDLED_EVENT_REASON)
 
     def _apply_entry(self, event: Mapping[str, Any]) -> None:
         if self.entry_price is not None:
-            self.blockers.append(DUPLICATE_ENTRY_REASON)
+            self._add_blocker(DUPLICATE_ENTRY_REASON)
             return
         self.entry_side = _text(event.get("side")).upper()
         self.quantity = _float(event.get("quantity"))
@@ -268,15 +268,15 @@ class _OutcomeBuilder:
 
     def _apply_exit(self, event: Mapping[str, Any]) -> None:
         if self.entry_price is None:
-            self.blockers.append(EXIT_WITHOUT_ENTRY_REASON)
+            self._add_blocker(EXIT_WITHOUT_ENTRY_REASON)
         self.exit_side = _text(event.get("side")).upper()
         if self.quantity == 0.0:
             self.quantity = _float(event.get("quantity"))
         self.exit_price = _optional_float(event.get("price"))
 
     def to_outcome(self) -> PaperCandidateOutcome:
+        status = self._status()
         blockers = _dedupe(self.blockers)
-        status = self._status(blockers)
         gross_pnl = self._gross_pnl(status)
         return PaperCandidateOutcome(
             candidate_id=self.candidate_id,
@@ -296,18 +296,19 @@ class _OutcomeBuilder:
             metadata=dict(self.metadata),
         )
 
-    def _status(self, blockers: tuple[str, ...]) -> str:
-        if blockers and any(reason in blockers for reason in (EXIT_WITHOUT_ENTRY_REASON, DUPLICATE_ENTRY_REASON, UNHANDLED_EVENT_REASON)):
+    def _status(self) -> str:
+        blockers = _dedupe(self.blockers)
+        if any(reason in blockers for reason in (EXIT_WITHOUT_ENTRY_REASON, DUPLICATE_ENTRY_REASON, UNHANDLED_EVENT_REASON)):
             return OUTCOME_INVALID
         if self.rejected:
             return OUTCOME_REJECTED
         if self.entry_price is not None and self.exit_price is not None:
             return OUTCOME_CLOSED
         if self.entry_price is not None:
-            self.blockers.append(OPEN_POSITION_REASON)
+            self._add_blocker(OPEN_POSITION_REASON)
             return OUTCOME_OPEN
         if self.noted and not self.accepted:
-            self.blockers.append(NOTE_ONLY_REASON)
+            self._add_blocker(NOTE_ONLY_REASON)
             return OUTCOME_NOTE_ONLY
         return OUTCOME_ACCEPTED
 
@@ -317,6 +318,10 @@ class _OutcomeBuilder:
         if self.entry_side == "SELL":
             return round((self.entry_price - self.exit_price) * self.quantity, 10)
         return round((self.exit_price - self.entry_price) * self.quantity, 10)
+
+    def _add_blocker(self, reason: str) -> None:
+        if reason not in self.blockers:
+            self.blockers.append(reason)
 
 
 def _blocked_report(validation: PaperTruthJournalValidation) -> PaperOutcomeReductionReport:
