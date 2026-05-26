@@ -77,21 +77,7 @@ Invalid inputs include:
 
 ## Scope guard
 
-This PR does not:
-
-- modify the journal
-- append paper events
-- call external execution APIs
-- submit live orders
-- create live order intent
-- mutate broker state
-- score opportunities
-- rank candidates
-- compute strategy expectancy
-- promote or suspend strategies
-- compute slippage/cost truth
-- change dashboard behavior
-- wire into runtime loops
+This PR is a read-only reducer contract. It reads validated paper evidence and returns derived paper outcomes. It does not update the journal, change candidate scoring, change ranking, change dashboards, or make strategy lifecycle decisions.
 
 ## Test command
 
