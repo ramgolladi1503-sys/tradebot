@@ -72,8 +72,24 @@ class PaperCandidateOutcome:
     blockers: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
+
+    @property
+    def live_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_order_action(self) -> bool:
+        return False
+
     def to_payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "candidate_id": self.candidate_id,
             "strategy_id": self.strategy_id,
             "symbol": self.symbol,
@@ -89,7 +105,11 @@ class PaperCandidateOutcome:
             "event_count": self.event_count,
             "blockers": list(self.blockers),
             "metadata": dict(self.metadata),
+            "read_only": True,
+            "append": False,
         }
+        _mark_non_action(payload)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -417,6 +437,7 @@ __all__ = [
     "PAPER_REDUCER_STATUS_BLOCKED",
     "PAPER_REDUCER_STATUS_REDUCED",
     "REJECTED_CANDIDATE_REASON",
+    "UNHANDLED_EVENT_REASON",
     "PaperCandidateOutcome",
     "PaperOutcomeReductionReport",
     "reduce_paper_outcomes",
