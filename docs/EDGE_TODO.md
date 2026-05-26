@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-78 — Strategy Parameter Robustness Tests, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-79 — Strategy Conflict and Consensus Engine, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -19,12 +19,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-75 — Zero Hero Expiry Strategy Rebuild
 - EDGE-76 — Option Chain Confirmation Layer
 - EDGE-77 — Strategy-Specific Exit Models
+- EDGE-78 — Strategy Parameter Robustness Tests
 
 ## Remaining TODO
 
 ### Conflict, no-trade, and final executable quality
 
-- [ ] EDGE-79 — Strategy Conflict and Consensus Engine
 - [ ] EDGE-80 — NoTradeOracle
 - [ ] EDGE-81 — NoTrade Evidence in Review Queue/UI
 - [ ] EDGE-82 — Final Executable Trade Quality Gate
@@ -65,8 +65,8 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-78 first and merge it green.
-2. Do not start EDGE-79 until EDGE-78 is merged.
+1. Finish EDGE-79 first and merge it green.
+2. Do not start EDGE-80 until EDGE-79 is merged.
 3. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
 4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
