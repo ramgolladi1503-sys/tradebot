@@ -4,6 +4,9 @@ from config import config as cfg
 import strategies.trade_builder as trade_builder_module
 from strategies.trade_builder import TradeBuilder
 
+SAME_EXPIRY = "2099-03-26"
+NEXT_EXPIRY = "2099-04-02"
+
 
 class _PredictorStub:
     model_version = "stub"
@@ -109,7 +112,7 @@ def _market_data(chain: list[dict]) -> dict:
 def test_candidate_pool_increases_for_broader_ladder_and_next_expiry(monkeypatch):
     chain = []
     token = 1000
-    for expiry in ("2026-03-26", "2026-04-02"):
+    for expiry in (SAME_EXPIRY, NEXT_EXPIRY):
         for strike in (24900, 24950, 25000, 25050, 25100):
             chain.append(_option_row(strike=strike, expiry=expiry, token=token))
             token += 1
@@ -136,7 +139,7 @@ def test_duplicate_candidate_rows_are_suppressed(monkeypatch):
     builder = _prepared_builder(monkeypatch)
     monkeypatch.setattr(cfg, "TRADE_BUILDER_STRIKE_LADDER_WIDTH", 0, raising=False)
     monkeypatch.setattr(cfg, "TRADE_BUILDER_EXPIRY_BUCKET_MODE", "SAME", raising=False)
-    row = _option_row(strike=25000, expiry="2026-03-26", token=123456)
+    row = _option_row(strike=25000, expiry=SAME_EXPIRY, token=123456)
     trade = builder.build(
         _market_data([dict(row), dict(row)]),
         quick_mode=False,
@@ -154,11 +157,11 @@ def test_strike_ladder_generation_is_deterministic(monkeypatch):
     monkeypatch.setattr(cfg, "TRADE_BUILDER_STRIKE_LADDER_WIDTH", 2, raising=False)
     monkeypatch.setattr(cfg, "TRADE_BUILDER_EXPIRY_BUCKET_MODE", "SAME", raising=False)
     chain = [
-        _option_row(strike=25050, expiry="2026-03-26", token=1),
-        _option_row(strike=24900, expiry="2026-03-26", token=2),
-        _option_row(strike=25100, expiry="2026-03-26", token=3),
-        _option_row(strike=25000, expiry="2026-03-26", token=4),
-        _option_row(strike=24950, expiry="2026-03-26", token=5),
+        _option_row(strike=25050, expiry=SAME_EXPIRY, token=1),
+        _option_row(strike=24900, expiry=SAME_EXPIRY, token=2),
+        _option_row(strike=25100, expiry=SAME_EXPIRY, token=3),
+        _option_row(strike=25000, expiry=SAME_EXPIRY, token=4),
+        _option_row(strike=24950, expiry=SAME_EXPIRY, token=5),
     ]
 
     rows = builder._annotate_candidate_chain_rows("NIFTY", _market_data(chain), 25000.0)
@@ -185,7 +188,7 @@ def test_force_family_emits_canonical_setup_family_metadata(monkeypatch):
     monkeypatch.setattr(cfg, "TRADE_BUILDER_STRIKE_LADDER_WIDTH", 0, raising=False)
     monkeypatch.setattr(cfg, "TRADE_BUILDER_EXPIRY_BUCKET_MODE", "SAME", raising=False)
     trade = builder.build(
-        _market_data([_option_row(strike=25000, expiry="2026-03-26", token=777001)]),
+        _market_data([_option_row(strike=25000, expiry=SAME_EXPIRY, token=777001)]),
         quick_mode=False,
         force_family="MEAN_REVERT",
         allow_fallbacks=False,
