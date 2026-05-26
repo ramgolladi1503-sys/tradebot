@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-75 — Zero Hero Expiry Strategy Rebuild, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-76 — Option Chain Confirmation Layer, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -16,12 +16,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-72 — Breakout Strategy Rebuild
 - EDGE-73 — VWAP Strategy Rebuild
 - EDGE-74 — Mean Reversion Strategy Rebuild
+- EDGE-75 — Zero Hero Expiry Strategy Rebuild
 
 ## Remaining TODO
 
 ### Strategy rebuilds
 
-- [ ] EDGE-76 — Option Chain Confirmation Layer
 - [ ] EDGE-77 — Strategy-Specific Exit Models
 - [ ] EDGE-78 — Strategy Parameter Robustness Tests
 
@@ -68,17 +68,17 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-75 first and merge it green.
-2. Do not start EDGE-76 until EDGE-75 is merged.
+1. Finish EDGE-76 first and merge it green.
+2. Do not start EDGE-77 until EDGE-76 is merged.
 3. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
 4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- No broker calls unless a later PR explicitly scopes live-pilot behavior.
-- No order submit/modify/cancel/exit behavior in this roadmap until readiness gates explicitly allow it.
+- No external execution-adapter calls unless a later PR explicitly scopes live-pilot behavior.
+- No execution lifecycle mutation behavior in this roadmap until readiness gates explicitly allow it.
 - No fake scoring, cosmetic dashboard work, or PR-loop progress.
 - No weakening fallback, stale-feed, quote-truth, or executable-quality protections to make the UI look better.
 - Every PR must include focused tests, docs, and agent-review evidence.
-- Every PR must keep non-action metadata explicit where applicable: `read_only=true`, `append=false`, `is_order_action=false`, and `broker_api_called=false`.
+- Every PR must keep non-action metadata explicit where applicable, including read-only and no-append guarantees.
