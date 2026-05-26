@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -17,6 +18,7 @@ ZERO_HERO_MISSING_INSTRUMENT = "zero_hero_missing_instrument"
 ZERO_HERO_MISSING_PREMIUM = "zero_hero_missing_premium"
 ZERO_HERO_MISSING_UNDERLYING_MOMENTUM = "zero_hero_missing_underlying_momentum"
 ZERO_HERO_INVALID_NUMERIC_INPUT = "zero_hero_invalid_numeric_input"
+ZERO_HERO_INVALID_PARAMETER = "zero_hero_invalid_parameter"
 ZERO_HERO_NOT_EXPIRY_CONTEXT = "zero_hero_not_expiry_context"
 ZERO_HERO_PREMIUM_OUT_OF_BOUNDS = "zero_hero_premium_out_of_bounds"
 ZERO_HERO_MOMENTUM_NOT_CONFIRMED = "zero_hero_momentum_not_confirmed"
@@ -115,6 +117,15 @@ def build_zero_hero_candidate_intents(
     if not isinstance(market_state, Mapping):
         blockers.append(ZERO_HERO_MISSING_MARKET_STATE)
 
+    min_premium_value = _threshold(min_premium, allow_zero=False)
+    max_premium_value = _threshold(max_premium, allow_zero=False)
+    min_momentum_bps_value = _threshold(min_momentum_bps, allow_zero=False)
+    min_volume_z_value = _threshold(min_volume_z, allow_zero=True)
+    if _INVALID_FLOAT in (min_premium_value, max_premium_value, min_momentum_bps_value, min_volume_z_value):
+        blockers.append(ZERO_HERO_INVALID_PARAMETER)
+    elif float(min_premium_value) > float(max_premium_value):
+        blockers.append(ZERO_HERO_INVALID_PARAMETER)
+
     resolved_instrument = str(instrument or _first_text(payload, _INSTRUMENT_KEYS) or "").strip()
     if not resolved_instrument:
         resolved_instrument = "UNKNOWN"
@@ -142,12 +153,12 @@ def build_zero_hero_candidate_intents(
     intent_type = INTENT_TYPE_NO_TRADE
     premium_state = "UNKNOWN"
     if not blockers:
-        premium_state = _premium_state(premium, min_premium, max_premium)
+        premium_state = _premium_state(premium, min_premium_value, max_premium_value)
         if premium_state != "TRADEABLE_PREMIUM":
             blockers.append(ZERO_HERO_PREMIUM_OUT_OF_BOUNDS)
-        elif abs(float(momentum_bps)) < float(min_momentum_bps):
+        elif abs(float(momentum_bps)) < float(min_momentum_bps_value):
             blockers.append(ZERO_HERO_MOMENTUM_NOT_CONFIRMED)
-        elif float(volume_z) < float(min_volume_z):
+        elif float(volume_z) < float(min_volume_z_value):
             blockers.append(ZERO_HERO_VOLUME_NOT_CONFIRMED)
             warnings.append("zero_hero_blocked_by_volume")
         elif float(momentum_bps) > 0:
@@ -183,10 +194,10 @@ def build_zero_hero_candidate_intents(
             "days_to_expiry": _safe_number(dte),
             "underlying_momentum_bps": _safe_number(momentum_bps),
             "volume_z": _safe_number(volume_z),
-            "min_premium": float(min_premium),
-            "max_premium": float(max_premium),
-            "min_momentum_bps": float(min_momentum_bps),
-            "min_volume_z": float(min_volume_z),
+            "min_premium": _safe_number(min_premium_value),
+            "max_premium": _safe_number(max_premium_value),
+            "min_momentum_bps": _safe_number(min_momentum_bps_value),
+            "min_volume_z": _safe_number(min_volume_z_value),
             "does_not_rank_candidates": True,
             "does_not_score_edge": True,
         },
@@ -208,6 +219,25 @@ def build_zero_hero_candidate_intents(
 _INVALID_FLOAT = object()
 
 
+def _threshold(value: Any, *, allow_zero: bool) -> float | object:
+    parsed = _to_finite_float(value)
+    if parsed is _INVALID_FLOAT:
+        return _INVALID_FLOAT
+    if parsed < 0 or (parsed == 0 and not allow_zero):
+        return _INVALID_FLOAT
+    return parsed
+
+
+def _to_finite_float(value: Any) -> float | object:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return _INVALID_FLOAT
+    if not math.isfinite(parsed):
+        return _INVALID_FLOAT
+    return parsed
+
+
 def _first_text(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str:
     for key in keys:
         value = payload.get(key)
@@ -223,10 +253,7 @@ def _first_float(payload: Mapping[str, Any], keys: tuple[str, ...], default: flo
         value = payload.get(key)
         if value is None or str(value).strip() == "":
             return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return _INVALID_FLOAT
+        return _to_finite_float(value)
     return default
 
 
@@ -242,8 +269,8 @@ def _expiry_context(payload: Mapping[str, Any], dte: Any) -> str:
     return "NON_EXPIRY_CONTEXT"
 
 
-def _premium_state(premium: Any, min_premium: float, max_premium: float) -> str:
-    if premium in (None, _INVALID_FLOAT):
+def _premium_state(premium: Any, min_premium: Any, max_premium: Any) -> str:
+    if any(value in (None, _INVALID_FLOAT) for value in (premium, min_premium, max_premium)):
         return "UNKNOWN"
     if float(premium) < float(min_premium):
         return "PREMIUM_TOO_LOW"
@@ -278,6 +305,7 @@ __all__ = [
     "ZERO_HERO_CANDIDATE_GENERATOR_SCHEMA_VERSION",
     "ZERO_HERO_CANDIDATE_GENERATOR_SOURCE",
     "ZERO_HERO_INVALID_NUMERIC_INPUT",
+    "ZERO_HERO_INVALID_PARAMETER",
     "ZERO_HERO_MISSING_INSTRUMENT",
     "ZERO_HERO_MISSING_MARKET_STATE",
     "ZERO_HERO_MISSING_PREMIUM",

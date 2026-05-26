@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -17,6 +18,7 @@ VWAP_MISSING_INSTRUMENT = "vwap_missing_instrument"
 VWAP_MISSING_LTP = "vwap_missing_ltp"
 VWAP_MISSING_VWAP = "vwap_missing_vwap"
 VWAP_INVALID_NUMERIC_INPUT = "vwap_invalid_numeric_input"
+VWAP_INVALID_PARAMETER = "vwap_invalid_parameter"
 VWAP_NO_TREND_CONFIRMATION = "vwap_no_trend_confirmation"
 VWAP_SLOPE_NOT_CONFIRMED = "vwap_slope_not_confirmed"
 VWAP_DEVIATION_TOO_SMALL = "vwap_deviation_too_small"
@@ -109,6 +111,11 @@ def build_vwap_candidate_intents(
     if not isinstance(market_state, Mapping):
         blockers.append(VWAP_MISSING_MARKET_STATE)
 
+    min_deviation_bps_value = _threshold(min_deviation_bps, allow_zero=False)
+    min_slope_value = _threshold(min_slope, allow_zero=True)
+    if _INVALID_FLOAT in (min_deviation_bps_value, min_slope_value):
+        blockers.append(VWAP_INVALID_PARAMETER)
+
     resolved_instrument = str(instrument or _first_text(payload, _INSTRUMENT_KEYS) or "").strip()
     if not resolved_instrument:
         resolved_instrument = "UNKNOWN"
@@ -132,18 +139,18 @@ def build_vwap_candidate_intents(
     deviation_bps = None
     if not blockers:
         deviation_bps = ((float(ltp) - float(vwap)) / float(vwap)) * 10000.0
-        if abs(deviation_bps) < float(min_deviation_bps):
+        if abs(deviation_bps) < float(min_deviation_bps_value):
             blockers.append(VWAP_DEVIATION_TOO_SMALL)
         elif deviation_bps > 0:
             direction = "BUY_CALL"
             trigger = "ltp_above_vwap_with_trend_confirmation"
-            if float(slope) < float(min_slope):
+            if float(slope) < float(min_slope_value):
                 blockers.append(VWAP_SLOPE_NOT_CONFIRMED)
                 warnings.append("vwap_uptrend_blocked_by_slope")
         elif deviation_bps < 0:
             direction = "BUY_PUT"
             trigger = "ltp_below_vwap_with_trend_confirmation"
-            if float(slope) > -float(min_slope):
+            if float(slope) > -float(min_slope_value):
                 blockers.append(VWAP_SLOPE_NOT_CONFIRMED)
                 warnings.append("vwap_downtrend_blocked_by_slope")
         else:
@@ -167,11 +174,11 @@ def build_vwap_candidate_intents(
         metadata={
             "adapter_source": VWAP_CANDIDATE_GENERATOR_SOURCE,
             "input_keys": sorted(str(key) for key in payload.keys()),
-            "vwap_position": _vwap_position(ltp, vwap, deviation_bps, min_deviation_bps),
+            "vwap_position": _vwap_position(ltp, vwap, deviation_bps, min_deviation_bps_value),
             "deviation_bps": _safe_number(deviation_bps),
             "vwap_slope": _safe_number(slope),
-            "min_deviation_bps": float(min_deviation_bps),
-            "min_slope": float(min_slope),
+            "min_deviation_bps": _safe_number(min_deviation_bps_value),
+            "min_slope": _safe_number(min_slope_value),
             "does_not_rank_candidates": True,
             "does_not_score_edge": True,
         },
@@ -193,6 +200,25 @@ def build_vwap_candidate_intents(
 _INVALID_FLOAT = object()
 
 
+def _threshold(value: Any, *, allow_zero: bool) -> float | object:
+    parsed = _to_finite_float(value)
+    if parsed is _INVALID_FLOAT:
+        return _INVALID_FLOAT
+    if parsed < 0 or (parsed == 0 and not allow_zero):
+        return _INVALID_FLOAT
+    return parsed
+
+
+def _to_finite_float(value: Any) -> float | object:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return _INVALID_FLOAT
+    if not math.isfinite(parsed):
+        return _INVALID_FLOAT
+    return parsed
+
+
 def _first_text(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str:
     for key in keys:
         value = payload.get(key)
@@ -208,15 +234,12 @@ def _first_float(payload: Mapping[str, Any], keys: tuple[str, ...], default: flo
         value = payload.get(key)
         if value is None or str(value).strip() == "":
             return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return _INVALID_FLOAT
+        return _to_finite_float(value)
     return default
 
 
-def _vwap_position(ltp: Any, vwap: Any, deviation_bps: Any, min_deviation_bps: float) -> str:
-    if any(value in (None, _INVALID_FLOAT) for value in (ltp, vwap)):
+def _vwap_position(ltp: Any, vwap: Any, deviation_bps: Any, min_deviation_bps: Any) -> str:
+    if any(value in (None, _INVALID_FLOAT) for value in (ltp, vwap, min_deviation_bps)):
         return "UNKNOWN"
     if deviation_bps in (None, _INVALID_FLOAT):
         return "UNKNOWN"
@@ -256,6 +279,7 @@ __all__ = [
     "VWAP_CANDIDATE_GENERATOR_SOURCE",
     "VWAP_DEVIATION_TOO_SMALL",
     "VWAP_INVALID_NUMERIC_INPUT",
+    "VWAP_INVALID_PARAMETER",
     "VWAP_MISSING_INSTRUMENT",
     "VWAP_MISSING_LTP",
     "VWAP_MISSING_MARKET_STATE",
