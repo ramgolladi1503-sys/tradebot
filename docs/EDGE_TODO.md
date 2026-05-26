@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-82 — Final Executable Trade Quality Gate, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-83 — Paper Truth Journal, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -25,12 +25,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - HOTFIX/EDGE-79B — Market Close Feed State Classifier
 - EDGE-80 — NoTradeOracle
 - EDGE-81 — NoTrade Evidence in Review Queue/UI
+- EDGE-82 — Final Executable Trade Quality Gate
 
 ## Remaining TODO
 
 ### Paper truth and expectancy
 
-- [ ] EDGE-83 — Paper Truth Journal
 - [ ] EDGE-84 — Outcome Reducer
 - [ ] EDGE-85 — Strategy Expectancy by Regime
 - [ ] EDGE-86 — Slippage and Cost Truth
@@ -64,16 +64,16 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-82 first and merge it green.
-2. Do not start EDGE-83 until EDGE-82 is merged.
-3. Do not treat final executable quality as paper outcome truth.
+1. Finish EDGE-83 first and merge it green.
+2. Do not start EDGE-84 until EDGE-83 is merged.
+3. Do not treat the paper journal as outcome truth until EDGE-84 derives state from it.
 4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
 - No external execution-adapter integration unless a later PR explicitly scopes live-pilot behavior.
-- No execution lifecycle mutation in this roadmap until readiness gates explicitly allow it.
+- No broker-state changes in this roadmap until readiness gates explicitly allow them.
 - No fake scoring, cosmetic dashboard work, or PR-loop progress.
 - No weakening fallback, stale-feed, quote-truth, or executable-quality protections to make the UI look better.
 - Every PR must include focused tests, docs, and agent-review evidence.
