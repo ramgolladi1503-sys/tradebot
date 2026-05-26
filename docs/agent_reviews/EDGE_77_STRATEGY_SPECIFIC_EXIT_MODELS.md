@@ -11,6 +11,12 @@ broker_api_called: false
 live_order_action: false
 broker_order_action: false
 
+## Agent Work Contract
+
+EDGE-77 introduces a pure read-only strategy-specific exit model contract.
+
+The implementation creates deterministic policy metadata for supported strategy families and blocks unsupported or unsafe candidate shapes with explicit blockers.
+
 ## Work contract
 
 EDGE-77 introduces a pure read-only strategy-specific exit model contract.
@@ -87,6 +93,22 @@ Focused tests cover:
 - required option confirmation blocks absent confirmation
 - supplied confirmation blocks unconfirmed candidates
 - supplied confirmation allows confirmed candidates
+
+## Runtime Proof Required After Merge
+
+After merge, runtime proof is still required before this model is wired anywhere.
+
+The proof must show this contract remains read-only, does not change runtime state, and does not bypass EDGE-76 option-chain confirmation.
+
+## What This PR Does Not Prove
+
+This PR does not prove live profitability, live readiness, paper-truth expectancy, slippage truth, runtime integration, dashboard behavior, or final executable-trade quality.
+
+Those belong to later roadmap items.
+
+## Human Approval
+
+Human review is required before any later PR wires this metadata into runtime, paper journal flows, dashboard surfaces, or execution-adapter boundaries.
 
 ## Acceptance proof
 
