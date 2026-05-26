@@ -7,7 +7,7 @@ from config import config as cfg
 import core.option_token_resolver as resolver
 
 
-FUTURE_EXPIRY = "2026-05-26"
+FUTURE_EXPIRY = "2099-05-26"
 
 
 class _CaptureLogger:
