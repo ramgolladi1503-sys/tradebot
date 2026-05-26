@@ -1,5 +1,23 @@
 # PR 277 Agent Review Evidence — Test Isolation and Decay Input Handling
 
+mode: TEST
+candidate_id: PR277_TEST_ISOLATION_DECAY_INPUT
+candidate_status: documentation_evidence
+rank: 0
+rank_reason: process_gate_evidence_only
+liquidity_score: 0
+risk_score: 0
+execution_score: 0
+data_quality_penalty: 0
+decision: FIX_TEST_ISOLATION_AND_INPUT_PRECEDENCE
+reason: Test runtime state and replay input precedence needed deterministic boundaries before live-regression tests could be trusted.
+timestamp: 2026-05-26T08:15:00Z
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
+source: docs/agent_reviews/pr277_test_isolation_decay_input.md
+
 ## Agent Work Contract
 
 - PR scope: fix deterministic test execution and explicit decay dataset input handling.
