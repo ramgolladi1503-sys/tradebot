@@ -162,7 +162,19 @@ class PaperOutcomeReductionReport:
 def reduce_paper_outcomes_from_journal(journal_path: str | Path) -> PaperOutcomeReductionReport:
     """Read and reduce a paper-truth journal file without mutating it."""
 
-    return reduce_paper_outcomes(read_paper_truth_events(journal_path))
+    try:
+        events = read_paper_truth_events(journal_path)
+    except ValueError as exc:
+        validation = PaperTruthJournalValidation(
+            journal_valid=False,
+            reason_code=INVALID_JOURNAL_REASON,
+            reasons=(str(exc),),
+            event_count=0,
+            latest_sequence=0,
+            latest_event_hash="",
+        )
+        return _blocked_report(validation)
+    return reduce_paper_outcomes(events)
 
 
 def reduce_paper_outcomes(events: Iterable[Mapping[str, Any]]) -> PaperOutcomeReductionReport:
@@ -182,7 +194,6 @@ def reduce_paper_outcomes(events: Iterable[Mapping[str, Any]]) -> PaperOutcomeRe
         builder.apply(event)
 
     outcomes = tuple(sorted((builder.to_outcome() for builder in builders.values()), key=lambda item: item.first_sequence))
-    reasons = _dedupe(reason for outcome in outcomes for reason in outcome.blockers)
     closed_count = sum(1 for outcome in outcomes if outcome.status == OUTCOME_CLOSED)
     open_count = sum(1 for outcome in outcomes if outcome.status == OUTCOME_OPEN)
     rejected_count = sum(1 for outcome in outcomes if outcome.status == OUTCOME_REJECTED)
@@ -193,8 +204,8 @@ def reduce_paper_outcomes(events: Iterable[Mapping[str, Any]]) -> PaperOutcomeRe
         source=PAPER_OUTCOME_REDUCER_SOURCE,
         status=PAPER_REDUCER_STATUS_REDUCED,
         journal_valid=True,
-        reason_code="ok" if not reasons else reasons[0],
-        reasons=reasons,
+        reason_code="ok",
+        reasons=(),
         event_count=len(materialized),
         candidate_count=len(outcomes),
         closed_count=closed_count,
