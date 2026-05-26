@@ -65,6 +65,11 @@ def _load_jsonl(path: Path) -> list[dict]:
 
 
 def _load_decision_events(decision_jsonl: Path, db_path: Path) -> pd.DataFrame:
+    # Explicit JSONL input must be authoritative, even when it is empty. Falling
+    # back to the default SQLite DB in that case contaminates unit tests and can
+    # also mix unrelated production sessions into a requested replay build.
+    if decision_jsonl.exists():
+        return pd.DataFrame(_load_jsonl(decision_jsonl))
     if db_path.exists():
         try:
             with sqlite3.connect(db_path) as conn:
@@ -73,8 +78,7 @@ def _load_decision_events(decision_jsonl: Path, db_path: Path) -> pd.DataFrame:
                 return df
         except Exception:
             pass
-    rows = _load_jsonl(decision_jsonl)
-    return pd.DataFrame(rows)
+    return pd.DataFrame()
 
 
 def _load_trade_risk_map(trade_log_path: Path) -> Dict[str, float]:
@@ -230,7 +234,6 @@ def build_decay_dataset(
             dd = _drawdown(pnls.tolist())
             dd_slope = (dd - 0.0) / max(len(pnls), 1)
 
-            # Avg R (use entry/stop risk if available)
             rs = []
             for tid, pnl in zip(executed.get("trade_id", []), pnls):
                 risk = risk_map.get(tid)
@@ -252,7 +255,6 @@ def build_decay_dataset(
 
             shock_freq = float((win["shock_score"].fillna(0) >= shock_threshold).mean()) if "shock_score" in win.columns else 0.0
 
-            # PSI for key features
             key_features = ["ensemble_proba", "xgb_proba", "score_0_100", "spread_pct", "depth_imbalance", "shock_score"]
             psi_vals = []
             if not prev.empty:
@@ -261,7 +263,6 @@ def build_decay_dataset(
                         psi_vals.append(_psi(prev[col].dropna(), win[col].dropna()))
             psi_max = float(max(psi_vals)) if psi_vals else 0.0
 
-            # Calibration error trend
             proba_col = "ensemble_proba" if win["ensemble_proba"].notna().any() else "xgb_proba"
             cur_y = (pnls > 0).astype(int) if not pnls.empty else pd.Series(dtype=int)
             cur_proba = executed[proba_col].dropna() if proba_col in executed.columns else pd.Series(dtype=float)
@@ -278,7 +279,6 @@ def build_decay_dataset(
             else:
                 cal_trend = 0.0
 
-            # Label: decayed if next window expectancy < 0 and drawdown exceeds threshold
             decayed = None
             next_exp = None
             next_dd = None
@@ -324,8 +324,6 @@ def build_decay_dataset(
         return out_df
 
     out_df = pd.DataFrame(rows).sort_values(["strategy_id", "window_end_ts"]).reset_index(drop=True)
-
-    # time_to_failure estimate: first future decayed window
     out_df["time_to_failure_sec"] = np.nan
     for strat, sdf in out_df.groupby("strategy_id"):
         sdf = sdf.sort_values("window_end_ts").reset_index()
