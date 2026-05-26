@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-74 — Mean Reversion Strategy Rebuild, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-75 — Zero Hero Expiry Strategy Rebuild, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -15,12 +15,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-71 — Convert Existing Strategies to Candidate Generators
 - EDGE-72 — Breakout Strategy Rebuild
 - EDGE-73 — VWAP Strategy Rebuild
+- EDGE-74 — Mean Reversion Strategy Rebuild
 
 ## Remaining TODO
 
 ### Strategy rebuilds
 
-- [ ] EDGE-75 — Zero Hero Expiry Strategy Rebuild
 - [ ] EDGE-76 — Option Chain Confirmation Layer
 - [ ] EDGE-77 — Strategy-Specific Exit Models
 - [ ] EDGE-78 — Strategy Parameter Robustness Tests
@@ -68,8 +68,8 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-74 first and merge it green.
-2. Do not start EDGE-75 until EDGE-74 is merged.
+1. Finish EDGE-75 first and merge it green.
+2. Do not start EDGE-76 until EDGE-75 is merged.
 3. Do not add dashboard/UI work until NoTrade and executable-quality evidence are stable.
 4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
