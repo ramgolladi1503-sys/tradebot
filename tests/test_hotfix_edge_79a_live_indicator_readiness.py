@@ -78,7 +78,7 @@ def test_blocks_zero_bars_and_missing_last_update_for_live_ltp_case():
     assert decision.indicator_last_update_epoch is None
     assert decision.indicators_age_sec is None
     assert decision.missing_inputs == ("ohlc_bars",)
-    assert decision.indicator_missing_inputs == ("atr", "ema", "rsi", "vwap")
+    assert decision.indicator_missing_inputs == ("vwap", "rsi", "ema", "atr")
     assert INDICATOR_INPUTS_MISSING in decision.blockers
     assert INDICATOR_BARS_BELOW_WARMUP in decision.blockers
     assert INDICATOR_LAST_UPDATE_MISSING in decision.blockers
