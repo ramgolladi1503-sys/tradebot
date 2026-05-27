@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #304 — LIVE-TRUTH-10 Strategy Perf Shadow Fallback Evidence, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #305 — EDGE-88 Strategy Lifecycle States, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -40,6 +40,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - LIVE-TRUTH-07 — Latency / SLO Guard Oscillation Evidence
 - LIVE-TRUTH-08 — SENSEX Reject Calibration Evidence
 - LIVE-TRUTH-09 — Runtime Health Artifact Consistency
+- LIVE-TRUTH-10 — Strategy Perf Shadow Fallback Evidence
 
 ## Locked LIVE-TRUTH stabilization block
 
@@ -58,11 +59,10 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Live evidence stabilization
 
-- Completed by the current PR branch.
+- Completed.
 
 ### Strategy lifecycle governance
 
-- [ ] PR #305 — EDGE-88 Strategy Lifecycle States
 - [ ] PR #306 — EDGE-89 Strategy Promotion Gate
 - [ ] PR #307 — EDGE-90 Strategy Suspension and Retirement Rules
 
@@ -88,8 +88,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish PR #304 / LIVE-TRUTH-10 first and merge it green.
-2. Do not start EDGE-88 until LIVE-TRUTH-10 is merged.
-3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
-4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
-5. Keep every PR narrow, tested, documented, and reviewed.
+1. Finish PR #305 / EDGE-88 first and merge it green.
+2. Do not start EDGE-89 until EDGE-88 is merged.
+3. Do not start feed refactors before lifecycle governance PRs are completed.
+4. Keep every PR narrow, tested, documented, and reviewed.
