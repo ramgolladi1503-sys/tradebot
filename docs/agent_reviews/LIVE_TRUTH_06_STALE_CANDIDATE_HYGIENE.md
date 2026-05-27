@@ -4,8 +4,12 @@ mode: REVIEW
 candidate_id: live_truth_06_stale_candidate_hygiene
 decision: review_ready
 reason: stale_candidate_hygiene_tests_docs
-timestamp: 2026-05-27T12:08:00Z
+timestamp: 2026-05-27T12:16:00Z
 source: live_truth_06_agent_review
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
 
 ## Agent Work Contract
 
