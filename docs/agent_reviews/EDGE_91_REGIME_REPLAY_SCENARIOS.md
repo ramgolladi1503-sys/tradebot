@@ -41,6 +41,24 @@ Not allowed:
 - Paper journal writes.
 - Silent fallback from missing evidence to a normal regime.
 
+## High-Risk Path Review
+
+This PR changes `core/regime_replay_scenarios.py`, so the high-risk path review is explicit.
+
+Risk assessment:
+
+- The new core module is pure and imports only `core.market_state.build_market_state`.
+- It does not import broker, execution, auth, WebSocket, orchestrator, risk, strategy, dashboard, or runtime writer modules.
+- It does not mutate state, write files, call network APIs, inspect credentials, or place instructions.
+- It converts missing or insufficient market-state evidence into blocked replay evidence instead of normal regime output.
+
+Containment:
+
+- No existing core behavior is changed.
+- No existing function signature is modified.
+- No runtime caller is wired to the new module.
+- The module is reachable only by explicit import/test until a later PR scopes integration.
+
 ## Grill Me Review
 
 Question: Can this PR place, modify, cancel, or route an order?
@@ -114,6 +132,18 @@ PYTHONPATH=. python -m pytest tests/test_edge_91_regime_replay_scenarios.py -q
 ```
 
 CI must pass before merge.
+
+## Runtime Proof Required After Merge
+
+EDGE-91 introduces no runtime wiring, so no live runtime proof is required for this PR beyond CI.
+
+A later PR may consume this replay module only if explicitly scoped. That later PR must prove:
+
+- the caller remains read-only unless a separate paper/live gate explicitly permits more
+- invalid snapshots still block instead of producing fake regimes
+- broker/order flags remain false
+- runtime evidence does not hide replay failures
+- existing market-state classifier behavior is not silently changed
 
 ## What This PR Does Not Prove
 
