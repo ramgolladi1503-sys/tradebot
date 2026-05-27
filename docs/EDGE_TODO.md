@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #311 — PR-FEED-11 Extract Runtime Snapshot Builder, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #312 — PR-FEED-17 Extract Token Resolution Read Model, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -37,6 +37,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - PR-FEED-08 — Extract Pure Tick Utility Helpers
 - PR-FEED-09 — Extract Reconnect Decision Policy
 - PR-FEED-10 — Extract Subscription Budget Policy
+- PR-FEED-11 — Extract Runtime Snapshot Builder
 - LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
 - LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
 - LIVE-TRUTH-03 — Runtime Snapshot Freshness Guard
@@ -73,7 +74,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Feed extraction/refactor work
 
-- [ ] PR #312 — PR-FEED-17 Extract Token Resolution Read Model
 - [ ] PR #313 — PR-FEED-18 Extract WebSocket Lifecycle Shell
 - [ ] PR #314 — PR-FEED-19 Callback Thin-Wiring Refactor
 
@@ -89,6 +89,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish PR #311 / PR-FEED-11 first and merge it green.
-2. Do not start PR #312 before PR #311 is merged and green.
+1. Finish PR #312 / PR-FEED-17 first and merge it green.
+2. Do not start PR #313 before PR #312 is merged and green.
 3. Keep every PR narrow, tested, documented, and reviewed.
