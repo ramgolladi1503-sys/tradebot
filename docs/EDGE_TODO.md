@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #296 — LIVE-TRUTH-02 Latest Artifact Non-Empty Preservation, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #297 — LIVE-TRUTH-03 Runtime Snapshot Freshness Guard, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -32,6 +32,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-86 — Slippage and Cost Truth
 - EDGE-87 — Strategy Family Kill/Keep Report
 - LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
+- LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
 
 ## Locked LIVE-TRUTH stabilization block
 
@@ -50,7 +51,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Live evidence stabilization
 
-- [ ] PR #297 — LIVE-TRUTH-03 Runtime Snapshot Freshness Guard
 - [ ] PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence
 - [ ] PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence
 - [ ] PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard
@@ -85,28 +85,28 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - [ ] PR #320 — EDGE-96 Live-Pilot Risk Throttle
 - [ ] PR #321 — EDGE-97 Final Edge Readiness Report
 
-## LIVE-TRUTH-02 acceptance subtasks
+## LIVE-TRUTH-03 acceptance subtasks
 
-LIVE-TRUTH-02 must prevent empty live-cycle evidence payloads from overwriting the previous non-empty latest artifact.
-
-Latest artifacts must preserve useful evidence when the incoming cycle is empty and the previous artifact still contains candidates, top opportunities, executable truth, or meaningful runtime state.
+LIVE-TRUTH-03 must prove latest runtime snapshots are fresh enough to trust before later runtime-health or lifecycle decisions consume them.
 
 In scope:
 
-- Detect incoming empty-cycle latest artifact payloads.
-- Detect previous non-empty latest artifact payloads.
-- Preserve the previous non-empty latest artifact instead of overwriting it with an empty payload.
-- Emit read-only preservation evidence explaining whether the incoming payload was written or the previous payload was preserved.
-- Keep existing executable-quality, stale-feed, quote-truth, and safety gates unchanged.
+- Evaluate runtime evidence snapshots by artifact name.
+- Accept numeric epoch and ISO timestamp fields.
+- Detect missing timestamps.
+- Detect stale timestamps by max-age threshold.
+- Detect future timestamps beyond tolerance.
+- Support per-artifact max-age overrides.
+- Emit read-only freshness evidence.
 
 Out of scope:
 
-- Dashboard changes.
+- Refreshing feeds.
+- Reconnecting WebSockets.
+- Market-close quiescence; that belongs to LIVE-TRUTH-05.
 - Candidate generation changes.
-- Strategy scoring changes.
-- Feed reconnect behavior.
-- Market-close state handling; that belongs to LIVE-TRUTH-05.
-- Runtime freshness checks; that belongs to LIVE-TRUTH-03.
+- Dashboard changes.
+- Runtime wiring unless a later PR explicitly scopes it.
 
 ## LIVE-TRUTH-05 close-state scope and acceptance
 
@@ -134,8 +134,8 @@ Given `market_snapshot.market_open=false`:
 
 ## Non-negotiable sequencing
 
-1. Finish PR #296 / LIVE-TRUTH-02 first and merge it green.
-2. Do not start LIVE-TRUTH-03 until LIVE-TRUTH-02 is merged.
+1. Finish PR #297 / LIVE-TRUTH-03 first and merge it green.
+2. Do not start LIVE-TRUTH-04 until LIVE-TRUTH-03 is merged.
 3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
 4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
 5. Do not start pilot readiness before paper truth, replay proof, cost truth, live evidence stabilization, and lifecycle gates exist.
@@ -171,7 +171,7 @@ Lifecycle rules should only be built after these are stabilized:
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- Do not mix LIVE-TRUTH-03 or later fixes into LIVE-TRUTH-02.
+- Do not mix LIVE-TRUTH-04 or later fixes into LIVE-TRUTH-03.
 - Do not start EDGE-88 until EDGE-87 and the LIVE-TRUTH block are complete.
 - Do not put feed refactor work before runtime truth evidence cleanup.
 - No adapter integration unless a later PR explicitly scopes pilot behavior.
