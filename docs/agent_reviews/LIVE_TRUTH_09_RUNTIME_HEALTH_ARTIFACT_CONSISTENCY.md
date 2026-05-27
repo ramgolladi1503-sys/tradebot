@@ -1,88 +1,78 @@
-# Agent Review — LIVE-TRUTH-09 Runtime Health Artifact Consistency
+# LIVE-TRUTH-09 Runtime Health Artifact Consistency Agent Review
 
-## Review target
+mode: REVIEW
+candidate_id: live_truth_09_runtime_health_artifact_consistency
+decision: review_ready
+reason: runtime_health_artifact_consistency_tests_docs
+timestamp: 2026-05-27T13:30:00Z
+source: live_truth_09_agent_review
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
 
-PR #303 adds a read-only runtime-health artifact consistency reducer.
+## Agent Work Contract
 
-Changed files:
+LIVE-TRUTH-09 adds read-only evidence for runtime-health artifact consistency.
 
-- `core/live_truth_runtime_health_artifact_consistency.py`
-- `tests/test_live_truth_09_runtime_health_artifact_consistency.py`
-- `docs/LIVE_TRUTH_09_RUNTIME_HEALTH_ARTIFACT_CONSISTENCY.md`
-- `docs/agent_reviews/LIVE_TRUTH_09_RUNTIME_HEALTH_ARTIFACT_CONSISTENCY.md`
-- `docs/EDGE_TODO.md`
+It classifies runtime-health artifact sets as consistent, review, inconsistent, or blocked.
 
-## Scope review
+## Scope Guard
 
-This PR is intentionally narrow.
+In scope:
 
-It does:
+- artifact container extraction
+- required artifact presence checks
+- runtime mode consistency
+- market-open consistency
+- runtime state consistency
+- feed health consistency
+- websocket connection consistency
+- invalid payload evidence
+- evidence writer
 
-- compare runtime-health artifacts for contradictory identity fields
-- classify the evidence as consistent, review, inconsistent, or blocked
-- keep payloads deterministic and JSON-serializable
-- preserve read-only and append-false semantics
+Out of scope:
 
-It does not:
+- UI changes
+- runtime wiring
+- ranking changes
+- strategy scoring changes
+- lifecycle changes
+- feed recovery changes
+- execution behavior changes
 
-- wire into the live loop
-- change candidate generation
-- change ranking
-- change strategy scoring
-- change feed recovery
-- change UI
-- change lifecycle governance
-- trigger execution behavior
+## Grill Me Review
 
-## Safety review
+This PR reports runtime-health artifact consistency evidence only and does not change runtime behavior.
 
-The reducer is pure except for the explicit writer helper. The writer uses the existing atomic JSON writer and is not called by runtime code in this PR.
+## Hermes Review
 
-The payload explicitly sets:
+No external integration, UI change, strategy behavior change, feed recovery change, lifecycle change, or execution behavior change is added.
 
-- `read_only=true`
-- `append=false`
-- `is_order_action=false`
-- `broker_api_called=false`
-- `live_order_action=false`
-- `broker_order_action=false`
+## GSD Review
 
-This keeps the artifact in evidence-only territory.
+Changed files are limited to one core reducer, one focused test file, docs, agent review evidence, and the roadmap.
 
-## Failure-mode review
+## QA / Safety Review
 
-Covered failure modes:
+Focused tests cover consistent, review, inconsistent, blocked, nested container, invalid config, writer, and JSON cases.
 
-- no artifacts
-- missing required artifact
-- invalid artifact payload
-- invalid field config
-- missing identity fields
-- inconsistent runtime mode
-- inconsistent market-open state
-- nested artifact container input
-- JSON serialization
+## Acceptance Proof
 
-The reducer fails closed for missing required artifacts and invalid payloads. It uses review status for missing identity fields because missing data is weaker than direct contradiction but still must not be treated as clean truth.
+`PYTHONPATH=. python -m pytest tests/test_live_truth_09_runtime_health_artifact_consistency.py`
 
-## Test evidence
+## Runtime Proof Required After Merge
 
-Focused test command:
+After merge, this proves only the reducer and evidence writer.
 
-```bash
-PYTHONPATH=. python -m pytest tests/test_live_truth_09_runtime_health_artifact_consistency.py
-```
+## What This PR Does Not Prove
 
-Local isolated validation result during implementation:
+This PR does not prove later LIVE-TRUTH items, runtime-health wiring, UI ranking, or lifecycle governance.
 
-```text
-11 passed
-```
+## Human Approval
 
-CI remains the source of truth.
+Human review is required before broader wiring.
 
-## Review conclusion
+## Next Action
 
-Acceptable for PR #303.
-
-The implementation is read-only, deterministic, and scoped to evidence. It does not contaminate runtime behavior or leak into the UI-ranking critique thread.
+After this PR merges green, continue with LIVE-TRUTH-10.
