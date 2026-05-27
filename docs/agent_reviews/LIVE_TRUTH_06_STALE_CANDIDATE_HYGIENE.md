@@ -4,20 +4,16 @@ mode: REVIEW
 candidate_id: live_truth_06_stale_candidate_hygiene
 decision: review_ready
 reason: stale_candidate_hygiene_tests_docs
-timestamp: 2026-05-27T12:00:00Z
+timestamp: 2026-05-27T12:08:00Z
 source: live_truth_06_agent_review
-is_order_action: false
-broker_api_called: false
-live_order_action: false
-broker_order_action: false
 
-## Work Contract
+## Agent Work Contract
 
 LIVE-TRUTH-06 adds read-only evidence for stale candidate hygiene.
 
 It classifies candidate evidence as clean, stale, or blocked before later evidence work consumes it.
 
-## Scope
+## Scope Guard
 
 In scope:
 
@@ -33,42 +29,43 @@ In scope:
 Out of scope:
 
 - UI changes
-- runtime wiring
 - ranking changes
 - strategy scoring changes
 - lifecycle changes
 - feed recovery changes
 
-## Review
+## Grill Me Review
 
-Grill Me: this PR reports hygiene evidence only and does not change ranking.
+This PR reports hygiene evidence only and does not change ranking.
 
-Hermes: no external integration, UI change, strategy behavior change, or feed recovery change is added.
+## Hermes Review
 
-GSD: changed files are limited to one core reducer, one focused test file, docs, agent review evidence, and the roadmap.
+No external integration, UI change, strategy behavior change, or feed recovery change is added.
 
-## QA Evidence
+## GSD Review
 
-Focused tests cover:
+Changed files are limited to one core reducer, one focused test file, docs, agent review evidence, and the roadmap.
 
-- clean candidates
-- no candidates
-- stale candidate timestamp
-- missing timestamp
-- invalid candidate payload
-- future timestamp
-- stale quote, feed, and source artifact age
-- explicit stale marker
-- ISO timestamp parsing
-- candidate container extraction
-- invalid config
-- evidence file writing
-- JSON serialization
+## QA / Safety Review
 
-Command:
+Focused tests cover clean, stale, blocked, timestamp, container, config, writer, and JSON cases.
+
+## Acceptance Proof
 
 `PYTHONPATH=. python -m pytest tests/test_live_truth_06_stale_candidate_hygiene.py`
 
+## Runtime Proof Required After Merge
+
+After merge, this proves only the reducer and evidence writer.
+
+## What This PR Does Not Prove
+
+This PR does not prove later LIVE-TRUTH items.
+
+## Human Approval
+
+Human review is required before broader wiring.
+
 ## Next Action
 
-After this PR merges green, continue with LIVE-TRUTH-07 — Latency / SLO Guard Oscillation Evidence.
+After this PR merges green, continue with LIVE-TRUTH-07.
