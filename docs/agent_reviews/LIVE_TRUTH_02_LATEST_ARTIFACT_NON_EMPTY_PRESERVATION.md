@@ -6,6 +6,10 @@ decision: review_ready
 reason: preservation_tests_docs
 timestamp: 2026-05-27T10:40:00Z
 source: live_truth_02_agent_review
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
 
 ## Agent Work Contract
 
