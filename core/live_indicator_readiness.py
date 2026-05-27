@@ -5,13 +5,20 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping
+
+from core.events import write_json_atomic
+from core.paths import data_root
 
 LIVE_INDICATOR_READINESS_SCHEMA_VERSION = 1
 LIVE_INDICATOR_READINESS_SOURCE = "live_indicator_readiness_diagnostics_v1"
+LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_SOURCE = "live_indicator_readiness_runtime_evidence_v1"
+LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME = "live_indicator_readiness_latest.json"
 
 INDICATOR_READY = "INDICATOR_READY"
 INDICATOR_BLOCKED = "INDICATOR_BLOCKED"
+INDICATORS_MISSING_GATE_REASON = "INDICATORS_MISSING"
 
 INDICATOR_EMPTY_INPUT = "indicator_empty_input"
 INDICATOR_SYMBOL_MISSING = "indicator_symbol_missing"
@@ -219,6 +226,69 @@ def build_live_indicator_readiness_report(
     )
 
 
+def live_indicator_readiness_runtime_evidence_path(path: str | Path | None = None) -> Path:
+    """Return the runtime evidence path for latest indicator-readiness proof."""
+
+    if path is not None:
+        return Path(path).expanduser()
+    return data_root() / LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME
+
+
+def build_indicator_missing_runtime_evidence_payload(
+    report: LiveIndicatorReadinessReport | Mapping[str, Any],
+    *,
+    now_epoch: float | None = None,
+) -> dict[str, Any] | None:
+    """Build runtime evidence only for per-symbol indicator-missing blockers."""
+
+    payload = _report_payload(report)
+    generated_epoch = _finite_float_or_none(payload.get("generated_epoch"))
+    if generated_epoch is None:
+        generated_epoch = float(time.time() if now_epoch is None else now_epoch)
+    decisions = [
+        _indicator_missing_symbol_payload(decision)
+        for decision in _decision_payloads(payload)
+        if _is_indicator_missing_decision(decision)
+    ]
+    decisions = [decision for decision in decisions if decision is not None]
+    if not decisions:
+        return None
+    out = {
+        "schema_version": LIVE_INDICATOR_READINESS_SCHEMA_VERSION,
+        "source": LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_SOURCE,
+        "read_only": True,
+        "append": False,
+        "decision_gate_reason": INDICATORS_MISSING_GATE_REASON,
+        "symbol_count": len(decisions),
+        "symbols": decisions,
+        "by_symbol": {str(item["symbol"]): dict(item) for item in decisions},
+        "generated_epoch": generated_epoch,
+        "metadata": {
+            "runtime_evidence_file": LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME,
+            "emits_only_for": INDICATORS_MISSING_GATE_REASON,
+            "does_not_change_gate_decision": True,
+            "does_not_change_candidate_state": True,
+            "does_not_compute_indicators": True,
+        },
+    }
+    _mark_non_action(out)
+    return out
+
+
+def write_indicator_missing_runtime_evidence(
+    report: LiveIndicatorReadinessReport | Mapping[str, Any],
+    *,
+    path: str | Path | None = None,
+    now_epoch: float | None = None,
+) -> Path | None:
+    """Write latest runtime evidence only when indicator values are missing."""
+
+    payload = build_indicator_missing_runtime_evidence_payload(report, now_epoch=now_epoch)
+    if payload is None:
+        return None
+    return write_json_atomic(live_indicator_readiness_runtime_evidence_path(path), payload)
+
+
 def _decision_for_snapshot(
     snapshot: Mapping[str, Any],
     *,
@@ -292,6 +362,59 @@ def _decision_for_snapshot(
     )
 
 
+def _indicator_missing_symbol_payload(decision: Mapping[str, Any]) -> dict[str, Any] | None:
+    symbol = _symbol_key(decision.get("symbol"))
+    if not symbol:
+        return None
+    return {
+        "symbol": symbol,
+        "decision_gate_reason": INDICATORS_MISSING_GATE_REASON,
+        "indicators_ok": bool(decision.get("indicators_ok")) if decision.get("indicators_ok") is not None else False,
+        "indicator_inputs_ok": bool(decision.get("indicator_inputs_ok")) if decision.get("indicator_inputs_ok") is not None else False,
+        "ohlc_bars_count": max(0, _int_or_none(decision.get("ohlc_bars_count")) or 0),
+        "warmup_min_bars": max(0, _int_or_none(decision.get("warmup_min_bars")) or 0),
+        "indicator_last_update_epoch": _finite_float_or_none(decision.get("indicator_last_update_epoch")),
+        "indicators_age_sec": _finite_float_or_none(decision.get("indicators_age_sec")),
+        "missing_inputs": list(_list_text(decision.get("missing_inputs"))),
+        "indicator_missing_inputs": list(_list_text(decision.get("indicator_missing_inputs"))),
+        "compute_indicators_error": str(decision.get("compute_indicators_error") or ""),
+        "vwap_present": bool(decision.get("vwap_present")),
+        "rsi_present": bool(decision.get("rsi_present")),
+        "ema_present": bool(decision.get("ema_present")),
+        "atr_present": bool(decision.get("atr_present")),
+    }
+
+
+def _is_indicator_missing_decision(decision: Mapping[str, Any]) -> bool:
+    if not isinstance(decision, Mapping):
+        return False
+    if _symbol_key(decision.get("decision_gate_reason")) == INDICATORS_MISSING_GATE_REASON:
+        return True
+    missing = _list_text(decision.get("indicator_missing_inputs"))
+    if missing:
+        return True
+    blockers = {_symbol_key(value) for value in _list_text(decision.get("blockers"))}
+    return INDICATOR_VALUE_MISSING.upper() in blockers
+
+
+def _report_payload(report: LiveIndicatorReadinessReport | Mapping[str, Any]) -> dict[str, Any]:
+    if hasattr(report, "to_payload"):
+        try:
+            value = report.to_payload()
+        except Exception:
+            value = {}
+    else:
+        value = report
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _decision_payloads(report_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    raw = report_payload.get("decisions")
+    if not isinstance(raw, list):
+        return []
+    return [dict(item) for item in raw if isinstance(item, Mapping)]
+
+
 def _missing_inputs(snapshot: Mapping[str, Any]) -> tuple[str, ...]:
     missing: list[str] = []
     for name in _REQUIRED_INPUTS:
@@ -351,6 +474,19 @@ def _symbol_key(value: Any) -> str:
     return str(value or "").strip().upper().replace(" ", "_").replace("-", "_")
 
 
+def _list_text(value: Any) -> tuple[str, ...]:
+    if value in (None, "", "None"):
+        return ()
+    if isinstance(value, str):
+        raw = [value]
+    else:
+        try:
+            raw = list(value)
+        except TypeError:
+            raw = [value]
+    return tuple(str(item or "").strip() for item in raw if str(item or "").strip())
+
+
 def _dedupe(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(sorted({value for value in values if value}))
 
@@ -387,9 +523,15 @@ __all__ = [
     "INDICATOR_STALE",
     "INDICATOR_SYMBOL_MISSING",
     "INDICATOR_VALUE_MISSING",
+    "INDICATORS_MISSING_GATE_REASON",
+    "LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME",
+    "LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_SOURCE",
     "LIVE_INDICATOR_READINESS_SCHEMA_VERSION",
     "LIVE_INDICATOR_READINESS_SOURCE",
     "LiveIndicatorReadinessDecision",
     "LiveIndicatorReadinessReport",
+    "build_indicator_missing_runtime_evidence_payload",
     "build_live_indicator_readiness_report",
+    "live_indicator_readiness_runtime_evidence_path",
+    "write_indicator_missing_runtime_evidence",
 ]
