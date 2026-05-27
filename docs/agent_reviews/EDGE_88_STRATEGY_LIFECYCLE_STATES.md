@@ -1,72 +1,118 @@
-# Agent Review Evidence — EDGE-88 Strategy Lifecycle States
+# EDGE-88 Strategy Lifecycle States Agent Review
 
-## Scope reviewed
+mode: REVIEW
+candidate_id: edge_88_strategy_lifecycle_states
+decision: review_ready
+reason: strategy_lifecycle_states_tests_docs
+timestamp: 2026-05-27T16:02:00Z
+source: edge_88_agent_review
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
 
-PR #305 introduces read-only lifecycle state modeling only:
+## Agent Work Contract
 
-- `core/strategy_lifecycle_states.py`
-- `tests/test_edge_88_strategy_lifecycle_states.py`
-- `docs/EDGE_88_STRATEGY_LIFECYCLE_STATES.md`
-- `docs/EDGE_TODO.md`
+This review covers EDGE-88 only.
 
-## Safety review
+The PR adds read-only lifecycle state modeling from EDGE-87 strategy-family recommendations. It must not promote, suspend, retire, execute, wire runtime behavior, change dashboards, alter ranking/scoring, or call broker APIs.
 
-Confirmed non-goals are preserved:
+## Scope Guard
 
-- No broker calls
-- No order placement, modification, cancellation, or exit behavior
-- No runtime wiring
-- No dashboard/UI work
-- No promotion implementation
-- No suspension implementation
-- No retirement implementation
-- No strategy lifecycle mutation
+Allowed:
 
-The reducer emits evidence-only lifecycle states and explicitly marks output as non-action:
+- Add a pure reducer for lifecycle state evidence.
+- Add focused unit tests.
+- Add documentation and agent-review evidence.
+- Shrink `docs/EDGE_TODO.md` for the completed PR.
 
-- `read_only=true`
-- `append=false`
-- `is_order_action=false`
-- `broker_api_called=false`
-- `live_order_action=false`
-- `broker_order_action=false`
-- `promotion_applied=false`
-- `suspension_applied=false`
-- `retirement_applied=false`
+Not allowed:
 
-## Determinism review
+- Broker calls.
+- Order actions.
+- Runtime wiring.
+- Dashboard/UI work.
+- Promotion implementation.
+- Suspension implementation.
+- Retirement implementation.
+- Strategy lifecycle mutation.
+- Ranking/scoring/execution changes.
 
-Lifecycle derivation is pure and deterministic from the family report payload and policy threshold.
+## Grill Me Review
 
-There are no time-based decisions, network calls, broker calls, filesystem writes, random values, global mutable state, or runtime side effects.
+Question: Can a weak/unknown recommendation become active eligible?
 
-## Fail-closed review
+Answer: No. Unknown recommendations are routed to `WATCHLIST`, and low-sample evidence is routed to `CANDIDATE`, not `ACTIVE_ELIGIBLE`.
 
-The reducer blocks invalid inputs:
+Question: Does `KILL` immediately retire or suspend a strategy?
 
-- invalid family report shape/status
-- missing recommendations
-- invalid lifecycle policy
+Answer: No. `KILL` only derives `SUSPEND_CANDIDATE` or `RETIRED_CANDIDATE` evidence. The output explicitly keeps `suspension_applied=false` and `retirement_applied=false`.
 
-Unknown source recommendations are routed to `WATCHLIST`, not active eligibility.
+Question: Does `KEEP` immediately promote a strategy?
 
-Low-sample source evidence becomes `CANDIDATE`, not active eligibility.
+Answer: No. `KEEP` derives `ACTIVE_ELIGIBLE` evidence and `eligible_for_promotion=true`, but `promotion_applied=false`. Promotion belongs to EDGE-89.
 
-## Test review
+## Hermes Review
 
-Focused tests cover positive, negative, and fail-closed paths:
+The public contract is intentionally narrow:
 
-- keep family -> active eligible
-- watch family -> watchlist
-- low sample -> candidate
-- kill below retire threshold -> suspend candidate
-- kill at retire threshold -> retired candidate
-- unknown recommendation -> watchlist
-- invalid family report -> blocked
-- empty recommendations -> blocked
-- invalid policy -> blocked
-- payload is JSON serializable and non-action
+- `build_strategy_lifecycle_report(...)`
 
-## Review conclusion
+Payloads include schema version, source, status, reason codes, policy, lifecycle counts, lifecycle states, and non-action markers.
 
-EDGE-88 is safe to review as a narrow lifecycle evidence-model PR. It deliberately stops before promotion, suspension, retirement, runtime wiring, dashboard behavior, and live execution.
+## GSD Review
+
+The implementation stays deterministic and local:
+
+- No hidden global state.
+- No network calls.
+- No broker imports.
+- No filesystem writes.
+- No runtime side effects.
+- Invalid family reports and invalid policy fail closed.
+
+## QA / Safety Review
+
+Focused test coverage includes:
+
+- `KEEP` to `ACTIVE_ELIGIBLE`
+- `WATCH` to `WATCHLIST`
+- low-sample evidence to `CANDIDATE`
+- `KILL` below retire threshold to `SUSPEND_CANDIDATE`
+- `KILL` at retire threshold to `RETIRED_CANDIDATE`
+- unknown recommendation to `WATCHLIST`
+- invalid family report blocking
+- empty recommendation blocking
+- invalid policy blocking
+- JSON serialization and non-action payload markers
+
+## Acceptance Proof
+
+Run:
+
+```bash
+pytest tests/test_edge_88_strategy_lifecycle_states.py
+```
+
+CI must pass before merge.
+
+## Runtime Proof Required After Merge
+
+A later PR may wire lifecycle evidence into runtime only if explicitly scoped. That later PR must prove:
+
+- read-only output remains read-only
+- broker/order markers remain false
+- promotion/suspension/retirement markers remain explicit
+- no lifecycle mutation occurs without a separately scoped gate
+
+## What This PR Does Not Prove
+
+This PR does not prove strategy profitability, live order safety, promotion readiness, suspension correctness, retirement correctness, ranking quality, or execution quality. It only proves that family evidence can be deterministically mapped into read-only lifecycle state evidence.
+
+## Human Approval
+
+Ready for maintainer review after CI is green.
+
+## Next Action
+
+After this PR is merged, continue with `EDGE-89 — Strategy Promotion Gate` only from the latest merged main commit.
