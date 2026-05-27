@@ -71,7 +71,7 @@ def append_event(
         "ts": _iso_utc(ts),
         "type": str(event_type),
         "event_id": payload_event_id,
-        "payload": _redact_sensitive_values(payload_obj),
+        "payload": payload_obj,
     }
     with target.open("a", encoding="utf-8", buffering=1) as handle:
         handle.write(json.dumps(event, ensure_ascii=True, sort_keys=True) + "\n")
@@ -83,7 +83,7 @@ def append_event(
                 "event_type": str(event_type),
                 "event_id": payload_event_id,
                 "session_id": payload_obj.get("session_id"),
-                "payload": _redact_sensitive_values(payload_obj),
+                "payload": payload_obj,
                 "source": "events_jsonl",
             }
         )
