@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #302 — LIVE-TRUTH-08 SENSEX Reject Calibration Evidence, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #303 — LIVE-TRUTH-09 Runtime Health Artifact Consistency, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -38,6 +38,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - LIVE-TRUTH-05 — Market Close State Consistency / Off-Hours Quiescence
 - LIVE-TRUTH-06 — Stale Candidate Hygiene Guard
 - LIVE-TRUTH-07 — Latency / SLO Guard Oscillation Evidence
+- LIVE-TRUTH-08 — SENSEX Reject Calibration Evidence
 
 ## Locked LIVE-TRUTH stabilization block
 
@@ -56,7 +57,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Live evidence stabilization
 
-- [ ] PR #303 — LIVE-TRUTH-09 Runtime Health Artifact Consistency
 - [ ] PR #304 — LIVE-TRUTH-10 Strategy Perf Shadow Fallback Evidence
 
 ### Strategy lifecycle governance
@@ -87,8 +87,8 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish PR #302 / LIVE-TRUTH-08 first and merge it green.
-2. Do not start LIVE-TRUTH-09 until LIVE-TRUTH-08 is merged.
+1. Finish PR #303 / LIVE-TRUTH-09 first and merge it green.
+2. Do not start LIVE-TRUTH-10 until LIVE-TRUTH-09 is merged.
 3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
 4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
 5. Keep every PR narrow, tested, documented, and reviewed.
