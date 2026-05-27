@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable
 
 
 _TERMINAL_STOP_PHASES: frozenset[str] = frozenset({"STOPPING", "STOPPED", "AUTH_BLOCKED"})
@@ -55,8 +55,6 @@ class WsLifecycleTransition:
     should_mark_connected: bool = False
     should_mark_disconnected: bool = False
     should_record_error: bool = False
-    is_order_action: bool = False
-    broker_api_called: bool = False
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -73,8 +71,8 @@ class WsLifecycleTransition:
             "should_mark_connected": bool(self.should_mark_connected),
             "should_mark_disconnected": bool(self.should_mark_disconnected),
             "should_record_error": bool(self.should_record_error),
-            "is_order_action": bool(self.is_order_action),
-            "broker_api_called": bool(self.broker_api_called),
+            "is_order_action": False,
+            "broker_api_called": False,
         }
 
 
@@ -290,7 +288,15 @@ def transition_for_error(
     if state.stop_requested:
         return WsLifecycleTransition("ERROR", phase, "STOPPING", "STOP", "stop_requested", should_stop=True)
     if bool(restart_requested):
-        return WsLifecycleTransition("ERROR", phase, "RECOVERING", "RESTART", str(reason or "error_restart"), should_restart=True, should_record_error=True)
+        return WsLifecycleTransition(
+            "ERROR",
+            phase,
+            "RECOVERING",
+            "RESTART",
+            str(reason or "error_restart"),
+            should_restart=True,
+            should_record_error=True,
+        )
     return WsLifecycleTransition("ERROR", phase, phase, "RECORD_ERROR", str(reason or "error"), should_record_error=True)
 
 
@@ -337,14 +343,13 @@ def build_lifecycle_evidence(
     transition: WsLifecycleTransition,
     token_sample: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
-    payload = {
+    return {
         "state": state.to_payload(),
         "transition": transition.to_payload(),
         "token_sample": list(normalize_token_sample(token_sample)),
         "is_order_action": False,
         "broker_api_called": False,
     }
-    return payload
 
 
 __all__ = [
