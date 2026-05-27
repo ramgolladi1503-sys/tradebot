@@ -34,6 +34,9 @@ Out of scope:
 - Feed recovery changes.
 - Runtime freshness checks.
 - Market-close behavior.
+- Dashboard behavior.
+- Candidate generation.
+- Strategy scoring.
 
 ## Scope Guard
 
@@ -43,8 +46,9 @@ Out of scope:
 - No feed reconnect work.
 - No market-close logic.
 - No later LIVE-TRUTH items.
+- No executable-quality gate change.
 
-## Review Questions
+## Grill Me Review
 
 Question: Can an empty incoming cycle erase a previous useful artifact?
 
@@ -62,13 +66,48 @@ Question: Does this PR solve market-close quiescence?
 
 Answer: No. That is LIVE-TRUTH-05.
 
-## Files
+Question: Does this PR change candidate generation or scoring?
+
+Answer: No.
+
+## Hermes Review
+
+Boundary check:
+
+- No external integration added.
+- No UI change added.
+- No strategy behavior changed.
+- No candidate scoring changed.
+- No feed reconnect behavior changed.
+- Non-action metadata remains explicit in review evidence.
+
+Verdict: scoped as latest-artifact preservation evidence and utility only.
+
+## GSD Review
+
+Files changed are narrow:
 
 - `core/live_truth_latest_artifact_preservation.py`
 - `tests/test_live_truth_02_latest_artifact_preservation.py`
 - `docs/LIVE_TRUTH_02_LATEST_ARTIFACT_NON_EMPTY_PRESERVATION.md`
 - `docs/agent_reviews/LIVE_TRUTH_02_LATEST_ARTIFACT_NON_EMPTY_PRESERVATION.md`
 - `docs/EDGE_TODO.md`
+
+## QA / Safety Review
+
+Tests cover:
+
+- preserve previous non-empty latest artifact when incoming cycle is empty
+- write incoming artifact when incoming payload is non-empty
+- write empty incoming payload only when no previous non-empty payload exists
+- block invalid incoming payloads
+- detect non-empty artifacts by count fields
+- detect non-empty artifacts by sequence fields
+- detect non-empty artifacts by signal fields
+- preserve existing file contents on empty-cycle overwrite risk
+- replace file contents on non-empty incoming payload
+- JSON serialization
+- read-only/no-append metadata
 
 ## Acceptance Proof
 
@@ -83,6 +122,27 @@ Expected result:
 - valid non-empty overwrite is proven
 - invalid incoming payloads block before write
 - read-only/no-append flags remain explicit
+
+## Runtime Proof Required After Merge
+
+After merge, LIVE-TRUTH-02 proves only the preservation decision and writer utility.
+
+Runtime wiring must be added only if a later scoped PR explicitly requires it.
+
+## What This PR Does Not Prove
+
+This PR does not prove:
+
+- runtime snapshot freshness
+- feed runtime liveness
+- market-close quiescence
+- stale candidate hygiene
+- dashboard correctness
+- pilot readiness
+
+## Human Approval
+
+Human review is required before wiring this utility into broader runtime loops.
 
 ## Next Action
 
