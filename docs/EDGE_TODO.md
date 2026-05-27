@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #295 — LIVE-TRUTH-01 Top Opportunities Executable Truth Alignment, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #296 — LIVE-TRUTH-02 Latest Artifact Non-Empty Preservation, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -31,75 +31,111 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-85 — Strategy Expectancy by Regime
 - EDGE-86 — Slippage and Cost Truth
 - EDGE-87 — Strategy Family Kill/Keep Report
+- LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
+
+## Locked LIVE-TRUTH stabilization block
+
+- PR #295 — LIVE-TRUTH-01 Top Opportunities Executable Truth Alignment
+- PR #296 — LIVE-TRUTH-02 Latest Artifact Non-Empty Preservation
+- PR #297 — LIVE-TRUTH-03 Runtime Snapshot Freshness Guard
+- PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence
+- PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence
+- PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard
+- PR #301 — LIVE-TRUTH-07 Latency / SLO Guard Oscillation Evidence
+- PR #302 — LIVE-TRUTH-08 SENSEX Reject Calibration Evidence
+- PR #303 — LIVE-TRUTH-09 Runtime Health Artifact Consistency
+- PR #304 — LIVE-TRUTH-10 Strategy Perf Shadow Fallback Evidence
 
 ## Remaining TODO
 
 ### Live evidence stabilization
 
-- [ ] PR #296 — LIVE-TRUTH-02 Latest Artifact Non-Empty Preservation
 - [ ] PR #297 — LIVE-TRUTH-03 Runtime Snapshot Freshness Guard
 - [ ] PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence
-- [ ] PR #299 — LIVE-TRUTH-05 Stale Candidate Hygiene Guard
-- [ ] PR #300 — LIVE-TRUTH-06 Latency / SLO Guard Oscillation Evidence
-- [ ] PR #301 — LIVE-TRUTH-07 SENSEX Reject Calibration Evidence
-- [ ] PR #302 — LIVE-TRUTH-08 Runtime Health Artifact Consistency
-- [ ] PR #303 — LIVE-TRUTH-09 Strategy Perf Shadow Fallback Evidence
+- [ ] PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence
+- [ ] PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard
+- [ ] PR #301 — LIVE-TRUTH-07 Latency / SLO Guard Oscillation Evidence
+- [ ] PR #302 — LIVE-TRUTH-08 SENSEX Reject Calibration Evidence
+- [ ] PR #303 — LIVE-TRUTH-09 Runtime Health Artifact Consistency
+- [ ] PR #304 — LIVE-TRUTH-10 Strategy Perf Shadow Fallback Evidence
 
 ### Strategy lifecycle governance
 
-- [ ] PR #304 — EDGE-88 Strategy Lifecycle States
-- [ ] PR #305 — EDGE-89 Strategy Promotion Gate
-- [ ] PR #306 — EDGE-90 Strategy Suspension and Retirement Rules
+- [ ] PR #305 — EDGE-88 Strategy Lifecycle States
+- [ ] PR #306 — EDGE-89 Strategy Promotion Gate
+- [ ] PR #307 — EDGE-90 Strategy Suspension and Retirement Rules
 
 ### Feed extraction/refactor work
 
-- [ ] PR #307 — PR-FEED-08 Extract Pure Tick Utility Helpers
-- [ ] PR #308 — PR-FEED-09 Extract Reconnect Decision Policy
-- [ ] PR #309 — PR-FEED-10 Extract Subscription Budget Policy
-- [ ] PR #310 — PR-FEED-11 Extract Runtime Snapshot Builder
-- [ ] PR #311 — PR-FEED-17 Extract Token Resolution Read Model
-- [ ] PR #312 — PR-FEED-18 Extract WebSocket Lifecycle Shell
-- [ ] PR #313 — PR-FEED-19 Callback Thin-Wiring Refactor
+- [ ] PR #308 — PR-FEED-08 Extract Pure Tick Utility Helpers
+- [ ] PR #309 — PR-FEED-09 Extract Reconnect Decision Policy
+- [ ] PR #310 — PR-FEED-10 Extract Subscription Budget Policy
+- [ ] PR #311 — PR-FEED-11 Extract Runtime Snapshot Builder
+- [ ] PR #312 — PR-FEED-17 Extract Token Resolution Read Model
+- [ ] PR #313 — PR-FEED-18 Extract WebSocket Lifecycle Shell
+- [ ] PR #314 — PR-FEED-19 Callback Thin-Wiring Refactor
 
 ### Replay, edge proof, and readiness
 
-- [ ] PR #314 — EDGE-91 Regime Replay Scenarios
-- [ ] PR #315 — EDGE-92 Feed Fault Replay Scenarios
-- [ ] PR #316 — EDGE-93 Strategy Replay Proof Pack
-- [ ] PR #317 — EDGE-94 End-to-End Edge Acceptance Suite
-- [ ] PR #318 — EDGE-95 Paper-Only Edge Gate
-- [ ] PR #319 — EDGE-96 Live-Pilot Risk Throttle
-- [ ] PR #320 — EDGE-97 Final Edge Readiness Report
+- [ ] PR #315 — EDGE-91 Regime Replay Scenarios
+- [ ] PR #316 — EDGE-92 Feed Fault Replay Scenarios
+- [ ] PR #317 — EDGE-93 Strategy Replay Proof Pack
+- [ ] PR #318 — EDGE-94 End-to-End Edge Acceptance Suite
+- [ ] PR #319 — EDGE-95 Paper-Only Edge Gate
+- [ ] PR #320 — EDGE-96 Live-Pilot Risk Throttle
+- [ ] PR #321 — EDGE-97 Final Edge Readiness Report
 
-## LIVE-TRUTH-01 acceptance subtasks
+## LIVE-TRUTH-02 acceptance subtasks
 
-LIVE-TRUTH-01 must prove top-opportunities executable truth alignment and top executable trace completeness.
+LIVE-TRUTH-02 must prevent empty live-cycle evidence payloads from overwriting the previous non-empty latest artifact.
 
-Every `TB_TOP_EXECUTABLE_CANDIDATE` event and `runtime_candidate_handoff_latest.json` payload must include:
+Latest artifacts must preserve useful evidence when the incoming cycle is empty and the previous artifact still contains candidates, top opportunities, executable truth, or meaningful runtime state.
 
-- `trade_id`
-- `appeared_at`
-- `symbol`
-- `strike`
-- `option_type`
-- `strategy_family`
-- `entry`
-- `execution_entry`
-- `stop_loss`
-- `target`
-- `risk_reward`
-- `rank_score`
-- `source_quote_age`
-- `bid`
-- `ask`
-- `ltp`
+In scope:
 
-No order behavior is allowed in LIVE-TRUTH-01. This is runtime evidence and trace completeness only.
+- Detect incoming empty-cycle latest artifact payloads.
+- Detect previous non-empty latest artifact payloads.
+- Preserve the previous non-empty latest artifact instead of overwriting it with an empty payload.
+- Emit read-only preservation evidence explaining whether the incoming payload was written or the previous payload was preserved.
+- Keep existing executable-quality, stale-feed, quote-truth, and safety gates unchanged.
+
+Out of scope:
+
+- Dashboard changes.
+- Candidate generation changes.
+- Strategy scoring changes.
+- Feed reconnect behavior.
+- Market-close state handling; that belongs to LIVE-TRUTH-05.
+- Runtime freshness checks; that belongs to LIVE-TRUTH-03.
+
+## LIVE-TRUTH-05 close-state scope and acceptance
+
+LIVE-TRUTH-05 exists because final close evidence must not look like normal intraday no-trade behavior.
+
+Scope:
+
+- Ensure `feed_runtime`, `market_snapshot`, `top_opportunities`, and runtime health agree on `market_open`.
+- After market close, move runtime evidence to `OFFHOURS` / `MARKET_CLOSED` state.
+- Stop expensive candidate scanning after close unless replay/off-hours analysis is explicitly enabled.
+- Top opportunities should show `MARKET_CLOSED` or `OFFHOURS_BLOCKED`, not normal `NO_TRADE`.
+- CPU should drop in off-hours mode.
+- WebSocket down plus market closed must not continue high-frequency SLO loops.
+
+Acceptance:
+
+Given `market_snapshot.market_open=false`:
+
+- `feed_runtime` must not report `market_open=true` without a freshness warning.
+- `top_opportunities` must include `market_state=MARKET_CLOSED/OFFHOURS`.
+- `source_candidate_count` should be `0` unless off-hours planning is explicitly enabled.
+- `executable_count` must be `0`.
+- No live execution action.
+- Runtime health must show quiet/off-hours mode.
 
 ## Non-negotiable sequencing
 
-1. Finish PR #295 / LIVE-TRUTH-01 first and merge it green.
-2. Do not start LIVE-TRUTH-02 until LIVE-TRUTH-01 is merged.
+1. Finish PR #296 / LIVE-TRUTH-02 first and merge it green.
+2. Do not start LIVE-TRUTH-03 until LIVE-TRUTH-02 is merged.
 3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
 4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
 5. Do not start pilot readiness before paper truth, replay proof, cost truth, live evidence stabilization, and lifecycle gates exist.
@@ -125,6 +161,7 @@ Lifecycle rules should only be built after these are stabilized:
 - latest artifact empty-cycle overwrite risk
 - frozen feed runtime and market snapshot artifacts
 - WebSocket disconnect / subscribe-failed recovery visibility
+- market-close state inconsistency and off-hours loop noise
 - stale candidate hygiene
 - latency / SLO guard oscillation evidence
 - SENSEX reject calibration evidence
@@ -134,7 +171,7 @@ Lifecycle rules should only be built after these are stabilized:
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- Do not mix LIVE-TRUTH-02 or later fixes into LIVE-TRUTH-01.
+- Do not mix LIVE-TRUTH-03 or later fixes into LIVE-TRUTH-02.
 - Do not start EDGE-88 until EDGE-87 and the LIVE-TRUTH block are complete.
 - Do not put feed refactor work before runtime truth evidence cleanup.
 - No adapter integration unless a later PR explicitly scopes pilot behavior.
