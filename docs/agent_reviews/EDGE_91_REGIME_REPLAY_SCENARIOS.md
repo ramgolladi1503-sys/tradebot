@@ -4,7 +4,7 @@ mode: REVIEW
 candidate_id: edge_91_regime_replay_scenarios
 decision: review_ready
 reason: deterministic_regime_replay_scenarios_tests_docs
-timestamp: 2026-05-28T01:30:00Z
+timestamp: 2026-05-27T20:48:00Z
 source: edge_91_agent_review
 is_order_action: false
 broker_api_called: false
@@ -90,11 +90,11 @@ The implementation is intentionally local and boring:
 - no UI dependency
 - no paper journal dependency
 
-This is the right boundary. Anything more would be fake progress and would pollute EDGE-92/EDGE-93.
+This is the right boundary. Anything more would pollute EDGE-92/EDGE-93.
 
 ## QA / Safety Review
 
-Focused tests cover:
+Focused test coverage includes:
 
 - default scenario pass path
 - read-only/non-action flags
@@ -118,6 +118,10 @@ CI must pass before merge.
 ## What This PR Does Not Prove
 
 This PR does not prove feed recovery, strategy profitability, candidate quality, paper/live readiness, execution quality, or live-pilot safety. It proves only that regime replay scenarios are deterministic, expectation-checked, and fail closed.
+
+## Human Approval
+
+Ready for maintainer review after CI is green.
 
 ## Next Action
 
