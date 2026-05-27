@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -35,6 +35,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
 - LIVE-TRUTH-03 — Runtime Snapshot Freshness Guard
 - LIVE-TRUTH-04 — Feed Runtime Writer Liveness / WebSocket Recovery Evidence
+- LIVE-TRUTH-05 — Market Close State Consistency / Off-Hours Quiescence
 
 ## Locked LIVE-TRUTH stabilization block
 
@@ -53,7 +54,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Live evidence stabilization
 
-- [ ] PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard
 - [ ] PR #301 — LIVE-TRUTH-07 Latency / SLO Guard Oscillation Evidence
 - [ ] PR #302 — LIVE-TRUTH-08 SENSEX Reject Calibration Evidence
 - [ ] PR #303 — LIVE-TRUTH-09 Runtime Health Artifact Consistency
@@ -85,75 +85,10 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - [ ] PR #320 — EDGE-96 Live-Pilot Risk Throttle
 - [ ] PR #321 — EDGE-97 Final Edge Readiness Report
 
-## LIVE-TRUTH-05 close-state scope and acceptance
-
-LIVE-TRUTH-05 exists because final close evidence must not look like normal intraday no-trade behavior.
-
-Scope:
-
-- Ensure `feed_runtime`, `market_snapshot`, `top_opportunities`, and runtime health agree on `market_open`.
-- After market close, runtime evidence must represent `OFFHOURS` / `MARKET_CLOSED` state.
-- Expensive candidate scanning must be quiet after close unless replay/off-hours analysis is explicitly enabled.
-- Top opportunities should show `MARKET_CLOSED` or `OFFHOURS_BLOCKED`, not normal `NO_TRADE`.
-- CPU/loop evidence should indicate quiet/off-hours behavior.
-- WebSocket down plus market closed must not continue high-frequency SLO loops.
-
-Acceptance:
-
-Given `market_snapshot.market_open=false`:
-
-- `feed_runtime` must not report `market_open=true` without a freshness warning.
-- `top_opportunities` must include `market_state=MARKET_CLOSED/OFFHOURS`.
-- `source_candidate_count` should be `0` unless off-hours planning is explicitly enabled.
-- `executable_count` must be `0`.
-- No live execution action.
-- Runtime health must show quiet/off-hours mode.
-
 ## Non-negotiable sequencing
 
-1. Finish PR #299 / LIVE-TRUTH-05 first and merge it green.
-2. Do not start LIVE-TRUTH-06 until LIVE-TRUTH-05 is merged.
+1. Finish PR #300 / LIVE-TRUTH-06 first and merge it green.
+2. Do not start LIVE-TRUTH-07 until LIVE-TRUTH-06 is merged.
 3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
 4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
-5. Do not start pilot readiness before paper truth, replay proof, cost truth, live evidence stabilization, and lifecycle gates exist.
-
-## Dependency order
-
-```text
-EDGE-86 / EDGE-87 paper truth
-  -> LIVE-TRUTH runtime evidence cleanup
-  -> EDGE-88/89/90 strategy lifecycle
-  -> PR-FEED refactors
-  -> Replay/readiness
-```
-
-## Why LIVE-TRUTH comes before lifecycle governance
-
-The 2026-05-27 live run exposed runtime evidence issues that can pollute promotion and suspension decisions if ignored.
-
-Lifecycle rules should only be built after these are stabilized:
-
-- top-opportunity truth mismatch
-- top executable trace missing entry, target, stop loss, risk-reward, rank, quote-age, and signal quote fields
-- latest artifact empty-cycle overwrite risk
-- frozen feed runtime and market snapshot artifacts
-- WebSocket disconnect / subscribe-failed recovery visibility
-- market-close state inconsistency and off-hours loop noise
-- stale candidate hygiene
-- latency / SLO guard oscillation evidence
-- SENSEX reject calibration evidence
-- runtime health artifact consistency
-- strategy performance shadow fallback evidence
-
-## Scope guard
-
-- Keep each PR narrow and evidence-backed.
-- Do not mix LIVE-TRUTH-06 or later fixes into LIVE-TRUTH-05.
-- Do not start EDGE-88 until EDGE-87 and the LIVE-TRUTH block are complete.
-- Do not put feed refactor work before runtime truth evidence cleanup.
-- No adapter integration unless a later PR explicitly scopes pilot behavior.
-- No state-changing integration in this roadmap until readiness gates explicitly allow it.
-- No fake scoring, cosmetic dashboard work, or PR-loop progress.
-- No weakening fallback, stale-feed, quote-truth, or executable-quality protections to make the UI look better.
-- Every PR must include focused tests, docs, and agent-review evidence.
-- Every PR must keep non-action metadata explicit where applicable, including read-only and no-append guarantees.
+5. Keep every PR narrow, tested, documented, and reviewed.
