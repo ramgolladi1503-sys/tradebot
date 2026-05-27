@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #305 — EDGE-88 Strategy Lifecycle States, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #306 — EDGE-89 Strategy Promotion Gate, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -31,6 +31,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-85 — Strategy Expectancy by Regime
 - EDGE-86 — Slippage and Cost Truth
 - EDGE-87 — Strategy Family Kill/Keep Report
+- EDGE-88 — Strategy Lifecycle States
 - LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
 - LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
 - LIVE-TRUTH-03 — Runtime Snapshot Freshness Guard
@@ -63,7 +64,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Strategy lifecycle governance
 
-- [ ] PR #306 — EDGE-89 Strategy Promotion Gate
 - [ ] PR #307 — EDGE-90 Strategy Suspension and Retirement Rules
 
 ### Feed extraction/refactor work
@@ -88,7 +88,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish PR #305 / EDGE-88 first and merge it green.
-2. Do not start EDGE-89 until EDGE-88 is merged.
+1. Finish PR #306 / EDGE-89 first and merge it green.
+2. Do not start EDGE-90 until EDGE-89 is merged.
 3. Do not start feed refactors before lifecycle governance PRs are completed.
 4. Keep every PR narrow, tested, documented, and reviewed.
