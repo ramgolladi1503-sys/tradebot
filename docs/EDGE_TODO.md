@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #297 — LIVE-TRUTH-03 Runtime Snapshot Freshness Guard, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -33,6 +33,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-87 — Strategy Family Kill/Keep Report
 - LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
 - LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
+- LIVE-TRUTH-03 — Runtime Snapshot Freshness Guard
 
 ## Locked LIVE-TRUTH stabilization block
 
@@ -51,7 +52,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Live evidence stabilization
 
-- [ ] PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence
 - [ ] PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence
 - [ ] PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard
 - [ ] PR #301 — LIVE-TRUTH-07 Latency / SLO Guard Oscillation Evidence
@@ -85,27 +85,30 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - [ ] PR #320 — EDGE-96 Live-Pilot Risk Throttle
 - [ ] PR #321 — EDGE-97 Final Edge Readiness Report
 
-## LIVE-TRUTH-03 acceptance subtasks
+## LIVE-TRUTH-04 acceptance subtasks
 
-LIVE-TRUTH-03 must prove latest runtime snapshots are fresh enough to trust before later runtime-health or lifecycle decisions consume them.
+LIVE-TRUTH-04 must prove whether feed runtime evidence is still being written and whether WebSocket/subscription failures have recovery visibility.
 
 In scope:
 
-- Evaluate runtime evidence snapshots by artifact name.
-- Accept numeric epoch and ISO timestamp fields.
-- Detect missing timestamps.
-- Detect stale timestamps by max-age threshold.
-- Detect future timestamps beyond tolerance.
-- Support per-artifact max-age overrides.
-- Emit read-only freshness evidence.
+- Evaluate feed runtime writer heartbeat freshness.
+- Detect stale writer heartbeat evidence.
+- Detect missing writer heartbeat evidence.
+- Detect future writer heartbeat evidence.
+- Detect WebSocket disconnect evidence without recovery visibility.
+- Detect subscription failure evidence without recovery visibility.
+- Preserve subscribed token and option-token counts in evidence.
+- Emit read-only liveness evidence.
 
 Out of scope:
 
-- Refreshing feeds.
 - Reconnecting WebSockets.
-- Market-close quiescence; that belongs to LIVE-TRUTH-05.
+- Refreshing feeds.
+- Resubscribing tokens.
 - Candidate generation changes.
+- Strategy scoring changes.
 - Dashboard changes.
+- Market-close quiescence; that belongs to LIVE-TRUTH-05.
 - Runtime wiring unless a later PR explicitly scopes it.
 
 ## LIVE-TRUTH-05 close-state scope and acceptance
@@ -134,8 +137,8 @@ Given `market_snapshot.market_open=false`:
 
 ## Non-negotiable sequencing
 
-1. Finish PR #297 / LIVE-TRUTH-03 first and merge it green.
-2. Do not start LIVE-TRUTH-04 until LIVE-TRUTH-03 is merged.
+1. Finish PR #298 / LIVE-TRUTH-04 first and merge it green.
+2. Do not start LIVE-TRUTH-05 until LIVE-TRUTH-04 is merged.
 3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
 4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
 5. Do not start pilot readiness before paper truth, replay proof, cost truth, live evidence stabilization, and lifecycle gates exist.
@@ -171,7 +174,7 @@ Lifecycle rules should only be built after these are stabilized:
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- Do not mix LIVE-TRUTH-04 or later fixes into LIVE-TRUTH-03.
+- Do not mix LIVE-TRUTH-05 or later fixes into LIVE-TRUTH-04.
 - Do not start EDGE-88 until EDGE-87 and the LIVE-TRUTH block are complete.
 - Do not put feed refactor work before runtime truth evidence cleanup.
 - No adapter integration unless a later PR explicitly scopes pilot behavior.
