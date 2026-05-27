@@ -17,6 +17,9 @@ from core.tick_store import insert_tick
 from core.time_utils import utc_now
 
 
+HEALTH_SCENARIO_EXPIRY = "2099-05-26"
+
+
 def run_golden_path(desk: str, *, run_id: str) -> dict[str, Any]:
     """
     Deterministic single-trade scenario using synthetic feed + mock broker.
@@ -105,11 +108,11 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
     Deterministic health scenario that proves one option trade can be built to EXECUTABLE state.
     """
     symbol = "NIFTY"
-    expiry_date = "2026-05-26"
+    expiry_date = HEALTH_SCENARIO_EXPIRY
     strike = 22500.0
     option_type = "CE"
     token = 990001
-    tradingsymbol = "NIFTY26MAY22500CE"
+    tradingsymbol = "NIFTY99MAY22500CE"
     now_iso = utc_now().isoformat().replace("+00:00", "Z")
     now_epoch = datetime.fromisoformat(now_iso.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
     queue_path = logs_dir() / f"health_gate_queue_{str(desk or 'DEFAULT').upper()}.json"
@@ -126,7 +129,7 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
         strike_val = base_strike + (idx * 50.0)
         right = "CE" if idx % 2 == 0 else "PE"
         token_val = token + idx
-        tsym = f"NIFTY26MAY{int(strike_val)}{right}"
+        tsym = f"NIFTY99MAY{int(strike_val)}{right}"
         instruments.append(
             {
                 "name": symbol,
