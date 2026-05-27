@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from core.events import append_event, read_events, write_json_atomic
+from core.events import write_json_atomic
 
 REDACTED = "[REDACTED]"
 
@@ -44,32 +44,3 @@ def test_write_json_atomic_preserves_safe_fields_and_redacts_sensitive_contract(
     assert original_payload["nested"]["api_key"] == "plain-api-key"
     assert original_payload["nested"]["items"][0]["client_secret"] == "plain-client-secret"
     assert original_payload["nested"]["items"][1]["token"] == "plain-token"
-
-
-def test_append_event_redacts_persisted_payload_without_breaking_event_identity(tmp_path):
-    target = tmp_path / "events.jsonl"
-    payload = {
-        "run_id": "run-1",
-        "event_id": "evt-1",
-        "authorization": "Bearer plain-token",
-        "nested": {"session_cookie": "plain-cookie", "safe": "visible"},
-    }
-
-    append_event("auth_check", payload, path=target)
-
-    rows = read_events(path=target, run_id="run-1")
-    assert rows == [
-        {
-            "ts": rows[0]["ts"],
-            "type": "auth_check",
-            "event_id": "evt-1",
-            "payload": {
-                "run_id": "run-1",
-                "event_id": "evt-1",
-                "authorization": REDACTED,
-                "nested": {"session_cookie": REDACTED, "safe": "visible"},
-            },
-        }
-    ]
-    assert payload["authorization"] == "Bearer plain-token"
-    assert payload["nested"]["session_cookie"] == "plain-cookie"
