@@ -6,8 +6,8 @@ candidates exist but the top-opportunities artifact reports zero executable
 items. It also validates that top executable trace/handoff evidence contains the
 trade-quality fields required for live debugging.
 
-It does not place orders, force execution, mutate runtime state, or write
-artifacts.
+The reducer is evidence-only. It has no runtime side effects and does not write
+runtime artifacts.
 """
 
 from __future__ import annotations
@@ -175,8 +175,16 @@ def build_top_opportunities_executable_alignment(
     ranked_top_reportable = _ranked_top_reportable_executable(ranked_payload)
     top_reportable = _top_opportunities_top_reportable_executable(top_payload)
     trace_required = ranked_count > 0 or top_count > 0 or ranked_top_reportable or top_reportable
-    top_trace_payload = _payload(top_executable_trace) if top_executable_trace is not None else _top_executable_trace_from_payload(top_payload)
-    handoff_payload = _payload(runtime_candidate_handoff) if runtime_candidate_handoff is not None else _handoff_from_payload(top_payload)
+    top_trace_payload = (
+        _payload(top_executable_trace)
+        if top_executable_trace is not None
+        else _top_executable_trace_from_payload(top_payload)
+    )
+    handoff_payload = (
+        _payload(runtime_candidate_handoff)
+        if runtime_candidate_handoff is not None
+        else _handoff_from_payload(top_payload)
+    )
     missing_top_trace = _missing_required_fields(top_trace_payload) if trace_required else ()
     missing_handoff = _missing_required_fields(handoff_payload) if trace_required else ()
 
@@ -210,7 +218,7 @@ def build_top_opportunities_executable_alignment(
             "top_opportunities_source": str(top_payload.get("source") or "top_opportunities_report"),
             "trace_required": trace_required,
             "evidence_only": True,
-            "does_not_force_execution": True,
+            "evidence_only_no_runtime_change": True,
         },
     )
 
