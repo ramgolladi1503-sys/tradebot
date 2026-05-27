@@ -252,7 +252,12 @@ def build_sensex_reject_calibration_report(
         status = CALIBRATION_STATUS_OVERFILTERED
     elif any(
         reason in reasons
-        for reason in (REJECT_RATE_HIGH_REASON, REASON_CONCENTRATION_HIGH_REASON, NEAR_MISS_RATE_HIGH_REASON)
+        for reason in (
+            REJECT_RATE_HIGH_REASON,
+            REASON_CONCENTRATION_HIGH_REASON,
+            NEAR_MISS_RATE_HIGH_REASON,
+            MISSING_REJECT_REASON,
+        )
     ):
         status = CALIBRATION_STATUS_REVIEW
     else:
