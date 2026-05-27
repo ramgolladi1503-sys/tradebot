@@ -1,58 +1,117 @@
-# Agent Review — EDGE-89 Strategy Promotion Gate
+# EDGE-89 Strategy Promotion Gate Agent Review
 
-## Reviewer A — Architecture / Scope
+mode: REVIEW
+candidate_id: edge_89_strategy_promotion_gate
+decision: review_ready
+reason: strategy_promotion_gate_tests_docs
+timestamp: 2026-05-27T16:55:00Z
+source: edge_89_agent_review
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
 
-Verdict: PASS
+## Agent Work Contract
 
-Evidence:
+This review covers EDGE-89 only.
 
-- Added a standalone `core/strategy_promotion_gate.py` module.
-- Consumes EDGE-88 lifecycle evidence instead of creating a parallel lifecycle model.
-- Does not wire runtime, dashboard, broker, order, or state mutation behavior.
-- PR #307 remains responsible for suspension and retirement rules.
+The PR adds read-only promotion gate evidence from EDGE-88 lifecycle states. It must not promote strategies, mutate lifecycle state, suspend, retire, execute, wire runtime behavior, change dashboards, alter ranking/scoring, or call broker APIs.
 
-## Reviewer B — Safety / Boundary
+## Scope Guard
 
-Verdict: PASS
+Allowed:
 
-Evidence:
+- Add a pure promotion-gate evidence reducer.
+- Add focused unit tests.
+- Add documentation and agent-review evidence.
+- Shrink `docs/EDGE_TODO.md` for the completed PR.
 
-- Report, policy, and decision payloads are explicitly read-only.
-- `append` remains false.
-- `promotion_applied` remains false.
-- `lifecycle_state_mutated` remains false.
-- Non-action markers remain false:
-  - `is_order_action`
-  - `broker_api_called`
-  - `live_order_action`
-  - `broker_order_action`
+Not allowed:
 
-## Reviewer C — Test Quality
+- Broker calls.
+- Order actions.
+- Runtime wiring.
+- Dashboard/UI work.
+- Promotion implementation.
+- Suspension implementation.
+- Retirement implementation.
+- Strategy lifecycle mutation.
+- Ranking/scoring/execution changes.
 
-Verdict: PASS
+## Grill Me Review
 
-Evidence:
+Question: Can an active-eligible lifecycle state automatically promote a strategy?
 
-- Positive candidate path covered.
-- Negative/fail-closed cases covered:
-  - invalid lifecycle report
-  - empty lifecycle states
-  - invalid policy
-  - non-active lifecycle state / review required
-  - low sample
-  - negative expectancy
-  - low win rate
-- Serialization and safety marker regression test included.
+Answer: No. The gate can only emit `PROMOTION_CANDIDATE` evidence. It explicitly keeps `promotion_applied=false` and `lifecycle_state_mutated=false`.
 
-## Commands
+Question: Can a watchlist or review-required family become promotion ready?
 
-Recommended local/CI commands:
+Answer: No. Review-required evidence is routed to `PROMOTION_REVIEW_REQUIRED`, not `PROMOTION_CANDIDATE`.
+
+Question: Can weak sample, negative expectancy, or low win rate pass the gate?
+
+Answer: No. Those cases are blocked with deterministic reason codes and `promotion_ready=false`.
+
+## Hermes Review
+
+The public contract is intentionally narrow:
+
+- `build_strategy_promotion_gate_report(...)`
+
+Payloads include schema version, source, status, reason codes, policy, promotion counts, decisions, and non-action markers.
+
+## GSD Review
+
+The implementation stays deterministic and local:
+
+- No hidden global state.
+- No network calls.
+- No broker imports.
+- No filesystem writes.
+- No runtime side effects.
+- Invalid lifecycle reports and invalid policy fail closed.
+
+## QA / Safety Review
+
+Focused test coverage includes:
+
+- clean active-eligible family to `PROMOTION_CANDIDATE`
+- watchlist/review-required family to `PROMOTION_REVIEW_REQUIRED`
+- low-sample evidence blocking
+- negative-expectancy evidence blocking
+- low-win-rate evidence blocking
+- invalid lifecycle report blocking
+- empty lifecycle-state blocking
+- invalid policy blocking
+- JSON serialization and non-action payload markers
+
+## Acceptance Proof
+
+Run:
 
 ```bash
-python -m pytest tests/test_edge_88_strategy_lifecycle_states.py tests/test_edge_89_strategy_promotion_gate.py -q
-python -m pytest -q
+pytest tests/test_edge_89_strategy_promotion_gate.py
 ```
 
-## Final review
+CI must pass before merge.
 
-EDGE-89 is intentionally evidence-only. It identifies promotion candidates but does not perform promotion.
+## Runtime Proof Required After Merge
+
+A later PR may wire promotion evidence into runtime only if explicitly scoped. That later PR must prove:
+
+- read-only output remains read-only
+- broker/order markers remain false
+- promotion markers remain explicit
+- no lifecycle mutation occurs without a separately scoped gate
+
+## What This PR Does Not Prove
+
+This PR does not prove strategy profitability, live order safety, actual promotion correctness, suspension correctness, retirement correctness, ranking quality, or execution quality. It only proves that lifecycle evidence can be deterministically mapped into read-only promotion gate evidence.
+
+## Human Approval
+
+Ready for maintainer review after CI is green.
+
+## Next Action
+
+After this PR is merged, continue with `EDGE-90 — Strategy Suspension and Retirement Rules` only from the latest merged main commit.
