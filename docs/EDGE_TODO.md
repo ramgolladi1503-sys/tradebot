@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #294 — EDGE-87 Strategy Family Kill/Keep Report, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #295 — LIVE-TRUTH-01 Top Opportunities Executable Truth Alignment, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -30,12 +30,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-84 — Outcome Reducer
 - EDGE-85 — Strategy Expectancy by Regime
 - EDGE-86 — Slippage and Cost Truth
+- EDGE-87 — Strategy Family Kill/Keep Report
 
 ## Remaining TODO
 
 ### Live evidence stabilization
 
-- [ ] PR #295 — LIVE-TRUTH-01 Top Opportunities Executable Truth Alignment
 - [ ] PR #296 — LIVE-TRUTH-02 Latest Artifact Non-Empty Preservation
 - [ ] PR #297 — LIVE-TRUTH-03 Runtime Snapshot Freshness Guard
 - [ ] PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence
@@ -71,10 +71,35 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - [ ] PR #319 — EDGE-96 Live-Pilot Risk Throttle
 - [ ] PR #320 — EDGE-97 Final Edge Readiness Report
 
+## LIVE-TRUTH-01 acceptance subtasks
+
+LIVE-TRUTH-01 must prove top-opportunities executable truth alignment and top executable trace completeness.
+
+Every `TB_TOP_EXECUTABLE_CANDIDATE` event and `runtime_candidate_handoff_latest.json` payload must include:
+
+- `trade_id`
+- `appeared_at`
+- `symbol`
+- `strike`
+- `option_type`
+- `strategy_family`
+- `entry`
+- `execution_entry`
+- `stop_loss`
+- `target`
+- `risk_reward`
+- `rank_score`
+- `source_quote_age`
+- `bid`
+- `ask`
+- `ltp`
+
+No order behavior is allowed in LIVE-TRUTH-01. This is runtime evidence and trace completeness only.
+
 ## Non-negotiable sequencing
 
-1. Finish PR #294 / EDGE-87 first and merge it green.
-2. Do not start LIVE-TRUTH-01 until EDGE-87 is merged.
+1. Finish PR #295 / LIVE-TRUTH-01 first and merge it green.
+2. Do not start LIVE-TRUTH-02 until LIVE-TRUTH-01 is merged.
 3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
 4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
 5. Do not start pilot readiness before paper truth, replay proof, cost truth, live evidence stabilization, and lifecycle gates exist.
@@ -96,6 +121,7 @@ The 2026-05-27 live run exposed runtime evidence issues that can pollute promoti
 Lifecycle rules should only be built after these are stabilized:
 
 - top-opportunity truth mismatch
+- top executable trace missing entry, target, stop loss, risk-reward, rank, quote-age, and signal quote fields
 - latest artifact empty-cycle overwrite risk
 - frozen feed runtime and market snapshot artifacts
 - WebSocket disconnect / subscribe-failed recovery visibility
@@ -108,7 +134,7 @@ Lifecycle rules should only be built after these are stabilized:
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- Do not mix LIVE-TRUTH fixes into EDGE-87.
+- Do not mix LIVE-TRUTH-02 or later fixes into LIVE-TRUTH-01.
 - Do not start EDGE-88 until EDGE-87 and the LIVE-TRUTH block are complete.
 - Do not put feed refactor work before runtime truth evidence cleanup.
 - No adapter integration unless a later PR explicitly scopes pilot behavior.
