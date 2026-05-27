@@ -12,10 +12,7 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
-
-from core.events import write_json_atomic
 
 STRATEGY_PERF_SHADOW_FALLBACK_SCHEMA_VERSION = 1
 STRATEGY_PERF_SHADOW_FALLBACK_SOURCE = "live_truth_strategy_perf_shadow_fallback_v1"
@@ -331,17 +328,6 @@ def build_strategy_perf_shadow_fallback_report(
     )
 
 
-def write_strategy_perf_shadow_fallback_evidence(
-    report: StrategyPerfShadowFallbackReport,
-    path: str | Path,
-) -> Path:
-    """Write strategy-performance fallback-shadow evidence."""
-
-    target = Path(path).expanduser()
-    write_json_atomic(target, report.to_payload())
-    return target
-
-
 def _report(
     *,
     status: str,
@@ -459,11 +445,6 @@ def _parse_row(index: int, value: Mapping[str, Any] | Any, *, min_sample_count: 
 
 
 def _payload_or_none(value: Mapping[str, Any] | Any | None) -> dict[str, Any] | None:
-    if hasattr(value, "to_payload"):
-        try:
-            value = value.to_payload()
-        except Exception:
-            return None
     if isinstance(value, Mapping):
         return dict(value)
     return None
@@ -600,5 +581,4 @@ __all__ = [
     "StrategyPerfShadowFallbackRow",
     "TRUSTED_REASON",
     "build_strategy_perf_shadow_fallback_report",
-    "write_strategy_perf_shadow_fallback_evidence",
 ]
