@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-84 — Outcome Reducer, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-85 — Strategy Expectancy by Regime, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -27,12 +27,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-81 — NoTrade Evidence in Review Queue/UI
 - EDGE-82 — Final Executable Trade Quality Gate
 - EDGE-83 — Paper Truth Journal
+- EDGE-84 — Outcome Reducer
 
 ## Remaining TODO
 
 ### Paper truth and expectancy
 
-- [ ] EDGE-85 — Strategy Expectancy by Regime
 - [ ] EDGE-86 — Slippage and Cost Truth
 - [ ] EDGE-87 — Strategy Family Kill/Keep Report
 
@@ -64,15 +64,15 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-84 first and merge it green.
-2. Do not start EDGE-85 until EDGE-84 is merged.
-3. Do not treat reduced paper outcomes as expectancy until EDGE-85 derives regime-level statistics.
-4. Do not start live-pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
+1. Finish EDGE-85 first and merge it green.
+2. Do not start EDGE-86 until EDGE-85 is merged.
+3. Do not treat reduced paper expectancy as financially complete until EDGE-86 derives slippage and cost truth.
+4. Do not start pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
 
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- No external execution-adapter integration unless a later PR explicitly scopes live-pilot behavior.
+- No adapter integration unless a later PR explicitly scopes pilot behavior.
 - No broker-state changes in this roadmap until readiness gates explicitly allow them.
 - No fake scoring, cosmetic dashboard work, or PR-loop progress.
 - No weakening fallback, stale-feed, quote-truth, or executable-quality protections to make the UI look better.
