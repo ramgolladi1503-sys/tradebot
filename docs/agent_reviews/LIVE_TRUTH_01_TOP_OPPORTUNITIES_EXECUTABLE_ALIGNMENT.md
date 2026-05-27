@@ -80,23 +80,11 @@ Files changed are narrow:
 - `docs/agent_reviews/LIVE_TRUTH_01_TOP_OPPORTUNITIES_EXECUTABLE_ALIGNMENT.md`
 - `docs/EDGE_TODO.md`
 
-## QA / safety review
+## QA / Safety Review
 
-Tests cover:
+Tests cover focused alignment, trace, invalid-input, serialization, and non-action metadata scenarios.
 
-- executable-count mismatch
-- top-reportable mismatch
-- missing top executable evidence
-- aligned state
-- count derivation from lists
-- incomplete trace fields
-- incomplete handoff fields
-- no trace requirement when executable truth is absent
-- invalid input blocking
-- JSON serialization
-- non-action metadata
-
-## Test Proof
+## Acceptance Proof
 
 Command:
 
@@ -108,6 +96,14 @@ Expected result:
 - mismatch reasons are explicit
 - trace gaps are explicit
 - non-action metadata remains false
+
+## Runtime Proof Required After Merge
+
+A later scoped validation must confirm downstream use.
+
+## What This PR Does Not Prove
+
+This PR does not prove later LIVE-TRUTH items, lifecycle governance, replay readiness, or pilot readiness.
 
 ## Human Approval
 
