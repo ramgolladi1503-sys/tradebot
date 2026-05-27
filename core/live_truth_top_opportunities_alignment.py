@@ -3,7 +3,10 @@
 This module compares ranked executable truth with the top-opportunities artifact
 truth. It detects cases where upstream ranked evidence says executable
 candidates exist but the top-opportunities artifact reports zero executable
-items. It does not place orders, force execution, mutate runtime state, or write
+items. It also validates that top executable trace/handoff evidence contains the
+trade-quality fields required for live debugging.
+
+It does not place orders, force execution, mutate runtime state, or write
 artifacts.
 """
 
@@ -26,7 +29,28 @@ INVALID_TOP_OPPORTUNITIES_REPORT_REASON = "invalid_top_opportunities_report"
 EXECUTABLE_COUNT_MISMATCH_REASON = "executable_count_mismatch"
 TOP_REPORTABLE_MISMATCH_REASON = "top_reportable_executable_mismatch"
 TOP_EXECUTABLE_MISSING_REASON = "top_executable_missing_from_top_opportunities"
+TOP_EXECUTABLE_TRACE_INCOMPLETE_REASON = "top_executable_trace_incomplete"
+RUNTIME_CANDIDATE_HANDOFF_INCOMPLETE_REASON = "runtime_candidate_handoff_incomplete"
 NO_MISMATCH_REASON = "ok"
+
+REQUIRED_TOP_EXECUTABLE_TRACE_FIELDS = (
+    "trade_id",
+    "appeared_at",
+    "symbol",
+    "strike",
+    "option_type",
+    "strategy_family",
+    "entry",
+    "execution_entry",
+    "stop_loss",
+    "target",
+    "risk_reward",
+    "rank_score",
+    "source_quote_age",
+    "bid",
+    "ask",
+    "ltp",
+)
 
 _ACTION_KEY = "is_" + "order_action"
 _BROKER_KEY = "broker_" + "api_called"
@@ -47,6 +71,11 @@ class TopOpportunitiesExecutableAlignmentReport:
     top_opportunities_executable_count: int
     ranked_top_reportable_executable: bool
     top_opportunities_top_reportable_executable: bool
+    top_executable_trace_complete: bool
+    runtime_candidate_handoff_complete: bool
+    missing_top_executable_trace_fields: tuple[str, ...]
+    missing_runtime_candidate_handoff_fields: tuple[str, ...]
+    required_top_executable_trace_fields: tuple[str, ...]
     aligned: bool
     mismatch_detected: bool
     read_only: bool = True
@@ -82,6 +111,11 @@ class TopOpportunitiesExecutableAlignmentReport:
             "top_opportunities_executable_count": self.top_opportunities_executable_count,
             "ranked_top_reportable_executable": self.ranked_top_reportable_executable,
             "top_opportunities_top_reportable_executable": self.top_opportunities_top_reportable_executable,
+            "top_executable_trace_complete": self.top_executable_trace_complete,
+            "runtime_candidate_handoff_complete": self.runtime_candidate_handoff_complete,
+            "missing_top_executable_trace_fields": list(self.missing_top_executable_trace_fields),
+            "missing_runtime_candidate_handoff_fields": list(self.missing_runtime_candidate_handoff_fields),
+            "required_top_executable_trace_fields": list(self.required_top_executable_trace_fields),
             "aligned": self.aligned,
             "mismatch_detected": self.mismatch_detected,
             "read_only": self.read_only,
@@ -98,6 +132,9 @@ class TopOpportunitiesExecutableAlignmentReport:
 def build_top_opportunities_executable_alignment(
     ranked_report: Mapping[str, Any] | Any,
     top_opportunities_report: Mapping[str, Any] | Any,
+    *,
+    top_executable_trace: Mapping[str, Any] | Any | None = None,
+    runtime_candidate_handoff: Mapping[str, Any] | Any | None = None,
 ) -> TopOpportunitiesExecutableAlignmentReport:
     """Build read-only executable truth alignment evidence.
 
@@ -107,7 +144,11 @@ def build_top_opportunities_executable_alignment(
     - ranked top reportable executable is true
     - top-opportunities executable count is zero
 
-    That condition must be visible before later writer/runtime fixes are scoped.
+    When executable truth exists, this also validates that both
+    ``TB_TOP_EXECUTABLE_CANDIDATE`` trace evidence and
+    ``runtime_candidate_handoff_latest.json`` contain the required trade-quality
+    fields: entry, execution entry, stop loss, target, risk/reward, rank score,
+    quote age, and bid/ask/ltp at signal time.
     """
 
     ranked_payload = _payload(ranked_report)
@@ -133,12 +174,19 @@ def build_top_opportunities_executable_alignment(
     top_count = _top_opportunities_executable_count(top_payload)
     ranked_top_reportable = _ranked_top_reportable_executable(ranked_payload)
     top_reportable = _top_opportunities_top_reportable_executable(top_payload)
+    trace_required = ranked_count > 0 or top_count > 0 or ranked_top_reportable or top_reportable
+    top_trace_payload = _payload(top_executable_trace) if top_executable_trace is not None else _top_executable_trace_from_payload(top_payload)
+    handoff_payload = _payload(runtime_candidate_handoff) if runtime_candidate_handoff is not None else _handoff_from_payload(top_payload)
+    missing_top_trace = _missing_required_fields(top_trace_payload) if trace_required else ()
+    missing_handoff = _missing_required_fields(handoff_payload) if trace_required else ()
 
     reasons = _alignment_reasons(
         ranked_executable_count=ranked_count,
         top_opportunities_executable_count=top_count,
         ranked_top_reportable_executable=ranked_top_reportable,
         top_opportunities_top_reportable_executable=top_reportable,
+        missing_top_executable_trace_fields=missing_top_trace,
+        missing_runtime_candidate_handoff_fields=missing_handoff,
     )
     mismatch = bool(reasons)
     return _report(
@@ -151,11 +199,16 @@ def build_top_opportunities_executable_alignment(
         top_opportunities_executable_count=top_count,
         ranked_top_reportable_executable=ranked_top_reportable,
         top_opportunities_top_reportable_executable=top_reportable,
+        top_executable_trace_complete=not missing_top_trace,
+        runtime_candidate_handoff_complete=not missing_handoff,
+        missing_top_executable_trace_fields=missing_top_trace,
+        missing_runtime_candidate_handoff_fields=missing_handoff,
         aligned=not mismatch,
         mismatch_detected=mismatch,
         metadata={
             "ranked_source": str(ranked_payload.get("source") or ranked_payload.get("stage") or "ranked_report"),
             "top_opportunities_source": str(top_payload.get("source") or "top_opportunities_report"),
+            "trace_required": trace_required,
             "evidence_only": True,
             "does_not_force_execution": True,
         },
@@ -168,6 +221,8 @@ def _alignment_reasons(
     top_opportunities_executable_count: int,
     ranked_top_reportable_executable: bool,
     top_opportunities_top_reportable_executable: bool,
+    missing_top_executable_trace_fields: tuple[str, ...],
+    missing_runtime_candidate_handoff_fields: tuple[str, ...],
 ) -> tuple[str, ...]:
     reasons: list[str] = []
     if ranked_executable_count != top_opportunities_executable_count:
@@ -176,6 +231,10 @@ def _alignment_reasons(
         reasons.append(TOP_REPORTABLE_MISMATCH_REASON)
     if ranked_executable_count > 0 and ranked_top_reportable_executable and top_opportunities_executable_count == 0:
         reasons.append(TOP_EXECUTABLE_MISSING_REASON)
+    if missing_top_executable_trace_fields:
+        reasons.append(TOP_EXECUTABLE_TRACE_INCOMPLETE_REASON)
+    if missing_runtime_candidate_handoff_fields:
+        reasons.append(RUNTIME_CANDIDATE_HANDOFF_INCOMPLETE_REASON)
     return _dedupe_preserve_order(reasons)
 
 
@@ -248,6 +307,25 @@ def _top_opportunity_list(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def _top_executable_trace_from_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    for key in ("top_executable_trace", "TB_TOP_EXECUTABLE_CANDIDATE", "top_executable_candidate"):
+        candidate = _payload(payload.get(key))
+        if candidate:
+            return candidate
+    opportunities = _top_opportunity_list(payload)
+    if opportunities:
+        return opportunities[0]
+    return {}
+
+
+def _handoff_from_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    for key in ("runtime_candidate_handoff_latest", "runtime_candidate_handoff", "handoff"):
+        handoff = _payload(payload.get(key))
+        if handoff:
+            return handoff
+    return {}
+
+
 def _candidate_executable(candidate: Mapping[str, Any]) -> bool:
     for key in (
         "is_executable",
@@ -268,6 +346,21 @@ def _candidate_executable(candidate: Mapping[str, Any]) -> bool:
     return False
 
 
+def _missing_required_fields(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    return tuple(field for field in REQUIRED_TOP_EXECUTABLE_TRACE_FIELDS if _field_missing(payload, field))
+
+
+def _field_missing(payload: Mapping[str, Any], field: str) -> bool:
+    if field not in payload:
+        return True
+    value = payload.get(field)
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
+
+
 def _report(
     *,
     status: str,
@@ -279,6 +372,10 @@ def _report(
     top_opportunities_executable_count: int = 0,
     ranked_top_reportable_executable: bool = False,
     top_opportunities_top_reportable_executable: bool = False,
+    top_executable_trace_complete: bool = True,
+    runtime_candidate_handoff_complete: bool = True,
+    missing_top_executable_trace_fields: tuple[str, ...] = (),
+    missing_runtime_candidate_handoff_fields: tuple[str, ...] = (),
     aligned: bool = False,
     mismatch_detected: bool = False,
     metadata: dict[str, Any] | None = None,
@@ -295,6 +392,11 @@ def _report(
         top_opportunities_executable_count=top_opportunities_executable_count,
         ranked_top_reportable_executable=ranked_top_reportable_executable,
         top_opportunities_top_reportable_executable=top_opportunities_top_reportable_executable,
+        top_executable_trace_complete=top_executable_trace_complete,
+        runtime_candidate_handoff_complete=runtime_candidate_handoff_complete,
+        missing_top_executable_trace_fields=missing_top_executable_trace_fields,
+        missing_runtime_candidate_handoff_fields=missing_runtime_candidate_handoff_fields,
+        required_top_executable_trace_fields=REQUIRED_TOP_EXECUTABLE_TRACE_FIELDS,
         aligned=aligned,
         mismatch_detected=mismatch_detected,
         metadata=dict(metadata or {}),
@@ -354,7 +456,10 @@ __all__ = [
     "INVALID_RANKED_REPORT_REASON",
     "INVALID_TOP_OPPORTUNITIES_REPORT_REASON",
     "NO_MISMATCH_REASON",
+    "REQUIRED_TOP_EXECUTABLE_TRACE_FIELDS",
+    "RUNTIME_CANDIDATE_HANDOFF_INCOMPLETE_REASON",
     "TOP_EXECUTABLE_MISSING_REASON",
+    "TOP_EXECUTABLE_TRACE_INCOMPLETE_REASON",
     "TOP_OPPORTUNITIES_ALIGNMENT_SCHEMA_VERSION",
     "TOP_OPPORTUNITIES_ALIGNMENT_SOURCE",
     "TOP_REPORTABLE_MISMATCH_REASON",
