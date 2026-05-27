@@ -132,6 +132,7 @@ from core.market_snapshot_builder import (
 from core.market_snapshot_store import write_market_snapshot_atomic
 from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
 from core.runtime_snapshot_store import TOP_OPPORTUNITIES_LATEST_PATH, write_snapshot_atomic
+from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -4388,6 +4389,7 @@ class Orchestrator:
             cycle_candidates_softened = 0
             cycle_candidates_fallback = 0
             cycle_ranked_candidates = []
+            cycle_candidate_handoff_snapshots: list[dict] = []
             cycle_real_trade_symbols: set[str] = set()
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
             cycle_market_open = False
@@ -5248,8 +5250,33 @@ class Orchestrator:
                                 "TB_TOP_SYNTH_CANDIDATE",
                                 _candidate_trace_payload(top_synth),
                             )
+                    cycle_ranked_candidates_before_append = len(cycle_ranked_candidates)
                     if ranked_candidates:
                         cycle_ranked_candidates.extend(ranked_candidates)
+                    cycle_ranked_candidates_after_append = len(cycle_ranked_candidates)
+                    if ranked_executable_candidates:
+                        try:
+                            cycle_candidate_handoff_snapshots.append(
+                                {
+                                    "symbol": sym,
+                                    "trade_builder_raw_count": raw_candidate_count,
+                                    "post_scan_survivor_count": post_scan_survivor_count,
+                                    "post_soft_reject_count": post_soft_reject_count,
+                                    "post_real_filter_count": post_real_filter_count,
+                                    "post_executable_filter_count": post_executable_filter_count,
+                                    "ranked_total_count": len(real_candidates),
+                                    "ranked_executable_count": len(ranked_executable_candidates),
+                                    "top_reportable_executable": _candidate_trace_payload(ranked_executable_candidates[0]),
+                                    "cycle_ranked_candidates_count_before_append": cycle_ranked_candidates_before_append,
+                                    "cycle_ranked_candidates_count_after_append": cycle_ranked_candidates_after_append,
+                                }
+                            )
+                        except Exception as handoff_exc:
+                            logger.warning(
+                                "runtime_candidate_handoff_snapshot_build_failed symbol=%s err=%s",
+                                sym,
+                                handoff_exc,
+                            )
                     if trade is None:
                         for reason_code in reject_gate_reasons:
                             cycle_blockers[str(reason_code)] += 1
@@ -6685,6 +6712,20 @@ class Orchestrator:
                         active_trade=self._phase2_active_trade if isinstance(self._phase2_active_trade, dict) else None,
                     )
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
+                    if cycle_candidate_handoff_snapshots:
+                        for handoff_snapshot in cycle_candidate_handoff_snapshots:
+                            try:
+                                write_runtime_candidate_handoff_evidence(
+                                    **handoff_snapshot,
+                                    phase2_input_count=len(cycle_ranked_candidates),
+                                    top_opportunities_payload=top_payload,
+                                )
+                            except Exception as handoff_exc:
+                                logger.warning(
+                                    "runtime_candidate_handoff_evidence_write_failed symbol=%s err=%s",
+                                    handoff_snapshot.get("symbol"),
+                                    handoff_exc,
+                                )
                     write_snapshot_atomic(
                         TOP_OPPORTUNITIES_LATEST_PATH,
                         payload=top_payload,
