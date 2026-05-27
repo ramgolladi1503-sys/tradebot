@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #308 — PR-FEED-08 Extract Pure Tick Utility Helpers, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #309 — PR-FEED-09 Extract Reconnect Decision Policy, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -34,6 +34,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-88 — Strategy Lifecycle States
 - EDGE-89 — Strategy Promotion Gate
 - EDGE-90 — Strategy Suspension and Retirement Rules
+- PR-FEED-08 — Extract Pure Tick Utility Helpers
 - LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
 - LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
 - LIVE-TRUTH-03 — Runtime Snapshot Freshness Guard
@@ -70,7 +71,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Feed extraction/refactor work
 
-- [ ] PR #309 — PR-FEED-09 Extract Reconnect Decision Policy
 - [ ] PR #310 — PR-FEED-10 Extract Subscription Budget Policy
 - [ ] PR #311 — PR-FEED-11 Extract Runtime Snapshot Builder
 - [ ] PR #312 — PR-FEED-17 Extract Token Resolution Read Model
@@ -89,6 +89,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish PR #308 / PR-FEED-08 first and merge it green.
-2. Do not start PR #309 before PR #308 is merged and green.
+1. Finish PR #309 / PR-FEED-09 first and merge it green.
+2. Do not start PR #310 before PR #309 is merged and green.
 3. Keep every PR narrow, tested, documented, and reviewed.
