@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -34,6 +34,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
 - LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
 - LIVE-TRUTH-03 — Runtime Snapshot Freshness Guard
+- LIVE-TRUTH-04 — Feed Runtime Writer Liveness / WebSocket Recovery Evidence
 
 ## Locked LIVE-TRUTH stabilization block
 
@@ -52,7 +53,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Live evidence stabilization
 
-- [ ] PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence
 - [ ] PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard
 - [ ] PR #301 — LIVE-TRUTH-07 Latency / SLO Guard Oscillation Evidence
 - [ ] PR #302 — LIVE-TRUTH-08 SENSEX Reject Calibration Evidence
@@ -85,32 +85,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - [ ] PR #320 — EDGE-96 Live-Pilot Risk Throttle
 - [ ] PR #321 — EDGE-97 Final Edge Readiness Report
 
-## LIVE-TRUTH-04 acceptance subtasks
-
-LIVE-TRUTH-04 must prove whether feed runtime evidence is still being written and whether WebSocket/subscription failures have recovery visibility.
-
-In scope:
-
-- Evaluate feed runtime writer heartbeat freshness.
-- Detect stale writer heartbeat evidence.
-- Detect missing writer heartbeat evidence.
-- Detect future writer heartbeat evidence.
-- Detect WebSocket disconnect evidence without recovery visibility.
-- Detect subscription failure evidence without recovery visibility.
-- Preserve subscribed token and option-token counts in evidence.
-- Emit read-only liveness evidence.
-
-Out of scope:
-
-- Reconnecting WebSockets.
-- Refreshing feeds.
-- Resubscribing tokens.
-- Candidate generation changes.
-- Strategy scoring changes.
-- Dashboard changes.
-- Market-close quiescence; that belongs to LIVE-TRUTH-05.
-- Runtime wiring unless a later PR explicitly scopes it.
-
 ## LIVE-TRUTH-05 close-state scope and acceptance
 
 LIVE-TRUTH-05 exists because final close evidence must not look like normal intraday no-trade behavior.
@@ -118,10 +92,10 @@ LIVE-TRUTH-05 exists because final close evidence must not look like normal intr
 Scope:
 
 - Ensure `feed_runtime`, `market_snapshot`, `top_opportunities`, and runtime health agree on `market_open`.
-- After market close, move runtime evidence to `OFFHOURS` / `MARKET_CLOSED` state.
-- Stop expensive candidate scanning after close unless replay/off-hours analysis is explicitly enabled.
+- After market close, runtime evidence must represent `OFFHOURS` / `MARKET_CLOSED` state.
+- Expensive candidate scanning must be quiet after close unless replay/off-hours analysis is explicitly enabled.
 - Top opportunities should show `MARKET_CLOSED` or `OFFHOURS_BLOCKED`, not normal `NO_TRADE`.
-- CPU should drop in off-hours mode.
+- CPU/loop evidence should indicate quiet/off-hours behavior.
 - WebSocket down plus market closed must not continue high-frequency SLO loops.
 
 Acceptance:
@@ -137,8 +111,8 @@ Given `market_snapshot.market_open=false`:
 
 ## Non-negotiable sequencing
 
-1. Finish PR #298 / LIVE-TRUTH-04 first and merge it green.
-2. Do not start LIVE-TRUTH-05 until LIVE-TRUTH-04 is merged.
+1. Finish PR #299 / LIVE-TRUTH-05 first and merge it green.
+2. Do not start LIVE-TRUTH-06 until LIVE-TRUTH-05 is merged.
 3. Finish the LIVE-TRUTH stabilization block before EDGE-88 lifecycle governance.
 4. Do not start feed refactors before LIVE-TRUTH evidence cleanup proves the runtime truth contracts.
 5. Do not start pilot readiness before paper truth, replay proof, cost truth, live evidence stabilization, and lifecycle gates exist.
@@ -174,7 +148,7 @@ Lifecycle rules should only be built after these are stabilized:
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
-- Do not mix LIVE-TRUTH-05 or later fixes into LIVE-TRUTH-04.
+- Do not mix LIVE-TRUTH-06 or later fixes into LIVE-TRUTH-05.
 - Do not start EDGE-88 until EDGE-87 and the LIVE-TRUTH block are complete.
 - Do not put feed refactor work before runtime truth evidence cleanup.
 - No adapter integration unless a later PR explicitly scopes pilot behavior.
