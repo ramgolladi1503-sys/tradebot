@@ -3,9 +3,9 @@
 mode: REVIEW
 candidate_id: edge_79a_r_runtime_indicator_readiness_evidence
 decision: review_ready
-reason: runtime_indicator_readiness_evidence_tests_docs
-timestamp: 2026-05-27T06:55:00Z
-source: edge79a_r_runtime_indicator_readiness_evidence
+reason: runtime_indicator_readiness_evidence_contract_tests_docs
+timestamp: 2026-05-27T07:36:00Z
+source: edge79a_r_runtime_indicator_readiness_review
 is_order_action: false
 broker_api_called: false
 live_order_action: false
@@ -13,97 +13,63 @@ broker_order_action: false
 
 ## Agent Work Contract
 
-EDGE-79A-R writes a latest runtime evidence file for existing live indicator readiness diagnostics when indicator values are missing.
+EDGE-79A-R adds a latest runtime evidence file for existing live indicator readiness diagnostics.
 
-The PR keeps the existing readiness decision intact. It only serializes evidence.
+The output is intended to become operator/runtime evidence when a symbol has missing indicator values.
 
-## Scope
+## Work contract
 
-In scope:
+This PR covers evidence serialization only.
 
-- Build an evidence payload from `LiveIndicatorReadinessReport`.
-- Emit per-symbol indicator-missing proof.
-- Write `.runtime/live_indicator_readiness_latest.json` through the existing atomic JSON writer.
-- Preserve read-only and non-action metadata.
+It does not compute indicators, change gate behavior, change dashboard behavior, rank candidates, score edge, add strategy behavior, or modify execution behavior.
 
-Out of scope:
+## Scope guard
 
-- Broker interaction.
-- Order behavior.
-- Gate loosening.
-- Candidate bypass.
-- Strategy changes.
-- Indicator computation.
-- Dashboard behavior.
+- Per-symbol indicator readiness fields are explicit.
+- Missing VWAP, RSI, EMA, and ATR are preserved in contract order.
+- OHLC bar count is preserved.
+- Warmup bars are preserved.
+- Indicator last update is preserved.
+- Indicator age is preserved.
+- Compute errors are preserved.
+- Read-only report payloads remain explicit.
+- Atomic JSON write is limited to the latest runtime evidence file.
 
-## Scope Guard
+## High-risk path review
 
-- No candidate state is modified.
-- No readiness decision is loosened.
-- No blocked candidate becomes executable.
-- No adapter imports are added.
-- No broker-state path is touched.
-- No strategy code is changed.
+The high-risk path is a symbol with live price but missing indicator values being hidden from runtime evidence.
 
-## Grill Me Review
+Controls:
 
-Question: Does this PR call a broker or adapter?
-
-Answer: No.
-
-Question: Does this PR change order behavior?
-
-Answer: No.
-
-Question: Does this PR loosen a gate?
-
-Answer: No.
-
-Question: Does this PR bypass candidates?
-
-Answer: No.
-
-Question: Does this PR compute indicators?
-
-Answer: No. It serializes readiness evidence from the already-built readiness report.
-
-Question: When is a file written?
-
-Answer: Only when per-symbol indicator values are missing.
-
-## Hermes Review
-
-Boundary check:
-
-- Runtime evidence file path only.
-- Atomic JSON write only.
-- No dashboard controls.
-- No ranking/scoring edits.
-- No strategy edits.
-- No execution behavior edits.
-
-Verdict: scoped evidence serialization only.
-
-## GSD Review
-
-Files changed are narrow:
-
-- `core/live_indicator_readiness.py`
-- `tests/test_edge_79a_r_runtime_indicator_readiness_evidence.py`
-- `docs/EDGE_79A_R_RUNTIME_INDICATOR_READINESS_EVIDENCE.md`
-- `docs/agent_reviews/EDGE_79A_R_RUNTIME_INDICATOR_READINESS_EVIDENCE.md`
+- Missing indicator values produce `INDICATORS_MISSING` evidence.
+- Ready symbols do not write the missing-indicator evidence file.
+- Stale-only diagnostics do not write the missing-indicator evidence file.
+- Existing readiness decisions are not changed by the writer.
+- Candidate state is not changed by the writer.
 
 ## QA / safety review
 
-Tests cover:
+Focused tests cover:
 
 - required per-symbol payload shape
 - file creation for missing indicator values
 - no file creation for ready indicators
-- no file creation for stale-only blockers
-- read-only/non-action metadata
+- no file creation for stale-only diagnostics
+- read-only and non-action metadata
 
-## Acceptance Proof
+## Runtime Proof Required After Merge
+
+After merge, runtime proof is still required before this evidence is used by any dashboard or operator workflow.
+
+The runtime proof should confirm that `.runtime/live_indicator_readiness_latest.json` is written only when missing indicator values are present.
+
+## What This PR Does Not Prove
+
+This PR does not prove NoTradeOracle behavior, live readiness, live profitability, paper-truth expectancy, feed freshness, strategy quality, or final executable quality.
+
+Those belong to separately scoped roadmap items.
+
+## Acceptance proof
 
 Command:
 
@@ -112,10 +78,8 @@ Command:
 Expected result:
 
 - focused EDGE-79A-R tests pass
-- file writes only for indicator-missing evidence
-- payload includes per-symbol proof
-- non-action metadata remains false
-
-## Human Approval
-
-Human review is required before any later PR wires this evidence into a dashboard or runtime operator workflow.
+- missing indicator readiness facts produce explicit runtime evidence
+- ready symbols do not write missing-indicator evidence
+- stale-only diagnostics do not write missing-indicator evidence
+- no gate behavior changes
+- no runtime candidate-state changes
