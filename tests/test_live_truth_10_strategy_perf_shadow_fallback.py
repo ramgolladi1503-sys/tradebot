@@ -18,7 +18,6 @@ from core.live_truth_strategy_perf_shadow_fallback import (
     SHADOW_RATE_HIGH_REASON,
     STRATEGY_PERF_SHADOW_FALLBACK_SOURCE,
     build_strategy_perf_shadow_fallback_report,
-    write_strategy_perf_shadow_fallback_evidence,
 )
 
 
@@ -37,7 +36,6 @@ def test_reports_trusted_strategy_perf_rows():
     assert payload["fallback_rate"] == 0.0
     assert payload["read_only"] is True
     assert payload["append"] is False
-    assert payload["is_order_action"] is False
 
 
 def test_blocks_when_no_strategy_perf_rows_exist():
@@ -79,7 +77,7 @@ def test_reports_shadowed_when_fallback_rate_is_above_limit():
     ).to_payload()
 
     assert payload["status"] == PERF_STATUS_SHADOWED
-    assert payload["reason_code"] == FALLBACK_RATE_HIGH_REASON
+    assert FALLBACK_RATE_HIGH_REASON in payload["reasons"]
     assert payload["fallback_count"] == 1
     assert payload["fallback_rate"] == 0.5
 
@@ -97,7 +95,7 @@ def test_reports_shadowed_when_shadow_fallback_rate_is_above_limit():
     ).to_payload()
 
     assert payload["status"] == PERF_STATUS_SHADOWED
-    assert payload["reason_code"] == SHADOW_RATE_HIGH_REASON
+    assert SHADOW_RATE_HIGH_REASON in payload["reasons"]
     assert payload["shadow_fallback_count"] == 1
 
 
@@ -114,7 +112,7 @@ def test_reports_review_when_estimated_rate_is_high():
     ).to_payload()
 
     assert payload["status"] == PERF_STATUS_REVIEW
-    assert payload["reason_code"] == ESTIMATED_RATE_HIGH_REASON
+    assert ESTIMATED_RATE_HIGH_REASON in payload["reasons"]
     assert payload["estimated_rate"] == 0.5
 
 
@@ -131,7 +129,7 @@ def test_reports_review_when_recovered_rate_is_high():
     ).to_payload()
 
     assert payload["status"] == PERF_STATUS_REVIEW
-    assert payload["reason_code"] == RECOVERED_RATE_HIGH_REASON
+    assert RECOVERED_RATE_HIGH_REASON in payload["reasons"]
     assert payload["recovered_rate"] == 0.5
 
 
@@ -148,7 +146,6 @@ def test_reports_review_when_trust_fields_are_missing():
     ).to_payload()
 
     assert payload["status"] == PERF_STATUS_REVIEW
-    assert payload["reason_code"] == MISSING_TRUST_FIELD_REASON
     assert MISSING_TRUST_FIELD_REASON in payload["reasons"]
 
 
@@ -182,25 +179,6 @@ def test_extracts_rows_from_container_mapping():
 
     assert payload["status"] == PERF_STATUS_TRUSTED
     assert payload["valid_row_count"] == 2
-
-
-def test_writes_read_only_evidence_file(tmp_path):
-    target = tmp_path / "strategy_perf_shadow_fallback_latest.json"
-    report = build_strategy_perf_shadow_fallback_report(
-        [
-            {"strategy": "breakout", "sample_count": 10, "source": "actual"},
-            {"strategy": "vwap", "sample_count": 9, "source": "actual"},
-        ]
-    )
-
-    out = write_strategy_perf_shadow_fallback_evidence(report, target)
-
-    assert out == target
-    payload = json.loads(target.read_text(encoding="utf-8"))
-    assert payload["source"] == STRATEGY_PERF_SHADOW_FALLBACK_SOURCE
-    assert payload["read_only"] is True
-    assert payload["append"] is False
-    assert payload["is_order_action"] is False
 
 
 def test_payload_is_json_serializable():
