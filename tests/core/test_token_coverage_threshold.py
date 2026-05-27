@@ -8,7 +8,7 @@ from config import config as cfg
 import core.option_token_resolver as resolver
 
 
-FUTURE_EXPIRY = "2026-05-26"
+FUTURE_EXPIRY = "2099-05-26"
 
 
 def _instrument_row(*, token: int, strike: float, opt_type: str, expiry: str = FUTURE_EXPIRY) -> dict:
@@ -57,7 +57,7 @@ def test_token_coverage_below_threshold_raises(monkeypatch):
     with pytest.raises(resolver.TokenCoverageError) as exc_info:
         resolver.resolve_option_token(
             symbol="NIFTY",
-            expiry_date=date(2026, 5, 26),
+            expiry_date=date(2099, 5, 26),
             strike=24000.0,
             option_type="CE",
             exchange="NFO",
