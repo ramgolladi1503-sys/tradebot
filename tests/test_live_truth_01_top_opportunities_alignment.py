@@ -201,4 +201,4 @@ def test_payload_is_json_serializable_and_non_action():
     assert payload["broker_api_called"] is False
     assert payload["live_order_action"] is False
     assert payload["broker_order_action"] is False
-    assert payload["metadata"]["does_not_force_execution"] is True
+    assert payload["metadata"]["evidence_only_no_runtime_change"] is True
