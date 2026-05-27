@@ -11,24 +11,6 @@ from core.paths import logs_dir
 from core.telemetry_streams import append_execution_stream_event
 from core.time_utils import utc_now
 
-_SENSITIVE_KEY_MARKERS = (
-    "password",
-    "passwd",
-    "pwd",
-    "secret",
-    "token",
-    "api_key",
-    "apikey",
-    "access_key",
-    "private_key",
-    "client_secret",
-    "authorization",
-    "auth_header",
-    "cookie",
-    "session_cookie",
-)
-_REDACTED_VALUE = "[REDACTED]"
-
 
 def events_path() -> Path:
     path = logs_dir() / "events.jsonl"
@@ -124,37 +106,10 @@ def read_events(
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
-    safe_payload = _redact_sensitive_values(payload)
-    data = json.dumps(safe_payload, indent=2, sort_keys=True, ensure_ascii=True)
+    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
     with tmp.open("w", encoding="utf-8") as handle:
         handle.write(data)
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(tmp, path)
     return path
-
-
-def _redact_sensitive_values(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            str(key): _REDACTED_VALUE if _is_sensitive_key(str(key)) else _redact_sensitive_values(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_redact_sensitive_values(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_redact_sensitive_values(item) for item in value)
-    return value
-
-
-def _is_sensitive_key(key: str) -> bool:
-    normalized = key.strip().lower().replace("-", "_").replace(" ", "_")
-    return any(marker in normalized for marker in _SENSITIVE_KEY_MARKERS)
-
-
-__all__ = [
-    "append_event",
-    "events_path",
-    "read_events",
-    "write_json_atomic",
-]
