@@ -30,10 +30,14 @@ A strategy family becomes a promotion candidate only when all criteria pass:
 
 Passing the gate only sets read-only evidence:
 
-- `decision == PROMOTION_CANDIDATE`
-- `promotion_ready == true`
-- `promotion_applied == false`
-- `lifecycle_state_mutated == false`
+```json
+{
+  "decision": "PROMOTION_CANDIDATE",
+  "promotion_ready": true,
+  "promotion_applied": false,
+  "lifecycle_state_mutated": false
+}
+```
 
 ## Fail-closed outcomes
 
@@ -51,14 +55,18 @@ The gate blocks or review-flags promotion evidence for:
 
 ## Safety contract
 
-Every report, policy, and decision payload carries:
+Every report, policy, and decision payload includes explicit non-action markers:
 
-- `read_only == true`
-- `append == false`
-- `is_order_action == false`
-- `broker_api_called == false`
-- `live_order_action == false`
-- `broker_order_action == false`
+```json
+{
+  "read_only": true,
+  "append": false,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "live_order_action": false,
+  "broker_order_action": false
+}
+```
 
 This is evidence-only governance. PR #307 owns suspension and retirement rules. Runtime wiring, dashboard exposure, and live execution remain out of scope.
 
