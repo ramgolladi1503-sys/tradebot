@@ -119,7 +119,7 @@ Expected result:
 - no broker/order flags are true
 - no gate behavior changes
 
-## Runtime Proof Required After Wiring
+## Runtime Proof Required After Merge
 
 After the orchestrator hook is added, run live read-only proof and confirm `.runtime/runtime_candidate_handoff_latest.json` captures the SENSEX-style mismatch:
 
@@ -131,3 +131,17 @@ After the orchestrator hook is added, run live read-only proof and confirm `.run
 ## What This PR Does Not Prove
 
 This PR does not prove strategy edge, profitability, slippage truth, regime correctness, confidence calibration, or live execution readiness. It only proves whether candidate handoff evidence is available.
+
+
+## Human Approval
+
+Human approval is required before merge after all CI checks are green.
+
+Approval checklist:
+
+- PR remains evidence-only.
+- No broker calls are introduced.
+- No order behavior is changed.
+- No gate logic is loosened.
+- No candidate bypass is introduced.
+- Runtime proof after merge must confirm `.runtime/runtime_candidate_handoff_latest.json` is written when reportable executable candidates exist.
