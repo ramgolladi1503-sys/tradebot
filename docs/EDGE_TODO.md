@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- EDGE-85 — Strategy Expectancy by Regime, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- EDGE-86 — Slippage and Cost Truth, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -28,12 +28,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-82 — Final Executable Trade Quality Gate
 - EDGE-83 — Paper Truth Journal
 - EDGE-84 — Outcome Reducer
+- EDGE-85 — Strategy Expectancy by Regime
 
 ## Remaining TODO
 
 ### Paper truth and expectancy
 
-- [ ] EDGE-86 — Slippage and Cost Truth
 - [ ] EDGE-87 — Strategy Family Kill/Keep Report
 
 ### Strategy lifecycle governance
@@ -64,16 +64,16 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish EDGE-85 first and merge it green.
-2. Do not start EDGE-86 until EDGE-85 is merged.
-3. Do not treat reduced paper expectancy as financially complete until EDGE-86 derives slippage and cost truth.
-4. Do not start pilot readiness before paper truth, replay proof, slippage/cost truth, and strategy lifecycle gates exist.
+1. Finish EDGE-86 first and merge it green.
+2. Do not start EDGE-87 until EDGE-86 is merged.
+3. Do not treat family-level decisions as valid until net cost truth is available.
+4. Do not start pilot readiness before paper truth, replay proof, cost truth, and lifecycle gates exist.
 
 ## Scope guard
 
 - Keep each PR narrow and evidence-backed.
 - No adapter integration unless a later PR explicitly scopes pilot behavior.
-- No broker-state changes in this roadmap until readiness gates explicitly allow them.
+- No state-changing integration in this roadmap until readiness gates explicitly allow it.
 - No fake scoring, cosmetic dashboard work, or PR-loop progress.
 - No weakening fallback, stale-feed, quote-truth, or executable-quality protections to make the UI look better.
 - Every PR must include focused tests, docs, and agent-review evidence.
