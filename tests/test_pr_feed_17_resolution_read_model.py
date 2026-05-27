@@ -171,4 +171,4 @@ def test_combine_symbol_resolution_models_builds_global_read_model_maps():
     assert combined.option_min_required_by_symbol == {"NIFTY": 2, "SENSEX": 2}
     payload = combined.to_payload()
     assert payload["tokens"] == [100, 202, 203, 500, 902, 903]
-    assert len(payload["resolution"]) == 2
+    assert payload["resolution"] == [nifty.row, sensex.row]
