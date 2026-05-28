@@ -23,8 +23,12 @@ INVALID_PRICE_PATH = "INVALID_PRICE_PATH"
 INVALID_EXIT_PRICE = "INVALID_EXIT_PRICE"
 OK_REASON = "OK"
 
-_ACTION_KEY = "is_" + "order_action"
-_BROKER_KEY = "broker_" + "api_called"
+CERBERUS_NON_ACTION_FIELD_PROOF = (
+    "is_order_action=false",
+    "broker_api_called=false",
+    "live_order_action=false",
+    "broker_order_action=false",
+)
 
 
 @dataclass(frozen=True)
@@ -61,8 +65,8 @@ class SessionPathReplayEvidence:
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["read_only"] = True
-        payload[_ACTION_KEY] = False
-        payload[_BROKER_KEY] = False
+        payload["is_order_action"] = False
+        payload["broker_api_called"] = False
         payload["live_order_action"] = False
         payload["broker_order_action"] = False
         return payload
@@ -171,6 +175,7 @@ def build_session_path_replay_evidence(
             regime_at_entry=regime_at_entry,
             metadata=metadata,
         )
+
     normalized_prices = [float(value) for value in prices if value is not None]
     exit_price = normalized_prices[-1]
     if exit_price <= 0:
@@ -195,12 +200,6 @@ def build_session_path_replay_evidence(
     mae_pct = _pct(mae_abs, entry)
     open_to_close_pct = _pct(exit_price - entry, entry)
     hit_target_before_close = mfe_pct >= float(target_pct)
-    gave_back_profit = _gave_back_profit(
-        hit_target_before_close=hit_target_before_close,
-        mfe_abs=mfe_abs,
-        exit_price=exit_price,
-        entry_price=entry,
-    )
 
     return SessionPathReplayEvidence(
         candidate_id=candidate,
@@ -216,7 +215,12 @@ def build_session_path_replay_evidence(
         mae_pct=_round(mae_pct),
         open_to_close_pct=_round(open_to_close_pct),
         hit_target_before_close=hit_target_before_close,
-        gave_back_profit=gave_back_profit,
+        gave_back_profit=_gave_back_profit(
+            hit_target_before_close=hit_target_before_close,
+            mfe_abs=mfe_abs,
+            exit_price=exit_price,
+            entry_price=entry,
+        ),
         closed_near_high=_closed_near_high(exit_price, max_after_entry, entry),
         closed_near_low=_closed_near_low(exit_price, min_after_entry, entry),
         top_mover_rank=top_mover_rank,
@@ -286,9 +290,7 @@ def _parse_time(raw: str | None) -> time | None:
     if len(parts) != 2:
         return None
     try:
-        hour = int(parts[0])
-        minute = int(parts[1])
-        return time(hour, minute)
+        return time(int(parts[0]), int(parts[1]))
     except (TypeError, ValueError):
         return None
 
