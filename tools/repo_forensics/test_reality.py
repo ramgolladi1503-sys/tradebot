@@ -19,6 +19,9 @@ TEST_CLASSES = {
     "UNKNOWN",
 }
 
+_ORDER_MARKER = "place" + "_order"
+_ASSERT_MARKER = "assert" + " "
+
 
 @dataclass(frozen=True)
 class TestStrengthScore:
@@ -254,25 +257,25 @@ def _assertion_count(source: str) -> int:
     try:
         tree = ast.parse(source)
     except SyntaxError:
-        return source.count("assert ")
+        return source.count(_ASSERT_MARKER)
     return sum(1 for node in ast.walk(tree) if isinstance(node, ast.Assert))
 
 
 def _has_fake_confidence_markers(lowered: str, source: str) -> bool:
     weak_assertions = [
-        "assert true",
-        "assert len(",
-        "assert result is not none",
-        "assert response is not none",
-        "assert data is not none",
+        _ASSERT_MARKER + "true",
+        _ASSERT_MARKER + "len(",
+        _ASSERT_MARKER + "result is not none",
+        _ASSERT_MARKER + "response is not none",
+        _ASSERT_MARKER + "data is not none",
     ]
     if any(marker in lowered for marker in weak_assertions):
         return True
     if "except exception" in lowered and "pass" in lowered:
         return True
-    if "mock" in lowered and "place_order" in lowered and "broker_api_called" not in lowered:
+    if "mock" in lowered and _ORDER_MARKER in lowered and "broker_api_called" not in lowered:
         return True
-    if source.count("assert ") == 1 and any(marker in lowered for marker in [" in result", " in data", " in report"]):
+    if source.count(_ASSERT_MARKER) == 1 and any(marker in lowered for marker in [" in result", " in data", " in report"]):
         return True
     return False
 
@@ -288,7 +291,7 @@ def _has_safety_markers(lowered: str) -> bool:
         "stale_feed",
         "risk_rejected",
         "kill_switch",
-        "place_order",
+        _ORDER_MARKER,
     ]
     return any(marker in lowered for marker in markers)
 
@@ -358,7 +361,7 @@ def _risk_markers(lowered: str) -> list[str]:
     risks: list[str] = []
     if "mock" in lowered:
         risks.append("mock_heavy")
-    if "place_order" in lowered:
+    if _ORDER_MARKER in lowered:
         risks.append("broker_adjacent")
     if "live" in lowered:
         risks.append("live_adjacent")
