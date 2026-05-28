@@ -35,6 +35,14 @@ class RuntimeFlowReport:
         return result
 
 
+@dataclass(frozen=True)
+class DottedStepResolution:
+    module_name: str | None
+    module_path: str | None
+    symbol: str | None
+    module_exists: bool
+
+
 def audit_runtime_wiring(repo_root: str | Path, config: ForensicsConfig) -> RuntimeFlowReport:
     root = Path(repo_root).resolve()
     python_imports = _collect_python_imports(root)
@@ -74,16 +82,15 @@ def _status_for_step(
     if candidate_file and (repo_root / candidate_file).exists():
         return FlowStepStatus(flow_name, step, "PASS", f"file_exists:{candidate_file}")
 
-    module_name, symbol = _module_and_symbol(normalized)
-    if module_name:
-        module_path = module_name.replace(".", "/") + ".py"
-        if not (repo_root / module_path).exists():
-            return FlowStepStatus(flow_name, step, "FAIL", f"module_file_missing:{module_path}")
-        if symbol:
-            if _symbol_defined(repo_root, module_path, symbol, file_text_cache):
-                return FlowStepStatus(flow_name, step, "PASS", f"symbol_defined:{module_path}:{symbol}")
-            return FlowStepStatus(flow_name, step, "UNKNOWN", f"module_exists_symbol_not_proven:{module_path}:{symbol}")
-        return FlowStepStatus(flow_name, step, "PASS", f"module_file_exists:{module_path}")
+    resolution = _resolve_dotted_step(repo_root, normalized)
+    if resolution.module_name and resolution.module_path:
+        if not resolution.module_exists:
+            return FlowStepStatus(flow_name, step, "FAIL", f"module_file_missing:{resolution.module_path}")
+        if resolution.symbol:
+            if _symbol_defined(repo_root, resolution.module_path, resolution.symbol, file_text_cache):
+                return FlowStepStatus(flow_name, step, "PASS", f"symbol_defined:{resolution.module_path}:{resolution.symbol}")
+            return FlowStepStatus(flow_name, step, "FAIL", f"symbol_missing:{resolution.module_path}:{resolution.symbol}")
+        return FlowStepStatus(flow_name, step, "PASS", f"module_file_exists:{resolution.module_path}")
 
     if _reference_found(normalized, python_imports, file_text_cache, repo_root):
         return FlowStepStatus(flow_name, step, "PASS", "reference_found")
@@ -98,16 +105,28 @@ def _candidate_file_for_step(step: str) -> str | None:
     return None
 
 
-def _module_and_symbol(step: str) -> tuple[str | None, str | None]:
+def _resolve_dotted_step(repo_root: Path, step: str) -> DottedStepResolution:
     if "." not in step or "/" in step:
-        return None, None
+        return DottedStepResolution(None, None, None, False)
+
     parts = step.split(".")
+    if not parts or not parts[0] in {"core", "dashboard", "strategies", "scripts", "tools"}:
+        return DottedStepResolution(None, None, None, False)
+
+    # Prefer the longest existing module prefix and treat the remaining dotted
+    # suffix as a symbol path. This keeps checks static and avoids importing
+    # Tradebot runtime modules while preventing false failures such as treating
+    # `core.auth.validate_kite_startup_credentials` as
+    # `core/auth/validate_kite_startup_credentials.py`.
     for split_index in range(len(parts), 0, -1):
         module = ".".join(parts[:split_index])
-        symbol = ".".join(parts[split_index:]) or None
-        if module.startswith(("core", "dashboard", "strategies", "scripts", "tools")):
-            return module, symbol
-    return None, None
+        module_path = module.replace(".", "/") + ".py"
+        if (repo_root / module_path).exists():
+            symbol = ".".join(parts[split_index:]) or None
+            return DottedStepResolution(module, module_path, symbol, True)
+
+    module = ".".join(parts)
+    return DottedStepResolution(module, module.replace(".", "/") + ".py", None, False)
 
 
 def _symbol_defined(repo_root: Path, module_path: str, symbol: str, cache: dict[str, str]) -> bool:
