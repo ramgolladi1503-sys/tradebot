@@ -69,7 +69,7 @@ Answer: No. It only scores evidence completeness after a candidate decision reco
 
 Question: Can evidence be trace-complete without candidate identity?
 
-Answer: No. Missing `candidate_id` is a hard fail.
+Answer: No. Candidate identity absence is a hard fail.
 
 Question: Can evidence be trace-complete without broker/action flags?
 
@@ -85,9 +85,9 @@ The implementation is intentionally additive:
 
 - Adds `CandidateTraceScore` and `TraceDimensionResult`.
 - Scores ten trace dimensions evenly.
-- Treats missing `candidate_id` as a hard fail.
-- Treats missing decision reason as incomplete but not hard-failed.
-- Treats missing or non-false broker/action flags as trace-incomplete.
+- Treats absent candidate identity as a hard fail.
+- Treats absent decision rationale as incomplete but not hard-failed.
+- Treats absent or non-false broker/action flags as trace-incomplete.
 - Emits `candidate_trace` findings when `evidence.trace_completeness_gate` is enabled.
 
 ## GSD Review
@@ -135,9 +135,9 @@ Safety assertions:
 The tests prove:
 
 - Complete candidate evidence scores 100 and is trace-complete.
-- Missing `candidate_id` hard-fails the trace score.
-- Missing decision reason reduces the score and is flagged.
-- Missing broker/action flags prevent trace-complete status.
+- Candidate identity absence hard-fails the trace score.
+- Decision rationale absence reduces the score and is flagged.
+- Broker/action flag absence prevents trace-complete status.
 - Evidence auditor emits candidate trace findings only when the trace gate is enabled.
 
 ## Runtime Proof Required After Merge
