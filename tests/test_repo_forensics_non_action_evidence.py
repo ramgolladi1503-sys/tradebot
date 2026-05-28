@@ -69,6 +69,7 @@ exclude:
   directories:
     - cache_dir
 evidence:
+  strict_non_action_gate: true
   required_fields:
     - mode
     - candidate_id
@@ -136,7 +137,22 @@ def test_non_action_evidence_tracks_extended_missing_fields_as_baseline_debt_whe
     assert report.baseline_debt[0].missing_fields == [LIVE_FIELD, BROKER_ORDER_FIELD]
 
 
-def test_non_action_evidence_blocks_readonly_action_true(tmp_path):
+def test_non_action_evidence_blocks_readonly_action_true_when_strict_gate_is_enabled(tmp_path):
+    _write(tmp_path / "app.py", "x = 1\n")
+    _write(
+        tmp_path / "evidence" / "report.json",
+        _complete_record().replace(f'"{ORDER_FIELD}":false', f'"{ORDER_FIELD}":true'),
+    )
+    config = load_config(_write_strict_profile(tmp_path))
+
+    report = audit_evidence(tmp_path, config)
+
+    assert [finding.evidence_type for finding in report.high] == ["record"]
+    assert report.high[0].evidence.startswith("non_action_field_not_false")
+    assert report.high[0].missing_fields == [ORDER_FIELD]
+
+
+def test_non_action_evidence_tracks_non_false_action_as_baseline_debt_when_not_strict(tmp_path):
     _write(tmp_path / "app.py", "x = 1\n")
     _write(
         tmp_path / "evidence" / "report.json",
@@ -146,9 +162,9 @@ def test_non_action_evidence_blocks_readonly_action_true(tmp_path):
 
     report = audit_evidence(tmp_path, config)
 
-    assert [finding.evidence_type for finding in report.high] == ["record"]
-    assert report.high[0].evidence.startswith("non_action_field_not_false")
-    assert report.high[0].missing_fields == [ORDER_FIELD]
+    assert report.high == []
+    assert report.baseline_debt
+    assert report.baseline_debt[0].missing_fields == [ORDER_FIELD]
 
 
 def test_non_action_evidence_accepts_all_fields_false(tmp_path):
