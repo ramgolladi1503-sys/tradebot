@@ -87,7 +87,9 @@ The implementation is intentionally additive:
 
 - Adds `FailureSignal`, `FailureCluster`, `FailureClusterReport`, and `FixContract`.
 - Parses pytest and CI failure text into per-failure signals.
-- Clusters by fixture, missing field, safety boundary, runtime flow step, candidate/ranking concept, normalized error text, and module fallback.
+- Clusters by fixture and schema-field drift.
+- Clusters by safety boundary and runtime flow step.
+- Clusters by ranking/candidate concept, normalized error text, and module fallback.
 - Emits confidence as `CONFIRMED`, `LIKELY`, or `UNKNOWN`.
 - Blocks fix contracts when proof is absent.
 
