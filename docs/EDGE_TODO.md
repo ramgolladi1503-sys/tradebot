@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #320 — EDGE-95 Paper-Only Edge Gate, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #321 — EDGE-96 Live-Pilot Risk Throttle, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -40,6 +40,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-93 — Strategy Replay Proof Pack
 - EDGE-94 — End-to-End Edge Acceptance Suite
 - EDGE-95 — Paper-Only Edge Gate
+- EDGE-96 — Live-Pilot Risk Throttle
 - PR-FEED-08 — Extract Pure Tick Utility Helpers
 - PR-FEED-09 — Extract Reconnect Decision Policy
 - PR-FEED-10 — Extract Subscription Budget Policy
@@ -87,11 +88,10 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Replay, edge proof, and readiness
 
-- [ ] PR #321 — EDGE-96 Live-Pilot Risk Throttle
 - [ ] PR #322 — EDGE-97 Final Edge Readiness Report
 
 ## Non-negotiable sequencing
 
-1. Finish PR #320 / EDGE-95 first and merge it green.
-2. Do not start PR #321 / EDGE-96 before PR #320 is merged and green.
+1. Finish PR #321 / EDGE-96 first and merge it green.
+2. Do not start PR #322 / EDGE-97 before PR #321 is merged and green.
 3. Keep every PR narrow, tested, documented, and reviewed.
