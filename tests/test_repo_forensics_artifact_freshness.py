@@ -60,6 +60,7 @@ exclude:
 evidence:
   freshness_gate: true
   freshness_max_age_seconds: {max_age_seconds}
+  freshness_now: 2026-05-28T10:30:00Z
   required_fields:
     - mode
     - candidate_id
