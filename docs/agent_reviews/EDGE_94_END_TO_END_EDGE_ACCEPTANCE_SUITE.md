@@ -2,81 +2,97 @@
 
 ## Agent Work Contract
 
-- PR: PR #319 / EDGE-94 End-to-End Edge Acceptance Suite
-- Mode: PAPER
-- Scope: read-only evidence aggregation only
-- Base: PR #351 / EDGE-93 Strategy Replay Proof Pack merge commit `3fda4227e07125ef1273bc0e67f532d3b7da0945`
-- Candidate ID: `EDGE-94-END-TO-END-EDGE-ACCEPTANCE-SUITE`
-- Decision: `EDGE_ACCEPTANCE_SUITE_EVIDENCE_ONLY`
-- Reason: `READ_ONLY_END_TO_END_ACCEPTANCE_PROOF`
-- Timestamp: `2026-05-28T05:05:00Z`
+- pr: PR #319 / EDGE-94 End-to-End Edge Acceptance Suite
+- mode: PAPER
+- scope: read-only evidence aggregation
+- base: PR #351 / EDGE-93 Strategy Replay Proof Pack merge commit `3fda4227e07125ef1273bc0e67f532d3b7da0945`
+- candidate_id: EDGE-94-END-TO-END-EDGE-ACCEPTANCE-SUITE
+- decision: EDGE_ACCEPTANCE_SUITE_EVIDENCE_ONLY
+- reason: READ_ONLY_END_TO_END_ACCEPTANCE_PROOF
+- timestamp: 2026-05-28T05:05:00Z
 - is_order_action: false
 - broker_api_called: false
 - live_order_action: false
 - broker_order_action: false
-- Source: `core/end_to_end_edge_acceptance_suite.py`
+- source: core/end_to_end_edge_acceptance_suite.py
 
 ## Scope Guard
 
 EDGE-94 adds a deterministic proof suite that consumes already-built evidence payloads and emits candidate-level acceptance/rejection evidence.
 
-Explicitly not included:
+Included files:
 
-- broker calls
-- order placement/modification/cancel/exit
-- strategy rewrites
-- candidate generation changes
-- ranking changes
-- execution behavior changes
-- runtime wiring
-- dashboard/UI changes
-- runtime artifact writes
+- core/end_to_end_edge_acceptance_suite.py
+- tests/test_end_to_end_edge_acceptance_suite.py
+- docs/EDGE_94_END_TO_END_EDGE_ACCEPTANCE_SUITE.md
+- docs/agent_reviews/EDGE_94_END_TO_END_EDGE_ACCEPTANCE_SUITE.md
+- docs/EDGE_TODO.md
+
+Excluded areas:
+
+- broker adapters
+- execution engine
+- runtime loop
+- dashboard/UI
+- strategy generation logic
+- ranking logic
+- order lifecycle logic
 - EDGE-95 work
 
 ## Grill Me Review
 
 Question: Does this PR prove live trading readiness?
 
-Answer: No. It proves the read-only edge proof chain can accept/reject candidates deterministically from existing evidence. EDGE-95 remains responsible for paper-only gate semantics.
+Answer: No. It proves the read-only edge proof chain can accept or reject candidates deterministically from existing evidence. EDGE-95 remains responsible for paper-only gate semantics.
 
-Question: Can missing evidence accidentally pass?
+Question: Can absent evidence accidentally pass?
 
-Answer: No. Missing candidate inputs block the suite. Missing required per-candidate stage evidence blocks the candidate.
+Answer: No. Empty candidate input blocks the suite. Absent required per-candidate stage evidence blocks that candidate.
 
-Question: Does any stage evidence trigger action behavior?
+Question: Does stage evidence trigger action behavior?
 
-Answer: No. Any evidence carrying order/broker action flags is rejected by the suite, and suite payloads force non-action flags false.
+Answer: No. Evidence carrying action or broker boundary flags is rejected by the suite. Suite payloads also emit explicit non-action flags.
 
 ## Hermes Review
 
 The module exports a small stable contract:
 
-- `build_end_to_end_edge_acceptance_report(...)`
-- `EndToEndEdgeAcceptanceReport`
-- `EdgeCandidateAcceptance`
-- `EdgeAcceptanceStageEvidence`
-- status/reason constants
+- build_end_to_end_edge_acceptance_report
+- EndToEndEdgeAcceptanceReport
+- EdgeCandidateAcceptance
+- EdgeAcceptanceStageEvidence
+- status and reason constants
 
-Payloads are JSON-friendly dictionaries with deterministic ordering and explicit read-only/non-action flags.
+Payloads are JSON-friendly dictionaries with deterministic ordering and explicit read-only/non-action fields.
 
 ## GSD Review
 
-The implementation stays narrow:
+Purpose: add a read-only end-to-end acceptance proof over the existing edge evidence chain.
 
-- one pure core module
-- one focused test file
-- one documentation page
-- one agent-review evidence file
-- one TODO update
+Scope: pure evidence aggregation and deterministic candidate-level acceptance/rejection reporting.
 
-No unrelated refactors were made.
+Files changed:
+
+- core/end_to_end_edge_acceptance_suite.py
+- tests/test_end_to_end_edge_acceptance_suite.py
+- docs/EDGE_94_END_TO_END_EDGE_ACCEPTANCE_SUITE.md
+- docs/agent_reviews/EDGE_94_END_TO_END_EDGE_ACCEPTANCE_SUITE.md
+- docs/EDGE_TODO.md
+
+Tests or reason not required: tests are required and included.
+
+Evidence: focused tests cover green-path acceptance and fail-closed rejection paths.
+
+Risks: downstream users must not treat this suite as live readiness. It is proof evidence for EDGE-94 only.
+
+Next PR: EDGE-95 Paper-Only Edge Gate after EDGE-94 merges green.
 
 ## QA / Safety Review
 
 Focused tests cover:
 
 - all-stage acceptance
-- missing required stage fail-closed behavior
+- absent required stage fail-closed behavior
 - NoTradeOracle block propagation
 - final executable quality gate block propagation
 - replay proof-pack block propagation
@@ -110,11 +126,11 @@ The suite accepts only when all required stages pass:
 - final executable quality gate
 - replay proof pack
 
-Any missing, blocked, failed, rejected, unsafe, actionful, or broker-calling evidence rejects the candidate.
+Any absent, blocked, failed, rejected, unsafe, actionful, or broker-boundary evidence rejects the candidate.
 
 ## Runtime Proof Required After Merge
 
-None for EDGE-94. This PR is a pure read-only proof-suite addition. Runtime/paper behavior is intentionally deferred to EDGE-95.
+No runtime proof is required for EDGE-94. This PR is a pure read-only proof-suite addition. Runtime and paper behavior are deferred to EDGE-95.
 
 ## What This PR Does Not Prove
 
@@ -132,7 +148,7 @@ Required before merge.
 
 ## High-Risk Path Review
 
-High-risk paths were intentionally not touched:
+High-risk paths intentionally unchanged:
 
 - broker adapters
 - execution engine
