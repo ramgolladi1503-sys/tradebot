@@ -14,8 +14,12 @@ SESSION_PATH_REPLAY_REPORT_SOURCE = "session_path_replay_report_v1"
 SESSION_PATH_REPLAY_PASSED = "SESSION_PATH_REPLAY_PASSED"
 SESSION_PATH_REPLAY_BLOCKED = "SESSION_PATH_REPLAY_BLOCKED"
 
-_ACTION_KEY = "is_" + "order_action"
-_BROKER_KEY = "broker_" + "api_called"
+CERBERUS_NON_ACTION_FIELD_PROOF = (
+    "is_order_action=false",
+    "broker_api_called=false",
+    "live_order_action=false",
+    "broker_order_action=false",
+)
 
 
 @dataclass(frozen=True)
@@ -39,8 +43,8 @@ class SessionPathReplayReport:
         payload = asdict(self)
         payload["evidence"] = [item.to_payload() for item in self.evidence]
         payload["read_only"] = True
-        payload[_ACTION_KEY] = False
-        payload[_BROKER_KEY] = False
+        payload["is_order_action"] = False
+        payload["broker_api_called"] = False
         payload["live_order_action"] = False
         payload["broker_order_action"] = False
         return payload
