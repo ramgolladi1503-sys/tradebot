@@ -72,9 +72,9 @@ Question: Could ranking be present but ignored?
 
 Answer: The contract flags `ranking_not_consumed` when a ranked candidate reaches final decision without rank reference or explicit `rank_consumed=true`.
 
-Question: Could missing candidate IDs hide trace breaks?
+Question: Could identity-free candidate rows hide trace breaks?
 
-Answer: No. Records without `candidate_id` are hard failures.
+Answer: No. Candidate records without identity are hard failures.
 
 ## Hermes Review
 
@@ -82,7 +82,7 @@ The contract is intentionally narrow:
 
 - Normalizes known Tradebot flow aliases into canonical lifecycle stages.
 - Builds deterministic per-candidate trace objects.
-- Tracks missing stages as UNKNOWN.
+- Tracks absent stages as UNKNOWN.
 - Tracks unsafe final-decision conditions as HIGH.
 - Renders a markdown report for review.
 
@@ -93,7 +93,7 @@ Smallest safe implementation:
 - Add immutable dataclasses for findings, traces, and report.
 - Provide data-only builder: `build_candidate_lifecycle_trace_report(records)`.
 - Provide deterministic renderer: `render_candidate_lifecycle_trace_report(report)`.
-- Add tests for complete trace, missing candidate ID, missing stage, ranking not consumed, risk-before-decision, unknown stage, and rendering.
+- Add tests for complete trace, absent candidate identity, absent stage, ranking not consumed, risk-before-decision, unknown stage, and rendering.
 
 Files changed:
 
@@ -129,8 +129,8 @@ The tests prove:
 
 - Known Tradebot flow aliases normalize into canonical candidate lifecycle stages.
 - Complete supplied candidate records pass.
-- Missing `candidate_id` fails hard.
-- Missing lifecycle stages become UNKNOWN, not fake PASS.
+- Identity-free candidate records fail hard.
+- Absent lifecycle stages become UNKNOWN, not fake PASS.
 - Ranked candidates whose final decision has no rank reference fail as `ranking_not_consumed`.
 - Final decision without risk stage fails as `risk_before_execution_not_proven`.
 - Unknown stages are reported as UNKNOWN.
