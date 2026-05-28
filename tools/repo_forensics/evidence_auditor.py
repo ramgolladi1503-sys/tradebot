@@ -145,18 +145,19 @@ def _audit_record(
         severity = "HIGH" if any(field in missing for field in ("decision", "reason", *NON_ACTION_FIELDS)) else "MEDIUM"
         findings.append(EvidenceFinding(rel, severity, "record", f"required_fields_absent:{evidence}", missing_fields=missing, scope=scope))
 
-    missing_extended_non_action = [field for field in NON_ACTION_FIELDS if field not in required_fields and field not in record]
-    if missing_extended_non_action:
-        findings.append(
-            EvidenceFinding(
-                rel,
-                "MEDIUM",
-                "record",
-                f"extended_non_action_fields_absent:{evidence}",
-                missing_fields=missing_extended_non_action,
-                scope="baseline_debt",
+    if strict_non_action_gate:
+        missing_extended_non_action = [field for field in NON_ACTION_FIELDS if field not in required_fields and field not in record]
+        if missing_extended_non_action:
+            findings.append(
+                EvidenceFinding(
+                    rel,
+                    "MEDIUM",
+                    "record",
+                    f"extended_non_action_fields_absent:{evidence}",
+                    missing_fields=missing_extended_non_action,
+                    scope="baseline_debt",
+                )
             )
-        )
 
     unsafe_non_action_fields = [field for field in NON_ACTION_FIELDS if field in record and record[field] is not False]
     if unsafe_non_action_fields:
@@ -181,7 +182,7 @@ def _audit_text(rel: str, text: str, strict_non_action_gate: bool) -> list[Evide
         if not any(marker in compact for marker in ["reason", "decision", "broker_api_called", "is_order_action"]):
             findings.append(EvidenceFinding(rel, "MEDIUM", "text", "weak_status_only_text", scope=scope))
     present_non_action = [field for field in NON_ACTION_FIELDS if field in compact]
-    if present_non_action and set(present_non_action) != set(NON_ACTION_FIELDS):
+    if strict_non_action_gate and present_non_action and set(present_non_action) != set(NON_ACTION_FIELDS):
         missing = [field for field in NON_ACTION_FIELDS if field not in present_non_action]
         findings.append(EvidenceFinding(rel, "MEDIUM", "text", "partial_non_action_fields", missing_fields=missing, scope="baseline_debt"))
     for field in NON_ACTION_FIELDS:
