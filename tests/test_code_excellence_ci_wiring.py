@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.run_agent_elite_report import _required_gate_exit_code
+
 
 WORKFLOW_PATH = Path(".github/workflows/code-excellence-gates.yml")
 
@@ -36,6 +38,55 @@ def test_code_excellence_workflow_uploads_reports_even_on_failure():
     assert "if: always()" in text
     assert "code-excellence-gate-reports" in text
     assert "docs/code_excellence/reports/unified_ce_gate_latest.md" in text
+    assert "docs/code_excellence/reports/unified_agent_elite_latest.md" in text
+
+
+def test_code_excellence_workflow_requires_agent_elite_report():
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "Build required Agent Elite report" in text
+    assert "scripts/run_agent_elite_report.py" in text
+    assert "--require-ci-pass" in text
+    assert "--unknown-explanation docs/code_excellence/reports/unified_ce_gate_latest.md" in text
+    assert "run_agent_elite_report.py" in text
+    assert "|| true" not in text
+
+
+def test_required_gate_fails_when_report_is_missing(tmp_path):
+    missing = tmp_path / "missing.md"
+
+    assert _required_gate_exit_code("PASS", missing, None) == 1
+
+
+def test_required_gate_fails_on_new_hard_failure(tmp_path):
+    report = tmp_path / "report.md"
+    report.write_text("verdict: FAIL\n", encoding="utf-8")
+
+    assert _required_gate_exit_code("FAIL", report, None) == 1
+
+
+def test_required_gate_requires_explanation_for_unknown(tmp_path):
+    report = tmp_path / "report.md"
+    report.write_text("verdict: UNKNOWN\n", encoding="utf-8")
+
+    assert _required_gate_exit_code("UNKNOWN", report, None) == 1
+
+
+def test_required_gate_allows_unknown_with_explanation(tmp_path):
+    report = tmp_path / "report.md"
+    explanation = tmp_path / "explanation.md"
+    report.write_text("verdict: UNKNOWN\n", encoding="utf-8")
+    explanation.write_text("upstream gate explains unknowns\n", encoding="utf-8")
+
+    assert _required_gate_exit_code("UNKNOWN", report, str(explanation)) == 0
+
+
+def test_required_gate_allows_warnings_and_pass(tmp_path):
+    report = tmp_path / "report.md"
+    report.write_text("verdict: PASS_WITH_WARNINGS\n", encoding="utf-8")
+
+    assert _required_gate_exit_code("PASS_WITH_WARNINGS", report, None) == 0
+    assert _required_gate_exit_code("PASS", report, None) == 0
 
 
 def test_code_excellence_workflow_stays_lightweight():
