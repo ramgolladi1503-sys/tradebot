@@ -1,12 +1,12 @@
 # Tradebot EDGE TODO
 
-This file is the living TODO list for the current opportunity-engine roadmap.
+This file is the living TODO list for the current backtest/walk-forward and elite-hardening roadmap.
 
 Rule: when a PR is raised, remove that item from this list in the same PR branch so the file always shows remaining work.
 
 ## Current active PR
 
-- PR #322 — EDGE-97 Final Edge Readiness Report, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- Issue #319 — EDGE-98 Historical Dataset Contract, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -42,57 +42,37 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-95 — Paper-Only Edge Gate
 - EDGE-96 — Live-Pilot Risk Throttle
 - EDGE-97 — Final Edge Readiness Report
-- PR-FEED-08 — Extract Pure Tick Utility Helpers
-- PR-FEED-09 — Extract Reconnect Decision Policy
-- PR-FEED-10 — Extract Subscription Budget Policy
-- PR-FEED-11 — Extract Runtime Snapshot Builder
-- PR-FEED-17 — Extract Token Resolution Read Model
-- PR-FEED-18 — Extract WebSocket Lifecycle Shell
-- PR-FEED-19 — Callback Thin-Wiring Refactor
-- LIVE-TRUTH-01 — Top Opportunities Executable Truth Alignment
-- LIVE-TRUTH-02 — Latest Artifact Non-Empty Preservation
-- LIVE-TRUTH-03 — Runtime Snapshot Freshness Guard
-- LIVE-TRUTH-04 — Feed Runtime Writer Liveness / WebSocket Recovery Evidence
-- LIVE-TRUTH-05 — Market Close State Consistency / Off-Hours Quiescence
-- LIVE-TRUTH-06 — Stale Candidate Hygiene Guard
-- LIVE-TRUTH-07 — Latency / SLO Guard Oscillation Evidence
-- LIVE-TRUTH-08 — SENSEX Reject Calibration Evidence
-- LIVE-TRUTH-09 — Runtime Health Artifact Consistency
-- LIVE-TRUTH-10 — Strategy Perf Shadow Fallback Evidence
-
-## Locked LIVE-TRUTH stabilization block
-
-- PR #295 — LIVE-TRUTH-01 Top Opportunities Executable Truth Alignment
-- PR #296 — LIVE-TRUTH-02 Latest Artifact Non-Empty Preservation
-- PR #297 — LIVE-TRUTH-03 Runtime Snapshot Freshness Guard
-- PR #298 — LIVE-TRUTH-04 Feed Runtime Writer Liveness / WebSocket Recovery Evidence
-- PR #299 — LIVE-TRUTH-05 Market Close State Consistency / Off-Hours Quiescence
-- PR #300 — LIVE-TRUTH-06 Stale Candidate Hygiene Guard
-- PR #301 — LIVE-TRUTH-07 Latency / SLO Guard Oscillation Evidence
-- PR #302 — LIVE-TRUTH-08 SENSEX Reject Calibration Evidence
-- PR #303 — LIVE-TRUTH-09 Runtime Health Artifact Consistency
-- PR #304 — LIVE-TRUTH-10 Strategy Perf Shadow Fallback Evidence
+- TEST-STAB-04 — Fix websocket restart compatibility regressions
+- TEST-STAB-04A — Restore websocket test fixture compatibility
+- EDGE-98 — Historical Dataset Contract
 
 ## Remaining TODO
 
-### Live evidence stabilization
+### Backtest / walk-forward foundation
 
-- Completed.
+- [ ] Issue #320 — EDGE-99 — Next roadmap card after EDGE-98
+- [ ] Issue #321 — EDGE-100 — Next roadmap card after EDGE-99
+- [ ] Issue #322 — EDGE-101 — Next roadmap card after EDGE-100
+- [ ] Issue #323 — EDGE-102 — Next roadmap card after EDGE-101
+- [ ] Issue #324 — EDGE-103 — Next roadmap card after EDGE-102
+- [ ] Issue #325 — EDGE-104 — Next roadmap card after EDGE-103
+- [ ] Issue #326 — EDGE-105 — Next roadmap card after EDGE-104
+- [ ] Issue #327 — EDGE-106 — Next roadmap card after EDGE-105
+- [ ] Issue #328 — EDGE-107 — Next roadmap card after EDGE-106
+- [ ] Issue #329 — EDGE-108 — Next roadmap card after EDGE-107
+- [ ] Issue #330 — EDGE-109 — Next roadmap card after EDGE-108
+- [ ] Issue #331 — EDGE-110 — Next roadmap card after EDGE-109
+- [ ] Issue #332 — EDGE-111 — Next roadmap card after EDGE-110
+- [ ] Issue #333 — EDGE-112 — Next roadmap card after EDGE-111
+- [ ] Issue #334 — EDGE-113 — Next roadmap card after EDGE-112
 
-### Strategy lifecycle governance
+### TB-ELITE hardening
 
-- Completed.
-
-### Feed extraction/refactor work
-
-- Completed.
-
-### Replay, edge proof, and readiness
-
-- Completed.
+- [ ] TB-ELITE-01 through TB-ELITE-21 remain locked behind their individual GitHub Project issue cards.
 
 ## Non-negotiable sequencing
 
-1. Finish PR #322 / EDGE-97 first and merge it green.
-2. Do not start new roadmap work after PR #322 unless explicitly requested.
-3. Keep every PR narrow, tested, documented, and reviewed.
+1. Finish issue #319 / EDGE-98 first and merge it green.
+2. Do not start issue #320 / EDGE-99 before #319 is merged green and explicitly confirmed.
+3. One issue equals one PR.
+4. Keep every PR narrow, tested, documented, and reviewed.
