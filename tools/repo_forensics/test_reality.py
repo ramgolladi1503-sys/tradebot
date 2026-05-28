@@ -79,7 +79,7 @@ def classify_tests(repo_root: str | Path, config: ForensicsConfig) -> TestRealit
     root = Path(repo_root).resolve()
     tests: list[TestRealityStatus] = []
     for path in sorted(root.rglob("test_*.py")):
-        if _should_skip(path, root, config):
+        if _should_skip(path, root, config) or not _is_test_file_candidate(path, root):
             continue
         tests.append(_classify_test_file(root, path))
     for path in sorted((root / "tests").rglob("*.py")) if (root / "tests").exists() else []:
@@ -368,6 +368,11 @@ def _risk_markers(lowered: str) -> list[str]:
     if "fallback" in lowered:
         risks.append("fallback_adjacent")
     return risks
+
+
+def _is_test_file_candidate(path: Path, repo_root: Path) -> bool:
+    rel = path.relative_to(repo_root)
+    return "tests" in rel.parts or rel.parent == Path(".")
 
 
 def _should_skip(path: Path, repo_root: Path, config: ForensicsConfig) -> bool:
