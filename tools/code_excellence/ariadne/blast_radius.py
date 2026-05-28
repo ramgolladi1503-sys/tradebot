@@ -84,8 +84,8 @@ def map_blast_radius(cluster: FailureCluster) -> BlastRadius:
         unknowns.append("safety_boundary_relevance_unknown")
 
     confidence = UNKNOWN if unknowns or cluster.confidence == UNKNOWN else cluster.confidence
-    stage = _single_or_unknown(stages)
-    boundary = _single_or_unknown(boundaries)
+    stage = _primary_stage(stages)
+    boundary = _primary_boundary(boundaries)
     unique_files = tuple(_ordered_unique(mapped_files))
     unique_unknowns = tuple(_ordered_unique(unknowns))
 
@@ -129,13 +129,20 @@ def _is_evidence_related(value: str) -> bool:
     return any(marker in value for marker in ("evidence", "artifact", "trace", "report"))
 
 
-def _single_or_unknown(values: list[str]) -> str:
+def _primary_stage(values: list[str]) -> str:
     unique = _ordered_unique(values)
-    if not unique:
-        return "UNKNOWN"
-    if len(unique) == 1:
-        return unique[0]
-    return "+".join(unique)
+    for preferred in ("ranking", "market_data", "risk_evaluation", "review_queue_or_evidence"):
+        if preferred in unique:
+            return preferred
+    return "UNKNOWN"
+
+
+def _primary_boundary(values: list[str]) -> str:
+    unique = _ordered_unique(values)
+    for preferred in ("feed_start_boundary", "read_only_dashboard_boundary", "execution_boundary"):
+        if preferred in unique:
+            return preferred
+    return "UNKNOWN"
 
 
 def _ordered_unique(values: Iterable[str]) -> list[str]:
