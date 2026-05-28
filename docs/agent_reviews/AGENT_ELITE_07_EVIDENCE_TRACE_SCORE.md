@@ -137,7 +137,7 @@ The tests prove:
 - Complete candidate evidence scores 100 and is trace-complete.
 - Candidate identity absence hard-fails the trace score.
 - Decision rationale absence reduces the score and is flagged.
-- Broker/action flag absence prevents trace-complete status.
+- Action-flag absence prevents trace completeness.
 - Evidence auditor emits candidate trace findings only when the trace gate is enabled.
 
 ## Runtime Proof Required After Merge
