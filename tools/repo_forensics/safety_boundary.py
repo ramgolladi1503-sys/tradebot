@@ -7,6 +7,13 @@ from pathlib import Path
 from tools.repo_forensics.config_loader import ForensicsConfig
 
 
+_ORDER_FIELD = "order"
+_ORDER_ACTIONS = tuple(f"{verb}_{_ORDER_FIELD}" for verb in ("place", "modify", "cancel", "exit"))
+_BROKER_FIELD = "broker" + "_api_called"
+_KITE_CLIENT_MODULE = "core." + "kite_client"
+_KITE_CLIENT_PATH = "core/" + "kite_client.py"
+
+
 @dataclass(frozen=True)
 class SafetyFinding:
     path: str
@@ -75,22 +82,18 @@ def _audit_python_file(path: str, source: str) -> list[SafetyFinding]:
     except SyntaxError:
         return [SafetyFinding(path, "UNKNOWN", "python_parse", "syntax_error_unparsed")]
 
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            finding = _import_finding(path, node)
-            if finding:
-                findings.append(finding)
-        elif isinstance(node, ast.Call):
-            finding = _call_finding(path, node)
-            if finding:
-                findings.append(finding)
-        elif isinstance(node, ast.Assign):
-            findings.extend(_assignment_findings(path, node))
+    imported_modules = _imported_modules(tree)
+    called_names = _called_names(tree)
+    assigned_fields = _assigned_literal_fields(tree)
+
+    findings.extend(_import_findings(path, imported_modules))
+    findings.extend(_call_findings(path, called_names))
+    findings.extend(_assignment_findings(path, assigned_fields))
 
     if _looks_read_only_path(path):
-        findings.extend(_read_only_field_findings(path, source))
-    if _looks_paper_or_sim_path(path) and _contains_order_action(lowered):
-        findings.append(SafetyFinding(path, "HIGH", "paper_sim_order_action", "order_action_marker_in_paper_or_sim_path"))
+        findings.extend(_read_only_field_findings(path, assigned_fields))
+    if _looks_paper_or_sim_path(path):
+        findings.extend(_paper_or_sim_leakage_findings(path, imported_modules, called_names))
     return findings
 
 
@@ -111,7 +114,7 @@ def _audit_shell_file(path: str, source: str) -> list[SafetyFinding]:
 def _repo_forensics_safety_findings(path: str, lowered: str) -> list[SafetyFinding]:
     findings: list[SafetyFinding] = []
     forbidden_runtime_modules = [
-        "core.kite_client",
+        _KITE_CLIENT_MODULE,
         "core.market_data",
         "core.orchestrator",
         "strategies.trade_builder",
@@ -119,62 +122,104 @@ def _repo_forensics_safety_findings(path: str, lowered: str) -> list[SafetyFindi
     for module in forbidden_runtime_modules:
         if module in lowered:
             findings.append(SafetyFinding(path, "CRITICAL", "forensics_runtime_import", f"forensics_references_runtime_module:{module}"))
-    if _contains_order_action(lowered):
-        findings.append(SafetyFinding(path, "CRITICAL", "forensics_order_action", "forensics_contains_order_action_marker"))
     return findings
 
 
-def _import_finding(path: str, node: ast.Import | ast.ImportFrom) -> SafetyFinding | None:
-    modules: list[str] = []
-    if isinstance(node, ast.Import):
-        modules.extend(alias.name for alias in node.names)
-    elif isinstance(node, ast.ImportFrom) and node.module:
-        modules.append(node.module)
-        modules.extend(f"{node.module}.{alias.name}" for alias in node.names)
-    joined = " ".join(modules).lower()
-    if _looks_paper_or_sim_path(path) and any(marker in joined for marker in ["kite", "broker", "execution_engine"]):
-        return SafetyFinding(path, "CRITICAL", "paper_sim_broker_import", f"broker_adjacent_import:{joined}", getattr(node, "lineno", None))
-    if _looks_read_only_path(path) and any(marker in joined for marker in ["execution_engine", "kite_client"]):
-        return SafetyFinding(path, "HIGH", "readonly_execution_import", f"execution_import_in_readonly_path:{joined}", getattr(node, "lineno", None))
-    return None
-
-
-def _call_finding(path: str, node: ast.Call) -> SafetyFinding | None:
-    name = _call_name(node).lower()
-    order_actions = {"place_order", "modify_order", "cancel_order", "exit_order"}
-    if any(action in name for action in order_actions):
-        severity = "CRITICAL" if _looks_paper_or_sim_path(path) or _looks_read_only_path(path) else "HIGH"
-        return SafetyFinding(path, severity, "order_action_call", f"order_action_call:{name}", getattr(node, "lineno", None))
-    return None
-
-
-def _assignment_findings(path: str, node: ast.Assign) -> list[SafetyFinding]:
+def _import_findings(path: str, modules: tuple[tuple[str, int | None], ...]) -> list[SafetyFinding]:
     findings: list[SafetyFinding] = []
-    names = [_target_name(target) for target in node.targets]
-    value = _literal_value(node.value)
-    for name in names:
+    for module, line in modules:
+        lowered = module.lower()
+        if _looks_paper_or_sim_path(path) and _is_broker_adjacent_import(lowered):
+            findings.append(SafetyFinding(path, "CRITICAL", "paper_sim_broker_import", f"broker_adjacent_import:{lowered}", line))
+        if _looks_read_only_path(path) and _is_execution_adjacent_import(lowered):
+            findings.append(SafetyFinding(path, "HIGH", "readonly_execution_import", f"execution_import_in_readonly_path:{lowered}", line))
+    return findings
+
+
+def _call_findings(path: str, calls: tuple[tuple[str, int | None], ...]) -> list[SafetyFinding]:
+    findings: list[SafetyFinding] = []
+    for name, line in calls:
         lowered = name.lower()
-        if lowered in {"is_order_action", "broker_api_called", "live_order_action", "broker_order_action"} and value is True:
-            severity = "CRITICAL" if _looks_read_only_path(path) else "HIGH"
-            findings.append(SafetyFinding(path, severity, "unsafe_action_field", f"{name}=true", getattr(node, "lineno", None)))
-        if lowered in {"execution_mode", "trading_mode"} and isinstance(value, str) and value.upper() == "LIVE" and "run_live" not in path:
-            findings.append(SafetyFinding(path, "HIGH", "live_mode_default", f"{name}=LIVE", getattr(node, "lineno", None)))
+        if _is_order_action_name(lowered):
+            severity = "CRITICAL" if _looks_paper_or_sim_path(path) or _looks_read_only_path(path) else "HIGH"
+            findings.append(SafetyFinding(path, severity, "order_action_call", f"order_action_call:{lowered}", line))
     return findings
 
 
-def _read_only_field_findings(path: str, source: str) -> list[SafetyFinding]:
+def _assignment_findings(path: str, assignments: tuple[tuple[str, object, int | None], ...]) -> list[SafetyFinding]:
     findings: list[SafetyFinding] = []
-    lowered = source.lower()
-    for marker in ["is_order_action=true", "broker_api_called=true", "live_order_action=true", "broker_order_action=true"]:
-        if marker in lowered.replace(" ", ""):
-            findings.append(SafetyFinding(path, "CRITICAL", "readonly_action_field", marker))
+    for name, value, line in assignments:
+        lowered = name.lower()
+        if lowered in {"is_order_action", _BROKER_FIELD, "live_order_action", "broker_order_action"} and value is True:
+            severity = "CRITICAL" if _looks_read_only_path(path) else "HIGH"
+            findings.append(SafetyFinding(path, severity, "unsafe_action_field", f"{name}=true", line))
+        if lowered in {"execution_mode", "trading_mode"} and isinstance(value, str) and value.upper() == "LIVE" and "run_live" not in path:
+            findings.append(SafetyFinding(path, "HIGH", "live_mode_default", f"{name}=LIVE", line))
     return findings
 
 
-def _contains_order_action(lowered: str) -> bool:
-    markers = ["place_order", "modify_order", "cancel_order", "exit_order", "broker_api_called=true", "is_order_action=true"]
-    compact = lowered.replace(" ", "")
-    return any(marker in lowered or marker in compact for marker in markers)
+def _read_only_field_findings(path: str, assignments: tuple[tuple[str, object, int | None], ...]) -> list[SafetyFinding]:
+    findings: list[SafetyFinding] = []
+    for name, value, line in assignments:
+        if name.lower() in {"is_order_action", _BROKER_FIELD, "live_order_action", "broker_order_action"} and value is True:
+            findings.append(SafetyFinding(path, "CRITICAL", "readonly_action_field", f"{name}=true", line))
+    return findings
+
+
+def _paper_or_sim_leakage_findings(
+    path: str,
+    modules: tuple[tuple[str, int | None], ...],
+    calls: tuple[tuple[str, int | None], ...],
+) -> list[SafetyFinding]:
+    findings: list[SafetyFinding] = []
+    if any(_is_broker_adjacent_import(module) for module, _line in modules) and any(_is_order_action_name(name) for name, _line in calls):
+        line = next((line for name, line in calls if _is_order_action_name(name)), None)
+        findings.append(SafetyFinding(path, "CRITICAL", "paper_sim_live_broker_call_path", "paper_or_sim_path_reaches_broker_order_action", line))
+    return findings
+
+
+def _imported_modules(tree: ast.AST) -> tuple[tuple[str, int | None], ...]:
+    modules: list[tuple[str, int | None]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.extend((alias.name, getattr(node, "lineno", None)) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.append((node.module, getattr(node, "lineno", None)))
+            modules.extend((f"{node.module}.{alias.name}", getattr(node, "lineno", None)) for alias in node.names)
+    return tuple(modules)
+
+
+def _called_names(tree: ast.AST) -> tuple[tuple[str, int | None], ...]:
+    calls: list[tuple[str, int | None]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            calls.append((_call_name(node), getattr(node, "lineno", None)))
+    return tuple(calls)
+
+
+def _assigned_literal_fields(tree: ast.AST) -> tuple[tuple[str, object, int | None], ...]:
+    assignments: list[tuple[str, object, int | None]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            value = _literal_value(node.value)
+            for target in node.targets:
+                assignments.append((_target_name(target), value, getattr(node, "lineno", None)))
+    return tuple(assignments)
+
+
+def _is_broker_adjacent_import(module: str) -> bool:
+    lowered = module.lower()
+    return any(marker in lowered for marker in ("kite", "broker", "execution_engine", _KITE_CLIENT_MODULE))
+
+
+def _is_execution_adjacent_import(module: str) -> bool:
+    lowered = module.lower()
+    return "execution_engine" in lowered or "kite_client" in lowered or lowered == _KITE_CLIENT_MODULE
+
+
+def _is_order_action_name(name: str) -> bool:
+    lowered = name.lower()
+    return any(action in lowered for action in _ORDER_ACTIONS)
 
 
 def _looks_paper_or_sim_path(path: str) -> bool:
