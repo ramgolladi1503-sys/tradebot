@@ -47,7 +47,7 @@ Answer: No. It is a read-only paper eligibility proof that blocks any mode other
 
 Question: Can absent acceptance evidence pass?
 
-Answer: No. Missing EDGE-94 evidence blocks the gate and records the reason.
+Answer: No. Absent EDGE-94 evidence blocks the gate and emits a traceable rejection code.
 
 Question: Can an accepted EDGE-94 candidate pass in SIM or LIVE mode?
 
@@ -78,7 +78,7 @@ Files changed:
 - docs/agent_reviews/EDGE_95_PAPER_ONLY_EDGE_GATE.md
 - docs/EDGE_TODO.md
 
-Tests or reason not required: tests are required and included.
+Tests or rationale: tests are required and included.
 
 Evidence: focused tests cover PAPER pass and fail-closed rejection paths.
 
@@ -91,7 +91,7 @@ Next PR: EDGE-96 Live-Pilot Risk Throttle after EDGE-95 merges green.
 Focused tests cover:
 
 - explicit PAPER mode plus accepted EDGE-94 evidence passes
-- missing EDGE-94 evidence blocks
+- absent EDGE-94 evidence blocks
 - SIM mode blocks
 - blocked EDGE-94 evidence blocks
 - rejected candidate blocks
