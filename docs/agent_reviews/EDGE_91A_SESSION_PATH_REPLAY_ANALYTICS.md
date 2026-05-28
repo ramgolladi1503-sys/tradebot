@@ -29,13 +29,25 @@ The report exposes schema version, source, status, counts, reasons, evidence row
 
 ## GSD Review
 
-The implementation stays small: dataclasses, constants, pure helper functions, and deterministic report construction.
+Purpose: add session-path replay analytics before EDGE-92.
 
-No new framework or unrelated abstraction was added.
+Scope: read-only replay evidence only.
+
+Files changed: `core/replay_session_path.py`, `core/replay_session_path_report.py`, `tests/test_replay_session_path.py`, `docs/EDGE_91A_SESSION_PATH_REPLAY_ANALYTICS.md`, `docs/agent_reviews/EDGE_91A_SESSION_PATH_REPLAY_ANALYTICS.md`, and `docs/EDGE_TODO.md`.
+
+Tests or reason not required: focused tests are required and included.
+
+Evidence: focused pytest coverage proves MFE, MAE, target behavior, give-back behavior, invalid input reasons, report wiring, and safety flags.
+
+Risks: future consumers could misuse this evidence as ranking without a separate ranking PR.
+
+Next PR: EDGE-92 Feed Fault Replay Scenarios after EDGE-91A is merged green.
 
 ## QA / Safety Review
 
 Focused tests cover MFE, MAE, target behavior, give-back behavior, session windows, top-mover buckets, invalid input reasons, batch report wiring, and read-only flags.
+
+Required non-action proof: `is_order_action=false`, `broker_api_called=false`, `live_order_action=false`, `broker_order_action=false`.
 
 ## Acceptance Proof
 
@@ -46,6 +58,17 @@ pytest tests/test_replay_session_path.py -q
 ```
 
 Expected: all focused tests pass and no UI files are changed.
+
+Evidence auditor fields:
+
+- mode: PAPER
+- candidate_id: EDGE-91A-SESSION-PATH-REPLAY
+- decision: SESSION_PATH_REPLAY_EVIDENCE_ONLY
+- reason: READ_ONLY_REPLAY_ANALYTICS
+- timestamp: 2026-05-28T03:15:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: docs/agent_reviews/EDGE_91A_SESSION_PATH_REPLAY_ANALYTICS.md
 
 ## Runtime Proof Required After Merge
 
