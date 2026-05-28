@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from tools.repo_forensics.candidate_evidence_trace import score_candidate_trace
 from tools.repo_forensics.config_loader import ForensicsConfig
 
 
@@ -52,6 +53,7 @@ def audit_evidence(repo_root: str | Path, config: ForensicsConfig) -> EvidenceAu
     root = Path(repo_root).resolve()
     required_fields = _required_fields(config)
     strict_non_action_gate = _strict_non_action_gate(config)
+    trace_completeness_gate = _trace_completeness_gate(config)
     findings: list[EvidenceFinding] = []
     reviewed = 0
 
@@ -62,7 +64,7 @@ def audit_evidence(repo_root: str | Path, config: ForensicsConfig) -> EvidenceAu
         for file_path in _iter_evidence_files(path):
             rel = file_path.relative_to(root).as_posix()
             reviewed += 1
-            findings.extend(_audit_file(rel, file_path, required_fields, strict_non_action_gate))
+            findings.extend(_audit_file(rel, file_path, required_fields, strict_non_action_gate, trace_completeness_gate))
     return EvidenceAuditReport(reviewed_files=reviewed, findings=findings)
 
 
@@ -77,7 +79,13 @@ def _iter_evidence_files(path: Path):
             yield file_path
 
 
-def _audit_file(rel: str, file_path: Path, required_fields: list[str], strict_non_action_gate: bool) -> list[EvidenceFinding]:
+def _audit_file(
+    rel: str,
+    file_path: Path,
+    required_fields: list[str],
+    strict_non_action_gate: bool,
+    trace_completeness_gate: bool,
+) -> list[EvidenceFinding]:
     suffix = file_path.suffix.lower()
     try:
         text = file_path.read_text(encoding="utf-8")
@@ -85,13 +93,19 @@ def _audit_file(rel: str, file_path: Path, required_fields: list[str], strict_no
         return [EvidenceFinding(rel, "UNKNOWN", "file_read", "unreadable_evidence_file", scope=_scope_for_path(rel))]
 
     if suffix == ".json":
-        return _audit_json(rel, text, required_fields, strict_non_action_gate)
+        return _audit_json(rel, text, required_fields, strict_non_action_gate, trace_completeness_gate)
     if suffix == ".jsonl":
-        return _audit_jsonl(rel, text, required_fields, strict_non_action_gate)
+        return _audit_jsonl(rel, text, required_fields, strict_non_action_gate, trace_completeness_gate)
     return _audit_text(rel, text, strict_non_action_gate)
 
 
-def _audit_json(rel: str, text: str, required_fields: list[str], strict_non_action_gate: bool) -> list[EvidenceFinding]:
+def _audit_json(
+    rel: str,
+    text: str,
+    required_fields: list[str],
+    strict_non_action_gate: bool,
+    trace_completeness_gate: bool,
+) -> list[EvidenceFinding]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
@@ -102,11 +116,17 @@ def _audit_json(rel: str, text: str, required_fields: list[str], strict_non_acti
         if not isinstance(record, dict):
             findings.append(EvidenceFinding(rel, "UNKNOWN", "json", f"non_object_record:index={index}", scope=_scope_for_path(rel)))
             continue
-        findings.extend(_audit_record(rel, record, required_fields, strict_non_action_gate, f"json_record:index={index}"))
+        findings.extend(_audit_record(rel, record, required_fields, strict_non_action_gate, trace_completeness_gate, f"json_record:index={index}"))
     return findings
 
 
-def _audit_jsonl(rel: str, text: str, required_fields: list[str], strict_non_action_gate: bool) -> list[EvidenceFinding]:
+def _audit_jsonl(
+    rel: str,
+    text: str,
+    required_fields: list[str],
+    strict_non_action_gate: bool,
+    trace_completeness_gate: bool,
+) -> list[EvidenceFinding]:
     findings: list[EvidenceFinding] = []
     for index, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
@@ -120,7 +140,7 @@ def _audit_jsonl(rel: str, text: str, required_fields: list[str], strict_non_act
         if not isinstance(record, dict):
             findings.append(EvidenceFinding(rel, "UNKNOWN", "jsonl", f"non_object_line:{index}", scope=_scope_for_path(rel)))
             continue
-        findings.extend(_audit_record(rel, record, required_fields, strict_non_action_gate, f"jsonl_line:{index}"))
+        findings.extend(_audit_record(rel, record, required_fields, strict_non_action_gate, trace_completeness_gate, f"jsonl_line:{index}"))
     return findings
 
 
@@ -129,6 +149,7 @@ def _audit_record(
     record: dict[str, Any],
     required_fields: list[str],
     strict_non_action_gate: bool,
+    trace_completeness_gate: bool,
     evidence: str,
 ) -> list[EvidenceFinding]:
     scope = _scope_for_path(rel)
@@ -171,7 +192,29 @@ def _audit_record(
                 scope=scope if strict_non_action_gate else "baseline_debt",
             )
         )
+
+    if trace_completeness_gate:
+        findings.extend(_trace_findings(rel, record, evidence, scope))
     return findings
+
+
+def _trace_findings(rel: str, record: dict[str, Any], evidence: str, scope: str) -> list[EvidenceFinding]:
+    trace_score = score_candidate_trace(record)
+    if trace_score.trace_complete:
+        return []
+
+    severity = "HIGH" if trace_score.hard_failed else "MEDIUM"
+    trace_evidence = f"candidate_trace_score:{trace_score.score}:{evidence}"
+    return [
+        EvidenceFinding(
+            rel,
+            severity,
+            "candidate_trace",
+            trace_evidence,
+            missing_fields=list(trace_score.missing_fields),
+            scope=scope,
+        )
+    ]
 
 
 def _audit_text(rel: str, text: str, strict_non_action_gate: bool) -> list[EvidenceFinding]:
@@ -231,6 +274,13 @@ def _strict_non_action_gate(config: ForensicsConfig) -> bool:
     if not isinstance(evidence, dict):
         return False
     return bool(evidence.get("strict_non_action_gate", False))
+
+
+def _trace_completeness_gate(config: ForensicsConfig) -> bool:
+    evidence = config.data.get("evidence", {})
+    if not isinstance(evidence, dict):
+        return False
+    return bool(evidence.get("trace_completeness_gate", False))
 
 
 def _scope_for_path(rel: str) -> str:
