@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from config import config as cfg
+import core.auth as auth_module
 import core.kite_depth_ws as ws
 
 
@@ -69,6 +70,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "repo_root", lambda: Path("/tmp"))
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: False)
     monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True})
+    monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: "TOKEN123")
     monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: {"status": "AUTH_REQUIRED"})
     monkeypatch.setattr(ws, "clear_auth_required_state", lambda **kwargs: {"status": "OK"})
     monkeypatch.setattr(ws, "invalidate_cache", lambda **kwargs: None)
