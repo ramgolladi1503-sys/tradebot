@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #316 — EDGE-91A Session Path Replay Analytics, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #317 — EDGE-92 Feed Fault Replay Scenarios, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -36,6 +36,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-90 — Strategy Suspension and Retirement Rules
 - EDGE-91 — Regime Replay Scenarios
 - EDGE-91A — Session Path Replay Analytics
+- EDGE-92 — Feed Fault Replay Scenarios
 - PR-FEED-08 — Extract Pure Tick Utility Helpers
 - PR-FEED-09 — Extract Reconnect Decision Policy
 - PR-FEED-10 — Extract Subscription Budget Policy
@@ -83,7 +84,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Replay, edge proof, and readiness
 
-- [ ] PR #317 — EDGE-92 Feed Fault Replay Scenarios
 - [ ] PR #318 — EDGE-93 Strategy Replay Proof Pack
 - [ ] PR #319 — EDGE-94 End-to-End Edge Acceptance Suite
 - [ ] PR #320 — EDGE-95 Paper-Only Edge Gate
@@ -92,6 +92,6 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish PR #316 / EDGE-91A first and merge it green.
-2. Do not start PR #317 / EDGE-92 before PR #316 is merged and green.
+1. Finish PR #317 / EDGE-92 first and merge it green.
+2. Do not start PR #318 / EDGE-93 before PR #317 is merged and green.
 3. Keep every PR narrow, tested, documented, and reviewed.
