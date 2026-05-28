@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from tools.repo_forensics.artifact_freshness import evaluate_artifact_freshness
 from tools.repo_forensics.candidate_evidence_trace import score_candidate_trace
 from tools.repo_forensics.config_loader import ForensicsConfig
 
@@ -54,6 +56,9 @@ def audit_evidence(repo_root: str | Path, config: ForensicsConfig) -> EvidenceAu
     required_fields = _required_fields(config)
     strict_non_action_gate = _strict_non_action_gate(config)
     trace_completeness_gate = _trace_completeness_gate(config)
+    freshness_gate = _freshness_gate(config)
+    max_age_seconds = _freshness_max_age_seconds(config)
+    freshness_now = _freshness_now(config)
     findings: list[EvidenceFinding] = []
     reviewed = 0
 
@@ -64,7 +69,19 @@ def audit_evidence(repo_root: str | Path, config: ForensicsConfig) -> EvidenceAu
         for file_path in _iter_evidence_files(path):
             rel = file_path.relative_to(root).as_posix()
             reviewed += 1
-            findings.extend(_audit_file(rel, file_path, required_fields, strict_non_action_gate, trace_completeness_gate))
+            findings.extend(
+                _audit_file(
+                    rel,
+                    file_path,
+                    root,
+                    required_fields,
+                    strict_non_action_gate,
+                    trace_completeness_gate,
+                    freshness_gate,
+                    max_age_seconds,
+                    freshness_now,
+                )
+            )
     return EvidenceAuditReport(reviewed_files=reviewed, findings=findings)
 
 
@@ -82,9 +99,13 @@ def _iter_evidence_files(path: Path):
 def _audit_file(
     rel: str,
     file_path: Path,
+    repo_root: Path,
     required_fields: list[str],
     strict_non_action_gate: bool,
     trace_completeness_gate: bool,
+    freshness_gate: bool,
+    max_age_seconds: int,
+    freshness_now: datetime | None,
 ) -> list[EvidenceFinding]:
     suffix = file_path.suffix.lower()
     try:
@@ -93,18 +114,42 @@ def _audit_file(
         return [EvidenceFinding(rel, "UNKNOWN", "file_read", "unreadable_evidence_file", scope=_scope_for_path(rel))]
 
     if suffix == ".json":
-        return _audit_json(rel, text, required_fields, strict_non_action_gate, trace_completeness_gate)
+        return _audit_json(
+            rel,
+            text,
+            repo_root,
+            required_fields,
+            strict_non_action_gate,
+            trace_completeness_gate,
+            freshness_gate,
+            max_age_seconds,
+            freshness_now,
+        )
     if suffix == ".jsonl":
-        return _audit_jsonl(rel, text, required_fields, strict_non_action_gate, trace_completeness_gate)
+        return _audit_jsonl(
+            rel,
+            text,
+            repo_root,
+            required_fields,
+            strict_non_action_gate,
+            trace_completeness_gate,
+            freshness_gate,
+            max_age_seconds,
+            freshness_now,
+        )
     return _audit_text(rel, text, strict_non_action_gate)
 
 
 def _audit_json(
     rel: str,
     text: str,
+    repo_root: Path,
     required_fields: list[str],
     strict_non_action_gate: bool,
     trace_completeness_gate: bool,
+    freshness_gate: bool,
+    max_age_seconds: int,
+    freshness_now: datetime | None,
 ) -> list[EvidenceFinding]:
     try:
         payload = json.loads(text)
@@ -116,16 +161,33 @@ def _audit_json(
         if not isinstance(record, dict):
             findings.append(EvidenceFinding(rel, "UNKNOWN", "json", f"non_object_record:index={index}", scope=_scope_for_path(rel)))
             continue
-        findings.extend(_audit_record(rel, record, required_fields, strict_non_action_gate, trace_completeness_gate, f"json_record:index={index}"))
+        findings.extend(
+            _audit_record(
+                rel,
+                record,
+                repo_root,
+                required_fields,
+                strict_non_action_gate,
+                trace_completeness_gate,
+                freshness_gate,
+                max_age_seconds,
+                freshness_now,
+                f"json_record:index={index}",
+            )
+        )
     return findings
 
 
 def _audit_jsonl(
     rel: str,
     text: str,
+    repo_root: Path,
     required_fields: list[str],
     strict_non_action_gate: bool,
     trace_completeness_gate: bool,
+    freshness_gate: bool,
+    max_age_seconds: int,
+    freshness_now: datetime | None,
 ) -> list[EvidenceFinding]:
     findings: list[EvidenceFinding] = []
     for index, line in enumerate(text.splitlines(), start=1):
@@ -140,16 +202,33 @@ def _audit_jsonl(
         if not isinstance(record, dict):
             findings.append(EvidenceFinding(rel, "UNKNOWN", "jsonl", f"non_object_line:{index}", scope=_scope_for_path(rel)))
             continue
-        findings.extend(_audit_record(rel, record, required_fields, strict_non_action_gate, trace_completeness_gate, f"jsonl_line:{index}"))
+        findings.extend(
+            _audit_record(
+                rel,
+                record,
+                repo_root,
+                required_fields,
+                strict_non_action_gate,
+                trace_completeness_gate,
+                freshness_gate,
+                max_age_seconds,
+                freshness_now,
+                f"jsonl_line:{index}",
+            )
+        )
     return findings
 
 
 def _audit_record(
     rel: str,
     record: dict[str, Any],
+    repo_root: Path,
     required_fields: list[str],
     strict_non_action_gate: bool,
     trace_completeness_gate: bool,
+    freshness_gate: bool,
+    max_age_seconds: int,
+    freshness_now: datetime | None,
     evidence: str,
 ) -> list[EvidenceFinding]:
     scope = _scope_for_path(rel)
@@ -195,6 +274,8 @@ def _audit_record(
 
     if trace_completeness_gate:
         findings.extend(_trace_findings(rel, record, evidence, scope))
+    if freshness_gate:
+        findings.extend(_freshness_findings(rel, record, repo_root, max_age_seconds, freshness_now, evidence, scope))
     return findings
 
 
@@ -212,6 +293,37 @@ def _trace_findings(rel: str, record: dict[str, Any], evidence: str, scope: str)
             "candidate_trace",
             trace_evidence,
             missing_fields=list(trace_score.missing_fields),
+            scope=scope,
+        )
+    ]
+
+
+def _freshness_findings(
+    rel: str,
+    record: dict[str, Any],
+    repo_root: Path,
+    max_age_seconds: int,
+    freshness_now: datetime | None,
+    evidence: str,
+    scope: str,
+) -> list[EvidenceFinding]:
+    freshness = evaluate_artifact_freshness(
+        record,
+        artifact_path=rel,
+        repo_root=repo_root,
+        max_age_seconds=max_age_seconds,
+        now=freshness_now,
+    )
+    if freshness.complete:
+        return []
+    severity = "HIGH" if "latest_marker_target_absent" in freshness.issues else freshness.freshness
+    return [
+        EvidenceFinding(
+            rel,
+            severity,
+            "artifact_freshness",
+            f"artifact_freshness:{freshness.freshness}:{evidence}",
+            missing_fields=list(freshness.issues),
             scope=scope,
         )
     ]
@@ -281,6 +393,41 @@ def _trace_completeness_gate(config: ForensicsConfig) -> bool:
     if not isinstance(evidence, dict):
         return False
     return bool(evidence.get("trace_completeness_gate", False))
+
+
+def _freshness_gate(config: ForensicsConfig) -> bool:
+    evidence = config.data.get("evidence", {})
+    if not isinstance(evidence, dict):
+        return False
+    return bool(evidence.get("freshness_gate", False))
+
+
+def _freshness_max_age_seconds(config: ForensicsConfig) -> int:
+    evidence = config.data.get("evidence", {})
+    if not isinstance(evidence, dict):
+        return 3600
+    raw = evidence.get("freshness_max_age_seconds", 3600)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 3600
+    return max(value, 0)
+
+
+def _freshness_now(config: ForensicsConfig) -> datetime | None:
+    evidence = config.data.get("evidence", {})
+    if not isinstance(evidence, dict):
+        return None
+    raw = evidence.get("freshness_now")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def _scope_for_path(rel: str) -> str:
