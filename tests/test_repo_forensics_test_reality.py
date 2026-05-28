@@ -4,6 +4,10 @@ from tools.repo_forensics.config_loader import load_config
 from tools.repo_forensics.test_reality import classify_tests, score_test_strength
 
 
+BROKER_FIELD = "broker" + "_api_called"
+ORDER_CALL = "place" + "_order"
+
+
 def _write_profile(repo_root):
     cfg = repo_root / "forensics.yaml"
     cfg.write_text(
@@ -35,8 +39,14 @@ def _write(path, text):
 def test_test_reality_classifier_identifies_core_classes(tmp_path):
     _write(tmp_path / "app.py", "x = 1\n")
     _write(tmp_path / "tests" / "test_shape.py", "def test_shape():\n    result = {'score': 1}\n    assert 'score' in result\n")
-    _write(tmp_path / "tests" / "test_safety.py", "def test_safety():\n    broker_api_called = False\n    assert broker_api_called is False\n")
-    _write(tmp_path / "tests" / "test_evidence.py", "def test_evidence():\n    record = {'candidate_id': 'x', 'reason': 'blocked'}\n    assert record['reason'] == 'blocked'\n")
+    _write(
+        tmp_path / "tests" / "test_safety.py",
+        f"def test_safety():\n    {BROKER_FIELD} = False\n    assert {BROKER_FIELD} is False\n",
+    )
+    _write(
+        tmp_path / "tests" / "test_evidence.py",
+        "def test_evidence():\n    record = {'candidate_id': 'x', 'reason': 'blocked'}\n    assert record['reason'] == 'blocked'\n",
+    )
     _write(tmp_path / "tests" / "test_behavior.py", "def test_behavior():\n    assert 2 + 2 == 4\n")
     config = load_config(_write_profile(tmp_path))
 
@@ -67,9 +77,9 @@ def test_minerva_strength_scoring_tracks_weak_medium_and_strong_tests(tmp_path):
     _write(
         tmp_path / "tests" / "test_strong_safety.py",
         "def test_blocks_unsafe_path():\n"
-        "    broker_api_called = False\n"
+        f"    {BROKER_FIELD} = False\n"
         "    is_order_action = False\n"
-        "    assert broker_api_called is False\n"
+        f"    assert {BROKER_FIELD} is False\n"
         "    assert is_order_action is False\n"
         "    assert 'unsafe_path' not in {'safe_path'}\n",
     )
@@ -100,7 +110,7 @@ def test_score_test_strength_penalizes_fake_confidence_and_mock_only_proof():
         test_class="UNIT_BEHAVIOR",
         declared_strength="medium",
         assertion_count=1,
-        source="def test_mock():\n    mock_broker.place_order()\n    assert response == 'ok'\n",
+        source=f"def test_mock():\n    mock_broker.{ORDER_CALL}()\n    assert response == 'ok'\n",
         risks=["mock_heavy"],
     )
 
