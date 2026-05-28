@@ -109,9 +109,9 @@ def test_option_feed_block_reason_blocks_symbol_replay():
     assert evidence.fault_type == "OPTION_FEED_BLOCKED"
 
 
-def test_missing_candidate_id_fails_closed():
+def test_blank_candidate_id_fails_closed():
     evidence = build_feed_fault_replay_evidence(
-        scenario_id="missing-candidate",
+        scenario_id="blank-candidate",
         candidate_id="",
         symbol="NIFTY",
         feed_payload=healthy_payload(),
@@ -195,7 +195,10 @@ def test_feed_fault_replay_report_summarizes_blocked_and_clear_scenarios():
     assert payload["broker_api_called"] is False
     assert payload["live_order_action"] is False
     assert payload["broker_order_action"] is False
-    assert len(payload["evidence"]) == 2
+    assert payload["evidence"][0]["candidate_id"] == "cand-7"
+    assert payload["evidence"][0]["replay_should_block"] is False
+    assert payload["evidence"][1]["candidate_id"] == "cand-8"
+    assert payload["evidence"][1]["replay_should_block"] is True
 
 
 def test_feed_fault_replay_report_passes_when_all_scenarios_are_clear():
