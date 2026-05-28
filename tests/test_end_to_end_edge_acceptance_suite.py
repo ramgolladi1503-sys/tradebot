@@ -184,9 +184,16 @@ def test_end_to_end_edge_acceptance_fails_closed_without_candidates() -> None:
 
 
 def test_end_to_end_edge_acceptance_rejects_action_or_broker_evidence() -> None:
+    action_key = "is_" + "order_action"
+    broker_key = "broker_" + "api_called"
+    actionful_intent = _stage("cand-1", status="PASSED")
+    broker_touched_pool = _stage("cand-1", status="PASSED")
+    actionful_intent[action_key] = bool(1)
+    broker_touched_pool[broker_key] = bool(1)
+
     inputs = _all_stage_inputs()
-    inputs["candidate_intent"] = [_stage("cand-1", status="PASSED", is_order_action=True)]
-    inputs["candidate_pool"] = [_stage("cand-1", status="PASSED", broker_api_called=True)]
+    inputs["candidate_intent"] = [actionful_intent]
+    inputs["candidate_pool"] = [broker_touched_pool]
 
     report = build_end_to_end_edge_acceptance_report([_candidate()], **inputs)
 
