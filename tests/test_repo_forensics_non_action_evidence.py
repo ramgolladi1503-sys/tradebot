@@ -120,7 +120,7 @@ def test_non_action_evidence_flags_absent_broker_field(tmp_path):
     assert report.high[0].scope == "new_regression"
 
 
-def test_non_action_evidence_tracks_extended_missing_fields_as_baseline_debt_when_not_configured(tmp_path):
+def test_non_action_evidence_preserves_default_contract_for_extended_missing_fields(tmp_path):
     _write(tmp_path / "app.py", "x = 1\n")
     _write(
         tmp_path / "evidence" / "decision.json",
@@ -132,9 +132,7 @@ def test_non_action_evidence_tracks_extended_missing_fields_as_baseline_debt_whe
 
     report = audit_evidence(tmp_path, config)
 
-    assert report.high == []
-    assert report.baseline_debt
-    assert report.baseline_debt[0].missing_fields == [LIVE_FIELD, BROKER_ORDER_FIELD]
+    assert report.findings == []
 
 
 def test_non_action_evidence_blocks_readonly_action_true_when_strict_gate_is_enabled(tmp_path):
