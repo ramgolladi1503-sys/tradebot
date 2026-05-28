@@ -33,35 +33,33 @@ def test_normalize_candidate_stage_accepts_tradebot_flow_aliases():
 def test_candidate_lifecycle_trace_passes_for_complete_candidate_records():
     report = build_candidate_lifecycle_trace_report(_complete_records())
 
-    assert not report.failures
-    assert not report.unknowns
-    assert len(report.traces) == 1
+    assert report.failures == []
+    assert report.unknowns == []
+    assert [trace.candidate_id for trace in report.traces] == ["CAND-1"]
     trace = report.traces[0]
-    assert trace.candidate_id == "CAND-1"
     assert trace.complete is True
     assert trace.missing_stages == ()
 
 
-def test_candidate_lifecycle_trace_flags_missing_candidate_id_as_hard_failure():
+def test_candidate_lifecycle_trace_flags_absent_identity_as_hard_failure():
     records = _complete_records()
     records.append({"stage": "candidate_generated"})
 
     report = build_candidate_lifecycle_trace_report(records)
 
-    assert len(report.failures) == 1
-    assert report.failures[0].finding_type == "candidate_id_missing"
-    assert report.failures[0].evidence == "record_index:9"
+    assert [finding.finding_type for finding in report.failures] == ["candidate_id_missing"]
+    assert [finding.evidence for finding in report.failures] == ["record_index:9"]
 
 
-def test_candidate_lifecycle_trace_reports_missing_stage_as_unknown():
-    records = [record for record in _complete_records() if record["stage"] != "risk_evaluated"]
+def test_candidate_lifecycle_trace_reports_non_unsafe_missing_stage_as_unknown():
+    records = [record for record in _complete_records() if record["stage"] != "evidence_output"]
 
     report = build_candidate_lifecycle_trace_report(records)
 
-    assert not report.failures
-    assert len(report.unknowns) == 1
+    assert report.failures == []
+    assert [finding.finding_type for finding in report.unknowns] == ["candidate_lifecycle_incomplete"]
     trace = report.traces[0]
-    assert "risk_evaluated" in trace.missing_stages
+    assert "evidence_output" in trace.missing_stages
     assert trace.complete is False
 
 
@@ -85,7 +83,7 @@ def test_candidate_lifecycle_trace_allows_final_decision_with_rank_reference():
 
     report = build_candidate_lifecycle_trace_report(records)
 
-    assert not report.failures
+    assert report.failures == []
     assert report.traces[0].complete is True
 
 
@@ -108,8 +106,7 @@ def test_candidate_lifecycle_trace_reports_unknown_stage_without_fake_pass():
 
     report = build_candidate_lifecycle_trace_report(records)
 
-    assert len(report.unknowns) == 1
-    assert report.unknowns[0].finding_type == "candidate_stage_unknown"
+    assert [finding.finding_type for finding in report.unknowns] == ["candidate_stage_unknown"]
 
 
 def test_render_candidate_lifecycle_trace_report_includes_verdict():
