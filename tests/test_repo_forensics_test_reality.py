@@ -111,7 +111,12 @@ def test_score_test_strength_penalizes_fake_confidence_and_mock_only_proof():
         test_class="UNIT_BEHAVIOR",
         declared_strength="medium",
         assertion_count=1,
-        source=f"def test_mock():\n    mock_broker.{ORDER_CALL}()\n    assert response == 'ok'\n",
+        source=(
+            "def test_mock():\n"
+            f"    {BROKER_FIELD} = False\n"
+            f"    mock_broker.{ORDER_CALL}()\n"
+            "    assert response == 'ok'\n"
+        ),
         risks=["mock_heavy"],
     )
 
