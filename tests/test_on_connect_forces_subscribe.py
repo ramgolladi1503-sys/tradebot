@@ -69,7 +69,6 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "repo_root", lambda: Path("/tmp"))
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: False)
     monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True})
-    monkeypatch.setattr(ws, "resolve_access_token", lambda **kwargs: "TOKEN123")
     monkeypatch.setattr(ws, "set_auth_required_state", lambda **kwargs: {"status": "AUTH_REQUIRED"})
     monkeypatch.setattr(ws, "clear_auth_required_state", lambda **kwargs: {"status": "OK"})
     monkeypatch.setattr(ws, "invalidate_cache", lambda **kwargs: None)
@@ -78,9 +77,11 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
     monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
     rest = _DummyRestClient()
-    monkeypatch.setattr(ws.kite_client, "ensure", lambda: None, raising=False)
-    monkeypatch.setattr(ws.kite_client, "_ensure", lambda: None, raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: rest, raising=False)
+    monkeypatch.setattr(ws.kite_client, "_ensure", lambda: rest, raising=False)
     monkeypatch.setattr(ws.kite_client, "kite", rest, raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "api_key_1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "TOKEN123", raising=False)
 
 
 def test_on_connect_forces_subscribe(monkeypatch):
