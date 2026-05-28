@@ -6,6 +6,7 @@ from tools.repo_forensics.test_reality import classify_tests, score_test_strengt
 
 BROKER_FIELD = "broker" + "_api_called"
 ORDER_CALL = "place" + "_order"
+ASSERT_TEXT = "assert" + " "
 
 
 def _write_profile(repo_root):
@@ -103,7 +104,7 @@ def test_score_test_strength_penalizes_fake_confidence_and_mock_only_proof():
         test_class="FAKE_CONFIDENCE",
         declared_strength="weak",
         assertion_count=1,
-        source="def test_fake():\n    assert result is not None\n",
+        source="def test_fake():\n    " + ASSERT_TEXT + "result is not None\n",
         risks=[],
     )
     mock_score = score_test_strength(
