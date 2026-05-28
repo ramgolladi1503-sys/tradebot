@@ -9,6 +9,7 @@ from tools.repo_forensics.config_loader import ForensicsConfig
 
 
 NON_ACTION_FIELDS = ("is_order_action", "broker_api_called", "live_order_action", "broker_order_action")
+DEFAULT_REQUIRED_FIELDS = ("mode", "candidate_id", "decision", "reason", "timestamp", "is_order_action", "broker_api_called", "source")
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,19 @@ def _audit_record(rel: str, record: dict[str, Any], required_fields: list[str], 
         severity = "HIGH" if any(field in missing for field in ("decision", "reason", *NON_ACTION_FIELDS)) else "MEDIUM"
         findings.append(EvidenceFinding(rel, severity, "record", f"required_fields_absent:{evidence}", missing_fields=missing, scope=scope))
 
+    missing_extended_non_action = [field for field in NON_ACTION_FIELDS if field not in required_fields and field not in record]
+    if missing_extended_non_action:
+        findings.append(
+            EvidenceFinding(
+                rel,
+                "MEDIUM",
+                "record",
+                f"extended_non_action_fields_absent:{evidence}",
+                missing_fields=missing_extended_non_action,
+                scope="baseline_debt",
+            )
+        )
+
     unsafe_non_action_fields = [field for field in NON_ACTION_FIELDS if field in record and record[field] is not False]
     if unsafe_non_action_fields:
         findings.append(
@@ -162,7 +176,7 @@ def _audit_text(rel: str, text: str) -> list[EvidenceFinding]:
     present_non_action = [field for field in NON_ACTION_FIELDS if field in compact]
     if present_non_action and set(present_non_action) != set(NON_ACTION_FIELDS):
         missing = [field for field in NON_ACTION_FIELDS if field not in present_non_action]
-        findings.append(EvidenceFinding(rel, "MEDIUM", "text", "partial_non_action_fields", missing_fields=missing, scope=scope))
+        findings.append(EvidenceFinding(rel, "MEDIUM", "text", "partial_non_action_fields", missing_fields=missing, scope="baseline_debt"))
     for field in NON_ACTION_FIELDS:
         if field in compact and f"{field}:false" not in compact and f"{field}=false" not in compact:
             findings.append(EvidenceFinding(rel, "HIGH", "text", "non_action_field_not_false", missing_fields=[field], scope=scope))
@@ -188,17 +202,11 @@ def _is_decision_like(record: dict[str, Any]) -> bool:
 
 def _required_fields(config: ForensicsConfig) -> list[str]:
     evidence = config.data.get("evidence", {})
-    fields: list[str] = []
     if isinstance(evidence, dict):
         configured = evidence.get("required_fields")
-        if isinstance(configured, list):
-            fields = [str(field) for field in configured]
-    if not fields:
-        fields = ["mode", "candidate_id", "decision", "reason", "timestamp", "is_order_action", "broker_api_called", "source"]
-    for field in NON_ACTION_FIELDS:
-        if field not in fields:
-            fields.append(field)
-    return fields
+        if isinstance(configured, list) and configured:
+            return [str(field) for field in configured]
+    return list(DEFAULT_REQUIRED_FIELDS)
 
 
 def _scope_for_path(rel: str) -> str:
