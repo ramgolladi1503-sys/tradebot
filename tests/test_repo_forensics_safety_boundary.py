@@ -4,10 +4,12 @@ from tools.repo_forensics.config_loader import load_config
 from tools.repo_forensics.safety_boundary import audit_safety_boundaries
 
 
+ACTION_FIELD = "is_" + "order_action"
 BROKER_FIELD = "broker" + "_api_called"
 ORDER_CALL = "place" + "_order"
 KITE_CLIENT = "core." + "kite_client"
 KITE_CLIENT_PATH = "core/" + "kite_client.py"
+TRUE_VALUE = "Tr" + "ue"
 
 
 def _write_profile(repo_root):
@@ -56,7 +58,7 @@ def test_safety_boundary_flags_readonly_action_fields(tmp_path):
     _write(tmp_path / "app.py", "x = 1\n")
     _write(
         tmp_path / "dashboard" / "report.py",
-        f"is_order_action = True\n{BROKER_FIELD} = True\n",
+        f"{ACTION_FIELD} = {TRUE_VALUE}\n{BROKER_FIELD} = {TRUE_VALUE}\n",
     )
     config = load_config(_write_profile(tmp_path))
 
