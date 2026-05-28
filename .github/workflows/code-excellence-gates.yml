@@ -44,6 +44,12 @@ jobs:
             --changed-paths-file docs/code_excellence/reports/changed_paths.txt \
             --out docs/code_excellence/reports/unified_ce_gate_latest.md
 
+      - name: Build unified Agent Elite report
+        if: always()
+        run: |
+          PYTHONPATH=. python scripts/run_agent_elite_report.py \
+            --out docs/code_excellence/reports/unified_agent_elite_latest.md || true
+
       - name: Upload CE gate reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,3 +59,4 @@ jobs:
           path: |
             docs/code_excellence/reports/changed_paths.txt
             docs/code_excellence/reports/unified_ce_gate_latest.md
+            docs/code_excellence/reports/unified_agent_elite_latest.md
