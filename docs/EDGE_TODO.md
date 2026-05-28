@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- PR #318 — EDGE-93 Strategy Replay Proof Pack, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- PR #319 — EDGE-94 End-to-End Edge Acceptance Suite, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -38,6 +38,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - EDGE-91A — Session Path Replay Analytics
 - EDGE-92 — Feed Fault Replay Scenarios
 - EDGE-93 — Strategy Replay Proof Pack
+- EDGE-94 — End-to-End Edge Acceptance Suite
 - PR-FEED-08 — Extract Pure Tick Utility Helpers
 - PR-FEED-09 — Extract Reconnect Decision Policy
 - PR-FEED-10 — Extract Subscription Budget Policy
@@ -85,13 +86,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ### Replay, edge proof, and readiness
 
-- [ ] PR #319 — EDGE-94 End-to-End Edge Acceptance Suite
 - [ ] PR #320 — EDGE-95 Paper-Only Edge Gate
 - [ ] PR #321 — EDGE-96 Live-Pilot Risk Throttle
 - [ ] PR #322 — EDGE-97 Final Edge Readiness Report
 
 ## Non-negotiable sequencing
 
-1. Finish PR #318 / EDGE-93 first and merge it green.
-2. Do not start PR #319 / EDGE-94 before PR #318 is merged and green.
+1. Finish PR #319 / EDGE-94 first and merge it green.
+2. Do not start PR #320 / EDGE-95 before PR #319 is merged and green.
 3. Keep every PR narrow, tested, documented, and reviewed.
