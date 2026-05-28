@@ -23,13 +23,6 @@ INVALID_PRICE_PATH = "INVALID_PRICE_PATH"
 INVALID_EXIT_PRICE = "INVALID_EXIT_PRICE"
 OK_REASON = "OK"
 
-CERBERUS_NON_ACTION_FIELD_PROOF = (
-    "is_order_action=false",
-    "broker_api_called=false",
-    "live_order_action=false",
-    "broker_order_action=false",
-)
-
 
 @dataclass(frozen=True)
 class SessionPathReplayEvidence:
@@ -56,11 +49,23 @@ class SessionPathReplayEvidence:
     valid: bool
     reason: str
     read_only: bool = True
-    is_order_action: bool = False
-    broker_api_called: bool = False
-    live_order_action: bool = False
-    broker_order_action: bool = False
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
+
+    @property
+    def live_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_order_action(self) -> bool:
+        return False
 
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
