@@ -6,7 +6,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Current active PR
 
-- Issue #319 — EDGE-98 Historical Dataset Contract, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
+- Issue #320 — EDGE-99 Replay Clock and No-Future-Leak Guard, is implemented by the current PR branch and is therefore removed from the remaining TODO list below.
 
 ## Recently completed
 
@@ -45,12 +45,12 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 - TEST-STAB-04 — Fix websocket restart compatibility regressions
 - TEST-STAB-04A — Restore websocket test fixture compatibility
 - EDGE-98 — Historical Dataset Contract
+- EDGE-99 — Replay Clock and No-Future-Leak Guard
 
 ## Remaining TODO
 
 ### Backtest / walk-forward foundation
 
-- [ ] Issue #320 — EDGE-99 — Next roadmap card after EDGE-98
 - [ ] Issue #321 — EDGE-100 — Next roadmap card after EDGE-99
 - [ ] Issue #322 — EDGE-101 — Next roadmap card after EDGE-100
 - [ ] Issue #323 — EDGE-102 — Next roadmap card after EDGE-101
@@ -72,7 +72,7 @@ Rule: when a PR is raised, remove that item from this list in the same PR branch
 
 ## Non-negotiable sequencing
 
-1. Finish issue #319 / EDGE-98 first and merge it green.
-2. Do not start issue #320 / EDGE-99 before #319 is merged green and explicitly confirmed.
+1. Finish issue #320 / EDGE-99 first and merge it green.
+2. Do not start issue #321 / EDGE-100 before #320 is merged green and explicitly confirmed.
 3. One issue equals one PR.
 4. Keep every PR narrow, tested, documented, and reviewed.
