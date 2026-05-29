@@ -1,5 +1,10 @@
 import core.kite_depth_ws as ws
 from config import config as cfg
+import json
+
+
+def _read_feed_runtime_latest(tmp_path):
+    return json.loads((tmp_path / "logs" / "feed_runtime_latest.json").read_text(encoding="utf-8"))
 
 
 def test_restart_skips_without_cached_tokens(monkeypatch):
@@ -689,3 +694,214 @@ def test_restart_writes_start_requested_before_ok_when_start_handoff_succeeds(mo
     assert "FEED_FULL_RESTART_OK" in event_names
     assert any(row["source"] == "restart_depth_ws:begin:ws_error:1006" for row in snapshots)
     assert any(row["source"] == "restart_depth_ws:start_requested:ws_error:1006" for row in snapshots)
+
+
+def test_restart_verification_pending_when_start_handoff_succeeds_but_no_connect_or_ticks(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 5.0, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    ws._reset_feed_restart_verification(reason="unit_test_setup")
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+    monkeypatch.setattr(ws.time, "time", lambda: 1000.0)
+
+    monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **kwargs: None)
+    monkeypatch.setattr(ws, "stop_depth_ws", lambda reason="manual_stop": None)
+
+    def _start(tokens, profile_verified=False, **kwargs):
+        ws._DEPTH_WS_START_EPOCH = 1000.0
+        return True
+
+    monkeypatch.setattr(ws, "start_depth_ws", _start)
+
+    assert ws.restart_depth_ws(reason="ws_error:1006", ignore_cooldown=True, force_full_restart=True) is True
+
+    ws._write_feed_runtime_snapshot(
+        now_epoch=1000.0,
+        ws_connected=None,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=None,
+        last_db_tick_age_sec=None,
+        last_ws_tick_epoch=None,
+        last_tick_age_sec=None,
+        last_depth_epoch=None,
+        last_depth_age_sec=None,
+        market_open=True,
+        state_machine={"state": "LIVE", "reason": "ticks_flowing"},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    payload = _read_feed_runtime_latest(tmp_path)
+    assert payload["runtime_state"] == "RESTART_VERIFY_PENDING"
+    assert "FEED_RESTART_VERIFIED_OK" not in [event for event, _payload in events]
+    ws._reset_feed_restart_verification(reason="unit_test_teardown")
+
+
+def test_restart_verification_emits_verified_ok_only_after_connect_subscribe_and_option_tick(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 5.0, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    ws._reset_feed_restart_verification(reason="unit_test_setup")
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 1001.0}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 1001.0, raising=False)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
+    ws._record_feed_restart_verify_connect(now_epoch=1000.5)
+    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6)
+
+    ws._write_feed_runtime_snapshot(
+        now_epoch=1001.0,
+        ws_connected=True,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=None,
+        last_db_tick_age_sec=None,
+        last_ws_tick_epoch=1001.0,
+        last_tick_age_sec=0.0,
+        last_depth_epoch=None,
+        last_depth_age_sec=None,
+        market_open=True,
+        state_machine={"state": "LIVE", "reason": "ticks_flowing"},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    payload = _read_feed_runtime_latest(tmp_path)
+    assert payload["runtime_state"] == "RUNNING"
+    assert "FEED_RESTART_VERIFIED_OK" in [event for event, _payload in events]
+    ws._reset_feed_restart_verification(reason="unit_test_teardown")
+
+
+def test_restart_verification_timeout_emits_failed_and_blocks(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 1.0, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    ws._reset_feed_restart_verification(reason="unit_test_setup")
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
+
+    ws._write_feed_runtime_snapshot(
+        now_epoch=1002.0,
+        ws_connected=None,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=None,
+        last_db_tick_age_sec=None,
+        last_ws_tick_epoch=None,
+        last_tick_age_sec=None,
+        last_depth_epoch=None,
+        last_depth_age_sec=None,
+        market_open=True,
+        state_machine={"state": "LIVE", "reason": "ticks_flowing"},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    payload = _read_feed_runtime_latest(tmp_path)
+    assert payload["runtime_state"] == "RESTART_VERIFY_FAILED"
+    assert "FEED_RESTART_VERIFY_FAILED" in [event for event, _payload in events]
+    ws._reset_feed_restart_verification(reason="unit_test_teardown")
+
+
+def test_restart_verification_does_not_call_broker_or_order_paths(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", False, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    ws._reset_feed_restart_verification(reason="unit_test_setup")
+
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: (_ for _ in ()).throw(AssertionError("broker_called")), raising=False)
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 1001.0}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 1001.0, raising=False)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
+    ws._record_feed_restart_verify_connect(now_epoch=1000.5)
+    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6)
+
+    ws._write_feed_runtime_snapshot(
+        now_epoch=1001.0,
+        ws_connected=True,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=None,
+        last_db_tick_age_sec=None,
+        last_ws_tick_epoch=1001.0,
+        last_tick_age_sec=0.0,
+        last_depth_epoch=None,
+        last_depth_age_sec=None,
+        market_open=True,
+        state_machine={"state": "LIVE", "reason": "ticks_flowing"},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+    ws._reset_feed_restart_verification(reason="unit_test_teardown")
