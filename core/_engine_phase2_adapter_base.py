@@ -95,7 +95,23 @@ def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
     if isinstance(candidate, dict):
         return dict(candidate)
     if is_dataclass(candidate):
-        return asdict(candidate)
+        out = asdict(candidate)
+        # Propagate real quote-truth fields into the top-level Phase2 candidate dict when they
+        # exist upstream in source_flags / quote_truth_snapshot. This does not invent data; it
+        # only surfaces already-computed quote truth so LIVE strict contracts can evaluate it.
+        try:
+            sf = out.get("source_flags") if isinstance(out.get("source_flags"), dict) else {}
+            truth = None
+            if isinstance(sf, dict):
+                truth = sf.get("quote_truth_snapshot") or sf.get("quote_truth")
+            if isinstance(truth, dict):
+                if out.get("spread_pct") is None and truth.get("spread_pct") is not None:
+                    out["spread_pct"] = truth.get("spread_pct")
+                if (not out.get("quote_source")) and truth.get("quote_source"):
+                    out["quote_source"] = truth.get("quote_source")
+        except Exception:
+            pass
+        return out
     out: dict[str, Any] = {}
     for key in dir(candidate):
         if key.startswith("_"):
@@ -107,6 +123,19 @@ def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
         if callable(value):
             continue
         out[key] = value
+    # Same propagation for non-dataclass Trade objects that carry quote truth in source_flags.
+    try:
+        sf = out.get("source_flags") if isinstance(out.get("source_flags"), dict) else {}
+        truth = None
+        if isinstance(sf, dict):
+            truth = sf.get("quote_truth_snapshot") or sf.get("quote_truth")
+        if isinstance(truth, dict):
+            if out.get("spread_pct") is None and truth.get("spread_pct") is not None:
+                out["spread_pct"] = truth.get("spread_pct")
+            if (not out.get("quote_source")) and truth.get("quote_source"):
+                out["quote_source"] = truth.get("quote_source")
+    except Exception:
+        pass
     return out
 
 
