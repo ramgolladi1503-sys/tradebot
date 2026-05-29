@@ -6,7 +6,16 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from config import config as cfg
-from core.decision_dag import Decision, MarketSnapshot, NODE_N8_STRATEGY_SELECT
+from core.decision_dag import (
+    Decision,
+    MarketSnapshot,
+    NODE_N8_STRATEGY_SELECT,
+    REASON_INDICATORS_MISSING,
+)
+from core.live_indicator_readiness import (
+    build_live_indicator_readiness_report,
+    write_indicator_missing_runtime_evidence,
+)
 from core.time_utils import now_ist
 
 
@@ -24,6 +33,63 @@ def _is_potentially_eligible(candidate_summary: Mapping[str, Any]) -> bool:
     return bool(family) or bool(allowed)
 
 
+def _has_indicator_missing_blocker(decision: Decision) -> bool:
+    blockers = {str(item or "").strip().upper() for item in (decision.blockers or ())}
+    return REASON_INDICATORS_MISSING in blockers
+
+
+def _warmup_node_facts(explain: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    for row in explain or ():
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("node") or "") != "N3_WARMUP_DONE":
+            continue
+        facts = row.get("facts") or {}
+        return facts if isinstance(facts, Mapping) else {}
+    return {}
+
+
+def _indicator_readiness_snapshot(snapshot: MarketSnapshot, explain: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    raw = dict(snapshot.raw_data or {}) if isinstance(snapshot.raw_data, Mapping) else {}
+    warmup_facts = dict(_warmup_node_facts(explain))
+    out = dict(raw)
+    out.setdefault("symbol", snapshot.symbol)
+    out.setdefault("ohlc_bars_count", snapshot.ohlc_bars_count)
+    out.setdefault("warmup_min_bars", warmup_facts.get("min_bars"))
+    out.setdefault("indicator_last_update_epoch", snapshot.indicator_last_update_epoch)
+    out.setdefault("indicators_age_sec", snapshot.indicators_age_sec)
+    out.setdefault("indicators_ok", snapshot.indicators_ok)
+    out.setdefault("warmup_reasons", warmup_facts.get("warmup_reasons", raw.get("warmup_reasons", [])))
+    out.setdefault("compute_indicators_error", raw.get("compute_indicators_error", ""))
+    return out
+
+
+def _maybe_write_indicator_missing_runtime_evidence(
+    *,
+    decision: Decision,
+    explain: Sequence[Mapping[str, Any]],
+    snapshot: MarketSnapshot,
+) -> None:
+    if not _has_indicator_missing_blocker(decision):
+        return
+    try:
+        payload = _indicator_readiness_snapshot(snapshot, explain)
+        warmup_min_bars = payload.get("warmup_min_bars")
+        try:
+            warmup_min_bars_int = int(warmup_min_bars)
+        except (TypeError, ValueError):
+            warmup_min_bars_int = int(getattr(cfg, "WARMUP_MIN_BARS", 50))
+        report = build_live_indicator_readiness_report(
+            [payload],
+            now_epoch=float(snapshot.ts_epoch),
+            warmup_min_bars=max(0, warmup_min_bars_int),
+            source="decision_reject_indicator_readiness_v1",
+        )
+        write_indicator_missing_runtime_evidence(report, now_epoch=float(snapshot.ts_epoch))
+    except Exception:
+        return
+
+
 def handle_post_decision_side_effects(
     decision: Decision,
     explain: Sequence[Mapping[str, Any]],
@@ -35,6 +101,12 @@ def handle_post_decision_side_effects(
     """
     if decision.allowed:
         return
+
+    _maybe_write_indicator_missing_runtime_evidence(
+        decision=decision,
+        explain=explain,
+        snapshot=snapshot,
+    )
 
     n8_row = None
     for row in explain:
@@ -103,5 +175,4 @@ def handle_post_decision_side_effects(
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=True) + "\n")
     except Exception:
-        # Side-effect logging must not affect decision flow.
         return
