@@ -85,7 +85,7 @@ Implementation is narrowly scoped:
 Tests prove:
 - Hard feed-dead restarts ignore cooldown and force full restart (soft path is not used).
 - Depth-stale and no-tick reasons both attempt the forced full restart.
-- Option-subscription-missing reason forces full restart (and refuses soft path).
+- Market-open option subscription shortfall forces full restart (and refuses soft path).
 - Repeated hard restarts trip storm breaker and trigger both breaker + risk halt.
 - Auth latch blocks a hard restart attempt and does not stop/start the feed.
 
@@ -133,4 +133,3 @@ Approve only if:
 - CI is fully green.
 - The diff remains limited to the declared allowed paths.
 - Restart storm protection and auth latch behavior remain fail-closed.
-
