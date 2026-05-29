@@ -3,8 +3,8 @@
 mode: PAPER
 candidate_id: LIVE-TRUTH-11-INDICATOR-READINESS-DECISION-REJECT
 source: agent_review_live_truth_11_indicator_readiness_decision_reject
-reason: production decision reject evidence is written when blocker is INDICATORS_MISSING
-timestamp: 2026-05-29T05:20:00Z
+reason: production decision reject evidence path is connected to the runtime artifact writer
+timestamp: 2026-05-29T05:24:00Z
 decision: APPROVED
 is_order_action: false
 broker_api_called: false
@@ -25,7 +25,7 @@ Reviewed files:
 
 ## Problem Confirmed
 
-Live evidence showed repeated `INDICATORS_MISSING` decisions while `.runtime/live_indicator_readiness_latest.json` was absent.
+Live evidence showed repeated indicator-readiness rejects while the latest runtime readiness artifact was not emitted.
 
 The helper existed in `core/live_indicator_readiness.py`, but it was not connected to the production decision reject path.
 
@@ -64,8 +64,8 @@ PYTHONPATH=. python -m pytest -q tests/test_live_truth_11_indicator_readiness_de
 
 Tests prove:
 
-1. Indicator-missing decision writes `.runtime/live_indicator_readiness_latest.json`.
-2. Non-indicator reject does not write the artifact.
+1. Indicator-readiness reject writes `.runtime/live_indicator_readiness_latest.json`.
+2. Other reject types do not write the artifact.
 3. Writer failure is side-effect safe.
 4. Allowed decision does not write the artifact.
 
