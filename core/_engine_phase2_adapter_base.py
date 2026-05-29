@@ -676,23 +676,59 @@ def _compute_phase2_final_score(candidate: dict[str, Any]) -> tuple[float, dict[
 
 
 def _apply_data_fallbacks(candidate: dict[str, Any]) -> None:
+    mode = _mode_for_candidate(candidate)
+    live_mode = _live_mode(mode)
     if _safe_float(candidate.get("quote_age_sec")) is None:
-        candidate["quote_age_sec"] = 1.0
+        if live_mode:
+            candidate["phase2_missing_quote_age_sec"] = True
+            candidate.setdefault("gate_reasons", [])
+            if "missing_live_timing_context" not in candidate["gate_reasons"]:
+                candidate["gate_reasons"].append("missing_live_timing_context")
+            candidate["execution_ok"] = False
+            candidate["execution_quality_reason_code"] = "missing_live_timing_context"
+        else:
+            candidate["quote_age_sec"] = 1.0
+            candidate["phase2_quote_age_fallback_used"] = True
     if _safe_float(candidate.get("spread_pct")) is None:
-        candidate["spread_pct"] = float(getattr(cfg, "PHASE2_SPREAD_FALLBACK_PCT", 0.003) or 0.003)
-        candidate["phase2_spread_fallback_used"] = True
+        if live_mode:
+            candidate["phase2_missing_spread_context"] = True
+            candidate.setdefault("gate_reasons", [])
+            if "missing_spread_context" not in candidate["gate_reasons"]:
+                candidate["gate_reasons"].append("missing_spread_context")
+            candidate["execution_ok"] = False
+            candidate["execution_quality_reason_code"] = "missing_spread_context"
+        else:
+            candidate["spread_pct"] = float(getattr(cfg, "PHASE2_SPREAD_FALLBACK_PCT", 0.003) or 0.003)
+            candidate["phase2_spread_fallback_used"] = True
     if _safe_float(candidate.get("liquidity_score")) is None:
         derived_liquidity_score = _liquidity_score(candidate)
         if _safe_float(candidate.get("best_bid")) is not None and _safe_float(candidate.get("best_ask")) is not None:
             candidate["liquidity_score"] = float(derived_liquidity_score)
             candidate["phase2_liquidity_derived_from_book"] = True
         else:
-            candidate["liquidity_score"] = float(getattr(cfg, "PHASE2_LIQUIDITY_FALLBACK_SCORE", 0.5) or 0.5)
-            candidate["phase2_liquidity_fallback_used"] = True
+            if live_mode:
+                candidate["phase2_missing_liquidity_validation"] = True
+                candidate.setdefault("gate_reasons", [])
+                if "missing_liquidity_validation" not in candidate["gate_reasons"]:
+                    candidate["gate_reasons"].append("missing_liquidity_validation")
+                candidate["execution_ok"] = False
+                candidate["execution_quality_reason_code"] = "missing_liquidity_validation"
+            else:
+                candidate["liquidity_score"] = float(getattr(cfg, "PHASE2_LIQUIDITY_FALLBACK_SCORE", 0.5) or 0.5)
+                candidate["phase2_liquidity_fallback_used"] = True
     quote_source = str(candidate.get("quote_source") or "").strip().lower()
     if not quote_source:
-        candidate["quote_source"] = "unknown"
-        quote_source = "unknown"
+        if live_mode:
+            candidate["quote_source"] = "unknown"
+            quote_source = "unknown"
+            candidate.setdefault("gate_reasons", [])
+            if "unknown_quote_source" not in candidate["gate_reasons"]:
+                candidate["gate_reasons"].append("unknown_quote_source")
+            candidate["execution_ok"] = False
+            candidate["execution_quality_reason_code"] = "unknown_quote_source"
+        else:
+            candidate["quote_source"] = "unknown"
+            quote_source = "unknown"
     if quote_source == "unknown":
         phase2_soft_penalties = list(candidate.get("phase2_soft_penalties") or [])
         if "unknown_quote_source" not in phase2_soft_penalties:
@@ -880,6 +916,18 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
                 drop_debug_budget -= 1
             continue
         _apply_data_fallbacks(candidate)
+        # LIVE strict contract: missing/fallback-driven RR context must never be executable.
+        mode = _mode_for_candidate(candidate)
+        if _live_mode(mode):
+            reason_codes = set(_reason_codes(candidate))
+            if "RR_ESTIMATED_CONTEXT" in reason_codes or "MISSING_RR_CONTEXT" in reason_codes:
+                candidate.setdefault("gate_reasons", [])
+                if "RR_ESTIMATED_CONTEXT" in reason_codes and "rr_estimated_context" not in candidate["gate_reasons"]:
+                    candidate["gate_reasons"].append("rr_estimated_context")
+                if "MISSING_RR_CONTEXT" in reason_codes and "missing_rr_context" not in candidate["gate_reasons"]:
+                    candidate["gate_reasons"].append("missing_rr_context")
+                candidate["execution_ok"] = False
+                candidate["execution_quality_reason_code"] = "rr_estimated_context" if "RR_ESTIMATED_CONTEXT" in reason_codes else "missing_rr_context"
         candidate["liquidity_score"] = float(_liquidity_score(candidate))
         _apply_profile_rejection_setup(candidate)
         if bool(getattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False)):
