@@ -67,6 +67,23 @@ def _live_mode(mode: str) -> bool:
     return str(mode or "").strip().upper() in {"LIVE", "REAL"}
 
 
+def _is_fallback_driven_candidate(candidate: dict[str, Any]) -> bool:
+    if not isinstance(candidate, dict):
+        return False
+    if _safe_bool(candidate.get("synthetic_candidate"), default=False):
+        return True
+    if _safe_bool(candidate.get("forced_fallback_execution"), default=False):
+        return True
+    quote_source = str(candidate.get("quote_source") or "").strip().lower()
+    if not quote_source or quote_source == "unknown":
+        return True
+    if _safe_bool(candidate.get("phase2_spread_fallback_used"), default=False):
+        return True
+    if _safe_bool(candidate.get("phase2_liquidity_fallback_used"), default=False):
+        return True
+    return False
+
+
 def safe_get(c: dict[str, Any], key: str, default: float = 0.0) -> float:
     try:
         return float(c.get(key, default))
@@ -1122,6 +1139,22 @@ def run_engine_phase2(
         }
 
     if top_score >= min_enter:
+        mode = _mode_for_candidate(top)
+        if _live_mode(mode) and _is_fallback_driven_candidate(top):
+            selected = _normalize_selected(top)
+            if selected is not None:
+                selected["execution_status"] = "not_executable"
+                selected["candidate_status"] = "watchlist"
+                selected["execution_block_reason"] = "live_fallback_candidate_blocked"
+                selected["live_fallback_execution_blocked"] = True
+            _log_state("WATCHLIST", selected, ranked_count=len(ranked_top))
+            return {
+                "state": "WATCHLIST",
+                "reason": "live_fallback_candidate_blocked",
+                "selected": selected,
+                "ranked": ranked_top,
+                "next_active_trade": None,
+            }
         if _queue_only_capped(top):
             selected = _normalize_selected(top)
             _log_state("WATCHLIST", selected, ranked_count=len(ranked_top))
@@ -1165,6 +1198,8 @@ def run_engine_phase2(
             }
         mode = _mode_for_candidate(selected)
         allow_mode = (not _live_mode(mode)) or allow_fallback_live
+        if _live_mode(mode):
+            allow_mode = False
         if allow_mode and top_score >= force_fallback_min_score:
             logger.warning(
                 "FORCED_EXECUTION_FALLBACK trade_id=%s symbol=%s score=%.4f mode=%s",
@@ -1184,6 +1219,11 @@ def run_engine_phase2(
                 "ranked": ranked_top,
                 "next_active_trade": selected,
             }
+        if _live_mode(mode) and top_score >= force_fallback_min_score:
+            selected["execution_status"] = "not_executable"
+            selected["candidate_status"] = "watchlist"
+            selected["execution_block_reason"] = "live_forced_fallback_disabled"
+            selected["live_fallback_execution_blocked"] = True
 
     _log_state("WATCHLIST", selected, ranked_count=len(ranked_top))
     return {
