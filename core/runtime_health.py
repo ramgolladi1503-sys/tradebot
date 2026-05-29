@@ -12,6 +12,7 @@ from typing import Any
 
 from config import config as cfg
 from core.feed_debug import get_feed_debug
+from core.feed_zombie_state import classify_feed_zombie_state
 from core.freshness_sla import get_freshness_status
 from core.time_utils import is_market_open_ist, now_utc_epoch
 from core.runtime_boot_identity import stamp_runtime_payload
@@ -93,6 +94,19 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         blockers.append(f"ws_runtime:{feed.get('runtime_state')}")
     if feed.get("last_error"):
         blockers.append(f"ws_error:{feed.get('last_error')}")
+
+    feed_zombie = classify_feed_zombie_state(
+        feed,
+        market_open=market_open,
+        mode=mode,
+        require_live_feed=bool(market_open and not allow_stale_quotes),
+    )
+    if feed_zombie.is_zombie:
+        feed["runtime_state"] = feed_zombie.state
+        for blocker in feed_zombie.blockers:
+            if blocker not in blockers:
+                blockers.append(blocker)
+    feed["feed_zombie"] = feed_zombie.to_payload()
     feed["blockers"] = blockers
 
     execution_engine = getattr(orchestrator, "execution_engine", None)
