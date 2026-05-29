@@ -174,3 +174,33 @@ def test_phase2_rejection_evidence_does_not_change_output(_runtime_dirs, monkeyp
     assert out_no == out_yes
     assert (logs_root / "phase2_rejection_latest.json").exists()
     assert (runtime_root / "phase2_rejection_latest.json").exists()
+
+
+def test_phase2_evidence_does_not_reuse_stale_counts_across_calls(_runtime_dirs, monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True, raising=False)
+    runtime_root, logs_root = _runtime_dirs
+
+    build_candidates_phase2(
+        [
+            {
+                "trade_id": "S1",
+                "symbol": "NIFTY",
+                "instrument": "OPT",
+                "execution_allowed": True,
+                "tradable": True,
+                "execution_ok": True,
+                "quote_age_sec": None,
+                "spread_pct": 0.002,
+                "liquidity_score": 1.0,
+                "quote_source": "option_chain_live",
+            }
+        ]
+    )
+    first = _read_json(logs_root / "phase2_rejection_latest.json")
+    assert first["missing_quote_age_count"] == 1
+
+    build_candidates_phase2([])
+    second = _read_json(logs_root / "phase2_rejection_latest.json")
+    assert second["input_candidate_count"] == 0
+    assert second["missing_quote_age_count"] == 0

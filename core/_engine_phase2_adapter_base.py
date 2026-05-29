@@ -898,6 +898,12 @@ def _apply_breakout_setup(candidate: dict[str, Any]) -> None:
 
 def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dict[str, Any]]:
     raw_list = list(raw_candidates or [])
+    # Avoid stale evidence leakage across cycles: reset evidence counters per call.
+    try:
+        build_candidates_phase2._last_drop_reason_counts = {}
+        build_candidates_phase2._last_raw_count = int(len(raw_list))
+    except Exception:
+        pass
     if not raw_list:
         logger.warning("PHASE2: No input candidates for phase2 raw_count=0")
         return []

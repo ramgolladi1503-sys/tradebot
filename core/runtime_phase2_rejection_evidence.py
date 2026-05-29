@@ -32,6 +32,15 @@ def _lower_text(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value in (None, "", "None"):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
 def _reason_codes(candidate: Mapping[str, Any]) -> list[str]:
     row = _as_mapping(candidate)
     out: list[str] = []
@@ -167,11 +176,31 @@ def build_phase2_rejection_evidence_payload(
         "recovered_fallback_count": int(recovered_fallback),
         "feed_stale_hard_block_count": int(feed_stale_hard),
         "unresolved_contract_hard_block_count": int(unresolved_contract_hard),
+        "selected_contract_quote_missing_count": int(
+            sum(
+                1
+                for row in ranked_list
+                if _safe_float(_as_mapping(row).get("quote_ts_epoch")) is None
+                and _safe_float(_as_mapping(row).get("quote_age_sec")) is None
+            )
+        ),
+        "selected_contract_token_missing_count": int(
+            sum(
+                1
+                for row in ranked_list
+                if _safe_float(_as_mapping(row).get("instrument_token")) is None
+                and _safe_float(_as_mapping(row).get("option_token")) is None
+            )
+        ),
         "invalid_selected_payload_count": int(invalid_selected_payload),
         "gate_reason_counts": dict(gate_reason_counter),
         "execution_quality_reason_code_counts": dict(execution_quality_counter),
         "hard_blocker_counts": dict(hard_blocker_counter),
         "drop_reason_counts": drop_counts,
+        "hard_blocker_source_counts": {
+            "FEED_STALE": int(drop_counts.get("hard_feed_stale", 0) or 0),
+            "UNRESOLVED_CONTRACT": int(drop_counts.get("hard_unresolved_contract", 0) or 0),
+        },
         "top_non_executable_reasons": dict(top_nonexec_counter.most_common(12)),
         "generated_epoch": float(time.time()),
         "read_only": True,
@@ -208,4 +237,3 @@ __all__ = [
     "build_phase2_rejection_evidence_payload",
     "write_phase2_rejection_evidence_latest",
 ]
-
