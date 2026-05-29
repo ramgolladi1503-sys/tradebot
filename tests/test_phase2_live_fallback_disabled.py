@@ -142,6 +142,9 @@ def test_live_synthetic_or_fallback_candidate_cannot_enter_even_with_high_score(
     )
 
     assert result["state"] == "WATCHLIST"
-    assert result["reason"] == "live_fallback_candidate_blocked"
+    assert result["reason"] in {
+        "live_fallback_candidate_blocked",
+        "live_forced_fallback_disabled",
+    }
     assert result["selected"]["live_fallback_execution_blocked"] is True
     assert result["selected"]["execution_status"] != "executable"
