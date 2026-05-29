@@ -1,5 +1,14 @@
 # Agent Review — LIVE-TRUTH-11 Indicator Readiness Decision Reject Evidence
 
+mode: PAPER
+candidate_id: LIVE-TRUTH-11-INDICATOR-READINESS-DECISION-REJECT
+source: agent_review_live_truth_11_indicator_readiness_decision_reject
+reason: production decision reject evidence is written when blocker is INDICATORS_MISSING
+timestamp: 2026-05-29T05:20:00Z
+decision: APPROVED
+is_order_action: false
+broker_api_called: false
+
 ## Verdict
 
 PASS — narrow production-path evidence wiring.
@@ -35,13 +44,13 @@ The side-effect uses only already-computed facts from:
 
 Confirmed boundaries:
 
-- No Decision DAG logic changes.
-- No strategy logic changes.
-- No candidate generation changes.
-- No ranking changes.
-- No threshold changes.
-- No dashboard changes.
-- No reconnect behavior changes.
+- Decision DAG logic unchanged.
+- Strategy logic unchanged.
+- Candidate generation unchanged.
+- Ranking unchanged.
+- Thresholds unchanged.
+- Dashboard unchanged.
+- Reconnect behavior unchanged.
 
 The evidence writer is best-effort. Writer failure does not alter the already-computed decision path.
 
