@@ -1,109 +1,58 @@
 # LIVE-TRUTH-31 — Pre-Market Live Readiness Gate
 
+mode: LIVE
+candidate_id: LIVE-TRUTH-31-pre-market-live-readiness-gate
+decision: add_read_only_pre_market_readiness_gate
+reason: Add a scoped command that reports PASS, FAIL, or MARKET_CLOSED_PENDING_TICK_PROOF with exact blockers.
+timestamp: 2026-05-29T16:36:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/442-live-truth-31-pre-market-live-readiness-gate.md
+
 ## Agent Work Contract
 
-Issue: #442 — LIVE-TRUTH-31 — Pre-Market Live Readiness Gate.
-
-This PR adds a read-only pre-market readiness command for LIVE startup validation. The work is intentionally limited to a gate/evaluator, a CLI wrapper, deterministic tests, and this review evidence.
+Issue #442 only. Add the readiness command, pure evaluator, deterministic tests, and this evidence file.
 
 ## Scope Guard
 
-In scope:
-- Add `core/pre_live_readiness_gate.py` as the pure readiness evaluator.
-- Add `scripts/pre_live_readiness_gate.py` as the command wrapper.
-- Add deterministic tests for fallback, token universe, auth/latch, market-closed pending proof, and exact JSON blockers.
+In scope: `core/pre_live_readiness_gate.py`, `scripts/pre_live_readiness_gate.py`, `tests/test_pre_live_readiness_gate.py`, and this file.
 
-Out of scope:
-- No strategy behavior.
-- No ranking/scoring weight changes.
-- No dashboard/UI changes.
-- No execution adapter changes.
-- No live order behavior.
+Out of scope: strategy logic, ranking, dashboard, adapters, and unrelated cleanup.
 
 ## Grill Me Review
 
-Hard questions answered:
-
-1. Can this place or route an order?
-   - No. The payload marks the gate as read-only and non-action, and the implementation does not call execution adapters.
-
-2. Can this falsely claim live tick proof when the market is closed?
-   - No. Market closed returns `MARKET_CLOSED_PENDING_TICK_PROOF` when there are no hard blockers.
-
-3. Does LIVE fail closed on unsafe inputs?
-   - Yes. LIVE fails on fallback execution flags, zero option universe, invalid auth state, active auth latch, feed breaker trip, or feed lock failure.
+The gate can fail closed for unsafe startup state. It must not claim live tick proof during market-closed state.
 
 ## Hermes Review
 
-The command emits machine-readable JSON with:
-- `outcome`
-- `ready`
-- `blockers`
-- `warnings`
-- `checks`
-- `exit_code`
-
-Hard failures exit nonzero. Market-closed pending tick proof exits zero with an explicit warning and `ready=false`.
+The change is a scoped readiness command. The JSON output contains outcome, ready, blockers, warnings, checks, and exit_code.
 
 ## GSD Review
 
-This is not an evidence-only PR. It adds runnable readiness code and deterministic test coverage. The implementation is small on purpose: one core evaluator, one CLI wrapper, and one focused test module.
+This is runnable product code plus tests, not documentation-only work.
 
 ## QA / Safety Review
 
-Covered by deterministic tests:
-- fallback execution enabled in LIVE fails.
-- zero option universe fails.
-- invalid auth plus auth latch fails.
-- valid safe inputs pass during market-open conditions.
-- market-closed mode does not falsely pass live tick proof.
-- JSON contains the exact blocker list.
-
-Safety properties:
-- No dashboard/UI path touched.
-- No strategy/ranking path touched.
-- No execution path touched.
-- Auth readiness uses local cached state and credential presence, not a forced external profile probe.
+Tests cover fallback enabled, zero token universe, invalid auth/latch, safe inputs, market-closed pending proof, and exact blocker JSON.
 
 ## Acceptance Proof
 
-Expected command:
-
-```bash
-PYTHONPATH=. python scripts/pre_live_readiness_gate.py --mode LIVE --json
-```
-
-Focused tests:
+Run:
 
 ```bash
 PYTHONPATH=. python -m pytest -q tests/test_pre_live_readiness_gate.py
 python -m py_compile scripts/pre_live_readiness_gate.py
-```
-
-Acceptance mapping:
-- LIVE fallback enabled -> `FAIL` with `fallback_execution_enabled_live`.
-- Zero option universe -> `FAIL` with `token_universe_zero`.
-- Invalid auth/latch -> `FAIL` with `auth_invalid` / `auth_required_latch_active`.
-- Safe config -> `PASS` or `MARKET_CLOSED_PENDING_TICK_PROOF` depending on market state.
-- JSON includes exact blocker list.
-
-## Runtime Proof Required After Merge
-
-Before the next live session, run:
-
-```bash
 PYTHONPATH=. python scripts/pre_live_readiness_gate.py --mode LIVE --json
 ```
 
-Required runtime evidence:
-- If market is closed, outcome must be `MARKET_CLOSED_PENDING_TICK_PROOF` or hard `FAIL`, never a false tick-proof pass.
-- If market is open and unsafe, outcome must be `FAIL` with exact blockers.
-- If market is open and safe, outcome may be `PASS`.
+## Runtime Proof Required After Merge
+
+Run the readiness command before a future live session and store the JSON outcome with blockers and warnings.
 
 ## What This PR Does Not Prove
 
-This PR does not prove profitability, ranking edge, strategy quality, feed recovery after startup, or live executable candidate quality. It only proves that a pre-market LIVE readiness gate exists and fails closed on the scoped unsafe startup states.
+It does not prove profitability, edge quality, strategy quality, feed recovery after startup, or candidate ranking quality.
 
 ## Human Approval
 
-Human approval is required before treating this gate as part of the operational LIVE startup procedure. The PR must remain unmerged until CI is green and the reviewer accepts the read-only scope boundary.
+Human approval is required before merging and before using the command as an operational gate.
