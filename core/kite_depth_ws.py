@@ -2027,9 +2027,23 @@ def _run_db_tick_watchdog_cycle(
         if _STALE_STRIKES >= max(1, int(strikes_to_restart)):
             cb = restart_cb or restart_depth_ws
             try:
-                restarted = bool(cb(reason="tick_stalled"))
+                restarted = bool(
+                    cb(
+                        reason="tick_stalled",
+                        ignore_cooldown=True,
+                        force_full_restart=True,
+                    )
+                )
             except TypeError:
-                restarted = bool(cb("tick_stalled"))
+                try:
+                    restarted = bool(
+                        cb(
+                            reason="tick_stalled",
+                            ignore_cooldown=True,
+                        )
+                    )
+                except TypeError:
+                    restarted = bool(cb("tick_stalled"))
     elif db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec):
         if _STALE_STRIKES:
             _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
@@ -3493,7 +3507,10 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             except Exception:
                 pass
             try:
-                risk_halt.trigger("feed_restart_storm")
+                risk_halt.set_halt(
+                    "feed_restart_storm",
+                    details={"count": len(_FULL_RESTARTS), "window_sec": 3600.0, "reason": reason},
+                )
             except Exception:
                 pass
             _log_ws(
@@ -4379,7 +4396,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         refresh_ok = restart_depth_ws(reason=restart_reason, ignore_cooldown=True) or refresh_ok
                     if bool(refresh_payload.get("freshness_urgent")) and not refresh_ok:
                         restart_reason = f"stale_option_freshness_drift_failed:{refresh_reason}"
-                        refresh_ok = restart_depth_ws(reason=restart_reason, ignore_cooldown=True) or refresh_ok
+                        refresh_ok = (
+                            restart_depth_ws(
+                                reason=restart_reason,
+                                ignore_cooldown=True,
+                                force_full_restart=True,
+                            )
+                            or refresh_ok
+                        )
                     _log_ws(
                         "FEED_OPTION_PRUNE_REFRESH",
                         {
@@ -4422,6 +4446,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     restart_depth_ws(
                         reason="market_open_option_subscriptions_missing",
                         ignore_cooldown=True,
+                        force_full_restart=True,
                     )
             try:
                 get_feed_health_monitor().maybe_trigger_reconnect(
@@ -4478,7 +4503,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 )
                 if (now_loop - last_no_tick_restart) >= backoff:
                     last_no_tick_restart = now_loop
-                    restart_depth_ws(reason=f"no_ticks_age={tick_age:.1f}s")
+                    restart_depth_ws(
+                        reason=f"no_ticks_age={tick_age:.1f}s",
+                        ignore_cooldown=True,
+                        force_full_restart=True,
+                    )
                 _emit_snapshot(now_loop)
                 continue
             no_tick_strikes = 0
@@ -4526,7 +4555,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 
                 if depth_stale_strikes >= strikes_to_restart:
-                    restart_depth_ws(reason=f"depth_stale_age={age:.1f}s")
+                    restart_depth_ws(
+                        reason=f"depth_stale_age={age:.1f}s",
+                        ignore_cooldown=True,
+                        force_full_restart=True,
+                    )
                     _emit_snapshot(now_loop)
                     continue
 

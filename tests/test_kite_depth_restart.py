@@ -905,3 +905,259 @@ def test_restart_verification_does_not_call_broker_or_order_paths(monkeypatch, t
         last_error="",
     )
     ws._reset_feed_restart_verification(reason="unit_test_teardown")
+
+
+def test_tick_stalled_watchdog_cycle_escalates_to_forced_full_restart(monkeypatch):
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 1, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_latest_db_tick_epoch", lambda: 90.0)
+
+    calls = {"kwargs": None}
+
+    def _restart_cb(**kwargs):
+        calls["kwargs"] = dict(kwargs)
+        return True
+
+    hb = ws._run_db_tick_watchdog_cycle(
+        now_epoch=100.0,
+        market_open=True,
+        stale_restart_sec=5.0,
+        reset_sec=0.0,
+        strikes_to_restart=2,
+        restart_cb=_restart_cb,
+    )
+
+    assert hb["restarted"] is True
+    assert calls["kwargs"]["reason"] == "tick_stalled"
+    assert calls["kwargs"]["ignore_cooldown"] is True
+    assert calls["kwargs"]["force_full_restart"] is True
+
+
+def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 9999.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+
+    class _ConnectedTicker:
+        def is_connected(self):
+            return True
+
+    monkeypatch.setattr(ws, "_KITE_TICKER", _ConnectedTicker(), raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    calls = {"stop": 0, "start": 0, "soft": 0}
+    monkeypatch.setattr(
+        ws,
+        "stop_depth_ws",
+        lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1) or True,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_soft_resubscribe_current",
+        lambda reason: calls.__setitem__("soft", calls["soft"] + 1) or True,
+    )
+    monkeypatch.setattr(ws.time, "time", lambda: 1001.0)
+
+    assert (
+        ws.restart_depth_ws(
+            reason="no_ticks_age=11.0s",
+            ignore_cooldown=True,
+            force_full_restart=True,
+        )
+        is True
+    )
+    assert calls["stop"] == 1
+    assert calls["start"] == 1
+    assert calls["soft"] == 0
+    assert "FEED_RESTART_FORCE_FULL_PATH" in [event for event, _payload in events]
+
+
+def test_hard_feed_dead_depth_stale_ignores_cooldown_and_forces_full_restart(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 9999.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+
+    class _ConnectedTicker:
+        def is_connected(self):
+            return True
+
+    monkeypatch.setattr(ws, "_KITE_TICKER", _ConnectedTicker(), raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    calls = {"stop": 0, "start": 0, "soft": 0}
+    monkeypatch.setattr(
+        ws,
+        "stop_depth_ws",
+        lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1) or True,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_soft_resubscribe_current",
+        lambda reason: calls.__setitem__("soft", calls["soft"] + 1) or True,
+    )
+    monkeypatch.setattr(ws.time, "time", lambda: 1001.0)
+
+    assert (
+        ws.restart_depth_ws(
+            reason="depth_stale_age=9.9s",
+            ignore_cooldown=True,
+            force_full_restart=True,
+        )
+        is True
+    )
+    assert calls["stop"] == 1
+    assert calls["start"] == 1
+    assert calls["soft"] == 0
+    assert "FEED_RESTART_FORCE_FULL_PATH" in [event for event, _payload in events]
+
+
+def test_market_open_option_subscriptions_missing_forces_full_restart(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 9999.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+
+    class _ConnectedTicker:
+        def is_connected(self):
+            return True
+
+    monkeypatch.setattr(ws, "_KITE_TICKER", _ConnectedTicker(), raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    calls = {"stop": 0, "start": 0}
+    monkeypatch.setattr(
+        ws,
+        "stop_depth_ws",
+        lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1) or True,
+    )
+
+    def _soft(reason):
+        raise AssertionError("soft_path_used_for_hard_feed_dead_restart")
+
+    monkeypatch.setattr(ws, "_soft_resubscribe_current", _soft)
+    monkeypatch.setattr(ws.time, "time", lambda: 1001.0)
+
+    assert (
+        ws.restart_depth_ws(
+            reason="market_open_option_subscriptions_missing",
+            ignore_cooldown=True,
+            force_full_restart=True,
+        )
+        is True
+    )
+    assert calls == {"stop": 1, "start": 1}
+    assert "FEED_RESTART_FORCE_FULL_PATH" in [event for event, _payload in events]
+
+
+def test_repeated_hard_restarts_trip_storm_breaker(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [900.0, 901.0], raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 9999.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 99, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_TRIP", 2, raising=False)
+
+    calls = {"breaker": 0, "risk": 0}
+    monkeypatch.setattr(ws, "trip_feed_breaker", lambda **kwargs: calls.__setitem__("breaker", calls["breaker"] + 1))
+    monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws.time, "time", lambda: 902.0)
+
+    assert (
+        ws.restart_depth_ws(
+            reason="no_ticks_age=20.0s",
+            ignore_cooldown=True,
+            force_full_restart=True,
+        )
+        is False
+    )
+    assert "FEED_RESTART_STORM_TRIP" in [event for event, _payload in events]
+    assert calls["breaker"] == 1
+    assert calls["risk"] == 1
+
+
+def test_auth_required_latch_blocks_hard_restart(monkeypatch):
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", True, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+
+    calls = {"stop": 0, "start": 0}
+    monkeypatch.setattr(
+        ws,
+        "stop_depth_ws",
+        lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
+    )
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda tokens, profile_verified=False, **kwargs: calls.__setitem__("start", calls["start"] + 1) or True,
+    )
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert (
+        ws.restart_depth_ws(
+            reason="depth_stale_age=99.0s",
+            ignore_cooldown=True,
+            force_full_restart=True,
+        )
+        is False
+    )
+    assert calls == {"stop": 0, "start": 0}
+    assert "FEED_RESTART_BLOCKED_AUTH_REQUIRED" in [event for event, _payload in events]
