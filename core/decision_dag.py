@@ -11,6 +11,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
+from core.live_indicator_readiness import build_live_indicator_readiness_report
 from core.market_context import coerce_segment_for_market_context, derive_market_context
 from core.time_utils import compute_age_sec, now_utc_epoch
 
@@ -705,16 +706,61 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
     indicator_stale_sec = float(getattr(cfg, "INDICATOR_STALE_SEC", 120.0))
     never_computed_age = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
     has_explicit_bar_contract = ("ohlc_bars_count" in snapshot.raw_data) or ("warmup_min_bars" in snapshot.raw_data)
+    indicator_missing_inputs: list[str] = []
+    indicator_readiness_blockers: list[str] = []
 
     if system_state == "WARMUP":
         reasons.append(REASON_WARMUP_INCOMPLETE)
     if (system_state == "WARMUP") or has_explicit_bar_contract:
         if snapshot.ohlc_bars_count < min_bars:
             reasons.append(REASON_WARMUP_INCOMPLETE)
+
+    # Strict indicator readiness gate (LIVE only):
+    # In LIVE mode, missing technical context must block executability. To preserve backward
+    # compatibility for legacy snapshots/tests that do not carry per-indicator values, we
+    # only enforce the per-indicator presence check when those fields are actually present
+    # in the snapshot payload; otherwise we fall back to the existing coarse flags.
+    if snapshot.mode == "LIVE" and snapshot.market_open:
+        raw = dict(snapshot.raw_data or {}) if isinstance(snapshot.raw_data, Mapping) else {}
+        has_indicator_values = any(k in raw for k in ("vwap", "rsi", "ema", "atr"))
+        if has_indicator_values:
+            try:
+                indicator_report = build_live_indicator_readiness_report(
+                    [
+                        {
+                            "symbol": snapshot.symbol,
+                            "ohlc_bars_count": snapshot.ohlc_bars_count,
+                            "warmup_min_bars": min_bars,
+                            "indicator_last_update_epoch": snapshot.indicator_last_update_epoch,
+                            "compute_indicators_error": raw.get("compute_indicators_error", ""),
+                            "ohlc_bars": raw.get("ohlc_bars"),
+                            "vwap": raw.get("vwap"),
+                            "rsi": raw.get("rsi"),
+                            "ema": raw.get("ema"),
+                            "atr": raw.get("atr"),
+                        }
+                    ],
+                    now_epoch=float(snapshot.ts_epoch),
+                    warmup_min_bars=max(0, int(min_bars)),
+                    max_indicator_age_sec=float(indicator_stale_sec),
+                    source="decision_dag_indicator_readiness_v1",
+                )
+                decision = indicator_report.get(snapshot.symbol)
+                if decision is None or not decision.ready:
+                    reasons.append(REASON_INDICATORS_MISSING)
+                if decision is not None:
+                    indicator_missing_inputs = list(decision.indicator_missing_inputs or ())
+                    indicator_readiness_blockers = list(decision.blockers or ())
+            except Exception:
+                reasons.append(REASON_INDICATORS_MISSING)
+
+    # Backward-compat coarse flags (fail-closed).
     if not snapshot.indicators_ok:
-        reasons.append(REASON_INDICATORS_MISSING)
+        if REASON_INDICATORS_MISSING not in reasons:
+            reasons.append(REASON_INDICATORS_MISSING)
     elif snapshot.indicators_age_sec >= never_computed_age:
-        reasons.append(REASON_INDICATORS_MISSING)
+        if REASON_INDICATORS_MISSING not in reasons:
+            reasons.append(REASON_INDICATORS_MISSING)
     if snapshot.indicators_age_sec > indicator_stale_sec:
         reasons.append(REASON_WARMUP_INCOMPLETE)
 
@@ -729,6 +775,8 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
         "never_computed_age": never_computed_age,
         "indicators_age_sec": snapshot.indicators_age_sec,
         "indicators_ok": snapshot.indicators_ok,
+        "indicator_missing_inputs": indicator_missing_inputs,
+        "indicator_readiness_blockers": indicator_readiness_blockers,
     }
     hist_fetch_failed_only = bool(warmup_reasons) and all(
         str(reason).upper() == "HIST_FETCH_FAILED" for reason in warmup_reasons
