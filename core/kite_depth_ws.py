@@ -32,6 +32,7 @@ from core.runtime_status_overlay import (
     derive_feed_ok,
     publish_feed_unhealthy_status_overlay,
 )
+from core.feed_truth_state import classify_feed_truth_state
 from core import risk_halt
 from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer, get_rotating_logger
@@ -1814,6 +1815,17 @@ def _write_feed_runtime_snapshot(
         payload["restart_verification_failure_detail"] = str(restart_verify_failure)
     payload["effective_ws_connected"] = derive_effective_ws_connected(payload)
     payload["feed_ok"] = derive_feed_ok(payload)
+    feed_truth = classify_feed_truth_state(
+        payload,
+        now_epoch=float(now_epoch),
+        max_option_tick_age_sec=float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0)),
+        max_ltp_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        max_depth_age_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
+    )
+    payload["feed_truth_state"] = str(feed_truth.state)
+    payload["feed_truth_reason_code"] = str(feed_truth.reason_code)
+    payload["feed_truth_reasons"] = list(feed_truth.reasons)
+    payload["feed_truth_strict_live"] = bool(feed_truth.strict_live)
     payload = stamp_runtime_payload(
         payload,
         writer="kite_depth_ws.feed_runtime",
@@ -2027,9 +2039,23 @@ def _run_db_tick_watchdog_cycle(
         if _STALE_STRIKES >= max(1, int(strikes_to_restart)):
             cb = restart_cb or restart_depth_ws
             try:
-                restarted = bool(cb(reason="tick_stalled"))
+                restarted = bool(
+                    cb(
+                        reason="tick_stalled",
+                        ignore_cooldown=True,
+                        force_full_restart=True,
+                    )
+                )
             except TypeError:
-                restarted = bool(cb("tick_stalled"))
+                try:
+                    restarted = bool(
+                        cb(
+                            reason="tick_stalled",
+                            ignore_cooldown=True,
+                        )
+                    )
+                except TypeError:
+                    restarted = bool(cb("tick_stalled"))
     elif db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec):
         if _STALE_STRIKES:
             _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
@@ -2404,13 +2430,27 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         for tok in option_tokens:
             option_rank_by_token[int(tok)] = _option_distance_rank(option_meta.get(int(tok)), atm, step, int(tok))
         option_fail_reason = None
+        option_coverage_status = "FULL"
+        option_coverage_reason = "full_coverage"
         if expiry is None:
             option_fail_reason = "expiry_unavailable"
         elif atm is None:
             option_fail_reason = "atm_unavailable"
+        elif len(option_tokens) <= 0:
+            option_fail_reason = "option_tokens_zero"
         elif len(option_tokens) < min_option_tokens:
             option_fail_reason = "option_tokens_under_min"
         if option_fail_reason is not None:
+            resolved_option_count = len(option_tokens)
+            if option_fail_reason == "option_tokens_under_min" and resolved_option_count > 0:
+                option_coverage_status = "DEGRADED"
+                option_coverage_reason = "DEGRADED_OPTION_COVERAGE"
+            elif resolved_option_count <= 0:
+                option_coverage_status = "ZERO"
+                option_coverage_reason = option_fail_reason
+            else:
+                option_coverage_status = "FULL"
+                option_coverage_reason = "full_coverage"
             _maybe_raise_option_token_incident(
                 symbol=sym_upper,
                 exchange=exchange,
@@ -2420,8 +2460,10 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                 sample_tokens=option_tokens[:10],
                 fail_reason=option_fail_reason,
             )
-            if option_fail_reason == "option_tokens_under_min":
-                option_tokens = []
+        else:
+            resolved_option_count = len(option_tokens)
+            option_coverage_status = "FULL"
+            option_coverage_reason = "full_coverage"
 
         per_tokens: list[int] = []
         if index_token:
@@ -2469,6 +2511,8 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                 "resolved_option_count": len(option_tokens),
                 "option_min_required": min_option_tokens,
                 "option_fail_reason": option_fail_reason,
+                "option_coverage_status": option_coverage_status,
+                "option_coverage_reason": option_coverage_reason,
                 "option_strikes_selected": sorted(selected_strikes.keys()),
                 "option_strike_count": len(selected_strikes),
                 "option_two_sided_strike_count": sum(1 for legs in selected_strikes.values() if {"CE", "PE"}.issubset(legs)),
@@ -3493,7 +3537,10 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             except Exception:
                 pass
             try:
-                risk_halt.trigger("feed_restart_storm")
+                risk_halt.set_halt(
+                    "feed_restart_storm",
+                    details={"count": len(_FULL_RESTARTS), "window_sec": 3600.0, "reason": reason},
+                )
             except Exception:
                 pass
             _log_ws(
@@ -4379,7 +4426,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         refresh_ok = restart_depth_ws(reason=restart_reason, ignore_cooldown=True) or refresh_ok
                     if bool(refresh_payload.get("freshness_urgent")) and not refresh_ok:
                         restart_reason = f"stale_option_freshness_drift_failed:{refresh_reason}"
-                        refresh_ok = restart_depth_ws(reason=restart_reason, ignore_cooldown=True) or refresh_ok
+                        refresh_ok = (
+                            restart_depth_ws(
+                                reason=restart_reason,
+                                ignore_cooldown=True,
+                                force_full_restart=True,
+                            )
+                            or refresh_ok
+                        )
                     _log_ws(
                         "FEED_OPTION_PRUNE_REFRESH",
                         {
@@ -4422,6 +4476,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     restart_depth_ws(
                         reason="market_open_option_subscriptions_missing",
                         ignore_cooldown=True,
+                        force_full_restart=True,
                     )
             try:
                 get_feed_health_monitor().maybe_trigger_reconnect(
@@ -4478,7 +4533,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 )
                 if (now_loop - last_no_tick_restart) >= backoff:
                     last_no_tick_restart = now_loop
-                    restart_depth_ws(reason=f"no_ticks_age={tick_age:.1f}s")
+                    restart_depth_ws(
+                        reason=f"no_ticks_age={tick_age:.1f}s",
+                        ignore_cooldown=True,
+                        force_full_restart=True,
+                    )
                 _emit_snapshot(now_loop)
                 continue
             no_tick_strikes = 0
@@ -4526,7 +4585,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 
                 if depth_stale_strikes >= strikes_to_restart:
-                    restart_depth_ws(reason=f"depth_stale_age={age:.1f}s")
+                    restart_depth_ws(
+                        reason=f"depth_stale_age={age:.1f}s",
+                        ignore_cooldown=True,
+                        force_full_restart=True,
+                    )
                     _emit_snapshot(now_loop)
                     continue
 

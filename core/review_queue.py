@@ -6443,6 +6443,8 @@ def _runtime_feed_status_snapshot() -> dict:
     if not isinstance(payload, dict):
         payload = {}
     auth_snapshot = runtime_auth_snapshot()
+    feed_truth_state = str(payload.get("feed_truth_state") or "").strip().upper() or None
+    feed_truth_strict_live = payload.get("feed_truth_strict_live")
     feed_ok = payload.get("feed_ok")
     if not isinstance(feed_ok, bool):
         runtime_state = str(payload.get("runtime_state") or "").strip().upper()
@@ -6463,6 +6465,8 @@ def _runtime_feed_status_snapshot() -> dict:
     return {
         "feed_ok": feed_ok,
         "ws_connected": payload.get("effective_ws_connected", payload.get("ws_connected")),
+        "feed_truth_state": feed_truth_state,
+        "feed_truth_strict_live": bool(feed_truth_strict_live) if isinstance(feed_truth_strict_live, bool) else None,
         "auth_ok": bool(auth_snapshot.get("auth_ok", True)),
         "auth_state": str(auth_snapshot.get("auth_state") or "UNKNOWN"),
         "auth_reason": str(auth_snapshot.get("auth_reason") or ""),
