@@ -133,6 +133,10 @@ from core.market_snapshot_store import write_market_snapshot_atomic
 from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
 from core.runtime_snapshot_store import TOP_OPPORTUNITIES_LATEST_PATH, write_snapshot_atomic
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
+from core.runtime_candidate_handoff_root_cause import (
+    build_candidate_handoff_root_cause_payload,
+    write_candidate_handoff_root_cause_latest,
+)
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -6711,6 +6715,16 @@ class Orchestrator:
                         advisory_top_n=int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
                         active_trade=self._phase2_active_trade if isinstance(self._phase2_active_trade, dict) else None,
                     )
+                    try:
+                        root_cause_payload = build_candidate_handoff_root_cause_payload(
+                            cycle_ts_epoch=float(time.time()),
+                            strategy_generated_count=int(cycle_candidate_pool_count),
+                            phase2_raw_candidates=[cand for cand in list(cycle_ranked_candidates or []) if isinstance(cand, dict)],
+                            phase2_ranked_count=int(top_payload.get("phase2_ranked_count") or 0),
+                        )
+                        write_candidate_handoff_root_cause_latest(payload=root_cause_payload)
+                    except Exception as handoff_exc:
+                        logger.warning("candidate_handoff_root_cause_write_failed err=%s", handoff_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
