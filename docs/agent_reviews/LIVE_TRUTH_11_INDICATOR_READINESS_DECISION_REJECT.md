@@ -4,77 +4,115 @@ mode: PAPER
 candidate_id: LIVE-TRUTH-11-INDICATOR-READINESS-DECISION-REJECT
 source: agent_review_live_truth_11_indicator_readiness_decision_reject
 reason: production decision reject evidence path is connected to the runtime artifact writer
-timestamp: 2026-05-29T05:24:00Z
+timestamp: 2026-05-29T05:30:00Z
 decision: APPROVED
 is_order_action: false
 broker_api_called: false
 
-## Verdict
+## Agent Work Contract
 
-PASS — narrow production-path evidence wiring.
+LIVE-TRUTH-11 is scoped to production-path evidence wiring for indicator-readiness decision rejects.
 
-## Scope Reviewed
-
-This PR wires existing indicator-readiness evidence into the post-decision side-effect hook used by production orchestrator flow.
-
-Reviewed files:
+Changed files reviewed:
 
 - `core/decision_side_effects.py`
 - `tests/test_live_truth_11_indicator_readiness_decision_side_effect.py`
 - `docs/LIVE_TRUTH_11_INDICATOR_READINESS_DECISION_REJECT.md`
+- `docs/agent_reviews/LIVE_TRUTH_11_INDICATOR_READINESS_DECISION_REJECT.md`
 
-## Problem Confirmed
+The work connects an existing readiness reporter to the post-decision side-effect hook already called by orchestrator after the Decision DAG result is computed.
 
-Live evidence showed repeated indicator-readiness rejects while the latest runtime readiness artifact was not emitted.
+## Scope Guard
 
-The helper existed in `core/live_indicator_readiness.py`, but it was not connected to the production decision reject path.
+In scope:
 
-## Design Review
+- Post-decision evidence writing.
+- Runtime artifact production for indicator-readiness rejects.
+- Focused tests for the side-effect hook.
+- Documentation and review evidence.
 
-The implementation keeps the pure Decision DAG side-effect free and adds the runtime evidence write inside `handle_post_decision_side_effects(...)`, which is already called by orchestrator immediately after production decision evaluation.
+Out of scope:
 
-The side-effect uses only already-computed facts from:
+- Decision DAG rule changes.
+- Strategy rule changes.
+- Candidate generation changes.
+- Ranking changes.
+- Threshold changes.
+- Dashboard changes.
+- Feed reconnect behavior changes.
 
-- `DecisionReport.blockers`
-- `DecisionReport.explain`
-- `MarketSnapshot`
-- `MarketSnapshot.raw_data`
+## Grill Me Review
 
-## Safety Review
+Weak assumption checked: the existing helper was present but production did not call it at the reject point.
 
-Confirmed boundaries:
+Failure mode checked: a writer exception must not change the already-computed decision path.
 
-- Decision DAG logic unchanged.
-- Strategy logic unchanged.
-- Candidate generation unchanged.
-- Ranking unchanged.
-- Thresholds unchanged.
-- Dashboard unchanged.
-- Reconnect behavior unchanged.
+Proof added: a focused test patches the writer to raise and verifies the side-effect path returns normally.
 
-The evidence writer is best-effort. Writer failure does not alter the already-computed decision path.
+## Hermes Review
 
-## Test Evidence
+Scope status: PASS.
 
-Focused test command:
+Boundary review:
+
+- The pure Decision DAG remains side-effect free.
+- The orchestrator call path remains unchanged.
+- The side effect runs after the decision object already exists.
+- The implementation uses already-computed `DecisionReport`, `MarketSnapshot`, and explain facts.
+
+## GSD Review
+
+Delivery verdict: PASS.
+
+Evidence summary:
+
+- Production hook connected in `core/decision_side_effects.py`.
+- Runtime artifact write uses the existing live indicator-readiness helper.
+- Focused tests cover write, non-write, writer exception, and allowed-decision paths.
+
+Next action: after merge, continue with LIVE-TRUTH-12 latency hot-path evidence.
+
+## QA / Safety Review
+
+Test command:
 
 ```bash
 PYTHONPATH=. python -m pytest -q tests/test_live_truth_11_indicator_readiness_decision_side_effect.py
 ```
 
-Tests prove:
+Safety result:
+
+- No Decision DAG behavior change.
+- No candidate behavior change.
+- No ranking behavior change.
+- No strategy behavior change.
+- Evidence writer failure is contained.
+
+## Acceptance Proof
+
+Acceptance criteria covered:
 
 1. Indicator-readiness reject writes `.runtime/live_indicator_readiness_latest.json`.
 2. Other reject types do not write the artifact.
-3. Writer failure is side-effect safe.
+3. Writer failure does not break the post-decision side-effect path.
 4. Allowed decision does not write the artifact.
 
-## Regression Risk
+## Runtime Proof Required After Merge
 
-Low.
+During the next live or paper run, verify that an indicator-readiness reject emits the latest readiness artifact and that the artifact contains symbol-level warmup and indicator age facts.
 
-The change is isolated to post-decision evidence and does not change gate decisions, candidate flow, or execution behavior.
+## What This PR Does Not Prove
 
-## Final Review Decision
+This PR does not prove that enough warmup bars exist in live market data.
 
-Approved.
+This PR does not prove that indicator computation itself is healthy.
+
+This PR does not prove that candidates become executable.
+
+It only proves that the reject evidence path is wired to the runtime artifact writer.
+
+## Human Approval
+
+Human approval required before merge: yes.
+
+Reviewer decision: approved for CI validation.
