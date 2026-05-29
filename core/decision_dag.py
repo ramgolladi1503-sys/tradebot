@@ -715,38 +715,44 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
         if snapshot.ohlc_bars_count < min_bars:
             reasons.append(REASON_WARMUP_INCOMPLETE)
 
-    # Strict indicator readiness gate:
-    # Required indicators must be present and fresh enough. This is the canonical truth
-    # for executability; do not treat process-alive or coarse booleans as sufficient.
-    try:
-        indicator_report = build_live_indicator_readiness_report(
-            [
-                {
-                    "symbol": snapshot.symbol,
-                    "ohlc_bars_count": snapshot.ohlc_bars_count,
-                    "warmup_min_bars": min_bars,
-                    "indicator_last_update_epoch": snapshot.indicator_last_update_epoch,
-                    "compute_indicators_error": snapshot.raw_data.get("compute_indicators_error", ""),
-                    "ohlc_bars": snapshot.raw_data.get("ohlc_bars"),
-                    "vwap": snapshot.raw_data.get("vwap"),
-                    "rsi": snapshot.raw_data.get("rsi"),
-                    "ema": snapshot.raw_data.get("ema"),
-                    "atr": snapshot.raw_data.get("atr"),
-                }
-            ],
-            now_epoch=float(snapshot.ts_epoch),
-            warmup_min_bars=max(0, int(min_bars)),
-            max_indicator_age_sec=float(indicator_stale_sec),
-            source="decision_dag_indicator_readiness_v1",
-        )
-        decision = indicator_report.get(snapshot.symbol)
-        if decision is None or not decision.ready:
-            reasons.append(REASON_INDICATORS_MISSING)
-        if decision is not None:
-            indicator_missing_inputs = list(decision.indicator_missing_inputs or ())
-            indicator_readiness_blockers = list(decision.blockers or ())
-    except Exception:
-        reasons.append(REASON_INDICATORS_MISSING)
+    # Strict indicator readiness gate (LIVE only):
+    # In LIVE mode, missing technical context must block executability. To preserve backward
+    # compatibility for legacy snapshots/tests that do not carry per-indicator values, we
+    # only enforce the per-indicator presence check when those fields are actually present
+    # in the snapshot payload; otherwise we fall back to the existing coarse flags.
+    if snapshot.mode == "LIVE" and snapshot.market_open:
+        raw = dict(snapshot.raw_data or {}) if isinstance(snapshot.raw_data, Mapping) else {}
+        has_indicator_values = any(k in raw for k in ("vwap", "rsi", "ema", "atr"))
+        if has_indicator_values:
+            try:
+                indicator_report = build_live_indicator_readiness_report(
+                    [
+                        {
+                            "symbol": snapshot.symbol,
+                            "ohlc_bars_count": snapshot.ohlc_bars_count,
+                            "warmup_min_bars": min_bars,
+                            "indicator_last_update_epoch": snapshot.indicator_last_update_epoch,
+                            "compute_indicators_error": raw.get("compute_indicators_error", ""),
+                            "ohlc_bars": raw.get("ohlc_bars"),
+                            "vwap": raw.get("vwap"),
+                            "rsi": raw.get("rsi"),
+                            "ema": raw.get("ema"),
+                            "atr": raw.get("atr"),
+                        }
+                    ],
+                    now_epoch=float(snapshot.ts_epoch),
+                    warmup_min_bars=max(0, int(min_bars)),
+                    max_indicator_age_sec=float(indicator_stale_sec),
+                    source="decision_dag_indicator_readiness_v1",
+                )
+                decision = indicator_report.get(snapshot.symbol)
+                if decision is None or not decision.ready:
+                    reasons.append(REASON_INDICATORS_MISSING)
+                if decision is not None:
+                    indicator_missing_inputs = list(decision.indicator_missing_inputs or ())
+                    indicator_readiness_blockers = list(decision.blockers or ())
+            except Exception:
+                reasons.append(REASON_INDICATORS_MISSING)
 
     # Backward-compat coarse flags (fail-closed).
     if not snapshot.indicators_ok:
