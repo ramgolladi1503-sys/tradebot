@@ -2,6 +2,9 @@
 
 mode: LIVE-TRUTH
 candidate_id: LIVE-TRUTH-13-VERIFIED-FEED-RESTART
+source: agent_review_live_truth_13_verified_feed_restart_transaction
+reason: verified feed restart transaction prevents false restart success after websocket 1006
+timestamp: 2026-05-29T07:20:00Z
 decision: APPROVED_FOR_CI
 is_order_action: false
 broker_api_called: false
