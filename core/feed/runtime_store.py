@@ -6,9 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from config import config as cfg
+from core.events import write_json_atomic
+from core.feed_execution_truth import attach_feed_execution_truth
 from core.feed_startup_lifecycle import record_feed_startup_event
+from core.feed_truth_state import classify_feed_truth_state
 from core.fs_utils import ensure_parent_dir
-from core.paths import trade_db_path
+from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
 
 
@@ -95,6 +98,34 @@ def _startup_event_for_runtime_source(source: str, runtime_state: str) -> str | 
     return None
 
 
+def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: float) -> dict[str, Any]:
+    out = dict(payload or {})
+    out["ts_epoch"] = float(ts_epoch)
+    if "feed_truth_state" not in out:
+        feed_truth = classify_feed_truth_state(out, now_epoch=float(ts_epoch))
+        out["feed_truth_state"] = str(feed_truth.state)
+        out["feed_truth_reason_code"] = str(feed_truth.reason_code)
+        out["feed_truth_reasons"] = list(feed_truth.reasons)
+        out["feed_truth_strict_live"] = bool(feed_truth.strict_live)
+    out = attach_feed_execution_truth(out)
+    out["read_only"] = True
+    out["append"] = False
+    out["is_order_action"] = False
+    out["broker_api_called"] = False
+    out["source"] = str(out.get("source") or "core.feed.runtime_store.write_runtime_snapshot")
+    return out
+
+
+def _write_canonical_runtime_artifacts(payload: dict[str, Any], *, ts_epoch: float) -> None:
+    artifact = _canonical_runtime_artifact_payload(payload, ts_epoch=ts_epoch)
+    root = repo_root()
+    for path in (root / "logs" / "feed_runtime_latest.json", root / ".runtime" / "feed_runtime_latest.json"):
+        try:
+            write_json_atomic(path, artifact)
+        except Exception:
+            pass
+
+
 def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
     if not isinstance(payload, dict):
         return False
@@ -151,6 +182,7 @@ def write_runtime_snapshot(payload: dict[str, Any]) -> bool:
             )
     except Exception:
         return False
+    _write_canonical_runtime_artifacts(payload, ts_epoch=float(ts_epoch))
     lifecycle_details = {
         "source": source,
         "ws_connected": payload.get("ws_connected"),
