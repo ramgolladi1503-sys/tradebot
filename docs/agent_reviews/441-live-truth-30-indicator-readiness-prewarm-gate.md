@@ -1,10 +1,19 @@
 # Agent Review Evidence — Issue #441 (LIVE-TRUTH-30)
 
+mode: LIVE
+candidate_id: issue-441
+decision: block_executable_when_indicators_missing
+reason: INDICATORS_UNREADY
+timestamp: 2026-05-29
+is_order_action: false
+broker_api_called: false
+source: agent_review_evidence_v1
+
 ## Agent Work Contract
 - source_agent: Codex (GPT-5.2)
 - action: GENERATE_PATCH + GENERATE_TESTS
 - title: LIVE-TRUTH-30 — Indicator Readiness Prewarm Gate
-- scope: Gate executable candidate generation when required indicators are missing; keep feed blockers as primary when feed is stale/dead.
+- scope: Gate executable candidate generation when required indicators are unavailable; keep feed blockers as primary when feed is stale/dead.
 - requested_paths:
   - core/decision_dag.py
   - tests/test_live_indicator_readiness.py
@@ -29,23 +38,23 @@
 - No UI/dashboard work.
 - Changes are limited to strict indicator readiness evaluation inside the decision DAG warmup gate and deterministic tests.
 
-## Grill Me (Risk Review)
+## Grill Me Review
 - Risk: Over-blocking due to missing indicator values in runtime payload.
   - Mitigation: Gate is restricted to required indicators; failure to compute readiness fails closed (explicit `INDICATORS_MISSING`).
 - Risk: Changing decision DAG outputs could affect candidate counts.
   - Mitigation: Only affects executability truth when indicator values are missing/stale; feed gate precedence remains earlier in DAG ordering.
 
-## Hermes (Design / Contract)
+## Hermes Review
 - Canonical rule: executable candidates require required indicators present + fresh enough (vwap/rsi/ema/atr and indicator last update within `INDICATOR_STALE_SEC`).
 - Precedence: feed stale/dead remains primary blocker because it is evaluated earlier in the DAG (`N2_FEED_FRESH` before `N3_WARMUP_DONE`).
 - Observability: Missing indicator fields are exposed via `N3_WARMUP_DONE` facts (`indicator_missing_inputs`, `indicator_readiness_blockers`) for per-symbol runtime/debug inspection.
 
-## GSD (Implementation Notes)
+## GSD Review
 - Implemented strict readiness check using `core.live_indicator_readiness.build_live_indicator_readiness_report` inside `core/decision_dag.py::_node_warmup_done`.
 - Fail-closed behavior: any exception or inability to compute a per-symbol readiness decision produces `INDICATORS_MISSING`.
 - Backward compatibility: existing coarse `indicators_ok`/`indicators_age_sec` checks remain as additional fail-closed safeguards.
 
-## QA / Safety
+## QA / Safety Review
 - Tests added are deterministic and do not require LIVE mode, broker access, or network calls.
 - No changes to broker/execution modules; no new external side effects.
 
