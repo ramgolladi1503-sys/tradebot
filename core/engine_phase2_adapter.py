@@ -14,6 +14,11 @@ from core import _engine_phase2_adapter_base as _phase2_base
 from core._engine_phase2_adapter_base import *  # noqa: F401,F403
 
 _base_build_candidates_phase2 = _phase2_base.build_candidates_phase2
+# Guard against module reload / re-import recursion: this adapter assigns its
+# wrapper back onto the base module. If imported again, the "base" callable may
+# already be the wrapper. Delegate through the stable base reference instead.
+if bool(getattr(_base_build_candidates_phase2, "_ci_phase2_contract_patch", False)):
+    _base_build_candidates_phase2 = getattr(_phase2_base, "_BASE_BUILD_CANDIDATES_PHASE2", _base_build_candidates_phase2)
 
 CONTRACT_FALLBACK_BLOCKER = "CONTRACT_RESOLUTION_FALLBACK_BLOCKED"
 CONTRACT_FALLBACK_REASON = "contract_resolution_fallback_blocked"
