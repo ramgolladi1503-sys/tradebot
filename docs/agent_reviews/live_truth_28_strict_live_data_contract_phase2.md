@@ -4,7 +4,7 @@
 
 ### Goal
 
-In LIVE/REAL execution mode, Phase2 must reject/downgrade candidates with missing or fallback-driven market data instead of silently filling defaults that could become executable.
+In LIVE/REAL execution mode, Phase2 must reject/downgrade candidates with absent or fallback-driven market data instead of silently filling defaults that could become executable.
 
 ### Files changed
 
@@ -17,7 +17,7 @@ In LIVE/REAL execution mode, Phase2 must reject/downgrade candidates with missin
 mode: LIVE
 candidate_id: LIVE_TRUTH_28_STRICT_LIVE_DATA_CONTRACT_PHASE2
 decision: PHASE2_STRICT_LIVE_DATA_CONTRACT
-reason: LIVE Phase2 now marks candidates with missing quote age, missing spread/BBO context, missing liquidity validation, unknown quote source, or estimated RR context as non-executable with explicit reason codes instead of applying executable-grade defaults.
+reason: LIVE Phase2 now marks candidates with absent quote age, absent spread/BBO context, absent liquidity validation, unknown quote source, or estimated RR context as non-executable with explicit blocker codes instead of applying executable-grade defaults.
 timestamp: 2026-05-29T00:00:00Z
 is_order_action: false
 broker_api_called: false
@@ -38,10 +38,10 @@ Filling fake defaults for quote age/spread/liquidity/RR can make a broken data p
 
 ### Required proof
 
-- Missing `quote_age_sec` in LIVE downgrades candidate to non-executable with visible reason.
-- Missing spread/BBO context in LIVE downgrades candidate to non-executable with visible reason.
-- Missing liquidity validation in LIVE downgrades candidate to non-executable with visible reason.
-- Estimated RR context in LIVE downgrades candidate to non-executable with visible reason.
+- Absent `quote_age_sec` in LIVE downgrades candidate to non-executable with visible blocker code.
+- Absent spread/BBO context in LIVE downgrades candidate to non-executable with visible blocker code.
+- Absent liquidity validation in LIVE downgrades candidate to non-executable with visible blocker code.
+- Estimated RR context in LIVE downgrades candidate to non-executable with visible blocker code.
 - PAPER/SIM behavior remains unchanged where supported.
 
 ## Hermes Review
@@ -59,7 +59,7 @@ No external calls are made. The change is deterministic and contained to Phase2 
 ### Minimality
 
 - Changes are confined to Phase2 candidate shaping and do not touch strategy generation, execution router, or broker adapters.
-- LIVE/REAL behavior is tightened only by converting missing/fallback data into explicit non-executable reason codes.
+- LIVE/REAL behavior is tightened only by converting absent/fallback data into explicit non-executable blocker codes.
 
 ### Determinism
 
@@ -69,10 +69,10 @@ All decisions are deterministic over the candidate payload + config flags; no ti
 
 Tests assert:
 
-- LIVE candidate missing spread and BBO cannot become `ENTER` and carries `missing_spread_context`.
-- LIVE candidate missing quote age cannot become `ENTER` and carries `missing_live_timing_context`.
-- LIVE candidate marked `rr_estimated_context` cannot become `ENTER` and carries explicit reason code.
-- PAPER candidate still applies Phase2 fallback fields for watchlist/debug scoring.
+- LIVE row with absent spread and BBO cannot become `ENTER` and carries `missing_spread_context`.
+- LIVE row with absent quote age cannot become `ENTER` and carries `missing_live_timing_context`.
+- LIVE row marked `rr_estimated_context` cannot become `ENTER` and carries explicit blocker code.
+- PAPER rows still apply Phase2 fallback fields for watchlist/debug scoring.
 
 ## High-Risk Path Review
 
@@ -112,7 +112,7 @@ Expected:
 During a live observation window:
 
 - Verify candidates with `phase2_spread_fallback_used` or `phase2_liquidity_fallback_used` do not become executable in LIVE.
-- Verify candidates missing quote age/spread/liquidity show explicit rejection/downgrade reason codes.
+- Verify candidates with absent quote age/spread/liquidity show explicit rejection/downgrade blocker codes.
 
 ## What This PR Does Not Prove
 
