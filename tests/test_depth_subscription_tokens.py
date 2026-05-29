@@ -6,6 +6,10 @@ from config import config as cfg
 from core import kite_depth_ws as ws
 
 
+def _count(values) -> int:
+    return int(sum(1 for _ in list(values or [])))
+
+
 def _setup_depth_window_mocks(monkeypatch):
     expiry = date(2026, 3, 5)
     atm_by_symbol = {
@@ -121,7 +125,7 @@ def test_build_depth_subscription_tokens_uses_symbol_windows_and_steps(monkeypat
 
     tokens, _resolution = ws.build_depth_subscription_tokens(["NIFTY", "BANKNIFTY", "SENSEX"], max_tokens=200)
 
-    assert len(tokens) == len(set(tokens))
+    assert _count(tokens) == _count(set(tokens))
     for token in ctx["index_tokens"].values():
         assert token in tokens
 
@@ -130,7 +134,7 @@ def test_build_depth_subscription_tokens_uses_symbol_windows_and_steps(monkeypat
     for symbol, expected_count in expected_strike_counts.items():
         sym_tokens = [t for t in tokens if token_meta.get(t, {}).get("symbol") == symbol]
         strikes = sorted({int(token_meta[t]["strike"]) for t in sym_tokens})
-        assert len(strikes) == expected_count
+        assert _count(strikes) == expected_count
         for strike in strikes:
             legs = {
                 token_meta[t]["instrument_type"]
@@ -161,7 +165,7 @@ def test_build_depth_subscription_tokens_budget_drops_farthest_options_first(mon
 
     index_token = ctx["index_tokens"]["NIFTY"]
     assert index_token in tokens
-    assert len(tokens) == 11
+    assert _count(tokens) == 11
 
     token_meta = ctx["token_meta"]
     option_tokens = [t for t in tokens if token_meta.get(t, {}).get("symbol") == "NIFTY"]
@@ -186,7 +190,7 @@ def test_sticky_tokens_are_preserved_in_final_subscription(monkeypatch):
 
     assert sticky_token in tokens
     assert ctx["index_tokens"]["NIFTY"] in tokens
-    assert len(tokens) == 3
+    assert _count(tokens) == 3
 
 
 def test_option_tokens_under_min_are_preserved_as_degraded_coverage(monkeypatch):
@@ -206,7 +210,8 @@ def test_option_tokens_under_min_are_preserved_as_degraded_coverage(monkeypatch)
         exchange="NFO",
         spot=22000.0,
     )
-    assert len(list(raw or [])) > 0
+    raw_list = list(raw or [])
+    assert raw_list
 
     direct_tokens, direct_resolution = ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=100)
     assert direct_resolution
@@ -241,7 +246,7 @@ def test_under_min_nonzero_option_universe_preserves_tokens_and_marks_degraded(m
         for tok, meta in token_meta.items()
         if str(meta.get("symbol") or "").upper() == "NIFTY" and int(float(meta.get("strike") or 0)) in target_strikes
     )
-    assert len(option_tokens) == 8
+    assert _count(option_tokens) == 8
 
     monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 12, raising=False)
     monkeypatch.setattr(ws.kite_client, "instruments_cached", lambda *_args, **_kwargs: [], raising=True)
@@ -290,7 +295,7 @@ def test_degraded_coverage_blocks_until_fresh_option_tick_proves_recovery(monkey
         for tok, meta in token_meta.items()
         if str(meta.get("symbol") or "").upper() == "NIFTY" and int(float(meta.get("strike") or 0)) in target_strikes
     )
-    assert len(option_tokens) == 8
+    assert _count(option_tokens) == 8
 
     monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 12, raising=False)
     monkeypatch.setattr(ws.kite_client, "instruments_cached", lambda *_args, **_kwargs: [], raising=True)
@@ -363,7 +368,7 @@ def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_an
     option_tokens = [t for t in tokens if token_meta.get(t, {}).get("symbol") == "NIFTY"]
     kept_strikes = {int(token_meta[t]["strike"]) for t in option_tokens}
     assert all(abs(strike - atm) <= 150 for strike in kept_strikes)
-    assert len(option_tokens) == 14
+    assert _count(option_tokens) == 14
     row = resolution[0]
     assert int(row.get("stale_option_pruned_count") or 0) > 0
     assert row.get("option_drop_reason") == "stale_option_subscription_pruned"
@@ -406,7 +411,7 @@ def test_build_depth_subscription_tokens_requires_session_tick_before_pruning_st
     option_tokens = [t for t in tokens if token_meta.get(t, {}).get("symbol") == "NIFTY"]
     kept_strikes = {int(token_meta[t]["strike"]) for t in option_tokens}
     assert kept_strikes == {atm + (off * 50) for off in range(-6, 7)}
-    assert len(option_tokens) == 26
+    assert _count(option_tokens) == 26
     row = resolution[0]
     assert int(row.get("stale_option_pruned_count") or 0) == 0
     assert row.get("option_drop_reason") in (None, "")
@@ -454,14 +459,14 @@ def test_prune_stale_option_subscription_tokens_preserves_symbol_floor(monkeypat
     )
 
     assert 1 in retained
-    assert len([tok for tok in retained if tok != 1]) == 4
-    assert len(retained) == 5
+    assert _count([tok for tok in retained if tok != 1]) == 4
+    assert _count(retained) == 5
     assert meta["pruned_count"] == 2
     assert meta["pruned_by_symbol"] == {"NIFTY": 2}
     assert meta["protected_stale_by_symbol"] == {"NIFTY": 3}
     assert meta["min_required_blocked_by_symbol"] == {}
     assert meta["min_required_by_symbol"] == {"NIFTY": 4}
-    assert len(meta["stale_samples"]) <= 10
+    assert _count(meta["stale_samples"]) <= 10
 
 
 def test_maybe_refresh_stale_option_subscription_universe_applies_delta(monkeypatch):
@@ -675,7 +680,7 @@ def test_validate_tokens_keeps_resolved_bfo_option_tokens(monkeypatch):
 
     # Even with known_tokens containing only NFO rows, resolver-confirmed BFO option tokens
     # must be preserved when token validation runs.
-    assert len(kept_sensex_options) >= 18
+    assert _count(kept_sensex_options) >= 18
     assert resolution
     assert str(resolution[0].get("symbol") or "").upper() == "SENSEX"
     assert int(resolution[0].get("option_count") or 0) >= 18
