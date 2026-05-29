@@ -1047,6 +1047,11 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
             len(raw_list),
             drop_reason_counts,
         )
+        try:
+            build_candidates_phase2._last_drop_reason_counts = dict(drop_reason_counts)
+            build_candidates_phase2._last_raw_count = int(len(raw_list))
+        except Exception:
+            pass
         return []
 
     ranked_candidates.sort(
@@ -1057,6 +1062,11 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
         ),
         reverse=True,
     )
+    try:
+        build_candidates_phase2._last_drop_reason_counts = dict(drop_reason_counts)
+        build_candidates_phase2._last_raw_count = int(len(raw_list))
+    except Exception:
+        pass
     return ranked_candidates
 
 
