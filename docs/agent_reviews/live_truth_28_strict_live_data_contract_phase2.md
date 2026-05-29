@@ -54,6 +54,17 @@ Filling fake defaults for quote age/spread/liquidity/RR can make a broken data p
 
 No external calls are made. The change is deterministic and contained to Phase2 candidate shaping.
 
+## GSD Review
+
+### Minimality
+
+- Changes are confined to Phase2 candidate shaping and do not touch strategy generation, execution router, or broker adapters.
+- LIVE/REAL behavior is tightened only by converting missing/fallback data into explicit non-executable reason codes.
+
+### Determinism
+
+All decisions are deterministic over the candidate payload + config flags; no time, network, or broker dependencies.
+
 ## QA / Safety Review
 
 Tests assert:
