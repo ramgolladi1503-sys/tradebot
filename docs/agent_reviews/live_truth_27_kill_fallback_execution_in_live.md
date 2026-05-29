@@ -70,7 +70,7 @@ All checks are pure/deterministic over config + candidate payload.
 
 Tests assert:
 
-- `EXECUTION_MODE=LIVE` + `PHASE2_FORCE_FALLBACK_EXECUTION_ENABLE=true` / `PHASE2_FORCE_FALLBACK_ALLOW_LIVE=true` => boot safety decision is not allowed.
+- `EXECUTION_MODE=LIVE` with either `PHASE2_FORCE_FALLBACK_EXECUTION_ENABLE` or `PHASE2_FORCE_FALLBACK_ALLOW_LIVE` enabled => boot safety decision is not allowed.
 - LIVE candidate marked `synthetic_candidate=True` cannot produce `ENTER` even with high score.
 
 ## High-Risk Path Review
