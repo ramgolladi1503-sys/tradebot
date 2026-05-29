@@ -95,7 +95,7 @@ _SYMBOL_LAST_OPTION_TICK_TS: dict[str, float] = {}
 _STALE_PRUNE_STRIKES_BY_TOKEN: dict[int, int] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
-_RESTART_LOCK = threading.Lock()
+_RESTART_LOCK = threading.RLock()
 _RESTART_ASYNC_LOCK = threading.Lock()
 _RESTART_ASYNC_THREAD = None
 _LAST_FULL_RESTART_EPOCH = 0.0
@@ -3071,7 +3071,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     Full restart: close existing ticker and recreate with last known tokens.
     Rate-limited to avoid restart storms.
     """
-    global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES
+    global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
     if _AUTH_REQUIRED_LATCH:
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
@@ -3173,13 +3173,61 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             return False
 
         _log_ws("FEED_FULL_RESTART_BEGIN", {"reason": reason, "tokens": len(tokens), **selection_payload})
+        _RUNTIME_STATE = "RESTARTING"
+        _LAST_RUNTIME_ERROR = str(reason)
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source=f"restart_depth_ws:begin:{reason}",
+            runtime_state="RESTARTING",
+            last_error=str(reason),
+            intended_tokens_count=len(tokens),
+        )
+
         stop_depth_ws(reason=f"restart:{reason}")
+
+        # A restart stop is not a manual/operator stop. Clear the stop latch before
+        # constructing the replacement ticker so close callbacks from the old ticker
+        # cannot leave the new feed in manual-stop mode.
+        _STOP_REQUESTED = False
+
         try:
-            start_depth_ws(tokens, profile_verified=False, skip_guard=True)
+            started = start_depth_ws(tokens, profile_verified=False, skip_guard=True)
         except Exception as exc:
+            _RUNTIME_STATE = "RESTART_FAILED"
+            _LAST_RUNTIME_ERROR = f"start_exception:{type(exc).__name__}:{exc}"[:1000]
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"restart_depth_ws:start_exception:{reason}",
+                runtime_state="RESTART_FAILED",
+                last_error=_LAST_RUNTIME_ERROR,
+                intended_tokens_count=len(tokens),
+            )
             _log_ws("FEED_FULL_RESTART_FAILED", {"reason": reason, "error": str(exc)})
             return False
 
+        if started is False:
+            _RUNTIME_STATE = "RESTART_FAILED"
+            _LAST_RUNTIME_ERROR = f"start_returned_false:{reason}"[:1000]
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"restart_depth_ws:start_failed:{reason}",
+                runtime_state="RESTART_FAILED",
+                last_error=_LAST_RUNTIME_ERROR,
+                intended_tokens_count=len(tokens),
+            )
+            _log_ws(
+                "FEED_FULL_RESTART_FAILED_AFTER_STOP",
+                {"reason": reason, "tokens": len(tokens), **selection_payload},
+            )
+            return False
+
+        _persist_runtime_snapshot_row(
+            ws_connected=None,
+            source=f"restart_depth_ws:start_requested:{reason}",
+            runtime_state="STARTING",
+            last_error="",
+            intended_tokens_count=len(tokens),
+        )
         _LAST_FULL_RESTART_EPOCH = now
         _FULL_RESTARTS.append(now)
         _STALE_STRIKES = 0
@@ -3187,7 +3235,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         return True
 
 
-def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False):
+def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
     _DEPTH_WS_START_EPOCH = float(now_utc_epoch())
     _RUNTIME_STATE = "STARTING"
@@ -3211,7 +3259,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 last_error=_LAST_RUNTIME_ERROR,
                 intended_tokens_count=_INTENDED_TOKEN_COUNT,
             )
-            return
+            return False
     if not skip_guard and getattr(cfg, "DEPTH_WS_SINGLETON", True):
         with _KITE_TICKER_LOCK:
             if _KITE_TICKER is not None:
@@ -3228,7 +3276,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     last_error="",
                     intended_tokens_count=_INTENDED_TOKEN_COUNT,
                 )
-                return
+                return True
     if not KiteTicker or not cfg.KITE_USE_DEPTH:
         _RUNTIME_STATE = "IMPORT_MISSING"
         _LAST_RUNTIME_ERROR = "kiteticker_unavailable_or_depth_disabled"
@@ -3240,7 +3288,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             intended_tokens_count=_INTENDED_TOKEN_COUNT,
         )
         logger.error("depth_ws_not_available")
-        return
+        return False
     if not cfg.KITE_API_KEY:
         _RUNTIME_STATE = "AUTH_BLOCKED"
         _LAST_RUNTIME_ERROR = "missing_api_key"
@@ -3252,7 +3300,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             intended_tokens_count=_INTENDED_TOKEN_COUNT,
         )
         logger.error("depth_ws_missing_api_key")
-        return
+        return False
     try:
         cwd = Path.cwd()
         root = repo_root()
@@ -3280,7 +3328,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if is_auth_error(reason_text=str(err)):
             _mark_auth_required(str(err), source="kite_depth_ws_start")
         logger.error("depth_ws_invalid_access_token reason=%s", err)
-        return
+        return False
     rest_client = None
     try:
         rest_client = kite_client.ensure()
@@ -3299,7 +3347,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         _mark_auth_required(f"token_resolve_failed:{type(exc).__name__}:{exc}", source="kite_depth_ws_start")
         logger.error("depth_ws_access_token_resolve_failed err=%s", exc)
-        return
+        return False
     if not access_token:
         _log_ws("FEED_AUTH_BLOCKED", {"error": "missing_access_token:empty"})
         _RUNTIME_STATE = "AUTH_BLOCKED"
@@ -3313,7 +3361,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         _mark_auth_required("missing_access_token:empty", source="kite_depth_ws_start")
         logger.error("depth_ws_access_token_empty")
-        return
+        return False
     if not api_key:
         _log_ws("FEED_AUTH_BLOCKED", {"error": "missing_api_key:empty"})
         _RUNTIME_STATE = "AUTH_BLOCKED"
@@ -3327,7 +3375,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         _mark_auth_required("missing_api_key:empty", source="kite_depth_ws_start")
         logger.error("depth_ws_api_key_empty")
-        return
+        return False
 
     tokens = list(dict.fromkeys(instrument_tokens or []))
     if not tokens:
@@ -3341,7 +3389,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             intended_tokens_count=_INTENDED_TOKEN_COUNT,
         )
         logger.error("depth_ws_no_instrument_tokens")
-        return
+        return False
     _LAST_TOKENS = list(tokens)
     _STALE_STRIKES = 0
     _WARMUP_PENDING = True
@@ -4216,4 +4264,5 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             runtime_state="SUBSCRIBE_FAILED",
             last_error=_LAST_RUNTIME_ERROR,
         )
-        raise
+        return False
+    return True
