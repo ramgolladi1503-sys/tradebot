@@ -1,5 +1,14 @@
 # LIVE-TRUTH-25 — Preserve Option Universe Under Minimum (Agent Review Evidence)
 
+mode: DEV
+candidate_id: N/A
+decision: preserve_option_universe_under_minimum
+reason: keep_under_min_option_universe_and_fail_closed_until_fresh_option_ticks
+timestamp: 2026-05-29T15:00:00+0530
+is_order_action: false
+broker_api_called: false
+source: agent_review
+
 ## Agent Work Contract
 
 - source_agent: Codex (GPT-5.2)
@@ -51,7 +60,7 @@
 
 - Verdict: PASS
 - Design: represent option universe coverage explicitly (`FULL` / `DEGRADED` / `ZERO`) and never discard a nonzero under-min universe
-- Observability: write coverage status + reason into per-symbol token resolution rows (via existing token resolution log contracts)
+- Observability: write coverage status + reason into per-symbol subscription resolution rows (via existing resolution log contracts)
 - Fail-closed: execution stays blocked until tick proof clears feed blockers
 
 ## GSD Review
@@ -81,7 +90,7 @@
 ## Acceptance Proof
 
 - Under-min nonzero: `option_coverage_status=DEGRADED`, `final_option_count` equals the resolved subset (no forced drop-to-zero)
-- Zero-token: `option_coverage_status=ZERO`, `final_option_count=0`, subscription contains only underlyings
+- Zero coverage: `option_coverage_status=ZERO`, `final_option_count=0`, subscription contains only underlyings
 - Tick-proof gate: without option ticks the symbol remains blocked (`NO_LIVE_OPTION_FEED`); with a fresh tick the blocker clears
 
 ## Runtime Proof Required After Merge
