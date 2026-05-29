@@ -189,7 +189,7 @@ def test_sticky_tokens_are_preserved_in_final_subscription(monkeypatch):
     assert len(tokens) == 3
 
 
-def test_option_tokens_under_min_are_blocked(monkeypatch):
+def test_option_tokens_under_min_are_preserved_as_degraded_coverage(monkeypatch):
     ctx = _setup_depth_window_mocks(monkeypatch)
     incidents: list[dict] = []
     monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 100, raising=False)
@@ -198,15 +198,128 @@ def test_option_tokens_under_min_are_blocked(monkeypatch):
         "_maybe_raise_option_token_incident",
         lambda **kwargs: incidents.append(dict(kwargs)),
     )
+    expiry = ws.kite_client.next_available_expiry("NIFTY", exchange="NFO")
+    raw = ws.kite_client.resolve_option_tokens_window(
+        symbol="NIFTY",
+        expiry=expiry,
+        strikes_around=6,
+        exchange="NFO",
+        spot=22000.0,
+    )
+    assert len(list(raw or [])) > 0
+
+    direct_tokens, direct_resolution = ws.build_subscription_tokens(symbols=["NIFTY"], max_tokens=100)
+    assert direct_resolution
+    assert int(direct_resolution[0].get("resolved_option_count") or 0) > 0
+    assert ctx["index_tokens"]["NIFTY"] in direct_tokens
 
     tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=100)
 
-    assert tokens == [ctx["index_tokens"]["NIFTY"]]
+    assert resolution
+    row = resolution[0]
+    assert int(row.get("resolved_option_count") or 0) > 0
+    assert row.get("option_fail_reason") == "option_tokens_under_min"
+    assert row.get("option_coverage_status") == "DEGRADED"
+    assert row.get("option_coverage_reason") == "DEGRADED_OPTION_COVERAGE"
+    assert int(row.get("resolved_option_count") or 0) > 0
+    assert int(row.get("final_option_count") or 0) == int(row.get("resolved_option_count") or 0)
+    assert ctx["index_tokens"]["NIFTY"] in tokens
+    assert int(row.get("final_option_count") or 0) == len(
+        [t for t in tokens if str(ctx["token_meta"].get(int(t), {}).get("symbol") or "").upper() == "NIFTY"]
+    )
+    assert incidents and incidents[-1]["symbol"] == "NIFTY"
+
+
+def test_under_min_nonzero_option_universe_preserves_tokens_and_marks_degraded(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    atm = int(ctx["atm_by_symbol"]["NIFTY"])
+    step = int(ctx["step_by_symbol"]["NIFTY"])
+    target_strikes = {atm - step, atm, atm + step, atm + (2 * step)}
+    option_tokens = sorted(
+        int(tok)
+        for tok, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "NIFTY" and int(float(meta.get("strike") or 0)) in target_strikes
+    )
+    assert len(option_tokens) == 8
+
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 12, raising=False)
+    monkeypatch.setattr(ws.kite_client, "instruments_cached", lambda *_args, **_kwargs: [], raising=True)
+    fake_resolver = lambda **_kwargs: list(option_tokens)
+    monkeypatch.setattr(ws.kite_client, "resolve_option_tokens_window", fake_resolver)
+    assert ws.kite_client.resolve_option_tokens_window is fake_resolver
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=100)
+
     assert resolution
     row = resolution[0]
     assert row.get("option_fail_reason") == "option_tokens_under_min"
-    assert int(row.get("option_count") or 0) == 0
-    assert incidents and incidents[-1]["symbol"] == "NIFTY"
+    assert row.get("option_coverage_status") == "DEGRADED"
+    assert int(row.get("resolved_option_count") or 0) == 8
+    assert int(row.get("final_option_count") or 0) == 8
+    assert ctx["index_tokens"]["NIFTY"] in tokens
+
+
+def test_zero_option_tokens_marks_zero_coverage_and_keeps_underlying(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 12, raising=False)
+    monkeypatch.setattr(ws.kite_client, "instruments_cached", lambda *_args, **_kwargs: [], raising=True)
+    fake_resolver = lambda **_kwargs: []
+    monkeypatch.setattr(ws.kite_client, "resolve_option_tokens_window", fake_resolver)
+    assert ws.kite_client.resolve_option_tokens_window is fake_resolver
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=100)
+
+    assert resolution
+    row = resolution[0]
+    assert row.get("option_fail_reason") == "option_tokens_zero"
+    assert row.get("option_coverage_status") == "ZERO"
+    assert int(row.get("resolved_option_count") or 0) == 0
+    assert int(row.get("final_option_count") or 0) == 0
+    assert tokens == [ctx["index_tokens"]["NIFTY"]]
+
+
+def test_degraded_coverage_blocks_until_fresh_option_tick_proves_recovery(monkeypatch):
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    atm = int(ctx["atm_by_symbol"]["NIFTY"])
+    step = int(ctx["step_by_symbol"]["NIFTY"])
+    target_strikes = {atm - step, atm, atm + step, atm + (2 * step)}
+    option_tokens = sorted(
+        int(tok)
+        for tok, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "NIFTY" and int(float(meta.get("strike") or 0)) in target_strikes
+    )
+    assert len(option_tokens) == 8
+
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 12, raising=False)
+    monkeypatch.setattr(ws.kite_client, "instruments_cached", lambda *_args, **_kwargs: [], raising=True)
+    monkeypatch.setattr(ws.kite_client, "resolve_option_tokens_window", lambda **_kwargs: list(option_tokens))
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {}, raising=False)
+
+    tokens, _resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=100)
+
+    import core.blocker_lifecycle as bl
+
+    bl.reset_blocker_registries()
+    option_state = ws._option_runtime_state(
+        now_epoch=200.0,
+        tokens=tokens,
+        expected_counts_by_symbol={"NIFTY": 8},
+        min_required_by_symbol={"NIFTY": 12},
+        ws_connected=True,
+    )
+    assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "NO_LIVE_OPTION_FEED"
+
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {int(option_tokens[0]): 199.5}, raising=False)
+    option_state = ws._option_runtime_state(
+        now_epoch=200.0,
+        tokens=tokens,
+        expected_counts_by_symbol={"NIFTY": 8},
+        min_required_by_symbol={"NIFTY": 12},
+        ws_connected=True,
+    )
+    assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "OK"
 
 
 def test_build_depth_subscription_tokens_prunes_stale_options_but_keeps_fresh_and_underlying(monkeypatch):

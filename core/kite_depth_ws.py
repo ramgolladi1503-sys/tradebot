@@ -2418,13 +2418,27 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
         for tok in option_tokens:
             option_rank_by_token[int(tok)] = _option_distance_rank(option_meta.get(int(tok)), atm, step, int(tok))
         option_fail_reason = None
+        option_coverage_status = "FULL"
+        option_coverage_reason = "full_coverage"
         if expiry is None:
             option_fail_reason = "expiry_unavailable"
         elif atm is None:
             option_fail_reason = "atm_unavailable"
+        elif len(option_tokens) <= 0:
+            option_fail_reason = "option_tokens_zero"
         elif len(option_tokens) < min_option_tokens:
             option_fail_reason = "option_tokens_under_min"
         if option_fail_reason is not None:
+            resolved_option_count = len(option_tokens)
+            if option_fail_reason == "option_tokens_under_min" and resolved_option_count > 0:
+                option_coverage_status = "DEGRADED"
+                option_coverage_reason = "DEGRADED_OPTION_COVERAGE"
+            elif resolved_option_count <= 0:
+                option_coverage_status = "ZERO"
+                option_coverage_reason = option_fail_reason
+            else:
+                option_coverage_status = "FULL"
+                option_coverage_reason = "full_coverage"
             _maybe_raise_option_token_incident(
                 symbol=sym_upper,
                 exchange=exchange,
@@ -2434,8 +2448,10 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                 sample_tokens=option_tokens[:10],
                 fail_reason=option_fail_reason,
             )
-            if option_fail_reason == "option_tokens_under_min":
-                option_tokens = []
+        else:
+            resolved_option_count = len(option_tokens)
+            option_coverage_status = "FULL"
+            option_coverage_reason = "full_coverage"
 
         per_tokens: list[int] = []
         if index_token:
@@ -2483,6 +2499,8 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
                 "resolved_option_count": len(option_tokens),
                 "option_min_required": min_option_tokens,
                 "option_fail_reason": option_fail_reason,
+                "option_coverage_status": option_coverage_status,
+                "option_coverage_reason": option_coverage_reason,
                 "option_strikes_selected": sorted(selected_strikes.keys()),
                 "option_strike_count": len(selected_strikes),
                 "option_two_sided_strike_count": sum(1 for legs in selected_strikes.values() if {"CE", "PE"}.issubset(legs)),
