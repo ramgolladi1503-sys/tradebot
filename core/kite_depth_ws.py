@@ -124,6 +124,21 @@ _LAST_ATM_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_COUNTS_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL: dict[str, int] = {}
 _DEPTH_WS_START_EPOCH: float = 0.0
+
+# LIVE-TRUTH-23: Verified post-start feed recovery gate.
+# Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
+_RESTART_VERIFY_LOCK = threading.Lock()
+_FEED_RESTART_VERIFY_STATE: str = "IDLE"  # IDLE | PENDING | OK | FAILED
+_FEED_RESTART_VERIFY_REASON: str = ""
+_FEED_RESTART_VERIFY_START_EPOCH: float = 0.0
+_FEED_RESTART_VERIFY_DEADLINE_EPOCH: float = 0.0
+_FEED_RESTART_VERIFY_CONNECT_EPOCH: float | None = None
+_FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH: float | None = None
+_FEED_RESTART_VERIFY_VERIFIED_EPOCH: float | None = None
+_FEED_RESTART_VERIFY_FAILURE_DETAIL: str = ""
+_FEED_RESTART_VERIFY_LAST_STAGE_EVENT: str = ""
+
+_RESTART_VERIFY_OPTION_OK_CODES = {"", "OK", "NONE", "HEALTHY", "FRESH"}
 logger = logging.getLogger(__name__)
 _WS_LOGGER = get_rotating_logger("depth_ws_watchdog", _LOG_PATH)
 _WS_LOG_THROTTLE_SEC = 5.0
@@ -1216,6 +1231,324 @@ def _restart_count_1h(now_epoch: float) -> int:
     return len(recent)
 
 
+def _restart_verification_enabled() -> bool:
+    return bool(getattr(cfg, "FEED_RESTART_VERIFY_ENABLE", True))
+
+
+def _restart_verification_require_market_open() -> bool:
+    return bool(getattr(cfg, "FEED_RESTART_VERIFY_REQUIRE_MARKET_OPEN", True))
+
+
+def _restart_verification_require_options() -> bool:
+    return bool(getattr(cfg, "FEED_RESTART_VERIFY_REQUIRE_OPTIONS", True))
+
+
+def _restart_verification_timeout_sec() -> float:
+    try:
+        return max(1.0, float(getattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 15.0)))
+    except Exception:
+        return 15.0
+
+
+def _restart_verification_min_option_ticks_per_symbol() -> int:
+    try:
+        return max(1, int(getattr(cfg, "FEED_RESTART_VERIFY_MIN_OPTION_TICKS_PER_SYMBOL", 1)))
+    except Exception:
+        return 1
+
+
+def _reset_feed_restart_verification(*, reason: str) -> None:
+    global _FEED_RESTART_VERIFY_STATE
+    global _FEED_RESTART_VERIFY_REASON
+    global _FEED_RESTART_VERIFY_START_EPOCH
+    global _FEED_RESTART_VERIFY_DEADLINE_EPOCH
+    global _FEED_RESTART_VERIFY_CONNECT_EPOCH
+    global _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+    global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
+    global _FEED_RESTART_VERIFY_FAILURE_DETAIL
+    global _FEED_RESTART_VERIFY_LAST_STAGE_EVENT
+    if not _restart_verification_enabled():
+        return
+    with _RESTART_VERIFY_LOCK:
+        _FEED_RESTART_VERIFY_STATE = "IDLE"
+        _FEED_RESTART_VERIFY_REASON = str(reason or "")
+        _FEED_RESTART_VERIFY_START_EPOCH = 0.0
+        _FEED_RESTART_VERIFY_DEADLINE_EPOCH = 0.0
+        _FEED_RESTART_VERIFY_CONNECT_EPOCH = None
+        _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = None
+        _FEED_RESTART_VERIFY_VERIFIED_EPOCH = None
+        _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
+        _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = ""
+
+
+def _begin_feed_restart_verification(*, reason: str, start_epoch: float, now_epoch: float) -> None:
+    global _FEED_RESTART_VERIFY_STATE
+    global _FEED_RESTART_VERIFY_REASON
+    global _FEED_RESTART_VERIFY_START_EPOCH
+    global _FEED_RESTART_VERIFY_DEADLINE_EPOCH
+    global _FEED_RESTART_VERIFY_CONNECT_EPOCH
+    global _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+    global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
+    global _FEED_RESTART_VERIFY_FAILURE_DETAIL
+    global _FEED_RESTART_VERIFY_LAST_STAGE_EVENT
+    if not _restart_verification_enabled():
+        return
+    if _restart_verification_require_market_open() and not bool(is_market_open_ist()):
+        return
+    start_epoch_f = float(start_epoch or 0.0)
+    now_epoch_f = float(now_epoch or 0.0)
+    if start_epoch_f <= 0.0:
+        start_epoch_f = now_epoch_f if now_epoch_f > 0.0 else float(now_utc_epoch())
+    if now_epoch_f <= 0.0:
+        now_epoch_f = float(now_utc_epoch())
+    deadline = now_epoch_f + float(_restart_verification_timeout_sec())
+    with _RESTART_VERIFY_LOCK:
+        _FEED_RESTART_VERIFY_STATE = "PENDING"
+        _FEED_RESTART_VERIFY_REASON = str(reason or "")
+        _FEED_RESTART_VERIFY_START_EPOCH = start_epoch_f
+        _FEED_RESTART_VERIFY_DEADLINE_EPOCH = float(deadline)
+        _FEED_RESTART_VERIFY_CONNECT_EPOCH = None
+        _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = None
+        _FEED_RESTART_VERIFY_VERIFIED_EPOCH = None
+        _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
+        _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = ""
+    _log_ws(
+        "FEED_RESTART_VERIFY_BEGIN",
+        {
+            "reason": str(reason or ""),
+            "start_epoch": start_epoch_f,
+            "deadline_epoch": float(deadline),
+            "timeout_sec": float(_restart_verification_timeout_sec()),
+        },
+    )
+
+
+def _record_feed_restart_verify_connect(*, now_epoch: float) -> None:
+    global _FEED_RESTART_VERIFY_CONNECT_EPOCH
+    if not _restart_verification_enabled():
+        return
+    with _RESTART_VERIFY_LOCK:
+        if _FEED_RESTART_VERIFY_STATE != "PENDING":
+            return
+        if _FEED_RESTART_VERIFY_CONNECT_EPOCH is not None:
+            return
+        _FEED_RESTART_VERIFY_CONNECT_EPOCH = float(now_epoch)
+
+
+def _record_feed_restart_verify_subscribe(*, now_epoch: float) -> None:
+    global _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+    if not _restart_verification_enabled():
+        return
+    with _RESTART_VERIFY_LOCK:
+        if _FEED_RESTART_VERIFY_STATE != "PENDING":
+            return
+        if _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH is not None:
+            return
+        _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH = float(now_epoch)
+
+
+def _restart_verify_stage_event(stage: str) -> str:
+    text = str(stage or "").strip().upper()
+    return f"FEED_RESTART_VERIFY_{text}" if text else "FEED_RESTART_VERIFY"
+
+
+def _restart_verify_should_block_runtime_state(state: str) -> bool:
+    return str(state or "").strip().upper() in {"PENDING", "FAILED"}
+
+
+def _restart_verification_proof(now_epoch: float) -> tuple[bool, str, dict[str, object]]:
+    ws_connected = _ws_connected_state()
+    option_state = _option_runtime_state(
+        now_epoch=float(now_epoch),
+        tokens=_LAST_TOKENS,
+        expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
+        min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        ws_connected=ws_connected,
+    )
+    subscribed_by_symbol = dict(option_state.get("subscribed_count_by_symbol") or {})
+    ticks_by_symbol = dict(option_state.get("ticks_received_count_by_symbol") or {})
+    block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
+    total_option_tokens = int(option_state.get("option_count") or 0)
+
+    required_symbols = [
+        str(sym or "").upper()
+        for sym, min_required in dict(_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL or {}).items()
+        if str(sym or "").strip() and int(min_required or 0) > 0
+    ]
+    required_symbols = sorted(set(sym for sym in required_symbols if sym))
+    if not required_symbols:
+        required_symbols = sorted(set(str(sym or "").upper() for sym in subscribed_by_symbol.keys() if str(sym or "").strip()))
+
+    min_ticks = int(_restart_verification_min_option_ticks_per_symbol())
+
+    if _restart_verification_require_options() and total_option_tokens <= 0:
+        return False, "no_subscribed_option_tokens", {
+            "required_symbols": required_symbols,
+            "subscribed_option_tokens_count": total_option_tokens,
+        }
+
+    for sym in required_symbols:
+        subscribed_count = int(subscribed_by_symbol.get(sym, 0) or 0)
+        if subscribed_count <= 0:
+            return False, f"missing_option_subscriptions:{sym}", {
+                "required_symbols": required_symbols,
+                "subscribed_by_symbol": subscribed_by_symbol,
+                "ticks_by_symbol": ticks_by_symbol,
+                "block_reason_by_symbol": block_reason_by_symbol,
+            }
+        ticks_received = int(ticks_by_symbol.get(sym, 0) or 0)
+        if ticks_received < min_ticks:
+            return False, f"insufficient_option_ticks:{sym}", {
+                "required_symbols": required_symbols,
+                "min_ticks_per_symbol": min_ticks,
+                "subscribed_by_symbol": subscribed_by_symbol,
+                "ticks_by_symbol": ticks_by_symbol,
+                "block_reason_by_symbol": block_reason_by_symbol,
+            }
+        block_reason = str(block_reason_by_symbol.get(sym, "OK") or "OK").strip().upper()
+        if block_reason not in _RESTART_VERIFY_OPTION_OK_CODES:
+            return False, f"feed_blocked:{sym}:{block_reason}", {
+                "required_symbols": required_symbols,
+                "min_ticks_per_symbol": min_ticks,
+                "subscribed_by_symbol": subscribed_by_symbol,
+                "ticks_by_symbol": ticks_by_symbol,
+                "block_reason_by_symbol": block_reason_by_symbol,
+            }
+
+    return True, "ok", {
+        "required_symbols": required_symbols,
+        "min_ticks_per_symbol": min_ticks,
+        "subscribed_by_symbol": subscribed_by_symbol,
+        "ticks_by_symbol": ticks_by_symbol,
+        "block_reason_by_symbol": block_reason_by_symbol,
+        "ws_connected": ws_connected,
+    }
+
+
+def _tick_feed_restart_verification(*, now_epoch: float) -> None:
+    global _FEED_RESTART_VERIFY_STATE
+    global _FEED_RESTART_VERIFY_FAILURE_DETAIL
+    global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
+    global _FEED_RESTART_VERIFY_LAST_STAGE_EVENT
+    if not _restart_verification_enabled():
+        return
+
+    now_epoch_f = float(now_epoch or 0.0)
+    if now_epoch_f <= 0.0:
+        now_epoch_f = float(now_utc_epoch())
+
+    with _RESTART_VERIFY_LOCK:
+        state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
+        if state != "PENDING":
+            return
+        start_epoch = float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0)
+        deadline = float(_FEED_RESTART_VERIFY_DEADLINE_EPOCH or 0.0)
+        connect_epoch = _FEED_RESTART_VERIFY_CONNECT_EPOCH
+        subscribe_epoch = _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH
+        reason = str(_FEED_RESTART_VERIFY_REASON or "")
+
+    stage = "WAITING_CONNECT"
+    if connect_epoch is not None and float(connect_epoch) >= start_epoch:
+        stage = "WAITING_SUBSCRIBE"
+    if subscribe_epoch is not None and float(subscribe_epoch) >= start_epoch:
+        stage = "WAITING_OPTION_TICKS"
+
+    stage_event = _restart_verify_stage_event(stage)
+    with _RESTART_VERIFY_LOCK:
+        if _FEED_RESTART_VERIFY_LAST_STAGE_EVENT != stage_event:
+            _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = stage_event
+            _log_ws(
+                stage_event,
+                {
+                    "reason": reason,
+                    "start_epoch": start_epoch,
+                    "deadline_epoch": deadline,
+                    "now_epoch": now_epoch_f,
+                    "connect_epoch": connect_epoch,
+                    "subscribe_epoch": subscribe_epoch,
+                },
+            )
+
+    verified = False
+    verify_detail = "unknown"
+    verify_meta: dict[str, object] = {}
+    if subscribe_epoch is not None and float(subscribe_epoch) >= start_epoch:
+        try:
+            verified, verify_detail, verify_meta = _restart_verification_proof(now_epoch_f)
+        except Exception as exc:
+            verified = False
+            verify_detail = f"proof_exception:{type(exc).__name__}:{exc}"
+
+    if verified:
+        with _RESTART_VERIFY_LOCK:
+            if _FEED_RESTART_VERIFY_STATE == "PENDING":
+                _FEED_RESTART_VERIFY_STATE = "OK"
+                _FEED_RESTART_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
+                _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
+        _log_ws(
+            "FEED_RESTART_VERIFIED_OK",
+            {
+                "reason": reason,
+                "start_epoch": start_epoch,
+                "verified_epoch": float(now_epoch_f),
+                "connect_epoch": connect_epoch,
+                "subscribe_epoch": subscribe_epoch,
+                "meta": verify_meta,
+            },
+        )
+        return
+
+    if deadline > 0.0 and now_epoch_f >= deadline:
+        with _RESTART_VERIFY_LOCK:
+            if _FEED_RESTART_VERIFY_STATE == "PENDING":
+                _FEED_RESTART_VERIFY_STATE = "FAILED"
+                _FEED_RESTART_VERIFY_FAILURE_DETAIL = str(verify_detail or "timeout")
+        _log_ws(
+            "FEED_RESTART_VERIFY_FAILED",
+            {
+                "reason": reason,
+                "start_epoch": start_epoch,
+                "deadline_epoch": deadline,
+                "now_epoch": now_epoch_f,
+                "connect_epoch": connect_epoch,
+                "subscribe_epoch": subscribe_epoch,
+                "detail": str(verify_detail or "timeout"),
+                "meta": verify_meta,
+            },
+        )
+
+
+def _restart_verify_overlay_payload() -> dict[str, object]:
+    if not _restart_verification_enabled():
+        return {}
+    with _RESTART_VERIFY_LOCK:
+        return {
+            "state": str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper(),
+            "reason": str(_FEED_RESTART_VERIFY_REASON or ""),
+            "start_epoch": float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0),
+            "deadline_epoch": float(_FEED_RESTART_VERIFY_DEADLINE_EPOCH or 0.0),
+            "connect_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_CONNECT_EPOCH),
+            "subscribe_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH),
+            "verified_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_VERIFIED_EPOCH),
+            "failure_detail": str(_FEED_RESTART_VERIFY_FAILURE_DETAIL or ""),
+        }
+
+
+def _effective_runtime_state_for_snapshot(runtime_state: str, *, now_epoch: float) -> tuple[str, str | None]:
+    """Return (effective_runtime_state, failure_detail_override_or_none)."""
+    if not _restart_verification_enabled():
+        return runtime_state, None
+    _tick_feed_restart_verification(now_epoch=float(now_epoch))
+    with _RESTART_VERIFY_LOCK:
+        state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
+        detail = str(_FEED_RESTART_VERIFY_FAILURE_DETAIL or "").strip()
+    if state == "PENDING":
+        return "RESTART_VERIFY_PENDING", None
+    if state == "FAILED":
+        return "RESTART_VERIFY_FAILED", (detail or "restart_verification_failed")
+    return runtime_state, None
+
+
 def _subscribed_tokens_count_by_symbol(tokens: list[int] | None) -> dict[str, int]:
     counts: dict[str, int] = {}
     for tok in list(tokens or []):
@@ -1439,6 +1772,12 @@ def _write_feed_runtime_snapshot(
     last_error: str | None = None,
 ) -> None:
     path = logs_dir() / "feed_runtime_latest.json"
+    raw_state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
+    effective_state_text, restart_verify_failure = _effective_runtime_state_for_snapshot(
+        raw_state_text,
+        now_epoch=float(now_epoch),
+    )
+    restart_verify = _restart_verify_overlay_payload()
     payload = {
         "ts_epoch": float(now_epoch),
         "ws_connected": ws_connected,
@@ -1466,9 +1805,13 @@ def _write_feed_runtime_snapshot(
         "option_active_blockers_by_symbol": dict(option_active_blockers_by_symbol or {}),
         "restart_count_1h": int(restart_count_1h),
         "stale_strikes": int(stale_strikes),
-        "runtime_state": str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper(),
+        "runtime_state": effective_state_text,
         "last_error": str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000],
     }
+    if restart_verify:
+        payload["restart_verification"] = restart_verify
+    if restart_verify_failure:
+        payload["restart_verification_failure_detail"] = str(restart_verify_failure)
     payload["effective_ws_connected"] = derive_effective_ws_connected(payload)
     payload["feed_ok"] = derive_feed_ok(payload)
     payload = stamp_runtime_payload(
@@ -1514,6 +1857,10 @@ def _persist_runtime_snapshot_row(
 ) -> None:
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
+    effective_state_text, restart_verify_failure = _effective_runtime_state_for_snapshot(
+        state_text,
+        now_epoch=ts_epoch,
+    )
     err_text = str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000]
     sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
     missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
@@ -1544,6 +1891,7 @@ def _persist_runtime_snapshot_row(
         min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
         ws_connected=ws_connected,
     )
+    restart_verify = _restart_verify_overlay_payload()
     payload = {
         "ts_epoch": ts_epoch,
         "ws_connected": ws_connected,
@@ -1573,9 +1921,13 @@ def _persist_runtime_snapshot_row(
         "last_depth_age_sec": last_depth_age_sec,
         "state_machine": dict(state_machine or {}),
         "source": source,
-        "runtime_state": state_text,
+        "runtime_state": effective_state_text,
         "last_error": err_text,
     }
+    if restart_verify:
+        payload["restart_verification"] = restart_verify
+    if restart_verify_failure:
+        payload["restart_verification_failure_detail"] = str(restart_verify_failure)
     ok = write_feed_runtime_snapshot(payload)
     if not ok:
         _log_ws("FEED_RUNTIME_STORE_WRITE_ERROR", {"source": source})
@@ -1606,7 +1958,7 @@ def _persist_runtime_snapshot_row(
         option_active_blockers_by_symbol=dict(option_state.get("active_blockers_by_symbol") or {}),
         restart_count_1h=_restart_count_1h(ts_epoch),
         stale_strikes=_STALE_STRIKES,
-        runtime_state=state_text,
+        runtime_state=effective_state_text,
         last_error=err_text,
     )
 
@@ -3029,6 +3381,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
     Stop watchdog and close existing KiteTicker instance.
     """
     global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
     watchdog_thread = None
     ticker_instance = None
     stop_timeout_sec = float(getattr(cfg, "DEPTH_WATCHDOG_STOP_TIMEOUT_SEC", 3.0))
@@ -3232,6 +3585,11 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         _FULL_RESTARTS.append(now)
         _STALE_STRIKES = 0
         _log_ws("FEED_FULL_RESTART_OK", {"reason": reason, "tokens": len(tokens), **selection_payload})
+        _begin_feed_restart_verification(
+            reason=str(reason or ""),
+            start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
+            now_epoch=float(now),
+        )
         return True
 
 
@@ -3579,6 +3937,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if desired:
             ws.subscribe(desired)
             ws.set_mode(ws.MODE_FULL, desired)
+        _record_feed_restart_verify_subscribe(now_epoch=float(now_utc_epoch()))
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
         logger.info(
@@ -3629,6 +3988,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
             _log_ws("FEED_CONNECT", {"tokens": len(tokens), "response": str(response)})
             logger.info(
                 "depth_ws_connected token_count=%d first_tokens=%s",
@@ -3666,6 +4026,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_reconnect(ws, attempts):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
             _resubscribe_full(ws, reason=f"reconnect:{attempts}")
             _RUNTIME_STATE = "RUNNING"
             _LAST_RUNTIME_ERROR = ""
