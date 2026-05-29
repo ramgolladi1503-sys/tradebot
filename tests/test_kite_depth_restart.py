@@ -597,3 +597,95 @@ def test_option_runtime_state_distinguishes_no_token_no_live_and_stale(monkeypat
     )
     assert stale["feed_block_reason_by_symbol"]["NIFTY"] == "NO_LIVE_OPTION_FEED"
     assert stale["active_blockers_by_symbol"]["NIFTY"] == ["NO_LIVE_OPTION_FEED", "STALE_OPTION_LTP"]
+
+def test_restart_returns_false_when_start_fails_after_stop(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+
+    events = []
+    snapshots = []
+    calls = {"stop": 0, "start": 0, "stop_requested_at_start": None}
+
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **kwargs: snapshots.append(kwargs))
+
+    def _stop(reason="manual_stop"):
+        calls["stop"] += 1
+        ws._STOP_REQUESTED = True
+
+    def _start(tokens, profile_verified=False, **kwargs):
+        calls["start"] += 1
+        calls["stop_requested_at_start"] = ws._STOP_REQUESTED
+        return False
+
+    monkeypatch.setattr(ws, "stop_depth_ws", _stop)
+    monkeypatch.setattr(ws, "start_depth_ws", _start)
+
+    assert ws.restart_depth_ws(
+        reason="ws_error:1006",
+        ignore_cooldown=True,
+        force_full_restart=True,
+    ) is False
+
+    assert calls["stop"] == 1
+    assert calls["start"] == 1
+    assert calls["stop_requested_at_start"] is False
+    assert "FEED_FULL_RESTART_OK" not in [event for event, _payload in events]
+    assert "FEED_FULL_RESTART_FAILED_AFTER_STOP" in [event for event, _payload in events]
+    assert any(row["runtime_state"] == "RESTARTING" for row in snapshots)
+    assert any(row["runtime_state"] == "RESTART_FAILED" for row in snapshots)
+
+
+def test_restart_writes_start_requested_before_ok_when_start_handoff_succeeds(monkeypatch):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+
+    events = []
+    snapshots = []
+    calls = {"stop": 0, "start": 0}
+
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **kwargs: snapshots.append(kwargs))
+
+    def _stop(reason="manual_stop"):
+        calls["stop"] += 1
+        ws._STOP_REQUESTED = True
+
+    def _start(tokens, profile_verified=False, **kwargs):
+        calls["start"] += 1
+        assert ws._STOP_REQUESTED is False
+        return True
+
+    monkeypatch.setattr(ws, "stop_depth_ws", _stop)
+    monkeypatch.setattr(ws, "start_depth_ws", _start)
+
+    assert ws.restart_depth_ws(
+        reason="ws_error:1006",
+        ignore_cooldown=True,
+        force_full_restart=True,
+    ) is True
+
+    assert calls == {"stop": 1, "start": 1}
+    event_names = [event for event, _payload in events]
+    assert "FEED_FULL_RESTART_BEGIN" in event_names
+    assert "FEED_FULL_RESTART_OK" in event_names
+    assert any(row["source"] == "restart_depth_ws:begin:ws_error:1006" for row in snapshots)
+    assert any(row["source"] == "restart_depth_ws:start_requested:ws_error:1006" for row in snapshots)
