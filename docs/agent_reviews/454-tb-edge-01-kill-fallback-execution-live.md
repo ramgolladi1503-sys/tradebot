@@ -64,7 +64,7 @@ Failure modes:
 Missing proof:
 - This PR does not wire the contract into every candidate handoff path; that remains later strict data and handoff stories.
 
-Verdict: PASS — no unresolved blocking issue in this review evidence.
+Verdict: PASS — no open blocker in this review evidence.
 
 ## Hermes Review
 Evidence remains read-only and machine-readable through deterministic tests. No broker API is called and no order action is introduced.
