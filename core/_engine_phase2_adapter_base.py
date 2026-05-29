@@ -1233,3 +1233,8 @@ def run_engine_phase2(
         "ranked": ranked_top,
         "next_active_trade": None,
     }
+
+
+# Preserve a stable reference to the original Phase2 builder so adapter wrappers
+# can safely delegate even after module-level monkeypatching or reloads.
+_BASE_BUILD_CANDIDATES_PHASE2 = build_candidates_phase2
