@@ -142,6 +142,10 @@ from core.runtime_notrade_reason_truth import (
     write_notrade_reason_truth_latest,
 )
 from core.candidate_row_classification import classify_candidate_row
+from core.runtime_ranking_quality_evidence import (
+    build_ranking_quality_evidence_payload,
+    write_ranking_quality_latest,
+)
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -6781,6 +6785,16 @@ class Orchestrator:
                         write_notrade_reason_truth_latest(payload=notrade_payload)
                     except Exception as notrade_exc:
                         logger.warning("notrade_reason_truth_write_failed err=%s", notrade_exc)
+                    try:
+                        rq_payload = build_ranking_quality_evidence_payload(
+                            candidates=[cand for cand in list(cycle_ranked_candidates or []) if isinstance(cand, dict)],
+                            phase2_state=str(top_payload.get("phase2_state") or ""),
+                            cycle_primary_reason=str(top_payload.get("cycle_primary_reason") or "") or None,
+                            phase2_min_enter_score=float(getattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.70) or 0.70),
+                        )
+                        write_ranking_quality_latest(payload=rq_payload)
+                    except Exception as rq_exc:
+                        logger.warning("ranking_quality_write_failed err=%s", rq_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
