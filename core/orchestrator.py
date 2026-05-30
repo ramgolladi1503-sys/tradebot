@@ -137,6 +137,10 @@ from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
     write_candidate_handoff_root_cause_latest,
 )
+from core.runtime_notrade_reason_truth import (
+    build_notrade_reason_truth_payload,
+    write_notrade_reason_truth_latest,
+)
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -6725,6 +6729,19 @@ class Orchestrator:
                         write_candidate_handoff_root_cause_latest(payload=root_cause_payload)
                     except Exception as handoff_exc:
                         logger.warning("candidate_handoff_root_cause_write_failed err=%s", handoff_exc)
+                    try:
+                        # Evidence-only: summarize why no-trade/no-executable is happening without mutating decisions.
+                        phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
+                        feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
+                        notrade_payload = build_notrade_reason_truth_payload(
+                            candidate_handoff=root_cause_payload if isinstance(root_cause_payload, dict) else {},
+                            phase2_rejection=phase2_rejection_payload,
+                            feed_truth=feed_truth_payload,
+                            top_opportunities=top_payload,
+                        )
+                        write_notrade_reason_truth_latest(payload=notrade_payload)
+                    except Exception as notrade_exc:
+                        logger.warning("notrade_reason_truth_write_failed err=%s", notrade_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
