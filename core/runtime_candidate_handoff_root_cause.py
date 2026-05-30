@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from core.events import write_json_atomic
-from core.paths import logs_dir, runtime_dir
+from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
 RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_SCHEMA_VERSION = 2
@@ -300,13 +300,18 @@ def write_candidate_handoff_root_cause_latest(
     logs_path: Path | None = None,
     runtime_path: Path | None = None,
 ) -> tuple[Path, Path]:
-    logs_target = Path(logs_path) if logs_path is not None else (logs_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME)
+    # Contract: write both repo-local `logs/` and runtime `.runtime/` latest artifacts.
+    # For backward compatibility, also mirror into runtime `logs_dir()` (usually `.runtime/logs`).
+    logs_target = Path(logs_path) if logs_path is not None else (repo_logs_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME)
     runtime_target = Path(runtime_path) if runtime_path is not None else (runtime_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME)
+    runtime_logs_target = logs_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME
     logs_target.parent.mkdir(parents=True, exist_ok=True)
     runtime_target.parent.mkdir(parents=True, exist_ok=True)
+    runtime_logs_target.parent.mkdir(parents=True, exist_ok=True)
     out = dict(payload) if isinstance(payload, Mapping) else {}
     write_json_atomic(logs_target, out)
     write_json_atomic(runtime_target, out)
+    write_json_atomic(runtime_logs_target, out)
     return logs_target, runtime_target
 
 

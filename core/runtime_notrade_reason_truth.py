@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from core.events import write_json_atomic
-from core.paths import logs_dir, runtime_dir
+from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
 RUNTIME_NOTRADE_REASON_TRUTH_SCHEMA_VERSION = 1
@@ -186,13 +186,18 @@ def write_notrade_reason_truth_latest(
     logs_path: Path | None = None,
     runtime_path: Path | None = None,
 ) -> tuple[Path, Path]:
-    logs_target = Path(logs_path) if logs_path is not None else (logs_dir() / RUNTIME_NOTRADE_REASON_TRUTH_FILENAME)
+    # Contract: write both repo-local `logs/` and runtime `.runtime/` latest artifacts.
+    # For backward compatibility, also mirror into runtime `logs_dir()` (usually `.runtime/logs`).
+    logs_target = Path(logs_path) if logs_path is not None else (repo_logs_dir() / RUNTIME_NOTRADE_REASON_TRUTH_FILENAME)
     runtime_target = Path(runtime_path) if runtime_path is not None else (runtime_dir() / RUNTIME_NOTRADE_REASON_TRUTH_FILENAME)
+    runtime_logs_target = logs_dir() / RUNTIME_NOTRADE_REASON_TRUTH_FILENAME
     logs_target.parent.mkdir(parents=True, exist_ok=True)
     runtime_target.parent.mkdir(parents=True, exist_ok=True)
+    runtime_logs_target.parent.mkdir(parents=True, exist_ok=True)
     out = dict(payload) if isinstance(payload, Mapping) else {}
     write_json_atomic(logs_target, out)
     write_json_atomic(runtime_target, out)
+    write_json_atomic(runtime_logs_target, out)
     return logs_target, runtime_target
 
 
@@ -201,4 +206,3 @@ __all__ = [
     "build_notrade_reason_truth_payload",
     "write_notrade_reason_truth_latest",
 ]
-

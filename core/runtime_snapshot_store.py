@@ -11,7 +11,7 @@ from core.latest_artifact_freshness_guard import (
     LatestArtifactFreshnessDecision,
     assess_latest_artifact_freshness,
 )
-from core.paths import runtime_dir
+from core.paths import repo_logs_dir, runtime_dir
 
 
 SNAPSHOT_WRAPPER_SCHEMA_VERSION = 1
@@ -59,6 +59,35 @@ def write_snapshot_atomic(
         schema_version=schema_version,
     )
     return write_json_atomic(target, envelope)
+
+
+def write_top_opportunities_snapshots(
+    *,
+    payload: Any,
+    producer: str,
+    generated_at: str | None = None,
+    schema_version: int = SNAPSHOT_WRAPPER_SCHEMA_VERSION,
+) -> tuple[Path, Path]:
+    """Write top opportunities latest snapshot to both runtime and repo-local logs.
+
+    This is a snapshot envelope (same schema as write_snapshot_atomic). It is read-only
+    and must not alter any trading decisions.
+    """
+    runtime_path = write_snapshot_atomic(
+        runtime_dir() / "top_opportunities_latest.json",
+        payload=payload,
+        producer=producer,
+        generated_at=generated_at,
+        schema_version=schema_version,
+    )
+    logs_path = write_snapshot_atomic(
+        repo_logs_dir() / "top_opportunities_latest.json",
+        payload=payload,
+        producer=producer,
+        generated_at=generated_at,
+        schema_version=schema_version,
+    )
+    return runtime_path, logs_path
 
 
 def read_snapshot(path: str | Path) -> dict[str, Any]:

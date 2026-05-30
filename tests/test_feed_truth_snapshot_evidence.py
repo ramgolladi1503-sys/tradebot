@@ -16,6 +16,7 @@ def _runtime_dirs(tmp_path, monkeypatch):
     logs_root.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("DATA_ROOT", str(runtime_root))
     monkeypatch.setenv("LOG_DIR", str(logs_root))
+    monkeypatch.setenv("REPO_LOG_DIR", str(logs_root))
     return runtime_root, logs_root
 
 

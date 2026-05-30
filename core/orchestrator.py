@@ -131,7 +131,7 @@ from core.market_snapshot_builder import (
 )
 from core.market_snapshot_store import write_market_snapshot_atomic
 from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
-from core.runtime_snapshot_store import TOP_OPPORTUNITIES_LATEST_PATH, write_snapshot_atomic
+from core.runtime_snapshot_store import write_top_opportunities_snapshots
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
@@ -6810,11 +6810,7 @@ class Orchestrator:
                                     handoff_snapshot.get("symbol"),
                                     handoff_exc,
                                 )
-                    write_snapshot_atomic(
-                        TOP_OPPORTUNITIES_LATEST_PATH,
-                        payload=top_payload,
-                        producer="orchestrator",
-                    )
+                    write_top_opportunities_snapshots(payload=top_payload, producer="orchestrator")
                 except Exception as top_exc:
                     logger.warning("top_opportunities_snapshot_write_failed err=%s", top_exc)
                 try:
