@@ -4,6 +4,53 @@
 - Purpose: CI validation + evidence/observability pack only (no gate weakening, no LIVE enablement, no broker/order paths touched).
 - Market note: market is closed for the next ~2 days; closed-market no-executable is not a production failure.
 
+## Agent Work Contract
+
+source: agent
+mode: stabilization
+candidate_id: N/A
+decision: evidence_pack_only
+reason: make candidate/feed/phase2/ranking truth observable; do not change decisions
+timestamp: 2026-05-30
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/tb_edge_candidate_unblock_stabilization.md
+
+## Scope Guard
+
+- In scope: add/extend machine-readable runtime artifacts + deterministic tests proving artifacts do not alter decisions; minimal quote-truth propagation needed for Phase2 contract.
+- Out of scope: broker/order execution, LIVE enablement, gate weakening, ranking threshold/weight tuning, strategy logic changes, UI redesign.
+- Safety posture: all evidence writers must be exception-safe and read-only with respect to trading decisions.
+
+## Grill Me Review
+
+- weak_assumptions:
+  - Evidence artifacts will not be misread as “success” during market-closed.
+  - Artifact writes are exception-safe and do not mutate decision inputs.
+- failure_modes:
+  - Evidence crash could halt orchestration if not guarded.
+  - Operator confusion if row classes implied executability when blocked by gates.
+- missing_proof:
+  - Market-open runtime proof is pending; CI + artifacts are the current validation layer.
+- verdict: PASS (evidence-only + fail-closed preserved)
+
+## Hermes Review
+
+- scope_pass_fail: PASS
+- boundary_violations: none (no broker/order/live enablement)
+- files_not_to_touch_check: PASS
+- verdict: PASS
+
+## GSD Review
+
+- purpose: provide a stabilization evidence pack so CI can validate, and operators can diagnose candidate drop/rejection causes without guessing.
+- scope: evidence-only artifacts + tests; no gate weakening; no threshold lowering.
+- files_changed: core evidence modules + orchestrator wiring + tests + docs (see cluster table).
+- tests_or_reason_not_required: full test suite run locally (see below).
+- evidence: artifacts added under logs/ and .runtime/ latest-snapshot semantics; tests assert determinism and no stale counter reuse.
+- risks: market-open validation required to confirm live tick proof and real-data availability.
+- next_pr: after market reopen, use artifacts to identify the next minimal fix cluster.
+
 ## Cluster commits (8)
 
 | # | Commit | Cluster | Summary |
@@ -127,8 +174,50 @@ Expected outcome:
 1. Run a dry-live session (no broker/order calls) and capture the latest artifacts above.
 2. Verify:
    - feed connected vs fresh truth separation (`feed_truth_latest.json`)
-   - Phase2 rejection reasons match missing data vs hard blockers (`phase2_rejection_latest.json`)
+   - Phase2 rejection outputs distinguish absent data vs hard blockers (`phase2_rejection_latest.json`)
    - row classes are consistent with Phase2 (`top_opportunities_latest.json`)
    - ranking separation and compression flags (`ranking_quality_latest.json`)
 3. Only after evidence confirms root-cause, propose the next minimal fix cluster (separate PR).
 
+## High-Risk Path Review
+
+High-risk paths changed in this stabilization branch:
+- `core/orchestrator.py` (runtime wiring for evidence; must be exception-safe)
+- `strategies/trade_builder.py` (candidate construction; quote-truth propagation only)
+
+Risk posture:
+- No execution boundary changes.
+- No broker/order code touched.
+- Evidence writes are guarded to avoid crashing decision paths.
+
+## QA / Safety Review
+
+- Deterministic tests added per cluster validate:
+  - artifact write behavior and schema stability
+  - stale counter resets across cycles
+  - fallback/recovered_fallback remains non-executable and classified as non-executable
+  - closed-market behavior is represented explicitly (no false “live success” claim)
+
+## Acceptance Proof
+
+- Local full suite:
+  - `PYTHONPATH=. python -m pytest -q tests`
+  - Result: PASS (see latest run output in local validation; CI pending)
+
+## Runtime Proof Required After Merge
+
+- After market reopens, run a dry-live monitoring cycle and confirm artifacts reflect:
+  - `market_closed_detected=false`
+  - fresh option ticks and selected contract quote truth fields present for real candidates
+  - Phase2 rejection outputs converge toward score/edge rather than absent quote truth
+
+## What This PR Does Not Prove
+
+- Does not prove profitability or strategy edge.
+- Does not prove broker reconciliation correctness (intentionally untouched).
+- Does not prove live entry executions (no broker/order calls; market currently closed).
+
+## Human Approval
+
+- Required: YES (high-risk paths include `strategies/` and `core/orchestrator.py`)
+- Status: PENDING
