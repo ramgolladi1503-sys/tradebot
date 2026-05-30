@@ -141,6 +141,7 @@ from core.runtime_notrade_reason_truth import (
     build_notrade_reason_truth_payload,
     write_notrade_reason_truth_latest,
 )
+from core.candidate_row_classification import classify_candidate_row
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -1048,11 +1049,48 @@ def _build_top_opportunities_payload(
     )
     notes: list[str] = []
 
+    # Evidence-only: if present, include the cycle-level primary reason without changing Phase2 behavior.
+    cycle_primary_reason = None
+    try:
+        notrade_payload = _read_json_dict(logs_dir() / "notrade_reason_truth_latest.json")
+        cycle_primary_reason = str(notrade_payload.get("primary_reason") or "").strip() or None
+    except Exception:
+        cycle_primary_reason = None
+
     def _project(rows: list, label: str) -> list[dict]:
         projected: list[dict] = []
         for candidate in rows or []:
             advisory_row = project_advisory_row(candidate)
             if isinstance(advisory_row, dict):
+                try:
+                    cls = classify_candidate_row(
+                        row=advisory_row,
+                        phase2_state=str(phase2_result.get("state") or "NO_TRADE"),
+                        cycle_primary_reason=cycle_primary_reason,
+                    )
+                    advisory_row.update(cls.to_dict())
+                    advisory_row.setdefault(
+                        "primary_reason",
+                        advisory_row.get("execution_quality_reason_code")
+                        or advisory_row.get("execution_block_reason")
+                        or advisory_row.get("permission_reason")
+                        or advisory_row.get("phase2_soft_degrade_reason")
+                        or None,
+                    )
+                    advisory_row.setdefault(
+                        "execution_block_reason",
+                        advisory_row.get("execution_quality_reason_code")
+                        or advisory_row.get("execution_block_reason")
+                        or advisory_row.get("permission_reason")
+                        or None,
+                    )
+                    for key in ("quote_source", "quote_age_sec", "spread_pct"):
+                        advisory_row.setdefault(key, None)
+                    sf = advisory_row.get("source_flags") if isinstance(advisory_row.get("source_flags"), dict) else {}
+                    if isinstance(sf, dict):
+                        advisory_row.setdefault("recovered_fallback", bool(sf.get("recovered_fallback")))
+                except Exception:
+                    pass
                 projected.append(advisory_row)
             else:
                 trade_id = getattr(candidate, "trade_id", None) if not isinstance(candidate, dict) else candidate.get("trade_id")
@@ -1100,6 +1138,7 @@ def _build_top_opportunities_payload(
         "phase2_reason": str(phase2_result.get("reason") or ""),
         "phase2_ranked_count": int(len(ranked)),
         "phase2_selected_trade_id": selected_id or None,
+        "cycle_primary_reason": cycle_primary_reason,
         "_phase2_next_active_trade": phase2_result.get("next_active_trade"),
         "notes": notes,
     }
