@@ -11,6 +11,8 @@ from core.live_indicator_readiness import (
     INDICATOR_STALE,
     INDICATOR_VALUE_MISSING,
     build_live_indicator_readiness_report,
+    build_live_indicator_readiness_runtime_payload,
+    write_live_indicator_readiness_latest,
 )
 
 
@@ -149,3 +151,24 @@ def test_multiple_symbols_keep_per_symbol_diagnostics():
     assert report.get("BANKNIFTY").ready is False
     assert report.to_payload()["ready_symbols"] == ["NIFTY"]
     assert report.to_payload()["blocked_symbols"] == ["BANKNIFTY"]
+
+
+def test_runtime_latest_payload_emits_schema2_provenance_and_by_symbol_contract(tmp_path, monkeypatch):
+    report = build_live_indicator_readiness_report((_ready_snapshot(),), now_epoch=1_030.0)
+    payload = build_live_indicator_readiness_runtime_payload(report, now_epoch=1_030.0)
+    assert payload["schema_version"] == 2
+    assert payload["writer_schema_version"] == 2
+    assert payload["writer_name"] == "live_indicator_readiness"
+    assert payload["writer_module"]
+    assert isinstance(payload["generated_epoch"], float)
+    assert payload["read_only"] is True
+    assert payload["append"] is False
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+    assert payload["by_symbol"]["NIFTY"]["rsi_present"] is True
+    assert payload["by_symbol"]["NIFTY"]["ema_present"] is True
+    assert payload["by_symbol"]["NIFTY"]["indicator_missing_inputs"] == []
+
+    target = tmp_path / "live_indicator_readiness_latest.json"
+    write_live_indicator_readiness_latest(report, path=target, now_epoch=1_030.0)
+    assert target.exists()

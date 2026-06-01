@@ -150,6 +150,10 @@ from core.runtime_live_workload_evidence import (
     build_live_workload_payload,
     write_live_workload_latest,
 )
+from core.live_indicator_readiness import (
+    build_live_indicator_readiness_report,
+    write_live_indicator_readiness_latest,
+)
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
     NODE_N1_MARKET_OPEN,
@@ -6781,6 +6785,19 @@ class Orchestrator:
                         phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
                         feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
                         indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
+                        try:
+                            # Refresh indicator readiness artifact from current cycle market snapshots so
+                            # it cannot remain stale when the orchestrator is actively running.
+                            indicator_report = build_live_indicator_readiness_report(
+                                [row for row in list(market_data_list or []) if isinstance(row, dict)],
+                                now_epoch=float(time.time()),
+                                warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
+                                source="orchestrator_live_indicator_readiness_v2",
+                            )
+                            write_live_indicator_readiness_latest(indicator_report, now_epoch=float(time.time()))
+                            indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
+                        except Exception:
+                            pass
                         regime_by_symbol = {}
                         regime_gate_reasons = {}
                         try:
