@@ -33,6 +33,7 @@ def test_live_workload_payload_includes_strike_config_and_chain_counts(tmp_path:
     assert payload["writer_schema_version"] == payload["schema_version"]
     assert payload["writer_name"] == "runtime_live_workload_evidence"
     assert "candidate_generation_ms" in payload
+    assert "fetch_option_chain_ms" in payload
     assert "db_tick_read_query_count" in payload
     assert payload["option_chain_total_rows"] == 3
     assert payload["option_chain_rows_by_symbol"]["NIFTY"] == 2
@@ -53,6 +54,7 @@ def test_live_workload_writer_writes_both_logs_and_runtime(tmp_path: Path):
     assert payload["timing_detail_available"] is False
     assert payload["timing_detail_missing_reason"] == "orchestrator_timing_not_provided"
     assert "live_cycle_ms" in payload
+    assert "fetch_option_chain_ms" in payload
     p_logs, p_runtime = write_live_workload_latest(payload=payload, logs_path=logs_path, runtime_path=runtime_path)
     assert p_logs == logs_path
     assert p_runtime == runtime_path

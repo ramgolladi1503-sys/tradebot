@@ -75,6 +75,7 @@ def build_live_workload_payload(
     # Timing fields are evidence-only. Do not invent; emit None when unavailable.
     timing_fields = {
         "candidate_generation_ms": timing_map.get("candidate_generation_ms"),
+        "fetch_option_chain_ms": timing_map.get("fetch_option_chain_ms"),
         "fetch_live_market_data_ms": timing_map.get("fetch_live_market_data_ms"),
         "build_cycle_market_data_ms": timing_map.get("build_cycle_market_data_ms"),
         "refresh_decay_report_ms": timing_map.get("refresh_decay_report_ms"),
