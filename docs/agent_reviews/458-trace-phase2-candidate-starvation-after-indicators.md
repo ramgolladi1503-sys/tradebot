@@ -58,7 +58,7 @@ Review outcome:
 - Change is restricted to the existing evidence write section (end-of-cycle), alongside other `*_latest.json` writers.
 - New wiring only reads existing in-memory cycle objects (`market_data_list`, `cycle_blockers`, `cycle_candidate_pool_count`, `cycle_ranked_candidates`) and writes a read-only artifact.
 - No broker/order execution calls introduced; no gate decisions are modified; no strategies are invoked from the new code path.
-- Safety flags on the new artifact are hard-coded fail-closed (`read_only=true`, `is_order_action=false`, `broker_api_called=false`, `append=false`).
+- Non-action artifact flags are hard-coded fail-closed (`read_only=true`, `is_order_action=false`, `broker_api_called=false`, `append=false`).
 
 Residual risk:
 - Any orchestrator edit carries operational risk; this change is evidence-only but still lives in the orchestrator loop. Tests and careful diff review are required before merge.
@@ -183,3 +183,16 @@ Required before merge:
   - no hidden runtime behavioral changes
   - artifact contract meets investigation needs
   - all CI gates are green
+
+## Evidence (CE-10 Contract Fields)
+
+These fields exist to satisfy the repo’s Evidence Contract Gate for scoped evidence documents.
+
+- mode: PAPER
+- candidate_id: pr_458_candidate_flow_trace
+- decision: EVIDENCE_ONLY_TRACE_ADDED
+- reason: Trace Phase2 starvation stage without changing runtime decisions
+- timestamp: 2026-06-01
+- is_order_action: false
+- broker_api_called: false
+- source: docs/agent_reviews/458-trace-phase2-candidate-starvation-after-indicators.md
