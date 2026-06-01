@@ -10,7 +10,7 @@ from core.events import write_json_atomic
 from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
-RUNTIME_NOTRADE_REASON_TRUTH_SCHEMA_VERSION = 1
+RUNTIME_NOTRADE_REASON_TRUTH_SCHEMA_VERSION = 2
 RUNTIME_NOTRADE_REASON_TRUTH_SOURCE = "runtime_notrade_reason_truth_v1"
 RUNTIME_NOTRADE_REASON_TRUTH_FILENAME = "notrade_reason_truth_latest.json"
 
@@ -113,9 +113,15 @@ def build_notrade_reason_truth_payload(
     regime_detail_available = bool(regime)
 
     missing_indicators_by_symbol = indicator.get("by_symbol") if isinstance(indicator.get("by_symbol"), dict) else {}
+    missing_indicators_by_strategy = indicator.get("by_strategy") if isinstance(indicator.get("by_strategy"), dict) else {}
     missing_indicator_counts: Counter[str] = Counter()
     warmup_candle_counts_by_symbol: dict[str, int] = {}
     required_warmup_candle_counts_by_symbol: dict[str, int] = {}
+    indicator_ready_by_symbol: dict[str, bool] = {}
+    indicator_ready_by_strategy: dict[str, bool] = {}
+    indicator_age_sec_by_symbol: dict[str, float | None] = {}
+    indicator_source_by_symbol: dict[str, str | None] = {}
+    indicator_blocker_reason_counts: Counter[str] = Counter()
     for sym, row in dict(missing_indicators_by_symbol or {}).items():
         if not isinstance(row, Mapping):
             continue
@@ -129,6 +135,24 @@ def build_notrade_reason_truth_payload(
             pass
         try:
             required_warmup_candle_counts_by_symbol[str(sym)] = int(row.get("warmup_min_bars") or 0)
+        except Exception:
+            pass
+        try:
+            indicator_ready_by_symbol[str(sym)] = bool(row.get("ready", False))
+        except Exception:
+            pass
+        indicator_age_sec_by_symbol[str(sym)] = row.get("indicators_age_sec")
+        indicator_source_by_symbol[str(sym)] = row.get("source")
+        for code in _as_list(row.get("blockers")):
+            c = _upper(code)
+            if c:
+                indicator_blocker_reason_counts[c] += 1
+
+    for strat, row in dict(missing_indicators_by_strategy or {}).items():
+        if not isinstance(row, Mapping):
+            continue
+        try:
+            indicator_ready_by_strategy[str(strat)] = bool(row.get("ready", False))
         except Exception:
             pass
 
@@ -239,8 +263,14 @@ def build_notrade_reason_truth_payload(
         "indicator_missing_count": int(indicators_missing_count),
         "missing_indicator_counts": dict(missing_indicator_counts),
         "missing_indicators_by_symbol": dict(missing_indicators_by_symbol or {}),
+        "missing_indicators_by_strategy": dict(missing_indicators_by_strategy or {}),
         "warmup_candle_counts_by_symbol": warmup_candle_counts_by_symbol,
         "required_warmup_candle_counts_by_symbol": required_warmup_candle_counts_by_symbol,
+        "indicator_ready_by_symbol": indicator_ready_by_symbol,
+        "indicator_ready_by_strategy": indicator_ready_by_strategy,
+        "indicator_age_sec_by_symbol": indicator_age_sec_by_symbol,
+        "indicator_source_by_symbol": indicator_source_by_symbol,
+        "indicator_blocker_reason_counts": dict(indicator_blocker_reason_counts),
         "regime_detail_available": bool(regime_detail_available),
         "regime_detail_missing_reason": None if regime_detail_available else "regime_truth_not_provided",
         "regime_unstable_count": int(regime_unstable_count),

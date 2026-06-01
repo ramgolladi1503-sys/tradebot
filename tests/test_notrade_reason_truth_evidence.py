@@ -129,6 +129,15 @@ def test_indicator_details_are_emitted_when_runtime_evidence_present():
     assert payload["required_warmup_candle_counts_by_symbol"]["NIFTY"] == 50
     assert payload["missing_indicator_counts"]["vwap"] == 1
     assert payload["missing_indicator_counts"]["rsi"] == 1
+    for k in (
+        "missing_indicators_by_strategy",
+        "indicator_ready_by_symbol",
+        "indicator_ready_by_strategy",
+        "indicator_age_sec_by_symbol",
+        "indicator_source_by_symbol",
+        "indicator_blocker_reason_counts",
+    ):
+        assert k in payload
 
 
 def test_regime_details_are_emitted_when_truth_present():
@@ -153,3 +162,35 @@ def test_regime_details_are_emitted_when_truth_present():
     assert payload["regime_detail_available"] is True
     assert payload["regime_gate_reasons"]["REGIME_UNSTABLE"] == 1
     assert payload["regime_by_symbol"]["BANKNIFTY"]["primary_regime"] == "RANGE"
+
+
+def test_indicator_schema_is_explicit_even_when_detail_missing():
+    payload = build_notrade_reason_truth_payload(
+        candidate_handoff={"phase2_input_candidate_count": 0},
+        phase2_rejection={},
+        feed_truth={"market_closed_detected": False, "feed_fresh": True, "option_tick_fresh": True},
+        top_opportunities={"phase2_state": "NO_TRADE"},
+        cycle_blockers={"INDICATORS_MISSING": 1},
+        indicator_readiness=None,
+    )
+    assert payload["indicator_detail_available"] is False
+    assert payload["indicator_detail_missing_reason"]
+    assert isinstance(payload["missing_indicator_counts"], dict)
+    assert isinstance(payload["missing_indicators_by_symbol"], dict)
+    assert isinstance(payload["warmup_candle_counts_by_symbol"], dict)
+    assert isinstance(payload["required_warmup_candle_counts_by_symbol"], dict)
+
+
+def test_regime_schema_is_explicit_even_when_detail_missing():
+    payload = build_notrade_reason_truth_payload(
+        candidate_handoff={"phase2_input_candidate_count": 0},
+        phase2_rejection={},
+        feed_truth={"market_closed_detected": False, "feed_fresh": True, "option_tick_fresh": True},
+        top_opportunities={"phase2_state": "NO_TRADE"},
+        cycle_blockers={"REGIME_UNSTABLE": 1},
+        regime_truth=None,
+    )
+    assert payload["regime_detail_available"] is False
+    assert payload["regime_detail_missing_reason"]
+    assert isinstance(payload["regime_gate_reasons"], dict)
+    assert isinstance(payload["regime_by_symbol"], dict)

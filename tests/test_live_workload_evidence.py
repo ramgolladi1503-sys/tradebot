@@ -30,6 +30,8 @@ def test_live_workload_payload_includes_strike_config_and_chain_counts(tmp_path:
     assert payload["execution_mode"] == "LIVE"
     assert payload["timing_detail_available"] is True
     assert payload["live_cycle_ms"] == 123.0
+    assert "candidate_generation_ms" in payload
+    assert "db_tick_read_query_count" in payload
     assert payload["option_chain_total_rows"] == 3
     assert payload["option_chain_rows_by_symbol"]["NIFTY"] == 2
     assert payload["option_chain_rows_by_symbol"]["BANKNIFTY"] == 1
@@ -46,6 +48,9 @@ def test_live_workload_writer_writes_both_logs_and_runtime(tmp_path: Path):
         market_data_list=[],
         feed_runtime={"subscribed_tokens_count": 0, "subscribed_option_tokens_count": 0},
     )
+    assert payload["timing_detail_available"] is False
+    assert payload["timing_detail_missing_reason"] == "orchestrator_timing_not_provided"
+    assert "live_cycle_ms" in payload
     p_logs, p_runtime = write_live_workload_latest(payload=payload, logs_path=logs_path, runtime_path=runtime_path)
     assert p_logs == logs_path
     assert p_runtime == runtime_path

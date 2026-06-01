@@ -11,7 +11,7 @@ from core.events import write_json_atomic
 from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
-RUNTIME_LIVE_WORKLOAD_SCHEMA_VERSION = 1
+RUNTIME_LIVE_WORKLOAD_SCHEMA_VERSION = 2
 RUNTIME_LIVE_WORKLOAD_SOURCE = "runtime_live_workload_evidence_v1"
 RUNTIME_LIVE_WORKLOAD_FILENAME = "live_workload_latest.json"
 
