@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from core.runtime_candidate_flow_trace import (
+    build_candidate_flow_trace_payload,
+    write_candidate_flow_trace_latest,
+)
+
+
+def test_candidate_flow_trace_no_market_data_classifies_first_zero_stage(tmp_path: Path):
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[],
+        cycle_blockers={},
+        indicator_readiness={},
+        regime_truth={},
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+    assert payload["read_only"] is True
+    assert payload["append"] is False
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+    assert payload["schema_version"] == 1
+    assert payload["writer_schema_version"] == payload["schema_version"]
+    assert payload["writer_name"] == "runtime_candidate_flow_trace"
+    assert payload["market_data_symbol_count"] == 0
+    assert payload["first_zero_stage"] == "no_market_data"
+
+
+def test_candidate_flow_trace_indicators_blocked_when_all_symbols_not_ready(tmp_path: Path):
+    indicator = {"by_symbol": {"SENSEX": {"ready": False}}}
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "SENSEX"}],
+        cycle_blockers={"INDICATORS_MISSING": 1},
+        indicator_readiness=indicator,
+        regime_truth={"by_symbol": {}},
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+    assert payload["market_data_symbol_count"] == 1
+    assert payload["indicator_blocked_symbol_count"] == 1
+    assert payload["indicator_ready_symbol_count"] == 0
+    assert payload["first_zero_stage"] == "indicators_blocked"
+    assert payload["gate_reasons"]["INDICATORS_MISSING"] == 1
+    assert payload["by_symbol"]["SENSEX"]["indicator_ready"] is False
+
+
+def test_candidate_flow_trace_regime_blocked_when_indicators_ready_but_all_symbols_unstable(tmp_path: Path):
+    indicator = {"by_symbol": {"SENSEX": {"ready": True}}}
+    regime = {"by_symbol": {"SENSEX": {"unstable_reasons": ["x"]}}, "gate_reasons": {"REGIME_UNSTABLE": 1}}
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "SENSEX"}],
+        cycle_blockers={"REGIME_UNSTABLE": 1},
+        indicator_readiness=indicator,
+        regime_truth=regime,
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+    assert payload["indicator_ready_symbol_count"] == 1
+    assert payload["regime_blocked_symbol_count"] == 1
+    assert payload["regime_ready_symbol_count"] == 0
+    assert payload["first_zero_stage"] == "regime_blocked"
+    assert payload["by_symbol"]["SENSEX"]["regime_blocked"] is True
+
+
+def test_candidate_flow_trace_strategy_generation_zero_when_raw_candidates_zero(tmp_path: Path):
+    indicator = {"by_symbol": {"SENSEX": {"ready": True}}}
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "SENSEX"}],
+        cycle_blockers={},
+        indicator_readiness=indicator,
+        regime_truth={"by_symbol": {}},
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+    assert payload["first_zero_stage"] == "strategy_generation_zero"
+
+
+def test_candidate_flow_trace_phase2_adapter_empty_when_raw_candidates_exist_but_phase2_empty(tmp_path: Path):
+    indicator = {"by_symbol": {"SENSEX": {"ready": True}}}
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "SENSEX"}],
+        cycle_blockers={},
+        indicator_readiness=indicator,
+        regime_truth={"by_symbol": {}},
+        raw_candidate_count=3,
+        phase2_input_candidate_count=0,
+    )
+    assert payload["raw_candidate_count"] == 3
+    assert payload["phase2_input_candidate_count"] == 0
+    assert payload["first_zero_stage"] == "phase2_adapter_empty"
+
+
+def test_candidate_flow_trace_not_starved_when_phase2_input_nonzero(tmp_path: Path):
+    indicator = {"by_symbol": {"SENSEX": {"ready": True}}}
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "SENSEX"}],
+        cycle_blockers={},
+        indicator_readiness=indicator,
+        regime_truth={"by_symbol": {}},
+        raw_candidate_count=3,
+        phase2_input_candidate_count=1,
+    )
+    assert payload["first_zero_stage"] == "not_starved"
+
+
+def test_candidate_flow_trace_writer_writes_both_logs_and_runtime(tmp_path: Path):
+    logs_path = tmp_path / "logs" / "candidate_flow_trace_latest.json"
+    runtime_path = tmp_path / ".runtime" / "candidate_flow_trace_latest.json"
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="SIM",
+        market_open=False,
+        market_data_list=[{"symbol": "NIFTY"}],
+        cycle_blockers={},
+        indicator_readiness={"by_symbol": {"NIFTY": {"ready": True}}},
+        regime_truth={"by_symbol": {}},
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+    p_logs, p_runtime = write_candidate_flow_trace_latest(payload=payload, logs_path=logs_path, runtime_path=runtime_path)
+    assert p_logs == logs_path
+    assert p_runtime == runtime_path
+    assert logs_path.exists()
+    assert runtime_path.exists()
+    written = json.loads(logs_path.read_text())
+    assert written["schema_version"] == 1
+    assert written["writer_name"] == "runtime_candidate_flow_trace"
+
