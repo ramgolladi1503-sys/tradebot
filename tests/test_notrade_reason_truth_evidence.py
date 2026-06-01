@@ -103,3 +103,53 @@ def test_market_closed_outranks_all_other_reasons():
         cycle_blockers={"INDICATORS_MISSING": 2, "REGIME_UNSTABLE": 1},
     )
     assert payload["primary_reason"] == "market_closed"
+
+
+def test_indicator_details_are_emitted_when_runtime_evidence_present():
+    payload = build_notrade_reason_truth_payload(
+        candidate_handoff={"phase2_input_candidate_count": 0},
+        phase2_rejection={},
+        feed_truth={"market_closed_detected": False, "feed_fresh": True, "option_tick_fresh": True},
+        top_opportunities={"phase2_state": "NO_TRADE"},
+        cycle_blockers={"INDICATORS_MISSING": 1},
+        indicator_readiness={
+            "by_symbol": {
+                "NIFTY": {
+                    "symbol": "NIFTY",
+                    "ohlc_bars_count": 12,
+                    "warmup_min_bars": 50,
+                    "indicator_missing_inputs": ["vwap", "rsi"],
+                }
+            }
+        },
+    )
+    assert payload["indicator_detail_available"] is True
+    assert payload["missing_indicators_by_symbol"]["NIFTY"]["symbol"] == "NIFTY"
+    assert payload["warmup_candle_counts_by_symbol"]["NIFTY"] == 12
+    assert payload["required_warmup_candle_counts_by_symbol"]["NIFTY"] == 50
+    assert payload["missing_indicator_counts"]["vwap"] == 1
+    assert payload["missing_indicator_counts"]["rsi"] == 1
+
+
+def test_regime_details_are_emitted_when_truth_present():
+    payload = build_notrade_reason_truth_payload(
+        candidate_handoff={"phase2_input_candidate_count": 0},
+        phase2_rejection={},
+        feed_truth={"market_closed_detected": False, "feed_fresh": True, "option_tick_fresh": True},
+        top_opportunities={"phase2_state": "NO_TRADE"},
+        cycle_blockers={"REGIME_UNSTABLE": 1},
+        regime_truth={
+            "gate_reasons": {"REGIME_UNSTABLE": 1},
+            "by_symbol": {
+                "BANKNIFTY": {
+                    "primary_regime": "RANGE",
+                    "regime_entropy": 1.45,
+                    "regime_prob_max": 0.38,
+                    "unstable_reasons": ["entropy_too_high", "prob_too_low"],
+                }
+            },
+        },
+    )
+    assert payload["regime_detail_available"] is True
+    assert payload["regime_gate_reasons"]["REGIME_UNSTABLE"] == 1
+    assert payload["regime_by_symbol"]["BANKNIFTY"]["primary_regime"] == "RANGE"

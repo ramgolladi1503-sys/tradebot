@@ -57,12 +57,16 @@ def build_notrade_reason_truth_payload(
     feed_truth: Mapping[str, Any] | None,
     top_opportunities: Mapping[str, Any] | None,
     cycle_blockers: Mapping[str, Any] | None = None,
+    indicator_readiness: Mapping[str, Any] | None = None,
+    regime_truth: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     handoff = _as_mapping(candidate_handoff)
     phase2 = _as_mapping(phase2_rejection)
     feed = _as_mapping(feed_truth)
     top = _as_mapping(top_opportunities)
     blockers = _as_mapping(cycle_blockers)
+    indicator = _as_mapping(indicator_readiness)
+    regime = _as_mapping(regime_truth)
 
     precedence = [
         "market_closed",
@@ -104,6 +108,29 @@ def build_notrade_reason_truth_payload(
 
     indicators_missing_count = int(upstream_gate_counts.get("INDICATORS_MISSING") or 0)
     regime_unstable_count = int(upstream_gate_counts.get("REGIME_UNSTABLE") or 0)
+
+    indicator_detail_available = bool(indicator)
+    regime_detail_available = bool(regime)
+
+    missing_indicators_by_symbol = indicator.get("by_symbol") if isinstance(indicator.get("by_symbol"), dict) else {}
+    missing_indicator_counts: Counter[str] = Counter()
+    warmup_candle_counts_by_symbol: dict[str, int] = {}
+    required_warmup_candle_counts_by_symbol: dict[str, int] = {}
+    for sym, row in dict(missing_indicators_by_symbol or {}).items():
+        if not isinstance(row, Mapping):
+            continue
+        for code in _as_list(row.get("indicator_missing_inputs")):
+            name = str(code or "").strip().lower()
+            if name:
+                missing_indicator_counts[name] += 1
+        try:
+            warmup_candle_counts_by_symbol[str(sym)] = int(row.get("ohlc_bars_count") or 0)
+        except Exception:
+            pass
+        try:
+            required_warmup_candle_counts_by_symbol[str(sym)] = int(row.get("warmup_min_bars") or 0)
+        except Exception:
+            pass
 
     # Aggregate the most actionable Phase2 evidence buckets.
     feed_stale_count = int(phase2.get("feed_stale_hard_block_count") or 0)
@@ -207,6 +234,18 @@ def build_notrade_reason_truth_payload(
         "selected_contract_quote_fresh": feed.get("selected_contract_quote_fresh"),
         "phase2_input_candidate_count": int(phase2_input_candidate_count),
         "upstream_gate_reason_counts": dict(upstream_gate_counts),
+        "indicator_detail_available": bool(indicator_detail_available),
+        "indicator_detail_missing_reason": None if indicator_detail_available else "live_indicator_readiness_runtime_evidence_missing",
+        "indicator_missing_count": int(indicators_missing_count),
+        "missing_indicator_counts": dict(missing_indicator_counts),
+        "missing_indicators_by_symbol": dict(missing_indicators_by_symbol or {}),
+        "warmup_candle_counts_by_symbol": warmup_candle_counts_by_symbol,
+        "required_warmup_candle_counts_by_symbol": required_warmup_candle_counts_by_symbol,
+        "regime_detail_available": bool(regime_detail_available),
+        "regime_detail_missing_reason": None if regime_detail_available else "regime_truth_not_provided",
+        "regime_unstable_count": int(regime_unstable_count),
+        "regime_gate_reasons": dict(regime.get("gate_reasons") or {}) if isinstance(regime.get("gate_reasons"), Mapping) else {},
+        "regime_by_symbol": dict(regime.get("by_symbol") or {}) if isinstance(regime.get("by_symbol"), Mapping) else {},
         "generated_epoch": float(time.time()),
         "read_only": True,
         "append": False,

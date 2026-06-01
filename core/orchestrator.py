@@ -120,7 +120,7 @@ from core.telemetry_streams import (
 )
 from core.trade_log_paths import ensure_trade_log_exists
 from core.runtime_health import write_runtime_health_snapshot
-from core.paths import logs_dir, repo_logs_dir
+from core.paths import logs_dir, repo_logs_dir, runtime_dir
 from core.auth_manager import runtime_auth_snapshot
 from core.observability.pipeline import write_pipeline_funnel
 from core.outcome_labels import attach_candidate_outcome_labels
@@ -6780,12 +6780,37 @@ class Orchestrator:
                         # Evidence-only: summarize why no-trade/no-executable is happening without mutating decisions.
                         phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
                         feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
+                        indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
+                        regime_by_symbol = {}
+                        regime_gate_reasons = {}
+                        try:
+                            for md in list(market_data_list or []):
+                                if not isinstance(md, dict):
+                                    continue
+                                sym = str(md.get("symbol") or "").strip().upper()
+                                if not sym:
+                                    continue
+                                unstable = md.get("unstable_reasons") if isinstance(md.get("unstable_reasons"), list) else []
+                                if unstable:
+                                    regime_by_symbol[sym] = {
+                                        "primary_regime": md.get("primary_regime") or md.get("regime"),
+                                        "regime_entropy": md.get("regime_entropy"),
+                                        "regime_prob_max": md.get("regime_prob_max") or md.get("regime_probs_max"),
+                                        "unstable_reasons": unstable,
+                                    }
+                            if regime_by_symbol:
+                                regime_gate_reasons["REGIME_UNSTABLE"] = len(regime_by_symbol)
+                        except Exception:
+                            regime_by_symbol = {}
+                            regime_gate_reasons = {}
                         notrade_payload = build_notrade_reason_truth_payload(
                             candidate_handoff=root_cause_payload if isinstance(root_cause_payload, dict) else {},
                             phase2_rejection=phase2_rejection_payload,
                             feed_truth=feed_truth_payload,
                             top_opportunities=top_payload,
                             cycle_blockers=dict(cycle_blockers),
+                            indicator_readiness=indicator_payload,
+                            regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
                         )
                         write_notrade_reason_truth_latest(payload=notrade_payload)
                     except Exception as notrade_exc:
@@ -6807,6 +6832,10 @@ class Orchestrator:
                             market_open=bool(cycle_market_open),
                             market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
                             feed_runtime=feed_runtime_payload,
+                            timing={
+                                **(feature_timing if isinstance(feature_timing, dict) else {}),
+                                "live_cycle_ms": float((time.perf_counter() - cycle_perf_start) * 1000.0),
+                            },
                         )
                         write_live_workload_latest(payload=workload_payload)
                     except Exception as workload_exc:
