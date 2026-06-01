@@ -129,6 +129,8 @@ def test_fetch_live_market_data_seeds_empty_buffer_and_enables_indicators(tmp_pa
     assert snap["ohlc_seeded"] is True
     assert snap["ohlc_bars_count"] >= 30
     assert snap["indicators_ok"] is True
+    assert snap.get("rsi") is not None
+    assert snap.get("ema") is not None
     assert isinstance(snap.get("indicator_last_update_epoch"), (int, float))
     assert isinstance(snap.get("indicators_age_sec"), (int, float))
 
@@ -874,3 +876,59 @@ def test_regime_unknown_when_indicator_values_are_nan(tmp_path, monkeypatch):
     snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
     assert snap.get("regime") == "UNKNOWN"
     assert "indicator_nan" in set(snap.get("regime_reasons") or [])
+
+
+def test_fetch_live_market_data_indicator_compute_error_does_not_fake_rsi_ema(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "SENSEX_INDICATOR_ERROR"
+    fixed_now = market_data.now_ist().replace(second=0, microsecond=0)
+
+    monkeypatch.setattr(cfg, "SYMBOLS", [symbol], raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 30, raising=False)
+    monkeypatch.setattr(cfg, "OHLC_WARM_SEED_WINDOWS_MIN", "120,240", raising=False)
+    monkeypatch.setattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False, raising=False)
+    monkeypatch.setattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO", raising=False)
+
+    market_data._DATA_CACHE.clear()
+    market_data._OPEN_RANGE.clear()
+    market_data._INSUFFICIENT_OHLC_WARNED.clear()
+    market_data.ohlc_buffer._bars.pop(symbol, None)
+
+    monkeypatch.setattr(market_data, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(market_data, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(market_data, "now_utc_epoch", lambda: fixed_now.timestamp())
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
+    monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
+    monkeypatch.setattr(
+        market_data.kite_client,
+        "historical_data",
+        lambda instrument_token, from_dt, to_dt, interval="minute", **kwargs: _build_hist_rows(40, base_price=83000.0),
+    )
+
+    def _fake_get_ltp(sym: str):
+        market_data._DATA_CACHE.setdefault(sym, {})
+        market_data._DATA_CACHE[sym]["ltp_source"] = "live"
+        market_data._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_now.timestamp()
+        return 83000.0
+
+    monkeypatch.setattr(market_data, "get_ltp", _fake_get_ltp)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(market_data, "compute_indicators", _boom)
+
+    rows = market_data.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
+    assert snap["ohlc_bars_count"] >= 30
+    assert snap["indicators_ok"] is False
+    assert "RuntimeError" in str(snap.get("compute_indicators_error") or "")
+    assert snap.get("rsi") is None
+    assert snap.get("ema") is None

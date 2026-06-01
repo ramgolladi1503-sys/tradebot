@@ -2535,6 +2535,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         orb_low = ltp
         volume = None
         vwap_slope = 0
+        rsi = None
+        ema = None
         rsi_mom = 0
         vol_z = 0
         adx_14 = 0
@@ -2626,6 +2628,10 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 vol_z = ind["vol_z"]
             if ind.get("vwap_slope") is not None:
                 vwap_slope = ind["vwap_slope"]
+            if ind.get("rsi") is not None:
+                rsi = ind["rsi"]
+            if ind.get("ema") is not None:
+                ema = ind["ema"]
             last_ts = ind.get("last_ts")
             bars_ready = bool(ohlc_bars_count >= min_bars and ohlc_bars_count > 0)
             required_inputs_ok = bars_ready
@@ -3504,6 +3510,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "invalid_reason": None,
             "segment": segment,
             "vwap": vwap,
+            "rsi": rsi,
+            "ema": ema,
             "bias": get_bias(ltp, vwap),
             "regime": regime,
             "primary_regime": primary_regime,
