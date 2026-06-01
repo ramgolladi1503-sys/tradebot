@@ -6871,6 +6871,11 @@ class Orchestrator:
                             regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
                             raw_candidate_count=int(cycle_candidate_pool_count),
                             phase2_input_candidate_count=int(len(cycle_ranked_candidates or [])),
+                            decision_gate_reason_by_symbol={
+                                str(md.get("symbol") or "").strip().upper(): md.get("decision_gate_reason")
+                                for md in list(market_data_list or [])
+                                if isinstance(md, dict) and str(md.get("symbol") or "").strip()
+                            },
                         )
                         write_candidate_flow_trace_latest(payload=trace_payload)
                     except Exception as trace_exc:

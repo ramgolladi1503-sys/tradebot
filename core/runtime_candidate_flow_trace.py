@@ -40,6 +40,71 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+def _infer_indicator_ready(irow: Mapping[str, Any] | None) -> bool | None:
+    if not isinstance(irow, Mapping):
+        return None
+
+    # Preferred explicit key when present.
+    if "ready" in irow:
+        try:
+            return bool(irow.get("ready"))
+        except Exception:
+            return None
+
+    # Contract-compatible: readiness v2 uses "indicators_ok".
+    if "indicators_ok" in irow:
+        try:
+            return bool(irow.get("indicators_ok"))
+        except Exception:
+            return None
+
+    missing_list = [str(x).strip().lower() for x in _as_list(irow.get("indicator_missing_inputs")) if str(x or "").strip()]
+    if missing_list:
+        return False
+
+    # Best-effort: infer from present flags if they exist and missing list is empty.
+    present_keys = ("rsi_present", "ema_present", "atr_present", "vwap_present")
+    if any(k in irow for k in present_keys):
+        try:
+            flags_ok = all(bool(irow.get(k)) for k in present_keys if k in irow)
+        except Exception:
+            flags_ok = False
+        return True if flags_ok else False
+
+    return None
+
+
+def _infer_regime_blocked(
+    *,
+    sym: str,
+    regime_by_symbol: Mapping[str, Any] | None,
+    regime_gate_reasons: Mapping[str, Any] | None,
+    decision_gate_reason_by_symbol: Mapping[str, Any] | None = None,
+) -> bool | None:
+    # Do not treat mere dict presence as blocked. Only explicit unstable/reject evidence counts.
+    by_symbol = dict(regime_by_symbol or {})
+    rrow = by_symbol.get(sym)
+    if isinstance(rrow, Mapping):
+        unstable = rrow.get("unstable_reasons")
+        if isinstance(unstable, list) and len(unstable) > 0:
+            return True
+        if "regime_ok" in rrow and rrow.get("regime_ok") is False:
+            return True
+
+    gates = dict(regime_gate_reasons or {})
+    if _safe_int(gates.get("REGIME_UNSTABLE")) > 0:
+        # If we have per-symbol regime evidence and this symbol appears there, treat it as blocked.
+        # Otherwise keep it unknown; do not smear global gate into every symbol.
+        return True if sym in by_symbol else None
+
+    if decision_gate_reason_by_symbol is not None:
+        code = _upper(dict(decision_gate_reason_by_symbol).get(sym))
+        if code == "REGIME_UNSTABLE":
+            return True
+
+    return False
+
+
 def build_candidate_flow_trace_payload(
     *,
     execution_mode: str | None,
@@ -50,6 +115,7 @@ def build_candidate_flow_trace_payload(
     regime_truth: Mapping[str, Any] | None,
     raw_candidate_count: int | None,
     phase2_input_candidate_count: int | None,
+    decision_gate_reason_by_symbol: Mapping[str, Any] | None = None,
     # Optional stage drop counts are evidence-only; emit None when unknown.
     validation_drop_count: int | None = None,
     normalization_drop_count: int | None = None,
@@ -78,7 +144,7 @@ def build_candidate_flow_trace_payload(
     indicator_blocked_symbol_count = 0
     for sym in symbols:
         irow = indicator_by_symbol.get(sym) if isinstance(indicator_by_symbol, Mapping) else None
-        ready = bool(irow.get("ready")) if isinstance(irow, Mapping) else None
+        ready = _infer_indicator_ready(irow) if isinstance(irow, Mapping) else None
         if ready is True:
             indicator_ready_symbol_count += 1
         elif ready is False:
@@ -86,11 +152,17 @@ def build_candidate_flow_trace_payload(
         by_symbol[sym]["indicator_ready"] = ready
 
     regime_by_symbol = regime.get("by_symbol") if isinstance(regime.get("by_symbol"), Mapping) else {}
+    regime_gate_reasons = regime.get("gate_reasons") if isinstance(regime.get("gate_reasons"), Mapping) else {}
     regime_ready_symbol_count = 0
     regime_blocked_symbol_count = 0
     for sym in symbols:
-        blocked = bool(regime_by_symbol.get(sym)) if isinstance(regime_by_symbol, Mapping) else False
-        if blocked:
+        blocked = _infer_regime_blocked(
+            sym=sym,
+            regime_by_symbol=regime_by_symbol if isinstance(regime_by_symbol, Mapping) else {},
+            regime_gate_reasons=regime_gate_reasons if isinstance(regime_gate_reasons, Mapping) else {},
+            decision_gate_reason_by_symbol=decision_gate_reason_by_symbol if isinstance(decision_gate_reason_by_symbol, Mapping) else None,
+        )
+        if blocked is True:
             regime_blocked_symbol_count += 1
         else:
             regime_ready_symbol_count += 1
@@ -205,4 +277,3 @@ __all__ = [
     "build_candidate_flow_trace_payload",
     "write_candidate_flow_trace_latest",
 ]
-
