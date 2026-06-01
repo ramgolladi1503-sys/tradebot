@@ -124,7 +124,7 @@ PASS
 
 PASS
 
-## QA / Safety
+## QA / Safety Review
 
 Non-negotiables reaffirmed:
 - No broker/order code touched.
@@ -183,4 +183,3 @@ Required before merge:
   - no hidden runtime behavioral changes
   - artifact contract meets investigation needs
   - all CI gates are green
-
