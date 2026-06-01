@@ -21,12 +21,15 @@ def test_live_workload_payload_includes_strike_config_and_chain_counts(tmp_path:
         market_open=True,
         market_data_list=market_data_list,
         feed_runtime=feed_runtime,
+        timing={"live_cycle_ms": 123.0, "fetch_live_market_data_ms": 7.0},
     )
     assert payload["read_only"] is True
     assert payload["append"] is False
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False
     assert payload["execution_mode"] == "LIVE"
+    assert payload["timing_detail_available"] is True
+    assert payload["live_cycle_ms"] == 123.0
     assert payload["option_chain_total_rows"] == 3
     assert payload["option_chain_rows_by_symbol"]["NIFTY"] == 2
     assert payload["option_chain_rows_by_symbol"]["BANKNIFTY"] == 1
@@ -50,4 +53,3 @@ def test_live_workload_writer_writes_both_logs_and_runtime(tmp_path: Path):
     assert runtime_path.exists()
     assert json.loads(logs_path.read_text())["schema_version"] == payload["schema_version"]
     assert json.loads(runtime_path.read_text())["schema_version"] == payload["schema_version"]
-

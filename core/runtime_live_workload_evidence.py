@@ -35,6 +35,7 @@ def build_live_workload_payload(
     market_open: bool | None,
     market_data_list: list[Mapping[str, Any]] | None,
     feed_runtime: Mapping[str, Any] | None = None,
+    timing: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     mode = str(execution_mode or getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").strip().upper() or "SIM"
     feed_rt = _as_mapping(feed_runtime)
@@ -70,6 +71,25 @@ def build_live_workload_payload(
             except Exception:
                 continue
 
+    timing_map = _as_mapping(timing)
+    # Timing fields are evidence-only. Do not invent; emit None when unavailable.
+    timing_fields = {
+        "candidate_generation_ms": timing_map.get("candidate_generation_ms"),
+        "fetch_live_market_data_ms": timing_map.get("fetch_live_market_data_ms"),
+        "build_cycle_market_data_ms": timing_map.get("build_cycle_market_data_ms"),
+        "refresh_decay_report_ms": timing_map.get("refresh_decay_report_ms"),
+        "option_tick_freshness_eval_ms": timing_map.get("option_tick_freshness_eval_ms"),
+        "phase2_ranking_ms": timing_map.get("phase2_ranking_ms"),
+        "live_cycle_ms": timing_map.get("live_cycle_ms"),
+        "evidence_write_ms": timing_map.get("evidence_write_ms"),
+        "db_tick_read_ms": timing_map.get("db_tick_read_ms"),
+        "ws_quotes_for_instruments_ms": timing_map.get("ws_quotes_for_instruments_ms"),
+        "db_tick_read_query_count": timing_map.get("db_tick_read_query_count"),
+        "option_token_count_evaluated": timing_map.get("option_token_count_evaluated"),
+        "n_plus_one_tick_read_warning": timing_map.get("n_plus_one_tick_read_warning"),
+    }
+    timing_detail_available = bool(timing_map)
+
     payload = {
         "schema_version": RUNTIME_LIVE_WORKLOAD_SCHEMA_VERSION,
         "source": RUNTIME_LIVE_WORKLOAD_SOURCE,
@@ -85,6 +105,9 @@ def build_live_workload_payload(
         "subscribed_tokens_count": subscribed_tokens_count,
         "subscribed_option_tokens_count": subscribed_option_tokens_count,
         "wide_live_universe_warning": bool(wide_live_universe_warning),
+        "timing_detail_available": bool(timing_detail_available),
+        "timing_detail_missing_reason": None if timing_detail_available else "orchestrator_timing_not_provided",
+        **timing_fields,
         "generated_epoch": float(time.time()),
         "read_only": True,
         "append": False,
@@ -120,4 +143,3 @@ __all__ = [
     "build_live_workload_payload",
     "write_live_workload_latest",
 ]
-
