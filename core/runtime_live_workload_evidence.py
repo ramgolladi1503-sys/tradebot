@@ -93,6 +93,9 @@ def build_live_workload_payload(
     payload = {
         "schema_version": RUNTIME_LIVE_WORKLOAD_SCHEMA_VERSION,
         "source": RUNTIME_LIVE_WORKLOAD_SOURCE,
+        "writer_name": "runtime_live_workload_evidence",
+        "writer_module": __name__,
+        "writer_schema_version": RUNTIME_LIVE_WORKLOAD_SCHEMA_VERSION,
         "execution_mode": mode,
         "market_open": bool(market_open) if market_open is not None else None,
         "configured_strikes_around_default": configured_strikes_around_default,

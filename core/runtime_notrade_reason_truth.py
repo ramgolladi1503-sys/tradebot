@@ -236,6 +236,9 @@ def build_notrade_reason_truth_payload(
     payload = {
         "schema_version": RUNTIME_NOTRADE_REASON_TRUTH_SCHEMA_VERSION,
         "source": RUNTIME_NOTRADE_REASON_TRUTH_SOURCE,
+        "writer_name": "runtime_notrade_reason_truth",
+        "writer_module": __name__,
+        "writer_schema_version": RUNTIME_NOTRADE_REASON_TRUTH_SCHEMA_VERSION,
         "primary_reason": primary_reason,
         "primary_reason_source": primary_source,
         "supporting_reasons": supporting,

@@ -30,6 +30,8 @@ def test_live_workload_payload_includes_strike_config_and_chain_counts(tmp_path:
     assert payload["execution_mode"] == "LIVE"
     assert payload["timing_detail_available"] is True
     assert payload["live_cycle_ms"] == 123.0
+    assert payload["writer_schema_version"] == payload["schema_version"]
+    assert payload["writer_name"] == "runtime_live_workload_evidence"
     assert "candidate_generation_ms" in payload
     assert "db_tick_read_query_count" in payload
     assert payload["option_chain_total_rows"] == 3

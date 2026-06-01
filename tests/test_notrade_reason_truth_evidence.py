@@ -179,6 +179,8 @@ def test_indicator_schema_is_explicit_even_when_detail_missing():
     assert isinstance(payload["missing_indicators_by_symbol"], dict)
     assert isinstance(payload["warmup_candle_counts_by_symbol"], dict)
     assert isinstance(payload["required_warmup_candle_counts_by_symbol"], dict)
+    assert payload["writer_schema_version"] == payload["schema_version"]
+    assert payload["writer_name"] == "runtime_notrade_reason_truth"
 
 
 def test_regime_schema_is_explicit_even_when_detail_missing():
