@@ -10,6 +10,19 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def repo_logs_dir() -> Path:
+    """Repository-local logs directory.
+
+    This is intentionally distinct from logs_dir(), which defaults to DATA_ROOT/logs
+    (typically `.runtime/logs`). Repo-local `logs/` is used for operator-friendly
+    smoke checks and CI artifact expectations.
+    """
+    override = os.getenv("REPO_LOG_DIR")
+    if override:
+        return Path(override).expanduser()
+    return repo_root() / "logs"
+
+
 def ensure_dir(path: Path | str) -> Path:
     target = Path(path).expanduser()
     target.mkdir(parents=True, exist_ok=True)

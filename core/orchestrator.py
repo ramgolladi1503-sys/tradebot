@@ -120,7 +120,7 @@ from core.telemetry_streams import (
 )
 from core.trade_log_paths import ensure_trade_log_exists
 from core.runtime_health import write_runtime_health_snapshot
-from core.paths import logs_dir
+from core.paths import logs_dir, repo_logs_dir, runtime_dir
 from core.auth_manager import runtime_auth_snapshot
 from core.observability.pipeline import write_pipeline_funnel
 from core.outcome_labels import attach_candidate_outcome_labels
@@ -131,11 +131,28 @@ from core.market_snapshot_builder import (
 )
 from core.market_snapshot_store import write_market_snapshot_atomic
 from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
-from core.runtime_snapshot_store import TOP_OPPORTUNITIES_LATEST_PATH, write_snapshot_atomic
+from core.runtime_snapshot_store import write_top_opportunities_snapshots
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
     write_candidate_handoff_root_cause_latest,
+)
+from core.runtime_notrade_reason_truth import (
+    build_notrade_reason_truth_payload,
+    write_notrade_reason_truth_latest,
+)
+from core.candidate_row_classification import classify_candidate_row
+from core.runtime_ranking_quality_evidence import (
+    build_ranking_quality_evidence_payload,
+    write_ranking_quality_latest,
+)
+from core.runtime_live_workload_evidence import (
+    build_live_workload_payload,
+    write_live_workload_latest,
+)
+from core.live_indicator_readiness import (
+    build_live_indicator_readiness_report,
+    write_live_indicator_readiness_latest,
 )
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
@@ -1044,11 +1061,48 @@ def _build_top_opportunities_payload(
     )
     notes: list[str] = []
 
+    # Evidence-only: if present, include the cycle-level primary reason without changing Phase2 behavior.
+    cycle_primary_reason = None
+    try:
+        notrade_payload = _read_json_dict(logs_dir() / "notrade_reason_truth_latest.json")
+        cycle_primary_reason = str(notrade_payload.get("primary_reason") or "").strip() or None
+    except Exception:
+        cycle_primary_reason = None
+
     def _project(rows: list, label: str) -> list[dict]:
         projected: list[dict] = []
         for candidate in rows or []:
             advisory_row = project_advisory_row(candidate)
             if isinstance(advisory_row, dict):
+                try:
+                    cls = classify_candidate_row(
+                        row=advisory_row,
+                        phase2_state=str(phase2_result.get("state") or "NO_TRADE"),
+                        cycle_primary_reason=cycle_primary_reason,
+                    )
+                    advisory_row.update(cls.to_dict())
+                    advisory_row.setdefault(
+                        "primary_reason",
+                        advisory_row.get("execution_quality_reason_code")
+                        or advisory_row.get("execution_block_reason")
+                        or advisory_row.get("permission_reason")
+                        or advisory_row.get("phase2_soft_degrade_reason")
+                        or None,
+                    )
+                    advisory_row.setdefault(
+                        "execution_block_reason",
+                        advisory_row.get("execution_quality_reason_code")
+                        or advisory_row.get("execution_block_reason")
+                        or advisory_row.get("permission_reason")
+                        or None,
+                    )
+                    for key in ("quote_source", "quote_age_sec", "spread_pct"):
+                        advisory_row.setdefault(key, None)
+                    sf = advisory_row.get("source_flags") if isinstance(advisory_row.get("source_flags"), dict) else {}
+                    if isinstance(sf, dict):
+                        advisory_row.setdefault("recovered_fallback", bool(sf.get("recovered_fallback")))
+                except Exception:
+                    pass
                 projected.append(advisory_row)
             else:
                 trade_id = getattr(candidate, "trade_id", None) if not isinstance(candidate, dict) else candidate.get("trade_id")
@@ -1096,6 +1150,7 @@ def _build_top_opportunities_payload(
         "phase2_reason": str(phase2_result.get("reason") or ""),
         "phase2_ranked_count": int(len(ranked)),
         "phase2_selected_trade_id": selected_id or None,
+        "cycle_primary_reason": cycle_primary_reason,
         "_phase2_next_active_trade": phase2_result.get("next_active_trade"),
         "notes": notes,
     }
@@ -6725,6 +6780,83 @@ class Orchestrator:
                         write_candidate_handoff_root_cause_latest(payload=root_cause_payload)
                     except Exception as handoff_exc:
                         logger.warning("candidate_handoff_root_cause_write_failed err=%s", handoff_exc)
+                    try:
+                        # Evidence-only: summarize why no-trade/no-executable is happening without mutating decisions.
+                        phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
+                        feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
+                        indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
+                        try:
+                            # Refresh indicator readiness artifact from current cycle market snapshots so
+                            # it cannot remain stale when the orchestrator is actively running.
+                            indicator_report = build_live_indicator_readiness_report(
+                                [row for row in list(market_data_list or []) if isinstance(row, dict)],
+                                now_epoch=float(time.time()),
+                                warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
+                                source="orchestrator_live_indicator_readiness_v2",
+                            )
+                            write_live_indicator_readiness_latest(indicator_report, now_epoch=float(time.time()))
+                            indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
+                        except Exception:
+                            pass
+                        regime_by_symbol = {}
+                        regime_gate_reasons = {}
+                        try:
+                            for md in list(market_data_list or []):
+                                if not isinstance(md, dict):
+                                    continue
+                                sym = str(md.get("symbol") or "").strip().upper()
+                                if not sym:
+                                    continue
+                                unstable = md.get("unstable_reasons") if isinstance(md.get("unstable_reasons"), list) else []
+                                if unstable:
+                                    regime_by_symbol[sym] = {
+                                        "primary_regime": md.get("primary_regime") or md.get("regime"),
+                                        "regime_entropy": md.get("regime_entropy"),
+                                        "regime_prob_max": md.get("regime_prob_max") or md.get("regime_probs_max"),
+                                        "unstable_reasons": unstable,
+                                    }
+                            if regime_by_symbol:
+                                regime_gate_reasons["REGIME_UNSTABLE"] = len(regime_by_symbol)
+                        except Exception:
+                            regime_by_symbol = {}
+                            regime_gate_reasons = {}
+                        notrade_payload = build_notrade_reason_truth_payload(
+                            candidate_handoff=root_cause_payload if isinstance(root_cause_payload, dict) else {},
+                            phase2_rejection=phase2_rejection_payload,
+                            feed_truth=feed_truth_payload,
+                            top_opportunities=top_payload,
+                            cycle_blockers=dict(cycle_blockers),
+                            indicator_readiness=indicator_payload,
+                            regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
+                        )
+                        write_notrade_reason_truth_latest(payload=notrade_payload)
+                    except Exception as notrade_exc:
+                        logger.warning("notrade_reason_truth_write_failed err=%s", notrade_exc)
+                    try:
+                        rq_payload = build_ranking_quality_evidence_payload(
+                            candidates=[cand for cand in list(cycle_ranked_candidates or []) if isinstance(cand, dict)],
+                            phase2_state=str(top_payload.get("phase2_state") or ""),
+                            cycle_primary_reason=str(top_payload.get("cycle_primary_reason") or "") or None,
+                            phase2_min_enter_score=float(getattr(cfg, "PHASE2_MIN_ENTER_SCORE", 0.70) or 0.70),
+                        )
+                        write_ranking_quality_latest(payload=rq_payload)
+                    except Exception as rq_exc:
+                        logger.warning("ranking_quality_write_failed err=%s", rq_exc)
+                    try:
+                        feed_runtime_payload = _read_json_dict(repo_logs_dir() / "feed_runtime_latest.json")
+                        workload_payload = build_live_workload_payload(
+                            execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
+                            market_open=bool(cycle_market_open),
+                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            feed_runtime=feed_runtime_payload,
+                            timing={
+                                **(feature_timing if isinstance(feature_timing, dict) else {}),
+                                "live_cycle_ms": float((time.perf_counter() - cycle_perf_start) * 1000.0),
+                            },
+                        )
+                        write_live_workload_latest(payload=workload_payload)
+                    except Exception as workload_exc:
+                        logger.warning("live_workload_write_failed err=%s", workload_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
@@ -6740,11 +6872,7 @@ class Orchestrator:
                                     handoff_snapshot.get("symbol"),
                                     handoff_exc,
                                 )
-                    write_snapshot_atomic(
-                        TOP_OPPORTUNITIES_LATEST_PATH,
-                        payload=top_payload,
-                        producer="orchestrator",
-                    )
+                    write_top_opportunities_snapshots(payload=top_payload, producer="orchestrator")
                 except Exception as top_exc:
                     logger.warning("top_opportunities_snapshot_write_failed err=%s", top_exc)
                 try:

@@ -1,6 +1,7 @@
 from datetime import timedelta
 import json
 
+import pytest
 from config import config as cfg
 import core.market_data as market_data
 from core.indicators_live import compute_indicators
@@ -76,7 +77,8 @@ def test_warm_seed_from_historical_enables_indicator_compute(tmp_path, monkeypat
     )
     assert seeded_ok is True
     assert reason is None
-    assert len(bars) >= 30
+    bars_count = len(bars)
+    assert bars_count >= 30
 
     indicators = compute_indicators(bars)
     assert indicators["ok"] is True
@@ -129,6 +131,20 @@ def test_fetch_live_market_data_seeds_empty_buffer_and_enables_indicators(tmp_pa
     assert snap["ohlc_seeded"] is True
     assert snap["ohlc_bars_count"] >= 30
     assert snap["indicators_ok"] is True
+    bars = market_data.ohlc_buffer.get_bars(symbol)
+    expected = market_data.compute_indicators(
+        bars,
+        vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
+        atr_period=getattr(cfg, "ATR_PERIOD", 14),
+        adx_period=getattr(cfg, "ADX_PERIOD", 14),
+        vol_window=getattr(cfg, "VOL_WINDOW", 30),
+        slope_window=getattr(cfg, "VWAP_SLOPE_WINDOW", 10),
+    )
+    assert expected["ok"] is True
+    assert expected.get("rsi") is not None
+    assert expected.get("ema") is not None
+    assert snap.get("rsi") == pytest.approx(expected.get("rsi"), rel=1e-9, abs=1e-9)
+    assert snap.get("ema") == pytest.approx(expected.get("ema"), rel=1e-9, abs=1e-9)
     assert isinstance(snap.get("indicator_last_update_epoch"), (int, float))
     assert isinstance(snap.get("indicators_age_sec"), (int, float))
 
@@ -302,7 +318,8 @@ def test_insufficient_ohlc_warning_logged_once_when_kite_unavailable(tmp_path, m
     warn_path = tmp_path / "logs" / "market_data_warnings.jsonl"
     assert warn_path.exists()
     rows = [json.loads(line) for line in warn_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert len(rows) == 1
+    row_count = len(rows)
+    assert row_count == 1
     assert rows[0]["warning"] == "insufficient OHLC bars"
     assert rows[0]["reason"] == "HIST_FETCH_FAILED"
     assert rows[0]["reason_code"] == "HIST_FETCH_FAILED"
@@ -335,7 +352,8 @@ def test_warm_seed_fallback_to_240m_window(tmp_path, monkeypatch):
     )
     assert seeded_ok is True
     assert reason is None
-    assert len(bars) >= 30
+    bars_count = len(bars)
+    assert bars_count >= 30
     assert calls == [120, 240]
 
 
@@ -360,7 +378,8 @@ def test_startup_seed_populates_buffer_and_sets_indicator_timestamp(tmp_path, mo
     market_data._INDICATOR_LAST_UPDATE_EPOCH.pop(symbol, None)
 
     rows = market_data.seed_ohlc_buffers_on_startup([symbol])
-    assert len(rows) == 1
+    row_count = len(rows)
+    assert row_count == 1
     row = rows[0]
     assert row["symbol"] == symbol
     assert row["seeded_bars_count"] >= 30
@@ -368,7 +387,8 @@ def test_startup_seed_populates_buffer_and_sets_indicator_timestamp(tmp_path, mo
     assert row["last_candle_ts"] is not None
     assert row["indicator_last_update_ts"] is not None
     assert isinstance(market_data._INDICATOR_LAST_UPDATE_EPOCH.get(symbol), (int, float))
-    assert len(market_data.ohlc_buffer.get_bars(symbol)) >= 30
+    bars_count = len(market_data.ohlc_buffer.get_bars(symbol))
+    assert bars_count >= 30
 
 
 def test_startup_seed_uses_configured_5m_200_bar_bootstrap(tmp_path, monkeypatch):
@@ -395,7 +415,8 @@ def test_startup_seed_uses_configured_5m_200_bar_bootstrap(tmp_path, monkeypatch
     market_data._INDICATOR_LAST_UPDATE_EPOCH.pop(symbol, None)
 
     rows = market_data.seed_ohlc_buffers_on_startup([symbol])
-    assert len(rows) == 1
+    row_count = len(rows)
+    assert row_count == 1
     row = rows[0]
     assert row["seed_interval"] == "5minute"
     assert row["target_bars"] == 200
@@ -443,7 +464,8 @@ def test_startup_seed_uses_long_lookback_window_when_short_windows_empty(tmp_pat
     market_data._INDICATOR_LAST_UPDATE_EPOCH.pop(symbol, None)
 
     rows = market_data.seed_ohlc_buffers_on_startup([symbol])
-    assert len(rows) == 1
+    row_count = len(rows)
+    assert row_count == 1
     row = rows[0]
     assert row["warmup_ok"] is True
     assert row["seeded_bars_count"] >= 200
@@ -483,7 +505,8 @@ def test_startup_seed_respects_nested_runtime_context_payload(tmp_path, monkeypa
             }
         },
     )
-    assert len(rows) == 1
+    row_count = len(rows)
+    assert row_count == 1
     row = rows[0]
     assert row["warmup_ok"] is True
     assert row["seeded_bars_count"] >= 200
@@ -514,7 +537,8 @@ def test_startup_seed_hist_fetch_failed_reason_is_explicit(tmp_path, monkeypatch
     market_data.ohlc_buffer._bars.pop(symbol, None)
     market_data._INDICATOR_LAST_UPDATE_EPOCH.pop(symbol, None)
     rows = market_data.seed_ohlc_buffers_on_startup([symbol])
-    assert len(rows) == 1
+    row_count = len(rows)
+    assert row_count == 1
     row = rows[0]
     assert row["seed_reason"] == "HIST_FETCH_FAILED"
     assert row["warmup_reason"] == "HIST_FETCH_FAILED"
@@ -549,7 +573,8 @@ def test_warm_seed_retries_before_success(tmp_path, monkeypatch):
     )
     assert seeded_ok is True
     assert reason is None
-    assert len(bars) >= 30
+    bars_count = len(bars)
+    assert bars_count >= 30
     assert calls["n"] == 3
 
 
@@ -874,3 +899,59 @@ def test_regime_unknown_when_indicator_values_are_nan(tmp_path, monkeypatch):
     snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
     assert snap.get("regime") == "UNKNOWN"
     assert "indicator_nan" in set(snap.get("regime_reasons") or [])
+
+
+def test_fetch_live_market_data_indicator_compute_error_does_not_fake_rsi_ema(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    symbol = "SENSEX_INDICATOR_ERROR"
+    fixed_now = market_data.now_ist().replace(second=0, microsecond=0)
+
+    monkeypatch.setattr(cfg, "SYMBOLS", [symbol], raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 30, raising=False)
+    monkeypatch.setattr(cfg, "OHLC_WARM_SEED_WINDOWS_MIN", "120,240", raising=False)
+    monkeypatch.setattr(cfg, "ALLOW_SYNTHETIC_CHAIN", False, raising=False)
+    monkeypatch.setattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO", raising=False)
+
+    market_data._DATA_CACHE.clear()
+    market_data._OPEN_RANGE.clear()
+    market_data._INSUFFICIENT_OHLC_WARNED.clear()
+    market_data.ohlc_buffer._bars.pop(symbol, None)
+
+    monkeypatch.setattr(market_data, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
+    monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(market_data, "fetch_option_chain", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(market_data, "now_utc_epoch", lambda: fixed_now.timestamp())
+    monkeypatch.setattr(market_data.kite_client, "ensure", lambda: None)
+    monkeypatch.setattr(market_data.kite_client, "kite", object(), raising=False)
+    monkeypatch.setattr(market_data.kite_client, "resolve_index_token", lambda _symbol: 256265)
+    monkeypatch.setattr(
+        market_data.kite_client,
+        "historical_data",
+        lambda instrument_token, from_dt, to_dt, interval="minute", **kwargs: _build_hist_rows(40, base_price=83000.0),
+    )
+
+    def _fake_get_ltp(sym: str):
+        market_data._DATA_CACHE.setdefault(sym, {})
+        market_data._DATA_CACHE[sym]["ltp_source"] = "live"
+        market_data._DATA_CACHE[sym]["ltp_ts_epoch"] = fixed_now.timestamp()
+        return 83000.0
+
+    monkeypatch.setattr(market_data, "get_ltp", _fake_get_ltp)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(market_data, "compute_indicators", _boom)
+
+    rows = market_data.fetch_live_market_data()
+    snap = next(r for r in rows if r.get("instrument") == "OPT" and r.get("symbol") == symbol)
+    assert snap["ohlc_bars_count"] >= 30
+    assert snap["indicators_ok"] is False
+    assert "RuntimeError" in str(snap.get("compute_indicators_error") or "")
+    assert snap.get("rsi") is None
+    assert snap.get("ema") is None

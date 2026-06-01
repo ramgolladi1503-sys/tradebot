@@ -15,6 +15,7 @@ from core.decision_dag import (
 from core.live_indicator_readiness import (
     build_live_indicator_readiness_report,
     write_indicator_missing_runtime_evidence,
+    write_live_indicator_readiness_latest,
 )
 from core.time_utils import now_ist
 
@@ -85,6 +86,8 @@ def _maybe_write_indicator_missing_runtime_evidence(
             warmup_min_bars=max(0, warmup_min_bars_int),
             source="decision_reject_indicator_readiness_v1",
         )
+        # Always write the schema-v2 latest artifact when we have a concrete snapshot.
+        write_live_indicator_readiness_latest(report, now_epoch=float(snapshot.ts_epoch))
         write_indicator_missing_runtime_evidence(report, now_epoch=float(snapshot.ts_epoch))
     except Exception:
         return

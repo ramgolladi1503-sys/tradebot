@@ -1,4 +1,5 @@
 import time
+from contextlib import suppress
 
 import core.order_reconciliation_daemon as recon
 
@@ -99,6 +100,14 @@ def test_paper_mode_reconciliation_uses_injected_broker_without_global_auth(monk
 
 def test_live_mode_reconciliation_still_attempts_global_broker_auth(monkeypatch, tmp_path):
     _set_modes(monkeypatch, execution_mode="LIVE", trading_mode="LIVE", dry_run=False)
+
+    # Test isolation: ensure no background reconciliation daemon from other tests
+    # can call the patched global broker auth hook.
+    registry = getattr(recon, "_DAEMON_REGISTRY", None)
+    if registry is not None:
+        for daemon in list(registry):
+            with suppress(Exception):
+                daemon.stop(timeout_sec=0.1)
 
     ensure_calls = []
 

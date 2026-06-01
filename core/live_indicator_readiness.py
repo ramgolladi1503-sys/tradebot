@@ -13,7 +13,10 @@ from core.paths import data_root
 
 LIVE_INDICATOR_READINESS_SCHEMA_VERSION = 1
 LIVE_INDICATOR_READINESS_SOURCE = "live_indicator_readiness_diagnostics_v1"
-LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_SOURCE = "live_indicator_readiness_runtime_evidence_v1"
+
+# Runtime latest artifact contract (used by live audits and notrade evidence enrichment).
+LIVE_INDICATOR_READINESS_RUNTIME_SCHEMA_VERSION = 2
+LIVE_INDICATOR_READINESS_RUNTIME_SOURCE = "live_indicator_readiness_latest_v2"
 LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME = "live_indicator_readiness_latest.json"
 
 INDICATOR_READY = "INDICATOR_READY"
@@ -234,6 +237,43 @@ def live_indicator_readiness_runtime_evidence_path(path: str | Path | None = Non
     return data_root() / LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME
 
 
+def build_live_indicator_readiness_runtime_payload(
+    report: LiveIndicatorReadinessReport | Mapping[str, Any],
+    *,
+    now_epoch: float | None = None,
+) -> dict[str, Any]:
+    """Build the canonical runtime latest readiness payload (schema v2)."""
+
+    payload = _report_payload(report)
+    generated_epoch = _finite_float_or_none(payload.get("generated_epoch"))
+    if generated_epoch is None:
+        generated_epoch = float(time.time() if now_epoch is None else now_epoch)
+    decisions = [_indicator_missing_symbol_payload(decision) for decision in _decision_payloads(payload)]
+    decisions = [decision for decision in decisions if decision is not None]
+    symbols = [str(item.get("symbol") or "") for item in decisions if str(item.get("symbol") or "")]
+    out = {
+        "schema_version": LIVE_INDICATOR_READINESS_RUNTIME_SCHEMA_VERSION,
+        "source": LIVE_INDICATOR_READINESS_RUNTIME_SOURCE,
+        "writer_name": "live_indicator_readiness",
+        "writer_module": __name__,
+        "writer_schema_version": LIVE_INDICATOR_READINESS_RUNTIME_SCHEMA_VERSION,
+        "read_only": True,
+        "append": False,
+        "symbol_count": len(decisions),
+        "symbols": symbols,
+        "by_symbol": {str(item["symbol"]): dict(item) for item in decisions},
+        "generated_epoch": float(generated_epoch),
+        "metadata": {
+            "runtime_evidence_file": LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME,
+            "does_not_change_gate_decision": True,
+            "does_not_change_candidate_state": True,
+            "does_not_compute_indicators": True,
+        },
+    }
+    _mark_non_action(out)
+    return out
+
+
 def build_indicator_missing_runtime_evidence_payload(
     report: LiveIndicatorReadinessReport | Mapping[str, Any],
     *,
@@ -253,25 +293,11 @@ def build_indicator_missing_runtime_evidence_payload(
     decisions = [decision for decision in decisions if decision is not None]
     if not decisions:
         return None
-    out = {
-        "schema_version": LIVE_INDICATOR_READINESS_SCHEMA_VERSION,
-        "source": LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_SOURCE,
-        "read_only": True,
-        "append": False,
-        "decision_gate_reason": INDICATORS_MISSING_GATE_REASON,
-        "symbol_count": len(decisions),
-        "symbols": decisions,
-        "by_symbol": {str(item["symbol"]): dict(item) for item in decisions},
-        "generated_epoch": generated_epoch,
-        "metadata": {
-            "runtime_evidence_file": LIVE_INDICATOR_READINESS_RUNTIME_EVIDENCE_FILENAME,
-            "emits_only_for": INDICATORS_MISSING_GATE_REASON,
-            "does_not_change_gate_decision": True,
-            "does_not_change_candidate_state": True,
-            "does_not_compute_indicators": True,
-        },
-    }
-    _mark_non_action(out)
+    # Backward-compat helper used by older call-sites; keep existing semantics:
+    # emit only when INDICATORS_MISSING is present.
+    out = build_live_indicator_readiness_runtime_payload(payload, now_epoch=now_epoch)
+    out["metadata"]["emits_only_for"] = INDICATORS_MISSING_GATE_REASON
+    out["decision_gate_reason"] = INDICATORS_MISSING_GATE_REASON
     return out
 
 
@@ -286,6 +312,18 @@ def write_indicator_missing_runtime_evidence(
     payload = build_indicator_missing_runtime_evidence_payload(report, now_epoch=now_epoch)
     if payload is None:
         return None
+    return write_json_atomic(live_indicator_readiness_runtime_evidence_path(path), payload)
+
+
+def write_live_indicator_readiness_latest(
+    report: LiveIndicatorReadinessReport | Mapping[str, Any],
+    *,
+    path: str | Path | None = None,
+    now_epoch: float | None = None,
+) -> Path:
+    """Write schema-v2 readiness artifact every time it is invoked."""
+
+    payload = build_live_indicator_readiness_runtime_payload(report, now_epoch=now_epoch)
     return write_json_atomic(live_indicator_readiness_runtime_evidence_path(path), payload)
 
 

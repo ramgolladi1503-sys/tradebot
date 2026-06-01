@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from core.events import write_json_atomic
-from core.paths import logs_dir, runtime_dir
+from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
-RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_SCHEMA_VERSION = 1
+RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_SCHEMA_VERSION = 2
 RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_SOURCE = "runtime_candidate_handoff_root_cause_counters_v1"
 RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME = "candidate_handoff_latest.json"
 
@@ -31,6 +31,46 @@ def _as_list(value: Any) -> list[Any]:
 def _upper_text(value: Any) -> str:
     return str(value or "").strip().upper()
 
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value in (None, "", "None"):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _identity_key(candidate: Mapping[str, Any]) -> str:
+    row = _as_mapping(candidate)
+    trade_id = str(row.get("trade_id") or "").strip()
+    if trade_id:
+        return f"trade_id:{trade_id}"
+    symbol = str(row.get("symbol") or "").strip().upper()
+    token = _safe_float(row.get("instrument_token") or row.get("option_token"))
+    strike = _safe_float(row.get("strike"))
+    expiry = str(row.get("expiry") or row.get("expiry_date") or "").strip()
+    side = str(row.get("side") or row.get("direction") or "").strip().upper()
+    if symbol and token is not None:
+        return f"symtok:{symbol}:{int(token)}:{side}"
+    if symbol and strike is not None and expiry:
+        return f"symstrike:{symbol}:{strike}:{expiry}:{side}"
+    return "unknown_identity"
+
+
+def _is_fallback_candidate(candidate: Mapping[str, Any]) -> bool:
+    row = _as_mapping(candidate)
+    if bool(row.get("synthetic_candidate")):
+        return True
+    if bool(row.get("forced_fallback_execution")):
+        return True
+    source_flags = row.get("source_flags")
+    if isinstance(source_flags, dict):
+        if bool(source_flags.get("recovered_fallback")):
+            return True
+        if bool(source_flags.get("fallback_applied")):
+            return True
+    return False
 
 def _contains_any(haystack: Iterable[str], needles: set[str]) -> bool:
     for item in haystack:
@@ -158,6 +198,7 @@ def build_candidate_handoff_root_cause_payload(
     source: str = RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_SOURCE,
 ) -> dict[str, Any]:
     raw = list(phase2_raw_candidates or [])
+    raw_count = len(raw)
     counters: dict[str, int] = {
         "strategy_generated_count": max(0, int(strategy_generated_count)),
         "feed_blocked_count": 0,
@@ -167,14 +208,60 @@ def build_candidate_handoff_root_cause_payload(
         "latency_blocked_count": 0,
         "execution_context_degraded_count": 0,
         "unknown_drop_reason_count": 0,
-        "phase2_raw_count": len(raw),
+        "phase2_raw_count": raw_count,
         "phase2_ranked_count": max(0, int(phase2_ranked_count)),
     }
+    counters["pre_phase2_drop_count"] = max(0, int(counters["strategy_generated_count"]) - int(raw_count))
+
+    # Pre-Phase2 shape/identity diagnostics (do not alter candidates; evidence only).
+    missing_trade_id = 0
+    missing_symbol = 0
+    missing_instrument_token = 0
+    missing_expiry = 0
+    missing_strike = 0
+    invalid_shape = 0
+    unresolved_contract = 0
+    fallback_candidate_count = 0
+    recovered_fallback_candidate_count = 0
+
+    identity_keys: Counter[str] = Counter()
     drop_reasons: Counter[str] = Counter()
     for candidate in raw:
+        row = _as_mapping(candidate)
+        if not row:
+            invalid_shape += 1
+            continue
+        trade_id = str(row.get("trade_id") or "").strip()
+        symbol = str(row.get("symbol") or "").strip()
+        token = _safe_float(row.get("instrument_token") or row.get("option_token"))
+        strike = _safe_float(row.get("strike"))
+        expiry = str(row.get("expiry") or row.get("expiry_date") or "").strip()
+        hard_blockers = set(_upper_text(v) for v in _as_list(row.get("hard_blockers")) if _upper_text(v))
+        if "UNRESOLVED_CONTRACT" in hard_blockers:
+            unresolved_contract += 1
+        if not trade_id:
+            missing_trade_id += 1
+        if not symbol:
+            missing_symbol += 1
+        if token is None:
+            missing_instrument_token += 1
+        if strike is None:
+            missing_strike += 1
+        if not expiry:
+            missing_expiry += 1
+        if _is_fallback_candidate(row):
+            fallback_candidate_count += 1
+            sf = row.get("source_flags")
+            if isinstance(sf, dict) and bool(sf.get("recovered_fallback")):
+                recovered_fallback_candidate_count += 1
+        identity_keys[_identity_key(row)] += 1
+
         bucket, primary = classify_primary_blocker_bucket(candidate)
         counters[bucket] = int(counters.get(bucket, 0)) + 1
         drop_reasons[str(primary or "UNKNOWN_DROP_REASON")] += 1
+
+    duplicate_key_counts = {k: int(v) for k, v in identity_keys.items() if int(v) > 1}
+    duplicate_count = sum(int(v) - 1 for v in duplicate_key_counts.values())
 
     top_drop_reasons = {reason: int(count) for reason, count in drop_reasons.most_common(10)}
     return {
@@ -182,6 +269,22 @@ def build_candidate_handoff_root_cause_payload(
         "source": str(source),
         "cycle_ts_epoch": float(cycle_ts_epoch),
         **counters,
+        "normalized_candidate_count": raw_count,
+        "deduped_candidate_count": raw_count,
+        "phase2_input_candidate_count": raw_count,
+        "invalid_shape_count": int(invalid_shape),
+        "missing_trade_id_count": int(missing_trade_id),
+        "missing_symbol_count": int(missing_symbol),
+        "missing_instrument_token_count": int(missing_instrument_token),
+        "missing_expiry_count": int(missing_expiry),
+        "missing_strike_count": int(missing_strike),
+        "unresolved_contract_count": int(unresolved_contract),
+        "duplicate_count": int(duplicate_count),
+        "duplicate_key_counts": duplicate_key_counts,
+        "fallback_candidate_count": int(fallback_candidate_count),
+        "recovered_fallback_candidate_count": int(recovered_fallback_candidate_count),
+        "normalization_drop_reason_counts": {},
+        "dedup_drop_reason_counts": {},
         "top_drop_reasons": top_drop_reasons,
         "generated_epoch": float(time.time()),
         "read_only": True,
@@ -197,13 +300,18 @@ def write_candidate_handoff_root_cause_latest(
     logs_path: Path | None = None,
     runtime_path: Path | None = None,
 ) -> tuple[Path, Path]:
-    logs_target = Path(logs_path) if logs_path is not None else (logs_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME)
+    # Contract: write both repo-local `logs/` and runtime `.runtime/` latest artifacts.
+    # For backward compatibility, also mirror into runtime `logs_dir()` (usually `.runtime/logs`).
+    logs_target = Path(logs_path) if logs_path is not None else (repo_logs_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME)
     runtime_target = Path(runtime_path) if runtime_path is not None else (runtime_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME)
+    runtime_logs_target = logs_dir() / RUNTIME_CANDIDATE_HANDOFF_ROOT_CAUSE_FILENAME
     logs_target.parent.mkdir(parents=True, exist_ok=True)
     runtime_target.parent.mkdir(parents=True, exist_ok=True)
+    runtime_logs_target.parent.mkdir(parents=True, exist_ok=True)
     out = dict(payload) if isinstance(payload, Mapping) else {}
     write_json_atomic(logs_target, out)
     write_json_atomic(runtime_target, out)
+    write_json_atomic(runtime_logs_target, out)
     return logs_target, runtime_target
 
 
@@ -213,4 +321,3 @@ __all__ = [
     "classify_primary_blocker_bucket",
     "write_candidate_handoff_root_cause_latest",
 ]
-

@@ -237,6 +237,20 @@ def _emit_scan_summary_and_status(self, market_data: dict | None, trade) -> None
                 option_summary.get("option_reject_total"),
                 option_summary.get("top_rejects"),
             )
+            try:
+                considered = int(option_summary.get("considered") or 0)
+                survivors = int(option_summary.get("survivors") or 0)
+                top_rejects = option_summary.get("top_rejects")
+                if survivors <= 0 and considered > 0:
+                    logger.info(
+                        "NO_CANDIDATE_PATH symbol=%s considered=%s survivors=%s top_rejects=%s",
+                        option_summary.get("symbol", symbol),
+                        considered,
+                        survivors,
+                        top_rejects,
+                    )
+            except Exception:
+                pass
             self._option_scan_summary_emitted = True
     except Exception as exc:
         logger.warning("option_scan_summary_emit_failed err=%s:%s", type(exc).__name__, exc)
@@ -2127,10 +2141,20 @@ class TradeBuilder:
                     or final_quote_row.get("price_age_sec") if isinstance(final_quote_row, dict) else None
                     or final_quote_row.get("option_ltp_age_sec") if isinstance(final_quote_row, dict) else None
                 )
+                # Derive quote age/timestamp deterministically from the cycle snapshot time when available.
+                # Never invent quote truth in LIVE: only derive age from a real quote timestamp, or derive
+                # a timestamp from an explicitly provided quote age.
+                now_epoch = self._coerce_nonnegative_float(
+                    data.get("timestamp_epoch")
+                    or data.get("timestamp")
+                    or data.get("ts_epoch")
+                )
+                if now_epoch is None:
+                    now_epoch = float(now_utc_epoch())
                 if final_quote_ts_epoch is None and final_quote_age_sec is not None:
-                    final_quote_ts_epoch = max(0.0, float(now_utc_epoch()) - float(final_quote_age_sec))
+                    final_quote_ts_epoch = max(0.0, float(now_epoch) - float(final_quote_age_sec))
                 if final_quote_age_sec is None and final_quote_ts_epoch is not None:
-                    final_quote_age_sec = max(0.0, float(now_utc_epoch()) - float(final_quote_ts_epoch))
+                    final_quote_age_sec = max(0.0, float(now_epoch) - float(final_quote_ts_epoch))
                 final_quote_source = "option_chain_live" if final_quote_row else "unknown"
                 if isinstance(final_quote_row, dict):
                     if final_quote_row.get("quote_source") not in (None, "", "None"):
@@ -2146,6 +2170,32 @@ class TradeBuilder:
                     ).strip()
                 if not final_option_ltp_source or final_option_ltp_source.lower() == "none":
                     final_option_ltp_source = final_quote_source
+                # Spread is only valid when derived from real bid/ask and a real mark/ltp anchor.
+                final_best_bid = self._coerce_nonnegative_float(
+                    final_quote_row.get("best_bid") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("bid") if isinstance(final_quote_row, dict) else None
+                )
+                final_best_ask = self._coerce_nonnegative_float(
+                    final_quote_row.get("best_ask") if isinstance(final_quote_row, dict) else None
+                    or final_quote_row.get("ask") if isinstance(final_quote_row, dict) else None
+                )
+                final_mark = self._coerce_nonnegative_float(
+                    (final_quote_row.get("mark_price") if isinstance(final_quote_row, dict) else None)
+                    or (final_quote_row.get("mid_price") if isinstance(final_quote_row, dict) else None)
+                    or (final_quote_row.get("ltp") if isinstance(final_quote_row, dict) else None)
+                    or (final_quote_row.get("last_price") if isinstance(final_quote_row, dict) else None)
+                    or getattr(updated_trade, "mark_price", None)
+                    or getattr(updated_trade, "current_ltp", None)
+                )
+                final_spread_pct = self._coerce_nonnegative_float(
+                    final_quote_row.get("spread_pct") if isinstance(final_quote_row, dict) else None
+                )
+                if final_spread_pct is None and final_best_bid is not None and final_best_ask is not None and final_mark:
+                    if float(final_mark) > 0 and float(final_best_ask) >= float(final_best_bid) >= 0:
+                        final_spread_pct = max(0.0, float(final_best_ask) - float(final_best_bid)) / max(float(final_mark), 1e-9)
+                final_liquidity_score = self._coerce_nonnegative_float(
+                    final_quote_row.get("liquidity_score") if isinstance(final_quote_row, dict) else None
+                )
                 final_quote_truth_snapshot = {
                     "quote_snapshot_id": str(
                         f"{getattr(updated_trade, 'trade_id', None)}|{getattr(updated_trade, 'symbol', None)}|"
@@ -2157,14 +2207,10 @@ class TradeBuilder:
                     ),
                     "quote_ts_epoch": final_quote_ts_epoch,
                     "quote_age_sec": final_quote_age_sec,
-                    "best_bid": self._coerce_nonnegative_float(
-                        final_quote_row.get("best_bid") if isinstance(final_quote_row, dict) else None
-                        or final_quote_row.get("bid") if isinstance(final_quote_row, dict) else None
-                    ),
-                    "best_ask": self._coerce_nonnegative_float(
-                        final_quote_row.get("best_ask") if isinstance(final_quote_row, dict) else None
-                        or final_quote_row.get("ask") if isinstance(final_quote_row, dict) else None
-                    ),
+                    "best_bid": final_best_bid,
+                    "best_ask": final_best_ask,
+                    "spread_pct": final_spread_pct,
+                    "liquidity_score": final_liquidity_score,
                     "current_ltp": self._coerce_nonnegative_float(
                         final_quote_row.get("ltp") if isinstance(final_quote_row, dict) else None
                         or final_quote_row.get("last_price") if isinstance(final_quote_row, dict) else None
@@ -2183,14 +2229,8 @@ class TradeBuilder:
                             or getattr(updated_trade, "current_ltp", None)
                         ),
                         quote_age_sec=final_quote_age_sec,
-                        best_bid=self._coerce_nonnegative_float(
-                            final_quote_row.get("best_bid") if isinstance(final_quote_row, dict) else None
-                            or final_quote_row.get("bid") if isinstance(final_quote_row, dict) else None
-                        ),
-                        best_ask=self._coerce_nonnegative_float(
-                            final_quote_row.get("best_ask") if isinstance(final_quote_row, dict) else None
-                            or final_quote_row.get("ask") if isinstance(final_quote_row, dict) else None
-                        ),
+                        best_bid=final_best_bid,
+                        best_ask=final_best_ask,
                         max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0),
                     ),
                     "execution_entry": self._coerce_nonnegative_float(
@@ -2218,6 +2258,7 @@ class TradeBuilder:
                     ("quote_validation_status", final_quote_truth_snapshot.get("quote_validation_status")),
                     ("option_ltp_timestamp", final_quote_truth_snapshot.get("quote_ts_epoch")),
                     ("price_age_sec", final_quote_truth_snapshot.get("quote_age_sec")),
+                    ("liquidity_score", final_quote_truth_snapshot.get("liquidity_score")),
                 ):
                     try:
                         object.__setattr__(updated_trade, attr, value)
@@ -2334,6 +2375,13 @@ class TradeBuilder:
         data = market_data if isinstance(market_data, dict) else {}
         flags = dict(source_flags or {})
         lifecycle = lifecycle if isinstance(lifecycle, dict) else {}
+        now_epoch = self._coerce_nonnegative_float(
+            data.get("timestamp_epoch")
+            or data.get("timestamp")
+            or data.get("ts_epoch")
+        )
+        if now_epoch is None:
+            now_epoch = float(now_utc_epoch())
 
         def _first_present(*values):
             for value in values:
@@ -2343,111 +2391,29 @@ class TradeBuilder:
             return None
 
         quote_row = None
-
-        best_bid = self._coerce_nonnegative_float(
-            _first_present(
-                getattr(trade, "best_bid", None),
-                getattr(trade, "opt_bid", None),
-                data.get("best_bid"),
-                data.get("bid"),
-                data.get("opt_bid"),
-            )
-        )
-        best_ask = self._coerce_nonnegative_float(
-            _first_present(
-                getattr(trade, "best_ask", None),
-                getattr(trade, "opt_ask", None),
-                data.get("best_ask"),
-                data.get("ask"),
-                data.get("opt_ask"),
-            )
-        )
-        current_ltp = self._coerce_nonnegative_float(
-            _first_present(
-                getattr(trade, "opt_ltp", None),
-                data.get("ltp"),
-                data.get("last_price"),
-                data.get("current_ltp"),
-                getattr(trade, "current_ltp", None),
-                data.get("mark_price"),
-            )
-        )
-        quote_source = str(
-            _first_present(
-                getattr(trade, "quote_source", None),
-                getattr(trade, "option_ltp_source", None),
-                flags.get("quote_source"),
-                flags.get("option_ltp_source"),
-                quote_row.get("quote_source") if isinstance(quote_row, dict) else None,
-                data.get("quote_source"),
-                data.get("option_ltp_source"),
-                data.get("option_quote_source"),
-            )
-            or ""
-        ).strip()
-        if quote_row:
-            quote_row_live = bool(quote_row.get("quote_live", True)) or bool(quote_row.get("quote_ok", True))
-            quote_row_source = str(
-                _first_present(
-                    quote_row.get("quote_source"),
-                    quote_row.get("option_ltp_source"),
-                    "option_chain_live" if quote_row_live else None,
-                )
-                or ""
-            ).strip()
-            if quote_row_live:
-                quote_source = "option_chain_live"
-            elif quote_row_source:
-                quote_source = quote_row_source
-        if not quote_source:
-            if best_bid is not None and best_ask is not None:
-                quote_source = "live"
-            elif _first_present(getattr(trade, "mark_price", None), data.get("mark_price")) is not None:
-                quote_source = "mark"
-            elif current_ltp is not None:
-                quote_source = "last"
-            else:
-                quote_source = "unknown"
-        option_ltp_source = str(
-            _first_present(
-                getattr(trade, "option_ltp_source", None),
-                flags.get("option_ltp_source"),
-                quote_row.get("option_ltp_source") if isinstance(quote_row, dict) else None,
-                data.get("option_ltp_source"),
-                data.get("option_quote_source"),
-                quote_source,
-            )
-            or ""
-        ).strip()
-        if quote_row:
-            quote_row_live = bool(quote_row.get("quote_live", True)) or bool(quote_row.get("quote_ok", True))
-            quote_row_ltp_source = str(
-                _first_present(
-                    quote_row.get("option_ltp_source"),
-                    quote_row.get("quote_source"),
-                    "option_chain_live" if quote_row_live else None,
-                )
-                or ""
-            ).strip()
-            if quote_row_live:
-                option_ltp_source = "option_chain_live"
-            elif quote_row_ltp_source:
-                option_ltp_source = quote_row_ltp_source
-            current_ltp = self._coerce_nonnegative_float(
-                _first_present(
-                    quote_row.get("ltp"),
-                    quote_row.get("last_price"),
-                    current_ltp,
-                )
-            )
-        quote_row = None
         option_chain = data.get("option_chain")
         if isinstance(option_chain, (list, tuple)):
             trade_token = self._coerce_nonnegative_float(getattr(trade, "instrument_token", None))
             trade_symbol = str(_first_present(getattr(trade, "tradingsymbol", None), data.get("tradingsymbol")) or "").strip()
             trade_strike = self._coerce_nonnegative_float(_first_present(getattr(trade, "strike", None), data.get("strike")))
-            trade_right = str(_first_present(getattr(trade, "right", None), getattr(trade, "option_type", None), data.get("right"), data.get("option_type")) or "").strip().upper()
-            trade_expiry = str(_first_present(getattr(trade, "expiry", None), getattr(trade, "expiry_date", None), data.get("expiry"), data.get("expiry_date")) or "").strip()
+            trade_right = str(
+                _first_present(
+                    getattr(trade, "right", None),
+                    getattr(trade, "option_type", None),
+                    data.get("right"),
+                    data.get("option_type"),
+                )
+                or ""
+            ).strip().upper()
+            trade_expiry = str(
+                _first_present(
+                    getattr(trade, "expiry", None),
+                    getattr(trade, "expiry_date", None),
+                    data.get("expiry"),
+                    data.get("expiry_date"),
+                )
+                or ""
+            ).strip()
             for row in option_chain:
                 if not isinstance(row, dict):
                     continue
@@ -2475,6 +2441,79 @@ class TradeBuilder:
                 ):
                     quote_row = row
                     break
+
+        best_bid = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "best_bid", None),
+                getattr(trade, "opt_bid", None),
+                data.get("best_bid"),
+                data.get("bid"),
+                data.get("opt_bid"),
+                quote_row.get("best_bid") if isinstance(quote_row, dict) else None,
+                quote_row.get("bid") if isinstance(quote_row, dict) else None,
+            )
+        )
+        best_ask = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "best_ask", None),
+                getattr(trade, "opt_ask", None),
+                data.get("best_ask"),
+                data.get("ask"),
+                data.get("opt_ask"),
+                quote_row.get("best_ask") if isinstance(quote_row, dict) else None,
+                quote_row.get("ask") if isinstance(quote_row, dict) else None,
+            )
+        )
+        current_ltp = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "opt_ltp", None),
+                data.get("ltp"),
+                data.get("last_price"),
+                data.get("current_ltp"),
+                getattr(trade, "current_ltp", None),
+                data.get("mark_price"),
+                quote_row.get("ltp") if isinstance(quote_row, dict) else None,
+                quote_row.get("last_price") if isinstance(quote_row, dict) else None,
+            )
+        )
+        quote_source = str(
+            _first_present(
+                getattr(trade, "quote_source", None),
+                flags.get("quote_source"),
+                quote_row.get("quote_source") if isinstance(quote_row, dict) else None,
+                data.get("quote_source"),
+                data.get("option_quote_source"),
+            )
+            or ""
+        ).strip()
+        if not quote_source:
+            if best_bid is not None and best_ask is not None:
+                quote_source = "live"
+            elif _first_present(getattr(trade, "mark_price", None), data.get("mark_price")) is not None:
+                quote_source = "mark"
+            elif current_ltp is not None:
+                quote_source = "last"
+            else:
+                quote_source = "unknown"
+        option_ltp_source = str(
+            _first_present(
+                getattr(trade, "option_ltp_source", None),
+                flags.get("option_ltp_source"),
+                quote_row.get("option_ltp_source") if isinstance(quote_row, dict) else None,
+                data.get("option_ltp_source"),
+                data.get("option_quote_source"),
+                quote_source,
+            )
+            or ""
+        ).strip()
+        if quote_row:
+            current_ltp = self._coerce_nonnegative_float(
+                _first_present(
+                    quote_row.get("ltp"),
+                    quote_row.get("last_price"),
+                    current_ltp,
+                )
+            )
         quote_ts_epoch = self._coerce_nonnegative_float(
             _first_present(
                 getattr(trade, "quote_ts_epoch", None),
@@ -2483,12 +2522,8 @@ class TradeBuilder:
                 flags.get("option_ltp_timestamp"),
                 quote_row.get("quote_ts_epoch") if isinstance(quote_row, dict) else None,
                 quote_row.get("quote_timestamp_epoch") if isinstance(quote_row, dict) else None,
-                quote_row.get("timestamp_epoch") if isinstance(quote_row, dict) else None,
-                quote_row.get("ts_epoch") if isinstance(quote_row, dict) else None,
                 data.get("quote_ts_epoch"),
                 data.get("quote_timestamp_epoch"),
-                data.get("timestamp_epoch"),
-                data.get("ts_epoch"),
             )
         )
         quote_age_sec = self._coerce_nonnegative_float(
@@ -2500,9 +2535,9 @@ class TradeBuilder:
             )
         )
         if quote_ts_epoch is None and quote_age_sec is not None:
-            quote_ts_epoch = max(0.0, float(now_utc_epoch()) - float(quote_age_sec))
+            quote_ts_epoch = max(0.0, float(now_epoch) - float(quote_age_sec))
         if quote_age_sec is None and quote_ts_epoch is not None:
-            quote_age_sec = max(0.0, float(now_utc_epoch()) - float(quote_ts_epoch))
+            quote_age_sec = max(0.0, float(now_epoch) - float(quote_ts_epoch))
 
         quote_validation_status = resolve_quote_validation_status(
             existing_status=_first_present(
@@ -2527,12 +2562,54 @@ class TradeBuilder:
             or f"{trade_id}|{symbol}|{quote_ts_epoch if quote_ts_epoch is not None else 'na'}|{quote_source or 'unknown'}|{current_ltp if current_ltp is not None else 'na'}|{best_bid if best_bid is not None else 'na'}|{best_ask if best_ask is not None else 'na'}"
         ).strip()
 
+        spread_pct = None
+        try:
+            mark = self._coerce_nonnegative_float(
+                _first_present(
+                    getattr(trade, "mark_price", None),
+                    data.get("mark_price"),
+                    current_ltp,
+                )
+            )
+            spread_pct = self._coerce_nonnegative_float(
+                _first_present(
+                    getattr(trade, "spread_pct", None),
+                    flags.get("spread_pct"),
+                    data.get("spread_pct"),
+                    quote_row.get("spread_pct") if isinstance(quote_row, dict) else None,
+                )
+            )
+            if (
+                spread_pct is None
+                and best_bid is not None
+                and best_ask is not None
+                and mark is not None
+                and float(mark) > 0
+                and float(best_ask) >= float(best_bid) >= 0
+            ):
+                spread_pct = max(0.0, float(best_ask) - float(best_bid)) / max(float(mark), 1e-9)
+        except Exception:
+            spread_pct = None
+
+        # (fallback stays None; LIVE strict gates will fail-closed)
+
+        liquidity_score = self._coerce_nonnegative_float(
+            _first_present(
+                getattr(trade, "liquidity_score", None),
+                flags.get("liquidity_score"),
+                data.get("liquidity_score"),
+                quote_row.get("liquidity_score") if isinstance(quote_row, dict) else None,
+            )
+        )
+
         snapshot = {
             "quote_snapshot_id": quote_snapshot_id,
             "quote_ts_epoch": quote_ts_epoch,
             "quote_age_sec": quote_age_sec,
             "best_bid": best_bid,
             "best_ask": best_ask,
+            "spread_pct": spread_pct,
+            "liquidity_score": liquidity_score,
             "current_ltp": current_ltp,
             "option_ltp_source": option_ltp_source or None,
             "quote_source": quote_source or None,
@@ -2567,6 +2644,7 @@ class TradeBuilder:
             "price_age_sec",
             "quote_source",
             "quote_validation_status",
+            "liquidity_score",
             "source_flags",
         ):
             value = snapshot.get(attr) if attr in snapshot else flags if attr == "source_flags" else None

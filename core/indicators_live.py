@@ -17,6 +17,8 @@ def compute_indicators(candles, vwap_window=20, atr_period=14, adx_period=14, vo
         "atr": None,
         "adx": None,
         "vol_z": 0.0,
+        "rsi": None,
+        "ema": None,
         "ok": False,
         "last_ts": None,
     }
@@ -91,4 +93,37 @@ def compute_indicators(candles, vwap_window=20, atr_period=14, adx_period=14, vo
         out["vol_z"] = (atr_pct_series[-1] - mu) / sd if sd > 0 else 0.0
 
     out["ok"] = True
+
+    # RSI (Wilder)
+    try:
+        rsi_period = 14
+        if len(closes) >= rsi_period + 1:
+            deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+            gains = [d if d > 0 else 0.0 for d in deltas]
+            losses = [(-d) if d < 0 else 0.0 for d in deltas]
+            avg_gain = sum(gains[:rsi_period]) / rsi_period
+            avg_loss = sum(losses[:rsi_period]) / rsi_period
+            for i in range(rsi_period, len(deltas)):
+                avg_gain = ((avg_gain * (rsi_period - 1)) + gains[i]) / rsi_period
+                avg_loss = ((avg_loss * (rsi_period - 1)) + losses[i]) / rsi_period
+            if avg_loss == 0:
+                out["rsi"] = 100.0 if avg_gain > 0 else 50.0
+            else:
+                rs = avg_gain / avg_loss
+                out["rsi"] = 100.0 - (100.0 / (1.0 + rs))
+    except Exception:
+        pass
+
+    # EMA
+    try:
+        ema_period = 20
+        if len(closes) >= ema_period:
+            k = 2.0 / (ema_period + 1.0)
+            ema = sum(closes[:ema_period]) / ema_period
+            for px in closes[ema_period:]:
+                ema = (px * k) + (ema * (1.0 - k))
+            out["ema"] = ema
+    except Exception:
+        pass
+
     return out

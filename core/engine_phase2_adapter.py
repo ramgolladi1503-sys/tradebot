@@ -7,11 +7,18 @@ behavior can live in the owning adapter instead of import-time hooks.
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from typing import Any
 
 from config import config as cfg
 from core import _engine_phase2_adapter_base as _phase2_base
 from core._engine_phase2_adapter_base import *  # noqa: F401,F403
+from core.paths import logs_dir
+from core.runtime_phase2_rejection_evidence import (
+    build_phase2_rejection_evidence_payload,
+    write_phase2_rejection_evidence_latest,
+)
+from core.runtime_feed_truth_snapshot import build_feed_truth_snapshot, write_feed_truth_snapshot_latest
 
 _base_build_candidates_phase2 = _phase2_base.build_candidates_phase2
 # Guard against module reload / re-import recursion: this adapter assigns its
@@ -393,6 +400,30 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
         ),
         reverse=True,
     )
+    try:
+        if bool(getattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True)):
+            drop_counts = getattr(_phase2_base.build_candidates_phase2, "_last_drop_reason_counts", {}) or {}
+            payload = build_phase2_rejection_evidence_payload(
+                phase2_state=None,
+                raw_candidates=[row for row in list(raw_candidates or []) if isinstance(row, dict)],
+                ranked_candidates=[row for row in list(out or []) if isinstance(row, dict)],
+                drop_reason_counts=drop_counts if isinstance(drop_counts, dict) else {},
+            )
+            write_phase2_rejection_evidence_latest(payload=payload)
+            try:
+                feed_payload = {}
+                feed_path = (logs_dir() / "feed_runtime_latest.json")
+                if feed_path.exists():
+                    feed_payload = json.loads(feed_path.read_text(encoding="utf-8"))
+                truth_payload = build_feed_truth_snapshot(
+                    feed_runtime=feed_payload if isinstance(feed_payload, dict) else {},
+                    phase2_rejection=payload,
+                )
+                write_feed_truth_snapshot_latest(payload=truth_payload)
+            except Exception:
+                pass
+    except Exception:
+        pass
     return out
 
 
