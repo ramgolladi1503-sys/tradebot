@@ -6781,6 +6781,7 @@ class Orchestrator:
                             phase2_rejection=phase2_rejection_payload,
                             feed_truth=feed_truth_payload,
                             top_opportunities=top_payload,
+                            cycle_blockers=dict(cycle_blockers),
                         )
                         write_notrade_reason_truth_latest(payload=notrade_payload)
                     except Exception as notrade_exc:

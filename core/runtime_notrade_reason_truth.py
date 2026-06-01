@@ -56,15 +56,19 @@ def build_notrade_reason_truth_payload(
     phase2_rejection: Mapping[str, Any] | None,
     feed_truth: Mapping[str, Any] | None,
     top_opportunities: Mapping[str, Any] | None,
+    cycle_blockers: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     handoff = _as_mapping(candidate_handoff)
     phase2 = _as_mapping(phase2_rejection)
     feed = _as_mapping(feed_truth)
     top = _as_mapping(top_opportunities)
+    blockers = _as_mapping(cycle_blockers)
 
     precedence = [
         "market_closed",
         "feed_stale",
+        "indicators_missing",
+        "regime_unstable",
         "unresolved_contract",
         "missing_quote_truth",
         "fallback_blocked",
@@ -80,6 +84,26 @@ def build_notrade_reason_truth_payload(
     market_closed_detected = bool(feed.get("market_closed_detected"))
     feed_fresh = bool(feed.get("feed_fresh")) if "feed_fresh" in feed else None
     option_tick_fresh = bool(feed.get("option_tick_fresh")) if "option_tick_fresh" in feed else None
+    phase2_input_candidate_count = int(handoff.get("phase2_input_candidate_count") or 0)
+
+    # Upstream gate blockers (pre-Phase2). These are evidence-only and must not
+    # change decision logic. They exist to prevent "unknown" when upstream gates
+    # are clearly blocking candidate generation.
+    upstream_gate_counts: Counter[str] = Counter()
+    for key, value in blockers.items():
+        code = _upper(key)
+        if not code:
+            continue
+        try:
+            count = int(value or 0)
+        except Exception:
+            count = 1
+        if count <= 0:
+            continue
+        upstream_gate_counts[code] += count
+
+    indicators_missing_count = int(upstream_gate_counts.get("INDICATORS_MISSING") or 0)
+    regime_unstable_count = int(upstream_gate_counts.get("REGIME_UNSTABLE") or 0)
 
     # Aggregate the most actionable Phase2 evidence buckets.
     feed_stale_count = int(phase2.get("feed_stale_hard_block_count") or 0)
@@ -107,6 +131,12 @@ def build_notrade_reason_truth_payload(
     elif feed_stale_count > 0 or feed_fresh is False or option_tick_fresh is False:
         primary_reason = "feed_stale"
         primary_source = "phase2_rejection_latest" if feed_stale_count > 0 else "feed_truth_latest"
+    elif feed_fresh is True and phase2_input_candidate_count <= 0 and indicators_missing_count > 0:
+        primary_reason = "indicators_missing"
+        primary_source = "cycle_blockers"
+    elif feed_fresh is True and phase2_input_candidate_count <= 0 and regime_unstable_count > 0:
+        primary_reason = "regime_unstable"
+        primary_source = "cycle_blockers"
     elif unresolved_contract_count > 0:
         primary_reason = "unresolved_contract"
         primary_source = "phase2_rejection_latest"
@@ -130,6 +160,10 @@ def build_notrade_reason_truth_payload(
         supporting.append("market_closed")
     if feed_stale_count > 0 or feed_fresh is False or option_tick_fresh is False:
         supporting.append("feed_stale")
+    if indicators_missing_count > 0:
+        supporting.append("indicators_missing")
+    if regime_unstable_count > 0:
+        supporting.append("regime_unstable")
     if unresolved_contract_count > 0:
         supporting.append("unresolved_contract")
     if missing_quote_age > 0:
@@ -171,6 +205,8 @@ def build_notrade_reason_truth_payload(
         "feed_fresh": feed_fresh,
         "option_tick_fresh": option_tick_fresh,
         "selected_contract_quote_fresh": feed.get("selected_contract_quote_fresh"),
+        "phase2_input_candidate_count": int(phase2_input_candidate_count),
+        "upstream_gate_reason_counts": dict(upstream_gate_counts),
         "generated_epoch": float(time.time()),
         "read_only": True,
         "append": False,
