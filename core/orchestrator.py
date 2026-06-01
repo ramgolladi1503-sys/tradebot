@@ -120,7 +120,7 @@ from core.telemetry_streams import (
 )
 from core.trade_log_paths import ensure_trade_log_exists
 from core.runtime_health import write_runtime_health_snapshot
-from core.paths import logs_dir
+from core.paths import logs_dir, repo_logs_dir
 from core.auth_manager import runtime_auth_snapshot
 from core.observability.pipeline import write_pipeline_funnel
 from core.outcome_labels import attach_candidate_outcome_labels
@@ -145,6 +145,10 @@ from core.candidate_row_classification import classify_candidate_row
 from core.runtime_ranking_quality_evidence import (
     build_ranking_quality_evidence_payload,
     write_ranking_quality_latest,
+)
+from core.runtime_live_workload_evidence import (
+    build_live_workload_payload,
+    write_live_workload_latest,
 )
 from core.event_log import validate_and_repair as validate_and_repair_event_log
 from core.decision_dag import (
@@ -6796,6 +6800,17 @@ class Orchestrator:
                         write_ranking_quality_latest(payload=rq_payload)
                     except Exception as rq_exc:
                         logger.warning("ranking_quality_write_failed err=%s", rq_exc)
+                    try:
+                        feed_runtime_payload = _read_json_dict(repo_logs_dir() / "feed_runtime_latest.json")
+                        workload_payload = build_live_workload_payload(
+                            execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
+                            market_open=bool(cycle_market_open),
+                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            feed_runtime=feed_runtime_payload,
+                        )
+                        write_live_workload_latest(payload=workload_payload)
+                    except Exception as workload_exc:
+                        logger.warning("live_workload_write_failed err=%s", workload_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
