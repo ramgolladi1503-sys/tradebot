@@ -3367,7 +3367,12 @@ class Orchestrator:
             self._gatekeeper_cycle_cache = cache
         if symbol in cache:
             decision = cache[symbol]
-            return GateResult(bool(decision.allowed), decision.selected_strategy, list(decision.blockers))
+            return GateResult(
+                bool(decision.allowed),
+                decision.selected_strategy,
+                list(decision.blockers),
+                facts=dict(decision.facts or {}),
+            )
 
         precondition_blocking_nodes = {
             NODE_N1_MARKET_OPEN,
@@ -3509,7 +3514,12 @@ class Orchestrator:
                 pass
             logger.warning("decision_stream_write_failed err=%s:%s", type(exc).__name__, exc)
 
-        return GateResult(bool(decision.allowed), decision.selected_strategy, list(decision.blockers))
+        return GateResult(
+            bool(decision.allowed),
+            decision.selected_strategy,
+            list(decision.blockers),
+            facts=dict(decision.facts or {}),
+        )
 
     def _is_live_mode(self):
         return str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper() == "LIVE"

@@ -1102,6 +1102,10 @@ def _node_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps
         "precondition_failures": list(precondition_failures),
         "precondition_reasons": list(precondition_reasons),
         "candidate_summary": candidate_summary if candidate_summary else {},
+        "predicate_node": NODE_N8_STRATEGY_SELECT,
+        "trade_builder_reached": False,
+        "candidate_family_considered": (candidate.family if candidate else None),
+        "no_candidate_constructed": candidate is None,
         "picked_candidate": {
             "family": (candidate.family if candidate else None),
             "allowed": (bool(candidate.allowed) if candidate else False),
@@ -1116,10 +1120,13 @@ def _node_strategy_select(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps
         # Still emit candidate telemetry for observability.
         return NodeResult(ok=True, reasons=(), facts=facts)
 
+    facts["trade_builder_reached"] = True
     if candidate is None:
         facts["strategy_reasons"] = []
         facts["qual_fail_codes"] = _derive_qual_fail_codes(None, manual_review=False)
         facts["qual_fail_reasons_raw"] = []
+        facts["no_candidate_constructed"] = True
+        facts["candidate_family_considered"] = None
         return NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts=facts)
 
     facts["strategy_reasons"] = list(candidate.reasons)
@@ -1155,7 +1162,19 @@ def _node_strategy_eligible(snapshot: MarketSnapshot, ctx: Mapping[str, Any], de
     n8 = deps.get(NODE_N8_STRATEGY_SELECT, NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts={}))
     facts = {"from_node": NODE_N8_STRATEGY_SELECT, "candidate_summary": (n8.facts or {}).get("candidate_summary", {})}
     # NEW: pass through telemetry if present
-    for k in ("qual_fail_codes", "qual_fail_reasons_raw", "picked_candidate", "all_candidates", "precondition_failures", "precondition_reasons"):
+    for k in (
+        "qual_fail_codes",
+        "qual_fail_reasons_raw",
+        "picked_candidate",
+        "all_candidates",
+        "precondition_failures",
+        "precondition_reasons",
+        "predicate_node",
+        "trade_builder_reached",
+        "candidate_family_considered",
+        "no_candidate_constructed",
+        "strategy_reasons",
+    ):
         if k in (n8.facts or {}):
             facts[k] = (n8.facts or {}).get(k)
     if n8.ok:
@@ -1167,7 +1186,19 @@ def _node_decision_ready(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
     n9 = deps.get(NODE_N9_STRATEGY_ELIGIBLE, NodeResult(ok=False, reasons=(REASON_NO_STRATEGY_QUALIFIED,), facts={}))
     facts = {"from_node": NODE_N9_STRATEGY_ELIGIBLE}
     # NEW: pass through telemetry if present
-    for k in ("qual_fail_codes", "qual_fail_reasons_raw", "picked_candidate", "all_candidates", "precondition_failures", "precondition_reasons"):
+    for k in (
+        "qual_fail_codes",
+        "qual_fail_reasons_raw",
+        "picked_candidate",
+        "all_candidates",
+        "precondition_failures",
+        "precondition_reasons",
+        "predicate_node",
+        "trade_builder_reached",
+        "candidate_family_considered",
+        "no_candidate_constructed",
+        "strategy_reasons",
+    ):
         if k in (n9.facts or {}):
             facts[k] = (n9.facts or {}).get(k)
     if n9.ok:
@@ -1207,7 +1238,20 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
         if node_name in {NODE_N8_STRATEGY_SELECT, NODE_N9_STRATEGY_ELIGIBLE, NODE_N10_DECISION_READY}:
             f = dict(result.facts or {})
             # Only keep a safe subset (bounded)
-            for k in ("qual_fail_codes", "qual_fail_reasons_raw", "picked_candidate", "all_candidates", "precondition_failures", "precondition_reasons", "strategy_reasons"):
+            for k in (
+                "qual_fail_codes",
+                "qual_fail_reasons_raw",
+                "picked_candidate",
+                "all_candidates",
+                "precondition_failures",
+                "precondition_reasons",
+                "strategy_reasons",
+                "predicate_node",
+                "trade_builder_reached",
+                "candidate_family_considered",
+                "no_candidate_constructed",
+                "strategy_skipped_due_to_preconditions",
+            ):
                 if k in f:
                     strategy_telemetry[k] = f.get(k)
 

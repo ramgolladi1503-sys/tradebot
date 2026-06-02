@@ -26,6 +26,7 @@ REASON_CATEGORIES = {
     "spread",
     "direction_or_regime_mismatch",
     "quote_quality",
+    "indicator_gate",
     "unknown",
 }
 
@@ -40,6 +41,7 @@ FEED_BLOCKERS = {
 }
 INDICATOR_BLOCKERS = {"INDICATORS_MISSING"}
 REGIME_BLOCKERS = {"REGIME_UNSTABLE"}
+LATENCY_GUARD_BLOCKERS = {"LATENCY_GUARD_COOLDOWN_PREBUILD_SKIP"}
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:
@@ -139,6 +141,8 @@ def classify_no_qualified_reason_category(*values: Any) -> str:
         return "expiry_restriction"
     if "spread" in compact or "bidask" in compact or "bid_ask" in compact:
         return "spread"
+    if "indicator" in compact or "indicators" in compact or "warmup" in compact:
+        return "indicator_gate"
     if "regime" in compact or "direction" in compact or "trend_mismatch" in compact:
         return "direction_or_regime_mismatch"
     if "quote" in compact or "stale" in compact or "ltp" in compact:
@@ -154,6 +158,85 @@ def _first_reason(*values: Any) -> str:
     return "unknown"
 
 
+def _promoted_gate_reasons(
+    *,
+    raw_reasons: list[str],
+    fail_codes: list[str],
+    gate_reasons: Any,
+    picked: Mapping[str, Any],
+    all_candidates: list[Mapping[str, Any]],
+) -> list[str]:
+    promoted = list(raw_reasons)
+    if not promoted:
+        promoted.extend([reason for reason in _string_list(picked.get("reasons")) if reason])
+    if not promoted:
+        for candidate in all_candidates:
+            promoted.extend([reason for reason in _string_list(candidate.get("reasons")) if reason])
+    if not promoted:
+        promoted.extend([reason for reason in fail_codes if reason])
+    if not promoted:
+        promoted.extend([reason for reason in _string_list(gate_reasons) if reason])
+    deduped: list[str] = []
+    for reason in promoted:
+        if reason and reason not in deduped:
+            deduped.append(reason)
+    return deduped or ["unknown"]
+
+
+def _has_predicate_facts(tele: Mapping[str, Any]) -> bool:
+    for key in (
+        "qual_fail_codes",
+        "qual_fail_reasons_raw",
+        "picked_candidate",
+        "all_candidates",
+        "precondition_failures",
+        "precondition_reasons",
+        "strategy_reasons",
+        "predicate_node",
+        "trade_builder_reached",
+        "candidate_family_considered",
+        "no_candidate_constructed",
+        "strategy_skipped_due_to_preconditions",
+    ):
+        value = tele.get(key)
+        if key in {"picked_candidate"} and isinstance(value, Mapping):
+            if value:
+                return True
+            continue
+        if key in {"all_candidates", "qual_fail_codes", "qual_fail_reasons_raw", "precondition_failures", "precondition_reasons", "strategy_reasons"}:
+            if _string_list(value) if key != "all_candidates" else isinstance(value, list) and bool(value):
+                return True
+            continue
+        if key == "trade_builder_reached":
+            if value is not None:
+                return True
+            continue
+        if value not in (None, "", [], (), {}, False):
+            return True
+    return False
+
+
+def _normalize_predicate_facts(tele: Mapping[str, Any]) -> dict[str, Any]:
+    picked = tele.get("picked_candidate") if isinstance(tele.get("picked_candidate"), Mapping) else {}
+    all_candidates = tele.get("all_candidates") if isinstance(tele.get("all_candidates"), list) else []
+    return {
+        "predicate_node": str(tele.get("predicate_node") or "unknown"),
+        "trade_builder_reached": _safe_bool(tele.get("trade_builder_reached")),
+        "candidate_family_considered": (
+            str(tele.get("candidate_family_considered") or "").strip() or None
+        ),
+        "no_candidate_constructed": _safe_bool(tele.get("no_candidate_constructed")),
+        "strategy_skipped_due_to_preconditions": _safe_bool(
+            tele.get("strategy_skipped_due_to_preconditions")
+        ),
+        "picked_candidate": dict(picked) if isinstance(picked, Mapping) else {},
+        "all_candidates": [dict(item) for item in all_candidates if isinstance(item, Mapping)],
+        "precondition_failures": _string_list(tele.get("precondition_failures")),
+        "precondition_reasons": _string_list(tele.get("precondition_reasons")),
+        "strategy_reasons": _string_list(tele.get("strategy_reasons")),
+    }
+
+
 def build_strategy_attempt_from_gate(
     *,
     symbol: str,
@@ -164,17 +247,45 @@ def build_strategy_attempt_from_gate(
     tele = _as_mapping(telemetry)
     fail_codes = _string_list(tele.get("qual_fail_codes"))
     raw_reasons = _string_list(tele.get("qual_fail_reasons_raw"))
-    picked = tele.get("picked_candidate") if isinstance(tele.get("picked_candidate"), Mapping) else {}
-    all_candidates = tele.get("all_candidates") if isinstance(tele.get("all_candidates"), list) else []
-    candidate_produced = bool(all_candidates)
-    no_setup_reason = _first_reason(raw_reasons, fail_codes, gate_reasons, "NO_STRATEGY_QUALIFIED")
-    category = classify_no_qualified_reason_category(fail_codes, raw_reasons, gate_reasons, picked)
-    strategy = _strategy_id(strategy_id or picked.get("family"))
+    predicate_facts = _normalize_predicate_facts(tele)
+    picked = predicate_facts["picked_candidate"]
+    all_candidates = predicate_facts["all_candidates"]
+    promoted_reasons = _promoted_gate_reasons(
+        raw_reasons=raw_reasons,
+        fail_codes=fail_codes,
+        gate_reasons=gate_reasons,
+        picked=picked,
+        all_candidates=all_candidates,
+    )
+    candidate_produced = bool(picked.get("family")) or any(
+        bool(str(candidate.get("family") or "").strip())
+        for candidate in all_candidates
+        if isinstance(candidate, Mapping)
+    )
+    predicate_facts["no_candidate_constructed"] = not candidate_produced
+    if not candidate_produced:
+        predicate_facts["candidate_family_considered"] = None
+    has_predicate_facts = _has_predicate_facts(tele)
+    if not has_predicate_facts and not candidate_produced:
+        strategy = _strategy_id(strategy_id or picked.get("family") or predicate_facts["candidate_family_considered"])
+        no_setup_reason = "no_strategy_candidate_constructed_before_gate"
+        category = "unknown"
+    else:
+        strategy = _strategy_id(strategy_id or picked.get("family") or predicate_facts["candidate_family_considered"])
+        no_setup_reason = _first_reason(promoted_reasons, fail_codes, gate_reasons, "NO_STRATEGY_QUALIFIED")
+        category = classify_no_qualified_reason_category(
+            fail_codes,
+            promoted_reasons,
+            gate_reasons,
+            picked,
+            predicate_facts["precondition_reasons"],
+            predicate_facts["strategy_reasons"],
+        )
     return {
         "symbol": _upper(symbol),
         "strategy_id": strategy,
         "attempted": True,
-        "trade_builder_ran": False,
+        "trade_builder_ran": bool(predicate_facts["trade_builder_reached"]),
         "candidate_produced": candidate_produced,
         "candidate_generated_then_dropped": False,
         "no_setup_qualified": not candidate_produced,
@@ -182,10 +293,11 @@ def build_strategy_attempt_from_gate(
         "reason_category": category if category in REASON_CATEGORIES else "unknown",
         "gate_reasons": _string_list(gate_reasons),
         "qual_fail_codes": fail_codes,
-        "qual_fail_reasons_raw": raw_reasons,
+        "qual_fail_reasons_raw": promoted_reasons,
         "raw_candidate_count": 0,
         "post_scan_survivor_count": 0,
         "source": "strategy_gate",
+        **predicate_facts,
     }
 
 
@@ -258,6 +370,24 @@ def _prepared_attempts(strategy_attempts: list[Mapping[str, Any]] | None) -> lis
         row["gate_reasons"] = _string_list(row.get("gate_reasons"))
         row["qual_fail_codes"] = _string_list(row.get("qual_fail_codes"))
         row["qual_fail_reasons_raw"] = _string_list(row.get("qual_fail_reasons_raw"))
+        row["predicate_node"] = str(row.get("predicate_node") or "unknown").strip() or "unknown"
+        row["trade_builder_reached"] = _safe_bool(row.get("trade_builder_reached"))
+        row["candidate_family_considered"] = (
+            str(row.get("candidate_family_considered") or "").strip() or None
+        )
+        row["no_candidate_constructed"] = _safe_bool(row.get("no_candidate_constructed"))
+        row["strategy_skipped_due_to_preconditions"] = _safe_bool(
+            row.get("strategy_skipped_due_to_preconditions")
+        )
+        row["picked_candidate"] = (
+            dict(row.get("picked_candidate")) if isinstance(row.get("picked_candidate"), Mapping) else {}
+        )
+        row["all_candidates"] = [
+            dict(item) for item in list(row.get("all_candidates") or []) if isinstance(item, Mapping)
+        ]
+        row["precondition_failures"] = _string_list(row.get("precondition_failures"))
+        row["precondition_reasons"] = _string_list(row.get("precondition_reasons"))
+        row["strategy_reasons"] = _string_list(row.get("strategy_reasons"))
         row["raw_candidate_count"] = _safe_int(row.get("raw_candidate_count"))
         row["post_scan_survivor_count"] = _safe_int(row.get("post_scan_survivor_count"))
         row["source"] = str(row.get("source") or "unknown").strip() or "unknown"
@@ -276,6 +406,10 @@ def _blocked_reason(
     phase2_input_candidate_count: int | None,
 ) -> str | None:
     blocker_codes = {_upper(key) for key, value in blockers.items() if _safe_int(value) > 0}
+    if any("LATENCY_GUARD" in code for code in blocker_codes) or blocker_codes.intersection(
+        LATENCY_GUARD_BLOCKERS
+    ):
+        return "latency_guard"
     if blocker_codes.intersection(FEED_BLOCKERS):
         return "feed_blocked"
 

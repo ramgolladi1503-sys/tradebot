@@ -11,6 +11,7 @@ class GateResult:
     allowed: bool
     family: str | None
     reasons: list
+    facts: dict | None = None
 
 
 class StrategyGatekeeper:

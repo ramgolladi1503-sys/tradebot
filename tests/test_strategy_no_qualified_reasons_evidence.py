@@ -211,6 +211,65 @@ def test_strategy_no_qualified_payload_distinguishes_no_setup_from_generated_the
     assert payload["by_symbol"]["SENSEX"]["attempts"][0]["reason_category"] == "spread"
 
 
+def test_strategy_no_qualified_payload_marks_empty_predicate_facts_as_no_candidate_constructed():
+    attempt = build_strategy_attempt_from_gate(
+        symbol="NIFTY",
+        strategy_id=None,
+        gate_reasons=["NO_STRATEGY_QUALIFIED"],
+        telemetry={},
+    )
+
+    assert attempt["strategy_id"] == "unknown"
+    assert attempt["no_setup_reason"] == "no_strategy_candidate_constructed_before_gate"
+    assert attempt["reason_category"] == "unknown"
+    assert attempt["trade_builder_ran"] is False
+    assert attempt["candidate_produced"] is False
+    assert attempt["no_candidate_constructed"] is True
+
+
+def test_strategy_no_qualified_payload_promotes_all_candidates_reasons_into_summary_fields():
+    attempt = build_strategy_attempt_from_gate(
+        symbol="SENSEX",
+        strategy_id=None,
+        gate_reasons=["NO_STRATEGY_QUALIFIED"],
+        telemetry={
+            "qual_fail_codes": ["no_candidates"],
+            "qual_fail_reasons_raw": [],
+            "all_candidates": [
+                {
+                    "family": None,
+                    "allowed": False,
+                    "manual_review_required": False,
+                    "reasons": ["indicators_missing_or_stale"],
+                    "candidate_summary": {},
+                }
+            ],
+        },
+    )
+
+    assert attempt["qual_fail_reasons_raw"] == ["indicators_missing_or_stale"]
+    assert attempt["no_setup_reason"] == "indicators_missing_or_stale"
+    assert attempt["reason_category"] == "indicator_gate"
+    assert attempt["no_candidate_constructed"] is True
+
+
+def test_strategy_no_qualified_payload_marks_latency_guard_as_non_applicable():
+    payload = build_strategy_no_qualified_reasons_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "NIFTY"}],
+        cycle_blockers={"LATENCY_GUARD_COOLDOWN_PREBUILD_SKIP": 1, "NO_STRATEGY_QUALIFIED": 1},
+        indicator_readiness=READY_INDICATORS,
+        regime_truth=READY_REGIME,
+        strategy_attempts=[],
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+
+    assert payload["strategy_no_qualified_applicable"] is False
+    assert payload["not_applicable_reason"] == "latency_guard"
+
+
 def test_strategy_no_qualified_payload_does_not_change_candidate_counts_or_strategy_decisions():
     attempts = [
         build_strategy_attempt_from_trade_builder(
