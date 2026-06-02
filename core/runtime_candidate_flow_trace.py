@@ -74,6 +74,33 @@ def _infer_indicator_ready(irow: Mapping[str, Any] | None) -> bool | None:
     return None
 
 
+def _reconcile_gate_reasons(
+    *,
+    blockers: Mapping[str, Any],
+    indicator_ready_symbol_count: int,
+    indicator_blocked_symbol_count: int,
+) -> Counter[str]:
+    gate_reasons: Counter[str] = Counter()
+    for k, v in blockers.items():
+        code = _upper(k)
+        if not code:
+            continue
+        try:
+            count = int(v or 0)
+        except Exception:
+            count = 1
+        if count <= 0:
+            continue
+        if (
+            code == "INDICATORS_MISSING"
+            and indicator_blocked_symbol_count == 0
+            and indicator_ready_symbol_count > 0
+        ):
+            continue
+        gate_reasons[code] += count
+    return gate_reasons
+
+
 def _infer_regime_blocked(
     *,
     sym: str,
@@ -168,18 +195,11 @@ def build_candidate_flow_trace_payload(
             regime_ready_symbol_count += 1
         by_symbol[sym]["regime_blocked"] = blocked
 
-    gate_reasons: Counter[str] = Counter()
-    for k, v in blockers.items():
-        code = _upper(k)
-        if not code:
-            continue
-        try:
-            count = int(v or 0)
-        except Exception:
-            count = 1
-        if count <= 0:
-            continue
-        gate_reasons[code] += count
+    gate_reasons = _reconcile_gate_reasons(
+        blockers=blockers,
+        indicator_ready_symbol_count=indicator_ready_symbol_count,
+        indicator_blocked_symbol_count=indicator_blocked_symbol_count,
+    )
 
     raw_count = None if raw_candidate_count is None else _safe_int(raw_candidate_count)
     phase2_count = None if phase2_input_candidate_count is None else _safe_int(phase2_input_candidate_count)

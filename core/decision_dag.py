@@ -708,6 +708,7 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
     has_explicit_bar_contract = ("ohlc_bars_count" in snapshot.raw_data) or ("warmup_min_bars" in snapshot.raw_data)
     indicator_missing_inputs: list[str] = []
     indicator_readiness_blockers: list[str] = []
+    indicator_readiness_ready: bool | None = None
 
     if system_state == "WARMUP":
         reasons.append(REASON_WARMUP_INCOMPLETE)
@@ -749,18 +750,20 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
                 if decision is None or not decision.ready:
                     reasons.append(REASON_INDICATORS_MISSING)
                 if decision is not None:
+                    indicator_readiness_ready = bool(decision.ready)
                     indicator_missing_inputs = list(decision.indicator_missing_inputs or ())
                     indicator_readiness_blockers = list(decision.blockers or ())
             except Exception:
                 reasons.append(REASON_INDICATORS_MISSING)
 
     # Backward-compat coarse flags (fail-closed).
-    if not snapshot.indicators_ok:
-        if REASON_INDICATORS_MISSING not in reasons:
-            reasons.append(REASON_INDICATORS_MISSING)
-    elif snapshot.indicators_age_sec >= never_computed_age:
-        if REASON_INDICATORS_MISSING not in reasons:
-            reasons.append(REASON_INDICATORS_MISSING)
+    if indicator_readiness_ready is not True:
+        if not snapshot.indicators_ok:
+            if REASON_INDICATORS_MISSING not in reasons:
+                reasons.append(REASON_INDICATORS_MISSING)
+        elif snapshot.indicators_age_sec >= never_computed_age:
+            if REASON_INDICATORS_MISSING not in reasons:
+                reasons.append(REASON_INDICATORS_MISSING)
     if snapshot.indicators_age_sec > indicator_stale_sec:
         reasons.append(REASON_WARMUP_INCOMPLETE)
 
@@ -775,6 +778,7 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
         "never_computed_age": never_computed_age,
         "indicators_age_sec": snapshot.indicators_age_sec,
         "indicators_ok": snapshot.indicators_ok,
+        "indicator_readiness_ready": indicator_readiness_ready,
         "indicator_missing_inputs": indicator_missing_inputs,
         "indicator_readiness_blockers": indicator_readiness_blockers,
     }
