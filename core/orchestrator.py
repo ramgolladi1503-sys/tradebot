@@ -150,6 +150,10 @@ from core.runtime_live_workload_evidence import (
     build_live_workload_payload,
     write_live_workload_latest,
 )
+from core.runtime_candidate_flow_trace import (
+    build_candidate_flow_trace_payload,
+    write_candidate_flow_trace_latest,
+)
 from core.live_indicator_readiness import (
     build_live_indicator_readiness_report,
     write_live_indicator_readiness_latest,
@@ -6857,6 +6861,25 @@ class Orchestrator:
                         write_live_workload_latest(payload=workload_payload)
                     except Exception as workload_exc:
                         logger.warning("live_workload_write_failed err=%s", workload_exc)
+                    try:
+                        trace_payload = build_candidate_flow_trace_payload(
+                            execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
+                            market_open=bool(cycle_market_open),
+                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            cycle_blockers=dict(cycle_blockers),
+                            indicator_readiness=indicator_payload,
+                            regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
+                            raw_candidate_count=int(cycle_candidate_pool_count),
+                            phase2_input_candidate_count=int(len(cycle_ranked_candidates or [])),
+                            decision_gate_reason_by_symbol={
+                                str(md.get("symbol") or "").strip().upper(): md.get("decision_gate_reason")
+                                for md in list(market_data_list or [])
+                                if isinstance(md, dict) and str(md.get("symbol") or "").strip()
+                            },
+                        )
+                        write_candidate_flow_trace_latest(payload=trace_payload)
+                    except Exception as trace_exc:
+                        logger.warning("candidate_flow_trace_write_failed err=%s", trace_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
