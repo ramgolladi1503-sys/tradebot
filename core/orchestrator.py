@@ -154,6 +154,12 @@ from core.runtime_candidate_flow_trace import (
     build_candidate_flow_trace_payload,
     write_candidate_flow_trace_latest,
 )
+from core.runtime_strategy_no_qualified_reasons import (
+    build_strategy_attempt_from_gate,
+    build_strategy_attempt_from_trade_builder,
+    build_strategy_no_qualified_reasons_payload,
+    write_strategy_no_qualified_reasons_latest,
+)
 from core.live_indicator_readiness import (
     build_live_indicator_readiness_report,
     write_live_indicator_readiness_latest,
@@ -4453,6 +4459,7 @@ class Orchestrator:
             cycle_candidates_fallback = 0
             cycle_ranked_candidates = []
             cycle_candidate_handoff_snapshots: list[dict] = []
+            cycle_strategy_no_qualified_attempts: list[dict] = []
             cycle_real_trade_symbols: set[str] = set()
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
             cycle_market_open = False
@@ -4881,20 +4888,31 @@ class Orchestrator:
                             except Exception:
                                 pass
 
+                        tele = {}
+                        try:
+                            if hasattr(gate, "facts") and isinstance(getattr(gate, "facts"), dict):
+                                tele = (gate.facts or {}).get("strategy_telemetry") or {}
+                            elif hasattr(gate, "decision") and getattr(gate, "decision") is not None:
+                                d = gate.decision
+                                if hasattr(d, "facts") and isinstance(getattr(d, "facts"), dict):
+                                    tele = (d.facts or {}).get("strategy_telemetry") or {}
+                        except Exception:
+                            tele = {}
+                        try:
+                            if any(str(reason).strip().upper() == "NO_STRATEGY_QUALIFIED" for reason in list(gate.reasons or [])):
+                                cycle_strategy_no_qualified_attempts.append(
+                                    build_strategy_attempt_from_gate(
+                                        symbol=sym,
+                                        strategy_id=getattr(gate, "family", None),
+                                        gate_reasons=list(gate.reasons or []),
+                                        telemetry=tele if isinstance(tele, dict) else {},
+                                    )
+                                )
+                        except Exception:
+                            pass
                         tele_compact = {}
                         if debug_flag:
                             # --- Gatekeeper rejection telemetry (NO_STRATEGY_QUALIFIED debug) ---
-                            tele = {}
-                            try:
-                                if hasattr(gate, "facts") and isinstance(getattr(gate, "facts"), dict):
-                                    tele = (gate.facts or {}).get("strategy_telemetry") or {}
-                                elif hasattr(gate, "decision") and getattr(gate, "decision") is not None:
-                                    d = gate.decision
-                                    if hasattr(d, "facts") and isinstance(getattr(d, "facts"), dict):
-                                        tele = (d.facts or {}).get("strategy_telemetry") or {}
-                            except Exception:
-                                tele = {}
-
                             if isinstance(tele, dict) and tele:
                                 tele_compact = {
                                     "qual_fail_codes": tele.get("qual_fail_codes"),
@@ -5137,6 +5155,20 @@ class Orchestrator:
                             )
                         )
                     post_soft_reject_count = len(ranked_candidates or [])
+                    try:
+                        cycle_strategy_no_qualified_attempts.append(
+                            build_strategy_attempt_from_trade_builder(
+                                symbol=sym,
+                                strategy_id=getattr(gate, "family", None),
+                                raw_candidate_count=raw_candidate_count,
+                                post_scan_survivor_count=post_scan_survivor_count,
+                                trade_generated=trade is not None,
+                                reject_reason=reject_reason,
+                                reject_gate_reasons=reject_gate_reasons,
+                            )
+                        )
+                    except Exception:
+                        pass
                     if latency_soften_active and ranked_candidates:
                         pre_latency_real = sum(
                             1 for cand in ranked_candidates if not _is_synthetic_candidate(cand)
@@ -6880,6 +6912,26 @@ class Orchestrator:
                         write_candidate_flow_trace_latest(payload=trace_payload)
                     except Exception as trace_exc:
                         logger.warning("candidate_flow_trace_write_failed err=%s", trace_exc)
+                    try:
+                        strategy_no_qualified_payload = build_strategy_no_qualified_reasons_payload(
+                            execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
+                            market_open=bool(cycle_market_open),
+                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            cycle_blockers=dict(cycle_blockers),
+                            indicator_readiness=indicator_payload,
+                            regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
+                            strategy_attempts=[
+                                row for row in list(cycle_strategy_no_qualified_attempts or []) if isinstance(row, dict)
+                            ],
+                            raw_candidate_count=int(cycle_candidate_pool_count),
+                            phase2_input_candidate_count=int(len(cycle_ranked_candidates or [])),
+                        )
+                        write_strategy_no_qualified_reasons_latest(payload=strategy_no_qualified_payload)
+                    except Exception as strategy_no_qualified_exc:
+                        logger.warning(
+                            "strategy_no_qualified_reasons_write_failed err=%s",
+                            strategy_no_qualified_exc,
+                        )
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
