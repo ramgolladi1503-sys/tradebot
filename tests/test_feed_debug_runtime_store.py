@@ -1,7 +1,8 @@
 import sqlite3
+import pytest
 
 from config import config as cfg
-from core.feed.runtime_store import write_runtime_snapshot
+from core.feed.runtime_store import _db_path, write_runtime_snapshot
 from core.feed_debug import get_feed_debug
 from core.fs_utils import ensure_parent_dir
 
@@ -86,3 +87,12 @@ def test_feed_debug_reports_disconnected_when_ticks_stale(monkeypatch, tmp_path)
     payload = get_feed_debug(now_epoch=now_ts)
     assert payload["ws_connected"] is False
     assert payload["ws_connected_source"] == "inferred_ticks"
+
+
+def test_runtime_store_db_path_fails_deterministically_when_parent_is_file(monkeypatch, tmp_path):
+    blocking_parent = tmp_path / "blocked-parent"
+    blocking_parent.write_text("not-a-directory", encoding="utf-8")
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(blocking_parent / "runtime.sqlite"), raising=False)
+
+    with pytest.raises(NotADirectoryError, match="path_exists_as_file"):
+        _db_path()

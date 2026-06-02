@@ -255,6 +255,7 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
     runtime_missing_option_by_symbol = dict(runtime_row.get("missing_option_tokens_count_by_symbol") or {}) if runtime_fresh else {}
     runtime_state = str(runtime_row.get("runtime_state") or "").strip().upper() if runtime_fresh else ""
     runtime_error = str(runtime_row.get("last_error") or "") if runtime_fresh else ""
+    runtime_reconnect_blocked_reason = str(runtime_row.get("reconnect_blocked_reason") or "").strip().lower() if runtime_fresh else ""
     snapshot_ws_connected = snapshot_payload.get("ws_connected") if isinstance(snapshot_payload, dict) else None
     snapshot_ws_tick_epoch = _coerce_epoch(snapshot_payload.get("last_ws_tick_epoch")) if isinstance(snapshot_payload, dict) else None
     snapshot_sub_count = int(snapshot_payload.get("subscribed_tokens_count") or 0) if isinstance(snapshot_payload, dict) else 0
@@ -290,6 +291,11 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
     )
     snapshot_state = str(snapshot_payload.get("runtime_state") or "").strip().upper() if isinstance(snapshot_payload, dict) else ""
     snapshot_error = str(snapshot_payload.get("last_error") or "") if isinstance(snapshot_payload, dict) else ""
+    snapshot_reconnect_blocked_reason = (
+        str(snapshot_payload.get("reconnect_blocked_reason") or "").strip().lower()
+        if isinstance(snapshot_payload, dict)
+        else ""
+    )
 
     inferred_connected = None
     if db_tick_age is not None:
@@ -329,6 +335,7 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
     intended_tokens_count = runtime_intended_count or snapshot_intended_count or int(subs_count)
     runtime_state_final = runtime_state or snapshot_state or None
     runtime_error_final = runtime_error or snapshot_error or None
+    reconnect_blocked_reason_final = runtime_reconnect_blocked_reason or snapshot_reconnect_blocked_reason or None
 
     depth_store_epoch = _latest_depth_epoch_from_store()
     depth_epoch = db_depth_epoch
@@ -385,6 +392,7 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
         "feed_runtime_source": str(runtime_row.get("source") or "") if runtime_row else "",
         "feed_runtime_state": runtime_state_final,
         "feed_runtime_last_error": runtime_error_final,
+        "reconnect_blocked_reason": reconnect_blocked_reason_final,
         "ws_connected_inferred": inferred_connected,
         "distinct_tokens_recent": distinct_tokens_recent,
         "last_tick_epoch_memory_local": mem_tick_epoch,

@@ -4464,6 +4464,7 @@ class Orchestrator:
             self._gatekeeper_cycle_cache = {}
             self._gate_status_cycle_id = f"{int(now_utc_epoch() * 1000)}"
             market_data_list = []
+            feature_timing: dict[str, float] = {}
             try:
                 # Hot-reload config to pick up FORCE_REGIME changes
                 try:
@@ -4503,7 +4504,6 @@ class Orchestrator:
                 # Feed freshness is now evaluated only in the Decision DAG from the
                 # immutable market snapshot. Do not recompute readiness here.
                 feature_stage_start = time.perf_counter()
-                feature_timing: dict[str, float] = {}
                 cycle_stage = "fetch_market_data"
                 # Daily decay report / strategy gating
                 t0 = time.perf_counter()

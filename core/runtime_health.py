@@ -90,8 +90,11 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "reasons": list(freshness.get("reasons") or []),
     }
     blockers = list(feed.get("reasons") or [])
-    if feed.get("runtime_state") in {"IMPORT_MISSING", "AUTH_BLOCKED", "SUBSCRIBE_FAILED"}:
+    if feed.get("runtime_state") in {"IMPORT_MISSING", "AUTH_BLOCKED", "SUBSCRIBE_FAILED", "RECOVERY_BLOCKED"}:
         blockers.append(f"ws_runtime:{feed.get('runtime_state')}")
+    reconnect_blocked_reason = str(feed_debug.get("reconnect_blocked_reason") or "").strip().lower()
+    if reconnect_blocked_reason:
+        blockers.append(f"ws_reconnect_blocked:{reconnect_blocked_reason}")
     if feed.get("last_error"):
         blockers.append(f"ws_error:{feed.get('last_error')}")
 
