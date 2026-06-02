@@ -279,3 +279,43 @@ def test_strategy_no_qualified_writer_writes_logs_runtime_and_runtime_logs(tmp_p
     assert json.loads(logs_path.read_text())["writer_name"] == "runtime_strategy_no_qualified_reasons"
     assert json.loads(runtime_path.read_text())["schema_version"] == 1
     assert json.loads(runtime_logs_path.read_text())["broker_api_called"] is False
+
+
+def test_strategy_no_qualified_writer_default_paths_fan_out_to_all_three_locations(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "core.runtime_strategy_no_qualified_reasons.repo_logs_dir",
+        lambda: tmp_path / "logs",
+    )
+    monkeypatch.setattr(
+        "core.runtime_strategy_no_qualified_reasons.runtime_dir",
+        lambda: tmp_path / ".runtime",
+    )
+    monkeypatch.setattr(
+        "core.runtime_strategy_no_qualified_reasons.logs_dir",
+        lambda: tmp_path / ".runtime" / "logs",
+    )
+
+    payload = build_strategy_no_qualified_reasons_payload(
+        execution_mode="SIM",
+        market_open=False,
+        market_data_list=[{"symbol": "NIFTY"}],
+        cycle_blockers={"NO_STRATEGY_QUALIFIED": 1},
+        indicator_readiness={"by_symbol": {"NIFTY": {"ready": True}}},
+        regime_truth={"by_symbol": {"NIFTY": {"primary_regime": "RANGE"}}, "gate_reasons": {}},
+        strategy_attempts=[],
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+
+    write_strategy_no_qualified_reasons_latest(payload=payload)
+
+    logs_path = tmp_path / "logs" / "strategy_no_qualified_reasons_latest.json"
+    runtime_path = tmp_path / ".runtime" / "strategy_no_qualified_reasons_latest.json"
+    runtime_logs_path = tmp_path / ".runtime" / "logs" / "strategy_no_qualified_reasons_latest.json"
+
+    assert logs_path.exists()
+    assert runtime_path.exists()
+    assert runtime_logs_path.exists()
+    assert json.loads(logs_path.read_text())["read_only"] is True
+    assert json.loads(runtime_path.read_text())["append"] is False
+    assert json.loads(runtime_logs_path.read_text())["live_order_allowed"] is False
