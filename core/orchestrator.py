@@ -3011,6 +3011,61 @@ class Orchestrator:
         self._cycle_market_snapshot_by_symbol = immutable_map
         return cycle_rows
 
+    def _apply_cycle_indicator_readiness_truth(
+        self,
+        market_data_list: list[dict] | None,
+        indicator_report,
+    ) -> None:
+        if not isinstance(market_data_list, list):
+            return
+        decisions_by_symbol: dict[str, Any] = {}
+        try:
+            if indicator_report is not None:
+                for decision in getattr(indicator_report, "decisions", ()) or ():
+                    symbol = str(getattr(decision, "symbol", "") or "").strip().upper()
+                    if symbol:
+                        decisions_by_symbol[symbol] = decision
+        except Exception:
+            decisions_by_symbol = {}
+        if not decisions_by_symbol:
+            return
+
+        refreshed_snapshots: dict[str, MappingProxyType] = {}
+        for row in market_data_list:
+            if not isinstance(row, dict):
+                continue
+            symbol = str(row.get("symbol") or "").strip().upper()
+            decision = decisions_by_symbol.get(symbol)
+            if decision is None:
+                continue
+            try:
+                row["indicator_source"] = getattr(decision, "source", None)
+                row["indicator_readiness_source"] = getattr(decision, "source", None)
+                row["indicator_last_update_epoch"] = getattr(decision, "indicator_last_update_epoch", None)
+                row["indicators_age_sec"] = getattr(decision, "indicators_age_sec", None)
+                row["indicator_age_sec"] = getattr(decision, "indicators_age_sec", None)
+                row["indicator_missing_inputs"] = list(getattr(decision, "indicator_missing_inputs", ()) or ())
+                row["compute_indicators_error"] = getattr(decision, "compute_indicators_error", "")
+                row["indicators_ok"] = bool(getattr(decision, "indicators_ok", False))
+                row["indicator_inputs_ok"] = bool(getattr(decision, "indicator_inputs_ok", False))
+                row["indicator_readiness_ready"] = bool(getattr(decision, "ready", False))
+                row["indicator_readiness_reason"] = (
+                    "ready" if bool(getattr(decision, "ready", False)) else str(getattr(decision, "decision_gate_reason", "") or "unknown")
+                )
+                row["indicator_readiness_blockers"] = list(getattr(decision, "blockers", ()) or ())
+            except Exception:
+                pass
+            try:
+                refreshed_snapshots[symbol] = MappingProxyType(copy.deepcopy(row))
+            except Exception:
+                refreshed_snapshots[symbol] = MappingProxyType(dict(row))
+        if refreshed_snapshots:
+            current_snapshots = getattr(self, "_cycle_market_snapshot_by_symbol", None)
+            if isinstance(current_snapshots, dict):
+                current_snapshots.update(refreshed_snapshots)
+            else:
+                self._cycle_market_snapshot_by_symbol = refreshed_snapshots
+
     def _run_v2_shadow_pipeline(self, market_data_list: list[dict] | None) -> None:
         try:
             run_v2_pipeline(market_data_list, now_ts=time.time())
@@ -4534,6 +4589,17 @@ class Orchestrator:
                 t0 = time.perf_counter()
                 market_data_list = self._build_cycle_market_data(live_market_data)
                 feature_timing["build_cycle_market_data_ms"] = _perf_ms(t0)
+                try:
+                    indicator_report = build_live_indicator_readiness_report(
+                        [row for row in list(market_data_list or []) if isinstance(row, dict)],
+                        now_epoch=float(time.time()),
+                        warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
+                        source="orchestrator_live_indicator_readiness_v2",
+                    )
+                    self._apply_cycle_indicator_readiness_truth(market_data_list, indicator_report)
+                    write_live_indicator_readiness_latest(indicator_report, now_epoch=float(time.time()))
+                except Exception as exc:
+                    logger.warning("cycle_indicator_truth_refresh_failed err=%s", exc)
                 cycle_market_open = bool(
                     any(bool((row or {}).get("market_open")) for row in (market_data_list or []))
                 )

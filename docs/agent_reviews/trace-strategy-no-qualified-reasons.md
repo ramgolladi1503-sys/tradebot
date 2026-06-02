@@ -57,6 +57,8 @@ acceptance_proof:
 
 PR #458 live evidence showed candidate flow reaching `first_zero_stage=strategy_generation_zero` with `NO_STRATEGY_QUALIFIED` after feed, indicator readiness, and regime readiness were healthy. This PR adds evidence only so the next live run can identify the exact failed setup category per symbol and strategy.
 
+Follow-on PR #462 tightened the predicate evidence and this branch now aligns N8 indicator truth with the same current-cycle readiness source used by candidate-flow and notrade evidence. This review note remains the evidence contract for that read-only wiring.
+
 ## Files Changed
 
 - `/Users/madhuram/tradebot/core/runtime_strategy_no_qualified_reasons.py`

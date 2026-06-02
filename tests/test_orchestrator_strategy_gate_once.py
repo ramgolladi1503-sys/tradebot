@@ -1,4 +1,5 @@
 import json
+import time
 
 from config import config as cfg
 import core.orchestrator as orchestrator_module
@@ -9,6 +10,7 @@ from core.decision_dag import (
 )
 from core.orchestrator import Orchestrator
 from core.strategy_gatekeeper import GateResult
+from core.live_indicator_readiness import build_live_indicator_readiness_report
 
 
 def test_one_strategy_gate_record_per_symbol_per_cycle(monkeypatch):
@@ -233,14 +235,148 @@ def test_strategy_gate_returns_predicate_facts_from_strategy_selection(monkeypat
         }
     )
 
+    tele = gate.facts.get("strategy_telemetry", gate.facts)
     assert gate.allowed is False
     assert gate.reasons == ["NO_STRATEGY_QUALIFIED"]
-    assert gate.facts["predicate_node"] == "NODE_N8_STRATEGY_SELECT"
-    assert gate.facts["trade_builder_reached"] is True
-    assert gate.facts["candidate_family_considered"] is None
-    assert gate.facts["no_candidate_constructed"] is True
-    assert gate.facts["qual_fail_codes"] == ["vwap"]
-    assert gate.facts["qual_fail_reasons_raw"] == ["price below vwap setup"]
+    assert str(tele["predicate_node"]).endswith("N8_STRATEGY_SELECT")
+    assert tele["trade_builder_reached"] is True
+    assert tele["candidate_family_considered"] is None
+    assert tele["no_candidate_constructed"] is True
+    assert tele["qual_fail_codes"] == ["vwap"]
+    assert tele["qual_fail_reasons_raw"] == ["price below vwap setup"]
+
+
+def test_strategy_gate_uses_current_cycle_indicator_truth_and_exposes_indicator_source(monkeypatch):
+    monkeypatch.setattr(cfg, "DESK_ID", "TEST", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(orchestrator_module, "append_gate_status", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_candidate_stream_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_decision_stream_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_decision_write_error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "audit_append", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "handle_post_decision_side_effects", lambda *args, **kwargs: None)
+
+    now_epoch = time.time()
+    market_data_list = [
+        {
+            "symbol": "NIFTY",
+            "instrument": "OPT",
+            "timestamp": now_epoch,
+            "market_open": True,
+            "ltp_ts_epoch": now_epoch,
+            "ltp": 25000.0,
+            "quote_ok": True,
+            "primary_regime": "TREND",
+            "ohlc_bars_count": 60,
+            "warmup_min_bars": 50,
+            "indicator_last_update_epoch": now_epoch,
+            "compute_indicators_error": "",
+            "vwap": 25010.0,
+            "rsi": 61.0,
+            "ema": 25002.0,
+            "atr": 110.0,
+            "indicators_ok": False,
+            "indicator_missing_inputs": ["rsi"],
+        }
+    ]
+    indicator_report = build_live_indicator_readiness_report(
+        market_data_list,
+        now_epoch=now_epoch,
+        warmup_min_bars=50,
+        source="orchestrator_live_indicator_readiness_v2",
+    )
+
+    orch = Orchestrator.__new__(Orchestrator)
+    orch._cycle_market_snapshot_by_symbol = {}
+    orch._apply_cycle_indicator_readiness_truth(market_data_list, indicator_report)
+
+    class _Gatekeeper:
+        def evaluate(self, market_data, mode="MAIN"):
+            assert market_data["indicators_ok"] is True
+            assert market_data["indicator_readiness_ready"] is True
+            assert market_data["indicator_source"] == "orchestrator_live_indicator_readiness_v2"
+            assert market_data["indicator_readiness_source"] == "orchestrator_live_indicator_readiness_v2"
+            assert market_data["indicator_missing_inputs"] == []
+            return GateResult(True, "DEFINED_RISK", ["paper_neutral_routed"])
+
+    orch.gatekeeper = _Gatekeeper()
+    orch._gate_status_cycle_seen = set()
+    orch._gatekeeper_cycle_cache = {}
+
+    gate = orch._strategy_gate_for_symbol(market_data_list[0])
+
+    tele = gate.facts.get("strategy_telemetry", gate.facts)
+    assert gate.allowed is True
+    assert tele["indicator_source"] == "orchestrator_live_indicator_readiness_v2"
+    assert tele["indicator_readiness_source"] == "orchestrator_live_indicator_readiness_v2"
+    assert tele["indicators_ok"] is True
+    assert tele["indicator_missing_inputs"] == []
+    assert tele["indicator_readiness_ready"] is True
+    assert str(tele["predicate_node"]).endswith("N8_STRATEGY_SELECT")
+
+
+def test_strategy_gate_still_rejects_when_current_cycle_indicator_truth_is_stale_or_missing(monkeypatch):
+    monkeypatch.setattr(cfg, "DESK_ID", "TEST", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(orchestrator_module, "append_gate_status", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_candidate_stream_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_decision_stream_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_decision_write_error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "audit_append", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "handle_post_decision_side_effects", lambda *args, **kwargs: None)
+
+    now_epoch = time.time()
+    market_data_list = [
+        {
+            "symbol": "SENSEX",
+            "instrument": "OPT",
+            "timestamp": now_epoch,
+            "market_open": True,
+            "ltp_ts_epoch": now_epoch,
+            "ltp": 72000.0,
+            "quote_ok": True,
+            "primary_regime": "TREND",
+            "ohlc_bars_count": 60,
+            "warmup_min_bars": 50,
+            "indicator_last_update_epoch": now_epoch - 9999.0,
+            "compute_indicators_error": "",
+            "vwap": 72010.0,
+            "rsi": 52.0,
+            "ema": 71995.0,
+            "atr": 180.0,
+            "indicators_ok": False,
+            "indicator_missing_inputs": [],
+        }
+    ]
+    indicator_report = build_live_indicator_readiness_report(
+        market_data_list,
+        now_epoch=now_epoch,
+        warmup_min_bars=50,
+        source="orchestrator_live_indicator_readiness_v2",
+    )
+
+    orch = Orchestrator.__new__(Orchestrator)
+    orch._cycle_market_snapshot_by_symbol = {}
+    orch._apply_cycle_indicator_readiness_truth(market_data_list, indicator_report)
+
+    class _Gatekeeper:
+        def evaluate(self, market_data, mode="MAIN"):
+            assert market_data["indicators_ok"] is False
+            assert market_data["indicator_readiness_ready"] is False
+            assert market_data["indicator_source"] == "orchestrator_live_indicator_readiness_v2"
+            return GateResult(False, None, ["NO_STRATEGY_QUALIFIED"])
+
+    orch.gatekeeper = _Gatekeeper()
+    orch._gate_status_cycle_seen = set()
+    orch._gatekeeper_cycle_cache = {}
+
+    gate = orch._strategy_gate_for_symbol(market_data_list[0])
+
+    assert gate.allowed is False
+    assert "INDICATORS_MISSING" in gate.reasons
+    assert gate.facts["strategy_telemetry"]["indicator_source"] == "orchestrator_live_indicator_readiness_v2"
+    assert gate.facts["strategy_telemetry"]["indicator_readiness_source"] == "orchestrator_live_indicator_readiness_v2"
+    assert gate.facts["strategy_telemetry"]["indicators_ok"] is False
 
 
 def test_nonlive_no_strategy_gate_is_softened_for_candidate_fallback(monkeypatch):
