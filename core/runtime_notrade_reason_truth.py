@@ -50,6 +50,31 @@ def _count_top_reasons(top_map: Mapping[str, Any] | None) -> Counter[str]:
     return out
 
 
+def _infer_indicator_ready(row: Mapping[str, Any] | None) -> bool | None:
+    if not isinstance(row, Mapping):
+        return None
+    if "ready" in row:
+        try:
+            return bool(row.get("ready"))
+        except Exception:
+            return None
+    if "indicators_ok" in row:
+        try:
+            return bool(row.get("indicators_ok"))
+        except Exception:
+            return None
+    missing_inputs = [str(x).strip().lower() for x in _as_list(row.get("indicator_missing_inputs")) if str(x or "").strip()]
+    if missing_inputs:
+        return False
+    present_keys = ("rsi_present", "ema_present", "atr_present", "vwap_present")
+    if any(key in row for key in present_keys):
+        try:
+            return all(bool(row.get(key)) for key in present_keys if key in row)
+        except Exception:
+            return False
+    return None
+
+
 def build_notrade_reason_truth_payload(
     *,
     candidate_handoff: Mapping[str, Any] | None,
@@ -122,6 +147,8 @@ def build_notrade_reason_truth_payload(
     indicator_age_sec_by_symbol: dict[str, float | None] = {}
     indicator_source_by_symbol: dict[str, str | None] = {}
     indicator_blocker_reason_counts: Counter[str] = Counter()
+    indicator_ready_symbol_count = 0
+    indicator_blocked_symbol_count = 0
     for sym, row in dict(missing_indicators_by_symbol or {}).items():
         if not isinstance(row, Mapping):
             continue
@@ -137,10 +164,13 @@ def build_notrade_reason_truth_payload(
             required_warmup_candle_counts_by_symbol[str(sym)] = int(row.get("warmup_min_bars") or 0)
         except Exception:
             pass
-        try:
-            indicator_ready_by_symbol[str(sym)] = bool(row.get("ready", False))
-        except Exception:
-            pass
+        ready = _infer_indicator_ready(row)
+        if ready is not None:
+            indicator_ready_by_symbol[str(sym)] = bool(ready)
+            if ready is True:
+                indicator_ready_symbol_count += 1
+            else:
+                indicator_blocked_symbol_count += 1
         indicator_age_sec_by_symbol[str(sym)] = row.get("indicators_age_sec")
         indicator_source_by_symbol[str(sym)] = row.get("source")
         for code in _as_list(row.get("blockers")):
@@ -152,9 +182,18 @@ def build_notrade_reason_truth_payload(
         if not isinstance(row, Mapping):
             continue
         try:
-            indicator_ready_by_strategy[str(strat)] = bool(row.get("ready", False))
+            inferred = _infer_indicator_ready(row)
+            if inferred is not None:
+                indicator_ready_by_strategy[str(strat)] = bool(inferred)
         except Exception:
             pass
+
+    effective_indicators_missing_count = int(indicators_missing_count)
+    if effective_indicators_missing_count > 0 and indicator_detail_available:
+        all_symbols_ready = bool(indicator_ready_by_symbol) and all(bool(value) for value in indicator_ready_by_symbol.values())
+        no_missing_indicator_values = not bool(missing_indicator_counts)
+        if all_symbols_ready and no_missing_indicator_values:
+            effective_indicators_missing_count = 0
 
     # Aggregate the most actionable Phase2 evidence buckets.
     feed_stale_count = int(phase2.get("feed_stale_hard_block_count") or 0)
@@ -182,7 +221,7 @@ def build_notrade_reason_truth_payload(
     elif feed_stale_count > 0 or feed_fresh is False or option_tick_fresh is False:
         primary_reason = "feed_stale"
         primary_source = "phase2_rejection_latest" if feed_stale_count > 0 else "feed_truth_latest"
-    elif feed_fresh is True and phase2_input_candidate_count <= 0 and indicators_missing_count > 0:
+    elif feed_fresh is True and phase2_input_candidate_count <= 0 and effective_indicators_missing_count > 0:
         primary_reason = "indicators_missing"
         primary_source = "cycle_blockers"
     elif feed_fresh is True and phase2_input_candidate_count <= 0 and regime_unstable_count > 0:
@@ -211,7 +250,7 @@ def build_notrade_reason_truth_payload(
         supporting.append("market_closed")
     if feed_stale_count > 0 or feed_fresh is False or option_tick_fresh is False:
         supporting.append("feed_stale")
-    if indicators_missing_count > 0:
+    if effective_indicators_missing_count > 0:
         supporting.append("indicators_missing")
     if regime_unstable_count > 0:
         supporting.append("regime_unstable")
@@ -263,7 +302,7 @@ def build_notrade_reason_truth_payload(
         "upstream_gate_reason_counts": dict(upstream_gate_counts),
         "indicator_detail_available": bool(indicator_detail_available),
         "indicator_detail_missing_reason": None if indicator_detail_available else "live_indicator_readiness_runtime_evidence_missing",
-        "indicator_missing_count": int(indicators_missing_count),
+        "indicator_missing_count": int(effective_indicators_missing_count),
         "missing_indicator_counts": dict(missing_indicator_counts),
         "missing_indicators_by_symbol": dict(missing_indicators_by_symbol or {}),
         "missing_indicators_by_strategy": dict(missing_indicators_by_strategy or {}),
@@ -271,6 +310,8 @@ def build_notrade_reason_truth_payload(
         "required_warmup_candle_counts_by_symbol": required_warmup_candle_counts_by_symbol,
         "indicator_ready_by_symbol": indicator_ready_by_symbol,
         "indicator_ready_by_strategy": indicator_ready_by_strategy,
+        "indicator_ready_symbol_count": int(indicator_ready_symbol_count),
+        "indicator_blocked_symbol_count": int(indicator_blocked_symbol_count),
         "indicator_age_sec_by_symbol": indicator_age_sec_by_symbol,
         "indicator_source_by_symbol": indicator_source_by_symbol,
         "indicator_blocker_reason_counts": dict(indicator_blocker_reason_counts),

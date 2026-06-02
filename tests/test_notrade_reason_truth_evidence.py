@@ -69,6 +69,33 @@ def test_indicators_missing_surfaces_when_phase2_starved_and_feed_fresh():
     assert "indicators_missing" in payload["supporting_reasons"]
 
 
+def test_stale_indicator_blocker_does_not_win_when_current_readiness_is_true():
+    payload = build_notrade_reason_truth_payload(
+        candidate_handoff={"phase2_input_candidate_count": 0},
+        phase2_rejection={},
+        feed_truth={"market_closed_detected": False, "feed_fresh": True, "option_tick_fresh": True},
+        top_opportunities={"phase2_state": "NO_TRADE"},
+        cycle_blockers={"INDICATORS_MISSING": 3},
+        indicator_readiness={
+            "by_symbol": {
+                "NIFTY": {"indicators_ok": True, "indicator_missing_inputs": []},
+                "BANKNIFTY": {"ready": True, "indicator_missing_inputs": []},
+                "SENSEX": {
+                    "rsi_present": True,
+                    "ema_present": True,
+                    "atr_present": True,
+                    "vwap_present": True,
+                    "indicator_missing_inputs": [],
+                },
+            }
+        },
+    )
+    assert payload["primary_reason"] != "indicators_missing"
+    assert payload["indicator_missing_count"] == 0
+    assert payload["indicator_ready_symbol_count"] == 3
+    assert payload["indicator_blocked_symbol_count"] == 0
+
+
 def test_regime_unstable_surfaces_when_phase2_starved_and_feed_fresh():
     payload = build_notrade_reason_truth_payload(
         candidate_handoff={"phase2_input_candidate_count": 0},
@@ -133,6 +160,8 @@ def test_indicator_details_are_emitted_when_runtime_evidence_present():
         "missing_indicators_by_strategy",
         "indicator_ready_by_symbol",
         "indicator_ready_by_strategy",
+        "indicator_ready_symbol_count",
+        "indicator_blocked_symbol_count",
         "indicator_age_sec_by_symbol",
         "indicator_source_by_symbol",
         "indicator_blocker_reason_counts",

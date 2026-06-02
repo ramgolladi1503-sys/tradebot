@@ -122,6 +122,36 @@ def test_candidate_flow_trace_missing_rsi_ema_counts_as_indicator_blocked(tmp_pa
     assert payload["by_symbol"]["SENSEX"]["indicator_ready"] is False
 
 
+def test_candidate_flow_trace_drops_stale_indicator_missing_gate_when_all_current_symbols_are_ready(tmp_path: Path):
+    indicator = {
+        "by_symbol": {
+            "NIFTY": {"indicators_ok": True, "indicator_missing_inputs": []},
+            "BANKNIFTY": {"ready": True, "indicator_missing_inputs": []},
+            "SENSEX": {
+                "rsi_present": True,
+                "ema_present": True,
+                "atr_present": True,
+                "vwap_present": True,
+                "indicator_missing_inputs": [],
+            },
+        }
+    }
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "NIFTY"}, {"symbol": "BANKNIFTY"}, {"symbol": "SENSEX"}],
+        cycle_blockers={"INDICATORS_MISSING": 3},
+        indicator_readiness=indicator,
+        regime_truth={"by_symbol": {}},
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+    )
+    assert payload["indicator_ready_symbol_count"] == 3
+    assert payload["indicator_blocked_symbol_count"] == 0
+    assert "INDICATORS_MISSING" not in payload["gate_reasons"]
+    assert payload["first_zero_stage"] == "strategy_generation_zero"
+
+
 def test_candidate_flow_trace_regime_blocked_when_indicators_ready_but_all_symbols_unstable(tmp_path: Path):
     indicator = {"by_symbol": {"SENSEX": {"ready": True}}}
     regime = {"by_symbol": {"SENSEX": {"unstable_reasons": ["x"]}}, "gate_reasons": {"REGIME_UNSTABLE": 1}}
