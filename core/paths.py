@@ -25,6 +25,8 @@ def repo_logs_dir() -> Path:
 
 def ensure_dir(path: Path | str) -> Path:
     target = Path(path).expanduser()
+    if target.exists() and not target.is_dir():
+        raise NotADirectoryError(f"path_exists_as_file:{target}")
     target.mkdir(parents=True, exist_ok=True)
     return target
 

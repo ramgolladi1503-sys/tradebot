@@ -8,6 +8,15 @@ from core.feed.runtime_store import read_latest_runtime_snapshot, write_runtime_
 import core.feed.runtime_store as runtime_store
 import core.kite_depth_ws as depth_ws
 from core.runtime_status_overlay import derive_effective_ws_connected, derive_feed_ok
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_feed_runtime_state(monkeypatch):
+    monkeypatch.setattr(depth_ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(depth_ws, "_RUNTIME_STATE", "STOPPED", raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_RUNTIME_ERROR", "", raising=False)
+    depth_ws._reset_feed_restart_verification(reason="unit_test_reset")
 
 
 def _read_feed_runtime_payload(logs_path: Path) -> dict:
@@ -421,6 +430,40 @@ def test_write_feed_runtime_snapshot_publishes_fail_closed_status_overlay(monkey
     assert engine["visible_executable_count"] == 0
     assert health["feed"]["sla_status"] == "FAIL"
     assert health["feed"]["ws_connected"] is False
+
+
+def test_write_feed_runtime_snapshot_includes_reconnect_blocked_reason(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+
+    depth_ws._write_feed_runtime_snapshot(
+        now_epoch=200.0,
+        ws_connected=False,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=180.0,
+        last_db_tick_age_sec=20.0,
+        last_ws_tick_epoch=None,
+        last_tick_age_sec=None,
+        last_depth_epoch=None,
+        last_depth_age_sec=None,
+        market_open=True,
+        state_machine={"state": "DOWN", "reason": "ws_disconnected"},
+        subscribed_option_tokens_count=1,
+        option_feed_block_reason_by_symbol={"NIFTY": "NO_LIVE_OPTION_FEED"},
+        option_active_blockers_by_symbol={"NIFTY": ["NO_LIVE_OPTION_FEED"]},
+        runtime_state="RECOVERY_BLOCKED",
+        last_error="reactor_not_restartable",
+        reconnect_blocked_reason="reactor_not_restartable",
+    )
+
+    feed = json.loads((logs_path / "feed_runtime_latest.json").read_text())
+    health = json.loads((logs_path / "runtime_health_latest.json").read_text())
+
+    assert feed["reconnect_blocked_reason"] == "reactor_not_restartable"
+    assert feed["feed_ok"] is False
+    assert health["feed"]["runtime_state"] == "RECOVERY_BLOCKED"
 
 
 def test_write_feed_runtime_snapshot_heals_stale_feed_overlay_after_recovery(monkeypatch, tmp_path):

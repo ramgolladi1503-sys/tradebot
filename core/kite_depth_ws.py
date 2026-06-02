@@ -125,6 +125,7 @@ _LAST_ATM_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_COUNTS_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL: dict[str, int] = {}
 _DEPTH_WS_START_EPOCH: float = 0.0
+_RECONNECT_BLOCKED_REASON: str = ""
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
 # Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
@@ -1147,6 +1148,28 @@ def _safe_float(value):
         return None
 
 
+def _is_reactor_not_restartable_error(exc: Exception | None) -> bool:
+    if exc is None:
+        return False
+    name = str(type(exc).__name__ or "").strip().lower()
+    text = str(exc or "").strip().lower()
+    return "reactornotrestartable" in name or "reactornotrestartable" in text
+
+
+def _set_reconnect_blocked_reason(reason: str) -> str:
+    global _RECONNECT_BLOCKED_REASON, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    blocked = str(reason or "").strip().lower() or "unknown_reconnect_block"
+    _RECONNECT_BLOCKED_REASON = blocked
+    _RUNTIME_STATE = "RECOVERY_BLOCKED"
+    _LAST_RUNTIME_ERROR = blocked[:1000]
+    return blocked
+
+
+def _clear_reconnect_blocked_reason() -> None:
+    global _RECONNECT_BLOCKED_REASON
+    _RECONNECT_BLOCKED_REASON = ""
+
+
 def _log_tick_ingest_error(
     *,
     token: int | None,
@@ -1537,6 +1560,9 @@ def _restart_verify_overlay_payload() -> dict[str, object]:
 
 def _effective_runtime_state_for_snapshot(runtime_state: str, *, now_epoch: float) -> tuple[str, str | None]:
     """Return (effective_runtime_state, failure_detail_override_or_none)."""
+    runtime_state_text = str(runtime_state or "").strip().upper()
+    if runtime_state_text in {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "IMPORT_MISSING"}:
+        return runtime_state_text, None
     if not _restart_verification_enabled():
         return runtime_state, None
     _tick_feed_restart_verification(now_epoch=float(now_epoch))
@@ -1771,6 +1797,7 @@ def _write_feed_runtime_snapshot(
     stale_strikes: int = 0,
     runtime_state: str | None = None,
     last_error: str | None = None,
+    reconnect_blocked_reason: str | None = None,
 ) -> None:
     path = logs_dir() / "feed_runtime_latest.json"
     raw_state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
@@ -1808,6 +1835,12 @@ def _write_feed_runtime_snapshot(
         "stale_strikes": int(stale_strikes),
         "runtime_state": effective_state_text,
         "last_error": str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000],
+        "reconnect_blocked_reason": str(
+            reconnect_blocked_reason
+            if reconnect_blocked_reason is not None
+            else (_RECONNECT_BLOCKED_REASON or "")
+        ).strip().lower()
+        or None,
     }
     if restart_verify:
         payload["restart_verification"] = restart_verify
@@ -1866,6 +1899,7 @@ def _persist_runtime_snapshot_row(
     runtime_state: str | None = None,
     last_error: str | None = None,
     intended_tokens_count: int | None = None,
+    reconnect_blocked_reason: str | None = None,
 ) -> None:
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
@@ -1935,6 +1969,12 @@ def _persist_runtime_snapshot_row(
         "source": source,
         "runtime_state": effective_state_text,
         "last_error": err_text,
+        "reconnect_blocked_reason": str(
+            reconnect_blocked_reason
+            if reconnect_blocked_reason is not None
+            else (_RECONNECT_BLOCKED_REASON or "")
+        ).strip().lower()
+        or None,
     }
     if restart_verify:
         payload["restart_verification"] = restart_verify
@@ -1972,6 +2012,7 @@ def _persist_runtime_snapshot_row(
         stale_strikes=_STALE_STRIKES,
         runtime_state=effective_state_text,
         last_error=err_text,
+        reconnect_blocked_reason=str(payload.get("reconnect_blocked_reason") or "").strip().lower() or None,
     )
 
 
@@ -3473,6 +3514,20 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     if _AUTH_REQUIRED_LATCH:
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
         return False
+    if _RECONNECT_BLOCKED_REASON:
+        blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+        _log_ws(
+            "FEED_RESTART_BLOCKED_RECOVERY_REQUIRED",
+            {"reason": reason, "reconnect_blocked_reason": blocked_reason},
+        )
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source=f"restart_depth_ws:blocked:{reason}",
+            runtime_state="RECOVERY_BLOCKED",
+            last_error=blocked_reason,
+            reconnect_blocked_reason=blocked_reason,
+        )
+        return False
 
     tokens, selection_payload = _resubscribe_token_selection()
     tokens = _normalize_positive_tokens(tokens)
@@ -3642,6 +3697,20 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    if _RECONNECT_BLOCKED_REASON:
+        blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source="start_depth_ws:reconnect_blocked",
+            runtime_state="RECOVERY_BLOCKED",
+            last_error=blocked_reason,
+            reconnect_blocked_reason=blocked_reason,
+        )
+        _log_ws(
+            "FEED_START_BLOCKED_RECOVERY_REQUIRED",
+            {"reconnect_blocked_reason": blocked_reason},
+        )
+        return False
     _DEPTH_WS_START_EPOCH = float(now_utc_epoch())
     _RUNTIME_STATE = "STARTING"
     _LAST_RUNTIME_ERROR = ""
@@ -4680,13 +4749,26 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     try:
         kws.connect(threaded=True)
     except Exception as exc:
-        _RUNTIME_STATE = "SUBSCRIBE_FAILED"
-        _LAST_RUNTIME_ERROR = f"connect_failed:{type(exc).__name__}:{exc}"[:1000]
+        reconnect_blocked_reason = None
+        if _is_reactor_not_restartable_error(exc):
+            reconnect_blocked_reason = _set_reconnect_blocked_reason("reactor_not_restartable")
+            _log_ws(
+                "FEED_RESTART_PROCESS_RECOVERY_REQUIRED",
+                {
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                    "reconnect_blocked_reason": reconnect_blocked_reason,
+                },
+            )
+        else:
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = f"connect_failed:{type(exc).__name__}:{exc}"[:1000]
         _persist_runtime_snapshot_row(
             ws_connected=False,
             source="start_depth_ws:connect_failed",
-            runtime_state="SUBSCRIBE_FAILED",
-            last_error=_LAST_RUNTIME_ERROR,
+            runtime_state=_RUNTIME_STATE,
+            last_error=_LAST_RUNTIME_ERROR if reconnect_blocked_reason is None else reconnect_blocked_reason,
+            reconnect_blocked_reason=reconnect_blocked_reason,
         )
         return False
     return True
