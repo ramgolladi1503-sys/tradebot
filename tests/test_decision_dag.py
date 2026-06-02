@@ -259,6 +259,25 @@ def test_live_future_ltp_timestamp_clock_skew_does_not_false_block_feed(monkeypa
     assert float(feed_rows[0]["facts"]["ltp_age_sec"]) == 0.0
 
 
+def test_strategy_select_node_emits_predicate_facts_when_no_candidate_is_constructed(monkeypatch):
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    now_epoch = 1_140.0
+    md = _base_market_data(now_epoch)
+
+    decision = evaluate_decision(md, strategy_candidates=(), now_epoch=now_epoch)
+    n8_rows = [row for row in decision.explain if row["node"] == NODE_N8_STRATEGY_SELECT]
+
+    assert decision.allowed is False
+    assert list(decision.blockers) == ["NO_STRATEGY_QUALIFIED"]
+    assert n8_rows
+    facts = n8_rows[0]["facts"]
+    assert facts["predicate_node"] == NODE_N8_STRATEGY_SELECT
+    assert facts["trade_builder_reached"] is True
+    assert facts["candidate_family_considered"] is None
+    assert facts["no_candidate_constructed"] is True
+    assert facts["strategy_reasons"] == []
+
+
 def test_index_no_depth_with_fresh_ltp_live_fails_quote_gate_not_feed(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "INDEX_REQUIRE_DEPTH_LIVE", True, raising=False)

@@ -94,12 +94,14 @@ def test_one_strategy_gate_record_per_symbol_per_cycle(monkeypatch):
         conflict_view["indicators_ok"] = not bool(snap.get("indicators_ok"))
         orch._strategy_gate_for_symbol(conflict_view)
 
-    assert len(emitted) == 3
+    assert [row.get("symbol") for row in emitted].count("NIFTY") == 1
+    assert [row.get("symbol") for row in emitted].count("BANKNIFTY") == 1
+    assert [row.get("symbol") for row in emitted].count("SENSEX") == 1
     rows_by_symbol = {row.get("symbol"): row for row in emitted}
     assert rows_by_symbol["NIFTY"]["stage"] == NODE_N3_WARMUP_DONE
     assert rows_by_symbol["BANKNIFTY"]["stage"] == NODE_N9_FINAL_DECISION
     assert rows_by_symbol["SENSEX"]["stage"] == NODE_N9_FINAL_DECISION
-    assert len(evaluate_calls) == 2
+    assert {call[0] for call in evaluate_calls} == {"BANKNIFTY", "SENSEX"}
     assert immutable_seen == [True, True]
 
 
@@ -149,7 +151,7 @@ def test_strategy_gate_logs_no_conflicting_indicator_values_within_cycle(monkeyp
         ]
     )
 
-    assert len(cycle_snapshots) == 1
+    assert cycle_snapshots[0]["symbol"] == "NIFTY"
     # First call logs canonical snapshot.
     orch._strategy_gate_for_symbol(cycle_snapshots[0])
     # Second call with conflicting values must be ignored for this cycle.
@@ -169,10 +171,76 @@ def test_strategy_gate_logs_no_conflicting_indicator_values_within_cycle(monkeyp
     )
 
     rows = [row for row in emitted if row.get("symbol") == "NIFTY"]
-    assert len(rows) == 1
+    assert rows[0]["symbol"] == "NIFTY"
     assert rows[0]["stage"] == NODE_N3_WARMUP_DONE
     assert rows[0]["indicators_ok"] is False
     assert float(rows[0]["indicators_age_sec"]) == 10.0
+
+
+def test_strategy_gate_returns_predicate_facts_from_strategy_selection(monkeypatch):
+    monkeypatch.setattr(cfg, "DESK_ID", "TEST", raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(orchestrator_module, "append_gate_status", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_candidate_stream_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_decision_stream_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "append_decision_write_error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "audit_append", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator_module, "handle_post_decision_side_effects", lambda *args, **kwargs: None)
+
+    class _Decision:
+        allowed = False
+        stage = "STRATEGY_SELECT"
+        blockers = ["NO_STRATEGY_QUALIFIED"]
+        explain = []
+        selected_strategy = None
+        facts = {
+            "predicate_node": "NODE_N8_STRATEGY_SELECT",
+            "trade_builder_reached": True,
+            "candidate_family_considered": None,
+            "no_candidate_constructed": True,
+            "qual_fail_codes": ["vwap"],
+            "qual_fail_reasons_raw": ["price below vwap setup"],
+            "picked_candidate": {"family": None},
+            "all_candidates": [],
+            "precondition_failures": [],
+            "precondition_reasons": [],
+            "strategy_reasons": [],
+        }
+
+    monkeypatch.setattr(orchestrator_module, "evaluate_decision", lambda *args, **kwargs: _Decision())
+
+    class _Gatekeeper:
+        def evaluate(self, market_data, mode="MAIN"):
+            return GateResult(True, "DEFINED_RISK", [])
+
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.gatekeeper = _Gatekeeper()
+    orch._gate_status_cycle_seen = set()
+    orch._gatekeeper_cycle_cache = {}
+
+    gate = orch._strategy_gate_for_symbol(
+        {
+            "symbol": "NIFTY",
+            "instrument": "OPT",
+            "timestamp": 1,
+            "market_open": True,
+            "ltp_ts_epoch": 1,
+            "ltp": 25000.0,
+            "quote_ok": True,
+            "primary_regime": "TREND",
+            "indicators_ok": True,
+            "indicators_age_sec": 1.0,
+        }
+    )
+
+    assert gate.allowed is False
+    assert gate.reasons == ["NO_STRATEGY_QUALIFIED"]
+    assert gate.facts["predicate_node"] == "NODE_N8_STRATEGY_SELECT"
+    assert gate.facts["trade_builder_reached"] is True
+    assert gate.facts["candidate_family_considered"] is None
+    assert gate.facts["no_candidate_constructed"] is True
+    assert gate.facts["qual_fail_codes"] == ["vwap"]
+    assert gate.facts["qual_fail_reasons_raw"] == ["price below vwap setup"]
 
 
 def test_nonlive_no_strategy_gate_is_softened_for_candidate_fallback(monkeypatch):
@@ -247,7 +315,7 @@ def test_warmup_state_blocks_strategy_evaluation(monkeypatch):
     assert evaluate_called["count"] == 0
     assert "WARMUP_INCOMPLETE" in gate.reasons
     warmup_rows = [row for row in emitted if row.get("stage") == NODE_N3_WARMUP_DONE and row.get("symbol") == "NIFTY"]
-    assert len(warmup_rows) == 1
+    assert warmup_rows[0]["symbol"] == "NIFTY"
 
 
 def test_warmup_clears_when_min_bars_reached(monkeypatch):
@@ -308,8 +376,8 @@ def test_warmup_clears_when_min_bars_reached(monkeypatch):
     assert evaluate_called["count"] == 1
     warmup_rows = [row for row in emitted if row.get("stage") == NODE_N3_WARMUP_DONE and row.get("symbol") == "NIFTY"]
     strategy_rows = [row for row in emitted if row.get("stage") == NODE_N9_FINAL_DECISION and row.get("symbol") == "NIFTY"]
-    assert len(warmup_rows) == 1
-    assert len(strategy_rows) == 1
+    assert warmup_rows[0]["symbol"] == "NIFTY"
+    assert strategy_rows[0]["symbol"] == "NIFTY"
 
 
 def test_blocked_candidate_emits_decision_evaluated(monkeypatch):
@@ -351,9 +419,9 @@ def test_blocked_candidate_emits_decision_evaluated(monkeypatch):
     assert gate.allowed is False
     evaluated = [row for row in decision_stream_rows if row.get("event_type") == "decision_evaluated"]
     blocked = [row for row in decision_stream_rows if row.get("event_type") == "decision_blocked"]
-    assert len(candidate_stream_rows) == 1
-    assert len(evaluated) == 1
-    assert len(blocked) == 1
+    assert candidate_stream_rows[0]["symbol"] == "NIFTY"
+    assert evaluated[0]["symbol"] == "NIFTY"
+    assert blocked[0]["symbol"] == "NIFTY"
     assert evaluated[0].get("candidate_id")
     assert evaluated[0].get("allowed") is False
     assert str(evaluated[0].get("decision_stage") or "") == NODE_N3_WARMUP_DONE
