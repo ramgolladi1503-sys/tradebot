@@ -219,11 +219,37 @@ def test_strategy_no_qualified_payload_marks_empty_predicate_facts_as_no_candida
         telemetry={},
     )
 
-    assert attempt["strategy_id"] == "no_candidate_constructed"
+    assert attempt["strategy_id"] == "unknown"
     assert attempt["no_setup_reason"] == "no_strategy_candidate_constructed_before_gate"
     assert attempt["reason_category"] == "unknown"
     assert attempt["trade_builder_ran"] is False
     assert attempt["candidate_produced"] is False
+    assert attempt["no_candidate_constructed"] is True
+
+
+def test_strategy_no_qualified_payload_promotes_all_candidates_reasons_into_summary_fields():
+    attempt = build_strategy_attempt_from_gate(
+        symbol="SENSEX",
+        strategy_id=None,
+        gate_reasons=["NO_STRATEGY_QUALIFIED"],
+        telemetry={
+            "qual_fail_codes": ["no_candidates"],
+            "qual_fail_reasons_raw": [],
+            "all_candidates": [
+                {
+                    "family": None,
+                    "allowed": False,
+                    "manual_review_required": False,
+                    "reasons": ["indicators_missing_or_stale"],
+                    "candidate_summary": {},
+                }
+            ],
+        },
+    )
+
+    assert attempt["qual_fail_reasons_raw"] == ["indicators_missing_or_stale"]
+    assert attempt["no_setup_reason"] == "indicators_missing_or_stale"
+    assert attempt["reason_category"] == "indicator_gate"
     assert attempt["no_candidate_constructed"] is True
 
 

@@ -26,6 +26,7 @@ REASON_CATEGORIES = {
     "spread",
     "direction_or_regime_mismatch",
     "quote_quality",
+    "indicator_gate",
     "unknown",
 }
 
@@ -140,6 +141,8 @@ def classify_no_qualified_reason_category(*values: Any) -> str:
         return "expiry_restriction"
     if "spread" in compact or "bidask" in compact or "bid_ask" in compact:
         return "spread"
+    if "indicator" in compact or "indicators" in compact or "warmup" in compact:
+        return "indicator_gate"
     if "regime" in compact or "direction" in compact or "trend_mismatch" in compact:
         return "direction_or_regime_mismatch"
     if "quote" in compact or "stale" in compact or "ltp" in compact:
@@ -153,6 +156,31 @@ def _first_reason(*values: Any) -> str:
             if item:
                 return item
     return "unknown"
+
+
+def _promoted_gate_reasons(
+    *,
+    raw_reasons: list[str],
+    fail_codes: list[str],
+    gate_reasons: Any,
+    picked: Mapping[str, Any],
+    all_candidates: list[Mapping[str, Any]],
+) -> list[str]:
+    promoted = list(raw_reasons)
+    if not promoted:
+        promoted.extend([reason for reason in _string_list(picked.get("reasons")) if reason])
+    if not promoted:
+        for candidate in all_candidates:
+            promoted.extend([reason for reason in _string_list(candidate.get("reasons")) if reason])
+    if not promoted:
+        promoted.extend([reason for reason in fail_codes if reason])
+    if not promoted:
+        promoted.extend([reason for reason in _string_list(gate_reasons) if reason])
+    deduped: list[str] = []
+    for reason in promoted:
+        if reason and reason not in deduped:
+            deduped.append(reason)
+    return deduped or ["unknown"]
 
 
 def _has_predicate_facts(tele: Mapping[str, Any]) -> bool:
@@ -222,20 +250,32 @@ def build_strategy_attempt_from_gate(
     predicate_facts = _normalize_predicate_facts(tele)
     picked = predicate_facts["picked_candidate"]
     all_candidates = predicate_facts["all_candidates"]
-    candidate_produced = bool(all_candidates) or bool(picked.get("family"))
+    promoted_reasons = _promoted_gate_reasons(
+        raw_reasons=raw_reasons,
+        fail_codes=fail_codes,
+        gate_reasons=gate_reasons,
+        picked=picked,
+        all_candidates=all_candidates,
+    )
+    candidate_produced = bool(picked.get("family")) or any(
+        bool(str(candidate.get("family") or "").strip())
+        for candidate in all_candidates
+        if isinstance(candidate, Mapping)
+    )
+    predicate_facts["no_candidate_constructed"] = not candidate_produced
+    if not candidate_produced:
+        predicate_facts["candidate_family_considered"] = None
     has_predicate_facts = _has_predicate_facts(tele)
     if not has_predicate_facts and not candidate_produced:
-        strategy = "no_candidate_constructed"
+        strategy = _strategy_id(strategy_id or picked.get("family") or predicate_facts["candidate_family_considered"])
         no_setup_reason = "no_strategy_candidate_constructed_before_gate"
         category = "unknown"
-        predicate_facts["no_candidate_constructed"] = True
-        predicate_facts["candidate_family_considered"] = None
     else:
         strategy = _strategy_id(strategy_id or picked.get("family") or predicate_facts["candidate_family_considered"])
-        no_setup_reason = _first_reason(raw_reasons, fail_codes, gate_reasons, "NO_STRATEGY_QUALIFIED")
+        no_setup_reason = _first_reason(promoted_reasons, fail_codes, gate_reasons, "NO_STRATEGY_QUALIFIED")
         category = classify_no_qualified_reason_category(
             fail_codes,
-            raw_reasons,
+            promoted_reasons,
             gate_reasons,
             picked,
             predicate_facts["precondition_reasons"],
@@ -253,7 +293,7 @@ def build_strategy_attempt_from_gate(
         "reason_category": category if category in REASON_CATEGORIES else "unknown",
         "gate_reasons": _string_list(gate_reasons),
         "qual_fail_codes": fail_codes,
-        "qual_fail_reasons_raw": raw_reasons,
+        "qual_fail_reasons_raw": promoted_reasons,
         "raw_candidate_count": 0,
         "post_scan_survivor_count": 0,
         "source": "strategy_gate",
