@@ -193,6 +193,15 @@ def _has_predicate_facts(tele: Mapping[str, Any]) -> bool:
         "precondition_reasons",
         "strategy_reasons",
         "predicate_node",
+        "indicator_source",
+        "indicator_readiness_source",
+        "indicator_last_update_epoch",
+        "indicator_age_sec",
+        "indicators_ok",
+        "indicator_missing_inputs",
+        "indicator_readiness_ready",
+        "indicator_readiness_reason",
+        "indicator_readiness_blockers",
         "trade_builder_reached",
         "candidate_family_considered",
         "no_candidate_constructed",
@@ -221,6 +230,15 @@ def _normalize_predicate_facts(tele: Mapping[str, Any]) -> dict[str, Any]:
     all_candidates = tele.get("all_candidates") if isinstance(tele.get("all_candidates"), list) else []
     return {
         "predicate_node": str(tele.get("predicate_node") or "unknown"),
+        "indicator_source": tele.get("indicator_source"),
+        "indicator_readiness_source": tele.get("indicator_readiness_source"),
+        "indicator_last_update_epoch": tele.get("indicator_last_update_epoch"),
+        "indicator_age_sec": tele.get("indicator_age_sec"),
+        "indicators_ok": tele.get("indicators_ok"),
+        "indicator_missing_inputs": _string_list(tele.get("indicator_missing_inputs")),
+        "indicator_readiness_ready": tele.get("indicator_readiness_ready"),
+        "indicator_readiness_reason": tele.get("indicator_readiness_reason"),
+        "indicator_readiness_blockers": _string_list(tele.get("indicator_readiness_blockers")),
         "trade_builder_reached": _safe_bool(tele.get("trade_builder_reached")),
         "candidate_family_considered": (
             str(tele.get("candidate_family_considered") or "").strip() or None
