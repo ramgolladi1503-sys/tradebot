@@ -58,6 +58,15 @@ def _first_non_empty(*values: Any) -> Any:
     return None
 
 
+def _read_json_file(path: Path) -> dict[str, Any]:
+    try:
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def _regime_metrics_from_snapshot(snapshot: Mapping[str, Any] | None) -> dict[str, Any]:
     row = _as_mapping(snapshot)
     regime = _as_mapping(row.get("regime"))
@@ -399,12 +408,21 @@ def build_candidate_starvation_trace_payload(
     previous_had_symbol_candidates = bool(previous.get("had_symbol_candidates_this_session_or_cycle"))
     current_symbol_traces = dict(sorted(by_symbol.items(), key=lambda item: item[0]))
     current_has_symbols = bool(current_symbol_traces)
+    existing_latest_payload = {}
+    if not current_has_symbols and not previous_symbol_traces:
+        existing_latest_payload = _read_json_file(repo_logs_dir() / RUNTIME_CANDIDATE_STARVATION_TRACE_FILENAME)
+    existing_symbol_traces = _as_mapping(existing_latest_payload.get("symbol_traces"))
+    existing_last_symbol_snapshot = _as_mapping(existing_latest_payload.get("last_symbol_snapshot"))
+    existing_had_symbol_candidates = bool(existing_latest_payload.get("had_symbol_candidates_this_session_or_cycle"))
     if current_has_symbols:
         symbol_traces = current_symbol_traces
         last_symbol_snapshot = dict(list(current_symbol_traces.values())[-1]) if current_symbol_traces else {}
     elif previous_symbol_traces:
         symbol_traces = dict(previous_symbol_traces)
         last_symbol_snapshot = dict(previous_last_symbol_snapshot)
+    elif existing_symbol_traces:
+        symbol_traces = dict(existing_symbol_traces)
+        last_symbol_snapshot = dict(existing_last_symbol_snapshot)
     else:
         symbol_traces = {}
         last_symbol_snapshot = {}
@@ -418,10 +436,18 @@ def build_candidate_starvation_trace_payload(
         )
     if latest_global_blocker is None and previous.get("latest_global_blocker"):
         latest_global_blocker = tuple(previous.get("latest_global_blocker")) if isinstance(previous.get("latest_global_blocker"), (list, tuple)) else previous.get("latest_global_blocker")
+    if latest_global_blocker is None:
+        existing_global = existing_latest_payload.get("latest_global_blocker")
+        if isinstance(existing_global, (list, tuple)) and len(existing_global) == 2:
+            latest_global_blocker = (str(existing_global[0]), _safe_int(existing_global[1]))
+        elif isinstance(existing_global, str) and existing_global.strip():
+            latest_global_blocker = (existing_global.strip(), _safe_int(existing_latest_payload.get("latest_global_blocker_count")))
 
     latest_global_blocker_counts = dict(sorted({str(k): _safe_int(v) for k, v in dict(cycle_blockers or {}).items() if str(k).strip()}.items(), key=lambda item: (-item[1], item[0])))
     if not latest_global_blocker_counts and isinstance(previous.get("latest_global_blocker_counts"), Mapping):
         latest_global_blocker_counts = dict(previous.get("latest_global_blocker_counts") or {})
+    if not latest_global_blocker_counts and isinstance(existing_latest_payload.get("latest_global_blocker_counts"), Mapping):
+        latest_global_blocker_counts = dict(existing_latest_payload.get("latest_global_blocker_counts") or {})
 
     had_symbol_candidates_this_session_or_cycle = bool(
         current_has_symbols
@@ -431,7 +457,10 @@ def build_candidate_starvation_trace_payload(
         or post_real_filter_count > 0
         or post_executable_filter_count > 0
         or previous_had_symbol_candidates
+        or existing_had_symbol_candidates
     )
+    if latest_global_blocker is None and str(feed.get("runtime_state") or "").strip().upper() in {"RUNNING", "RECOVERY_BLOCKED"}:
+        latest_global_blocker = next(iter(sorted({str(k): _safe_int(v) for k, v in dict(cycle_blockers or {}).items() if str(k).strip()}.items(), key=lambda item: (-item[1], item[0]))), None)
 
     payload = {
         "schema_version": RUNTIME_CANDIDATE_STARVATION_TRACE_SCHEMA_VERSION,
@@ -446,8 +475,9 @@ def build_candidate_starvation_trace_payload(
         "append": False,
         "is_order_action": False,
         "broker_api_called": False,
-        "market_data_symbol_count": int(len(symbols)),
-        "market_data_symbols": list(symbols),
+        "market_data_symbol_count": int(len(symbol_traces) if symbol_traces else len(symbols)),
+        "market_data_symbols": list(symbol_traces.keys()) if symbol_traces else list(symbols),
+        "symbol_count": int(len(symbol_traces) if symbol_traces else len(symbols)),
         "regime_unstable_symbol_count": int(regime_unstable_symbol_count),
         "regime_unstable_reason_counts": dict(unstable_reason_counts),
         "raw_candidate_count": int(raw_candidate_count),
