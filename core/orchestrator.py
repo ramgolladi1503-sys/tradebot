@@ -7,6 +7,7 @@ import multiprocessing
 import os
 from collections import Counter
 from collections.abc import Mapping
+from typing import Any
 from types import MappingProxyType
 from pathlib import Path
 import pandas as pd
@@ -915,6 +916,109 @@ def _should_skip_background_maintenance_for_latency_guard(
     if feed_ok is False:
         return True
     return str(latency_action or ACTION_OK).strip().upper() != ACTION_OK
+
+
+def _latency_guard_metric_context(latency_state: Mapping[str, Any] | None, latency_stats: Mapping[str, Any] | None) -> dict[str, Any]:
+    state = dict(latency_state or {})
+    stats = dict(latency_stats or {})
+    thresholds = stats.get("thresholds") if isinstance(stats.get("thresholds"), Mapping) else {}
+    stages = stats.get("stages") if isinstance(stats.get("stages"), Mapping) else {}
+    breach = stats.get("breach") if isinstance(stats.get("breach"), Mapping) else {}
+
+    candidates: list[dict[str, Any]] = []
+
+    def _stage_metric(stage_name: str, *, breach_metric: str, threshold_metric: str, metric_label: str) -> None:
+        stage = stages.get(stage_name) if isinstance(stages, Mapping) else {}
+        if not isinstance(stage, Mapping):
+            return
+        if not bool(breach.get(breach_metric)):
+            return
+        value = stage.get("p95_ms")
+        threshold = thresholds.get(threshold_metric)
+        try:
+            value_f = float(value)
+        except Exception:
+            value_f = None
+        try:
+            threshold_f = float(threshold)
+        except Exception:
+            threshold_f = None
+        ratio = None
+        if value_f is not None and threshold_f not in (None, 0.0):
+            try:
+                ratio = float(value_f) / float(threshold_f)
+            except Exception:
+                ratio = None
+        candidates.append(
+            {
+                "latency_guard_metric": metric_label,
+                "latency_guard_value": value_f,
+                "latency_guard_threshold": threshold_f,
+                "latency_guard_source": f"latency_monitor.stages.{stage_name}.p95_ms",
+                "latency_guard_breach_metric": breach_metric,
+                "latency_guard_ratio": ratio,
+            }
+        )
+
+    _stage_metric("total_loop", breach_metric="sustained_total_breach", threshold_metric="max_p95_total_ms", metric_label="total_loop.p95_ms")
+    _stage_metric("decision_build", breach_metric="sustained_decision_breach", threshold_metric="max_p95_decision_ms", metric_label="decision_build.p95_ms")
+    _stage_metric("total_loop", breach_metric="p95_total_breach", threshold_metric="max_p95_total_ms", metric_label="total_loop.p95_ms")
+    _stage_metric("decision_build", breach_metric="p95_decision_breach", threshold_metric="max_p95_decision_ms", metric_label="decision_build.p95_ms")
+
+    chosen = None
+    if candidates:
+        candidates = sorted(
+            candidates,
+            key=lambda item: (
+                0 if item.get("latency_guard_breach_metric", "").startswith("sustained") else 1,
+                -(float(item.get("latency_guard_ratio") or 0.0)),
+            ),
+        )
+        chosen = candidates[0]
+
+    action = str(state.get("action") or ACTION_OK).upper()
+    reason = str(state.get("reason") or "latency_within_budget")
+    unknown_state = not bool(stats) or not bool(stages)
+    triggered = action in {ACTION_COOLDOWN, ACTION_DEGRADE_EXIT_ONLY, ACTION_HALT_ALL} or reason not in {
+        "latency_within_budget",
+        "market_closed",
+    }
+    if unknown_state:
+        triggered = True
+        reason = "latency_guard_state_unknown"
+    out = {
+        "latency_guard_triggered": bool(triggered),
+        "latency_guard_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").strip().upper(),
+        "latency_guard_action": action,
+        "latency_guard_source": None,
+        "latency_guard_reason": reason,
+        "latency_guard_metric": None,
+        "latency_guard_value": None,
+        "latency_guard_threshold": None,
+        "latency_guard_age_sec": None,
+        "latency_guard_last_ok_at": state.get("last_ok_at"),
+        "latency_guard_last_bad_at": state.get("last_bad_at"),
+        "latency_guard_recovery_required": bool(action in {ACTION_COOLDOWN, ACTION_DEGRADE_EXIT_ONLY, ACTION_HALT_ALL}),
+    }
+    if chosen is not None:
+        out.update(
+            {
+                "latency_guard_source": chosen.get("latency_guard_source"),
+                "latency_guard_metric": chosen.get("latency_guard_metric"),
+                "latency_guard_value": chosen.get("latency_guard_value"),
+                "latency_guard_threshold": chosen.get("latency_guard_threshold"),
+            }
+        )
+    if out["latency_guard_source"] is None and triggered:
+        out["latency_guard_source"] = "latency_guard_state"
+    if unknown_state:
+        out["latency_guard_recovery_required"] = True
+    if state.get("cooldown_until_ts"):
+        try:
+            out["latency_guard_age_sec"] = max(0.0, float(now_utc_epoch()) - float(state.get("ts_epoch") or 0.0))
+        except Exception:
+            out["latency_guard_age_sec"] = None
+    return out
 
 
 def _scan_visible_suggestions(path: Path) -> dict:
@@ -2796,14 +2900,18 @@ class Orchestrator:
             market_open=bool(market_open),
             now_ts=now_utc_epoch(),
         )
+        now_epoch = now_utc_epoch()
         state = {
             "action": str(result.action),
             "reason": str(result.reason),
             "cooldown_until_ts": float(result.cooldown_until_ts or 0.0),
-            "ts_epoch": now_utc_epoch(),
+            "ts_epoch": now_epoch,
             "blocks_new_entries": bool(result.blocks_new_entries),
             "blocks_non_emergency_exits": bool(result.blocks_non_emergency_exits),
+            "last_ok_at": now_epoch if str(result.action).upper() == ACTION_OK else getattr(self, "_latency_guard_state", {}).get("last_ok_at"),
+            "last_bad_at": now_epoch if str(result.action).upper() != ACTION_OK else getattr(self, "_latency_guard_state", {}).get("last_bad_at"),
         }
+        state.update(_latency_guard_metric_context(state, result.stats if isinstance(result.stats, dict) else {}))
         previous_action = str(getattr(self, "_latency_last_reported_action", ACTION_OK) or ACTION_OK).upper()
         next_action = str(state.get("action") or ACTION_OK).upper()
         self._latency_guard_state = state
@@ -6940,6 +7048,7 @@ class Orchestrator:
                             cycle_blockers=dict(cycle_blockers),
                             indicator_readiness=indicator_payload,
                             regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
+                            latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                         )
                         write_notrade_reason_truth_latest(payload=notrade_payload)
                     except Exception as notrade_exc:
@@ -6979,6 +7088,7 @@ class Orchestrator:
                             regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
                             raw_candidate_count=int(cycle_candidate_pool_count),
                             phase2_input_candidate_count=int(len(cycle_ranked_candidates or [])),
+                            latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                             decision_gate_reason_by_symbol={
                                 str(md.get("symbol") or "").strip().upper(): md.get("decision_gate_reason")
                                 for md in list(market_data_list or [])
@@ -7001,6 +7111,7 @@ class Orchestrator:
                             ],
                             raw_candidate_count=int(cycle_candidate_pool_count),
                             phase2_input_candidate_count=int(len(cycle_ranked_candidates or [])),
+                            latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                         )
                         write_strategy_no_qualified_reasons_latest(payload=strategy_no_qualified_payload)
                     except Exception as strategy_no_qualified_exc:

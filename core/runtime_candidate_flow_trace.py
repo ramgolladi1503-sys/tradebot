@@ -143,6 +143,7 @@ def build_candidate_flow_trace_payload(
     raw_candidate_count: int | None,
     phase2_input_candidate_count: int | None,
     decision_gate_reason_by_symbol: Mapping[str, Any] | None = None,
+    latency_guard: Mapping[str, Any] | None = None,
     # Optional stage drop counts are evidence-only; emit None when unknown.
     validation_drop_count: int | None = None,
     normalization_drop_count: int | None = None,
@@ -153,6 +154,7 @@ def build_candidate_flow_trace_payload(
     blockers = _as_mapping(cycle_blockers)
     indicator = _as_mapping(indicator_readiness)
     regime = _as_mapping(regime_truth)
+    latency = _as_mapping(latency_guard)
 
     symbols: list[str] = []
     by_symbol: dict[str, Any] = {}
@@ -236,6 +238,22 @@ def build_candidate_flow_trace_payload(
         else "orchestrator_does_not_expose_drop_stage_counts",
     }
 
+    if latency:
+        starvation_summary["latency_guard"] = {
+            "triggered": latency.get("latency_guard_triggered"),
+            "mode": latency.get("latency_guard_mode"),
+            "action": latency.get("latency_guard_action"),
+            "source": latency.get("latency_guard_source"),
+            "reason": latency.get("latency_guard_reason"),
+            "metric": latency.get("latency_guard_metric"),
+            "value": latency.get("latency_guard_value"),
+            "threshold": latency.get("latency_guard_threshold"),
+            "age_sec": latency.get("latency_guard_age_sec"),
+            "last_ok_at": latency.get("latency_guard_last_ok_at"),
+            "last_bad_at": latency.get("latency_guard_last_bad_at"),
+            "recovery_required": latency.get("latency_guard_recovery_required"),
+        }
+
     payload = {
         "schema_version": RUNTIME_CANDIDATE_FLOW_TRACE_SCHEMA_VERSION,
         "source": RUNTIME_CANDIDATE_FLOW_TRACE_SOURCE,
@@ -266,6 +284,18 @@ def build_candidate_flow_trace_payload(
         "by_symbol": dict(by_symbol),
         "by_strategy": {},
         "drop_reasons": {},
+        "latency_guard_triggered": latency.get("latency_guard_triggered") if latency else None,
+        "latency_guard_mode": latency.get("latency_guard_mode") if latency else None,
+        "latency_guard_action": latency.get("latency_guard_action") if latency else None,
+        "latency_guard_source": latency.get("latency_guard_source") if latency else None,
+        "latency_guard_reason": latency.get("latency_guard_reason") if latency else None,
+        "latency_guard_metric": latency.get("latency_guard_metric") if latency else None,
+        "latency_guard_value": latency.get("latency_guard_value") if latency else None,
+        "latency_guard_threshold": latency.get("latency_guard_threshold") if latency else None,
+        "latency_guard_age_sec": latency.get("latency_guard_age_sec") if latency else None,
+        "latency_guard_last_ok_at": latency.get("latency_guard_last_ok_at") if latency else None,
+        "latency_guard_last_bad_at": latency.get("latency_guard_last_bad_at") if latency else None,
+        "latency_guard_recovery_required": latency.get("latency_guard_recovery_required") if latency else None,
         "gate_reasons": dict(gate_reasons),
         "first_zero_stage": str(first_zero_stage),
         "starvation_summary": dict(starvation_summary),

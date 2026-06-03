@@ -270,6 +270,40 @@ def test_strategy_no_qualified_payload_marks_latency_guard_as_non_applicable():
     assert payload["not_applicable_reason"] == "latency_guard"
 
 
+def test_strategy_no_qualified_payload_includes_latency_guard_evidence_fields():
+    payload = build_strategy_no_qualified_reasons_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "NIFTY"}],
+        cycle_blockers={"LATENCY_GUARD_DEGRADE_EXIT_ONLY_PREBUILD_SKIP": 1},
+        indicator_readiness=READY_INDICATORS,
+        regime_truth=READY_REGIME,
+        strategy_attempts=[],
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+        latency_guard={
+            "latency_guard_triggered": True,
+            "latency_guard_mode": "LIVE",
+            "latency_guard_action": "DEGRADE_EXIT_ONLY",
+            "latency_guard_source": "latency_monitor.stages.total_loop.p95_ms",
+            "latency_guard_reason": "latency_sustained_breach",
+            "latency_guard_metric": "total_loop.p95_ms",
+            "latency_guard_value": 180.0,
+            "latency_guard_threshold": 120.0,
+            "latency_guard_age_sec": 4.0,
+            "latency_guard_last_ok_at": 100.0,
+            "latency_guard_last_bad_at": 104.0,
+            "latency_guard_recovery_required": True,
+        },
+    )
+
+    assert payload["latency_guard_triggered"] is True
+    assert payload["latency_guard_action"] == "DEGRADE_EXIT_ONLY"
+    assert payload["latency_guard_metric"] == "total_loop.p95_ms"
+    assert payload["latency_guard_threshold"] == 120.0
+    assert payload["latency_guard_reason"] == "latency_sustained_breach"
+
+
 def test_strategy_no_qualified_payload_does_not_change_candidate_counts_or_strategy_decisions():
     attempts = [
         build_strategy_attempt_from_trade_builder(

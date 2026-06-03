@@ -255,6 +255,41 @@ def test_candidate_flow_trace_not_starved_when_phase2_input_nonzero(tmp_path: Pa
     assert payload["first_zero_stage"] == "not_starved"
 
 
+def test_candidate_flow_trace_includes_latency_guard_evidence_fields(tmp_path: Path):
+    indicator = {"by_symbol": {"SENSEX": {"ready": True}}}
+    latency_guard = {
+        "latency_guard_triggered": True,
+        "latency_guard_mode": "LIVE",
+        "latency_guard_action": "DEGRADE_EXIT_ONLY",
+        "latency_guard_source": "latency_monitor.stages.total_loop.p95_ms",
+        "latency_guard_reason": "latency_sustained_breach",
+        "latency_guard_metric": "total_loop.p95_ms",
+        "latency_guard_value": 180.0,
+        "latency_guard_threshold": 120.0,
+        "latency_guard_age_sec": 4.0,
+        "latency_guard_last_ok_at": 100.0,
+        "latency_guard_last_bad_at": 104.0,
+        "latency_guard_recovery_required": True,
+    }
+    payload = build_candidate_flow_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "SENSEX"}],
+        cycle_blockers={"LATENCY_GUARD_DEGRADE_EXIT_ONLY_PREBUILD_SKIP": 1},
+        indicator_readiness=indicator,
+        regime_truth={"by_symbol": {}},
+        raw_candidate_count=0,
+        phase2_input_candidate_count=0,
+        latency_guard=latency_guard,
+    )
+    assert payload["latency_guard_triggered"] is True
+    assert payload["latency_guard_action"] == "DEGRADE_EXIT_ONLY"
+    assert payload["latency_guard_metric"] == "total_loop.p95_ms"
+    assert payload["latency_guard_value"] == 180.0
+    assert payload["latency_guard_threshold"] == 120.0
+    assert payload["starvation_summary"]["latency_guard"]["reason"] == "latency_sustained_breach"
+
+
 def test_candidate_flow_trace_writer_writes_both_logs_and_runtime(tmp_path: Path):
     logs_path = tmp_path / "logs" / "candidate_flow_trace_latest.json"
     runtime_path = tmp_path / ".runtime" / "candidate_flow_trace_latest.json"
