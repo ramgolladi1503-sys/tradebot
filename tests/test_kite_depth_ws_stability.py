@@ -5,6 +5,8 @@ import sqlite3
 from config import config as cfg
 import core.auth as auth_module
 from core.auth import reset_kite_runtime_credentials_guard
+import json
+
 import core.kite_depth_ws as ws
 import core.tick_store as tick_store
 
@@ -175,13 +177,11 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == [
-        {
-            "reason": "ws_error:1006",
-            "force_full_restart": True,
-            "source": "on_error",
-        }
-    ]
+    assert scheduled == []
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["recovery_action"] == "process_restart_required"
 
 
 def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
@@ -210,13 +210,11 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == [
-        {
-            "reason": "ws_close:1006",
-            "force_full_restart": True,
-            "source": "on_close",
-        }
-    ]
+    assert scheduled == []
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["recovery_action"] == "process_restart_required"
 
 
 def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
@@ -571,7 +569,7 @@ def test_network_error_restarts_without_auth_required(monkeypatch):
     ticker = captured["ticker"]
     ticker.on_error(ticker, 1006, "connection closed by peer")
 
-    assert restarts["count"] == 1
+    assert restarts["count"] == 0
     assert auth_marks == []
     assert ws._AUTH_REQUIRED_LATCH is False
 
@@ -605,11 +603,5 @@ def test_network_error_forces_full_restart_when_enabled(monkeypatch):
     ticker = captured["ticker"]
     ticker.on_error(ticker, 1006, "connection closed by peer")
 
-    assert scheduled == [
-        {
-            "reason": "ws_error:1006",
-            "force_full_restart": True,
-            "source": "on_error",
-        }
-    ]
+    assert scheduled == []
     assert soft["count"] == 0

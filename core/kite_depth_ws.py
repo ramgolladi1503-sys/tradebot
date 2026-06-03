@@ -1156,6 +1156,25 @@ def _is_reactor_not_restartable_error(exc: Exception | None) -> bool:
     return "reactornotrestartable" in name or "reactornotrestartable" in text
 
 
+def _is_terminal_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
+    try:
+        code_int = int(code) if code is not None else None
+    except Exception:
+        code_int = None
+    reason_lower = str(reason_text or "").strip().lower()
+    if code_int == 1006:
+        return True
+    terminal_reason_markers = (
+        "connection was closed uncleanly",
+        "connection closed uncleanly",
+        "peer dropped",
+        "main loop terminated",
+        "reactornotrestartable",
+        "reactor not restartable",
+    )
+    return any(marker in reason_lower for marker in terminal_reason_markers)
+
+
 def _set_reconnect_blocked_reason(reason: str) -> str:
     global _RECONNECT_BLOCKED_REASON, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
     blocked = str(reason or "").strip().lower() or "unknown_reconnect_block"
@@ -1163,6 +1182,29 @@ def _set_reconnect_blocked_reason(reason: str) -> str:
     _RUNTIME_STATE = "RECOVERY_BLOCKED"
     _LAST_RUNTIME_ERROR = blocked[:1000]
     return blocked
+
+
+def _block_reconnect_for_process_restart(*, source: str, code: int | None = None, reason: str | None = None) -> str:
+    blocked_reason = "reactor_not_restartable"
+    reason_lower = str(reason or "").strip().lower()
+    if "connection was closed uncleanly" in reason_lower or "peer dropped" in reason_lower or "main loop terminated" in reason_lower:
+        blocked_reason = "ws1006_process_restart_required"
+    _set_reconnect_blocked_reason(blocked_reason)
+    _log_ws(
+        "FEED_WS_PROCESS_RESTART_REQUIRED",
+        {
+            "source": source,
+            "code": code,
+            "reason": str(reason or ""),
+            "reconnect_blocked_reason": blocked_reason,
+            "recovery_action": "process_restart_required",
+        },
+    )
+    _emit_reconnect_recovery_blocked_snapshot(
+        source=f"{source}:process_restart_required",
+        reason=blocked_reason,
+    )
+    return blocked_reason
 
 
 def _reconnect_recovery_blocked_payload(*, reason: str, source: str) -> dict[str, object]:
@@ -4271,6 +4313,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         stop_set = bool(_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set())
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
+            if _is_terminal_ws_fault(code=code_int, reason_text=reason_text):
+                _block_reconnect_for_process_restart(source="on_error", code=code_int, reason=reason_text)
+                return
             if _use_internal_reconnect():
                 if _reconnect_recovery_blocked_active():
                     blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
@@ -4352,6 +4397,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             fatal = True
         if is_market_open_ist():
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
+            if _is_terminal_ws_fault(code=code_int, reason_text=reason_text):
+                _block_reconnect_for_process_restart(source="on_close", code=code_int, reason=reason_text)
+                return
             if _use_internal_reconnect():
                 if fatal:
                     if _reconnect_recovery_blocked_active():
