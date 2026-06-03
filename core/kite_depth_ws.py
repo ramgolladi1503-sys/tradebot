@@ -1165,9 +1165,45 @@ def _set_reconnect_blocked_reason(reason: str) -> str:
     return blocked
 
 
+def _reconnect_recovery_blocked_payload(*, reason: str, source: str) -> dict[str, object]:
+    blocked_reason = str(reason or _RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
+    reactor_not_restartable = blocked_reason == "reactor_not_restartable"
+    payload = {
+        "source": source,
+        "reason": blocked_reason,
+        "reconnect_blocked_reason": blocked_reason,
+        "recovery_action": "process_restart_required",
+        "runtime_state": "RECOVERY_BLOCKED",
+        "ws_connected": False,
+        "last_error": blocked_reason,
+        "ws_reconnect_allowed": False,
+        "ws_reconnect_attempted": False,
+        "restart_suppressed": True,
+        "reactor_not_restartable_detected": reactor_not_restartable,
+    }
+    _log_ws("FEED_RECONNECT_SUPPRESSED_RECOVERY_BLOCKED", payload)
+    return payload
+
+
+def _emit_reconnect_recovery_blocked_snapshot(*, source: str, reason: str) -> dict[str, object]:
+    payload = _reconnect_recovery_blocked_payload(reason=reason, source=source)
+    _persist_runtime_snapshot_row(
+        ws_connected=False,
+        source=source,
+        runtime_state="RECOVERY_BLOCKED",
+        last_error=str(payload["last_error"]),
+        reconnect_blocked_reason=str(payload["reconnect_blocked_reason"]),
+    )
+    return payload
+
+
 def _clear_reconnect_blocked_reason() -> None:
     global _RECONNECT_BLOCKED_REASON
     _RECONNECT_BLOCKED_REASON = ""
+
+
+def _reconnect_recovery_blocked_active() -> bool:
+    return bool(str(_RECONNECT_BLOCKED_REASON or "").strip())
 
 
 def _log_tick_ingest_error(
@@ -1842,6 +1878,16 @@ def _write_feed_runtime_snapshot(
         ).strip().lower()
         or None,
     }
+    if payload["reconnect_blocked_reason"]:
+        payload.update(
+            {
+                "recovery_action": "process_restart_required",
+                "ws_reconnect_allowed": False,
+                "ws_reconnect_attempted": False,
+                "restart_suppressed": True,
+                "reactor_not_restartable_detected": payload["reconnect_blocked_reason"] == "reactor_not_restartable",
+            }
+        )
     if restart_verify:
         payload["restart_verification"] = restart_verify
     if restart_verify_failure:
@@ -1976,6 +2022,16 @@ def _persist_runtime_snapshot_row(
         ).strip().lower()
         or None,
     }
+    if payload["reconnect_blocked_reason"]:
+        payload.update(
+            {
+                "recovery_action": "process_restart_required",
+                "ws_reconnect_allowed": False,
+                "ws_reconnect_attempted": False,
+                "restart_suppressed": True,
+                "reactor_not_restartable_detected": payload["reconnect_blocked_reason"] == "reactor_not_restartable",
+            }
+        )
     if restart_verify:
         payload["restart_verification"] = restart_verify
     if restart_verify_failure:
@@ -3199,6 +3255,10 @@ def _schedule_restart_depth_ws(
     source: str,
 ) -> bool:
     global _RESTART_ASYNC_THREAD
+    if _reconnect_recovery_blocked_active():
+        blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
+        _emit_reconnect_recovery_blocked_snapshot(source=f"_schedule_restart_depth_ws:{source}", reason=blocked_reason)
+        return False
 
     with _RESTART_ASYNC_LOCK:
         existing = _RESTART_ASYNC_THREAD
@@ -3514,18 +3574,15 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     if _AUTH_REQUIRED_LATCH:
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
         return False
-    if _RECONNECT_BLOCKED_REASON:
+    if _reconnect_recovery_blocked_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
         _log_ws(
             "FEED_RESTART_BLOCKED_RECOVERY_REQUIRED",
             {"reason": reason, "reconnect_blocked_reason": blocked_reason},
         )
-        _persist_runtime_snapshot_row(
-            ws_connected=False,
+        _emit_reconnect_recovery_blocked_snapshot(
             source=f"restart_depth_ws:blocked:{reason}",
-            runtime_state="RECOVERY_BLOCKED",
-            last_error=blocked_reason,
-            reconnect_blocked_reason=blocked_reason,
+            reason=blocked_reason,
         )
         return False
 
@@ -3697,14 +3754,11 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
-    if _RECONNECT_BLOCKED_REASON:
+    if _reconnect_recovery_blocked_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
-        _persist_runtime_snapshot_row(
-            ws_connected=False,
+        _emit_reconnect_recovery_blocked_snapshot(
             source="start_depth_ws:reconnect_blocked",
-            runtime_state="RECOVERY_BLOCKED",
-            last_error=blocked_reason,
-            reconnect_blocked_reason=blocked_reason,
+            reason=blocked_reason,
         )
         _log_ws(
             "FEED_START_BLOCKED_RECOVERY_REQUIRED",
@@ -4218,6 +4272,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
             if _use_internal_reconnect():
+                if _reconnect_recovery_blocked_active():
+                    blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+                    _emit_reconnect_recovery_blocked_snapshot(
+                        source="on_error:reconnect_suppressed",
+                        reason=blocked_reason,
+                    )
+                    return
                 _log_ws(
                     "FEED_INTERNAL_RECONNECT_FORCE_FULL",
                     {"source": "on_error", "code": code, "reason": reason_text},
@@ -4293,6 +4354,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
             if _use_internal_reconnect():
                 if fatal:
+                    if _reconnect_recovery_blocked_active():
+                        blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+                        _emit_reconnect_recovery_blocked_snapshot(
+                            source="on_close:reconnect_suppressed",
+                            reason=blocked_reason,
+                        )
+                        return
                     _log_ws(
                         "FEED_INTERNAL_RECONNECT_FORCE_FULL",
                         {"source": "on_close", "code": code, "reason": reason_text},

@@ -261,6 +261,148 @@ def test_start_depth_ws_marks_reactor_not_restartable_as_recovery_blocked(monkey
     assert payload["ws_connected"] is False
     assert payload["runtime_state"] == "RECOVERY_BLOCKED"
     assert payload["reconnect_blocked_reason"] == "reactor_not_restartable"
+    assert payload["recovery_action"] == "process_restart_required"
+    assert payload["ws_reconnect_allowed"] is False
+    assert payload["ws_reconnect_attempted"] is False
+    assert payload["restart_suppressed"] is True
+    assert payload["reactor_not_restartable_detected"] is True
+
+
+def test_schedule_restart_depth_ws_suppresses_when_reactor_blocked(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable", raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"thread": 0, "persist": 0}
+    monkeypatch.setattr(
+        ws,
+        "_persist_runtime_snapshot_row",
+        lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1),
+    )
+
+    original_thread = ws.threading.Thread
+
+    class _FailThread(original_thread):
+        def start(self):  # pragma: no cover - defensive
+            calls["thread"] += 1
+            raise AssertionError("restart thread should not start when recovery is blocked")
+
+    monkeypatch.setattr(ws.threading, "Thread", _FailThread, raising=True)
+
+    assert (
+        ws._schedule_restart_depth_ws(
+            reason="ws_error:1006",
+            ignore_cooldown=True,
+            force_full_restart=True,
+            source="on_error",
+        )
+        is False
+    )
+    assert calls == {"thread": 0, "persist": 1}
+
+
+def test_on_error_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"schedule": 0, "persist": 0}
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: calls.__setitem__("schedule", calls["schedule"] + 1) or True,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_persist_runtime_snapshot_row",
+        lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1),
+    )
+
+    class _Ticker:
+        pass
+
+    def _make_ticker():
+        class _FakeTicker:
+            def connect(self, threaded=True):
+                ws._RECONNECT_BLOCKED_REASON = "reactor_not_restartable"
+                self.on_error(self, 1006, "closing handshake timeout")
+
+        fake = _FakeTicker()
+        return fake
+
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: _make_ticker(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is True
+    assert calls == {"schedule": 0, "persist": 3}
+
+
+def test_on_close_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"schedule": 0, "persist": 0}
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: calls.__setitem__("schedule", calls["schedule"] + 1) or True,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_persist_runtime_snapshot_row",
+        lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1),
+    )
+
+    class _FakeTicker:
+        def connect(self, threaded=True):
+            ws._RECONNECT_BLOCKED_REASON = "reactor_not_restartable"
+            self.on_close(self, 1006, "connection closed")
+
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: _FakeTicker(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is True
+    assert calls == {"schedule": 0, "persist": 3}
+
+
+def test_recovery_blocked_snapshot_contains_process_restart_required(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    payload = ws._emit_reconnect_recovery_blocked_snapshot(
+        source="unit_test",
+        reason="reactor_not_restartable",
+    )
+    assert payload["recovery_action"] == "process_restart_required"
+    assert payload["reactor_not_restartable_detected"] is True
+    snapshot = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert snapshot["runtime_state"] == "RECOVERY_BLOCKED"
+    assert snapshot["reconnect_blocked_reason"] == "reactor_not_restartable"
+    assert snapshot["recovery_action"] == "process_restart_required"
+    assert snapshot["ws_reconnect_allowed"] is False
+    assert snapshot["ws_reconnect_attempted"] is False
 
 
 def test_restart_depth_ws_stops_retrying_when_reactor_recovery_is_blocked(monkeypatch):
