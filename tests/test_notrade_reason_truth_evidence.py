@@ -212,6 +212,41 @@ def test_indicator_schema_is_explicit_even_when_detail_missing():
     assert payload["writer_name"] == "runtime_notrade_reason_truth"
 
 
+def test_notrade_payload_accepts_latency_guard_context_without_regressing_existing_fields():
+    payload = build_notrade_reason_truth_payload(
+        candidate_handoff={"phase2_input_candidate_count": 0},
+        phase2_rejection={},
+        feed_truth={"market_closed_detected": False, "feed_fresh": True, "option_tick_fresh": True},
+        top_opportunities={"phase2_state": "NO_TRADE"},
+        cycle_blockers={"REGIME_UNSTABLE": 1},
+        latency_guard={
+            "latency_guard_triggered": True,
+            "latency_guard_mode": "LIVE",
+            "latency_guard_action": "DEGRADE_EXIT_ONLY",
+            "latency_guard_source": "latency_monitor.stages.total_loop.p95_ms",
+            "latency_guard_reason": "latency_sustained_breach",
+            "latency_guard_metric": "total_loop.p95_ms",
+            "latency_guard_value": 180.0,
+            "latency_guard_threshold": 120.0,
+            "latency_guard_age_sec": 4.0,
+            "latency_guard_last_ok_at": 100.0,
+            "latency_guard_last_bad_at": 104.0,
+            "latency_guard_recovery_required": True,
+        },
+    )
+
+    assert payload["latency_guard_detail_available"] is True
+    assert payload["latency_guard_triggered"] is True
+    assert payload["latency_guard_action"] == "DEGRADE_EXIT_ONLY"
+    assert payload["latency_guard_metric"] == "total_loop.p95_ms"
+    assert payload["latency_guard_value"] == 180.0
+    assert payload["latency_guard_threshold"] == 120.0
+    assert payload["read_only"] is True
+    assert payload["append"] is False
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+
+
 def test_regime_schema_is_explicit_even_when_detail_missing():
     payload = build_notrade_reason_truth_payload(
         candidate_handoff={"phase2_input_candidate_count": 0},
@@ -225,3 +260,44 @@ def test_regime_schema_is_explicit_even_when_detail_missing():
     assert payload["regime_detail_missing_reason"]
     assert isinstance(payload["regime_gate_reasons"], dict)
     assert isinstance(payload["regime_by_symbol"], dict)
+
+
+def test_notrade_payload_includes_latency_guard_schema_when_present():
+    payload = build_notrade_reason_truth_payload(
+        candidate_handoff={"phase2_input_candidate_count": 0},
+        phase2_rejection={},
+        feed_truth={"market_closed_detected": False, "feed_fresh": True, "option_tick_fresh": True},
+        top_opportunities={"phase2_state": "NO_TRADE"},
+        cycle_blockers={"REGIME_UNSTABLE": 1},
+        latency_guard={
+            "latency_guard_triggered": True,
+            "latency_guard_mode": "LIVE",
+            "latency_guard_action": "DEGRADE_EXIT_ONLY",
+            "latency_guard_source": "latency_monitor.stages.total_loop.p95_ms",
+            "latency_guard_reason": "latency_sustained_breach",
+            "latency_guard_metric": "total_loop.p95_ms",
+            "latency_guard_value": 180.0,
+            "latency_guard_threshold": 120.0,
+            "latency_guard_age_sec": 4.0,
+            "latency_guard_last_ok_at": 100.0,
+            "latency_guard_last_bad_at": 104.0,
+            "latency_guard_recovery_required": True,
+        },
+    )
+    for key in (
+        "latency_guard_detail_available",
+        "latency_guard_detail_missing_reason",
+        "latency_guard_triggered",
+        "latency_guard_mode",
+        "latency_guard_action",
+        "latency_guard_source",
+        "latency_guard_reason",
+        "latency_guard_metric",
+        "latency_guard_value",
+        "latency_guard_threshold",
+        "latency_guard_age_sec",
+        "latency_guard_last_ok_at",
+        "latency_guard_last_bad_at",
+        "latency_guard_recovery_required",
+    ):
+        assert key in payload

@@ -84,6 +84,7 @@ def build_notrade_reason_truth_payload(
     cycle_blockers: Mapping[str, Any] | None = None,
     indicator_readiness: Mapping[str, Any] | None = None,
     regime_truth: Mapping[str, Any] | None = None,
+    latency_guard: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     handoff = _as_mapping(candidate_handoff)
     phase2 = _as_mapping(phase2_rejection)
@@ -92,6 +93,7 @@ def build_notrade_reason_truth_payload(
     blockers = _as_mapping(cycle_blockers)
     indicator = _as_mapping(indicator_readiness)
     regime = _as_mapping(regime_truth)
+    latency = _as_mapping(latency_guard)
 
     precedence = [
         "market_closed",
@@ -136,6 +138,7 @@ def build_notrade_reason_truth_payload(
 
     indicator_detail_available = bool(indicator)
     regime_detail_available = bool(regime)
+    latency_detail_available = bool(latency)
 
     missing_indicators_by_symbol = indicator.get("by_symbol") if isinstance(indicator.get("by_symbol"), dict) else {}
     missing_indicators_by_strategy = indicator.get("by_strategy") if isinstance(indicator.get("by_strategy"), dict) else {}
@@ -320,6 +323,20 @@ def build_notrade_reason_truth_payload(
         "regime_unstable_count": int(regime_unstable_count),
         "regime_gate_reasons": dict(regime.get("gate_reasons") or {}) if isinstance(regime.get("gate_reasons"), Mapping) else {},
         "regime_by_symbol": dict(regime.get("by_symbol") or {}) if isinstance(regime.get("by_symbol"), Mapping) else {},
+        "latency_guard_detail_available": bool(latency_detail_available),
+        "latency_guard_detail_missing_reason": None if latency_detail_available else "latency_guard_not_provided",
+        "latency_guard_triggered": latency.get("latency_guard_triggered") if latency else None,
+        "latency_guard_mode": latency.get("latency_guard_mode") if latency else None,
+        "latency_guard_action": latency.get("latency_guard_action") if latency else None,
+        "latency_guard_source": latency.get("latency_guard_source") if latency else None,
+        "latency_guard_reason": latency.get("latency_guard_reason") if latency else None,
+        "latency_guard_metric": latency.get("latency_guard_metric") if latency else None,
+        "latency_guard_value": latency.get("latency_guard_value") if latency else None,
+        "latency_guard_threshold": latency.get("latency_guard_threshold") if latency else None,
+        "latency_guard_age_sec": latency.get("latency_guard_age_sec") if latency else None,
+        "latency_guard_last_ok_at": latency.get("latency_guard_last_ok_at") if latency else None,
+        "latency_guard_last_bad_at": latency.get("latency_guard_last_bad_at") if latency else None,
+        "latency_guard_recovery_required": latency.get("latency_guard_recovery_required") if latency else None,
         "generated_epoch": float(time.time()),
         "read_only": True,
         "append": False,
