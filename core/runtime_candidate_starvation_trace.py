@@ -169,6 +169,184 @@ def _normalize_top_reject_reasons(*sources: Mapping[str, Any] | None) -> dict[st
     return dict(counts)
 
 
+def _row_count_score(row: Mapping[str, Any] | None) -> int:
+    if not isinstance(row, Mapping):
+        return 0
+    return sum(
+        max(0, _safe_int(row.get(field)))
+        for field in (
+            "raw_candidate_count",
+            "post_scan_survivor_count",
+            "post_soft_reject_count",
+            "post_real_filter_count",
+            "post_executable_filter_count",
+        )
+    )
+
+
+def _merge_reason_lists(*values: Any) -> list[str]:
+    merged: list[str] = []
+    for value in values:
+        for item in _as_list(value):
+            text = str(item or "").strip()
+            if text and text not in merged:
+                merged.append(text)
+    return merged
+
+
+def _merge_counts(*sources: Mapping[str, Any] | None) -> dict[str, int]:
+    merged: dict[str, int] = {}
+    for source in sources:
+        for key, value in dict(source or {}).items():
+            code = str(key or "").strip()
+            if not code:
+                continue
+            merged[code] = max(merged.get(code, 0), _safe_int(value))
+    return merged
+
+
+def _merge_regime_rows(*rows: Mapping[str, Any] | None) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    regime_fields = (
+        "primary_regime",
+        "regime_entropy",
+        "regime_entropy_max",
+        "regime_prob_max",
+        "regime_prob_min",
+        "regime_unstable_streak",
+        "regime_unstable_block_after",
+        "regime_unstable_debounced",
+        "unstable_reasons",
+        "regime_unstable",
+        "feed_runtime_state",
+        "ws_connected",
+        "option_feed_block_reason",
+        "quote_health_state",
+        "quote_health_stale_reasons",
+        "ltp_age_sec",
+    )
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        for field in regime_fields:
+            value = row.get(field)
+            if field in {"regime_entropy", "regime_entropy_max", "regime_prob_max", "regime_prob_min", "ltp_age_sec"}:
+                if merged.get(field) is None and value is not None:
+                    merged[field] = value
+                elif value is not None:
+                    try:
+                        merged[field] = max(_safe_float(merged.get(field)) or float("-inf"), _safe_float(value) or float("-inf"))
+                    except Exception:
+                        merged[field] = value
+                continue
+            if field in {"regime_unstable_streak", "regime_unstable_block_after"}:
+                merged[field] = max(_safe_int(merged.get(field)), _safe_int(value))
+                continue
+            if field in {"regime_unstable_debounced", "regime_unstable"}:
+                merged[field] = bool(merged.get(field)) or bool(value)
+                continue
+            if field in {"unstable_reasons", "quote_health_stale_reasons"}:
+                merged[field] = _merge_reason_lists(merged.get(field), value)
+                continue
+            if field in {"primary_regime", "feed_runtime_state", "option_feed_block_reason", "quote_health_state"}:
+                if value not in (None, "", [], (), {}):
+                    merged[field] = value
+                continue
+            if field == "ws_connected":
+                if merged.get(field) is None and value is not None:
+                    merged[field] = value
+                elif value is not None:
+                    merged[field] = bool(merged.get(field)) or bool(value)
+                continue
+        if row.get("feed_health") and not merged.get("feed_health"):
+            merged["feed_health"] = dict(row.get("feed_health") or {})
+        if row.get("quote_health") and not merged.get("quote_health"):
+            merged["quote_health"] = dict(row.get("quote_health") or {})
+    if "unstable_reasons" not in merged:
+        merged["unstable_reasons"] = []
+    if "quote_health_stale_reasons" not in merged:
+        merged["quote_health_stale_reasons"] = []
+    return merged
+
+
+def _merge_symbol_trace_rows(*rows: Mapping[str, Any] | None) -> dict[str, Any]:
+    chosen_rows = [dict(row) for row in rows if isinstance(row, Mapping) and row]
+    if not chosen_rows:
+        return {}
+    chosen_rows.sort(key=_row_count_score)
+    merged: dict[str, Any] = {}
+    for row in chosen_rows:
+        for key, value in row.items():
+            if key == "regime":
+                merged["regime"] = _merge_regime_rows(merged.get("regime"), value)
+                continue
+            if key in {"raw_candidate_count", "post_scan_survivor_count", "post_soft_reject_count", "post_real_filter_count", "post_executable_filter_count", "ltp_age_sec"}:
+                current = merged.get(key)
+                if key == "ltp_age_sec":
+                    if current is None and value is not None:
+                        merged[key] = value
+                    elif value is not None:
+                        try:
+                            merged[key] = max(_safe_float(current) or float("-inf"), _safe_float(value) or float("-inf"))
+                        except Exception:
+                            merged[key] = value
+                else:
+                    merged[key] = max(_safe_int(current), _safe_int(value))
+                continue
+            if key in {"reject_gate_reasons", "quote_health_stale_reasons"}:
+                merged[key] = _merge_reason_lists(merged.get(key), value)
+                continue
+            if key in {"scan_reject_counts", "blocker_counts"}:
+                merged[key] = _merge_counts(merged.get(key), value)
+                continue
+            if key in {"ws_connected"}:
+                if merged.get(key) is None and value is not None:
+                    merged[key] = value
+                elif value is not None:
+                    merged[key] = bool(merged.get(key)) or bool(value)
+                continue
+            if key in {"reject_reason", "final_emit_block_reason", "candidate_reason", "candidate_funnel_stage", "feed_runtime_state", "option_feed_block_reason", "quote_health_state"}:
+                if value not in (None, "", [], (), {}):
+                    merged[key] = value
+                continue
+            if key not in merged and value not in (None, "", [], (), {}):
+                merged[key] = value
+    if "candidate_funnel_stage" not in merged:
+        merged["candidate_funnel_stage"] = _first_zero_stage(
+            raw_candidate_count=_safe_int(merged.get("raw_candidate_count")),
+            post_scan_survivor_count=_safe_int(merged.get("post_scan_survivor_count")),
+            post_soft_reject_count=_safe_int(merged.get("post_soft_reject_count")),
+            post_real_filter_count=_safe_int(merged.get("post_real_filter_count")),
+            post_executable_filter_count=_safe_int(merged.get("post_executable_filter_count")),
+        )
+    regime = _as_mapping(merged.get("regime"))
+    if regime:
+        merged["regime"] = regime
+    if "reject_gate_reasons" not in merged:
+        merged["reject_gate_reasons"] = []
+    if "scan_reject_counts" not in merged:
+        merged["scan_reject_counts"] = {}
+    if "quote_health_stale_reasons" not in merged:
+        merged["quote_health_stale_reasons"] = []
+    return merged
+
+
+def _normalize_latest_global_blocker(value: Any) -> tuple[str | None, int | None]:
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        reason = str(value[0] or "").strip()
+        count = _safe_int(value[1])
+        return (reason or None, count)
+    if isinstance(value, str):
+        reason = value.strip()
+        return (reason or None, None)
+    if isinstance(value, Mapping):
+        reason = next(iter(value.keys()), None)
+        if reason is None:
+            return (None, None)
+        return (str(reason).strip() or None, _safe_int(value.get(reason)))
+    return (None, None)
+
+
 def _merge_top_reject_reasons(
     *,
     base: Mapping[str, Any] | None,
@@ -275,6 +453,9 @@ def build_candidate_starvation_trace_payload(
             "post_real_filter_count": _safe_int(snap.get("post_real_filter_count")),
             "post_executable_filter_count": _safe_int(snap.get("post_executable_filter_count")),
             "reject_reason": str(snap.get("reject_reason") or "").strip() or None,
+            "candidate_reason": str(_first_non_empty(snap.get("candidate_reason"), snap.get("reject_reason"))) if _first_non_empty(snap.get("candidate_reason"), snap.get("reject_reason")) not in (None, "", [], (), {}) else None,
+            "final_emit_block_reason": str(_first_non_empty(snap.get("final_emit_block_reason"), snap.get("candidate_reason"), snap.get("reject_reason"))) if _first_non_empty(snap.get("final_emit_block_reason"), snap.get("candidate_reason"), snap.get("reject_reason")) not in (None, "", [], (), {}) else None,
+            "reason_category": str(snap.get("reason_category") or "").strip() or None,
             "reject_gate_reasons": [str(item).strip() for item in _as_list(snap.get("reject_gate_reasons")) if str(item or "").strip()],
             "scan_reject_counts": _normalize_top_reject_reasons(_as_mapping(snap.get("scan_reject_counts"))),
             "feed_runtime_state": _upper(snap.get("feed_runtime_state")) or None,
@@ -408,15 +589,22 @@ def build_candidate_starvation_trace_payload(
     previous_had_symbol_candidates = bool(previous.get("had_symbol_candidates_this_session_or_cycle"))
     current_symbol_traces = dict(sorted(by_symbol.items(), key=lambda item: item[0]))
     current_has_symbols = bool(current_symbol_traces)
-    existing_latest_payload = {}
-    if not current_has_symbols and not previous_symbol_traces:
-        existing_latest_payload = _read_json_file(repo_logs_dir() / RUNTIME_CANDIDATE_STARVATION_TRACE_FILENAME)
+    existing_latest_payload = _read_json_file(repo_logs_dir() / RUNTIME_CANDIDATE_STARVATION_TRACE_FILENAME)
     existing_symbol_traces = _as_mapping(existing_latest_payload.get("symbol_traces"))
     existing_last_symbol_snapshot = _as_mapping(existing_latest_payload.get("last_symbol_snapshot"))
     existing_had_symbol_candidates = bool(existing_latest_payload.get("had_symbol_candidates_this_session_or_cycle"))
-    if current_has_symbols:
-        symbol_traces = current_symbol_traces
-        last_symbol_snapshot = dict(list(current_symbol_traces.values())[-1]) if current_symbol_traces else {}
+    merged_symbol_keys = sorted(
+        {str(key).strip() for source in (existing_symbol_traces, previous_symbol_traces, current_symbol_traces) for key in dict(source or {}).keys() if str(key).strip()}
+    )
+    symbol_traces: dict[str, Any] = {}
+    for symbol in merged_symbol_keys:
+        symbol_traces[symbol] = _merge_symbol_trace_rows(
+            existing_symbol_traces.get(symbol),
+            previous_symbol_traces.get(symbol),
+            current_symbol_traces.get(symbol),
+        )
+    if symbol_traces:
+        last_symbol_snapshot = dict(list(symbol_traces.values())[-1])
     elif previous_symbol_traces:
         symbol_traces = dict(previous_symbol_traces)
         last_symbol_snapshot = dict(previous_last_symbol_snapshot)
@@ -424,24 +612,26 @@ def build_candidate_starvation_trace_payload(
         symbol_traces = dict(existing_symbol_traces)
         last_symbol_snapshot = dict(existing_last_symbol_snapshot)
     else:
-        symbol_traces = {}
         last_symbol_snapshot = {}
 
-    latest_global_blocker = None
+    latest_global_blocker_reason: str | None = None
+    latest_global_blocker_count: int | None = None
     if cycle_blockers:
-        latest_global_blocker = max(
+        latest_global_blocker_reason, latest_global_blocker_count = max(
             ((str(reason).strip(), _safe_int(count)) for reason, count in dict(cycle_blockers).items() if str(reason).strip()),
             key=lambda item: (item[1], item[0]),
             default=None,
         )
-    if latest_global_blocker is None and previous.get("latest_global_blocker"):
-        latest_global_blocker = tuple(previous.get("latest_global_blocker")) if isinstance(previous.get("latest_global_blocker"), (list, tuple)) else previous.get("latest_global_blocker")
-    if latest_global_blocker is None:
-        existing_global = existing_latest_payload.get("latest_global_blocker")
-        if isinstance(existing_global, (list, tuple)) and len(existing_global) == 2:
-            latest_global_blocker = (str(existing_global[0]), _safe_int(existing_global[1]))
-        elif isinstance(existing_global, str) and existing_global.strip():
-            latest_global_blocker = (existing_global.strip(), _safe_int(existing_latest_payload.get("latest_global_blocker_count")))
+    if latest_global_blocker_reason is None:
+        previous_global_reason, previous_global_count = _normalize_latest_global_blocker(previous.get("latest_global_blocker"))
+        if previous_global_reason:
+            latest_global_blocker_reason = previous_global_reason
+            latest_global_blocker_count = previous_global_count
+    if latest_global_blocker_reason is None:
+        existing_global_reason, existing_global_count = _normalize_latest_global_blocker(existing_latest_payload.get("latest_global_blocker"))
+        if existing_global_reason:
+            latest_global_blocker_reason = existing_global_reason
+            latest_global_blocker_count = existing_global_count or _safe_int(existing_latest_payload.get("latest_global_blocker_count"))
 
     latest_global_blocker_counts = dict(sorted({str(k): _safe_int(v) for k, v in dict(cycle_blockers or {}).items() if str(k).strip()}.items(), key=lambda item: (-item[1], item[0])))
     if not latest_global_blocker_counts and isinstance(previous.get("latest_global_blocker_counts"), Mapping):
@@ -450,17 +640,15 @@ def build_candidate_starvation_trace_payload(
         latest_global_blocker_counts = dict(existing_latest_payload.get("latest_global_blocker_counts") or {})
 
     had_symbol_candidates_this_session_or_cycle = bool(
-        current_has_symbols
-        or raw_candidate_count > 0
+        raw_candidate_count > 0
         or post_scan_survivor_count > 0
         or post_soft_reject_count > 0
         or post_real_filter_count > 0
         or post_executable_filter_count > 0
+        or any(_row_count_score(row) > 0 for row in symbol_traces.values())
         or previous_had_symbol_candidates
         or existing_had_symbol_candidates
     )
-    if latest_global_blocker is None and str(feed.get("runtime_state") or "").strip().upper() in {"RUNNING", "RECOVERY_BLOCKED"}:
-        latest_global_blocker = next(iter(sorted({str(k): _safe_int(v) for k, v in dict(cycle_blockers or {}).items() if str(k).strip()}.items(), key=lambda item: (-item[1], item[0]))), None)
 
     payload = {
         "schema_version": RUNTIME_CANDIDATE_STARVATION_TRACE_SCHEMA_VERSION,
@@ -501,7 +689,8 @@ def build_candidate_starvation_trace_payload(
         "ltp_age_sec": ltp_age_sec,
         "blocker_counts": {str(key): _safe_int(value) for key, value in dict(cycle_blockers or {}).items() if str(key).strip()},
         "top_blockers": _top_blockers(cycle_blockers),
-        "latest_global_blocker": list(latest_global_blocker) if isinstance(latest_global_blocker, tuple) else latest_global_blocker,
+        "latest_global_blocker": latest_global_blocker_reason,
+        "latest_global_blocker_count": latest_global_blocker_count,
         "latest_global_blocker_counts": latest_global_blocker_counts,
         "last_symbol_snapshot": last_symbol_snapshot,
         "symbol_traces": symbol_traces,

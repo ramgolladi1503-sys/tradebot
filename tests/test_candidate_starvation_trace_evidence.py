@@ -36,6 +36,12 @@ def _symbol_snapshot(
     unstable_reasons: list[str],
     raw_candidate_count: int,
     scan_reject_counts: dict[str, int],
+    post_scan_survivor_count: int = 0,
+    post_soft_reject_count: int = 0,
+    post_real_filter_count: int = 0,
+    post_executable_filter_count: int = 0,
+    reject_reason: str | None = None,
+    final_emit_block_reason: str | None = None,
     feed_runtime_state: str = "RUNNING",
     ws_connected: bool = True,
     option_feed_block_reason: str = "OK",
@@ -63,11 +69,12 @@ def _symbol_snapshot(
             "ltp_age_sec": ltp_age_sec,
         },
         "raw_candidate_count": raw_candidate_count,
-        "post_scan_survivor_count": 0,
-        "post_soft_reject_count": 0,
-        "post_real_filter_count": 0,
-        "post_executable_filter_count": 0,
-        "reject_reason": None,
+        "post_scan_survivor_count": post_scan_survivor_count,
+        "post_soft_reject_count": post_soft_reject_count,
+        "post_real_filter_count": post_real_filter_count,
+        "post_executable_filter_count": post_executable_filter_count,
+        "reject_reason": reject_reason,
+        "final_emit_block_reason": final_emit_block_reason,
         "reject_gate_reasons": ["REGIME_UNSTABLE"] if unstable_reasons else [],
         "scan_reject_counts": dict(scan_reject_counts),
         "feed_runtime_state": feed_runtime_state,
@@ -276,6 +283,11 @@ def test_candidate_starvation_trace_preserves_symbol_traces_when_later_global_ri
                 regime_prob_max=0.42,
                 unstable_reasons=["prob_too_low"],
                 raw_candidate_count=26,
+                post_scan_survivor_count=13,
+                post_soft_reject_count=13,
+                post_real_filter_count=13,
+                post_executable_filter_count=1,
+                final_emit_block_reason="premium_sanity",
                 scan_reject_counts={"confidence_raw_gate": 13},
             ),
             _symbol_snapshot(
@@ -285,6 +297,11 @@ def test_candidate_starvation_trace_preserves_symbol_traces_when_later_global_ri
                 regime_prob_max=0.51,
                 unstable_reasons=["entropy_too_high"],
                 raw_candidate_count=18,
+                post_scan_survivor_count=9,
+                post_soft_reject_count=9,
+                post_real_filter_count=9,
+                post_executable_filter_count=8,
+                final_emit_block_reason="STALE_OPTION_LTP",
                 scan_reject_counts={"iv_z_bounds": 4},
             ),
         ],
@@ -314,17 +331,24 @@ def test_candidate_starvation_trace_preserves_symbol_traces_when_later_global_ri
         previous_payload=first_payload,
     )
 
-    assert later_payload["latest_global_blocker"] == ["RISK_HALT", 1]
+    assert later_payload["latest_global_blocker"] == "RISK_HALT"
+    assert later_payload["latest_global_blocker_count"] == 1
     assert later_payload["latest_global_blocker_counts"]["RISK_HALT"] == 1
     assert later_payload["blocker_counts"]["RISK_HALT"] == 1
     assert later_payload["top_blockers"][0] == {"reason": "RISK_HALT", "count": 1}
     assert later_payload["had_symbol_candidates_this_session_or_cycle"] is True
     assert later_payload["symbol_traces"]["BANKNIFTY"]["raw_candidate_count"] == 26
-    assert later_payload["symbol_traces"]["BANKNIFTY"]["post_scan_survivor_count"] == 0
-    assert later_payload["symbol_traces"]["BANKNIFTY"]["post_executable_filter_count"] == 0
+    assert later_payload["symbol_traces"]["BANKNIFTY"]["post_scan_survivor_count"] == 13
+    assert later_payload["symbol_traces"]["BANKNIFTY"]["post_soft_reject_count"] == 13
+    assert later_payload["symbol_traces"]["BANKNIFTY"]["post_real_filter_count"] == 13
+    assert later_payload["symbol_traces"]["BANKNIFTY"]["post_executable_filter_count"] == 1
+    assert later_payload["symbol_traces"]["BANKNIFTY"]["final_emit_block_reason"] == "premium_sanity"
     assert later_payload["symbol_traces"]["SENSEX"]["raw_candidate_count"] == 18
-    assert later_payload["symbol_traces"]["SENSEX"]["post_scan_survivor_count"] == 0
-    assert later_payload["symbol_traces"]["SENSEX"]["post_executable_filter_count"] == 0
+    assert later_payload["symbol_traces"]["SENSEX"]["post_scan_survivor_count"] == 9
+    assert later_payload["symbol_traces"]["SENSEX"]["post_soft_reject_count"] == 9
+    assert later_payload["symbol_traces"]["SENSEX"]["post_real_filter_count"] == 9
+    assert later_payload["symbol_traces"]["SENSEX"]["post_executable_filter_count"] == 8
+    assert later_payload["symbol_traces"]["SENSEX"]["final_emit_block_reason"] == "STALE_OPTION_LTP"
     assert later_payload["last_candidate_funnel_by_symbol"]["BANKNIFTY"]["raw_candidate_count"] == 26
     assert later_payload["last_candidate_funnel_by_symbol"]["SENSEX"]["raw_candidate_count"] == 18
     assert later_payload["read_only"] is True
@@ -339,10 +363,17 @@ def test_candidate_starvation_trace_preserves_symbol_traces_when_later_global_ri
         runtime_logs_path=runtime_root / "logs" / "candidate_starvation_trace_latest.json",
     )
     persisted = _read_json(logs_root / "candidate_starvation_trace_latest.json")
-    assert persisted["latest_global_blocker"] == ["RISK_HALT", 1]
+    assert persisted["latest_global_blocker"] == "RISK_HALT"
+    assert persisted["latest_global_blocker_count"] == 1
     assert persisted["symbol_traces"]["BANKNIFTY"]["raw_candidate_count"] == 26
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_scan_survivor_count"] == 13
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_executable_filter_count"] == 1
+    assert persisted["symbol_traces"]["BANKNIFTY"]["final_emit_block_reason"] == "premium_sanity"
     assert persisted["symbol_traces"]["SENSEX"]["raw_candidate_count"] == 18
-    assert persisted["last_candidate_funnel_by_symbol"]["BANKNIFTY"]["post_executable_filter_count"] == 0
+    assert persisted["symbol_traces"]["SENSEX"]["post_scan_survivor_count"] == 9
+    assert persisted["symbol_traces"]["SENSEX"]["post_executable_filter_count"] == 8
+    assert persisted["symbol_traces"]["SENSEX"]["final_emit_block_reason"] == "STALE_OPTION_LTP"
+    assert persisted["last_candidate_funnel_by_symbol"]["BANKNIFTY"]["post_executable_filter_count"] == 1
 
 
 def test_candidate_starvation_trace_merges_existing_disk_symbol_traces_on_global_only_overwrite(_artifact_dirs):
@@ -370,6 +401,11 @@ def test_candidate_starvation_trace_merges_existing_disk_symbol_traces_on_global
                 regime_prob_max=0.42,
                 unstable_reasons=["prob_too_low"],
                 raw_candidate_count=26,
+                post_scan_survivor_count=13,
+                post_soft_reject_count=13,
+                post_real_filter_count=13,
+                post_executable_filter_count=1,
+                final_emit_block_reason="premium_sanity",
                 scan_reject_counts={"confidence_raw_gate": 13},
             )
         ],
@@ -400,17 +436,120 @@ def test_candidate_starvation_trace_merges_existing_disk_symbol_traces_on_global
     write_candidate_starvation_trace_latest(payload=global_only_payload)
 
     persisted = _read_json(logs_root / "candidate_starvation_trace_latest.json")
-    assert persisted["latest_global_blocker"] == ["RISK_HALT", 1]
+    assert persisted["latest_global_blocker"] == "RISK_HALT"
+    assert persisted["latest_global_blocker_count"] == 1
     assert persisted["latest_global_blocker_counts"]["RISK_HALT"] == 1
     assert persisted["had_symbol_candidates_this_session_or_cycle"] is True
     assert persisted["symbol_count"] >= 1
     assert "BANKNIFTY" in persisted["symbol_traces"]
     assert persisted["symbol_traces"]["BANKNIFTY"]["raw_candidate_count"] == 26
-    assert persisted["symbol_traces"]["BANKNIFTY"]["post_scan_survivor_count"] == 0
-    assert persisted["symbol_traces"]["BANKNIFTY"]["post_executable_filter_count"] == 0
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_scan_survivor_count"] == 13
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_soft_reject_count"] == 13
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_real_filter_count"] == 13
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_executable_filter_count"] == 1
+    assert persisted["symbol_traces"]["BANKNIFTY"]["final_emit_block_reason"] == "premium_sanity"
     assert persisted["last_candidate_funnel_by_symbol"]["BANKNIFTY"]["raw_candidate_count"] == 26
+    assert persisted["last_candidate_funnel_by_symbol"]["BANKNIFTY"]["post_executable_filter_count"] == 1
     assert persisted["blocker_counts"]["RISK_HALT"] == 1
     assert persisted["top_blockers"][0] == {"reason": "RISK_HALT", "count": 1}
+    assert persisted["read_only"] is True
+    assert persisted["append"] is False
+    assert persisted["is_order_action"] is False
+    assert persisted["broker_api_called"] is False
+
+
+def test_candidate_starvation_trace_prefers_richer_symbol_rows_when_global_only_overwrite_occurs(_artifact_dirs):
+    runtime_root, logs_root = _artifact_dirs
+    initial_payload = build_candidate_starvation_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "BANKNIFTY"}, {"symbol": "SENSEX"}],
+        cycle_blockers={"REGIME_UNSTABLE": 162},
+        feed_runtime={
+            "ws_connected": True,
+            "runtime_state": "RUNNING",
+            "option_feed_block_reason": "OK",
+            "feed_fresh": True,
+            "option_tick_fresh": True,
+            "underlying_tick_fresh": True,
+            "depth_fresh": True,
+            "stale_reason": [],
+        },
+        candidate_starvation_snapshots=[
+            _symbol_snapshot(
+                symbol="BANKNIFTY",
+                primary_regime="CHOP",
+                regime_entropy=1.55,
+                regime_prob_max=0.42,
+                unstable_reasons=["prob_too_low"],
+                raw_candidate_count=26,
+                post_scan_survivor_count=13,
+                post_soft_reject_count=13,
+                post_real_filter_count=13,
+                post_executable_filter_count=1,
+                final_emit_block_reason="premium_sanity",
+                scan_reject_counts={"confidence_raw_gate": 13},
+            ),
+            _symbol_snapshot(
+                symbol="SENSEX",
+                primary_regime="RANGE",
+                regime_entropy=1.32,
+                regime_prob_max=0.51,
+                unstable_reasons=["entropy_too_high"],
+                raw_candidate_count=18,
+                post_scan_survivor_count=9,
+                post_soft_reject_count=9,
+                post_real_filter_count=9,
+                post_executable_filter_count=8,
+                final_emit_block_reason="STALE_OPTION_LTP",
+                scan_reject_counts={"iv_z_bounds": 4},
+            ),
+        ],
+        candidate_handoff_root_cause={"top_drop_reasons": {"confidence_raw_gate": 13, "iv_z_bounds": 4}},
+        phase2_rejection={"top_non_executable_reasons": {"no_viable_candidates": 2}},
+    )
+    write_candidate_starvation_trace_latest(payload=initial_payload)
+
+    global_only_payload = build_candidate_starvation_trace_payload(
+        execution_mode="LIVE",
+        market_open=False,
+        market_data_list=[],
+        cycle_blockers={"RISK_HALT": 1},
+        feed_runtime={
+            "ws_connected": False,
+            "runtime_state": "RUNNING",
+            "option_feed_block_reason": "OK",
+            "feed_fresh": False,
+            "option_tick_fresh": False,
+            "underlying_tick_fresh": False,
+            "depth_fresh": False,
+            "stale_reason": ["ws_disconnected"],
+        },
+        candidate_starvation_snapshots=[],
+        candidate_handoff_root_cause={"top_drop_reasons": {}},
+        phase2_rejection={"top_non_executable_reasons": {}},
+    )
+    write_candidate_starvation_trace_latest(payload=global_only_payload)
+
+    persisted = _read_json(logs_root / "candidate_starvation_trace_latest.json")
+    assert persisted["latest_global_blocker"] == "RISK_HALT"
+    assert persisted["latest_global_blocker_counts"] == {"RISK_HALT": 1}
+    assert persisted["had_symbol_candidates_this_session_or_cycle"] is True
+    assert persisted["symbol_count"] >= 2
+    assert persisted["symbol_traces"]["BANKNIFTY"]["raw_candidate_count"] == 26
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_scan_survivor_count"] == 13
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_soft_reject_count"] == 13
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_real_filter_count"] == 13
+    assert persisted["symbol_traces"]["BANKNIFTY"]["post_executable_filter_count"] == 1
+    assert persisted["symbol_traces"]["BANKNIFTY"]["final_emit_block_reason"] == "premium_sanity"
+    assert persisted["symbol_traces"]["SENSEX"]["raw_candidate_count"] == 18
+    assert persisted["symbol_traces"]["SENSEX"]["post_scan_survivor_count"] == 9
+    assert persisted["symbol_traces"]["SENSEX"]["post_soft_reject_count"] == 9
+    assert persisted["symbol_traces"]["SENSEX"]["post_real_filter_count"] == 9
+    assert persisted["symbol_traces"]["SENSEX"]["post_executable_filter_count"] == 8
+    assert persisted["symbol_traces"]["SENSEX"]["final_emit_block_reason"] == "STALE_OPTION_LTP"
+    assert persisted["last_candidate_funnel_by_symbol"]["BANKNIFTY"]["post_executable_filter_count"] == 1
+    assert persisted["last_candidate_funnel_by_symbol"]["SENSEX"]["post_executable_filter_count"] == 8
     assert persisted["read_only"] is True
     assert persisted["append"] is False
     assert persisted["is_order_action"] is False
