@@ -5454,13 +5454,26 @@ class Orchestrator:
                     ]
                     post_real_filter_count = len(real_candidates)
                     post_executable_filter_count = len(ranked_executable_candidates)
+                    regime_gate_reasons = {}
+                    regime_unstable_reasons: list[str] = []
+                    if isinstance(market_data, dict):
+                        regime_unstable_reasons = list(market_data.get("unstable_reasons") or [])
                     try:
                         scan_reject_counts = dict(getattr(self.trade_builder, "_scan_reject_counts", {}) or {})
                     except Exception:
                         scan_reject_counts = {}
+                    if isinstance(gate, object) and getattr(gate, "reasons", None):
+                        try:
+                            regime_gate_reasons = {
+                                str(reason).strip().upper(): int(cycle_blockers.get(str(reason).strip().upper(), 0) or 0)
+                                for reason in list(gate.reasons or [])
+                                if str(reason).strip().upper().startswith("REGIME_")
+                            }
+                        except Exception:
+                            regime_gate_reasons = {}
                     starvation_regime_diag = _regime_unstable_diagnostic_payload(
                         market_data,
-                        list(regime_gate_reasons.keys()) if isinstance(regime_gate_reasons, dict) and regime_gate_reasons else list(market_data.get("unstable_reasons") or []),
+                        list(regime_gate_reasons.keys()) if regime_gate_reasons else regime_unstable_reasons,
                     )
                     quote_health_row = market_data.get("quote_health") if isinstance(market_data.get("quote_health"), dict) else {}
                     feed_health_row = market_data.get("feed_health") if isinstance(market_data.get("feed_health"), dict) else {}
@@ -5498,6 +5511,14 @@ class Orchestrator:
                                 "reject_reason": starvation_candidate_reason,
                                 "reject_gate_reasons": list(reject_gate_reasons or []),
                                 "scan_reject_counts": scan_reject_counts,
+                                "blocker_counts": dict(cycle_blockers),
+                                "top_blockers": [
+                                    {"reason": reason, "count": int(count)}
+                                    for reason, count in sorted(
+                                        ((str(k), int(v or 0)) for k, v in dict(cycle_blockers or {}).items() if str(k).strip()),
+                                        key=lambda item: (-int(item[1]), str(item[0])),
+                                    )[:10]
+                                ],
                                 "feed_runtime_state": feed_runtime_payload.get("runtime_state") if isinstance(feed_runtime_payload, dict) else None,
                                 "ws_connected": feed_runtime_payload.get("ws_connected") if isinstance(feed_runtime_payload, dict) else None,
                                 "option_feed_block_reason": feed_runtime_payload.get("option_feed_block_reason") if isinstance(feed_runtime_payload, dict) else None,

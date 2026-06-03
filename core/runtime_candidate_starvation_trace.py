@@ -187,6 +187,17 @@ def _merge_top_reject_reasons(
     return merged
 
 
+def _top_blockers(blockers: Mapping[str, Any] | None, limit: int = 10) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for reason, count in dict(blockers or {}).items():
+        code = str(reason or "").strip()
+        if not code:
+            continue
+        rows.append({"reason": code, "count": _safe_int(count)})
+    rows.sort(key=lambda item: (-int(item["count"]), str(item["reason"])))
+    return rows[: max(0, int(limit))]
+
+
 def _first_zero_stage(
     *,
     raw_candidate_count: int,
@@ -276,6 +287,12 @@ def build_candidate_starvation_trace_payload(
             regime_unstable_symbol_count += 1
             for reason in regime_row.get("unstable_reasons") or []:
                 unstable_reason_counts[str(reason)] += 1
+
+        if by_symbol[symbol]["reject_reason"] is None and by_symbol[symbol]["scan_reject_counts"]:
+            by_symbol[symbol]["reject_reason"] = max(
+                by_symbol[symbol]["scan_reject_counts"].items(),
+                key=lambda item: (int(item[1] or 0), str(item[0])),
+            )[0]
 
         raw_candidate_count += by_symbol[symbol]["raw_candidate_count"]
         post_scan_survivor_count += by_symbol[symbol]["post_scan_survivor_count"]
@@ -411,6 +428,8 @@ def build_candidate_starvation_trace_payload(
         "quote_health_state": quote_health_state,
         "quote_health_stale_reasons": quote_stale_reasons,
         "ltp_age_sec": ltp_age_sec,
+        "blocker_counts": {str(key): _safe_int(value) for key, value in dict(cycle_blockers or {}).items() if str(key).strip()},
+        "top_blockers": _top_blockers(cycle_blockers),
         "cycle_blockers": {str(key): _safe_int(value) for key, value in dict(cycle_blockers or {}).items() if str(key).strip()},
         "by_symbol": dict(sorted(by_symbol.items(), key=lambda item: item[0])),
         "notes": [

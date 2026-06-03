@@ -142,6 +142,9 @@ def test_candidate_starvation_trace_aggregates_regime_unstable_and_survivor_funn
     assert payload["first_zero_stage"] == "post_scan_survivor_zero"
     assert payload["top_reject_reasons"]["confidence_raw_gate"] == 22
     assert payload["top_reject_reasons"]["iv_z_bounds"] == 4
+    assert payload["blocker_counts"]["REGIME_UNSTABLE"] == 162
+    assert payload["blocker_counts"]["PHASE2_NO_INPUT"] == 28
+    assert payload["top_blockers"][0] == {"reason": "REGIME_UNSTABLE", "count": 162}
     assert payload["reject_reason_details"]["confidence_raw_gate"]["count"] == 22
     assert payload["reject_reason_details"]["iv_z_bounds"]["count"] == 4
     assert payload["reject_reason_details"]["no_viable_candidates"]["count"] == 9
@@ -194,3 +197,55 @@ def test_candidate_starvation_trace_writes_all_fanout_paths(_artifact_dirs):
     assert _read_json(logs_root / "candidate_starvation_trace_latest.json")["read_only"] is True
     assert _read_json(runtime_root / "candidate_starvation_trace_latest.json")["append"] is False
     assert _read_json(runtime_root / "logs" / "candidate_starvation_trace_latest.json")["is_order_action"] is False
+
+
+def test_candidate_starvation_trace_includes_latency_guard_blockers_and_fails_closed(_artifact_dirs):
+    runtime_root, logs_root = _artifact_dirs
+    payload = build_candidate_starvation_trace_payload(
+        execution_mode="LIVE",
+        market_open=True,
+        market_data_list=[{"symbol": "SENSEX"}],
+        cycle_blockers={
+            "LATENCY_GUARD_COOLDOWN_PREBUILD_SKIP": 3,
+            "LATENCY_GUARD_DEGRADE_EXIT_ONLY_PREBUILD_SKIP": 2,
+        },
+        feed_runtime={
+            "ws_connected": True,
+            "runtime_state": "RUNNING",
+            "option_feed_block_reason": "OK",
+            "feed_fresh": True,
+            "option_tick_fresh": True,
+            "underlying_tick_fresh": True,
+            "depth_fresh": True,
+            "stale_reason": [],
+        },
+        candidate_starvation_snapshots=[
+            _symbol_snapshot(
+                symbol="SENSEX",
+                primary_regime="TREND",
+                regime_entropy=0.25,
+                regime_prob_max=0.91,
+                unstable_reasons=[],
+                raw_candidate_count=0,
+                scan_reject_counts={"no_viable_candidates": 5},
+            )
+        ],
+        candidate_handoff_root_cause={"top_drop_reasons": {"no_viable_candidates": 5}},
+        phase2_rejection={"top_non_executable_reasons": {"no_viable_candidates": 5}},
+    )
+
+    assert payload["blocker_counts"]["LATENCY_GUARD_COOLDOWN_PREBUILD_SKIP"] == 3
+    assert payload["blocker_counts"]["LATENCY_GUARD_DEGRADE_EXIT_ONLY_PREBUILD_SKIP"] == 2
+    assert payload["top_blockers"][0]["reason"] == "LATENCY_GUARD_COOLDOWN_PREBUILD_SKIP"
+    assert payload["top_blockers"][0]["count"] == 3
+    assert payload["by_symbol"]["SENSEX"]["reject_reason"] == "no_viable_candidates"
+    assert payload["by_symbol"]["SENSEX"]["scan_reject_counts"]["no_viable_candidates"] == 5
+    assert payload["by_symbol"]["SENSEX"]["candidate_funnel_stage"] == "no_raw_candidates"
+    assert payload["read_only"] is True
+    assert payload["append"] is False
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+
+    write_candidate_starvation_trace_latest(payload=payload)
+    assert (logs_root / "candidate_starvation_trace_latest.json").exists()
+    assert (runtime_root / "candidate_starvation_trace_latest.json").exists()
