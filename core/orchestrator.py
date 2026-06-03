@@ -4638,6 +4638,7 @@ class Orchestrator:
             cycle_candidate_handoff_snapshots: list[dict] = []
             cycle_candidate_starvation_snapshots: list[dict] = []
             cycle_strategy_no_qualified_attempts: list[dict] = []
+            candidate_starvation_last_payload = getattr(self, "_candidate_starvation_trace_last_payload", None)
             cycle_real_trade_symbols: set[str] = set()
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
             cycle_market_open = False
@@ -7211,8 +7212,11 @@ class Orchestrator:
                             ],
                             candidate_handoff_root_cause=root_cause_payload if isinstance(root_cause_payload, dict) else {},
                             phase2_rejection=phase2_rejection_payload if isinstance(phase2_rejection_payload, dict) else {},
+                            previous_payload=candidate_starvation_last_payload if isinstance(candidate_starvation_last_payload, dict) else {},
                         )
                         write_candidate_starvation_trace_latest(payload=starvation_payload)
+                        candidate_starvation_last_payload = dict(starvation_payload)
+                        self._candidate_starvation_trace_last_payload = dict(starvation_payload)
                     except Exception as starvation_exc:
                         logger.warning("candidate_starvation_trace_write_failed err=%s", starvation_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)

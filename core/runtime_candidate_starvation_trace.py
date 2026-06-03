@@ -229,6 +229,7 @@ def build_candidate_starvation_trace_payload(
     candidate_starvation_snapshots: list[Mapping[str, Any]] | None,
     candidate_handoff_root_cause: Mapping[str, Any] | None = None,
     phase2_rejection: Mapping[str, Any] | None = None,
+    previous_payload: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     symbols: list[str] = []
     for row in list(market_data_list or []):
@@ -339,6 +340,7 @@ def build_candidate_starvation_trace_payload(
     root_cause = _as_mapping(candidate_handoff_root_cause)
     phase2 = _as_mapping(phase2_rejection)
     feed = _as_mapping(feed_runtime)
+    previous = _as_mapping(previous_payload)
     top_reject_reasons = _merge_top_reject_reasons(
         base=_as_mapping(root_cause.get("top_drop_reasons")),
         overlay=_as_mapping(phase2.get("top_non_executable_reasons")),
@@ -392,6 +394,45 @@ def build_candidate_starvation_trace_payload(
         if ltp_age_sec is None and row.get("ltp_age_sec") is not None:
             ltp_age_sec = row.get("ltp_age_sec")
 
+    previous_symbol_traces = _as_mapping(previous.get("symbol_traces"))
+    previous_last_symbol_snapshot = _as_mapping(previous.get("last_symbol_snapshot"))
+    previous_had_symbol_candidates = bool(previous.get("had_symbol_candidates_this_session_or_cycle"))
+    current_symbol_traces = dict(sorted(by_symbol.items(), key=lambda item: item[0]))
+    current_has_symbols = bool(current_symbol_traces)
+    if current_has_symbols:
+        symbol_traces = current_symbol_traces
+        last_symbol_snapshot = dict(list(current_symbol_traces.values())[-1]) if current_symbol_traces else {}
+    elif previous_symbol_traces:
+        symbol_traces = dict(previous_symbol_traces)
+        last_symbol_snapshot = dict(previous_last_symbol_snapshot)
+    else:
+        symbol_traces = {}
+        last_symbol_snapshot = {}
+
+    latest_global_blocker = None
+    if cycle_blockers:
+        latest_global_blocker = max(
+            ((str(reason).strip(), _safe_int(count)) for reason, count in dict(cycle_blockers).items() if str(reason).strip()),
+            key=lambda item: (item[1], item[0]),
+            default=None,
+        )
+    if latest_global_blocker is None and previous.get("latest_global_blocker"):
+        latest_global_blocker = tuple(previous.get("latest_global_blocker")) if isinstance(previous.get("latest_global_blocker"), (list, tuple)) else previous.get("latest_global_blocker")
+
+    latest_global_blocker_counts = dict(sorted({str(k): _safe_int(v) for k, v in dict(cycle_blockers or {}).items() if str(k).strip()}.items(), key=lambda item: (-item[1], item[0])))
+    if not latest_global_blocker_counts and isinstance(previous.get("latest_global_blocker_counts"), Mapping):
+        latest_global_blocker_counts = dict(previous.get("latest_global_blocker_counts") or {})
+
+    had_symbol_candidates_this_session_or_cycle = bool(
+        current_has_symbols
+        or raw_candidate_count > 0
+        or post_scan_survivor_count > 0
+        or post_soft_reject_count > 0
+        or post_real_filter_count > 0
+        or post_executable_filter_count > 0
+        or previous_had_symbol_candidates
+    )
+
     payload = {
         "schema_version": RUNTIME_CANDIDATE_STARVATION_TRACE_SCHEMA_VERSION,
         "source": RUNTIME_CANDIDATE_STARVATION_TRACE_SOURCE,
@@ -430,6 +471,22 @@ def build_candidate_starvation_trace_payload(
         "ltp_age_sec": ltp_age_sec,
         "blocker_counts": {str(key): _safe_int(value) for key, value in dict(cycle_blockers or {}).items() if str(key).strip()},
         "top_blockers": _top_blockers(cycle_blockers),
+        "latest_global_blocker": list(latest_global_blocker) if isinstance(latest_global_blocker, tuple) else latest_global_blocker,
+        "latest_global_blocker_counts": latest_global_blocker_counts,
+        "last_symbol_snapshot": last_symbol_snapshot,
+        "symbol_traces": symbol_traces,
+        "had_symbol_candidates_this_session_or_cycle": had_symbol_candidates_this_session_or_cycle,
+        "last_candidate_funnel_by_symbol": {
+            symbol: {
+                "raw_candidate_count": row.get("raw_candidate_count"),
+                "post_scan_survivor_count": row.get("post_scan_survivor_count"),
+                "post_soft_reject_count": row.get("post_soft_reject_count"),
+                "post_real_filter_count": row.get("post_real_filter_count"),
+                "post_executable_filter_count": row.get("post_executable_filter_count"),
+            }
+            for symbol, row in symbol_traces.items()
+            if isinstance(row, Mapping)
+        },
         "cycle_blockers": {str(key): _safe_int(value) for key, value in dict(cycle_blockers or {}).items() if str(key).strip()},
         "by_symbol": dict(sorted(by_symbol.items(), key=lambda item: item[0])),
         "notes": [
