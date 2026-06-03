@@ -155,6 +155,10 @@ from core.runtime_candidate_flow_trace import (
     build_candidate_flow_trace_payload,
     write_candidate_flow_trace_latest,
 )
+from core.runtime_candidate_starvation_trace import (
+    build_candidate_starvation_trace_payload,
+    write_candidate_starvation_trace_latest,
+)
 from core.runtime_strategy_no_qualified_reasons import (
     build_strategy_attempt_from_gate,
     build_strategy_attempt_from_trade_builder,
@@ -4632,6 +4636,7 @@ class Orchestrator:
             cycle_candidates_fallback = 0
             cycle_ranked_candidates = []
             cycle_candidate_handoff_snapshots: list[dict] = []
+            cycle_candidate_starvation_snapshots: list[dict] = []
             cycle_strategy_no_qualified_attempts: list[dict] = []
             cycle_real_trade_symbols: set[str] = set()
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
@@ -5449,6 +5454,60 @@ class Orchestrator:
                     ]
                     post_real_filter_count = len(real_candidates)
                     post_executable_filter_count = len(ranked_executable_candidates)
+                    try:
+                        scan_reject_counts = dict(getattr(self.trade_builder, "_scan_reject_counts", {}) or {})
+                    except Exception:
+                        scan_reject_counts = {}
+                    starvation_regime_diag = _regime_unstable_diagnostic_payload(
+                        market_data,
+                        list(regime_gate_reasons.keys()) if isinstance(regime_gate_reasons, dict) and regime_gate_reasons else list(market_data.get("unstable_reasons") or []),
+                    )
+                    quote_health_row = market_data.get("quote_health") if isinstance(market_data.get("quote_health"), dict) else {}
+                    feed_health_row = market_data.get("feed_health") if isinstance(market_data.get("feed_health"), dict) else {}
+                    try:
+                        starvation_candidate_reason = None
+                        if isinstance(reject_reason, str) and reject_reason.strip():
+                            starvation_candidate_reason = reject_reason
+                        elif scan_reject_counts:
+                            starvation_candidate_reason = max(
+                                scan_reject_counts.items(),
+                                key=lambda item: (int(item[1] or 0), str(item[0])),
+                            )[0]
+                        cycle_candidate_starvation_snapshots.append(
+                            {
+                                "symbol": sym,
+                                "regime": starvation_regime_diag if starvation_regime_diag else {
+                                    "primary_regime": market_data.get("primary_regime") or market_data.get("regime"),
+                                    "regime_entropy": market_data.get("regime_entropy"),
+                                    "regime_entropy_max": market_data.get("regime_entropy_max") or float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3)),
+                                    "regime_prob_max": market_data.get("regime_prob_max") or market_data.get("regime_probs_max"),
+                                    "regime_prob_min": market_data.get("regime_prob_min") or float(getattr(cfg, "REGIME_PROB_MIN", 0.45)),
+                                    "regime_unstable_streak": market_data.get("regime_unstable_streak") or 0,
+                                    "regime_unstable_block_after": market_data.get("regime_unstable_block_after") or 0,
+                                    "regime_unstable_debounced": bool(market_data.get("regime_unstable_debounced", False)),
+                                    "unstable_reasons": list(market_data.get("unstable_reasons") or []),
+                                    "regime_unstable": bool(list(market_data.get("unstable_reasons") or [])),
+                                    "feed_health": feed_health_row,
+                                    "quote_health": quote_health_row,
+                                },
+                                "raw_candidate_count": raw_candidate_count,
+                                "post_scan_survivor_count": post_scan_survivor_count,
+                                "post_soft_reject_count": post_soft_reject_count,
+                                "post_real_filter_count": post_real_filter_count,
+                                "post_executable_filter_count": post_executable_filter_count,
+                                "reject_reason": starvation_candidate_reason,
+                                "reject_gate_reasons": list(reject_gate_reasons or []),
+                                "scan_reject_counts": scan_reject_counts,
+                                "feed_runtime_state": feed_runtime_payload.get("runtime_state") if isinstance(feed_runtime_payload, dict) else None,
+                                "ws_connected": feed_runtime_payload.get("ws_connected") if isinstance(feed_runtime_payload, dict) else None,
+                                "option_feed_block_reason": feed_runtime_payload.get("option_feed_block_reason") if isinstance(feed_runtime_payload, dict) else None,
+                                "quote_health_state": quote_health_row.get("state"),
+                                "quote_health_stale_reasons": list(quote_health_row.get("stale_reasons") or []),
+                                "ltp_age_sec": quote_health_row.get("ltp_age_sec"),
+                            }
+                        )
+                    except Exception:
+                        pass
                     eligible_real_candidates = []
                     if trade is not None and not _is_synthetic_candidate(trade):
                         cycle_real_trade_symbols.add(sym)
@@ -7119,6 +7178,22 @@ class Orchestrator:
                             "strategy_no_qualified_reasons_write_failed err=%s",
                             strategy_no_qualified_exc,
                         )
+                    try:
+                        starvation_payload = build_candidate_starvation_trace_payload(
+                            execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
+                            market_open=bool(cycle_market_open),
+                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            cycle_blockers=dict(cycle_blockers),
+                            feed_runtime=feed_runtime_payload if isinstance(feed_runtime_payload, dict) else {},
+                            candidate_starvation_snapshots=[
+                                row for row in list(cycle_candidate_starvation_snapshots or []) if isinstance(row, dict)
+                            ],
+                            candidate_handoff_root_cause=root_cause_payload if isinstance(root_cause_payload, dict) else {},
+                            phase2_rejection=phase2_rejection_payload if isinstance(phase2_rejection_payload, dict) else {},
+                        )
+                        write_candidate_starvation_trace_latest(payload=starvation_payload)
+                    except Exception as starvation_exc:
+                        logger.warning("candidate_starvation_trace_write_failed err=%s", starvation_exc)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
