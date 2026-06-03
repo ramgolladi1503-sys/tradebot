@@ -1,5 +1,7 @@
 import pytest
 
+import pytest
+
 import core.orchestrator as orch_mod
 from core.latency_monitor import LatencyMonitor
 
@@ -151,3 +153,78 @@ def test_latency_skip_background_maintenance_disabled_for_sim(monkeypatch):
         )
         is False
     )
+
+
+def test_latency_guard_evidence_reports_healthy_state_as_not_triggered(monkeypatch):
+    monkeypatch.setattr(orch_mod.cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    state = {
+        "action": "OK",
+        "reason": "latency_within_budget",
+        "ts_epoch": 100.0,
+    }
+    stats = {
+        "thresholds": {"max_p95_total_ms": 120.0, "max_p95_decision_ms": 80.0},
+        "stages": {
+            "total_loop": {"p95_ms": 42.0},
+            "decision_build": {"p95_ms": 24.0},
+        },
+        "breach": {
+            "p95_total_breach": False,
+            "p95_decision_breach": False,
+            "sustained_total_breach": False,
+            "sustained_decision_breach": False,
+        },
+    }
+
+    evidence = orch_mod._latency_guard_metric_context(state, stats)
+
+    assert evidence["latency_guard_triggered"] is False
+    assert evidence["latency_guard_action"] == "OK"
+    assert evidence["latency_guard_reason"] == "latency_within_budget"
+    assert evidence["latency_guard_metric"] is None
+    assert evidence["latency_guard_value"] is None
+    assert evidence["latency_guard_threshold"] is None
+    assert evidence["latency_guard_recovery_required"] is False
+
+
+def test_latency_guard_evidence_reports_degraded_state_with_metric_and_threshold(monkeypatch):
+    monkeypatch.setattr(orch_mod.cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    state = {
+        "action": "DEGRADE_EXIT_ONLY",
+        "reason": "latency_sustained_breach",
+        "ts_epoch": 100.0,
+    }
+    stats = {
+        "thresholds": {"max_p95_total_ms": 120.0, "max_p95_decision_ms": 80.0},
+        "stages": {
+            "total_loop": {"p95_ms": 180.0},
+            "decision_build": {"p95_ms": 60.0},
+        },
+        "breach": {
+            "p95_total_breach": True,
+            "p95_decision_breach": False,
+            "sustained_total_breach": True,
+            "sustained_decision_breach": False,
+        },
+    }
+
+    evidence = orch_mod._latency_guard_metric_context(state, stats)
+
+    assert evidence["latency_guard_triggered"] is True
+    assert evidence["latency_guard_action"] == "DEGRADE_EXIT_ONLY"
+    assert evidence["latency_guard_reason"] == "latency_sustained_breach"
+    assert evidence["latency_guard_source"] == "latency_monitor.stages.total_loop.p95_ms"
+    assert evidence["latency_guard_metric"] == "total_loop.p95_ms"
+    assert evidence["latency_guard_value"] == pytest.approx(180.0)
+    assert evidence["latency_guard_threshold"] == pytest.approx(120.0)
+    assert evidence["latency_guard_recovery_required"] is True
+
+
+def test_latency_guard_evidence_fails_closed_when_state_is_unknown(monkeypatch):
+    monkeypatch.setattr(orch_mod.cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    evidence = orch_mod._latency_guard_metric_context({}, {})
+
+    assert evidence["latency_guard_triggered"] is True
+    assert evidence["latency_guard_reason"] == "latency_guard_state_unknown"
+    assert evidence["latency_guard_source"] == "latency_guard_state"
+    assert evidence["latency_guard_recovery_required"] is True

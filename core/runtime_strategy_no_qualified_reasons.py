@@ -465,10 +465,12 @@ def build_strategy_no_qualified_reasons_payload(
     strategy_attempts: list[Mapping[str, Any]] | None,
     raw_candidate_count: int | None,
     phase2_input_candidate_count: int | None,
+    latency_guard: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     symbols = _market_symbols(market_data_list)
     attempts = _prepared_attempts(strategy_attempts)
     blockers = _as_mapping(cycle_blockers)
+    latency = _as_mapping(latency_guard)
     raw_count = None if raw_candidate_count is None else _safe_int(raw_candidate_count)
     phase2_count = None if phase2_input_candidate_count is None else _safe_int(phase2_input_candidate_count)
     not_applicable_reason = _blocked_reason(
@@ -588,6 +590,18 @@ def build_strategy_no_qualified_reasons_payload(
             for key, value in blockers.items()
             if _upper(key) and _safe_int(value) > 0
         },
+        "latency_guard_triggered": latency.get("latency_guard_triggered") if latency else None,
+        "latency_guard_mode": latency.get("latency_guard_mode") if latency else None,
+        "latency_guard_action": latency.get("latency_guard_action") if latency else None,
+        "latency_guard_source": latency.get("latency_guard_source") if latency else None,
+        "latency_guard_reason": latency.get("latency_guard_reason") if latency else None,
+        "latency_guard_metric": latency.get("latency_guard_metric") if latency else None,
+        "latency_guard_value": latency.get("latency_guard_value") if latency else None,
+        "latency_guard_threshold": latency.get("latency_guard_threshold") if latency else None,
+        "latency_guard_age_sec": latency.get("latency_guard_age_sec") if latency else None,
+        "latency_guard_last_ok_at": latency.get("latency_guard_last_ok_at") if latency else None,
+        "latency_guard_last_bad_at": latency.get("latency_guard_last_bad_at") if latency else None,
+        "latency_guard_recovery_required": latency.get("latency_guard_recovery_required") if latency else None,
         "by_symbol": dict(by_symbol),
         "by_strategy": dict(by_strategy),
         "notes": [
