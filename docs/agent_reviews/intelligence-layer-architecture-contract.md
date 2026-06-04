@@ -77,6 +77,7 @@ Required checks before merge:
 
 - `git diff --check main...HEAD`
 - Agent review evidence gate must pass.
+- Code Excellence Gates must pass.
 - Markdown lint may be run if repository tooling exists.
 
 Expected changed files are documentation files only.
@@ -108,3 +109,14 @@ It only proves the architecture contract and roadmap have been documented.
 Human approval is required before merge.
 
 Do not start PR 2 until this PR is merged and the architecture contract is accepted.
+
+## CE Evidence Contract Fields
+
+mode: DOCS_ONLY
+candidate_id: intelligence_layer_architecture_contract
+decision: DOCUMENTATION_CONTRACT_ONLY
+reason: lock_read_only_intelligence_layer_scope_before_implementation
+timestamp: 2026-06-03T19:25:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/intelligence-layer-architecture-contract.md
