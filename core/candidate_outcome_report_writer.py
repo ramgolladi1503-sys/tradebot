@@ -23,6 +23,24 @@ class CandidateOutcomeReport:
     status_counts: dict[str, int]
     results: tuple[dict[str, object], ...]
     safety: dict[str, object]
+    read_only: bool = True
+    append: bool = False
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
+
+    @property
+    def live_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_order_action(self) -> bool:
+        return False
 
 
 def _safety_block() -> dict[str, object]:
@@ -100,6 +118,13 @@ def report_to_payload(report: CandidateOutcomeReport) -> dict[str, object]:
         "status_counts": dict(sorted(report.status_counts.items())),
         "results": [dict(row) for row in report.results],
         "safety": dict(report.safety),
+        "read_only": report.read_only,
+        "append": report.append,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "live_order_allowed": False,
+        "live_order_action": False,
+        "broker_order_action": False,
     }
 
 
