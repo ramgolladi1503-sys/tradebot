@@ -346,12 +346,17 @@ def test_on_error_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 0
+    assert calls["schedule"] == 1
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["runtime_state"] == "RESTARTING"
     assert payload["ws_connected"] is False
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["recovery_action"] == "process_restart_required"
+    assert payload["disconnected_code"] == 1006
+    assert "connection was closed uncleanly" in payload["disconnected_reason"]
+    assert payload["restart_attempt_allowed"] is True
+    assert payload["restart_attempted"] is True
+    assert payload["recovery_blocked"] is False
+    assert payload["process_restart_required"] is False
+    assert payload["reconnect_blocked_reason"] in {"", None}
     ws.stop_depth_ws(reason="unit_test_cleanup")
 
 
@@ -391,12 +396,17 @@ def test_on_close_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 0
+    assert calls["schedule"] == 1
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["runtime_state"] == "RESTARTING"
     assert payload["ws_connected"] is False
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["recovery_action"] == "process_restart_required"
+    assert payload["disconnected_code"] == 1006
+    assert "connection was closed uncleanly" in payload["disconnected_reason"]
+    assert payload["restart_attempt_allowed"] is True
+    assert payload["restart_attempted"] is True
+    assert payload["recovery_blocked"] is False
+    assert payload["process_restart_required"] is False
+    assert payload["reconnect_blocked_reason"] in {"", None}
     ws.stop_depth_ws(reason="unit_test_cleanup")
 
 
@@ -416,7 +426,12 @@ def test_recovery_blocked_snapshot_contains_process_restart_required(monkeypatch
     snapshot = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert snapshot["runtime_state"] == "RECOVERY_BLOCKED"
     assert snapshot["reconnect_blocked_reason"] == "reactor_not_restartable_process_restart_required"
+    assert snapshot["restart_blocked_reason"] == "reactor_not_restartable_process_restart_required"
     assert snapshot["recovery_action"] == "process_restart_required"
+    assert snapshot["process_restart_required"] is True
+    assert snapshot["recovery_blocked"] is True
+    assert snapshot["restart_attempt_allowed"] is False
+    assert snapshot["restart_attempted"] is False
     assert snapshot["ws_reconnect_allowed"] is False
     assert snapshot["ws_reconnect_attempted"] is False
 
@@ -433,6 +448,34 @@ def test_restart_depth_ws_stops_retrying_when_reactor_recovery_is_blocked(monkey
 
     assert ws.restart_depth_ws(reason="unit_test_reactor_blocked") is False
     assert calls == {"stop": 0, "start": 0, "persist": 1}
+
+
+def test_schedule_restart_depth_ws_does_not_spawn_duplicate_when_restart_is_already_running(monkeypatch):
+    class _AliveRestartThread:
+        def is_alive(self):
+            return True
+
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+    monkeypatch.setattr(ws, "_RESTART_ASYNC_THREAD", _AliveRestartThread(), raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "threading", ws.threading, raising=False)
+
+    class _FailThread:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("duplicate restart thread must not be created")
+
+    monkeypatch.setattr(ws.threading, "Thread", _FailThread, raising=True)
+
+    assert (
+        ws._schedule_restart_depth_ws(
+            reason="unit_test_duplicate_restart",
+            ignore_cooldown=True,
+            force_full_restart=True,
+            source="unit_test",
+        )
+        is True
+    )
 
 
 def test_reactor_terminal_state_blocks_followup_start_restart_and_schedule(monkeypatch, tmp_path):

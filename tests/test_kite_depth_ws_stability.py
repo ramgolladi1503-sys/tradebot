@@ -178,11 +178,19 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert scheduled and scheduled[0]["source"] == "on_error"
+    assert scheduled[1:] == []
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["recovery_action"] == "process_restart_required"
+    assert payload["runtime_state"] == "RESTARTING"
+    assert payload["ws_connected"] is False
+    assert payload["disconnected_code"] == 1006
+    assert "connection was closed uncleanly" in payload["disconnected_reason"]
+    assert payload["restart_attempt_allowed"] is True
+    assert payload["restart_attempted"] is True
+    assert payload["process_restart_required"] is False
+    assert payload["recovery_blocked"] is False
+    assert payload["reconnect_blocked_reason"] in {"", None}
+    assert payload["restart_blocked_reason"] in {"", None}
 
 
 def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
@@ -211,11 +219,19 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert scheduled and scheduled[0]["source"] == "on_close"
+    assert scheduled[1:] == []
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["recovery_action"] == "process_restart_required"
+    assert payload["runtime_state"] == "RESTARTING"
+    assert payload["ws_connected"] is False
+    assert payload["disconnected_code"] == 1006
+    assert "connection was closed uncleanly" in payload["disconnected_reason"]
+    assert payload["restart_attempt_allowed"] is True
+    assert payload["restart_attempted"] is True
+    assert payload["process_restart_required"] is False
+    assert payload["recovery_blocked"] is False
+    assert payload["reconnect_blocked_reason"] in {"", None}
+    assert payload["restart_blocked_reason"] in {"", None}
 
 
 def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):

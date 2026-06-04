@@ -166,7 +166,17 @@ def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(m
     assert payload["state_machine"]["state"] == "DOWN"
     assert payload["state_machine"]["reason"] == "ws1006_process_restart_required"
     assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["restart_blocked_reason"] == "ws1006_process_restart_required"
     assert payload["recovery_action"] == "process_restart_required"
+    assert payload["process_restart_required"] is True
+    assert payload["recovery_blocked"] is True
+    assert payload["restart_attempt_allowed"] is False
+    assert payload["restart_attempted"] is False
+    assert payload["ws_reconnect_allowed"] is False
+    assert payload["ws_reconnect_attempted"] is False
+    assert payload["restart_suppressed"] is True
+    assert payload["no_order_action"] is True
+    assert payload["order_safe"] is True
 
 
 def test_feed_truth_state_ticker_object_exists_but_no_ticks_is_not_live(monkeypatch, tmp_path):
