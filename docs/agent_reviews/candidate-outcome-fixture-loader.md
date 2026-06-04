@@ -1,5 +1,14 @@
 # Agent Review Evidence — Candidate Outcome Fixture Loader
 
+mode: REVIEW
+candidate_id: PR-CANDIDATE-OUTCOME-FIXTURE-LOADER
+decision: add_offline_candidate_outcome_fixture_loader
+reason: Add deterministic committed-fixture loading for Candidate Outcome Truth without runtime wiring, broker calls, Kite/websocket dependency, or strategy/ranking/Phase2 changes.
+timestamp: 2026-06-05T00:00:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/candidate-outcome-fixture-loader.md
+
 ## Agent Work Contract
 
 - **Goal**: add a deterministic offline fixture loader for the existing Candidate Outcome Truth contract.
