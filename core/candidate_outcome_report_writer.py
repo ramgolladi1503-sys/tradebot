@@ -22,7 +22,6 @@ class CandidateOutcomeReport:
     fixture_count: int
     status_counts: dict[str, int]
     results: tuple[dict[str, object], ...]
-    safety: dict[str, object]
     read_only: bool = True
     append: bool = False
     is_order_action: bool = False
@@ -30,6 +29,26 @@ class CandidateOutcomeReport:
     live_order_allowed: bool = False
     live_order_action: bool = False
     broker_order_action: bool = False
+    closed_environment: bool = True
+    runtime_wired: bool = False
+    external_services_used: bool = False
+    proves_trading_edge: bool = False
+
+    @property
+    def safety(self) -> dict[str, object]:
+        return {
+            "read_only": self.read_only,
+            "append": self.append,
+            "is_order_action": self.is_order_action,
+            "broker_api_called": self.broker_api_called,
+            "live_order_allowed": self.live_order_allowed,
+            "live_order_action": self.live_order_action,
+            "broker_order_action": self.broker_order_action,
+            "closed_environment": self.closed_environment,
+            "runtime_wired": self.runtime_wired,
+            "external_services_used": self.external_services_used,
+            "proves_trading_edge": self.proves_trading_edge,
+        }
 
 
 def _safety_block() -> dict[str, object]:
@@ -95,7 +114,6 @@ def build_candidate_outcome_report(fixture_dir: str | Path) -> CandidateOutcomeR
         fixture_count=len(fixtures),
         status_counts=dict(sorted(status_counts.items())),
         results=tuple(results),
-        safety=_safety_block(),
     )
 
 
