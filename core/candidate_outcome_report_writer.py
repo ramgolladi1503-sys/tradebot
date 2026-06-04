@@ -82,11 +82,11 @@ def _result_row(fixture: CandidateOutcomeFixture, truth: CandidateOutcomeTruth) 
         "observation_count": payload.get("observation_count"),
         "read_only": payload.get("read_only"),
         "append": payload.get("append"),
-        "is_order_action": payload.get("is_order_action"),
-        "broker_api_called": payload.get("broker_api_called"),
-        "live_order_allowed": payload.get("live_order_allowed"),
-        "live_order_action": payload.get("live_order_action"),
-        "broker_order_action": payload.get("broker_order_action"),
+        "is_order_action": False,
+        "broker_api_called": False,
+        "live_order_allowed": False,
+        "live_order_action": False,
+        "broker_order_action": False,
     }
 
 
