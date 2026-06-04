@@ -24,53 +24,23 @@ class CandidateOutcomeReport:
     results: tuple[dict[str, object], ...]
     read_only: bool = True
     append: bool = False
-    is_order_action: bool = False
-    broker_api_called: bool = False
-    live_order_allowed: bool = False
-    live_order_action: bool = False
-    broker_order_action: bool = False
     closed_environment: bool = True
-    runtime_wired: bool = False
-    external_services_used: bool = False
-    proves_trading_edge: bool = False
 
     @property
     def safety(self) -> dict[str, object]:
         return {
             "read_only": self.read_only,
             "append": self.append,
-            "is_order_action": self.is_order_action,
-            "broker_api_called": self.broker_api_called,
-            "live_order_allowed": self.live_order_allowed,
-            "live_order_action": self.live_order_action,
-            "broker_order_action": self.broker_order_action,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_order_allowed": False,
+            "live_order_action": False,
+            "broker_order_action": False,
             "closed_environment": self.closed_environment,
-            "runtime_wired": self.runtime_wired,
-            "external_services_used": self.external_services_used,
-            "proves_trading_edge": self.proves_trading_edge,
+            "runtime_wired": False,
+            "external_services_used": False,
+            "proves_trading_edge": False,
         }
-
-    def to_payload(self) -> dict[str, Any]:
-        payload = {
-            "schema_version": self.schema_version,
-            "generated_by": self.generated_by,
-            "fixture_count": self.fixture_count,
-            "status_counts": dict(sorted(self.status_counts.items())),
-            "results": [dict(row) for row in self.results],
-        }
-        payload["read_only"] = True
-        payload["append"] = False
-        payload["is_order_action"] = False
-        payload["broker_api_called"] = False
-        payload["live_order_allowed"] = False
-        payload["live_order_action"] = False
-        payload["broker_order_action"] = False
-        payload["closed_environment"] = True
-        payload["runtime_wired"] = False
-        payload["external_services_used"] = False
-        payload["proves_trading_edge"] = False
-        payload["safety"] = dict(self.safety)
-        return payload
 
 
 def _safety_block() -> dict[str, object]:
@@ -140,7 +110,29 @@ def build_candidate_outcome_report(fixture_dir: str | Path) -> CandidateOutcomeR
 
 
 def report_to_payload(report: CandidateOutcomeReport) -> dict[str, object]:
-    return report.to_payload()
+    payload = {
+        "schema_version": report.schema_version,
+        "generated_by": report.generated_by,
+        "fixture_count": report.fixture_count,
+        "status_counts": dict(sorted(report.status_counts.items())),
+        "results": [dict(row) for row in report.results],
+        "read_only": True,
+        "append": False,
+        "closed_environment": report.closed_environment,
+    }
+    non_action_flags = {
+        "is_order_action": False,
+        "broker_api_called": False,
+        "live_order_allowed": False,
+        "live_order_action": False,
+        "broker_order_action": False,
+        "runtime_wired": False,
+        "external_services_used": False,
+        "proves_trading_edge": False,
+    }
+    payload.update(non_action_flags)
+    payload["safety"] = dict(report.safety)
+    return payload
 
 
 def write_candidate_outcome_json_report(report: CandidateOutcomeReport, output_path: str | Path) -> Path:
