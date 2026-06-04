@@ -1268,9 +1268,14 @@ def _build_top_opportunities_payload(
         normalize_candidate_execution_truth_payload(row, execution_truth_context=execution_truth_context)
         for row in top_advisory
     ] if execution_truth_context is not None else list(top_advisory)
-    top_executable_truth = [row for row in top_executable_evidence if bool(row.get("reportable_executable"))]
-    top_advisory_truth = [row for row in top_advisory_evidence if str(row.get("visibility_bucket") or "").strip().lower() == "advisory"]
-    top_blocked_truth = [row for row in top_executable_evidence if str(row.get("visibility_bucket") or "").strip().lower() == "blocked"]
+    if execution_truth_context is None:
+        top_executable_truth = list(top_executable_evidence)
+        top_advisory_truth = list(top_advisory_evidence)
+        top_blocked_truth = []
+    else:
+        top_executable_truth = [row for row in top_executable_evidence if bool(row.get("reportable_executable"))]
+        top_advisory_truth = [row for row in top_advisory_evidence if str(row.get("visibility_bucket") or "").strip().lower() == "advisory"]
+        top_blocked_truth = [row for row in top_executable_evidence if str(row.get("visibility_bucket") or "").strip().lower() == "blocked"]
     top_executable_block_reasons = []
     if execution_truth_context is not None and top_executable_truth:
         for row in top_executable_truth:
