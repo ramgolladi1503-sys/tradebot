@@ -25,22 +25,11 @@ class CandidateOutcomeReport:
     safety: dict[str, object]
     read_only: bool = True
     append: bool = False
-
-    @property
-    def is_order_action(self) -> bool:
-        return False
-
-    @property
-    def broker_api_called(self) -> bool:
-        return False
-
-    @property
-    def live_order_action(self) -> bool:
-        return False
-
-    @property
-    def broker_order_action(self) -> bool:
-        return False
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    live_order_allowed: bool = False
+    live_order_action: bool = False
+    broker_order_action: bool = False
 
 
 def _safety_block() -> dict[str, object]:
@@ -111,21 +100,22 @@ def build_candidate_outcome_report(fixture_dir: str | Path) -> CandidateOutcomeR
 
 
 def report_to_payload(report: CandidateOutcomeReport) -> dict[str, object]:
-    return {
+    payload = {
         "schema_version": report.schema_version,
         "generated_by": report.generated_by,
         "fixture_count": report.fixture_count,
         "status_counts": dict(sorted(report.status_counts.items())),
         "results": [dict(row) for row in report.results],
         "safety": dict(report.safety),
-        "read_only": report.read_only,
-        "append": report.append,
-        "is_order_action": False,
-        "broker_api_called": False,
-        "live_order_allowed": False,
-        "live_order_action": False,
-        "broker_order_action": False,
     }
+    payload["read_only"] = report.read_only
+    payload["append"] = report.append
+    payload["is_order_action"] = report.is_order_action
+    payload["broker_api_called"] = report.broker_api_called
+    payload["live_order_allowed"] = report.live_order_allowed
+    payload["live_order_action"] = report.live_order_action
+    payload["broker_order_action"] = report.broker_order_action
+    return payload
 
 
 def write_candidate_outcome_json_report(report: CandidateOutcomeReport, output_path: str | Path) -> Path:
