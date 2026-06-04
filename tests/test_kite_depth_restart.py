@@ -5,6 +5,7 @@ import core.storage as storage
 from config import config as cfg
 import json
 import pytest
+from types import SimpleNamespace
 
 
 @pytest.fixture(autouse=True)
@@ -48,6 +49,32 @@ def _reset_ws_runtime_state(monkeypatch):
         "_FULL_RESTARTS": [],
     }.items():
         monkeypatch.setattr(ws, name, value, raising=False)
+    monkeypatch.setattr(ws.kite_client, "_next_expiry_cache", {}, raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws.kite_client, "resolve_option_tokens_window", lambda *args, **kwargs: [], raising=False)
+    monkeypatch.setattr(
+        ws,
+        "get_feed_health_monitor",
+        lambda: SimpleNamespace(set_reconnect_handler=lambda handler: None),
+        raising=True,
+    )
+    monkeypatch.setattr(incidents, "create_incident", lambda *args, **kwargs: "inc-test", raising=True)
+    monkeypatch.setattr(storage, "emit_sla_violation_event", lambda *args, **kwargs: None, raising=True)
+    class _NoopThread:
+        def __init__(self, *args, **kwargs):
+            self.daemon = kwargs.get("daemon", False)
+            self.name = kwargs.get("name", "noop-thread")
+
+        def start(self):
+            return None
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout=None):  # pragma: no cover - no-op helper
+            return None
+
+    monkeypatch.setattr(ws.threading, "Thread", _NoopThread, raising=True)
     ws._reset_feed_restart_verification(reason="unit_test_reset")
 
 

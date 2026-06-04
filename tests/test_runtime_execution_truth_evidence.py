@@ -284,6 +284,76 @@ def test_runtime_execution_truth_fails_closed_when_feedtruth_unknown_or_missing(
     assert truth["execution_truth_state"] == "blocked"
 
 
+def test_top_opportunities_payload_blocks_executable_when_feed_truth_snapshot_is_stale_even_if_market_looks_live(monkeypatch):
+    candidate = _candidate()
+
+    monkeypatch.setattr(
+        orchestrator,
+        "run_engine_phase2",
+        lambda candidates, active_trade=None, top_n=5, min_enter_score=0.70: {
+            "state": "ENTER",
+            "reason": "selected",
+            "ranked": [dict(candidate.__dict__)],
+            "selected": dict(candidate.__dict__),
+            "next_active_trade": None,
+        },
+        raising=True,
+    )
+
+    payload = orchestrator._build_top_opportunities_payload(
+        candidates=[dict(candidate.__dict__)],
+        executable_top_n=5,
+        advisory_top_n=5,
+        active_trade=None,
+        execution_truth_context=build_execution_truth_context(
+            market_data={
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "feed_truth_state": "LIVE",
+                "quote_health": {"state": "OK", "stale_reasons": []},
+            },
+            feed_truth={
+                "ws_connected": True,
+                "feed_fresh": False,
+                "underlying_tick_fresh": True,
+                "option_tick_fresh": False,
+                "depth_fresh": False,
+                "stale_reason": ["option_tick_stale_or_missing"],
+            },
+            latency_guard={},
+        ),
+    )
+
+    candidate_payload = orchestrator._candidate_trace_payload(
+        candidate,
+        execution_truth_context=build_execution_truth_context(
+            market_data={
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "feed_truth_state": "LIVE",
+                "quote_health": {"state": "OK", "stale_reasons": []},
+            },
+            feed_truth={
+                "ws_connected": True,
+                "feed_fresh": False,
+                "underlying_tick_fresh": True,
+                "option_tick_fresh": False,
+                "depth_fresh": False,
+                "stale_reason": ["option_tick_stale_or_missing"],
+            },
+            latency_guard={},
+        ),
+    )
+
+    assert candidate_payload["reportable_executable"] is False
+    assert candidate_payload["execution_truth_blocked"] is True
+    assert candidate_payload["visibility_bucket"] == "blocked"
+    assert candidate_payload["candidate_status"] == "blocked"
+    assert payload["top_executable_count"] == 0
+    assert payload["top_executable_opportunities"] == []
+    assert payload["selector_outcome"] == "NO_EXECUTABLE_OPPORTUNITY"
+
+
 def test_top_opportunities_payload_suppresses_executable_output_when_feed_truth_blocked(monkeypatch):
     candidate = _candidate()
 

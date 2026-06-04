@@ -137,6 +137,10 @@ def _candidate_feed_context(payload: dict[str, Any], runtime_payload: dict[str, 
     _set("feed_truth_reason_code", payload.get("feed_truth_reason_code"))
     _set("feed_ok", payload.get("feed_ok"))
     _set("feed_truth_strict_live", payload.get("feed_truth_strict_live"))
+    if context.get("feed_ok") is None and payload.get("feed_fresh") is not None:
+        context["feed_ok"] = payload.get("feed_fresh")
+    if context.get("feed_truth_strict_live") is None and payload.get("feed_fresh") is not None:
+        context["feed_truth_strict_live"] = payload.get("feed_fresh")
     _set("option_feed_block_reason", payload.get("option_feed_block_reason"))
     if isinstance(payload.get("option_feed_block_reason_by_symbol"), dict):
         context["option_feed_block_reason_by_symbol"] = payload.get("option_feed_block_reason_by_symbol")

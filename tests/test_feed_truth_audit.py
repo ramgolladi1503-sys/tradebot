@@ -113,6 +113,53 @@ def test_rejects_recovered_fallback_reportable_executable(tmp_path: Path) -> Non
     assert "fallback_quote_marked_executable" in codes
 
 
+def test_rejects_reportable_executable_when_runtime_feed_snapshot_is_not_fresh(tmp_path: Path) -> None:
+    log_file = _write(
+        tmp_path / "live_console.log",
+        _log_line(
+            "TB_TOP_EXECUTABLE_CANDIDATE",
+            {
+                "event": "TB_TOP_EXECUTABLE_CANDIDATE",
+                "symbol": "BANKNIFTY",
+                "trade_id": "T-2",
+                "candidate_status": "executable",
+                "execution_status": "executable",
+                "execution_entry_status": "executable",
+                "permission": "EXECUTE",
+                "final_action": "EXECUTE",
+                "readiness": "READY",
+                "execution_allowed": True,
+                "eligible_for_execution": True,
+                "reportable_executable": True,
+                "execution_truth_blockers": ["UNKNOWN"],
+            },
+        ),
+    )
+    runtime_file = _write(
+        tmp_path / "feed_runtime_latest.json",
+        json.dumps(
+            _runtime_payload(
+                runtime_state="RUNNING",
+                ws_connected=True,
+                feed_truth_reason_code="UNKNOWN",
+                quote_health={"state": "OK", "stale_reasons": []},
+                feed_fresh=False,
+                underlying_tick_fresh=True,
+                option_tick_fresh=False,
+                depth_fresh=False,
+                stale_reason=["option_tick_stale_or_missing"],
+            ),
+            sort_keys=True,
+        ),
+    )
+
+    report = build_feed_truth_audit_report(log_file=log_file, runtime_file=runtime_file)
+
+    assert report["verdict"] == "FAIL"
+    codes = {item["code"] for item in report["contradictions"]}
+    assert "unsafe_reportable_executable_under_blocked_feedtruth" in codes or "reportable_executable_under_blocked_truth" in codes
+
+
 def test_rejects_latency_guard_ok_used_as_blocker(tmp_path: Path) -> None:
     log_file = _write(
         tmp_path / "live_console.log",

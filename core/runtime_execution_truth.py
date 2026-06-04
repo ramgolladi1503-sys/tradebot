@@ -72,6 +72,23 @@ def build_execution_truth_context(
     feed_truth_state = _upper(market.get("feed_truth_state"))
     feed_truth_reason_code = _upper(market.get("feed_truth_reason_code"))
     reconnect_blocked_reason = _upper(market.get("reconnect_blocked_reason"))
+    feed_fresh = feed.get("feed_fresh")
+    feed_ok = feed.get("feed_ok")
+    if feed_ok is None and feed_fresh is not None:
+        feed_ok = feed_fresh
+    feed_truth_strict_live = feed.get("feed_truth_strict_live")
+    if feed_truth_strict_live is None and feed_fresh is not None:
+        feed_truth_strict_live = feed_fresh
+    if feed_ok is False and quote_health_state in {"", "OK", "LIVE", "FRESH"}:
+        quote_health_state = "BLOCKED"
+    stale_reason_values = [
+        _normalized_reason_text(reason)
+        for reason in _as_list(feed.get("stale_reason") or feed.get("stale_reasons"))
+        if _normalized_reason_text(reason)
+    ]
+    for reason in stale_reason_values:
+        if reason not in quote_health_stale_reasons:
+            quote_health_stale_reasons.append(reason)
     feed_blocked = (
         runtime_state in _BLOCKED_RUNTIME_STATES
         or feed_truth_state in {"RESTART_VERIFY_FAILED", "RECONNECT_BLOCKED", "MARKET_CLOSED"}
@@ -89,8 +106,8 @@ def build_execution_truth_context(
             "effective_ws_connected": market.get("effective_ws_connected"),
             "feed_truth_state": feed_truth_state,
             "feed_truth_reason_code": feed_truth_reason_code,
-            "feed_ok": feed.get("feed_ok"),
-            "feed_truth_strict_live": feed.get("feed_truth_strict_live"),
+            "feed_ok": feed_ok,
+            "feed_truth_strict_live": feed_truth_strict_live,
             "quote_health": {
                 "state": quote_health_state,
                 "stale_reasons": list(quote_health_stale_reasons),
@@ -107,8 +124,8 @@ def build_execution_truth_context(
         "ws_connected": market.get("ws_connected", market.get("effective_ws_connected")),
         "feed_truth_state": feed_truth_state,
         "feed_truth_reason_code": feed_truth_reason_code,
-        "feed_ok": feed.get("feed_ok"),
-        "feed_truth_strict_live": feed.get("feed_truth_strict_live"),
+        "feed_ok": feed_ok,
+        "feed_truth_strict_live": feed_truth_strict_live,
         "feed_ws_connected": feed.get("ws_connected"),
         "feed_truth_state_snapshot": _upper(feed.get("feed_truth_state")),
         "option_feed_block_reason": _upper(market.get("option_feed_block_reason")),
