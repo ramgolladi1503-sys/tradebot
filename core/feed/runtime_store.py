@@ -103,16 +103,29 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
     out["ts_epoch"] = float(ts_epoch)
     reconnect_blocked_reason = str(out.get("reconnect_blocked_reason") or "").strip().lower() or None
     if reconnect_blocked_reason:
+        if reconnect_blocked_reason == "reactor_not_restartable":
+            reconnect_blocked_reason = "reactor_not_restartable_process_restart_required"
         out["runtime_state"] = "RECOVERY_BLOCKED"
         state_machine = dict(out.get("state_machine") or {})
         state_machine["state"] = "DOWN"
         state_machine["reason"] = (
             "ws1006_process_restart_required"
             if reconnect_blocked_reason == "ws1006_process_restart_required"
-            else "reconnect_blocked"
+            else (
+                "reactor_not_restartable_process_restart_required"
+                if reconnect_blocked_reason.startswith("reactor_not_restartable")
+                else "reconnect_blocked"
+            )
         )
         out["state_machine"] = state_machine
         out["ws_connected"] = False
+        out["recovery_action"] = "process_restart_required"
+        out["ws_reconnect_allowed"] = False
+        out["ws_reconnect_attempted"] = False
+        out["restart_suppressed"] = True
+        out["reactor_not_restartable_detected"] = reconnect_blocked_reason.startswith("reactor_not_restartable")
+    if reconnect_blocked_reason and reconnect_blocked_reason.startswith("reactor_not_restartable"):
+        out["reactor_not_restartable_detected"] = True
     if "feed_truth_state" not in out:
         feed_truth = classify_feed_truth_state(out, now_epoch=float(ts_epoch))
         out["feed_truth_state"] = str(feed_truth.state)
