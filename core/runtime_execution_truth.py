@@ -42,6 +42,14 @@ def _normalized_reason_text(value: Any) -> str:
     return _upper(value)
 
 
+def _append_blocker(blockers: list[str], reason: Any) -> None:
+    normalized = _normalized_reason_text(reason)
+    if not normalized or normalized in {"OK", "LIVE", "FRESH", "NONE"} or normalized.endswith("_OK"):
+        return
+    if normalized not in blockers:
+        blockers.append(normalized)
+
+
 def build_execution_truth_context(
     *,
     market_data: Mapping[str, Any] | None = None,
@@ -52,21 +60,39 @@ def build_execution_truth_context(
     feed = _as_mapping(feed_truth)
     latency = _as_mapping(latency_guard)
     quote_health = _as_mapping(market.get("quote_health"))
+    quote_health_state = _upper(quote_health.get("state"))
+    quote_health_stale_reasons = [
+        _normalized_reason_text(reason)
+        for reason in _as_list(quote_health.get("stale_reasons"))
+        if _normalized_reason_text(reason)
+    ]
+    runtime_state = _upper(market.get("runtime_state"))
+    feed_truth_state = _upper(market.get("feed_truth_state"))
+    feed_truth_reason_code = _upper(market.get("feed_truth_reason_code"))
+    reconnect_blocked_reason = _upper(market.get("reconnect_blocked_reason"))
+    feed_blocked = (
+        runtime_state in _BLOCKED_RUNTIME_STATES
+        or feed_truth_state in {"RESTART_VERIFY_FAILED", "RECONNECT_BLOCKED", "MARKET_CLOSED"}
+        or feed_truth_reason_code in _HARD_FEED_BLOCKERS
+        or reconnect_blocked_reason in _HARD_FEED_BLOCKERS
+    )
+    if feed_blocked and quote_health_state in {"OK", "LIVE", "FRESH"}:
+        quote_health_state = "BLOCKED"
+        if "RECOVERY_BLOCKED" not in quote_health_stale_reasons:
+            quote_health_stale_reasons.append("RECOVERY_BLOCKED")
     return {
-        "runtime_state": _upper(market.get("runtime_state")),
+        "runtime_state": runtime_state,
         "ws_connected": market.get("ws_connected", market.get("effective_ws_connected")),
-        "feed_truth_state": _upper(market.get("feed_truth_state")),
-        "feed_truth_reason_code": _upper(market.get("feed_truth_reason_code")),
+        "feed_truth_state": feed_truth_state,
+        "feed_truth_reason_code": feed_truth_reason_code,
         "feed_ok": feed.get("feed_ok"),
         "feed_truth_strict_live": feed.get("feed_truth_strict_live"),
         "feed_ws_connected": feed.get("ws_connected"),
         "feed_truth_state_snapshot": _upper(feed.get("feed_truth_state")),
         "option_feed_block_reason": _upper(market.get("option_feed_block_reason")),
         "option_feed_block_reason_by_symbol": _as_mapping(market.get("option_feed_block_reason_by_symbol")),
-        "quote_health_state": _upper(quote_health.get("state")),
-        "quote_health_stale_reasons": [
-            _normalized_reason_text(reason) for reason in _as_list(quote_health.get("stale_reasons")) if _normalized_reason_text(reason)
-        ],
+        "quote_health_state": quote_health_state,
+        "quote_health_stale_reasons": quote_health_stale_reasons,
         "latency_guard_triggered": latency.get("latency_guard_triggered"),
         "latency_guard_mode": _upper(latency.get("latency_guard_mode")),
         "latency_guard_action": _upper(latency.get("latency_guard_action")),
@@ -106,45 +132,47 @@ def execution_truth_decision(context: Mapping[str, Any] | None = None) -> dict[s
     reconnect_blocked_reason = _upper(ctx.get("reconnect_blocked_reason"))
 
     if runtime_state in _BLOCKED_RUNTIME_STATES:
-        blockers.append(runtime_state)
+        _append_blocker(blockers, runtime_state)
     if ws_connected is False:
-        blockers.append("WS_DISCONNECTED")
+        _append_blocker(blockers, "WS_DISCONNECTED")
     if feed_ws_connected is False:
-        blockers.append("WS_DISCONNECTED")
+        _append_blocker(blockers, "WS_DISCONNECTED")
     if feed_ok is False:
-        blockers.append("GLOBAL_FEED_UNHEALTHY")
+        _append_blocker(blockers, "GLOBAL_FEED_UNHEALTHY")
     if feed_truth_strict_live is False:
-        blockers.append("GLOBAL_FEED_UNHEALTHY")
+        _append_blocker(blockers, "GLOBAL_FEED_UNHEALTHY")
     if feed_truth_state_snapshot in {"RESTART_VERIFY_FAILED", "RECONNECT_BLOCKED", "MARKET_CLOSED"}:
-        blockers.append(feed_truth_state_snapshot)
+        _append_blocker(blockers, feed_truth_state_snapshot)
     if feed_truth_state in {"RESTART_VERIFY_FAILED", "RECONNECT_BLOCKED", "MARKET_CLOSED"}:
-        blockers.append(feed_truth_state)
+        _append_blocker(blockers, feed_truth_state)
     if feed_truth_state_snapshot in _HARD_FEED_BLOCKERS:
-        blockers.append(feed_truth_state_snapshot)
+        _append_blocker(blockers, feed_truth_state_snapshot)
     if feed_truth_reason_code in _HARD_FEED_BLOCKERS:
-        blockers.append(feed_truth_reason_code)
+        _append_blocker(blockers, feed_truth_reason_code)
     if option_feed_block_reason and option_feed_block_reason not in {"OK", "NONE"}:
-        blockers.append(option_feed_block_reason)
-    if quote_health_state and quote_health_state not in {"OK", "LIVE", "FRESH"}:
-        blockers.append(quote_health_state)
+        _append_blocker(blockers, option_feed_block_reason)
+    if quote_health_state and quote_health_state not in {"OK", "LIVE", "FRESH", "BLOCKED"}:
+        _append_blocker(blockers, quote_health_state)
     if quote_health_stale_reasons:
-        blockers.extend(quote_health_stale_reasons)
+        for reason in quote_health_stale_reasons:
+            _append_blocker(blockers, reason)
     if recovery_action == "PROCESS_RESTART_REQUIRED":
-        blockers.append(recovery_action)
+        _append_blocker(blockers, recovery_action)
     if reconnect_blocked_reason:
-        blockers.append(reconnect_blocked_reason)
+        _append_blocker(blockers, reconnect_blocked_reason)
 
     advisory = False
     if latency_action in _ADVISORY_LATENCY_ACTIONS:
         advisory = True
-        blockers.append(f"LATENCY_GUARD_{latency_action}")
+        if latency_action:
+            _append_blocker(blockers, f"LATENCY_GUARD_{latency_action}")
     elif bool(ctx.get("latency_guard_triggered")) or latency_action:
         if latency_action:
-            blockers.append(f"LATENCY_GUARD_{latency_action}")
+            _append_blocker(blockers, f"LATENCY_GUARD_{latency_action}")
         elif latency_reason:
-            blockers.append(latency_reason)
+            _append_blocker(blockers, latency_reason)
         elif bool(ctx.get("latency_guard_triggered")):
-            blockers.append("LATENCY_GUARD_TRIGGERED")
+            _append_blocker(blockers, "LATENCY_GUARD_TRIGGERED")
 
     blocker_list = [item for item in blockers if item]
     hard_reason_markers = {

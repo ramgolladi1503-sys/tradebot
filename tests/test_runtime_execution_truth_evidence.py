@@ -42,6 +42,7 @@ def test_candidate_trace_payload_normalizes_recovery_block_to_non_executable():
         ),
     )
 
+    assert payload["execution_entry_status"] == "executable"
     assert payload["reportable_executable"] is False
     assert payload["visibility_bucket"] == "blocked"
     assert payload["execution_allowed"] is False
@@ -52,6 +53,50 @@ def test_candidate_trace_payload_normalizes_recovery_block_to_non_executable():
     assert payload["runtime_truth_consistent"] is False
     assert "RECOVERY_BLOCKED" in payload["execution_truth_blockers"]
     assert "WS_DISCONNECTED" in payload["execution_truth_blockers"]
+
+
+def test_execution_truth_decision_dedupes_blockers_and_skips_ok_markers():
+    context = build_execution_truth_context(
+        market_data={
+            "runtime_state": "RECOVERY_BLOCKED",
+            "ws_connected": False,
+            "feed_truth_state": "RECOVERY_BLOCKED",
+            "feed_truth_reason_code": "WS_DISCONNECTED",
+            "reconnect_blocked_reason": "ws1006_process_restart_required",
+            "quote_health": {"state": "OK"},
+        },
+        latency_guard={
+            "latency_guard_triggered": True,
+            "latency_guard_action": "OK",
+            "latency_guard_reason": "LATENCY_GUARD_OK",
+        },
+    )
+
+    assert context["quote_health_state"] == "BLOCKED"
+    assert context["quote_health_stale_reasons"] == ["RECOVERY_BLOCKED"]
+
+    truth = orchestrator.normalize_candidate_execution_truth_payload(
+        {
+            "execution_entry_status": "executable",
+            "execution_allowed": True,
+            "eligible_for_execution": True,
+            "permission": "EXECUTE",
+            "final_action": "EXECUTE",
+            "readiness": "READY",
+            "execution_status": "executable",
+            "candidate_status": "executable",
+        },
+        execution_truth_context=context,
+    )
+
+    assert truth["reportable_executable"] is False
+    assert truth["execution_truth_blocked"] is True
+    assert truth["execution_truth_blockers"] == [
+        "RECOVERY_BLOCKED",
+        "WS_DISCONNECTED",
+        "WS1006_PROCESS_RESTART_REQUIRED",
+    ]
+    assert "LATENCY_GUARD_OK" not in truth["execution_truth_blockers"]
 
 
 def test_candidate_trace_payload_normalizes_latency_degrade_exit_only_to_advisory():
@@ -76,6 +121,7 @@ def test_candidate_trace_payload_normalizes_latency_degrade_exit_only_to_advisor
     assert payload["candidate_status"] == "advisory_only"
     assert payload["runtime_truth_consistent"] is False
     assert "LATENCY_GUARD_DEGRADE_EXIT_ONLY" in payload["execution_truth_blockers"]
+    assert payload["execution_entry_status"] == "executable"
 
 
 def test_top_opportunities_payload_suppresses_executable_output_when_feed_truth_blocked(monkeypatch):
