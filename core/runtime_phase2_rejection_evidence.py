@@ -73,6 +73,21 @@ def _reason_codes(candidate: Mapping[str, Any]) -> list[str]:
     return out
 
 
+def _hard_execution_blocker_category(reason_code: str) -> str:
+    code = _lower_text(reason_code)
+    if not code:
+        return "unknown"
+    if code in {"feed_stale", "no_ws_ticks", "tick_stalled", "depth_stale", "depth_stale_age", "no_live_option_feed", "ws_disconnected", "global_feed_unhealthy", "stale_option_ltp", "ltp_stale"}:
+        return "feed"
+    if code.startswith("latency_guard_"):
+        return "latency_guard"
+    if code in {"unresolved_contract", "missing_contract_fields", "missing_option_token", "no_token"}:
+        return "contract"
+    if code in {"hard_liquidity", "hard_spread_too_wide", "spread_breached"}:
+        return "liquidity_or_spread"
+    return "unknown"
+
+
 def build_phase2_rejection_evidence_payload(
     *,
     phase2_state: str | None,
@@ -196,6 +211,17 @@ def build_phase2_rejection_evidence_payload(
         "gate_reason_counts": dict(gate_reason_counter),
         "execution_quality_reason_code_counts": dict(execution_quality_counter),
         "hard_blocker_counts": dict(hard_blocker_counter),
+        "hard_execution_blocker_details": [
+            {
+                "reason_code": str(reason).strip().upper(),
+                "count": int(count),
+                "category": _hard_execution_blocker_category(reason),
+            }
+            for reason, count in sorted(
+                ((str(reason), int(count or 0)) for reason, count in hard_blocker_counter.items() if str(reason).strip()),
+                key=lambda item: (-int(item[1]), str(item[0])),
+            )
+        ],
         "drop_reason_counts": drop_counts,
         "hard_blocker_source_counts": {
             "FEED_STALE": int(drop_counts.get("hard_feed_stale", 0) or 0),
