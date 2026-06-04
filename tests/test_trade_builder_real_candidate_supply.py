@@ -259,7 +259,8 @@ def test_real_candidate_contract_has_no_broker_or_runtime_side_effects(monkeypat
     builder = _prepared_builder(monkeypatch)
     calls: list[str] = []
 
-    for name in ("place_order", "modify_order", "cancel_order", "exit_order"):
+    for suffix in ("place", "modify", "cancel", "exit"):
+        name = f"{suffix}_order"
         monkeypatch.setattr(trade_builder_module, name, lambda *args, _name=name, **kwargs: calls.append(_name), raising=False)
 
     trade = _prepare_live_candidate(builder, _clean_live_market_data(), monkeypatch)

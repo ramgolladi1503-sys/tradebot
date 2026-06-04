@@ -62,7 +62,7 @@ acceptance_proof:
 
 - The contract must not over-claim execution readiness beyond what the builder actually proves.
 - The no-signal branch must remain fail-closed when fallbacks are disabled.
-- Missing liquidity inputs must not be normalized into a false positive candidate.
+- Absent liquidity inputs must not be normalized into a false positive result.
 
 ## Hermes Review
 
@@ -87,7 +87,7 @@ acceptance_proof:
 
 - Strong clean LIVE-like inputs yield a real ranked candidate.
 - No-signal with fallbacks disabled yields no ranked candidate.
-- Missing bid/ask yields no real candidate in the pool.
+- Absent bid/ask yields no real pool entry.
 - The test suite proves there are no broker or runtime side effects.
 
 ## Runtime Proof Required After Merge

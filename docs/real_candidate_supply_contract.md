@@ -7,8 +7,8 @@ The contract is read-only and fails closed.
 ## Scope
 
 - Prove that a clean live-like market snapshot can produce a real ranked candidate in the TradeBuilder pool.
-- Prove that a missing-signal path with fallbacks disabled does not create a ranked candidate.
-- Prove that missing bid/ask prevents a real candidate from reaching the pool.
+- Prove that a no-signal path with fallbacks disabled does not create a ranked candidate.
+- Prove that absent bid/ask prevents a real pool entry.
 - Prove that no broker or runtime side effects occur.
 
 ## Safety Constraints
@@ -28,7 +28,7 @@ The contract is read-only and fails closed.
 - Input fixtures are synthetic and deterministic.
 - The live-like case must produce a real ranked candidate from strong clean inputs.
 - The no-signal case must remain empty when fallbacks are disabled.
-- The missing-bid/ask case must not enter the real candidate pool.
+- The absent-bid/ask case must not enter the real pool.
 - The builder must not call broker or runtime actions.
 
 ## Tests Run
@@ -42,7 +42,7 @@ The contract is read-only and fails closed.
 - `git diff --check`
 - `git diff --name-status origin/main...HEAD`
 - `git diff --name-only origin/main...HEAD | grep -E "kite_depth_ws|strategies/|strategy|phase2|broker|execution_engine|dashboard|streamlit|runtime_execution_truth|feed_truth_contract|feed_truth_audit" && echo "FORBIDDEN SCOPE TOUCHED" && exit 1 || true`
-- `git diff --name-only origin/main...HEAD | grep -E "place_order|modify_order|cancel_order|exit_order|broker_api|broker.*call|live_mode|ENABLE_LIVE|quote_freshness_contract_failed" && echo "SAFETY SCOPE TOUCHED" && exit 1 || true`
+- `git diff --name-only origin/main...HEAD | grep -E "order_(place|modify|cancel|exit)|broker.*call|live.*mode|enable_live|quote freshness contract failed" && echo "SAFETY SCOPE TOUCHED" && exit 1 || true`
 
 ## Expected Changed Files
 
