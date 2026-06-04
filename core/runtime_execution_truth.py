@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from core.feed_truth_contract import FeedTruthContract, build_feed_truth_contract
+
 
 _BLOCKED_RUNTIME_STATES = {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "STOPPED"}
 _HARD_FEED_BLOCKERS = {
@@ -80,6 +82,26 @@ def build_execution_truth_context(
         quote_health_state = "BLOCKED"
         if "RECOVERY_BLOCKED" not in quote_health_stale_reasons:
             quote_health_stale_reasons.append("RECOVERY_BLOCKED")
+    feed_truth_contract = build_feed_truth_contract(
+        {
+            "runtime_state": runtime_state,
+            "ws_connected": market.get("ws_connected", market.get("effective_ws_connected")),
+            "effective_ws_connected": market.get("effective_ws_connected"),
+            "feed_truth_state": feed_truth_state,
+            "feed_truth_reason_code": feed_truth_reason_code,
+            "feed_ok": feed.get("feed_ok"),
+            "feed_truth_strict_live": feed.get("feed_truth_strict_live"),
+            "quote_health": {
+                "state": quote_health_state,
+                "stale_reasons": list(quote_health_stale_reasons),
+            },
+            "option_feed_block_reason": _upper(market.get("option_feed_block_reason")),
+            "option_feed_block_reason_by_symbol": _as_mapping(market.get("option_feed_block_reason_by_symbol")),
+            "reconnect_blocked_reason": _upper(market.get("reconnect_blocked_reason")),
+            "recovery_action": _upper(market.get("recovery_action")),
+            "latency_guard": latency,
+        }
+    )
     return {
         "runtime_state": runtime_state,
         "ws_connected": market.get("ws_connected", market.get("effective_ws_connected")),
@@ -107,13 +129,91 @@ def build_execution_truth_context(
         "latency_guard_recovery_required": latency.get("latency_guard_recovery_required"),
         "recovery_action": _upper(market.get("recovery_action")),
         "reconnect_blocked_reason": _upper(market.get("reconnect_blocked_reason")),
+        "feed_truth_contract": feed_truth_contract.to_payload(),
+        "feed_truth_contract_state": feed_truth_contract.state,
+        "feed_truth_contract_entries_allowed": feed_truth_contract.entries_allowed,
+        "feed_truth_contract_quotes_trusted": feed_truth_contract.quotes_trusted,
+        "feed_truth_contract_depth_trusted": feed_truth_contract.depth_trusted,
+        "feed_truth_contract_reconnect_allowed": feed_truth_contract.reconnect_allowed,
+        "feed_truth_contract_process_restart_required": feed_truth_contract.process_restart_required,
+        "feed_truth_contract_blockers": list(feed_truth_contract.blockers),
+        "feed_truth_contract_advisory_reasons": list(feed_truth_contract.advisory_reasons),
     }
+
+
+def _feed_truth_contract_from_context(ctx: Mapping[str, Any] | None) -> FeedTruthContract:
+    context = _as_mapping(ctx)
+    contract_payload = context.get("feed_truth_contract")
+    if isinstance(contract_payload, Mapping):
+        payload = dict(contract_payload)
+        return FeedTruthContract(
+            state=_upper(payload.get("state")),
+            entries_allowed=bool(payload.get("entries_allowed")),
+            exits_allowed=bool(payload.get("exits_allowed")),
+            quotes_trusted=bool(payload.get("quotes_trusted")),
+            depth_trusted=bool(payload.get("depth_trusted")),
+            reconnect_allowed=bool(payload.get("reconnect_allowed")),
+            process_restart_required=bool(payload.get("process_restart_required")),
+            blockers=tuple(str(reason).strip().upper() for reason in list(payload.get("blockers") or []) if str(reason).strip()),
+            advisory_reasons=tuple(str(reason).strip().upper() for reason in list(payload.get("advisory_reasons") or []) if str(reason).strip()),
+            source_snapshot=_as_mapping(payload.get("source_snapshot")),
+            reason_code=_upper(payload.get("reason_code") or payload.get("state")),
+        )
+    return build_feed_truth_contract(
+        {
+            "runtime_state": context.get("runtime_state"),
+            "ws_connected": context.get("ws_connected"),
+            "effective_ws_connected": context.get("ws_connected"),
+            "feed_truth_state": context.get("feed_truth_state"),
+            "feed_truth_reason_code": context.get("feed_truth_reason_code"),
+            "feed_ok": context.get("feed_ok"),
+            "feed_truth_strict_live": context.get("feed_truth_strict_live"),
+            "quote_health": {
+                "state": context.get("quote_health_state"),
+                "stale_reasons": list(context.get("quote_health_stale_reasons") or []),
+            },
+            "option_feed_block_reason": context.get("option_feed_block_reason"),
+            "option_feed_block_reason_by_symbol": context.get("option_feed_block_reason_by_symbol"),
+            "reconnect_blocked_reason": context.get("reconnect_blocked_reason"),
+            "recovery_action": context.get("recovery_action"),
+            "latency_guard": {
+                "latency_guard_triggered": context.get("latency_guard_triggered"),
+                "latency_guard_mode": context.get("latency_guard_mode"),
+                "latency_guard_action": context.get("latency_guard_action"),
+                "latency_guard_source": context.get("latency_guard_source"),
+                "latency_guard_reason": context.get("latency_guard_reason"),
+                "latency_guard_metric": context.get("latency_guard_metric"),
+                "latency_guard_value": context.get("latency_guard_value"),
+                "latency_guard_threshold": context.get("latency_guard_threshold"),
+                "latency_guard_age_sec": context.get("latency_guard_age_sec"),
+                "latency_guard_last_ok_at": context.get("latency_guard_last_ok_at"),
+                "latency_guard_last_bad_at": context.get("latency_guard_last_bad_at"),
+                "latency_guard_recovery_required": context.get("latency_guard_recovery_required"),
+            },
+        }
+    )
+
+
+def _legacy_blocker_from_feed_truth_contract(reason: str, ctx: Mapping[str, Any]) -> str:
+    normalized = _upper(reason)
+    if normalized == "DISCONNECTED":
+        return "WS_DISCONNECTED"
+    if normalized == "STALE":
+        feed_reason = _upper(ctx.get("feed_truth_reason_code"))
+        option_reason = _upper(ctx.get("option_feed_block_reason"))
+        if feed_reason == "STALE_OPTION_LTP" or option_reason == "STALE_OPTION_LTP":
+            return "STALE_OPTION_LTP"
+        return "STALE_OPTION_LTP"
+    return normalized
 
 
 def execution_truth_decision(context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     ctx = _as_mapping(context)
+    feed_truth_contract = _feed_truth_contract_from_context(ctx)
     blockers: list[str] = []
     mode = "executable"
+    for blocker in feed_truth_contract.blockers:
+        _append_blocker(blockers, _legacy_blocker_from_feed_truth_contract(blocker, ctx))
 
     runtime_state = _upper(ctx.get("runtime_state"))
     ws_connected = ctx.get("ws_connected")
@@ -161,9 +261,7 @@ def execution_truth_decision(context: Mapping[str, Any] | None = None) -> dict[s
     if reconnect_blocked_reason:
         _append_blocker(blockers, reconnect_blocked_reason)
 
-    advisory = False
     if latency_action in _ADVISORY_LATENCY_ACTIONS:
-        advisory = True
         if latency_action:
             _append_blocker(blockers, f"LATENCY_GUARD_{latency_action}")
     elif bool(ctx.get("latency_guard_triggered")) or latency_action:
@@ -174,33 +272,15 @@ def execution_truth_decision(context: Mapping[str, Any] | None = None) -> dict[s
         elif bool(ctx.get("latency_guard_triggered")):
             _append_blocker(blockers, "LATENCY_GUARD_TRIGGERED")
 
-    blocker_list = [item for item in blockers if item]
-    hard_reason_markers = {
-        "WS_DISCONNECTED",
-        "GLOBAL_FEED_UNHEALTHY",
-        "MARKET_CLOSED",
-        "NO_LIVE_OPTION_FEED",
-        "STALE_OPTION_LTP",
-        "LTP_STALE",
-        "DEPTH_STALE",
-        "WS1006_PROCESS_RESTART_REQUIRED",
-        "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED",
-        "RECOVERY_BLOCKED",
-        "RESTART_VERIFY_FAILED",
-        "RECONNECT_BLOCKED",
-    }
-    hard_blocked = bool(
-        any(
-            reason in hard_reason_markers
-            or (reason.startswith("LATENCY_GUARD_") and reason not in {f"LATENCY_GUARD_{action}" for action in _ADVISORY_LATENCY_ACTIONS})
-            for reason in blocker_list
-        )
-    )
-
-    if hard_blocked:
-        mode = "blocked"
-    elif advisory:
+    advisory = False
+    if feed_truth_contract.advisory_reasons and feed_truth_contract.state in {"LIVE", "DEGRADED"}:
+        advisory = True
+    if feed_truth_contract.state == "DEGRADED" and advisory:
         mode = "advisory"
+    elif not feed_truth_contract.entries_allowed or feed_truth_contract.state in {"AUTH_BLOCKED", "IMPORT_MISSING", "RECOVERY_BLOCKED", "DISCONNECTED", "STALE", "UNKNOWN"}:
+        mode = "blocked"
+    else:
+        mode = "executable"
 
     if mode == "blocked":
         permission = "BLOCK"
@@ -228,18 +308,19 @@ def execution_truth_decision(context: Mapping[str, Any] | None = None) -> dict[s
         "execution_truth_state": mode,
         "execution_truth_blocked": mode == "blocked",
         "execution_truth_advisory": mode == "advisory",
-        "execution_truth_blockers": blocker_list,
+        "feed_truth_contract": feed_truth_contract.to_payload(),
+        "execution_truth_blockers": list(dict.fromkeys(blockers)),
         "execution_truth_source": (
             "latency_guard"
-            if any(reason.startswith("LATENCY_GUARD_") for reason in blocker_list)
+            if any(reason.startswith("LATENCY_GUARD_") for reason in blockers)
             else "feed_runtime"
-            if blocker_list
+            if blockers
             else "candidate"
         ),
         "visibility_bucket": visibility_bucket,
-        "reportable_executable": mode == "executable",
-        "execution_allowed": mode == "executable",
-        "eligible_for_execution": mode == "executable",
+        "reportable_executable": mode == "executable" and feed_truth_contract.entries_allowed and feed_truth_contract.quotes_trusted,
+        "execution_allowed": mode == "executable" and feed_truth_contract.entries_allowed,
+        "eligible_for_execution": mode == "executable" and feed_truth_contract.entries_allowed,
         "permission": permission,
         "final_action": final_action,
         "execution_status": execution_status,
