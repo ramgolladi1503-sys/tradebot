@@ -6,10 +6,45 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _reset_ws_runtime_state(monkeypatch):
-    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
-    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
-    monkeypatch.setattr(ws, "_RUNTIME_STATE", "STOPPED", raising=False)
-    monkeypatch.setattr(ws, "_LAST_RUNTIME_ERROR", "", raising=False)
+    for name, value in {
+        "_KITE_TICKER": None,
+        "_WATCHDOG_THREAD": None,
+        "_WATCHDOG_STOP": None,
+        "_LAST_TOKENS": [],
+        "_LAST_DESIRED_TOKENS": None,
+        "_STALE_STRIKES": 0,
+        "_WARMUP_PENDING": False,
+        "_STOP_REQUESTED": False,
+        "_RESTART_ASYNC_THREAD": None,
+        "_LAST_WS_TICK_EPOCH": 0.0,
+        "_LAST_FEED_HEALTH_STATE": None,
+        "_RECONNECT_BLOCKED_REASON": "",
+        "_RECONNECT_BLOCKED_SINCE_EPOCH": 0.0,
+        "_REACTOR_NOT_RESTARTABLE_DETECTED": False,
+        "_AUTH_REQUIRED_LATCH": False,
+        "_AUTH_REQUIRED_LOGGED": False,
+        "_LAST_DISCONNECTED_CODE": None,
+        "_LAST_DISCONNECTED_REASON": "",
+        "_SYMBOL_LAST_LTP_TS": {},
+        "_SYMBOL_LAST_DEPTH_TS": {},
+        "_SYMBOL_LAST_OPTION_TICK_TS": {},
+        "_LAST_MSG_TS_BY_TOKEN": {},
+        "_LAST_OPTION_TOKEN_INCIDENT_TS": {},
+        "_LAST_OPTION_COUNTS_BY_SYMBOL": {},
+        "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL": {},
+        "_TOKEN_TO_SYMBOL": {},
+        "_UNDERLYING_TOKENS": set(),
+        "_UNDERLYING_TOKEN_TO_SYMBOL": {},
+        "_DEPTH_WS_LOCK_ACQUIRED": False,
+        "_DEPTH_WS_START_EPOCH": 0.0,
+        "_LAST_FEED_TICK_LOG_MINUTE": None,
+        "_INTENDED_TOKEN_COUNT": 0,
+        "_RUNTIME_STATE": "STOPPED",
+        "_LAST_RUNTIME_ERROR": "",
+        "_LAST_FULL_RESTART_EPOCH": 0.0,
+        "_FULL_RESTARTS": [],
+    }.items():
+        monkeypatch.setattr(ws, name, value, raising=False)
     ws._reset_feed_restart_verification(reason="unit_test_reset")
 
 
