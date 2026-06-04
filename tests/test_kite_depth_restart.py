@@ -1,4 +1,7 @@
 import core.kite_depth_ws as ws
+from core.auth import reset_kite_runtime_credentials_guard
+import core.incidents as incidents
+import core.storage as storage
 from config import config as cfg
 import json
 import pytest
@@ -6,10 +9,45 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _reset_ws_runtime_state(monkeypatch):
-    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
-    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
-    monkeypatch.setattr(ws, "_RUNTIME_STATE", "STOPPED", raising=False)
-    monkeypatch.setattr(ws, "_LAST_RUNTIME_ERROR", "", raising=False)
+    for name, value in {
+        "_KITE_TICKER": None,
+        "_WATCHDOG_THREAD": None,
+        "_WATCHDOG_STOP": None,
+        "_LAST_TOKENS": [],
+        "_LAST_DESIRED_TOKENS": None,
+        "_STALE_STRIKES": 0,
+        "_WARMUP_PENDING": False,
+        "_STOP_REQUESTED": False,
+        "_RESTART_ASYNC_THREAD": None,
+        "_LAST_WS_TICK_EPOCH": 0.0,
+        "_LAST_FEED_HEALTH_STATE": None,
+        "_RECONNECT_BLOCKED_REASON": "",
+        "_RECONNECT_BLOCKED_SINCE_EPOCH": 0.0,
+        "_REACTOR_NOT_RESTARTABLE_DETECTED": False,
+        "_AUTH_REQUIRED_LATCH": False,
+        "_AUTH_REQUIRED_LOGGED": False,
+        "_LAST_DISCONNECTED_CODE": None,
+        "_LAST_DISCONNECTED_REASON": "",
+        "_SYMBOL_LAST_LTP_TS": {},
+        "_SYMBOL_LAST_DEPTH_TS": {},
+        "_SYMBOL_LAST_OPTION_TICK_TS": {},
+        "_LAST_MSG_TS_BY_TOKEN": {},
+        "_LAST_OPTION_TOKEN_INCIDENT_TS": {},
+        "_LAST_OPTION_COUNTS_BY_SYMBOL": {},
+        "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL": {},
+        "_TOKEN_TO_SYMBOL": {},
+        "_UNDERLYING_TOKENS": set(),
+        "_UNDERLYING_TOKEN_TO_SYMBOL": {},
+        "_DEPTH_WS_LOCK_ACQUIRED": False,
+        "_DEPTH_WS_START_EPOCH": 0.0,
+        "_LAST_FEED_TICK_LOG_MINUTE": None,
+        "_INTENDED_TOKEN_COUNT": 0,
+        "_RUNTIME_STATE": "STOPPED",
+        "_LAST_RUNTIME_ERROR": "",
+        "_LAST_FULL_RESTART_EPOCH": 0.0,
+        "_FULL_RESTARTS": [],
+    }.items():
+        monkeypatch.setattr(ws, name, value, raising=False)
     ws._reset_feed_restart_verification(reason="unit_test_reset")
 
 
@@ -483,10 +521,21 @@ def test_reactor_terminal_state_blocks_followup_start_restart_and_schedule(monke
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    reset_kite_runtime_credentials_guard()
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable_process_restart_required", raising=False)
     monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", True, raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [101, 202], raising=False)
+    class _StableRestClient:
+        def profile(self):
+            return {"user_id": "ABCD1234"}
+
+    stable_rest_client = _StableRestClient()
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: stable_rest_client, raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws.kite_client, "instruments", lambda *args, **kwargs: [], raising=False)
+    monkeypatch.setattr(incidents, "create_incident", lambda *args, **kwargs: "incident-test", raising=False)
+    monkeypatch.setattr(storage, "emit_sla_violation_event", lambda *args, **kwargs: None, raising=False)
 
     calls = {"start": 0, "schedule": 0, "thread": 0, "persist": 0}
     original_persist = ws._persist_runtime_snapshot_row
