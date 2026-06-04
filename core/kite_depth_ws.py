@@ -126,6 +126,7 @@ _LAST_OPTION_COUNTS_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL: dict[str, int] = {}
 _DEPTH_WS_START_EPOCH: float = 0.0
 _RECONNECT_BLOCKED_REASON: str = ""
+_REACTOR_NOT_RESTARTABLE_DETECTED: bool = False
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
 # Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
@@ -1156,6 +1157,15 @@ def _is_reactor_not_restartable_error(exc: Exception | None) -> bool:
     return "reactornotrestartable" in name or "reactornotrestartable" in text
 
 
+def _reactor_not_restartable_block_reason() -> str:
+    return "reactor_not_restartable_process_restart_required"
+
+
+def _reactor_terminal_restart_block_active() -> bool:
+    blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower()
+    return bool(_REACTOR_NOT_RESTARTABLE_DETECTED or blocked_reason.startswith("reactor_not_restartable"))
+
+
 def _is_terminal_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
     try:
         code_int = int(code) if code is not None else None
@@ -1176,17 +1186,19 @@ def _is_terminal_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
 
 
 def _set_reconnect_blocked_reason(reason: str) -> str:
-    global _RECONNECT_BLOCKED_REASON, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    global _RECONNECT_BLOCKED_REASON, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _REACTOR_NOT_RESTARTABLE_DETECTED
     blocked = str(reason or "").strip().lower() or "unknown_reconnect_block"
     _RECONNECT_BLOCKED_REASON = blocked
     _RUNTIME_STATE = "RECOVERY_BLOCKED"
     _LAST_RUNTIME_ERROR = blocked[:1000]
+    if blocked.startswith("reactor_not_restartable"):
+        _REACTOR_NOT_RESTARTABLE_DETECTED = True
     return blocked
 
 
 def _block_reconnect_for_process_restart(*, source: str, code: int | None = None, reason: str | None = None) -> str:
     global _WATCHDOG_STOP
-    blocked_reason = "reactor_not_restartable"
+    blocked_reason = _reactor_not_restartable_block_reason()
     reason_lower = str(reason or "").strip().lower()
     if "connection was closed uncleanly" in reason_lower or "peer dropped" in reason_lower or "main loop terminated" in reason_lower:
         blocked_reason = "ws1006_process_restart_required"
@@ -1215,7 +1227,9 @@ def _block_reconnect_for_process_restart(*, source: str, code: int | None = None
 
 def _reconnect_recovery_blocked_payload(*, reason: str, source: str) -> dict[str, object]:
     blocked_reason = str(reason or _RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
-    reactor_not_restartable = blocked_reason == "reactor_not_restartable"
+    if blocked_reason == "reactor_not_restartable":
+        blocked_reason = _reactor_not_restartable_block_reason()
+    reactor_not_restartable = blocked_reason.startswith("reactor_not_restartable")
     payload = {
         "source": source,
         "reason": blocked_reason,
@@ -1246,12 +1260,13 @@ def _emit_reconnect_recovery_blocked_snapshot(*, source: str, reason: str) -> di
 
 
 def _clear_reconnect_blocked_reason() -> None:
-    global _RECONNECT_BLOCKED_REASON
+    global _RECONNECT_BLOCKED_REASON, _REACTOR_NOT_RESTARTABLE_DETECTED
     _RECONNECT_BLOCKED_REASON = ""
+    _REACTOR_NOT_RESTARTABLE_DETECTED = False
 
 
 def _reconnect_recovery_blocked_active() -> bool:
-    return bool(str(_RECONNECT_BLOCKED_REASON or "").strip())
+    return bool(str(_RECONNECT_BLOCKED_REASON or "").strip() or _REACTOR_NOT_RESTARTABLE_DETECTED)
 
 
 def _normalize_recovery_blocked_snapshot_state(
@@ -1264,6 +1279,10 @@ def _normalize_recovery_blocked_snapshot_state(
     blocked_reason = str(
         reconnect_blocked_reason if reconnect_blocked_reason is not None else (_RECONNECT_BLOCKED_REASON or "")
     ).strip().lower() or None
+    if blocked_reason == "reactor_not_restartable":
+        blocked_reason = _reactor_not_restartable_block_reason()
+    if not blocked_reason and _REACTOR_NOT_RESTARTABLE_DETECTED:
+        blocked_reason = _reactor_not_restartable_block_reason()
     effective_state = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper() or "UNKNOWN"
     state_machine_row = dict(state_machine or {})
     effective_ws_connected = ws_connected
@@ -1276,7 +1295,11 @@ def _normalize_recovery_blocked_snapshot_state(
             state_machine_row["reason"] = (
                 "ws1006_process_restart_required"
                 if blocked_reason == "ws1006_process_restart_required"
-                else "reconnect_blocked"
+                else (
+                    "reactor_not_restartable_process_restart_required"
+                    if blocked_reason.startswith("reactor_not_restartable")
+                    else "reconnect_blocked"
+                )
             )
         state_machine_row.setdefault("reason", blocked_reason)
     return effective_state, state_machine_row, effective_ws_connected, blocked_reason
@@ -1973,7 +1996,7 @@ def _write_feed_runtime_snapshot(
                 "ws_reconnect_allowed": False,
                 "ws_reconnect_attempted": False,
                 "restart_suppressed": True,
-                "reactor_not_restartable_detected": payload["reconnect_blocked_reason"] == "reactor_not_restartable",
+                "reactor_not_restartable_detected": payload["reconnect_blocked_reason"].startswith("reactor_not_restartable"),
             }
         )
     if restart_verify:
@@ -2128,7 +2151,7 @@ def _persist_runtime_snapshot_row(
                 "ws_reconnect_allowed": False,
                 "ws_reconnect_attempted": False,
                 "restart_suppressed": True,
-                "reactor_not_restartable_detected": payload["reconnect_blocked_reason"] == "reactor_not_restartable",
+                "reactor_not_restartable_detected": payload["reconnect_blocked_reason"].startswith("reactor_not_restartable"),
             }
         )
     if restart_verify:
@@ -3354,8 +3377,8 @@ def _schedule_restart_depth_ws(
     source: str,
 ) -> bool:
     global _RESTART_ASYNC_THREAD
-    if _reconnect_recovery_blocked_active():
-        blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
+    if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
+        blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or _reactor_not_restartable_block_reason()
         _emit_reconnect_recovery_blocked_snapshot(source=f"_schedule_restart_depth_ws:{source}", reason=blocked_reason)
         return False
 
@@ -3678,8 +3701,8 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     if _AUTH_REQUIRED_LATCH:
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
         return False
-    if _reconnect_recovery_blocked_active():
-        blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+    if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
+        blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower() or _reactor_not_restartable_block_reason()
         _log_ws(
             "FEED_RESTART_BLOCKED_RECOVERY_REQUIRED",
             {"reason": reason, "reconnect_blocked_reason": blocked_reason},
@@ -3858,8 +3881,8 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
-    if _reconnect_recovery_blocked_active():
-        blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+    if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
+        blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower() or _reactor_not_restartable_block_reason()
         _emit_reconnect_recovery_blocked_snapshot(
             source="start_depth_ws:reconnect_blocked",
             reason=blocked_reason,
@@ -4943,7 +4966,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     except Exception as exc:
         reconnect_blocked_reason = None
         if _is_reactor_not_restartable_error(exc):
-            reconnect_blocked_reason = _set_reconnect_blocked_reason("reactor_not_restartable")
+            reconnect_blocked_reason = _set_reconnect_blocked_reason(_reactor_not_restartable_block_reason())
             _log_ws(
                 "FEED_RESTART_PROCESS_RECOVERY_REQUIRED",
                 {

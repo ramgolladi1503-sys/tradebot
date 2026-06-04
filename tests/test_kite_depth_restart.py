@@ -7,6 +7,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _reset_ws_runtime_state(monkeypatch):
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "STOPPED", raising=False)
     monkeypatch.setattr(ws, "_LAST_RUNTIME_ERROR", "", raising=False)
     ws._reset_feed_restart_verification(reason="unit_test_reset")
@@ -260,7 +261,7 @@ def test_start_depth_ws_marks_reactor_not_restartable_as_recovery_blocked(monkey
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["ws_connected"] is False
     assert payload["runtime_state"] == "RECOVERY_BLOCKED"
-    assert payload["reconnect_blocked_reason"] == "reactor_not_restartable"
+    assert payload["reconnect_blocked_reason"] == "reactor_not_restartable_process_restart_required"
     assert payload["recovery_action"] == "process_restart_required"
     assert payload["ws_reconnect_allowed"] is False
     assert payload["ws_reconnect_attempted"] is False
@@ -272,7 +273,7 @@ def test_schedule_restart_depth_ws_suppresses_when_reactor_blocked(monkeypatch, 
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
-    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable", raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable_process_restart_required", raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     calls = {"thread": 0, "persist": 0}
     monkeypatch.setattr(
@@ -404,6 +405,8 @@ def test_recovery_blocked_snapshot_contains_process_restart_required(monkeypatch
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
     monkeypatch.setattr(ws, "_restart_verification_enabled", lambda: False, raising=True)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable_process_restart_required", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", True, raising=False)
     payload = ws._emit_reconnect_recovery_blocked_snapshot(
         source="unit_test",
         reason="reactor_not_restartable",
@@ -412,14 +415,14 @@ def test_recovery_blocked_snapshot_contains_process_restart_required(monkeypatch
     assert payload["reactor_not_restartable_detected"] is True
     snapshot = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert snapshot["runtime_state"] == "RECOVERY_BLOCKED"
-    assert snapshot["reconnect_blocked_reason"] == "reactor_not_restartable"
+    assert snapshot["reconnect_blocked_reason"] == "reactor_not_restartable_process_restart_required"
     assert snapshot["recovery_action"] == "process_restart_required"
     assert snapshot["ws_reconnect_allowed"] is False
     assert snapshot["ws_reconnect_attempted"] is False
 
 
 def test_restart_depth_ws_stops_retrying_when_reactor_recovery_is_blocked(monkeypatch):
-    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable", raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable_process_restart_required", raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [101, 202], raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
@@ -430,6 +433,68 @@ def test_restart_depth_ws_stops_retrying_when_reactor_recovery_is_blocked(monkey
 
     assert ws.restart_depth_ws(reason="unit_test_reactor_blocked") is False
     assert calls == {"stop": 0, "start": 0, "persist": 1}
+
+
+def test_reactor_terminal_state_blocks_followup_start_restart_and_schedule(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable_process_restart_required", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", True, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [101, 202], raising=False)
+
+    calls = {"start": 0, "schedule": 0, "thread": 0, "persist": 0}
+    original_persist = ws._persist_runtime_snapshot_row
+    monkeypatch.setattr(
+        ws,
+        "get_kite_ticker",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("reactor terminal state must not create a ticker")),
+        raising=True,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_persist_runtime_snapshot_row",
+        lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1) or original_persist(**kwargs),
+    )
+
+    original_thread = ws.threading.Thread
+
+    class _FailThread(original_thread):
+        def start(self):  # pragma: no cover - defensive
+            calls["thread"] += 1
+            raise AssertionError("reactor terminal state must not start a restart thread")
+
+    monkeypatch.setattr(ws.threading, "Thread", _FailThread, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
+
+    monkeypatch.setattr(
+        ws,
+        "start_depth_ws",
+        lambda *args, **kwargs: calls.__setitem__("start", calls["start"] + 1) or True,
+        raising=True,
+    )
+    assert ws.restart_depth_ws(reason="unit_test_terminal_reactor") is False
+    assert (
+        ws._schedule_restart_depth_ws(
+            reason="ws_error:1006",
+            ignore_cooldown=True,
+            force_full_restart=True,
+            source="unit_test",
+        )
+        is False
+    )
+    assert calls == {"start": 0, "schedule": 0, "thread": 0, "persist": 3}
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["state_machine"]["state"] == "DOWN"
+    assert payload["state_machine"]["reason"] == "reactor_not_restartable_process_restart_required"
+    assert payload["reconnect_blocked_reason"] == "reactor_not_restartable_process_restart_required"
+    assert payload["recovery_action"] == "process_restart_required"
+    assert payload["reactor_not_restartable_detected"] is True
+    assert payload["restart_suppressed"] is True
 
 
 def test_restart_skips_soft_path_when_ws_tick_is_stale_even_if_socket_connected(monkeypatch):

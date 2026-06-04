@@ -491,13 +491,13 @@ def test_write_feed_runtime_snapshot_includes_reconnect_blocked_reason(monkeypat
         option_active_blockers_by_symbol={"NIFTY": ["NO_LIVE_OPTION_FEED"]},
         runtime_state="RECOVERY_BLOCKED",
         last_error="reactor_not_restartable",
-        reconnect_blocked_reason="reactor_not_restartable",
+        reconnect_blocked_reason="reactor_not_restartable_process_restart_required",
     )
 
     feed = json.loads((logs_path / "feed_runtime_latest.json").read_text())
     health = json.loads((logs_path / "runtime_health_latest.json").read_text())
 
-    assert feed["reconnect_blocked_reason"] == "reactor_not_restartable"
+    assert feed["reconnect_blocked_reason"] == "reactor_not_restartable_process_restart_required"
     assert feed["feed_ok"] is False
     assert health["feed"]["runtime_state"] == "RECOVERY_BLOCKED"
 
