@@ -207,6 +207,7 @@ def build_candidate_outcome_truth(
 ) -> CandidateOutcomeTruth:
     obs_list = [_coerce_observation(item) for item in (observations or [])]
     valid_observations = [item for item in obs_list if item is not None]
+    ordered_observations = sorted(valid_observations, key=lambda item: (item.observed_epoch, item.ltp))
     identifier = _candidate_identifier(candidate)
     direction = _direction(candidate)
     signal_epoch = _finite_float(candidate.signal_epoch)
@@ -285,8 +286,12 @@ def build_candidate_outcome_truth(
     if direction == "BUY" and not (stop_loss_price < entry_price < target_price):
         return _invalid_truth(candidate, reason="invalid_buy_risk_model", blocker="INVALID_RISK_MODEL")
 
-    signal_observations = [item for item in valid_observations if item.observed_epoch >= signal_epoch]
-    if not signal_observations:
+    active_observations = [
+        item
+        for item in ordered_observations
+        if signal_epoch <= item.observed_epoch <= timeout_epoch
+    ]
+    if not active_observations:
         return CandidateOutcomeTruth(
             schema_version=CANDIDATE_OUTCOME_TRUTH_SCHEMA_VERSION,
             read_only=True,
@@ -331,8 +336,8 @@ def build_candidate_outcome_truth(
     if direction != "BUY":
         return _invalid_truth(candidate, reason="unsupported_direction", blocker="UNSUPPORTED_DIRECTION")
 
-    max_favorable_price = max(item.ltp for item in signal_observations)
-    min_favorable_price = min(item.ltp for item in signal_observations)
+    max_favorable_price = max(item.ltp for item in active_observations)
+    min_favorable_price = min(item.ltp for item in active_observations)
     mfe_abs = max(0.0, max_favorable_price - entry_price)
     mae_abs = max(0.0, entry_price - min_favorable_price)
     risk_per_unit = entry_price - stop_loss_price
@@ -348,7 +353,7 @@ def build_candidate_outcome_truth(
     target_hit_epoch: float | None = None
     stop_hit_epoch: float | None = None
     ambiguous_epoch: float | None = None
-    for observation in signal_observations:
+    for observation in active_observations:
         target_hit = observation.ltp >= target_price
         stop_hit = observation.ltp <= stop_loss_price
         if observation.bid is not None and observation.ask is not None:
@@ -373,7 +378,7 @@ def build_candidate_outcome_truth(
     stop_hit = False
     timeout_hit = True
     first_hit_epoch: float | None = None
-    gross_r = (signal_observations[-1].ltp - entry_price) / risk_per_unit
+    gross_r = (active_observations[-1].ltp - entry_price) / risk_per_unit
 
     if ambiguous_epoch is not None:
         outcome_status = AMBIGUOUS_SAME_BAR
@@ -400,11 +405,11 @@ def build_candidate_outcome_truth(
         first_hit_epoch = stop_hit_epoch
         gross_r = -1.0
     else:
-        if timeout_epoch is not None and signal_observations[-1].observed_epoch > timeout_epoch:
+        if timeout_epoch is not None and active_observations[-1].observed_epoch > timeout_epoch:
             outcome_reason = "timeout_reached"
         else:
             outcome_reason = "no_exit_before_timeout"
-        if signal_observations[-1].observed_epoch < timeout_epoch:
+        if active_observations[-1].observed_epoch < timeout_epoch:
             outcome_reason = "timeout_not_reached_but_no_target_or_stop"
 
     return CandidateOutcomeTruth(
@@ -443,7 +448,7 @@ def build_candidate_outcome_truth(
         stop_hit=stop_hit,
         timeout_hit=timeout_hit,
         first_hit_epoch=first_hit_epoch,
-        observation_count=len(signal_observations),
+        observation_count=len(active_observations),
         blockers=(),
         warnings=(),
     )

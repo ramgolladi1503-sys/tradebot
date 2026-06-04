@@ -211,3 +211,78 @@ def test_ignores_pre_signal_observations() -> None:
     assert truth.observation_count == 3
     assert truth.first_hit_epoch == 102.0
 
+
+def test_target_after_timeout_is_ignored_and_returns_timeout() -> None:
+    truth = build_candidate_outcome_truth(
+        _candidate(),
+        [
+            PriceObservation(observed_epoch=150.0, ltp=104.0),
+            PriceObservation(observed_epoch=250.0, ltp=111.0),
+        ],
+    )
+
+    payload = truth.to_payload()
+    _safe_flags(payload)
+    assert truth.outcome_status == TIMEOUT
+    assert truth.target_hit is False
+    assert truth.stop_hit is False
+    assert truth.first_hit_epoch is None
+    assert truth.observation_count == 1
+    assert math.isclose(truth.gross_r, 0.8)
+    assert math.isclose(truth.max_favorable_price, 104.0)
+    assert math.isclose(truth.max_adverse_price, 104.0)
+
+
+def test_stop_after_timeout_is_ignored_and_returns_timeout() -> None:
+    truth = build_candidate_outcome_truth(
+        _candidate(),
+        [
+            PriceObservation(observed_epoch=150.0, ltp=104.0),
+            PriceObservation(observed_epoch=250.0, ltp=94.0),
+        ],
+    )
+
+    payload = truth.to_payload()
+    _safe_flags(payload)
+    assert truth.outcome_status == TIMEOUT
+    assert truth.target_hit is False
+    assert truth.stop_hit is False
+    assert truth.first_hit_epoch is None
+    assert truth.observation_count == 1
+    assert math.isclose(truth.gross_r, 0.8)
+
+
+def test_unsorted_observations_are_processed_chronologically() -> None:
+    truth = build_candidate_outcome_truth(
+        _candidate(),
+        [
+            PriceObservation(observed_epoch=120.0, ltp=111.0),
+            PriceObservation(observed_epoch=110.0, ltp=94.0),
+        ],
+    )
+
+    payload = truth.to_payload()
+    _safe_flags(payload)
+    assert truth.outcome_status == STOP_HIT
+    assert truth.first_hit_epoch == 110.0
+
+
+def test_mfe_mae_ignore_post_timeout_prices() -> None:
+    truth = build_candidate_outcome_truth(
+        _candidate(),
+        [
+            PriceObservation(observed_epoch=150.0, ltp=104.0),
+            PriceObservation(observed_epoch=160.0, ltp=97.0),
+            PriceObservation(observed_epoch=250.0, ltp=150.0),
+            PriceObservation(observed_epoch=260.0, ltp=80.0),
+        ],
+    )
+
+    payload = truth.to_payload()
+    _safe_flags(payload)
+    assert truth.outcome_status == TIMEOUT
+    assert math.isclose(truth.mfe_abs, 4.0)
+    assert math.isclose(truth.mae_abs, 3.0)
+    assert truth.observation_count == 2
+    assert math.isclose(truth.max_favorable_price, 104.0)
+    assert math.isclose(truth.max_adverse_price, 97.0)
