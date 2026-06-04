@@ -134,6 +134,10 @@ from core.market_snapshot_store import write_market_snapshot_atomic
 from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
 from core.runtime_snapshot_store import write_top_opportunities_snapshots
 from core.ranked_pipeline_evidence import write_ranked_pipeline_evidence
+from core.runtime_execution_truth import (
+    build_execution_truth_context,
+    normalize_candidate_execution_truth_payload,
+)
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
@@ -586,9 +590,9 @@ def _candidate_runtime_truth_summary(candidate) -> dict:
     }
 
 
-def _candidate_trace_payload(candidate) -> dict:
+def _candidate_trace_payload(candidate, *, execution_truth_context: dict | None = None) -> dict:
     runtime_truth = _candidate_runtime_truth_summary(candidate)
-    return {
+    payload = {
         "symbol": _trade_attr(candidate, "symbol"),
         "trade_id": _trade_attr(candidate, "trade_id"),
         "strategy_family": _trade_attr(candidate, "strategy_family"),
@@ -605,6 +609,9 @@ def _candidate_trace_payload(candidate) -> dict:
         "reason": _trade_attr(candidate, "reason"),
         **runtime_truth,
     }
+    if execution_truth_context is not None:
+        payload = normalize_candidate_execution_truth_payload(payload, execution_truth_context=execution_truth_context)
+    return payload
 
 
 def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[str] | None = None) -> dict:
@@ -1160,6 +1167,7 @@ def _build_top_opportunities_payload(
     executable_top_n: int | None = None,
     advisory_top_n: int | None = None,
     active_trade: dict | None = None,
+    execution_truth_context: dict | None = None,
 ) -> dict:
     candidates, _ = _filter_invalid_cycle_candidates(candidates, symbol="GLOBAL")
     exec_limit = max(0, int(executable_top_n if executable_top_n is not None else getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)))
@@ -1252,23 +1260,51 @@ def _build_top_opportunities_payload(
 
     top_executable = _project(top_executable_seed, "executable")
     top_advisory = _project(top_advisory_seed, "advisory")
-    if phase2_state in {"ENTER", "REPLACE", "HOLD"}:
+    top_executable_evidence = [
+        normalize_candidate_execution_truth_payload(row, execution_truth_context=execution_truth_context)
+        for row in top_executable
+    ] if execution_truth_context is not None else list(top_executable)
+    top_advisory_evidence = [
+        normalize_candidate_execution_truth_payload(row, execution_truth_context=execution_truth_context)
+        for row in top_advisory
+    ] if execution_truth_context is not None else list(top_advisory)
+    if execution_truth_context is None:
+        top_executable_truth = list(top_executable_evidence)
+        top_advisory_truth = list(top_advisory_evidence)
+        top_blocked_truth = []
+    else:
+        top_executable_truth = [row for row in top_executable_evidence if bool(row.get("reportable_executable"))]
+        top_advisory_truth = [row for row in top_advisory_evidence if str(row.get("visibility_bucket") or "").strip().lower() == "advisory"]
+        top_blocked_truth = [row for row in top_executable_evidence if str(row.get("visibility_bucket") or "").strip().lower() == "blocked"]
+    top_executable_block_reasons = []
+    if execution_truth_context is not None and top_executable_truth:
+        for row in top_executable_truth:
+            top_executable_block_reasons.extend([str(reason) for reason in list(row.get("execution_truth_blockers") or []) if str(reason).strip()])
+    if execution_truth_context is not None and top_blocked_truth:
+        for row in top_blocked_truth:
+            top_executable_block_reasons.extend([str(reason) for reason in list(row.get("execution_truth_blockers") or []) if str(reason).strip()])
+    truth_executable_count = sum(1 for row in top_executable_truth if bool(row.get("reportable_executable")))
+    if truth_executable_count > 0 and phase2_state in {"ENTER", "REPLACE", "HOLD"}:
         selector_outcome = "EXECUTE_TOP"
     elif phase2_state == "WATCHLIST":
         selector_outcome = "WATCHLIST_ONLY"
     else:
         selector_outcome = "NO_EXECUTABLE_OPPORTUNITY"
     return {
-        "top_executable_opportunities": top_executable,
-        "top_advisory_opportunities": top_advisory,
-        "top_executable_count": int(len(top_executable)),
-        "top_advisory_count": int(len(top_advisory)),
+        "top_executable_opportunities": top_executable_truth,
+        "top_advisory_opportunities": top_advisory_truth,
+        "top_blocked_opportunities": top_blocked_truth,
+        "top_executable_count": int(truth_executable_count),
+        "top_advisory_count": int(len(top_advisory_truth)),
+        "top_blocked_count": int(len(top_blocked_truth)),
         "source_candidate_count": int(len(candidates or [])),
         "selector_outcome": selector_outcome,
         "phase2_state": phase2_state,
         "phase2_reason": str(phase2_result.get("reason") or ""),
         "phase2_ranked_count": int(len(ranked)),
         "phase2_selected_trade_id": selected_id or None,
+        "execution_truth_blockers": list(dict.fromkeys(top_executable_block_reasons)),
+        "top_executable_block_reasons": list(dict.fromkeys(top_executable_block_reasons)),
         "cycle_primary_reason": cycle_primary_reason,
         "_phase2_next_active_trade": phase2_result.get("next_active_trade"),
         "notes": notes,
@@ -5502,17 +5538,24 @@ class Orchestrator:
                             softened,
                             fallback,
                         )
+                    execution_truth_context = build_execution_truth_context(
+                        market_data=market_data,
+                        latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
+                    )
+                    truth_candidate_rows = [
+                        _candidate_trace_payload(cand, execution_truth_context=execution_truth_context)
+                        for cand in real_candidates
+                    ]
                     ranked_executable_candidates = [
-                        cand for cand in real_candidates
-                        if _is_reportable_executable_candidate(cand)
+                        row for row in truth_candidate_rows if bool(row.get("reportable_executable"))
                     ]
                     ranked_advisory_candidates = [
-                        cand for cand in real_candidates
-                        if _candidate_visibility_bucket(cand) == "advisory"
+                        row for row in truth_candidate_rows
+                        if str(row.get("visibility_bucket") or "").strip().lower() == "advisory"
                     ]
                     ranked_blocked_candidates = [
-                        cand for cand in real_candidates
-                        if _candidate_visibility_bucket(cand) == "blocked"
+                        row for row in truth_candidate_rows
+                        if str(row.get("visibility_bucket") or "").strip().lower() == "blocked"
                     ]
                     post_real_filter_count = len(real_candidates)
                     post_executable_filter_count = len(ranked_executable_candidates)
@@ -5645,25 +5688,25 @@ class Orchestrator:
                             {"symbol": sym, "count": len(ranked_blocked_candidates)},
                         )
                         if real_candidates:
-                            top = real_candidates[0]
+                            top = truth_candidate_rows[0]
                             print(
                                 "TB_TOP_REAL_CANDIDATE",
-                                _candidate_trace_payload(top),
+                                top,
                             )
                         if ranked_executable_candidates:
                             print(
                                 "TB_TOP_EXECUTABLE_CANDIDATE",
-                                _candidate_trace_payload(ranked_executable_candidates[0]),
+                                ranked_executable_candidates[0],
                             )
                         if ranked_advisory_candidates:
                             print(
                                 "TB_TOP_ADVISORY_CANDIDATE",
-                                _candidate_trace_payload(ranked_advisory_candidates[0]),
+                                ranked_advisory_candidates[0],
                             )
                         if ranked_blocked_candidates:
                             print(
                                 "TB_TOP_BLOCKED_CANDIDATE",
-                                _candidate_trace_payload(ranked_blocked_candidates[0]),
+                                ranked_blocked_candidates[0],
                             )
                         if synthetic_candidates:
                             top_synth = synthetic_candidates[0]
@@ -5687,7 +5730,7 @@ class Orchestrator:
                                     "post_executable_filter_count": post_executable_filter_count,
                                     "ranked_total_count": len(real_candidates),
                                     "ranked_executable_count": len(ranked_executable_candidates),
-                                    "top_reportable_executable": _candidate_trace_payload(ranked_executable_candidates[0]),
+                                    "top_reportable_executable": ranked_executable_candidates[0],
                                     "cycle_ranked_candidates_count_before_append": cycle_ranked_candidates_before_append,
                                     "cycle_ranked_candidates_count_after_append": cycle_ranked_candidates_after_append,
                                 }
@@ -7131,6 +7174,10 @@ class Orchestrator:
                         executable_top_n=int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
                         advisory_top_n=int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
                         active_trade=self._phase2_active_trade if isinstance(self._phase2_active_trade, dict) else None,
+                        execution_truth_context=build_execution_truth_context(
+                            feed_truth=feed_truth_payload if isinstance(feed_truth_payload, dict) else {},
+                            latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
+                        ),
                     )
                     try:
                         root_cause_payload = build_candidate_handoff_root_cause_payload(
