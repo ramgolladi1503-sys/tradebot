@@ -119,6 +119,38 @@ def test_top_opportunities_payload_suppresses_executable_output_when_feed_truth_
     assert payload["selector_outcome"] == "NO_EXECUTABLE_OPPORTUNITY"
 
 
+
+
+def test_candidate_trace_payload_blocks_ltp_stale_even_when_candidate_looks_executable():
+    payload = orchestrator._candidate_trace_payload(
+        _candidate(),
+        execution_truth_context=build_execution_truth_context(
+            market_data={
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "feed_truth_state": "LIVE",
+                "feed_truth_reason_code": "STALE_OPTION_LTP",
+                "option_feed_block_reason": "STALE_OPTION_LTP",
+                "quote_health": {"state": "STALE", "stale_reasons": ["LTP_STALE AGE=4.17 MAX=2.50"]},
+            },
+            latency_guard={},
+        ),
+    )
+
+    assert payload["reportable_executable"] is False
+    assert payload["execution_allowed"] is False
+    assert payload["eligible_for_execution"] is False
+    assert payload["permission"] == "BLOCK"
+    assert payload["final_action"] == "BLOCK"
+    assert payload["execution_status"] == "blocked"
+    assert payload["candidate_status"] == "blocked"
+    assert payload["visibility_bucket"] == "blocked"
+    assert payload["readiness"] == "BLOCKED"
+    assert payload["execution_truth_state"] == "blocked"
+    assert payload["execution_truth_blocked"] is True
+    assert "STALE_OPTION_LTP" in payload["execution_truth_blockers"]
+    assert any("LTP_STALE" in reason for reason in payload["execution_truth_blockers"])
+
 def test_phase2_rejection_evidence_emits_hard_execution_blocker_details():
     payload = build_phase2_rejection_evidence_payload(
         phase2_state="ENTER",
