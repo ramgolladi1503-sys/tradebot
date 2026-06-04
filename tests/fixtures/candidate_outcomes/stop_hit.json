@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "fixture_id": "stop_hit",
+  "description": "BUY candidate hits stop before target.",
+  "candidate": {
+    "candidate_id": "cand-stop-1",
+    "trade_id": "trade-stop-1",
+    "strategy_family": "breakout",
+    "symbol": "BANKNIFTY",
+    "index": "BANKNIFTY",
+    "regime": "TREND_DOWN",
+    "expiry_type": "WEEKLY",
+    "signal_epoch": 100.0,
+    "entry_price": 100.0,
+    "stop_loss_price": 95.0,
+    "target_price": 110.0,
+    "timeout_epoch": 200.0,
+    "side": "BUY",
+    "feed_truth_state": "LIVE",
+    "reportable_executable": true,
+    "execution_allowed": true,
+    "estimated_cost_r": 0.25
+  },
+  "observations": [
+    { "observed_epoch": 101.0, "ltp": 98.0 },
+    { "observed_epoch": 102.0, "ltp": 94.0 }
+  ],
+  "expected": {
+    "outcome_status": "STOP_HIT",
+    "gross_r": -1.0,
+    "cost_adjusted_r": -1.25
+  },
+  "metadata": {
+    "closed_environment": true,
+    "source": "synthetic"
+  }
+}

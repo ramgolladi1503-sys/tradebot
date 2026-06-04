@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "fixture_id": "not_executable",
+  "description": "Non-reportable candidate remains not executable.",
+  "candidate": {
+    "candidate_id": "cand-none-1",
+    "trade_id": "trade-none-1",
+    "strategy_family": "breakout",
+    "symbol": "NIFTY",
+    "index": "NIFTY",
+    "regime": "TREND_UP",
+    "expiry_type": "WEEKLY",
+    "signal_epoch": 100.0,
+    "entry_price": 100.0,
+    "stop_loss_price": 95.0,
+    "target_price": 110.0,
+    "timeout_epoch": 200.0,
+    "side": "BUY",
+    "feed_truth_state": "LIVE",
+    "reportable_executable": false,
+    "execution_allowed": false
+  },
+  "observations": [
+    { "observed_epoch": 101.0, "ltp": 120.0 }
+  ],
+  "expected": {
+    "outcome_status": "NOT_EXECUTABLE",
+    "gross_r": 0.0,
+    "cost_adjusted_r": 0.0
+  },
+  "metadata": {
+    "closed_environment": true,
+    "source": "synthetic"
+  }
+}
