@@ -222,3 +222,8 @@ Required next live validation:
 ## Human Approval
 
 This PR requires explicit human approval before merge because it touches high-risk orchestrator evidence wiring, even though it remains read-only and fail-closed.
+
+## Regression Follow-Up
+
+- Updated after the top-opportunity truth regression to ensure stale feed / latency-guard blockers cannot be reported as executable-looking top candidates.
+- This follow-up remains evidence-only and does not change strategy, ranking, Phase2, broker, or UI behavior.

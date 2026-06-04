@@ -4748,6 +4748,7 @@ class Orchestrator:
             self._gate_status_cycle_id = f"{int(now_utc_epoch() * 1000)}"
             market_data_list = []
             feature_timing: dict[str, float] = {}
+            feed_truth_payload: dict = _read_json_dict(logs_dir() / "feed_truth_latest.json")
             try:
                 # Hot-reload config to pick up FORCE_REGIME changes
                 try:
@@ -5540,6 +5541,7 @@ class Orchestrator:
                         )
                     execution_truth_context = build_execution_truth_context(
                         market_data=market_data,
+                        feed_truth=feed_truth_payload if isinstance(feed_truth_payload, dict) else {},
                         latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                     )
                     truth_candidate_rows = [
@@ -7169,6 +7171,7 @@ class Orchestrator:
                 except Exception as funnel_exc:
                     logger.warning("pipeline_funnel_write_failed err=%s", funnel_exc)
                 try:
+                    feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
                     top_payload = _build_top_opportunities_payload(
                         candidates=list(cycle_ranked_candidates),
                         executable_top_n=int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
