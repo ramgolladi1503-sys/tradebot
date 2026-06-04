@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "fixture_id": "timeout",
+  "description": "BUY candidate times out after a favorable but insufficient move.",
+  "candidate": {
+    "candidate_id": "cand-timeout-1",
+    "trade_id": "trade-timeout-1",
+    "strategy_family": "breakout",
+    "symbol": "NIFTY",
+    "index": "NIFTY",
+    "regime": "TREND_UP",
+    "expiry_type": "WEEKLY",
+    "signal_epoch": 100.0,
+    "entry_price": 100.0,
+    "stop_loss_price": 95.0,
+    "target_price": 110.0,
+    "timeout_epoch": 200.0,
+    "side": "BUY",
+    "feed_truth_state": "LIVE",
+    "reportable_executable": true,
+    "execution_allowed": true,
+    "estimated_cost_r": 0.25
+  },
+  "observations": [
+    { "observed_epoch": 101.0, "ltp": 103.0 },
+    { "observed_epoch": 199.0, "ltp": 104.0 }
+  ],
+  "expected": {
+    "outcome_status": "TIMEOUT",
+    "gross_r": 0.8,
+    "cost_adjusted_r": 0.55
+  },
+  "metadata": {
+    "closed_environment": true,
+    "source": "synthetic"
+  }
+}

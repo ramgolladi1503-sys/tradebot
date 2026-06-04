@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "fixture_id": "post_timeout_target_ignored",
+  "description": "Target printed after timeout is ignored and timeout wins.",
+  "candidate": {
+    "candidate_id": "cand-post-timeout-1",
+    "trade_id": "trade-post-timeout-1",
+    "strategy_family": "breakout",
+    "symbol": "NIFTY",
+    "index": "NIFTY",
+    "regime": "TREND_UP",
+    "expiry_type": "WEEKLY",
+    "signal_epoch": 100.0,
+    "entry_price": 100.0,
+    "stop_loss_price": 95.0,
+    "target_price": 110.0,
+    "timeout_epoch": 200.0,
+    "side": "BUY",
+    "feed_truth_state": "LIVE",
+    "reportable_executable": true,
+    "execution_allowed": true
+  },
+  "observations": [
+    { "observed_epoch": 150.0, "ltp": 104.0 },
+    { "observed_epoch": 250.0, "ltp": 111.0 }
+  ],
+  "expected": {
+    "outcome_status": "TIMEOUT",
+    "gross_r": 0.8,
+    "cost_adjusted_r": 0.8
+  },
+  "metadata": {
+    "closed_environment": true,
+    "source": "synthetic"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "fixture_id": "target_hit",
+  "description": "BUY candidate reaches target before stop.",
+  "candidate": {
+    "candidate_id": "cand-target-1",
+    "trade_id": "trade-target-1",
+    "strategy_family": "breakout",
+    "symbol": "NIFTY",
+    "index": "NIFTY",
+    "regime": "TREND_UP",
+    "expiry_type": "WEEKLY",
+    "signal_epoch": 100.0,
+    "entry_price": 100.0,
+    "stop_loss_price": 95.0,
+    "target_price": 110.0,
+    "timeout_epoch": 200.0,
+    "side": "BUY",
+    "feed_truth_state": "LIVE",
+    "reportable_executable": true,
+    "execution_allowed": true,
+    "estimated_cost_r": 0.25
+  },
+  "observations": [
+    { "observed_epoch": 101.0, "ltp": 103.0 },
+    { "observed_epoch": 102.0, "ltp": 110.0 }
+  ],
+  "expected": {
+    "outcome_status": "TARGET_HIT",
+    "gross_r": 2.0,
+    "cost_adjusted_r": 1.75
+  },
+  "metadata": {
+    "closed_environment": true,
+    "source": "synthetic"
+  }
+}
