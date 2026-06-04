@@ -381,6 +381,7 @@ def test_on_error_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
@@ -431,6 +432,7 @@ def test_on_close_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
@@ -532,6 +534,7 @@ def test_reactor_terminal_state_blocks_followup_start_restart_and_schedule(monke
 
     stable_rest_client = _StableRestClient()
     monkeypatch.setattr(ws.kite_client, "ensure", lambda: stable_rest_client, raising=False)
+    monkeypatch.setattr(ws.kite_client, "_next_expiry_cache", {}, raising=False)
     monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
     monkeypatch.setattr(ws.kite_client, "instruments", lambda *args, **kwargs: [], raising=False)
     monkeypatch.setattr(incidents, "create_incident", lambda *args, **kwargs: "incident-test", raising=False)
