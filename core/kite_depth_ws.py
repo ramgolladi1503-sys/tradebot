@@ -126,6 +126,9 @@ _LAST_OPTION_COUNTS_BY_SYMBOL: dict[str, int] = {}
 _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL: dict[str, int] = {}
 _DEPTH_WS_START_EPOCH: float = 0.0
 _RECONNECT_BLOCKED_REASON: str = ""
+_RECONNECT_BLOCKED_SINCE_EPOCH: float = 0.0
+_LAST_DISCONNECTED_CODE: int | None = None
+_LAST_DISCONNECTED_REASON: str = ""
 _REACTOR_NOT_RESTARTABLE_DETECTED: bool = False
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
@@ -1167,17 +1170,8 @@ def _reactor_terminal_restart_block_active() -> bool:
 
 
 def _is_terminal_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
-    try:
-        code_int = int(code) if code is not None else None
-    except Exception:
-        code_int = None
     reason_lower = str(reason_text or "").strip().lower()
-    if code_int == 1006:
-        return True
     terminal_reason_markers = (
-        "connection was closed uncleanly",
-        "connection closed uncleanly",
-        "peer dropped",
         "main loop terminated",
         "reactornotrestartable",
         "reactor not restartable",
@@ -1186,14 +1180,31 @@ def _is_terminal_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
 
 
 def _set_reconnect_blocked_reason(reason: str) -> str:
-    global _RECONNECT_BLOCKED_REASON, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _REACTOR_NOT_RESTARTABLE_DETECTED
+    global _RECONNECT_BLOCKED_REASON, _RECONNECT_BLOCKED_SINCE_EPOCH, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _REACTOR_NOT_RESTARTABLE_DETECTED
     blocked = str(reason or "").strip().lower() or "unknown_reconnect_block"
     _RECONNECT_BLOCKED_REASON = blocked
+    if not _RECONNECT_BLOCKED_SINCE_EPOCH:
+        try:
+            _RECONNECT_BLOCKED_SINCE_EPOCH = float(time.time())
+        except Exception:
+            _RECONNECT_BLOCKED_SINCE_EPOCH = 0.0
     _RUNTIME_STATE = "RECOVERY_BLOCKED"
     _LAST_RUNTIME_ERROR = blocked[:1000]
     if blocked.startswith("reactor_not_restartable"):
         _REACTOR_NOT_RESTARTABLE_DETECTED = True
     return blocked
+
+
+def _set_last_disconnected_info(*, code: int | None = None, reason: str | None = None) -> None:
+    global _LAST_DISCONNECTED_CODE, _LAST_DISCONNECTED_REASON
+    _LAST_DISCONNECTED_CODE = int(code) if code is not None else None
+    _LAST_DISCONNECTED_REASON = str(reason or "").strip()
+
+
+def _clear_last_disconnected_info() -> None:
+    global _LAST_DISCONNECTED_CODE, _LAST_DISCONNECTED_REASON
+    _LAST_DISCONNECTED_CODE = None
+    _LAST_DISCONNECTED_REASON = ""
 
 
 def _block_reconnect_for_process_restart(*, source: str, code: int | None = None, reason: str | None = None) -> str:
@@ -1234,14 +1245,22 @@ def _reconnect_recovery_blocked_payload(*, reason: str, source: str) -> dict[str
         "source": source,
         "reason": blocked_reason,
         "reconnect_blocked_reason": blocked_reason,
+        "restart_blocked_reason": blocked_reason,
         "recovery_action": "process_restart_required",
+        "process_restart_required": True,
+        "recovery_blocked": True,
         "runtime_state": "RECOVERY_BLOCKED",
         "ws_connected": False,
         "last_error": blocked_reason,
+        "restart_attempt_allowed": False,
+        "restart_attempted": False,
         "ws_reconnect_allowed": False,
         "ws_reconnect_attempted": False,
         "restart_suppressed": True,
         "reactor_not_restartable_detected": reactor_not_restartable,
+        "reconnect_blocked_since_epoch": float(_RECONNECT_BLOCKED_SINCE_EPOCH or 0.0) or None,
+        "no_order_action": True,
+        "order_safe": True,
     }
     _log_ws("FEED_RECONNECT_SUPPRESSED_RECOVERY_BLOCKED", payload)
     return payload
@@ -1260,8 +1279,9 @@ def _emit_reconnect_recovery_blocked_snapshot(*, source: str, reason: str) -> di
 
 
 def _clear_reconnect_blocked_reason() -> None:
-    global _RECONNECT_BLOCKED_REASON, _REACTOR_NOT_RESTARTABLE_DETECTED
+    global _RECONNECT_BLOCKED_REASON, _RECONNECT_BLOCKED_SINCE_EPOCH, _REACTOR_NOT_RESTARTABLE_DETECTED
     _RECONNECT_BLOCKED_REASON = ""
+    _RECONNECT_BLOCKED_SINCE_EPOCH = 0.0
     _REACTOR_NOT_RESTARTABLE_DETECTED = False
 
 
@@ -1438,6 +1458,7 @@ def _reset_feed_restart_verification(*, reason: str) -> None:
         _FEED_RESTART_VERIFY_VERIFIED_EPOCH = None
         _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
         _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = ""
+    _clear_last_disconnected_info()
 
 
 def _begin_feed_restart_verification(*, reason: str, start_epoch: float, now_epoch: float) -> None:
@@ -1647,6 +1668,7 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
         if _reconnect_recovery_blocked_active():
             cleared_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
             _clear_reconnect_blocked_reason()
+            _clear_last_disconnected_info()
             _log_ws(
                 "FEED_RECONNECT_RECOVERY_CLEARED",
                 {
@@ -1943,7 +1965,12 @@ def _write_feed_runtime_snapshot(
     stale_strikes: int = 0,
     runtime_state: str | None = None,
     last_error: str | None = None,
+    disconnected_code: int | None = None,
+    disconnected_reason: str | None = None,
     reconnect_blocked_reason: str | None = None,
+    restart_attempt_allowed: bool | None = None,
+    restart_attempted: bool | None = None,
+    restart_blocked_reason: str | None = None,
 ) -> None:
     path = logs_dir() / "feed_runtime_latest.json"
     raw_state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
@@ -1958,6 +1985,20 @@ def _write_feed_runtime_snapshot(
         reconnect_blocked_reason=reconnect_blocked_reason,
         ws_connected=ws_connected,
     )
+    disconnected_code_value = disconnected_code if disconnected_code is not None else _LAST_DISCONNECTED_CODE
+    disconnected_reason_value = disconnected_reason if disconnected_reason is not None else _LAST_DISCONNECTED_REASON
+    if (
+        not normalized_blocked_reason
+        and effective_state_text == "RUNNING"
+        and (disconnected_code_value is not None or str(disconnected_reason_value or "").strip())
+    ):
+        effective_state_text = "RESTARTING"
+    if (
+        not normalized_blocked_reason
+        and effective_state_text == "RESTARTING"
+        and (disconnected_code_value is not None or str(disconnected_reason_value or "").strip())
+    ):
+        ws_connected = False
     payload = {
         "ts_epoch": float(now_epoch),
         "ws_connected": ws_connected,
@@ -1987,16 +2028,45 @@ def _write_feed_runtime_snapshot(
         "stale_strikes": int(stale_strikes),
         "runtime_state": effective_state_text,
         "last_error": str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000],
+        "disconnected_code": int(disconnected_code_value) if disconnected_code_value is not None else None,
+        "disconnected_reason": str(disconnected_reason_value or "").strip() or None,
         "reconnect_blocked_reason": normalized_blocked_reason,
+        "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
     if payload["reconnect_blocked_reason"]:
         payload.update(
             {
                 "recovery_action": "process_restart_required",
+                "process_restart_required": True,
+                "recovery_blocked": True,
+                "restart_attempt_allowed": False if restart_attempt_allowed is None else bool(restart_attempt_allowed),
+                "restart_attempted": False if restart_attempted is None else bool(restart_attempted),
                 "ws_reconnect_allowed": False,
                 "ws_reconnect_attempted": False,
                 "restart_suppressed": True,
                 "reactor_not_restartable_detected": payload["reconnect_blocked_reason"].startswith("reactor_not_restartable"),
+                "reconnect_blocked_since_epoch": float(_RECONNECT_BLOCKED_SINCE_EPOCH or 0.0) or None,
+                "no_order_action": True,
+                "order_safe": True,
+            }
+        )
+    else:
+        payload.update(
+            {
+                "process_restart_required": False,
+                "recovery_blocked": False,
+                "restart_attempt_allowed": bool(restart_attempt_allowed) if restart_attempt_allowed is not None else (str(effective_state_text).strip().upper() not in {"STOPPED", "AUTH_BLOCKED", "IMPORT_MISSING"}),
+                "restart_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
+                    disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
+                ),
+                "restart_suppressed": False,
+                "ws_reconnect_allowed": True if ws_connected is not False else False,
+                "ws_reconnect_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
+                    disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
+                ),
+                "restart_blocked_reason": None,
+                "no_order_action": True,
+                "order_safe": True,
             }
         )
     if restart_verify:
@@ -2055,8 +2125,13 @@ def _persist_runtime_snapshot_row(
     now_epoch: float | None = None,
     runtime_state: str | None = None,
     last_error: str | None = None,
+    disconnected_code: int | None = None,
+    disconnected_reason: str | None = None,
     intended_tokens_count: int | None = None,
     reconnect_blocked_reason: str | None = None,
+    restart_attempt_allowed: bool | None = None,
+    restart_attempted: bool | None = None,
+    restart_blocked_reason: str | None = None,
 ) -> None:
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
@@ -2111,6 +2186,14 @@ def _persist_runtime_snapshot_row(
         ws_connected=ws_connected,
     )
     restart_verify = _restart_verify_overlay_payload()
+    disconnected_code_value = disconnected_code if disconnected_code is not None else _LAST_DISCONNECTED_CODE
+    disconnected_reason_value = disconnected_reason if disconnected_reason is not None else _LAST_DISCONNECTED_REASON
+    if (
+        not normalized_blocked_reason
+        and effective_state_text == "RESTARTING"
+        and (disconnected_code_value is not None or str(disconnected_reason_value or "").strip())
+    ):
+        ws_connected = False
     payload = {
         "ts_epoch": ts_epoch,
         "ws_connected": ws_connected,
@@ -2142,16 +2225,45 @@ def _persist_runtime_snapshot_row(
         "source": source,
         "runtime_state": effective_state_text,
         "last_error": err_text,
+        "disconnected_code": int(disconnected_code_value) if disconnected_code_value is not None else None,
+        "disconnected_reason": str(disconnected_reason_value or "").strip() or None,
         "reconnect_blocked_reason": normalized_blocked_reason,
+        "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
     if payload["reconnect_blocked_reason"]:
         payload.update(
             {
                 "recovery_action": "process_restart_required",
+                "process_restart_required": True,
+                "recovery_blocked": True,
+                "restart_attempt_allowed": False if restart_attempt_allowed is None else bool(restart_attempt_allowed),
+                "restart_attempted": False if restart_attempted is None else bool(restart_attempted),
                 "ws_reconnect_allowed": False,
                 "ws_reconnect_attempted": False,
                 "restart_suppressed": True,
                 "reactor_not_restartable_detected": payload["reconnect_blocked_reason"].startswith("reactor_not_restartable"),
+                "reconnect_blocked_since_epoch": float(_RECONNECT_BLOCKED_SINCE_EPOCH or 0.0) or None,
+                "no_order_action": True,
+                "order_safe": True,
+            }
+        )
+    else:
+        payload.update(
+            {
+                "process_restart_required": False,
+                "recovery_blocked": False,
+                "restart_attempt_allowed": bool(restart_attempt_allowed) if restart_attempt_allowed is not None else (state_text not in {"STOPPED", "AUTH_BLOCKED", "IMPORT_MISSING"}),
+                "restart_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
+                    disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
+                ),
+                "restart_suppressed": False,
+                "ws_reconnect_allowed": True if ws_connected is not False else False,
+                "ws_reconnect_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
+                    disconnected_code_value is not None or str(disconnected_reason_value or "").strip()
+                ),
+                "restart_blocked_reason": None,
+                "no_order_action": True,
+                "order_safe": True,
             }
         )
     if restart_verify:
@@ -3820,6 +3932,8 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             runtime_state="RESTARTING",
             last_error=str(reason),
             intended_tokens_count=len(tokens),
+            restart_attempt_allowed=True,
+            restart_attempted=True,
         )
 
         stop_depth_ws(reason=f"restart:{reason}")
@@ -4285,6 +4399,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
             _log_ws("FEED_CONNECT", {"tokens": len(tokens), "response": str(response)})
             logger.info(
@@ -4323,6 +4438,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     def on_reconnect(ws, attempts):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
             _resubscribe_full(ws, reason=f"reconnect:{attempts}")
             _RUNTIME_STATE = "RUNNING"
@@ -4345,10 +4461,19 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 last_error=_LAST_RUNTIME_ERROR,
             )
 
+    ws_fault_seen = False
+
     def on_error(ws, code, reason):
-        nonlocal handshake_soft_reset_used
+        nonlocal handshake_soft_reset_used, ws_fault_seen
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         reason_text = str(reason)
+        code_int = None
+        try:
+            code_int = int(code) if code is not None else None
+        except Exception:
+            code_int = None
+        _set_last_disconnected_info(code=code_int, reason=reason_text)
+        ws_fault_seen = True
         _log_ws("FEED_ERROR", {"code": code, "reason": reason_text, "profile_verified": bool(computed_profile_verified)})
         _RUNTIME_STATE = "SUBSCRIBE_FAILED"
         _LAST_RUNTIME_ERROR = f"{code}:{reason_text}"[:1000]
@@ -4357,13 +4482,10 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             source=f"on_error:{code}",
             runtime_state="SUBSCRIBE_FAILED",
             last_error=_LAST_RUNTIME_ERROR,
+            disconnected_code=code_int,
+            disconnected_reason=reason_text,
         )
         logger.warning("kite_ws_error code=%s reason=%s", code, reason)
-        code_int = None
-        try:
-            code_int = int(code) if code is not None else None
-        except Exception:
-            code_int = None
         if is_auth_error(code=code_int, reason_text=reason_text):
             failure_proof = build_ws_auth_failure_proof_event(
                 public_key=api_key,
@@ -4391,9 +4513,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             _log_ws("FEED_HANDSHAKE_SUPPRESS_RESTART", {"code": code, "reason": reason_text})
             return
         fatal = False
-        if code in (1006, 1011, 1012):
+        if code in (1011, 1012):
             fatal = True
-        if "connection" in reason_lower and "closed" in reason_lower:
+        if "connection was closed uncleanly" in reason_lower:
             fatal = True
         stop_set = bool(_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set())
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
@@ -4409,6 +4531,16 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                         reason=blocked_reason,
                     )
                     return
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"on_error:restart_attempt:{code}",
+                    runtime_state="RESTARTING",
+                    last_error=_LAST_RUNTIME_ERROR,
+                    disconnected_code=code_int,
+                    disconnected_reason=reason_text,
+                    restart_attempt_allowed=True,
+                    restart_attempted=True,
+                )
                 _log_ws(
                     "FEED_INTERNAL_RECONNECT_FORCE_FULL",
                     {"source": "on_error", "code": code, "reason": reason_text},
@@ -4423,7 +4555,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             restart_depth_ws(reason=f"ws_error:{code}", ignore_cooldown=ignore_cooldown)
 
     def on_close(ws, code, reason):
+        nonlocal ws_fault_seen
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        code_int = None
+        try:
+            code_int = int(code) if code is not None else None
+        except Exception:
+            code_int = None
+        reason_text = str(reason)
+        reason_lower = reason_text.lower()
+        _set_last_disconnected_info(code=code_int, reason=reason_text)
+        ws_fault_seen = True
         if _AUTH_REQUIRED_LATCH:
             close_failure_proof = build_ws_auth_failure_proof_event(
                 public_key=api_key,
@@ -4466,19 +4608,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             source=f"on_close:{code}",
             runtime_state="SUBSCRIBE_FAILED",
             last_error=_LAST_RUNTIME_ERROR,
+            disconnected_code=code_int,
+            disconnected_reason=reason_text,
         )
         logger.warning("kite_ws_close code=%s reason=%s", code, reason)
-        code_int = None
-        try:
-            code_int = int(code) if code is not None else None
-        except Exception:
-            code_int = None
-        reason_text = str(reason)
-        reason_lower = reason_text.lower()
         fatal = False
-        if code_int in (1006, 1011, 1012):
+        if code_int in (1011, 1012):
             fatal = True
-        if "connection" in reason_lower and "closed" in reason_lower:
+        if "connection was closed uncleanly" in reason_lower:
             fatal = True
         if is_market_open_ist():
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
@@ -4494,6 +4631,16 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                             reason=blocked_reason,
                         )
                         return
+                    _persist_runtime_snapshot_row(
+                        ws_connected=False,
+                        source=f"on_close:restart_attempt:{code}",
+                        runtime_state="RESTARTING",
+                        last_error=_LAST_RUNTIME_ERROR,
+                        disconnected_code=code_int,
+                        disconnected_reason=reason_text,
+                        restart_attempt_allowed=True,
+                        restart_attempted=True,
+                    )
                     _log_ws(
                         "FEED_INTERNAL_RECONNECT_FORCE_FULL",
                         {"source": "on_close", "code": code, "reason": reason_text},
@@ -4986,6 +5133,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             reconnect_blocked_reason=reconnect_blocked_reason,
         )
         return False
+    if _LAST_DISCONNECTED_CODE is not None or _LAST_DISCONNECTED_REASON:
+        ws_fault_seen = True
 
     if _reconnect_recovery_blocked_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
@@ -4995,4 +5144,4 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         return False
 
-    return True
+    return not ws_fault_seen
