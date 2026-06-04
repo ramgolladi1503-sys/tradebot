@@ -50,6 +50,28 @@ class CandidateOutcomeReport:
             "proves_trading_edge": self.proves_trading_edge,
         }
 
+    def to_payload(self) -> dict[str, Any]:
+        payload = {
+            "schema_version": self.schema_version,
+            "generated_by": self.generated_by,
+            "fixture_count": self.fixture_count,
+            "status_counts": dict(sorted(self.status_counts.items())),
+            "results": [dict(row) for row in self.results],
+        }
+        payload["read_only"] = True
+        payload["append"] = False
+        payload["is_order_action"] = False
+        payload["broker_api_called"] = False
+        payload["live_order_allowed"] = False
+        payload["live_order_action"] = False
+        payload["broker_order_action"] = False
+        payload["closed_environment"] = True
+        payload["runtime_wired"] = False
+        payload["external_services_used"] = False
+        payload["proves_trading_edge"] = False
+        payload["safety"] = dict(self.safety)
+        return payload
+
 
 def _safety_block() -> dict[str, object]:
     return {
@@ -118,22 +140,7 @@ def build_candidate_outcome_report(fixture_dir: str | Path) -> CandidateOutcomeR
 
 
 def report_to_payload(report: CandidateOutcomeReport) -> dict[str, object]:
-    payload = {
-        "schema_version": report.schema_version,
-        "generated_by": report.generated_by,
-        "fixture_count": report.fixture_count,
-        "status_counts": dict(sorted(report.status_counts.items())),
-        "results": [dict(row) for row in report.results],
-        "safety": dict(report.safety),
-    }
-    payload["read_only"] = report.read_only
-    payload["append"] = report.append
-    payload["is_order_action"] = report.is_order_action
-    payload["broker_api_called"] = report.broker_api_called
-    payload["live_order_allowed"] = report.live_order_allowed
-    payload["live_order_action"] = report.live_order_action
-    payload["broker_order_action"] = report.broker_order_action
-    return payload
+    return report.to_payload()
 
 
 def write_candidate_outcome_json_report(report: CandidateOutcomeReport, output_path: str | Path) -> Path:
