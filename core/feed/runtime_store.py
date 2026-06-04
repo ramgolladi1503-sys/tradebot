@@ -101,6 +101,18 @@ def _startup_event_for_runtime_source(source: str, runtime_state: str) -> str | 
 def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: float) -> dict[str, Any]:
     out = dict(payload or {})
     out["ts_epoch"] = float(ts_epoch)
+    reconnect_blocked_reason = str(out.get("reconnect_blocked_reason") or "").strip().lower() or None
+    if reconnect_blocked_reason:
+        out["runtime_state"] = "RECOVERY_BLOCKED"
+        state_machine = dict(out.get("state_machine") or {})
+        state_machine["state"] = "DOWN"
+        state_machine["reason"] = (
+            "ws1006_process_restart_required"
+            if reconnect_blocked_reason == "ws1006_process_restart_required"
+            else "reconnect_blocked"
+        )
+        out["state_machine"] = state_machine
+        out["ws_connected"] = False
     if "feed_truth_state" not in out:
         feed_truth = classify_feed_truth_state(out, now_epoch=float(ts_epoch))
         out["feed_truth_state"] = str(feed_truth.state)

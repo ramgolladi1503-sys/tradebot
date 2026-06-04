@@ -1079,6 +1079,59 @@ def test_restart_verification_timeout_emits_failed_and_blocks(monkeypatch, tmp_p
     ws._reset_feed_restart_verification(reason="unit_test_teardown")
 
 
+def test_restart_verification_clears_ws1006_recovery_blocked_metadata_on_success(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 5.0, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    ws._reset_feed_restart_verification(reason="unit_test_setup")
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 1001.0}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 1001.0, raising=False)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RECOVERY_BLOCKED", raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
+    ws._record_feed_restart_verify_connect(now_epoch=1000.5)
+    ws._record_feed_restart_verify_subscribe(now_epoch=1000.6)
+
+    monkeypatch.setattr(
+        ws,
+        "_restart_verification_proof",
+        lambda now_epoch: (True, "ok", {"source": "unit_test"}),
+    )
+
+    ws._tick_feed_restart_verification(now_epoch=1001.0)
+
+    assert ws._reconnect_recovery_blocked_active() is False
+    assert "FEED_RECONNECT_RECOVERY_CLEARED" in [event for event, _payload in events]
+    ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test_recovered_ticks",
+        now_epoch=1001.0,
+        runtime_state="RUNNING",
+        last_error="",
+    )
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["reconnect_blocked_reason"] in {"", None}
+    assert payload["runtime_state"] == "RUNNING"
+    assert payload["state_machine"]["state"] == "LIVE"
+    assert payload["state_machine"]["reason"] == "ticks_flowing"
+    ws._reset_feed_restart_verification(reason="unit_test_teardown")
+
+
 def test_restart_verification_does_not_call_broker_or_order_paths(monkeypatch, tmp_path):
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
