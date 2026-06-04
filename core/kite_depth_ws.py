@@ -1254,6 +1254,34 @@ def _reconnect_recovery_blocked_active() -> bool:
     return bool(str(_RECONNECT_BLOCKED_REASON or "").strip())
 
 
+def _normalize_recovery_blocked_snapshot_state(
+    *,
+    runtime_state: str | None,
+    state_machine: dict | None,
+    reconnect_blocked_reason: str | None,
+    ws_connected: bool | None,
+) -> tuple[str, dict[str, object], bool | None, str | None]:
+    blocked_reason = str(
+        reconnect_blocked_reason if reconnect_blocked_reason is not None else (_RECONNECT_BLOCKED_REASON or "")
+    ).strip().lower() or None
+    effective_state = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper() or "UNKNOWN"
+    state_machine_row = dict(state_machine or {})
+    effective_ws_connected = ws_connected
+    if blocked_reason:
+        effective_state = "RECOVERY_BLOCKED"
+        effective_ws_connected = False
+        machine_state = str(state_machine_row.get("state") or "").strip().upper()
+        if machine_state in {"LIVE", "STARTING", "TICKS_FLOWING", "MARKET_OPEN", ""}:
+            state_machine_row["state"] = "DOWN"
+            state_machine_row["reason"] = (
+                "ws1006_process_restart_required"
+                if blocked_reason == "ws1006_process_restart_required"
+                else "reconnect_blocked"
+            )
+        state_machine_row.setdefault("reason", blocked_reason)
+    return effective_state, state_machine_row, effective_ws_connected, blocked_reason
+
+
 def _log_tick_ingest_error(
     *,
     token: int | None,
@@ -1593,6 +1621,17 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
                 _FEED_RESTART_VERIFY_STATE = "OK"
                 _FEED_RESTART_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
                 _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
+        if _reconnect_recovery_blocked_active():
+            cleared_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
+            _clear_reconnect_blocked_reason()
+            _log_ws(
+                "FEED_RECONNECT_RECOVERY_CLEARED",
+                {
+                    "reason": reason,
+                    "cleared_reason": cleared_reason,
+                    "verified_epoch": float(now_epoch_f),
+                },
+            )
         _log_ws(
             "FEED_RESTART_VERIFIED_OK",
             {
@@ -1890,6 +1929,12 @@ def _write_feed_runtime_snapshot(
         now_epoch=float(now_epoch),
     )
     restart_verify = _restart_verify_overlay_payload()
+    effective_state_text, normalized_state_machine, ws_connected, normalized_blocked_reason = _normalize_recovery_blocked_snapshot_state(
+        runtime_state=effective_state_text,
+        state_machine=state_machine,
+        reconnect_blocked_reason=reconnect_blocked_reason,
+        ws_connected=ws_connected,
+    )
     payload = {
         "ts_epoch": float(now_epoch),
         "ws_connected": ws_connected,
@@ -1905,7 +1950,7 @@ def _write_feed_runtime_snapshot(
         "last_depth_epoch": _coerce_epoch(last_depth_epoch),
         "last_depth_age_sec": _safe_float(last_depth_age_sec),
         "market_open": bool(market_open),
-        "state_machine": dict(state_machine or {}),
+        "state_machine": normalized_state_machine,
         "subscribed_option_tokens_count": int(subscribed_option_tokens_count or 0),
         "option_last_tick_age_by_symbol": dict(option_last_tick_age_by_symbol or {}),
         "option_last_tick_sample": list(option_last_tick_sample or []),
@@ -1919,12 +1964,7 @@ def _write_feed_runtime_snapshot(
         "stale_strikes": int(stale_strikes),
         "runtime_state": effective_state_text,
         "last_error": str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000],
-        "reconnect_blocked_reason": str(
-            reconnect_blocked_reason
-            if reconnect_blocked_reason is not None
-            else (_RECONNECT_BLOCKED_REASON or "")
-        ).strip().lower()
-        or None,
+        "reconnect_blocked_reason": normalized_blocked_reason,
     }
     if payload["reconnect_blocked_reason"]:
         payload.update(
@@ -2001,6 +2041,13 @@ def _persist_runtime_snapshot_row(
         state_text,
         now_epoch=ts_epoch,
     )
+    state_machine: dict | None = None
+    effective_state_text, state_machine, ws_connected, normalized_blocked_reason = _normalize_recovery_blocked_snapshot_state(
+        runtime_state=effective_state_text,
+        state_machine=state_machine,
+        reconnect_blocked_reason=reconnect_blocked_reason,
+        ws_connected=ws_connected,
+    )
     err_text = str(last_error if last_error is not None else _LAST_RUNTIME_ERROR or "")[:1000]
     sub_counts = _subscribed_tokens_count_by_symbol(_LAST_TOKENS)
     missing_count, missing_counts_by_symbol = _missing_option_tokens_stats()
@@ -2014,7 +2061,16 @@ def _persist_runtime_snapshot_row(
     last_tick_age_sec = max(0.0, float(ts_epoch) - float(last_tick_epoch)) if last_tick_epoch is not None else None
     last_depth_epoch = _latest_depth_epoch_from_store()
     last_depth_age_sec = max(0.0, float(ts_epoch) - float(last_depth_epoch)) if last_depth_epoch is not None else None
-    if not market_open:
+    if normalized_blocked_reason:
+        state_machine = state_machine or {
+            "state": "DOWN",
+            "reason": (
+                "ws1006_process_restart_required"
+                if normalized_blocked_reason == "ws1006_process_restart_required"
+                else "reconnect_blocked"
+            ),
+        }
+    elif not market_open:
         state_machine = {"state": "MARKET_CLOSED", "reason": "market_closed"}
     elif ws_connected is False:
         state_machine = {"state": "DOWN", "reason": "ws_disconnected"}
@@ -2059,16 +2115,11 @@ def _persist_runtime_snapshot_row(
         "last_tick_age_sec": last_tick_age_sec,
         "last_depth_epoch": last_depth_epoch,
         "last_depth_age_sec": last_depth_age_sec,
-        "state_machine": dict(state_machine or {}),
+        "state_machine": state_machine,
         "source": source,
         "runtime_state": effective_state_text,
         "last_error": err_text,
-        "reconnect_blocked_reason": str(
-            reconnect_blocked_reason
-            if reconnect_blocked_reason is not None
-            else (_RECONNECT_BLOCKED_REASON or "")
-        ).strip().lower()
-        or None,
+        "reconnect_blocked_reason": normalized_blocked_reason,
     }
     if payload["reconnect_blocked_reason"]:
         payload.update(
@@ -3554,8 +3605,12 @@ def on_ticks(ws, ticks):
         tick_epoch=_LAST_WS_TICK_EPOCH,
         reason="ws_ticks_flowing",
     )
-    _RUNTIME_STATE = "RUNNING"
-    _LAST_RUNTIME_ERROR = ""
+    if _reconnect_recovery_blocked_active():
+        _RUNTIME_STATE = "RECOVERY_BLOCKED"
+        _LAST_RUNTIME_ERROR = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
+    else:
+        _RUNTIME_STATE = "RUNNING"
+        _LAST_RUNTIME_ERROR = ""
     minute_bucket = int(_LAST_WS_TICK_EPOCH // 60.0)
     if _LAST_FEED_TICK_LOG_MINUTE != minute_bucket:
         _LAST_FEED_TICK_LOG_MINUTE = minute_bucket
@@ -3564,8 +3619,9 @@ def on_ticks(ws, ticks):
         ws_connected=True,
         source="on_ticks",
         now_epoch=now_epoch,
-        runtime_state="RUNNING",
-        last_error="",
+        runtime_state=_RUNTIME_STATE,
+        last_error=_LAST_RUNTIME_ERROR,
+        reconnect_blocked_reason=_RECONNECT_BLOCKED_REASON if _reconnect_recovery_blocked_active() else None,
     )
 
 

@@ -133,6 +133,7 @@ from core.market_snapshot_builder import (
 from core.market_snapshot_store import write_market_snapshot_atomic
 from core.runtime_snapshot_producer import produce_and_store_runtime_snapshots
 from core.runtime_snapshot_store import write_top_opportunities_snapshots
+from core.ranked_pipeline_evidence import write_ranked_pipeline_evidence
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
@@ -1272,6 +1273,66 @@ def _build_top_opportunities_payload(
         "_phase2_next_active_trade": phase2_result.get("next_active_trade"),
         "notes": notes,
     }
+
+
+def _build_ranked_pipeline_runtime_report(
+    *,
+    top_payload: dict,
+    cycle_ranked_candidates: list,
+    market_open: bool,
+    feed_truth_payload: dict | None,
+    indicator_payload: dict | None,
+    cycle_blockers: dict,
+) -> dict:
+    ranked_candidates = [cand for cand in list(cycle_ranked_candidates or []) if isinstance(cand, dict)]
+    report = {
+        "schema_version": 1,
+        "read_only": True,
+        "is_order_action": False,
+        "append": False,
+        "ranked_candidate_count": int(len(ranked_candidates)),
+        "source_candidate_count": int(len(ranked_candidates)),
+        "top_rank_strategy_id": str(top_payload.get("phase2_selected_trade_id") or "") or None,
+        "phase2_state": str(top_payload.get("phase2_state") or ""),
+        "phase2_reason": str(top_payload.get("phase2_reason") or ""),
+        "phase2_ranked_count": int(top_payload.get("phase2_ranked_count") or 0),
+        "phase2_input_candidate_count": int(len(ranked_candidates)),
+        "top_executable_count": int(top_payload.get("top_executable_count") or 0),
+        "top_advisory_count": int(top_payload.get("top_advisory_count") or 0),
+        "market_open": bool(market_open),
+        "feed_truth_state": str((feed_truth_payload or {}).get("feed_truth_state") or ""),
+        "feed_truth_reason_code": str((feed_truth_payload or {}).get("feed_truth_reason_code") or ""),
+        "indicator_readiness_state": str((indicator_payload or {}).get("indicator_readiness_state") or ""),
+        "indicator_readiness_reason_code": str((indicator_payload or {}).get("indicator_readiness_reason_code") or ""),
+        "blocker_counts": {str(k): int(v) for k, v in dict(cycle_blockers or {}).items()},
+        "metadata": {
+            "orchestrator": "ranked_opportunity_pipeline_v1",
+            "scope": "read_only_no_execution_no_dashboard_no_live_wiring",
+            "producer": "orchestrator",
+        },
+    }
+    return report
+
+
+def _write_ranked_pipeline_runtime_evidence(
+    *,
+    top_payload: dict,
+    cycle_ranked_candidates: list,
+    market_open: bool,
+    feed_truth_payload: dict | None,
+    indicator_payload: dict | None,
+    cycle_blockers: dict,
+) -> dict | None:
+    ranked_pipeline_report = _build_ranked_pipeline_runtime_report(
+        top_payload=top_payload,
+        cycle_ranked_candidates=list(cycle_ranked_candidates or []),
+        market_open=bool(market_open),
+        feed_truth_payload=feed_truth_payload if isinstance(feed_truth_payload, dict) else {},
+        indicator_payload=indicator_payload if isinstance(indicator_payload, dict) else {},
+        cycle_blockers=dict(cycle_blockers),
+    )
+    write_ranked_pipeline_evidence(ranked_pipeline_report, output_dir=logs_dir())
+    return ranked_pipeline_report
 
 
 def _top_blockers_payload(blocker_counts: Counter, limit: int = 5) -> list[dict]:
@@ -7234,6 +7295,17 @@ class Orchestrator:
                                     handoff_snapshot.get("symbol"),
                                     handoff_exc,
                                 )
+                    try:
+                        _write_ranked_pipeline_runtime_evidence(
+                            top_payload=top_payload,
+                            cycle_ranked_candidates=list(cycle_ranked_candidates or []),
+                            market_open=bool(cycle_market_open),
+                            feed_truth_payload=feed_truth_payload if isinstance(feed_truth_payload, dict) else {},
+                            indicator_payload=indicator_payload if isinstance(indicator_payload, dict) else {},
+                            cycle_blockers=dict(cycle_blockers),
+                        )
+                    except Exception as ranked_pipeline_exc:
+                        logger.warning("ranked_pipeline_runtime_write_failed err=%s", ranked_pipeline_exc)
                     write_top_opportunities_snapshots(payload=top_payload, producer="orchestrator")
                 except Exception as top_exc:
                     logger.warning("top_opportunities_snapshot_write_failed err=%s", top_exc)

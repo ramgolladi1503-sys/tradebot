@@ -133,6 +133,42 @@ def test_persist_runtime_snapshot_row_updates_json_artifact(monkeypatch, tmp_pat
     assert payload["feed_truth_state"] in {"LIVE", "DEGRADED", "STARTING", "DEAD", "MARKET_CLOSED"}
 
 
+def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+
+    depth_ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="on_ticks",
+        now_epoch=200.0,
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text())
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["ws_connected"] is False
+    assert payload["state_machine"]["state"] == "DOWN"
+    assert payload["state_machine"]["reason"] == "ws1006_process_restart_required"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["recovery_action"] == "process_restart_required"
+
+
 def test_feed_truth_state_ticker_object_exists_but_no_ticks_is_not_live(monkeypatch, tmp_path):
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
