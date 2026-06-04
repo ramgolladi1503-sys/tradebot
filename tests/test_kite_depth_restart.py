@@ -1,4 +1,7 @@
 import core.kite_depth_ws as ws
+from core.auth import reset_kite_runtime_credentials_guard
+import core.incidents as incidents
+import core.storage as storage
 from config import config as cfg
 import json
 import pytest
@@ -518,10 +521,21 @@ def test_reactor_terminal_state_blocks_followup_start_restart_and_schedule(monke
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    reset_kite_runtime_credentials_guard()
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "reactor_not_restartable_process_restart_required", raising=False)
     monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", True, raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [101, 202], raising=False)
+    class _StableRestClient:
+        def profile(self):
+            return {"user_id": "ABCD1234"}
+
+    stable_rest_client = _StableRestClient()
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: stable_rest_client, raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws.kite_client, "instruments", lambda *args, **kwargs: [], raising=False)
+    monkeypatch.setattr(incidents, "create_incident", lambda *args, **kwargs: "incident-test", raising=False)
+    monkeypatch.setattr(storage, "emit_sla_violation_event", lambda *args, **kwargs: None, raising=False)
 
     calls = {"start": 0, "schedule": 0, "thread": 0, "persist": 0}
     original_persist = ws._persist_runtime_snapshot_row
