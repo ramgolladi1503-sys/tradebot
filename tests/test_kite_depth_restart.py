@@ -412,17 +412,20 @@ def test_on_error_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 1
+    assert calls["schedule"] == 0
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RESTARTING"
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
     assert payload["ws_connected"] is False
     assert payload["disconnected_code"] == 1006
     assert "connection was closed uncleanly" in payload["disconnected_reason"]
-    assert payload["restart_attempt_allowed"] is True
-    assert payload["restart_attempted"] is True
-    assert payload["recovery_blocked"] is False
-    assert payload["process_restart_required"] is False
-    assert payload["reconnect_blocked_reason"] in {"", None}
+    assert payload["restart_attempt_allowed"] is False
+    assert payload["restart_attempted"] is False
+    assert payload["recovery_blocked"] is True
+    assert payload["process_restart_required"] is True
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["restart_suppressed"] is True
+    assert payload["ws_reconnect_allowed"] is False
+    assert payload["ws_reconnect_attempted"] is False
     ws.stop_depth_ws(reason="unit_test_cleanup")
 
 
@@ -463,17 +466,20 @@ def test_on_close_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 1
+    assert calls["schedule"] == 0
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RESTARTING"
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
     assert payload["ws_connected"] is False
     assert payload["disconnected_code"] == 1006
     assert "connection was closed uncleanly" in payload["disconnected_reason"]
-    assert payload["restart_attempt_allowed"] is True
-    assert payload["restart_attempted"] is True
-    assert payload["recovery_blocked"] is False
-    assert payload["process_restart_required"] is False
-    assert payload["reconnect_blocked_reason"] in {"", None}
+    assert payload["restart_attempt_allowed"] is False
+    assert payload["restart_attempted"] is False
+    assert payload["recovery_blocked"] is True
+    assert payload["process_restart_required"] is True
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["restart_suppressed"] is True
+    assert payload["ws_reconnect_allowed"] is False
+    assert payload["ws_reconnect_attempted"] is False
     ws.stop_depth_ws(reason="unit_test_cleanup")
 
 
