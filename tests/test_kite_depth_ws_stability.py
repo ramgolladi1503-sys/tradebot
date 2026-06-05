@@ -36,6 +36,8 @@ class _DummyTicker:
         self.on_error = None
         self.on_close = None
         self.on_ticks = None
+        self.stop_retry_count = 0
+        self.factory = None
 
     def subscribe(self, tokens):
         self.tokens = list(tokens)
@@ -49,6 +51,9 @@ class _DummyTicker:
 
     def close(self):
         self.closed = True
+
+    def stop_retry(self):
+        self.stop_retry_count += 1
 
 
 class _DummyRestClient:
@@ -76,6 +81,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_FEED_HEALTH_STATE", None, raising=False)
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+    monkeypatch.setattr(ws, "_LAST_INTERNAL_RETRY_SUPPRESSION_STATE", {}, raising=False)
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LOGGED", False, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_LTP_TS", {}, raising=False)

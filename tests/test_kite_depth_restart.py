@@ -24,6 +24,7 @@ def _reset_ws_runtime_state(monkeypatch):
         "_LAST_FEED_HEALTH_STATE": None,
         "_RECONNECT_BLOCKED_REASON": "",
         "_RECONNECT_BLOCKED_SINCE_EPOCH": 0.0,
+        "_LAST_INTERNAL_RETRY_SUPPRESSION_STATE": {},
         "_REACTOR_NOT_RESTARTABLE_DETECTED": False,
         "_AUTH_REQUIRED_LATCH": False,
         "_AUTH_REQUIRED_LOGGED": False,
@@ -481,6 +482,281 @@ def test_on_close_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     assert payload["ws_reconnect_allowed"] is False
     assert payload["ws_reconnect_attempted"] is False
     ws.stop_depth_ws(reason="unit_test_cleanup")
+
+
+def test_ws1006_on_error_disables_kiteticker_internal_retry(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"schedule": 0}
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: calls.__setitem__("schedule", calls["schedule"] + 1) or True,
+    )
+
+    class _Factory:
+        def __init__(self):
+            self.stop_trying_called = 0
+
+        def stopTrying(self):
+            self.stop_trying_called += 1
+
+    class _FakeTicker:
+        def __init__(self):
+            self.auto_reconnect = True
+            self.factory = _Factory()
+            self.stop_retry_called = 0
+
+        def stop_retry(self):
+            self.stop_retry_called += 1
+
+        def connect(self, threaded=True):
+            self.on_error(
+                self,
+                1006,
+                "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
+            )
+
+    fake_ticker = _FakeTicker()
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: fake_ticker, raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.cfg, "KITE_API_KEY", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.cfg, "KITE_ACCESS_TOKEN", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
+    assert calls["schedule"] == 0
+    assert fake_ticker.stop_retry_called == 1
+    assert fake_ticker.factory.stop_trying_called == 1
+    assert fake_ticker.auto_reconnect is False
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["process_restart_required"] is True
+    assert payload["restart_suppressed"] is True
+    assert payload["internal_retry_disabled"] is True
+    assert payload["stop_retry_called"] is True
+    assert payload["factory_stop_trying_called"] is True
+    assert payload["auto_reconnect_disabled"] is True
+    assert payload["internal_retry_reason"] == "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)"
+
+
+def test_ws1006_on_close_disables_kiteticker_internal_retry(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"schedule": 0}
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: calls.__setitem__("schedule", calls["schedule"] + 1) or True,
+    )
+
+    class _Factory:
+        def __init__(self):
+            self.stop_trying_called = 0
+
+        def stopTrying(self):
+            self.stop_trying_called += 1
+
+    class _FakeTicker:
+        def __init__(self):
+            self.auto_reconnect = True
+            self.factory = _Factory()
+            self.stop_retry_called = 0
+
+        def stop_retry(self):
+            self.stop_retry_called += 1
+
+        def connect(self, threaded=True):
+            self.on_close(
+                self,
+                1006,
+                "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
+            )
+
+    fake_ticker = _FakeTicker()
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: fake_ticker, raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.cfg, "KITE_API_KEY", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.cfg, "KITE_ACCESS_TOKEN", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
+    assert calls["schedule"] == 0
+    assert fake_ticker.stop_retry_called == 1
+    assert fake_ticker.factory.stop_trying_called == 1
+    assert fake_ticker.auto_reconnect is False
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["process_restart_required"] is True
+    assert payload["restart_suppressed"] is True
+    assert payload["internal_retry_disabled"] is True
+    assert payload["stop_retry_called"] is True
+    assert payload["factory_stop_trying_called"] is True
+    assert payload["auto_reconnect_disabled"] is True
+    assert payload["internal_retry_reason"] == "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)"
+
+
+def test_terminal_recovery_internal_retry_suppression_is_safe_without_stop_retry(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+
+    class _FakeTicker:
+        def __init__(self):
+            self.auto_reconnect = True
+            self.factory = None
+
+        def connect(self, threaded=True):
+            self.on_close(self, 1006, "connection was closed uncleanly (peer dropped)")
+
+    fake_ticker = _FakeTicker()
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: fake_ticker, raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.cfg, "KITE_API_KEY", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.cfg, "KITE_ACCESS_TOKEN", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["internal_retry_disabled"] is True
+    assert payload["stop_retry_called"] is False
+    assert payload["factory_stop_trying_called"] is False
+    assert payload["auto_reconnect_disabled"] is True
+    assert payload["restart_suppressed"] is True
+
+
+def test_recovery_blocked_followup_starting_factory_is_suppressed(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    calls = {"ticker": 0, "start": 0}
+
+    class _FailTicker:
+        def __init__(self, *args, **kwargs):
+            calls["ticker"] += 1
+            self.auto_reconnect = True
+
+        def stop_retry(self):
+            calls["start"] += 1
+
+        def connect(self, threaded=True):  # pragma: no cover - defensive
+            raise AssertionError("blocked recovery must not create a new ticker connect path")
+
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: _FailTicker(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.cfg, "KITE_API_KEY", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.cfg, "KITE_ACCESS_TOKEN", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
+    assert calls == {"ticker": 0, "start": 0}
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["restart_suppressed"] is True
+
+
+def test_non_terminal_network_error_still_uses_existing_restart_behavior(monkeypatch):
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: False, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    calls = {"restart": 0, "stop_retry": 0}
+
+    class _Factory:
+        def __init__(self):
+            self.stop_trying_called = 0
+
+        def stopTrying(self):
+            self.stop_trying_called += 1
+
+    class _FakeTicker:
+        def __init__(self):
+            self.auto_reconnect = True
+            self.factory = _Factory()
+            self.stop_retry_called = 0
+
+        def stop_retry(self):
+            self.stop_retry_called += 1
+
+        def connect(self, threaded=True):
+            self.on_error(self, 1006, "connection closed by peer")
+
+    fake_ticker = _FakeTicker()
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: fake_ticker, raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.cfg, "KITE_API_KEY", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.cfg, "KITE_ACCESS_TOKEN", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+    monkeypatch.setattr(
+        ws,
+        "restart_depth_ws",
+        lambda reason="unknown", ignore_cooldown=False, force_full_restart=False: calls.__setitem__("restart", calls["restart"] + 1) or True,
+    )
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
+    assert calls["restart"] == 0
+    assert fake_ticker.stop_retry_called == 0
+    assert fake_ticker.factory.stop_trying_called == 0
 
 
 def test_recovery_blocked_snapshot_contains_process_restart_required(monkeypatch, tmp_path):

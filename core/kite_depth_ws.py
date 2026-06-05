@@ -129,6 +129,7 @@ _RECONNECT_BLOCKED_REASON: str = ""
 _RECONNECT_BLOCKED_SINCE_EPOCH: float = 0.0
 _LAST_DISCONNECTED_CODE: int | None = None
 _LAST_DISCONNECTED_REASON: str = ""
+_LAST_INTERNAL_RETRY_SUPPRESSION_STATE: dict[str, object] = {}
 _REACTOR_NOT_RESTARTABLE_DETECTED: bool = False
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
@@ -1227,8 +1228,15 @@ def _clear_last_disconnected_info() -> None:
     _LAST_DISCONNECTED_REASON = ""
 
 
-def _block_reconnect_for_process_restart(*, source: str, code: int | None = None, reason: str | None = None) -> str:
+def _block_reconnect_for_process_restart(
+    *,
+    source: str,
+    code: int | None = None,
+    reason: str | None = None,
+    ticker=None,
+) -> str:
     global _WATCHDOG_STOP
+    internal_retry_state = _disable_kiteticker_internal_retry(reason=str(reason or ""), ticker=ticker)
     blocked_reason = _reactor_not_restartable_block_reason()
     reason_lower = str(reason or "").strip().lower()
     if "connection was closed uncleanly" in reason_lower or "peer dropped" in reason_lower or "main loop terminated" in reason_lower:
@@ -1247,16 +1255,67 @@ def _block_reconnect_for_process_restart(*, source: str, code: int | None = None
             "reason": str(reason or ""),
             "reconnect_blocked_reason": blocked_reason,
             "recovery_action": "process_restart_required",
+            **{k: v for k, v in internal_retry_state.items() if v is not None},
         },
     )
     _emit_reconnect_recovery_blocked_snapshot(
         source=f"{source}:process_restart_required",
         reason=blocked_reason,
+        internal_retry_state=internal_retry_state,
     )
     return blocked_reason
 
 
-def _reconnect_recovery_blocked_payload(*, reason: str, source: str) -> dict[str, object]:
+def _disable_kiteticker_internal_retry(*, reason: str, ticker=None) -> dict[str, object]:
+    global _LAST_INTERNAL_RETRY_SUPPRESSION_STATE
+    current_ticker = ticker if ticker is not None else _KITE_TICKER
+    evidence: dict[str, object] = {
+        "reason": str(reason or "").strip(),
+        "internal_retry_disabled": False,
+        "stop_retry_called": False,
+        "factory_stop_trying_called": False,
+        "auto_reconnect_disabled": False,
+        "error": None,
+    }
+    if current_ticker is None:
+        return evidence
+    error_parts: list[str] = []
+    try:
+        if hasattr(current_ticker, "stop_retry"):
+            current_ticker.stop_retry()
+            evidence["stop_retry_called"] = True
+    except Exception as exc:
+        error_parts.append(f"stop_retry:{type(exc).__name__}:{exc}")
+    try:
+        factory = getattr(current_ticker, "factory", None)
+        if factory is not None and hasattr(factory, "stopTrying"):
+            factory.stopTrying()
+            evidence["factory_stop_trying_called"] = True
+    except Exception as exc:
+        error_parts.append(f"factory.stopTrying:{type(exc).__name__}:{exc}")
+    try:
+        if hasattr(current_ticker, "auto_reconnect"):
+            setattr(current_ticker, "auto_reconnect", False)
+            evidence["auto_reconnect_disabled"] = True
+    except Exception as exc:
+        error_parts.append(f"auto_reconnect:{type(exc).__name__}:{exc}")
+    evidence["internal_retry_disabled"] = bool(
+        evidence["stop_retry_called"] or evidence["factory_stop_trying_called"] or evidence["auto_reconnect_disabled"]
+    )
+    if error_parts:
+        evidence["error"] = "; ".join(error_parts)
+    _LAST_INTERNAL_RETRY_SUPPRESSION_STATE = dict(evidence)
+    return evidence
+
+
+def _reconnect_recovery_blocked_payload(
+    *,
+    reason: str,
+    source: str,
+    internal_retry_state: dict[str, object] | None = None,
+) -> dict[str, object]:
+    if internal_retry_state is None:
+        internal_retry_state = dict(_LAST_INTERNAL_RETRY_SUPPRESSION_STATE or {})
     blocked_reason = str(reason or _RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
     if blocked_reason == "reactor_not_restartable":
         blocked_reason = _reactor_not_restartable_block_reason()
@@ -1282,27 +1341,58 @@ def _reconnect_recovery_blocked_payload(*, reason: str, source: str) -> dict[str
         "no_order_action": True,
         "order_safe": True,
     }
+    if internal_retry_state is not None:
+        payload.update(
+            {
+                "internal_retry_disabled": bool(internal_retry_state.get("internal_retry_disabled")),
+                "stop_retry_called": bool(internal_retry_state.get("stop_retry_called")),
+                "factory_stop_trying_called": bool(internal_retry_state.get("factory_stop_trying_called")),
+                "auto_reconnect_disabled": bool(internal_retry_state.get("auto_reconnect_disabled")),
+                "internal_retry_error": (
+                    str(internal_retry_state.get("error") or "").strip() or None
+                ),
+                "internal_retry_reason": str(internal_retry_state.get("reason") or "").strip() or None,
+            }
+        )
     _log_ws("FEED_RECONNECT_SUPPRESSED_RECOVERY_BLOCKED", payload)
     return payload
 
 
-def _emit_reconnect_recovery_blocked_snapshot(*, source: str, reason: str) -> dict[str, object]:
-    payload = _reconnect_recovery_blocked_payload(reason=reason, source=source)
+def _emit_reconnect_recovery_blocked_snapshot(
+    *,
+    source: str,
+    reason: str,
+    internal_retry_state: dict[str, object] | None = None,
+) -> dict[str, object]:
+    payload = _reconnect_recovery_blocked_payload(
+        reason=reason,
+        source=source,
+        internal_retry_state=internal_retry_state,
+    )
     _persist_runtime_snapshot_row(
         ws_connected=False,
         source=source,
         runtime_state="RECOVERY_BLOCKED",
         last_error=str(payload["last_error"]),
         reconnect_blocked_reason=str(payload["reconnect_blocked_reason"]),
+        internal_retry_disabled=bool(payload.get("internal_retry_disabled")) if "internal_retry_disabled" in payload else None,
+        stop_retry_called=bool(payload.get("stop_retry_called")) if "stop_retry_called" in payload else None,
+        factory_stop_trying_called=(
+            bool(payload.get("factory_stop_trying_called")) if "factory_stop_trying_called" in payload else None
+        ),
+        auto_reconnect_disabled=bool(payload.get("auto_reconnect_disabled")) if "auto_reconnect_disabled" in payload else None,
+        internal_retry_error=str(payload.get("internal_retry_error") or "").strip() or None if "internal_retry_error" in payload else None,
+        internal_retry_reason=str(payload.get("internal_retry_reason") or "").strip() or None if "internal_retry_reason" in payload else None,
     )
     return payload
 
 
 def _clear_reconnect_blocked_reason() -> None:
-    global _RECONNECT_BLOCKED_REASON, _RECONNECT_BLOCKED_SINCE_EPOCH, _REACTOR_NOT_RESTARTABLE_DETECTED
+    global _RECONNECT_BLOCKED_REASON, _RECONNECT_BLOCKED_SINCE_EPOCH, _REACTOR_NOT_RESTARTABLE_DETECTED, _LAST_INTERNAL_RETRY_SUPPRESSION_STATE
     _RECONNECT_BLOCKED_REASON = ""
     _RECONNECT_BLOCKED_SINCE_EPOCH = 0.0
     _REACTOR_NOT_RESTARTABLE_DETECTED = False
+    _LAST_INTERNAL_RETRY_SUPPRESSION_STATE = {}
 
 
 def _reconnect_recovery_blocked_active() -> bool:
@@ -1991,6 +2081,12 @@ def _write_feed_runtime_snapshot(
     restart_attempt_allowed: bool | None = None,
     restart_attempted: bool | None = None,
     restart_blocked_reason: str | None = None,
+    internal_retry_disabled: bool | None = None,
+    stop_retry_called: bool | None = None,
+    factory_stop_trying_called: bool | None = None,
+    auto_reconnect_disabled: bool | None = None,
+    internal_retry_error: str | None = None,
+    internal_retry_reason: str | None = None,
 ) -> None:
     path = logs_dir() / "feed_runtime_latest.json"
     raw_state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
@@ -2053,6 +2149,26 @@ def _write_feed_runtime_snapshot(
         "reconnect_blocked_reason": normalized_blocked_reason,
         "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
+    if (
+        internal_retry_disabled is not None
+        or stop_retry_called is not None
+        or factory_stop_trying_called is not None
+        or auto_reconnect_disabled is not None
+        or internal_retry_error is not None
+        or internal_retry_reason is not None
+    ):
+        payload.update(
+            {
+                "internal_retry_disabled": bool(internal_retry_disabled) if internal_retry_disabled is not None else None,
+                "stop_retry_called": bool(stop_retry_called) if stop_retry_called is not None else None,
+                "factory_stop_trying_called": (
+                    bool(factory_stop_trying_called) if factory_stop_trying_called is not None else None
+                ),
+                "auto_reconnect_disabled": bool(auto_reconnect_disabled) if auto_reconnect_disabled is not None else None,
+                "internal_retry_error": str(internal_retry_error or "").strip() or None,
+                "internal_retry_reason": str(internal_retry_reason or "").strip() or None,
+            }
+        )
     if payload["reconnect_blocked_reason"]:
         payload.update(
             {
@@ -2152,6 +2268,12 @@ def _persist_runtime_snapshot_row(
     restart_attempt_allowed: bool | None = None,
     restart_attempted: bool | None = None,
     restart_blocked_reason: str | None = None,
+    internal_retry_disabled: bool | None = None,
+    stop_retry_called: bool | None = None,
+    factory_stop_trying_called: bool | None = None,
+    auto_reconnect_disabled: bool | None = None,
+    internal_retry_error: str | None = None,
+    internal_retry_reason: str | None = None,
 ) -> None:
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
@@ -2250,6 +2372,26 @@ def _persist_runtime_snapshot_row(
         "reconnect_blocked_reason": normalized_blocked_reason,
         "restart_blocked_reason": str(restart_blocked_reason or normalized_blocked_reason or "").strip().lower() or None,
     }
+    if (
+        internal_retry_disabled is not None
+        or stop_retry_called is not None
+        or factory_stop_trying_called is not None
+        or auto_reconnect_disabled is not None
+        or internal_retry_error is not None
+        or internal_retry_reason is not None
+    ):
+        payload.update(
+            {
+                "internal_retry_disabled": bool(internal_retry_disabled) if internal_retry_disabled is not None else None,
+                "stop_retry_called": bool(stop_retry_called) if stop_retry_called is not None else None,
+                "factory_stop_trying_called": (
+                    bool(factory_stop_trying_called) if factory_stop_trying_called is not None else None
+                ),
+                "auto_reconnect_disabled": bool(auto_reconnect_disabled) if auto_reconnect_disabled is not None else None,
+                "internal_retry_error": str(internal_retry_error or "").strip() or None,
+                "internal_retry_reason": str(internal_retry_reason or "").strip() or None,
+            }
+        )
     if payload["reconnect_blocked_reason"]:
         payload.update(
             {
@@ -2323,6 +2465,12 @@ def _persist_runtime_snapshot_row(
         runtime_state=effective_state_text,
         last_error=err_text,
         reconnect_blocked_reason=str(payload.get("reconnect_blocked_reason") or "").strip().lower() or None,
+        internal_retry_disabled=internal_retry_disabled,
+        stop_retry_called=stop_retry_called,
+        factory_stop_trying_called=factory_stop_trying_called,
+        auto_reconnect_disabled=auto_reconnect_disabled,
+        internal_retry_error=internal_retry_error,
+        internal_retry_reason=internal_retry_reason,
     )
 
 
@@ -4541,7 +4689,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
             if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
-                _block_reconnect_for_process_restart(source="on_error", code=code_int, reason=reason_text)
+                _block_reconnect_for_process_restart(source="on_error", code=code_int, reason=reason_text, ticker=ws)
                 return
             if _use_internal_reconnect():
                 if _reconnect_recovery_blocked_active():
@@ -4640,7 +4788,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if is_market_open_ist():
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
             if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
-                _block_reconnect_for_process_restart(source="on_close", code=code_int, reason=reason_text)
+                _block_reconnect_for_process_restart(source="on_close", code=code_int, reason=reason_text, ticker=ws)
                 return
             if _use_internal_reconnect():
                 if fatal:
@@ -5133,6 +5281,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     except Exception as exc:
         reconnect_blocked_reason = None
         if _is_reactor_not_restartable_error(exc):
+            internal_retry_state = _disable_kiteticker_internal_retry(reason=f"start_depth_ws:{type(exc).__name__}", ticker=kws)
             reconnect_blocked_reason = _set_reconnect_blocked_reason(_reactor_not_restartable_block_reason())
             _log_ws(
                 "FEED_RESTART_PROCESS_RECOVERY_REQUIRED",
@@ -5140,6 +5289,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     "error_type": type(exc).__name__,
                     "error": str(exc),
                     "reconnect_blocked_reason": reconnect_blocked_reason,
+                    **{k: v for k, v in internal_retry_state.items() if v is not None},
                 },
             )
         else:
@@ -5151,6 +5301,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             runtime_state=_RUNTIME_STATE,
             last_error=_LAST_RUNTIME_ERROR if reconnect_blocked_reason is None else reconnect_blocked_reason,
             reconnect_blocked_reason=reconnect_blocked_reason,
+            internal_retry_disabled=bool(internal_retry_state.get("internal_retry_disabled")) if reconnect_blocked_reason is not None else None,
+            stop_retry_called=bool(internal_retry_state.get("stop_retry_called")) if reconnect_blocked_reason is not None else None,
+            factory_stop_trying_called=(
+                bool(internal_retry_state.get("factory_stop_trying_called")) if reconnect_blocked_reason is not None else None
+            ),
+            auto_reconnect_disabled=bool(internal_retry_state.get("auto_reconnect_disabled")) if reconnect_blocked_reason is not None else None,
+            internal_retry_error=str(internal_retry_state.get("error") or "").strip() or None if reconnect_blocked_reason is not None else None,
+            internal_retry_reason=str(internal_retry_state.get("reason") or "").strip() or None if reconnect_blocked_reason is not None else None,
         )
         return False
     if _LAST_DISCONNECTED_CODE is not None or _LAST_DISCONNECTED_REASON:
