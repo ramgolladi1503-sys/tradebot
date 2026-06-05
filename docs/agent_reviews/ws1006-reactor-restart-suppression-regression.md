@@ -66,6 +66,12 @@ acceptance_proof:
 - It must not change strategy, ranking, Phase2, broker/order, or dashboard behavior.
 - It must fail closed on terminal websocket faults.
 
+## High-Risk Path Review
+
+- `core/kite_depth_ws.py` is a high-risk path because it owns websocket lifecycle and feed recovery behavior.
+- The patch is intentionally narrow: it only suppresses in-process restart attempts after WS1006 / unclean close / terminal reactor failure.
+- Healthy startup, subscription, and token-resolution behavior remain unchanged.
+
 ## Closed-Environment / Off-Market Rule
 
 - All validation is offline and deterministic.
