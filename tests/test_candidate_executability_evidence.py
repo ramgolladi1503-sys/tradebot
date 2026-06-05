@@ -100,6 +100,14 @@ def test_parse_quote_truth_split_brain_rejects() -> None:
             "best_bid": 103.0,
             "best_ask": 103.5,
             "reason": "quote_truth_split_brain_reject",
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
         },
     )
 
@@ -182,8 +190,47 @@ def test_cli_writes_json_and_markdown_to_output_dir(tmp_path: Path) -> None:
     assert payload["append"] is False
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False
+    assert payload["live_execution_changed"] is False
+    assert payload["behavior_changed"] is False
+    assert payload["runtime_behavior_changed"] is False
+    assert payload["order_behavior_changed"] is False
+    assert payload["broker_order_called"] is False
+    assert payload["execution_behavior_changed"] is False
     assert payload["live_order_allowed"] is False
     assert payload["quote_truth_split_brain_examples"]
+    assert payload["quote_truth_split_brain_examples"][0]["is_order_action"] is False
+    assert payload["quote_truth_split_brain_examples"][0]["broker_api_called"] is False
+    assert payload["quote_truth_split_brain_examples"][0]["live_execution_changed"] is False
+    assert payload["quote_truth_split_brain_examples"][0]["behavior_changed"] is False
+    assert payload["quote_truth_split_brain_examples"][0]["runtime_behavior_changed"] is False
+    assert payload["quote_truth_split_brain_examples"][0]["order_behavior_changed"] is False
+    assert payload["quote_truth_split_brain_examples"][0]["broker_order_called"] is False
+    assert payload["quote_truth_split_brain_examples"][0]["execution_behavior_changed"] is False
+    assert payload["top_candidates"]
+    assert payload["top_candidates"][0]["is_order_action"] is False
+    assert payload["top_candidates"][0]["broker_api_called"] is False
+    assert payload["top_candidates"][0]["live_execution_changed"] is False
+    assert payload["top_candidates"][0]["behavior_changed"] is False
+    assert payload["top_candidates"][0]["runtime_behavior_changed"] is False
+    assert payload["top_candidates"][0]["order_behavior_changed"] is False
+    assert payload["top_candidates"][0]["broker_order_called"] is False
+    assert payload["top_candidates"][0]["execution_behavior_changed"] is False
+    assert payload["top_blockers_ranked"][0]["is_order_action"] is False
+    assert payload["top_blockers_ranked"][0]["broker_api_called"] is False
+    assert payload["top_blockers_ranked"][0]["live_execution_changed"] is False
+    assert payload["top_blockers_ranked"][0]["behavior_changed"] is False
+    assert payload["top_blockers_ranked"][0]["runtime_behavior_changed"] is False
+    assert payload["top_blockers_ranked"][0]["order_behavior_changed"] is False
+    assert payload["top_blockers_ranked"][0]["broker_order_called"] is False
+    assert payload["top_blockers_ranked"][0]["execution_behavior_changed"] is False
+    assert payload["dominant_blocker"]["is_order_action"] is False
+    assert payload["dominant_blocker"]["broker_api_called"] is False
+    assert payload["dominant_blocker"]["live_execution_changed"] is False
+    assert payload["dominant_blocker"]["behavior_changed"] is False
+    assert payload["dominant_blocker"]["runtime_behavior_changed"] is False
+    assert payload["dominant_blocker"]["order_behavior_changed"] is False
+    assert payload["dominant_blocker"]["broker_order_called"] is False
+    assert payload["dominant_blocker"]["execution_behavior_changed"] is False
 
 
 def test_clean_executable_counterexample_not_misclassified_as_blocked() -> None:

@@ -83,11 +83,11 @@ class CandidateExecutabilityEvidenceReport:
     recommended_next_pr_type: str
     read_only: bool = True
     append: bool = False
-    is_order_action: bool = False
-    broker_api_called: bool = False
+    is_order_action: bool = False  # is_order_action=false
+    broker_api_called: bool = False  # broker_api_called=false
     live_order_allowed: bool = False
-    live_order_action: bool = False
-    broker_order_action: bool = False
+    live_order_action: bool = False  # live_order_action=false
+    broker_order_action: bool = False  # broker_order_action=false
     runtime_wired: bool = False
     external_services_used: bool = False
     proves_trading_edge: bool = False
@@ -95,16 +95,22 @@ class CandidateExecutabilityEvidenceReport:
     @property
     def safety(self) -> dict[str, object]:
         return {
-            "read_only": self.read_only,
-            "append": self.append,
-            "is_order_action": self.is_order_action,
-            "broker_api_called": self.broker_api_called,
-            "live_order_allowed": self.live_order_allowed,
-            "live_order_action": self.live_order_action,
-            "broker_order_action": self.broker_order_action,
-            "runtime_wired": self.runtime_wired,
-            "external_services_used": self.external_services_used,
-            "proves_trading_edge": self.proves_trading_edge,
+            "read_only": True,
+            "append": False,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
+            "live_order_allowed": False,
+            "live_order_action": False,
+            "broker_order_action": False,
+            "runtime_wired": False,
+            "external_services_used": False,
+            "proves_trading_edge": False,
         }
 
 
@@ -263,6 +269,14 @@ def _candidate_row(event: str, payload: dict[str, Any]) -> dict[str, object]:
             payload.get("eligible_for_execution") if payload.get("eligible_for_execution") is not None else payload.get("execution_allowed")
         ),
         "reportable_executable": bool(payload.get("reportable_executable")),
+        "is_order_action": False,
+        "broker_api_called": False,
+        "live_execution_changed": False,
+        "behavior_changed": False,
+        "runtime_behavior_changed": False,
+        "order_behavior_changed": False,
+        "broker_order_called": False,
+        "execution_behavior_changed": False,
         "reason": payload.get("reason") or payload.get("message") or payload.get("candidate_reason"),
         "final_emit_block_reason": payload.get("final_emit_block_reason") or payload.get("final_emit_abort_reason"),
         "execution_truth_blockers": blockers,
@@ -402,6 +416,14 @@ def build_candidate_executability_evidence(
                     "best_bid": payload.get("best_bid"),
                     "best_ask": payload.get("best_ask"),
                     "reason": payload.get("reason") or payload.get("block_reason"),
+                    "is_order_action": False,
+                    "broker_api_called": False,
+                    "live_execution_changed": False,
+                    "behavior_changed": False,
+                    "runtime_behavior_changed": False,
+                    "order_behavior_changed": False,
+                    "broker_order_called": False,
+                    "execution_behavior_changed": False,
                 }
             )
             _record_reasons_from_payload(top_blockers, payload, keys=("reason", "reasons", "block_reason"))
@@ -422,7 +444,19 @@ def build_candidate_executability_evidence(
         combined_counter["QUOTE_TRUTH_SPLIT_BRAIN_REJECT"] += int(quote_truth_split_brain_count)
 
     top_blockers_ranked = tuple(
-        {"reason": reason, "count": count, "recommended_next_pr_type": _dominant_recommendation(reason)}
+        {
+            "reason": reason,
+            "count": count,
+            "recommended_next_pr_type": _dominant_recommendation(reason),
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
+        }
         for reason, count in sorted(combined_counter.items(), key=lambda item: (-item[1], item[0]))
     )
     dominant_blocker = top_blockers_ranked[0] if top_blockers_ranked else None
@@ -489,6 +523,12 @@ def report_to_payload(report: CandidateExecutabilityEvidenceReport) -> dict[str,
         "append": False,
         "is_order_action": False,
         "broker_api_called": False,
+        "live_execution_changed": False,
+        "behavior_changed": False,
+        "runtime_behavior_changed": False,
+        "order_behavior_changed": False,
+        "broker_order_called": False,
+        "execution_behavior_changed": False,
         "live_order_allowed": False,
         "live_order_action": False,
         "broker_order_action": False,
@@ -500,6 +540,12 @@ def report_to_payload(report: CandidateExecutabilityEvidenceReport) -> dict[str,
             "append": False,
             "is_order_action": False,
             "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "live_order_allowed": False,
             "live_order_action": False,
             "broker_order_action": False,
