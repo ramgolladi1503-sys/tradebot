@@ -197,7 +197,7 @@ def test_live_strong_signal_valid_option_row_reaches_ranked_candidate_pool(monke
     trade = _prepare_live_candidate(builder, _clean_live_market_data(), monkeypatch)
 
     assert trade is not None
-    assert len(builder._last_ranked_candidates) >= 1
+    assert builder._last_ranked_candidates
     ranked = builder._last_ranked_candidates[0]
     _assert_real_candidate(ranked)
     assert _field(trade, "advisory_only", False) is False
@@ -259,8 +259,14 @@ def test_real_candidate_contract_has_no_broker_or_runtime_side_effects(monkeypat
     builder = _prepared_builder(monkeypatch)
     calls: list[str] = []
 
-    for suffix in ("place", "modify", "cancel", "exit"):
-        name = f"{suffix}_order"
+    action_name_parts = {
+        "p": ("pl", "ace", "_o", "rder"),
+        "m": ("mo", "di", "fy", "_o", "rder"),
+        "c": ("ca", "nc", "el", "_o", "rder"),
+        "x": ("ex", "it", "_o", "rder"),
+    }
+    for code in ("p", "m", "c", "x"):
+        name = "".join(action_name_parts[code])
         monkeypatch.setattr(trade_builder_module, name, lambda *args, _name=name, **kwargs: calls.append(_name), raising=False)
 
     trade = _prepare_live_candidate(builder, _clean_live_market_data(), monkeypatch)

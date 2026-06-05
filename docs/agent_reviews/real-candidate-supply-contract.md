@@ -48,7 +48,7 @@ expected_tests:
 acceptance_proof:
   - live-like inputs produce a real ranked candidate in the TradeBuilder pool
   - no-signal with fallbacks disabled does not create a ranked candidate
-  - missing bid/ask does not reach the real candidate pool
+  - absent bid/ask does not reach the real pool
   - no broker or runtime side effects occur
 ```
 
