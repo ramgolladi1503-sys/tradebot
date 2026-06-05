@@ -1093,6 +1093,10 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
 
     class _DummyTicker:
         MODE_FULL = "full"
+        connected = True
+
+        def is_connected(self):
+            return True
 
         def subscribe(self, tokens):
             calls["subscribe"].append(list(tokens))
@@ -1104,6 +1108,8 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 2, 3], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", list(range(1, 40)), raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1, 2, 3}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY", 2: "BANKNIFTY", 3: "SENSEX"}, raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
@@ -1124,6 +1130,10 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
 
     class _DummyTicker:
         MODE_FULL = "full"
+        connected = True
+
+        def is_connected(self):
+            return True
 
         def subscribe(self, tokens):
             calls["subscribe"].append(list(tokens))
@@ -1135,6 +1145,8 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33, 44], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", list(range(1, 40)), raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
@@ -1156,6 +1168,10 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
 
     class _DummyTicker:
         MODE_FULL = "full"
+        connected = True
+
+        def is_connected(self):
+            return True
 
         def subscribe(self, tokens):
             calls["subscribe"].append(list(tokens))
@@ -1167,6 +1183,8 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", list(range(1, 40)), raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))

@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib
 from datetime import datetime, timezone
 import sqlite3
 
@@ -7,6 +8,7 @@ import core.auth as auth_module
 from core.auth import reset_kite_runtime_credentials_guard
 import json
 
+import core.depth_hook_cleanup as depth_hook_cleanup
 import core.kite_depth_ws as ws
 import core.tick_store as tick_store
 
@@ -38,6 +40,7 @@ class _DummyTicker:
         self.on_ticks = None
         self.stop_retry_count = 0
         self.factory = None
+        self.connected = False
 
     def subscribe(self, tokens):
         self.tokens = list(tokens)
@@ -51,6 +54,9 @@ class _DummyTicker:
 
     def close(self):
         self.closed = True
+
+    def is_connected(self):
+        return bool(self.connected)
 
     def stop_retry(self):
         self.stop_retry_count += 1
@@ -68,6 +74,9 @@ class _DummyRestClient:
 
 
 def _patch_common(monkeypatch):
+    monkeypatch.setattr(depth_hook_cleanup, "_maybe_reapply_depth_engine", lambda: None, raising=False)
+    monkeypatch.setattr(depth_hook_cleanup, "_reapply_depth_engine", lambda *args, **kwargs: None, raising=False)
+    importlib.reload(ws)
     reset_kite_runtime_credentials_guard()
     monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
@@ -91,6 +100,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_OPTION_TOKEN_INCIDENT_TS", {}, raising=False)
     monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {}, raising=False)
     monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {}, raising=False)
+    monkeypatch.setattr(ws, "_STALE_OPTION_MUTATION_WINDOW_STATE", {}, raising=False)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
@@ -111,6 +121,48 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws.kite_client, "kite", rest, raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_api_key", "api_key_1234", raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_access_token", "TOKEN123", raising=False)
+
+
+def _fresh_refresh_stale_symbol_state(monkeypatch, *, fresh_ratio: float = 0.25, stale_count: int = 6, fresh_count: int = 2):
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102, 103, 104, 105, 106, 107, 108], raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {token: "BANKNIFTY" for token in range(101, 109)}, raising=False)
+    monkeypatch.setattr(
+        ws,
+        "build_subscription_tokens",
+        lambda symbols, max_tokens=150: (
+            [101, 102, 103, 104, 105, 106, 107, 108],
+            [{"symbol": "BANKNIFTY", "tokens": [101, 102, 103, 104, 105, 106, 107, 108], "stale_option_pruned_count": 6}],
+        ),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_option_subscription_freshness_stats",
+        lambda now_epoch, tokens: {"option_count": 8, "fresh_count": fresh_count, "stale_count": stale_count, "fresh_ratio": fresh_ratio, "max_age_sec": 12.0},
+    )
+    monkeypatch.setattr(
+        ws,
+        "_option_subscription_freshness_by_symbol_stats",
+        lambda now_epoch, tokens: {
+            "BANKNIFTY": {
+                "option_count": 8,
+                "fresh_count": fresh_count,
+                "stale_count": stale_count,
+                "fresh_ratio": fresh_ratio,
+                "max_age_sec": 12.0,
+                "urgent_max_age_sec": 2.0,
+            }
+        },
+    )
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(cfg, "MAX_DEPTH_AGE_SEC", 1000.0, raising=False)
+    monkeypatch.setattr(cfg, "MAX_QUOTE_AGE_SEC", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = True
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    return ticker
 
 
 def test_start_depth_ws_uses_resolved_token(monkeypatch):
@@ -628,3 +680,269 @@ def test_network_error_forces_full_restart_when_enabled(monkeypatch):
 
     assert scheduled == []
     assert soft["count"] == 0
+
+
+def test_single_stale_token_does_not_refresh_full_symbol(monkeypatch):
+    _patch_common(monkeypatch)
+    _fresh_refresh_stale_symbol_state(monkeypatch, fresh_ratio=0.0, stale_count=1, fresh_count=0)
+
+    should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=500.0,
+        refresh_state={"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0},
+    )
+
+    assert should_refresh is False
+    assert payload["freshness_urgent"] is True
+    assert payload["mutation_eligible_symbols"] == []
+    assert payload["mutation_skipped_symbols"] == ["BANKNIFTY"]
+    assert payload["mutation_skip_reason_by_symbol"]["BANKNIFTY"] == "stale_count_below_threshold"
+    assert payload["subscribe_tokens"] == []
+    assert payload["unsubscribe_tokens"] == []
+    assert payload["refresh_tokens"] == []
+    assert payload["refresh_applied"] is False
+
+
+def test_high_fresh_ratio_with_one_stale_symbol_logs_skip_reason(monkeypatch):
+    _patch_common(monkeypatch)
+    _fresh_refresh_stale_symbol_state(monkeypatch, fresh_ratio=0.9, stale_count=6, fresh_count=2)
+
+    should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=500.0,
+        refresh_state={"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0},
+    )
+
+    assert should_refresh is False
+    assert payload["freshness_urgent"] is True
+    assert payload["mutation_eligible_symbols"] == []
+    assert payload["mutation_skipped_symbols"] == ["BANKNIFTY"]
+    assert payload["mutation_skip_reason_by_symbol"]["BANKNIFTY"] == "fresh_ratio_above_mutation_threshold"
+    assert payload["reason"] == "freshness_urgent_no_mutation_eligible"
+
+
+def test_symbol_mutation_requires_stale_count_and_low_fresh_ratio() -> None:
+    allowed, payload, _ = ws._should_mutate_stale_option_symbol_subscription(
+        symbol="BANKNIFTY",
+        option_count=8,
+        fresh_count=1,
+        stale_count=4,
+        fresh_ratio=0.125,
+        max_age_sec=12.0,
+        urgent_max_age_sec=2.0,
+        min_fresh_ratio=0.8,
+        min_stale_tokens_required=5,
+        mutation_max_fresh_ratio=0.7,
+        consecutive_windows_required=3,
+        stale_window_state={},
+        now_epoch=500.0,
+    )
+    assert allowed is False
+    assert payload["mutation_skip_reason"] == "stale_count_below_threshold"
+
+    allowed, payload, _ = ws._should_mutate_stale_option_symbol_subscription(
+        symbol="BANKNIFTY",
+        option_count=8,
+        fresh_count=6,
+        stale_count=6,
+        fresh_ratio=0.75,
+        max_age_sec=12.0,
+        urgent_max_age_sec=2.0,
+        min_fresh_ratio=0.8,
+        min_stale_tokens_required=5,
+        mutation_max_fresh_ratio=0.7,
+        consecutive_windows_required=3,
+        stale_window_state={},
+        now_epoch=500.0,
+    )
+    assert allowed is False
+    assert payload["mutation_skip_reason"] == "fresh_ratio_above_mutation_threshold"
+
+
+def test_symbol_mutation_allowed_after_consecutive_broad_stale_windows() -> None:
+    state = {}
+    allowed, payload, state = ws._should_mutate_stale_option_symbol_subscription(
+        symbol="BANKNIFTY",
+        option_count=8,
+        fresh_count=2,
+        stale_count=6,
+        fresh_ratio=0.25,
+        max_age_sec=12.0,
+        urgent_max_age_sec=2.0,
+        min_fresh_ratio=0.8,
+        min_stale_tokens_required=5,
+        mutation_max_fresh_ratio=0.7,
+        consecutive_windows_required=3,
+        stale_window_state=state,
+        now_epoch=500.0,
+    )
+    assert allowed is False
+    assert payload["mutation_window_count_by_symbol"] == 1
+    allowed, payload, state = ws._should_mutate_stale_option_symbol_subscription(
+        symbol="BANKNIFTY",
+        option_count=8,
+        fresh_count=2,
+        stale_count=6,
+        fresh_ratio=0.25,
+        max_age_sec=12.0,
+        urgent_max_age_sec=2.0,
+        min_fresh_ratio=0.8,
+        min_stale_tokens_required=5,
+        mutation_max_fresh_ratio=0.7,
+        consecutive_windows_required=3,
+        stale_window_state=state,
+        now_epoch=545.0,
+    )
+    assert allowed is False
+    assert payload["mutation_window_count_by_symbol"] == 2
+    allowed, payload, state = ws._should_mutate_stale_option_symbol_subscription(
+        symbol="BANKNIFTY",
+        option_count=8,
+        fresh_count=2,
+        stale_count=6,
+        fresh_ratio=0.25,
+        max_age_sec=12.0,
+        urgent_max_age_sec=2.0,
+        min_fresh_ratio=0.8,
+        min_stale_tokens_required=5,
+        mutation_max_fresh_ratio=0.7,
+        consecutive_windows_required=3,
+        stale_window_state=state,
+        now_epoch=590.0,
+    )
+    assert allowed is True
+    assert payload["mutation_window_count_by_symbol"] == 3
+
+
+def test_mutation_window_resets_when_symbol_recovers() -> None:
+    state = {}
+    allowed, _, state = ws._should_mutate_stale_option_symbol_subscription(
+        symbol="BANKNIFTY",
+        option_count=8,
+        fresh_count=2,
+        stale_count=6,
+        fresh_ratio=0.25,
+        max_age_sec=12.0,
+        urgent_max_age_sec=2.0,
+        min_fresh_ratio=0.8,
+        min_stale_tokens_required=5,
+        mutation_max_fresh_ratio=0.7,
+        consecutive_windows_required=3,
+        stale_window_state=state,
+        now_epoch=500.0,
+    )
+    assert allowed is False
+    assert state["mutation_window_count"] == 1
+    allowed, payload, state = ws._should_mutate_stale_option_symbol_subscription(
+        symbol="BANKNIFTY",
+        option_count=8,
+        fresh_count=8,
+        stale_count=0,
+        fresh_ratio=1.0,
+        max_age_sec=1.0,
+        urgent_max_age_sec=2.0,
+        min_fresh_ratio=0.8,
+        min_stale_tokens_required=5,
+        mutation_max_fresh_ratio=0.7,
+        consecutive_windows_required=3,
+        stale_window_state=state,
+        now_epoch=545.0,
+    )
+    assert allowed is False
+    assert payload["mutation_skip_reason"] == "not_diagnostic_urgent"
+    assert state["mutation_window_count"] == 0
+
+
+def test_stale_symbol_without_mutation_permission_does_not_emit_refresh_tokens(monkeypatch):
+    _patch_common(monkeypatch)
+    _fresh_refresh_stale_symbol_state(monkeypatch, fresh_ratio=0.25, stale_count=6, fresh_count=2)
+
+    should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=500.0,
+        refresh_state={"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0},
+    )
+
+    assert should_refresh is False
+    assert payload["subscribe_tokens"] == []
+    assert payload["unsubscribe_tokens"] == []
+    assert payload["refresh_tokens"] == []
+    assert payload["mutation_eligible_symbols"] == []
+    assert payload["mutation_skipped_symbols"] == ["BANKNIFTY"]
+
+
+def test_legitimate_broad_stale_symbol_can_emit_refresh_after_hysteresis(monkeypatch):
+    _patch_common(monkeypatch)
+    _fresh_refresh_stale_symbol_state(monkeypatch, fresh_ratio=0.25, stale_count=6, fresh_count=2)
+
+    refresh_state = {"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0}
+    first = ws._maybe_refresh_stale_option_subscription_universe(now_epoch=500.0, refresh_state=refresh_state)
+    second = ws._maybe_refresh_stale_option_subscription_universe(now_epoch=545.0, refresh_state=refresh_state)
+    should_refresh, payload = ws._maybe_refresh_stale_option_subscription_universe(now_epoch=590.0, refresh_state=refresh_state)
+
+    assert first[0] is False
+    assert second[0] is False
+    assert should_refresh is True
+    assert payload["mutation_eligible_symbols"] == ["BANKNIFTY"]
+    assert payload["refresh_tokens"] == [101, 102, 103, 104, 105, 106, 107, 108]
+    assert payload["refresh_applied"] is False
+
+
+def test_ensure_subscribed_tokens_skips_when_ws_disconnected(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = False
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert ws.ensure_subscribed_tokens([201, 202], reason="unit_test", symbol="BANKNIFTY") is False
+    assert ticker.tokens == [] if hasattr(ticker, "tokens") else True
+    assert events[-1][0] == "FEED_SUBSCRIBE_SKIPPED"
+    assert events[-1][1]["guard_reason"] == "ws_disconnected"
+
+
+def test_ensure_subscribed_tokens_skips_when_recovery_blocked(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = True
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert ws.ensure_subscribed_tokens([201, 202], reason="unit_test", symbol="BANKNIFTY") is False
+    assert events[-1][0] == "FEED_SUBSCRIBE_SKIPPED"
+    assert events[-1][1]["guard_reason"] == "ws1006_process_restart_required"
+
+
+def test_soft_resubscribe_skips_when_recovery_blocked(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = True
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [101, 102], raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert ws._soft_resubscribe_current(reason="unit_test") is False
+    assert events[-1][0] == "FEED_SOFT_RESUBSCRIBE_SKIPPED"
+    assert events[-1][1]["guard_reason"] == "ws1006_process_restart_required"
+
+
+def test_apply_subscription_delta_skips_when_recovery_blocked(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = True
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is False
+    assert events[-1][0] == "FEED_REBALANCE_SKIPPED"
+    assert events[-1][1]["guard_reason"] == "ws1006_process_restart_required"
