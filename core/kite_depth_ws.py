@@ -1179,6 +1179,26 @@ def _is_terminal_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
     return any(marker in reason_lower for marker in terminal_reason_markers)
 
 
+def _should_require_process_restart_for_ws_fault(*, code: int | None, reason_text: str | None) -> bool:
+    if _is_terminal_ws_fault(code=code, reason_text=reason_text):
+        return True
+    try:
+        code_int = int(code) if code is not None else None
+    except Exception:
+        code_int = None
+    if code_int != 1006:
+        return False
+    reason_lower = str(reason_text or "").strip().lower()
+    return any(
+        marker in reason_lower
+        for marker in (
+            "connection was closed uncleanly",
+            "peer dropped",
+            "main loop terminated",
+        )
+    )
+
+
 def _set_reconnect_blocked_reason(reason: str) -> str:
     global _RECONNECT_BLOCKED_REASON, _RECONNECT_BLOCKED_SINCE_EPOCH, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _REACTOR_NOT_RESTARTABLE_DETECTED
     blocked = str(reason or "").strip().lower() or "unknown_reconnect_block"
@@ -4520,7 +4540,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         stop_set = bool(_WATCHDOG_STOP is not None and _WATCHDOG_STOP.is_set())
         if fatal and is_market_open_ist() and not _STOP_REQUESTED and not stop_set:
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
-            if _is_terminal_ws_fault(code=code_int, reason_text=reason_text):
+            if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
                 _block_reconnect_for_process_restart(source="on_error", code=code_int, reason=reason_text)
                 return
             if _use_internal_reconnect():
@@ -4619,7 +4639,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             fatal = True
         if is_market_open_ist():
             ignore_cooldown = _should_ignore_restart_cooldown_for_ws_fault(code=code_int, reason_text=reason_text)
-            if _is_terminal_ws_fault(code=code_int, reason_text=reason_text):
+            if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
                 _block_reconnect_for_process_restart(source="on_close", code=code_int, reason=reason_text)
                 return
             if _use_internal_reconnect():
