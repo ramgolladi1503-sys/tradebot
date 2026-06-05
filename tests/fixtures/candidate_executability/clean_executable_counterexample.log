@@ -1,0 +1,7 @@
+2026-06-05T12:10:00Z RAW_CANDIDATE_COUNT {"event":"RAW_CANDIDATE_COUNT","symbol":"NIFTY","count":8}
+2026-06-05T12:10:00Z POST_SCAN_SURVIVOR_COUNT {"event":"POST_SCAN_SURVIVOR_COUNT","symbol":"NIFTY","count":6}
+2026-06-05T12:10:01Z POST_REAL_FILTER_COUNT {"event":"POST_REAL_FILTER_COUNT","symbol":"NIFTY","count":6}
+2026-06-05T12:10:01Z POST_EXECUTABLE_FILTER_COUNT {"event":"POST_EXECUTABLE_FILTER_COUNT","symbol":"NIFTY","count":1}
+2026-06-05T12:10:01Z TB_RANKED_COUNT_REAL {"event":"TB_RANKED_COUNT_REAL","symbol":"NIFTY","count":6}
+2026-06-05T12:10:01Z TB_RANKED_COUNT_EXECUTABLE {"event":"TB_RANKED_COUNT_EXECUTABLE","symbol":"NIFTY","count":1}
+2026-06-05T12:10:01Z TB_TOP_EXECUTABLE_CANDIDATE {"event":"TB_TOP_EXECUTABLE_CANDIDATE","symbol":"NIFTY","trade_id":"CLEAN-1","strategy_family":"continuation","candidate_status":"executable","execution_status":"executable","execution_entry_status":"executable","permission":"EXECUTE","final_action":"EXECUTE","readiness":"READY","execution_allowed":true,"eligible_for_execution":true,"reportable_executable":true,"reason":"clean_route","final_emit_block_reason":null,"execution_truth_blockers":[]}
