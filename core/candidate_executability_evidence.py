@@ -495,7 +495,18 @@ def report_to_payload(report: CandidateExecutabilityEvidenceReport) -> dict[str,
         "runtime_wired": False,
         "external_services_used": False,
         "proves_trading_edge": False,
-        "safety": dict(report.safety),
+        "safety": {
+            "read_only": True,
+            "append": False,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_order_allowed": False,
+            "live_order_action": False,
+            "broker_order_action": False,
+            "runtime_wired": False,
+            "external_services_used": False,
+            "proves_trading_edge": False,
+        },
     }
 
 
