@@ -79,8 +79,13 @@ class CommandCenterReport:
     analyzed_paths: tuple[str, ...]
     agents: tuple[AgentReport, ...]
     first_blocker_layer: str | None
+    first_failing_event: str | None
     root_cause_summary: str
+    confidence: str
+    next_action_type: str
     next_pr_recommendation: str
+    downstream_impact: tuple[str, ...]
+    what_is_not_root_cause: tuple[str, ...]
     safety_summary: dict[str, Any]
     metrics_summary: dict[str, Any]
 
