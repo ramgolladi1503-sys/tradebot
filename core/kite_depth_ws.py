@@ -749,6 +749,40 @@ def _maybe_refresh_stale_option_subscription_universe(
     }
 
 
+def _stale_option_mutation_guard_blocked(refresh_payload: dict[str, object] | None) -> tuple[bool, dict[str, object]]:
+    payload = dict(refresh_payload or {})
+    freshness_urgent = bool(payload.get("freshness_urgent"))
+    mutation_guard_ok = bool(payload.get("mutation_guard_ok"))
+    if not freshness_urgent or mutation_guard_ok:
+        return False, {}
+    skip_payload = {
+        "reason": str(payload.get("reason") or "stale_option_prune_refresh_guard"),
+        "refresh_mode": str(payload.get("refresh_mode") or "delta"),
+        "freshness_urgent": freshness_urgent,
+        "freshness_urgent_symbols": list(payload.get("freshness_urgent_symbols") or []),
+        "mutation_eligible_symbols": list(payload.get("mutation_eligible_symbols") or []),
+        "mutation_skipped_symbols": list(payload.get("mutation_skipped_symbols") or []),
+        "mutation_skip_reason_by_symbol": dict(payload.get("mutation_skip_reason_by_symbol") or {}),
+        "mutation_window_count_by_symbol": dict(payload.get("mutation_window_count_by_symbol") or {}),
+        "mutation_guard_ok": False,
+        "mutation_guard_reason": str(payload.get("mutation_guard_reason") or "mutation_guard_false"),
+        "mutation_guard_payload": dict(payload.get("mutation_guard_payload") or {}),
+        "fresh_count": int(payload.get("fresh_count") or 0),
+        "stale_count": int(payload.get("stale_count") or 0),
+        "fresh_ratio": float(payload.get("fresh_ratio") or 0.0),
+        "max_age_sec": float(payload.get("max_age_sec") or 0.0),
+        "min_stale_tokens_required": int(payload.get("min_stale_tokens_required") or 0),
+        "mutation_max_fresh_ratio": float(payload.get("mutation_max_fresh_ratio") or 0.0),
+        "mutation_consecutive_windows_required": int(payload.get("mutation_consecutive_windows_required") or 0),
+        "subscribe_count": int(payload.get("subscribe_count") or 0),
+        "unsubscribe_count": int(payload.get("unsubscribe_count") or 0),
+        "refresh_token_count": int(payload.get("refresh_token_count") or 0),
+        "refresh_applied": False,
+        "guard_reason": str(payload.get("mutation_guard_reason") or "mutation_guard_false"),
+    }
+    return True, skip_payload
+
+
 def _resubscribe_token_selection() -> tuple[list[int], dict[str, int | bool | str]]:
     desired_tokens = _normalize_positive_tokens(_LAST_DESIRED_TOKENS)
     fallback_tokens = _normalize_positive_tokens(_LAST_TOKENS)
@@ -5201,6 +5235,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
             )
             subscribed_option_tokens = int(option_state.get("option_count") or 0)
+            refresh_payload: dict[str, object] = {}
             try:
                 should_refresh, refresh_payload = _maybe_refresh_stale_option_subscription_universe(
                     now_epoch=now_loop,
@@ -5290,6 +5325,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
             except Exception:
                 pass
+            stale_option_mutation_guard_blocked, stale_option_mutation_guard_payload = _stale_option_mutation_guard_blocked(
+                refresh_payload
+            )
             if expected_option_tokens > 0 and subscribed_option_tokens <= 0:
                 if (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
                     last_option_subscribe_retry = now_loop
@@ -5423,6 +5461,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     _emit_snapshot(now_loop)
                     continue
 
+            if stale_option_mutation_guard_blocked:
+                _log_ws(
+                    "FEED_REBALANCE_SKIPPED",
+                    {
+                        **stale_option_mutation_guard_payload,
+                        "guard_reason": "stale_option_mutation_guard",
+                        "subscribe_count": 0,
+                        "unsubscribe_count": 0,
+                    },
+                )
+                _emit_snapshot(now_loop)
+                continue
             now_reb = time.time()
             eval_interval = max(5.0, min(rebalance_cooldown_sec, 30.0))
             if (now_reb - float(rebalance_state.get("last_eval_ts") or 0.0)) < eval_interval:

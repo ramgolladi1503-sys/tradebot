@@ -719,6 +719,74 @@ def test_high_fresh_ratio_with_one_stale_symbol_logs_skip_reason(monkeypatch):
     assert payload["reason"] == "freshness_urgent_no_mutation_eligible"
 
 
+def test_mutation_guard_false_suppresses_stale_option_rebalance_applied() -> None:
+    blocked, payload = ws._stale_option_mutation_guard_blocked(
+        {
+            "reason": "freshness_drift",
+            "refresh_mode": "symbol_freshness",
+            "freshness_urgent": True,
+            "freshness_urgent_symbols": ["BANKNIFTY"],
+            "mutation_eligible_symbols": [],
+            "mutation_skipped_symbols": ["BANKNIFTY"],
+            "mutation_skip_reason_by_symbol": {"BANKNIFTY": "fresh_ratio_above_mutation_threshold"},
+            "mutation_window_count_by_symbol": {"BANKNIFTY": 2},
+            "mutation_guard_ok": False,
+            "mutation_guard_reason": "fresh_ratio_above_threshold",
+            "mutation_guard_payload": {"source": "unit_test"},
+            "fresh_count": 2,
+            "stale_count": 6,
+            "fresh_ratio": 0.9,
+            "max_age_sec": 12.0,
+            "min_stale_tokens_required": 5,
+            "mutation_max_fresh_ratio": 0.7,
+            "mutation_consecutive_windows_required": 3,
+        }
+    )
+
+    assert blocked is True
+    assert payload["guard_reason"] == "fresh_ratio_above_threshold"
+    assert payload["mutation_guard_ok"] is False
+    assert payload["fresh_count"] == 2
+    assert payload["stale_count"] == 6
+    assert payload["fresh_ratio"] == 0.9
+    assert payload["mutation_skip_reason_by_symbol"]["BANKNIFTY"] == "fresh_ratio_above_mutation_threshold"
+    assert payload["mutation_skipped_symbols"] == ["BANKNIFTY"]
+
+
+def test_urgent_stale_diagnostic_does_not_bypass_mutation_guard() -> None:
+    blocked, payload = ws._stale_option_mutation_guard_blocked(
+        {
+            "reason": "freshness_drift",
+            "refresh_mode": "symbol_freshness",
+            "freshness_urgent": True,
+            "freshness_urgent_symbols": ["BANKNIFTY", "SENSEX"],
+            "mutation_eligible_symbols": ["BANKNIFTY"],
+            "mutation_skipped_symbols": ["BANKNIFTY", "SENSEX"],
+            "mutation_skip_reason_by_symbol": {
+                "BANKNIFTY": "mutation_consecutive_windows_not_met",
+                "SENSEX": "stale_count_below_threshold",
+            },
+            "mutation_window_count_by_symbol": {"BANKNIFTY": 2, "SENSEX": 0},
+            "mutation_guard_ok": False,
+            "mutation_guard_reason": "mutation_breadth_not_met",
+            "mutation_guard_payload": {"source": "unit_test"},
+            "fresh_count": 10,
+            "stale_count": 2,
+            "fresh_ratio": 0.83,
+            "max_age_sec": 9.0,
+            "min_stale_tokens_required": 5,
+            "mutation_max_fresh_ratio": 0.7,
+            "mutation_consecutive_windows_required": 3,
+        }
+    )
+
+    assert blocked is True
+    assert payload["guard_reason"] == "mutation_breadth_not_met"
+    assert payload["freshness_urgent_symbols"] == ["BANKNIFTY", "SENSEX"]
+    assert payload["mutation_eligible_symbols"] == ["BANKNIFTY"]
+    assert payload["mutation_guard_payload"] == {"source": "unit_test"}
+
+
 def test_symbol_mutation_requires_stale_count_and_low_fresh_ratio() -> None:
     allowed, payload, _ = ws._should_mutate_stale_option_symbol_subscription(
         symbol="BANKNIFTY",
