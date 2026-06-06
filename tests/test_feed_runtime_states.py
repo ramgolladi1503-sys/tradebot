@@ -191,6 +191,8 @@ def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(m
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
     monkeypatch.setattr(depth_ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
 
     depth_ws._persist_runtime_snapshot_row(
         ws_connected=True,
@@ -516,6 +518,152 @@ def test_write_feed_runtime_snapshot_publishes_fail_closed_status_overlay(monkey
     assert engine["visible_executable_count"] == 0
     assert health["feed"]["sla_status"] == "FAIL"
     assert health["feed"]["ws_connected"] is False
+
+
+def test_recovery_blocked_snapshot_sets_executable_false_everywhere(monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    logs_path = repo_root / ".runtime" / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(runtime_store, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+    monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
+
+    depth_ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test_recovery_blocked_snapshot",
+        now_epoch=200.0,
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    mirror_paths = [
+        repo_root / "logs" / "feed_runtime_latest.json",
+        repo_root / ".runtime" / "feed_runtime_latest.json",
+        repo_root / ".runtime" / "logs" / "feed_runtime_latest.json",
+    ]
+    payloads = [json.loads(path.read_text()) for path in mirror_paths]
+
+    for payload in payloads:
+        assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+        assert payload["feed_truth_state"] in {"DEAD", "RECOVERY_BLOCKED"}
+        assert payload["feed_truth_allows_executable_candidates"] is False
+        assert payload["process_restart_required"] is True
+        assert payload["ws_reconnect_allowed"] is False
+        assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+        assert payload["option_feed_block_reason_by_symbol"]["NIFTY"] == "NO_LIVE_OPTION_FEED"
+        assert payload["option_active_blockers_by_symbol"]["NIFTY"] == ["NO_LIVE_OPTION_FEED"]
+
+    assert payloads[0]["option_feed_block_reason_by_symbol"] == payloads[1]["option_feed_block_reason_by_symbol"] == payloads[2]["option_feed_block_reason_by_symbol"]
+    assert payloads[0]["feed_truth_allows_executable_candidates"] == payloads[1]["feed_truth_allows_executable_candidates"] == payloads[2]["feed_truth_allows_executable_candidates"]
+
+
+def test_healthy_runtime_snapshot_still_reports_executable_true_everywhere(monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    logs_path = repo_root / ".runtime" / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(runtime_store, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+
+    depth_ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test_healthy_runtime_snapshot",
+        now_epoch=200.0,
+        runtime_state="RUNNING",
+        last_error="",
+        intended_tokens_count=2,
+    )
+
+    mirror_paths = [
+        repo_root / "logs" / "feed_runtime_latest.json",
+        repo_root / ".runtime" / "feed_runtime_latest.json",
+        repo_root / ".runtime" / "logs" / "feed_runtime_latest.json",
+    ]
+    payloads = [json.loads(path.read_text()) for path in mirror_paths]
+
+    for payload in payloads:
+        assert payload["runtime_state"] == "RUNNING"
+        assert payload["feed_truth_state"] == "LIVE"
+        assert payload["feed_truth_allows_executable_candidates"] is True
+        assert payload["option_feed_block_reason_by_symbol"] == {"NIFTY": "OK"}
+        assert payload["option_active_blockers_by_symbol"] == {"NIFTY": []}
+
+
+def test_runtime_snapshot_mirrors_share_canonical_blocked_truth(monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    logs_path = repo_root / ".runtime" / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+
+    db_path = tmp_path / "runtime.sqlite"
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(runtime_store, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
+
+    depth_ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test_canonical_mirrors",
+        now_epoch=200.0,
+        runtime_state="RUNNING",
+        last_error="",
+    )
+
+    mirror_paths = [
+        repo_root / "logs" / "feed_runtime_latest.json",
+        repo_root / ".runtime" / "feed_runtime_latest.json",
+        repo_root / ".runtime" / "logs" / "feed_runtime_latest.json",
+    ]
+    payloads = [json.loads(path.read_text()) for path in mirror_paths]
+
+    shared_keys = (
+        "runtime_state",
+        "feed_truth_state",
+        "feed_truth_allows_executable_candidates",
+        "option_feed_block_reason_by_symbol",
+        "process_restart_required",
+        "ws_reconnect_allowed",
+    )
+    for key in shared_keys:
+        baseline = payloads[0][key]
+        for payload in payloads[1:]:
+            assert payload[key] == baseline
 
 
 def test_write_feed_runtime_snapshot_includes_reconnect_blocked_reason(monkeypatch, tmp_path):

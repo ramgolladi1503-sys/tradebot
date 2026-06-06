@@ -80,6 +80,60 @@ def _coerce_epoch(value: Any) -> float | None:
         return None
 
 
+def canonicalize_feed_runtime_snapshot_truth(payload: dict[str, Any]) -> dict[str, Any]:
+    out = dict(payload or {})
+    runtime_state = str(out.get("runtime_state") or "").strip().upper()
+    feed_truth_state = str(out.get("feed_truth_state") or "").strip().upper()
+    reconnect_blocked_reason = str(out.get("reconnect_blocked_reason") or "").strip().lower()
+    process_restart_required = bool(out.get("process_restart_required"))
+    ws_connected = out.get("ws_connected")
+    blocked_snapshot = bool(
+        reconnect_blocked_reason
+        or process_restart_required
+        or runtime_state in {"RECOVERY_BLOCKED", "DEAD", "SUBSCRIBE_FAILED", "WS_DISCONNECTED"}
+        or feed_truth_state in {"DEAD", "RECOVERY_BLOCKED"}
+        or ws_connected is False
+    )
+    if not blocked_snapshot:
+        return out
+
+    option_block_reason_by_symbol = dict(out.get("option_feed_block_reason_by_symbol") or {})
+    option_tokens_subscribed_count_by_symbol = dict(out.get("option_tokens_subscribed_count_by_symbol") or {})
+    option_ticks_received_count_by_symbol = dict(out.get("option_ticks_received_count_by_symbol") or {})
+    option_active_blockers_by_symbol = {
+        str(symbol).upper(): [str(reason).strip().upper() for reason in list(reasons or []) if str(reason).strip()]
+        for symbol, reasons in dict(out.get("option_active_blockers_by_symbol") or {}).items()
+    }
+    tracked_symbols = (
+        set(str(symbol).upper() for symbol in option_block_reason_by_symbol.keys())
+        | set(str(symbol).upper() for symbol in option_tokens_subscribed_count_by_symbol.keys())
+        | set(str(symbol).upper() for symbol in option_ticks_received_count_by_symbol.keys())
+    )
+    normalized_block_reason_by_symbol: dict[str, str] = {}
+    normalized_active_blockers_by_symbol: dict[str, list[str]] = {}
+    for symbol in sorted(sym for sym in tracked_symbols if sym):
+        reason_text = str(option_block_reason_by_symbol.get(symbol) or "").strip().upper()
+        if reason_text in {"", "OK", "LIVE", "FRESH", "NONE"}:
+            reason_text = "NO_LIVE_OPTION_FEED"
+        normalized_block_reason_by_symbol[symbol] = reason_text
+        active_reasons = [
+            reason
+            for reason in list(option_active_blockers_by_symbol.get(symbol) or [])
+            if reason not in {"", "OK", "LIVE", "FRESH", "NONE"}
+        ]
+        if not active_reasons:
+            active_reasons = [reason_text]
+        elif reason_text not in active_reasons:
+            active_reasons.insert(0, reason_text)
+        normalized_active_blockers_by_symbol[symbol] = list(dict.fromkeys(active_reasons))
+
+    if normalized_block_reason_by_symbol:
+        out["option_feed_block_reason_by_symbol"] = normalized_block_reason_by_symbol
+    if normalized_active_blockers_by_symbol:
+        out["option_active_blockers_by_symbol"] = normalized_active_blockers_by_symbol
+    return out
+
+
 def _startup_event_for_runtime_source(source: str, runtime_state: str) -> str | None:
     source_text = str(source or "")
     state_text = str(runtime_state or "").strip().upper()
@@ -132,6 +186,7 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
         out["feed_truth_reason_code"] = str(feed_truth.reason_code)
         out["feed_truth_reasons"] = list(feed_truth.reasons)
         out["feed_truth_strict_live"] = bool(feed_truth.strict_live)
+    out = canonicalize_feed_runtime_snapshot_truth(out)
     out = attach_feed_execution_truth(out)
     out["read_only"] = True
     out["append"] = False
