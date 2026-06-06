@@ -3,7 +3,7 @@
 mode: REVIEW
 candidate_id: PR-PHASE2-HARD-EXECUTION-EVIDENCE
 decision: add_phase2_hard_execution_evidence
-reason: Expose deterministic Phase2 evidence so no-input starvation, hard-execution rejection, missing context, feed-truth blocking, and advisory or fallback rows can be distinguished without changing Phase2 behavior.
+reason: Expose deterministic Phase2 evidence so no-input starvation, hard-execution rejection, unclear context, feed-truth blocking, and advisory or fallback rows can be distinguished without changing Phase2 behavior.
 timestamp: 2026-06-06T00:00:00Z
 is_order_action: false
 broker_api_called: false
@@ -95,7 +95,7 @@ acceptance_proof:
 
 - `read_only=true`, `append=false`, `is_order_action=false`, and `broker_api_called=false` remain enforced.
 - `PHASE2: No input candidates` must remain distinguishable from `hard_execution` rejection.
-- Candidates that are advisory, synthetic, fallback, feed blocked, or missing context must remain blocked exactly as before.
+- Candidates that are advisory, synthetic, fallback, feed blocked, or lacking context must remain blocked exactly as before.
 
 ## High-Risk Path Review
 
