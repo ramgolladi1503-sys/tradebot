@@ -350,8 +350,12 @@ def run_agent_command_center(
 
     json_path = output_root / "agent_command_center_latest.json"
     md_path = output_root / "agent_command_center_latest.md"
-    write_json_atomic(json_path, report.to_dict())
-    md_path.write_text(_render_markdown(report), encoding="utf-8")
+    write_json_outputs = fmt in {"json", "both"}
+    write_markdown_output = fmt in {"markdown", "both"}
+    if write_json_outputs:
+        write_json_atomic(json_path, report.to_dict())
+    if write_markdown_output:
+        md_path.write_text(_render_markdown(report), encoding="utf-8")
 
     per_agent_paths = {
         "live_rca": output_root / "live_rca_latest.json",
@@ -361,10 +365,11 @@ def run_agent_command_center(
         "edge_measurement": output_root / "edge_measurement_latest.json",
         "safety_regression_gate": output_root / "safety_regression_gate_latest.json",
     }
-    for agent in agent_reports:
-        path = per_agent_paths.get(agent.agent_name)
-        if path is not None:
-            write_json_atomic(path, agent.to_dict())
+    if write_json_outputs:
+        for agent in agent_reports:
+            path = per_agent_paths.get(agent.agent_name)
+            if path is not None:
+                write_json_atomic(path, agent.to_dict())
 
     if fail_on_blocker and blocker_layers:
         raise SystemExit(f"agent_command_center_blocked first_blocker_layer={summary['first_blocker_layer']}")
