@@ -356,6 +356,9 @@ def _best_reject_reason(entry: dict, *, default: str = "unspecified_trade_builde
 def _execution_ineligibility_reason(entry: dict, *, default: str = "no_execution_candidates") -> str:
     if not isinstance(entry, dict):
         return str(default or "no_execution_candidates")
+    execution_truth_blockers = _dedupe_issue_codes(list(entry.get("execution_truth_blockers") or []))
+    if bool(entry.get("execution_truth_blocked")) and execution_truth_blockers:
+        return execution_truth_blockers[0]
     preferred_reason = str(_best_reject_reason(entry, default="") or "").strip()
     if preferred_reason and preferred_reason.lower() not in {
         "ok",
@@ -384,6 +387,7 @@ def _execution_ineligibility_reason(entry: dict, *, default: str = "no_execution
         list(entry.get("blockers") or [])
         + list(entry.get("gate_reasons") or [])
         + list(entry.get("execution_blockers") or [])
+        + list(entry.get("execution_truth_blockers") or [])
     )
     if blockers:
         return blockers[0]
@@ -485,6 +489,8 @@ def _mark_synthetic_advisory_entry(entry: dict, *, emit_log: bool = False) -> di
 
 def _is_execution_eligible(entry: dict) -> bool:
     if not isinstance(entry, dict):
+        return False
+    if bool(entry.get("execution_truth_blocked")) or bool(entry.get("execution_truth_blockers")):
         return False
     hard_blockers = _dedupe_issue_codes(list(entry.get("hard_blockers") or []))
     permission = str(entry.get("permission") or "").strip().upper()
@@ -6036,6 +6042,7 @@ def _enforce_final_execution_state_consistency(entry: dict) -> dict:
         out["final_emit_block_reason"] = replacement or None
 
     execution_blocked = bool(out.get("execution_blocked"))
+    execution_truth_blocked = bool(out.get("execution_truth_blocked")) or bool(out.get("execution_truth_blockers"))
     approval_blocked = bool(out.get("approval_blocked"))
     must_demote_execute = (
         final_action == "EXECUTE"
@@ -6048,13 +6055,14 @@ def _enforce_final_execution_state_consistency(entry: dict) -> dict:
         or not executable_entry_ready
         or approval_blocked
         or execution_blocked
+        or execution_truth_blocked
         or unresolved_contract
         or bool(hard_blockers)
     )
     if not must_demote_execute:
         return out
 
-    if unresolved_contract or bool(hard_blockers) or execution_status == "blocked":
+    if unresolved_contract or bool(hard_blockers) or execution_status == "blocked" or execution_truth_blocked:
         target_permission = "BLOCK"
     elif execution_status == "queue_only":
         target_permission = "QUEUE_ONLY"

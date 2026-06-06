@@ -464,6 +464,10 @@ def _is_reportable_executable_candidate(candidate) -> bool:
     permission = str(_trade_attr(candidate, "permission", "") or "").strip().upper()
     final_action = str(_trade_attr(candidate, "final_action", "") or "").strip().upper()
     readiness = str(_trade_attr(candidate, "readiness", "") or "").strip().upper()
+    if bool(_trade_attr(candidate, "execution_truth_blocked", False)):
+        return False
+    if bool(_trade_attr(candidate, "execution_truth_blockers", None)):
+        return False
     if candidate_status in {"advisory_only", "blocked", "blocked_contract"}:
         return False
     status_derived_executable = (
