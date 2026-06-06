@@ -403,11 +403,19 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
     try:
         if bool(getattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True)):
             drop_counts = getattr(_phase2_base.build_candidates_phase2, "_last_drop_reason_counts", {}) or {}
+            feed_truth_payload = {}
+            try:
+                feed_path = logs_dir() / "feed_truth_latest.json"
+                if feed_path.exists():
+                    feed_truth_payload = json.loads(feed_path.read_text(encoding="utf-8"))
+            except Exception:
+                feed_truth_payload = {}
             payload = build_phase2_rejection_evidence_payload(
                 phase2_state=None,
                 raw_candidates=[row for row in list(raw_candidates or []) if isinstance(row, dict)],
                 ranked_candidates=[row for row in list(out or []) if isinstance(row, dict)],
                 drop_reason_counts=drop_counts if isinstance(drop_counts, dict) else {},
+                feed_truth=feed_truth_payload if isinstance(feed_truth_payload, dict) else {},
             )
             write_phase2_rejection_evidence_latest(payload=payload)
             try:
