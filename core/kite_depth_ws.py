@@ -27,12 +27,14 @@ from core.feed_restart_guard import feed_restart_guard
 from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip as trip_feed_breaker
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
+from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
 from core.runtime_status_overlay import (
     derive_effective_ws_connected,
     derive_feed_ok,
     publish_feed_unhealthy_status_overlay,
 )
 from core.feed_truth_state import classify_feed_truth_state
+from core.feed_execution_truth import attach_feed_execution_truth
 from core import risk_halt
 from core.paths import repo_root, logs_dir
 from core.log_writer import get_jsonl_writer, get_rotating_logger
@@ -2418,6 +2420,8 @@ def _write_feed_runtime_snapshot(
     payload["feed_truth_reason_code"] = str(feed_truth.reason_code)
     payload["feed_truth_reasons"] = list(feed_truth.reasons)
     payload["feed_truth_strict_live"] = bool(feed_truth.strict_live)
+    payload = canonicalize_feed_runtime_snapshot_truth(payload)
+    payload = attach_feed_execution_truth(payload)
     payload = stamp_runtime_payload(
         payload,
         writer="kite_depth_ws.feed_runtime",
