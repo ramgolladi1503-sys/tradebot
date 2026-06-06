@@ -148,6 +148,21 @@ acceptance_proof:
 
 Add richer per-agent heuristics after the contract and readers are stable.
 
+## Runtime Proof Required After Merge
+
+- Run the command-center CLI against real runtime logs and snapshots.
+- Confirm the JSON and Markdown summary artifacts are written to the requested output directory.
+- Confirm per-agent latest JSON artifacts are written for every selected agent.
+- Confirm missing or malformed evidence does not crash the readers.
+- Confirm the output remains read-only and no runtime artifacts are written outside the explicit report directory.
+
+## What This PR Does Not Prove
+
+- It does not prove trading edge or profitability.
+- It does not prove live market readiness.
+- It does not prove broker readiness.
+- It does not prove order execution safety beyond the read-only forensic reports.
+
 ## Human Approval
 
 Human approval is required before merge.
