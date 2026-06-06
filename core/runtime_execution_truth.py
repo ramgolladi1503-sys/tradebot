@@ -52,6 +52,35 @@ def _append_blocker(blockers: list[str], reason: Any) -> None:
         blockers.append(normalized)
 
 
+def _payload_execution_truth_blockers(payload: Mapping[str, Any] | None) -> list[str]:
+    out: list[str] = []
+    if not isinstance(payload, Mapping):
+        return out
+    for key in (
+        "execution_truth_blockers",
+        "blockers",
+        "hard_blockers",
+        "execution_blockers",
+        "gate_reasons",
+    ):
+        for reason in _as_list(payload.get(key)):
+            _append_blocker(out, reason)
+    if bool(payload.get("execution_truth_blocked")):
+        for reason in _as_list(payload.get("execution_truth_blockers") or payload.get("blockers") or payload.get("hard_blockers")):
+            _append_blocker(out, reason)
+    if str(payload.get("visibility_bucket") or "").strip().lower() == "blocked":
+        _append_blocker(out, "BLOCKED")
+    if str(payload.get("candidate_status") or "").strip().lower() in {"blocked", "blocked_contract"}:
+        _append_blocker(out, payload.get("candidate_status"))
+    if str(payload.get("permission") or "").strip().upper() == "BLOCK":
+        _append_blocker(out, "BLOCK")
+    if str(payload.get("final_action") or "").strip().upper() == "BLOCK":
+        _append_blocker(out, "BLOCK")
+    if str(payload.get("readiness") or "").strip().upper() == "BLOCKED":
+        _append_blocker(out, "BLOCKED")
+    return out
+
+
 def build_execution_truth_context(
     *,
     market_data: Mapping[str, Any] | None = None,
@@ -357,6 +386,22 @@ def normalize_candidate_execution_truth_payload(
         for key in ("execution_allowed", "eligible_for_execution")
     ) or str(out.get("permission") or "").strip().upper() == "EXECUTE" or str(out.get("final_action") or "").strip().upper() == "EXECUTE" or str(out.get("execution_status") or "").strip().lower() == "executable" or str(out.get("readiness") or "").strip().upper() == "READY"
     truth = execution_truth_decision(execution_truth_context)
+    payload_blockers = _payload_execution_truth_blockers(out)
+    if payload_blockers:
+        for blocker in payload_blockers:
+            _append_blocker(truth["execution_truth_blockers"], blocker)
+        truth["execution_truth_state"] = "blocked"
+        truth["execution_truth_blocked"] = True
+        truth["execution_truth_advisory"] = False
+        truth["reportable_executable"] = False
+        truth["execution_allowed"] = False
+        truth["eligible_for_execution"] = False
+        truth["permission"] = "BLOCK"
+        truth["final_action"] = "BLOCK"
+        truth["execution_status"] = "blocked"
+        truth["readiness"] = "BLOCKED"
+        truth["candidate_status"] = "blocked"
+        truth["visibility_bucket"] = "blocked"
     if not truth["execution_truth_blockers"] and truth["reportable_executable"]:
         out.setdefault("execution_truth_state", truth["execution_truth_state"])
         out.setdefault("execution_truth_blockers", [])

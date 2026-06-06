@@ -153,6 +153,43 @@ def test_runtime_execution_truth_blocks_when_feedtruth_disconnected():
     assert "WS_DISCONNECTED" in truth["execution_truth_blockers"]
 
 
+def test_runtime_truth_blocker_overrides_executable_candidate_fields():
+    truth = orchestrator.normalize_candidate_execution_truth_payload(
+        {
+            "execution_entry_status": "executable",
+            "execution_allowed": True,
+            "eligible_for_execution": True,
+            "permission": "EXECUTE",
+            "final_action": "EXECUTE",
+            "readiness": "READY",
+            "execution_status": "executable",
+            "candidate_status": "executable",
+            "execution_truth_blocked": True,
+            "execution_truth_blockers": ["STALE", "WS_DISCONNECTED", "LATENCY_GUARD_DEGRADE_EXIT_ONLY"],
+        },
+        execution_truth_context=build_execution_truth_context(
+            market_data={
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "feed_truth_state": "LIVE",
+                "quote_health": {"state": "OK", "stale_reasons": []},
+            },
+            latency_guard={},
+        ),
+    )
+
+    assert truth["reportable_executable"] is False
+    assert truth["execution_allowed"] is False
+    assert truth["eligible_for_execution"] is False
+    assert truth["permission"] == "BLOCK"
+    assert truth["final_action"] == "BLOCK"
+    assert truth["execution_status"] == "blocked"
+    assert truth["candidate_status"] == "blocked"
+    assert truth["visibility_bucket"] == "blocked"
+    assert truth["execution_truth_blocked"] is True
+    assert truth["execution_truth_blockers"] == ["STALE", "WS_DISCONNECTED", "LATENCY_GUARD_DEGRADE_EXIT_ONLY"]
+
+
 def test_runtime_execution_truth_blocks_when_feedtruth_recovery_blocked_even_if_candidate_looks_executable():
     contract = build_feed_truth_contract(
         {

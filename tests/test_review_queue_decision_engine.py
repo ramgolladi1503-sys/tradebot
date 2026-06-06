@@ -490,6 +490,35 @@ def test_is_execution_eligible_rejects_execute_intent_with_hard_blocker():
     assert review_queue._is_execution_eligible(row) is False
 
 
+def test_is_execution_eligible_rejects_execution_truth_blocked_rows():
+    row = {
+        "trade_id": "T-EXEC-TRUTH-BLOCKED",
+        "symbol": "NIFTY",
+        "strategy_family": "breakout",
+        "instrument": "OPT",
+        "tradingsymbol": "NIFTY2642124300CE",
+        "expiry_date": "2026-04-21",
+        "option_type": "CE",
+        "instrument_token": 12345,
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "readiness": "READY",
+        "candidate_status": "executable",
+        "execution_status": "executable",
+        "execution_entry": 150.0,
+        "execution_entry_status": "executable",
+        "execution_entry_source": "ask",
+        "execution_allowed": True,
+        "execution_blocked": False,
+        "unresolved_contract": False,
+        "hard_blockers": [],
+        "blockers": [],
+        "execution_truth_blocked": True,
+        "execution_truth_blockers": ["STALE_OPTION_LTP"],
+    }
+    assert review_queue._is_execution_eligible(row) is False
+
+
 def test_execution_ineligibility_reason_prefers_specific_blocker():
     row = {
         "trade_id": "T-INELIGIBLE-REASON",
@@ -502,6 +531,21 @@ def test_execution_ineligibility_reason_prefers_specific_blocker():
         "execution_block_reason": "execution_quality_reject",
     }
     assert review_queue._execution_ineligibility_reason(row) == "execution_quality_reject"
+
+
+def test_execution_ineligibility_reason_prefers_execution_truth_blocker():
+    row = {
+        "trade_id": "T-INELIGIBLE-EXEC-TRUTH",
+        "symbol": "NIFTY",
+        "permission": "EXECUTE",
+        "final_action": "EXECUTE",
+        "execution_status": "executable",
+        "execution_entry": 150.0,
+        "execution_entry_status": "executable",
+        "execution_truth_blocked": True,
+        "execution_truth_blockers": ["WS_DISCONNECTED", "RECOVERY_BLOCKED"],
+    }
+    assert review_queue._execution_ineligibility_reason(row) == "WS_DISCONNECTED"
 
 
 def test_execution_ineligibility_reason_prefers_stale_quote_validation_status_over_contract_symptom():
