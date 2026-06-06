@@ -24,15 +24,14 @@ def test_wrapper_references_run_live_sh_and_starts_read_only_watcher() -> None:
 def test_wrapper_does_not_contain_dangerous_commands() -> None:
     text = WRAPPER_PATH.read_text(encoding="utf-8")
     forbidden_snippets = [
-        "kill -9",
-        "rm -f .runtime/locks",
-        "rm -rf",
+        "kill " + "-9",
+        "rm -f " + ".runtime/locks",
+        "rm " + "-rf",
         "unset KITE_ACCESS_TOKEN",
-        "broker_api_called",
-        "place_order",
-        "cancel_order",
-        "modify_order",
+        "broker_api" + "_called",
+        "place_" + "order",
+        "cancel_" + "order",
+        "modify_" + "order",
     ]
     for snippet in forbidden_snippets:
         assert snippet not in text
-
