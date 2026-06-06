@@ -56,7 +56,12 @@ def discover_latest_existing_path(candidates: Sequence[Path]) -> Path | None:
     existing = [path for path in candidates if path.exists() and path.is_file()]
     if not existing:
         return None
-    return sorted(existing, key=lambda item: (item.stat().st_mtime, str(item)))[-1]
+    ranked = list(enumerate(existing))
+    best_index, best_path = max(
+        ranked,
+        key=lambda item: (item[1].stat().st_mtime_ns, item[0]),
+    )
+    return best_path
 
 
 def discover_runtime_artifacts(
