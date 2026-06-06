@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import re
 from pathlib import Path
 from typing import Any
 
@@ -10,10 +11,48 @@ from .readers import discover_runtime_artifacts, grep_lines, read_json_file, rea
 from .timeline import TimelineEvent, sort_timeline_events
 
 
+_EXPLICIT_AUTH_FAILURE_PATTERNS = (
+    "AUTH_FAILURE",
+    "KITE_AUTH_FAILURE",
+    "KITE_SESSION_INVALID",
+    "KITE_ACCESS_TOKEN_MISSING",
+    "KITE_ACCESS_TOKEN_INVALID",
+    "CREDENTIAL_GUARD_BLOCKED",
+    "AUTH_BLOCKED",
+    "LOGIN_REQUIRED",
+    "TOKEN_EXPIRED",
+    "UNAUTHORIZED",
+)
+
+
+def _is_unit_test_log_line(text: str) -> bool:
+    upper = text.upper()
+    return '"SOURCE": "UNIT_TEST"' in upper or "'SOURCE': 'UNIT_TEST'" in upper or 'SOURCE=UNIT_TEST' in upper
+
+
+def _has_explicit_auth_failure(text: str) -> bool:
+    for line in text.splitlines():
+        upper = line.upper()
+        if any(pattern in upper for pattern in _EXPLICIT_AUTH_FAILURE_PATTERNS):
+            return True
+        if re.search(r"\b401\b", upper) and re.search(r"\b(?:AUTH|TOKEN|SESSION|UNAUTHORIZED)\b", upper):
+            return True
+    return False
+
+
 def _event_match(line: str) -> str | None:
     text = line.upper()
     patterns = [
-        "AUTH",
+        "AUTH_FAILURE",
+        "KITE_AUTH_FAILURE",
+        "KITE_SESSION_INVALID",
+        "KITE_ACCESS_TOKEN_MISSING",
+        "KITE_ACCESS_TOKEN_INVALID",
+        "CREDENTIAL_GUARD_BLOCKED",
+        "AUTH_BLOCKED",
+        "LOGIN_REQUIRED",
+        "TOKEN_EXPIRED",
+        "UNAUTHORIZED",
         "FEED_CONNECT_FAILURE",
         "FEED_ON_CONNECT_SUBSCRIBE",
         "FEED_OPTION_PRUNE_REFRESH",
@@ -53,6 +92,8 @@ def _timeline_from_logs(paths: list[Path | None], tail_lines: int) -> list[Timel
         "TB_RANKED_COUNT_EXECUTABLE",
     ], tail_lines=tail_lines):
         excerpt = str(match.get("excerpt") or "")
+        if _is_unit_test_log_line(excerpt):
+            continue
         events.append(
             TimelineEvent(
                 source_path=str(match.get("source_path") or ""),
@@ -79,6 +120,10 @@ def analyze_live_rca(
     ranked_runtime = read_json_file(artifacts["ranked_pipeline_runtime"])
     starvation_trace = read_json_file(artifacts["candidate_starvation_trace"])
     lines_timeline = _timeline_from_logs([depth_log], tail_lines=tail_lines)
+    raw_depth_text = depth_log.read_text(encoding="utf-8", errors="replace") if depth_log and depth_log.exists() else ""
+    filtered_depth_text = "\n".join(
+        line for line in raw_depth_text.splitlines() if not _is_unit_test_log_line(line)
+    )
 
     timeline_rows = [item.to_evidence_ref() for item in lines_timeline[:40]]
     metrics = {
@@ -94,8 +139,27 @@ def analyze_live_rca(
 
     first_failing_event = None
     root_cause = "UNKNOWN"
-    if any("AUTH" in (item.event or "") for item in lines_timeline):
+    if _has_explicit_auth_failure(filtered_depth_text) or any(
+        item.event
+        in {
+            "AUTH_FAILURE",
+            "KITE_AUTH_FAILURE",
+            "KITE_SESSION_INVALID",
+            "KITE_ACCESS_TOKEN_MISSING",
+            "KITE_ACCESS_TOKEN_INVALID",
+            "CREDENTIAL_GUARD_BLOCKED",
+            "AUTH_BLOCKED",
+            "LOGIN_REQUIRED",
+            "TOKEN_EXPIRED",
+            "UNAUTHORIZED",
+        }
+        for item in lines_timeline
+    ) or any(
+        item.event == "401"
+        for item in lines_timeline
+    ):
         root_cause = "AUTH_FAILURE"
+        first_failing_event = "AUTH_FAILURE"
     elif any("FEED_CONNECT_FAILURE" in (item.event or "") for item in lines_timeline):
         root_cause = "FEED_CONNECT_FAILURE"
     elif any(item.event == "FEED_REBALANCE_APPLIED" for item in lines_timeline):

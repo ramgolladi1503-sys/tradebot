@@ -166,3 +166,17 @@ def test_feed_truth_dead_uses_live_rca_findings_not_code_attribute(tmp_path: Pat
     assert payload["first_blocker_layer"] == "FEED_TRUTH"
     assert payload["next_action_type"] == "FIX_FEED_TRUTH"
     assert payload["first_failing_event"] == "FEED_TRUTH_DEAD"
+
+
+def test_command_center_markdown_does_not_recommend_auth_first_for_feed_churn(tmp_path: Path):
+    runtime_dir, logs_dir = _write_runtime(
+        tmp_path,
+        feed_runtime=_common_feed_runtime(),
+        depth_log="FEED_REBALANCE_APPLIED reason=stale_option_prune_refresh subscribe_count=12 unsubscribe_count=11\nConnection error: 1006\n",
+        starvation_trace=_common_starvation_trace(),
+        ranked_runtime=_common_ranked_runtime(),
+    )
+
+    run_agent_command_center(runtime_dir=runtime_dir, logs_dir=logs_dir, out_dir=runtime_dir / "agent_reports")
+    md = (runtime_dir / "agent_reports" / "agent_command_center_latest.md").read_text(encoding="utf-8")
+    assert "Investigate auth_failure first" not in md
