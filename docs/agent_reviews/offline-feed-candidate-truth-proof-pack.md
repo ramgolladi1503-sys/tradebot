@@ -11,43 +11,117 @@ source: docs/agent_reviews/offline-feed-candidate-truth-proof-pack.md
 
 Status: DRAFT (do not merge without explicit human approval)
 
-## Problem
+## Agent Work Contract
 
-Prior patches made the feed runtime snapshot, execution-truth normalization, stale-option mutation guard, and Phase2 evidence more explicit. What was still missing was a deterministic offline proof that ties those layers together without live connectivity.
+### Source Agent
+
+```text
+source_agent: Codex (GPT-5.2)
+action: GENERATE_PATCH (offline proof-pack evidence-only diagnostics + deterministic regression tests + review doc)
+title: Offline Feed/Candidate Truth Proof Pack
+scope: add a deterministic offline proof pack that proves FeedTruth, execution truth, candidate classification, Phase2 evidence, and final emit remain coherent without changing live runtime behavior
+requested_paths:
+  - scripts/run_offline_feed_candidate_truth_proof_pack.py
+  - tests/test_offline_feed_candidate_truth_proof_pack.py
+  - docs/agent_reviews/offline-feed-candidate-truth-proof-pack.md
+allowed_paths:
+  - scripts/run_offline_feed_candidate_truth_proof_pack.py
+  - tests/test_offline_feed_candidate_truth_proof_pack.py
+  - docs/agent_reviews/*
+forbidden_paths:
+  - core/kite_depth_ws.py
+  - core/orchestrator.py
+  - core/runtime_execution_truth.py
+  - core/engine_phase2_adapter.py
+  - core/runtime_phase2_rejection_evidence.py
+  - core/broker*
+  - core/order*
+  - strategies/*
+  - dashboard/*
+  - runtime/live*
+  - logs/*
+  - live websocket startup code
+expected_tests:
+  - PYTHONPATH=. pytest -q tests/test_offline_feed_candidate_truth_proof_pack.py -vv
+  - PYTHONPATH=. pytest -q tests/test_runtime_execution_truth_evidence.py tests/test_review_queue_decision_engine.py tests/test_phase2_rejection_evidence_artifact.py tests/test_feed_runtime_states.py tests/test_feed_truth_contract.py -vv
+  - python scripts/validate_agent_review_evidence.py --base-ref origin/main
+  - git diff --check
+  - PYTHONPATH=. python scripts/run_unified_ce_gates.py --changed-paths-file /tmp/pr496_changed_paths_pr_only.txt
+acceptance_proof:
+  - healthy executable scenarios pass
+  - feed dead and WS1006 terminal scenarios fail closed
+  - stale option LTP blocks final emit
+  - missing context scenarios stay blocked
+  - advisory or fallback rows stay non-executable
+  - Phase2 no input remains distinct from input dropped and accepted
+  - snapshot mirror scenarios stay coherent
+  - the pack writes only explicit output files and no runtime artifacts
+```
+
+## Scope Guard
+
+- This PR is offline and evidence-only.
+- It must not alter runtime websocket behavior, broker calls, order behavior, strategy logic, ranking, or Phase2 decisions.
+- It must fail closed and preserve current truth-contract behavior.
+
+## Grill Me Review
+
+- The proof pack must not create fake confidence by only testing shape.
+- It must prove both pass and fail paths with deterministic truth builders.
+- It must keep blocked states blocked and executable states executable.
+
+## Hermes Review
+
+- The script is the right boundary because it assembles existing truth builders into one deterministic offline proof pack.
+- The new tests should verify the output contract, not live runtime behavior.
+- The pack should stay isolated from broker, websocket, and strategy code paths.
+
+## GSD Review
+
+- Changes are limited to one offline script, one focused test file, and one review doc.
+- The proof pack is deterministic and read-only.
+- The output contract is explicit and auditable.
+
+## QA / Safety Review
+
+- `read_only=true`
+- `append=false`
+- `is_order_action=false`
+- `broker_api_called=false`
+- `live_order_allowed=false`
+- `live_order_action=false`
+- `broker_order_action=false`
+- No live orders.
+- No websocket startup.
+- No broker calls.
 
 ## Evidence
 
-- The proof pack is read-only and fixture-free.
-- It uses pure truth builders and deterministic synthetic scenarios.
-- It does not call broker APIs, start websocket sessions, or mutate runtime state.
-- It preserves the current behavior of healthy executable candidates and keeps blocked or advisory rows non-executable.
+- The proof pack exercises healthy, blocked, advisory, no-input, input-dropped, accepted, and WS1006 terminal scenarios.
+- The proof pack writes a JSON artifact and a Markdown summary to the explicit output directory only.
+- The proof pack is deterministic and does not depend on live market data.
 
-## Proof Scenarios
+## Root Cause
 
-1. Healthy executable candidate.
-2. FeedTruth DEAD / RECOVERY_BLOCKED.
-3. STALE_OPTION_LTP.
-4. Missing live timing, spread, liquidity, and unknown quote source context.
-5. Advisory / queue-only / synthetic / fallback rows.
-6. Phase2 no input.
-7. Phase2 input dropped.
-8. Phase2 accepted path.
-9. Snapshot mirror truth consistency.
-10. WS1006 terminal state.
+- Prior evidence existed across several separate truth layers, but there was no single offline artifact tying FeedTruth, execution truth, candidate classification, Phase2 evidence, and final emit eligibility together.
+- This proof pack closes that gap without altering runtime behavior.
 
-Each scenario records:
+## Fix
 
-- scenario name
-- input truth state
-- expected result
-- actual result
-- executable allowed
-- reportable executable
-- Phase2 input state
-- Phase2 drop counts
-- final emit allowed
-- blockers
-- pass/fail
+- Add a deterministic offline proof pack script.
+- Add regression tests covering the proof scenarios and output contract.
+- Add an evidence doc that clearly states the offline, read-only, fail-closed scope.
+
+## Acceptance Proof
+
+- Healthy executable scenarios pass.
+- Feed dead and WS1006 terminal scenarios fail closed.
+- Stale option LTP blocks final emit.
+- Missing context remains blocked.
+- Advisory and fallback rows remain non-executable.
+- Phase2 no input, input dropped, and accepted remain distinguishable.
+- Snapshot mirrors remain coherent.
+- The proof pack emits only explicit output artifacts.
 
 ## Safety Constraints
 
@@ -57,19 +131,19 @@ Each scenario records:
 - No websocket start.
 - No strategy changes.
 - No ranking or scoring formula changes.
-- No Phase2 decision behavior changes.
+- No Phase2 decision changes.
 - No dashboard/UI changes.
 - No stale-feed relaxation.
 - No risk gate relaxation.
 - No fallback promotion.
 - No making blocked candidates executable.
-- Evidence failures do not crash runtime.
-- The pack stays read-only with `append=false`.
+- No broad refactor.
 
 ## Tests Run
 
 - `PYTHONPATH=. pytest -q tests/test_offline_feed_candidate_truth_proof_pack.py -vv`
 - `PYTHONPATH=. pytest -q tests/test_runtime_execution_truth_evidence.py tests/test_review_queue_decision_engine.py tests/test_phase2_rejection_evidence_artifact.py tests/test_feed_runtime_states.py tests/test_feed_truth_contract.py -vv`
+- `PYTHONPATH=. python scripts/run_offline_feed_candidate_truth_proof_pack.py --out-dir /tmp/feedtruth_proof_pack`
 
 ## What Was Not Changed
 
@@ -85,29 +159,26 @@ Each scenario records:
 ## Remaining Risks
 
 - The proof pack is synthetic and offline; it proves contract coherence, not live market performance.
-- Future schema changes in candidate or feed-truth payloads may require proof-pack updates.
+- Future schema changes in feed, execution, or candidate payloads may require updates to the proof pack.
 
 ## Next Market Validation Signals
 
-After merge and the next open market session, verify:
-
-- FEED_REBALANCE_SKIPPED
-- mutation_skipped_symbols
-- mutation_skip_reason_by_symbol
-- WS1006 / RECOVERY_BLOCKED
-- forbidden retry behavior
-- RAW_CANDIDATE_COUNT
-- POST_REAL_FILTER_COUNT
-- POST_EXECUTABLE_FILTER_COUNT
-- Phase2 input states
-- Phase2 drop categories
-- TB_RANKED_COUNT_EXECUTABLE
-- FINAL_EMIT_ABORT / final emit eligibility
-- recovered_fallback / stale_option_ltp / missing context blockers
+- `RAW_CANDIDATE_COUNT`
+- `POST_REAL_FILTER_COUNT`
+- `POST_EXECUTABLE_FILTER_COUNT`
+- `TB_RANKED_COUNT_EXECUTABLE`
+- `TB_TOP_EXECUTABLE_CANDIDATE`
+- `TB_TOP_BLOCKED_CANDIDATE`
+- `FINAL_EMIT_ABORT`
+- `FEED_WS_PROCESS_RESTART_REQUIRED`
+- `RECOVERY_BLOCKED`
+- `STALE_OPTION_LTP`
+- `PHASE2: No input candidates`
+- `PHASE2: No valid candidates after filtering`
 
 ## Runtime Proof Required After Merge
 
-- Run the offline proof pack CLI against a tmp output directory.
+- Run the offline proof pack CLI against a temporary output directory.
 - Confirm the JSON and Markdown summaries are written.
 - Confirm the pass/fail summary is deterministic.
 - Confirm no runtime artifacts are written outside the explicit output path.
