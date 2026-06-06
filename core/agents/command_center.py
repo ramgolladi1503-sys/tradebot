@@ -176,7 +176,7 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
         )
         return summary
 
-    if feed_truth_dead or (live_rca and live_rca.code == "FEEDTRUTH_DEAD"):
+    if feed_truth_dead or (live_rca and any(finding.code == "FEEDTRUTH_DEAD" for finding in live_rca.findings)):
         summary.update(
             first_blocker_layer="FEED_TRUTH",
             first_failing_event=(feed_stability.first_failing_event if feed_stability else None) or (live_rca.first_failing_event if live_rca else None) or "FEED_TRUTH_DEAD",

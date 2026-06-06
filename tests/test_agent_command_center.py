@@ -143,3 +143,26 @@ def test_feed_and_phase2_downstream_blocks_do_not_beat_feed_stability(tmp_path: 
     assert payload["first_blocker_layer"] != "CANDIDATE_SUPPLY"
     assert payload["first_blocker_layer"] != "PHASE2_RANKING"
     assert payload["next_action_type"] == "FIX_FEED_LIFECYCLE"
+
+
+def test_feed_truth_dead_uses_live_rca_findings_not_code_attribute(tmp_path: Path):
+    runtime_dir, logs_dir = _write_runtime(
+        tmp_path,
+        feed_runtime={
+            "runtime_state": "DEAD",
+            "feed_truth_state": "DEAD",
+            "ws_connected": False,
+            "process_restart_required": False,
+            "ws_reconnect_allowed": False,
+            "option_feed_block_reason_by_symbol": {"NIFTY": "NO_LIVE_OPTION_FEED"},
+        },
+        depth_log="",
+        starvation_trace={"raw_candidate_count": 0, "phase2_input_candidate_count": 0},
+        ranked_runtime={"ranked_candidate_count": 0, "executable_count": 0},
+    )
+
+    report = run_agent_command_center(runtime_dir=runtime_dir, logs_dir=logs_dir, out_dir=runtime_dir / "agent_reports")
+    payload = report.to_dict()
+    assert payload["first_blocker_layer"] == "FEED_TRUTH"
+    assert payload["next_action_type"] == "FIX_FEED_TRUTH"
+    assert payload["first_failing_event"] == "FEED_TRUTH_DEAD"

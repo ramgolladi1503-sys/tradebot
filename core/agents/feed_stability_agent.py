@@ -1,10 +1,47 @@
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 from .contracts import AgentFinding, AgentReport, build_read_only_agent_report
 from .evidence_refs import evidence_ref_from_mapping, evidence_ref_from_text
 from .readers import discover_runtime_artifacts, grep_lines, read_json_file
+
+
+def _extract_watchdog_fields(line: str) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    text = line.strip()
+    if not text:
+        return payload
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = {}
+        if isinstance(parsed, dict):
+            payload.update(parsed)
+    if not payload:
+        event_match = re.search(r'event["\\\']?\s*[:=]\s*["\\\']?([A-Z0-9_]+)', text, re.IGNORECASE)
+        if event_match:
+            payload["event"] = event_match.group(1)
+    for key in ("subscribe_count", "unsubscribe_count", "fresh_ratio", "stale_count", "code"):
+        if key in payload:
+            continue
+        match = re.search(rf'{key}\s*[:=]\s*"?([0-9.]+)"?', text, re.IGNORECASE)
+        if match:
+            value: str = match.group(1)
+            if key in {"subscribe_count", "unsubscribe_count", "stale_count", "code"}:
+                try:
+                    payload[key] = int(float(value))
+                except Exception:
+                    continue
+            else:
+                try:
+                    payload[key] = float(value)
+                except Exception:
+                    continue
+    return payload
 
 
 def analyze_feed_stability(
@@ -21,15 +58,30 @@ def analyze_feed_stability(
     text = (depth_log.read_text(encoding="utf-8", errors="replace") if depth_log and depth_log.exists() else "")
     subscribe_counts = []
     unsubscribe_counts = []
-    import re
+    fresh_ratio_values: list[float] = []
+    stale_count_values: list[int] = []
     for line in text.splitlines():
-        if "FEED_REBALANCE_APPLIED" in line or "FEED_REBALANCE_SKIPPED" in line:
-            m1 = re.search(r"subscribe_count=(\d+)", line)
-            m2 = re.search(r"unsubscribe_count=(\d+)", line)
-            if m1:
-                subscribe_counts.append(int(m1.group(1)))
-            if m2:
-                unsubscribe_counts.append(int(m2.group(1)))
+        fields = _extract_watchdog_fields(line)
+        event = str(fields.get("event") or "").upper()
+        if event in {"FEED_REBALANCE_APPLIED", "FEED_REBALANCE_SKIPPED"} or "FEED_REBALANCE_APPLIED" in line or "FEED_REBALANCE_SKIPPED" in line:
+            if "subscribe_count" in fields:
+                subscribe_counts.append(int(fields["subscribe_count"]))
+            elif match := re.search(r"subscribe_count=(\d+)", line):
+                subscribe_counts.append(int(match.group(1)))
+            if "unsubscribe_count" in fields:
+                unsubscribe_counts.append(int(fields["unsubscribe_count"]))
+            elif match := re.search(r"unsubscribe_count=(\d+)", line):
+                unsubscribe_counts.append(int(match.group(1)))
+        if "fresh_ratio" in fields:
+            try:
+                fresh_ratio_values.append(float(fields["fresh_ratio"]))
+            except Exception:
+                pass
+        if "stale_count" in fields:
+            try:
+                stale_count_values.append(int(fields["stale_count"]))
+            except Exception:
+                pass
     fresh_ratio_min = None
     option_ticks = feed_runtime.get("option_ticks_received_count_by_symbol")
     subscribed = feed_runtime.get("option_tokens_subscribed_count_by_symbol")
@@ -45,6 +97,8 @@ def analyze_feed_stability(
                 ratios.append(ticks / sub)
         if ratios:
             fresh_ratio_min = min(ratios)
+    if fresh_ratio_values:
+        fresh_ratio_min = min(fresh_ratio_values) if fresh_ratio_min is None else min(fresh_ratio_min, min(fresh_ratio_values))
 
     metrics = {
         "feed_connect_count": sum("FEED_CONNECT" in (item.get("excerpt") or "") for item in lines),
@@ -61,7 +115,7 @@ def analyze_feed_stability(
         "max_subscribe_count": max(subscribe_counts) if subscribe_counts else 0,
         "max_unsubscribe_count": max(unsubscribe_counts) if unsubscribe_counts else 0,
         "fresh_ratio_min": fresh_ratio_min,
-        "stale_count_max": max(0, len([item for item in lines if "STALE" in (item.get("excerpt") or "").upper()])),
+        "stale_count_max": max(stale_count_values + [0]),
         "option_ticks_received_by_symbol": feed_runtime.get("option_ticks_received_count_by_symbol") or {},
         "option_feed_block_reasons": feed_runtime.get("option_feed_block_reason_by_symbol") or {},
     }
@@ -122,6 +176,13 @@ def analyze_feed_stability(
 
     verdict = "BLOCKER" if any(item.severity == "BLOCKER" for item in findings) else ("WARN" if findings else "PASS")
     confidence = "HIGH" if findings else "LOW"
+    if verdict != "BLOCKER" and (
+        metrics["rebalance_applied_count"]
+        or metrics["ws1006_count"]
+        or metrics["recovery_blocked_count"]
+        or (fresh_ratio_min is not None and fresh_ratio_min > 0.90)
+    ):
+        verdict = "WARN"
     return build_read_only_agent_report(
         agent_name="feed_stability",
         verdict=verdict,
