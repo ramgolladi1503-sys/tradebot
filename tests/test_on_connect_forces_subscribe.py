@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from config import config as cfg
+from core.auth import reset_kite_runtime_credentials_guard
 import core.auth as auth_module
 import core.kite_depth_ws as ws
 
@@ -54,6 +55,7 @@ class _DummyRestClient:
 
 
 def _patch_common(monkeypatch):
+    reset_kite_runtime_credentials_guard()
     monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
