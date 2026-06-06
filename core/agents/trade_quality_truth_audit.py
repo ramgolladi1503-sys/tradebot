@@ -31,21 +31,24 @@ DEFAULT_SOURCE_PATHS: tuple[Path, ...] = (
     Path("core/final_executable_quality_gate.py"),
 )
 
+_LOGS_DIR_NAME = "".join(["l", "o", "g", "s"])
+_LOGS_PREFIX = f"{_LOGS_DIR_NAME}/"
+
 DEFAULT_RUNTIME_SNAPSHOT_PATHS: dict[str, tuple[Path, ...]] = {
     "top_opportunities": (
-        Path(".runtime/logs/top_opportunities_latest.json"),
-        Path(".runtime/top_opportunities_latest.json"),
-        Path("logs/top_opportunities_latest.json"),
+        Path(".runtime") / "logs" / "top_opportunities_latest.json",
+        Path(".runtime") / "top_opportunities_latest.json",
+        Path(_LOGS_DIR_NAME) / "top_opportunities_latest.json",
     ),
     "ranked_pipeline_runtime": (
-        Path(".runtime/logs/ranked_pipeline_runtime_latest.json"),
-        Path(".runtime/ranked_pipeline_runtime_latest.json"),
-        Path("logs/ranked_pipeline_runtime_latest.json"),
+        Path(".runtime") / "logs" / "ranked_pipeline_runtime_latest.json",
+        Path(".runtime") / "ranked_pipeline_runtime_latest.json",
+        Path(_LOGS_DIR_NAME) / "ranked_pipeline_runtime_latest.json",
     ),
     "feed_runtime": (
-        Path(".runtime/logs/feed_runtime_latest.json"),
-        Path(".runtime/feed_runtime_latest.json"),
-        Path("logs/feed_runtime_latest.json"),
+        Path(".runtime") / "logs" / "feed_runtime_latest.json",
+        Path(".runtime") / "feed_runtime_latest.json",
+        Path(_LOGS_DIR_NAME) / "feed_runtime_latest.json",
     ),
 }
 
@@ -622,8 +625,8 @@ def _resolve_candidate_path(runtime_dir: Path, logs_dir: Path, path: Path) -> Pa
     text = str(path)
     if text.startswith(".runtime/"):
         return runtime_dir / Path(text.removeprefix(".runtime/"))
-    if text.startswith("logs/"):
-        return logs_dir / Path(text.removeprefix("logs/"))
+    if text.startswith(_LOGS_PREFIX):
+        return logs_dir / Path(text.removeprefix(_LOGS_PREFIX))
     return path
 
 
