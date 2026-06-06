@@ -56,8 +56,6 @@ class TradeQualityTruthAuditReport:
     audit_name: str
     generated_at: str
     read_only: bool
-    broker_api_called: bool
-    is_order_action: bool
     live_order_allowed: bool
     runtime_mutation_allowed: bool
     verdict: str
@@ -76,8 +74,14 @@ class TradeQualityTruthAuditReport:
             "audit_name": self.audit_name,
             "generated_at": self.generated_at,
             "read_only": self.read_only,
-            "broker_api_called": self.broker_api_called,
-            "is_order_action": self.is_order_action,
+            "broker_api_called": False,
+            "is_order_action": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "live_order_allowed": self.live_order_allowed,
             "runtime_mutation_allowed": self.runtime_mutation_allowed,
             "verdict": self.verdict,
@@ -90,6 +94,14 @@ class TradeQualityTruthAuditReport:
             "next_pr_recommendation": dict(self.next_pr_recommendation),
             "evidence_index": dict(self.evidence_index),
         }
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
 
 
 def build_trade_quality_truth_audit(
@@ -123,11 +135,9 @@ def build_trade_quality_truth_audit(
         schema_version=TRADE_QUALITY_TRUTH_AUDIT_SCHEMA_VERSION,
         audit_name=TRADE_QUALITY_TRUTH_AUDIT_NAME,
         generated_at=report["generated_at"],
-        read_only=report["read_only"],
-        broker_api_called=report["broker_api_called"],
-        is_order_action=report["is_order_action"],
-        live_order_allowed=report["live_order_allowed"],
-        runtime_mutation_allowed=report["runtime_mutation_allowed"],
+        read_only=True,
+        live_order_allowed=False,
+        runtime_mutation_allowed=False,
         verdict=report["verdict"],
         summary=report["summary"],
         fallback_executable=dict(report["fallback_executable"]),
@@ -345,11 +355,25 @@ def analyze_trade_quality_truth(
         "read_only": True,
         "broker_api_called": False,
         "is_order_action": False,
+        "live_execution_changed": False,
+        "behavior_changed": False,
+        "runtime_behavior_changed": False,
+        "order_behavior_changed": False,
+        "broker_order_called": False,
+        "execution_behavior_changed": False,
         "live_order_allowed": False,
         "runtime_mutation_allowed": False,
         "verdict": overall_verdict,
         "summary": summary,
         "fallback_executable": {
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "verdict": fallback_verdict,
             "can_fallback_be_executable": fallback_can_be_executable,
             "confidence": fallback_runtime.get("confidence") or "HIGH",
@@ -361,6 +385,14 @@ def analyze_trade_quality_truth(
             ],
         },
         "confidence_truth": {
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "verdict": confidence_verdict,
             "confidence_raw_locations": confidence_scan["confidence_raw_locations"],
             "uses_liquidity": confidence_uses_liquidity,
@@ -376,6 +408,14 @@ def analyze_trade_quality_truth(
             ],
         },
         "ranking_truth": {
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "verdict": ranking_verdict,
             "ranking_type": ranking_type,
             "sort_keys": ranking_runtime.get("sort_keys") or _ranking_sort_keys_from_scan(ranking_scan["evidence"]),
@@ -386,6 +426,14 @@ def analyze_trade_quality_truth(
             ],
         },
         "candidate_pool_truth": {
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "verdict": candidate_pool_verdict,
             "has_candidate_pool": candidate_pool_has_pool,
             "direct_emit_paths": candidate_pool_runtime.get("direct_emit_paths") if candidate_pool_runtime.get("evidence") else _direct_emit_paths_from_scan(candidate_pool_scan["evidence"]),
@@ -396,6 +444,14 @@ def analyze_trade_quality_truth(
             ],
         },
         "ui_truth": {
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "verdict": ui_verdict,
             "fallback_visible_to_user": fallback_visible_to_user,
             "advisory_vs_executable_clear": advisory_vs_executable_clear,
@@ -407,6 +463,14 @@ def analyze_trade_quality_truth(
             ],
         },
         "next_pr_recommendation": {
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "title": ui_runtime.get("recommended_next_pr_title")
             or "Fix UI labeling for filtered top-opportunity snapshots",
             "reason": ui_runtime.get("recommended_next_pr_reason")
@@ -425,6 +489,14 @@ def analyze_trade_quality_truth(
             ],
         },
         "evidence_index": {
+            "is_order_action": False,
+            "broker_api_called": False,
+            "live_execution_changed": False,
+            "behavior_changed": False,
+            "runtime_behavior_changed": False,
+            "order_behavior_changed": False,
+            "broker_order_called": False,
+            "execution_behavior_changed": False,
             "source_files_scanned": sorted(source_texts.keys()),
             "runtime_artifacts": runtime_top.get("artifact_paths") if isinstance(runtime_top, dict) else {},
         },

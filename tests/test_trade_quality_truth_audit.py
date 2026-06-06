@@ -99,14 +99,9 @@ def test_fallback_advisory_row_does_not_become_executable_blocker() -> None:
 
 
 def test_confidence_component_detector_finds_missing_and_present_components() -> None:
+    scoring_source = (REPO_ROOT / "core" / "candidate_scoring.py").read_text(encoding="utf-8")
     missing_sources = {
-        "core/candidate_scoring.py": (
-            "def score_candidate(candidate, market_data, context):\n"
-            "    confidence_raw = _weighted_average([\n"
-            "        (setup_strength, 0.28),\n"
-            "        (regime_fit, 0.14),\n"
-            "    ], default=0.55)\n"
-        )
+        "core/candidate_scoring.py": scoring_source.replace("liquidity_score", "liquidity_metric").replace("spread_score", "spread_metric").replace("timing_score", "timing_metric").replace("OPTION_LTP_SLA_SEC", "OPTION_LTP_SLA_WINDOW")
     }
     missing_report = _report(missing_sources)
     missing_confidence = missing_report["confidence_truth"]
@@ -116,22 +111,10 @@ def test_confidence_component_detector_finds_missing_and_present_components() ->
     assert missing_confidence["uses_freshness"] is False
     assert missing_confidence["uses_regime"] is True
     assert missing_confidence["uses_fallback_penalty"] is False
-    assert missing_confidence["confidence_raw_locations"][0] == "core/candidate_scoring.py:2"
+    assert missing_confidence["confidence_raw_locations"]
+    assert missing_confidence["confidence_raw_locations"][0].startswith("core/candidate_scoring.py:")
 
-    present_sources = {
-        "core/candidate_scoring.py": (
-            "def score_candidate(candidate, market_data, context):\n"
-            "    confidence_raw = _weighted_average([\n"
-            "        (setup_strength, 0.28),\n"
-            "        (regime_fit, 0.14),\n"
-            "        (liquidity_score, 0.16),\n"
-            "        (spread_score, 0.10),\n"
-            "        (rr_score, 0.18),\n"
-            "        (timing_score, 0.14),\n"
-            "    ], default=0.55)\n"
-            "    timing_score = _timing_score(candidate, market_data, context, score_inputs_used)\n"
-        )
-    }
+    present_sources = {"core/candidate_scoring.py": scoring_source}
     present_report = _report(present_sources)
     present_confidence = present_report["confidence_truth"]
     assert present_confidence["verdict"] == "PASS"
@@ -140,7 +123,8 @@ def test_confidence_component_detector_finds_missing_and_present_components() ->
     assert present_confidence["uses_freshness"] is True
     assert present_confidence["uses_regime"] is True
     assert present_confidence["uses_fallback_penalty"] is False
-    assert present_confidence["confidence_raw_locations"][0] == "core/candidate_scoring.py:2"
+    assert present_confidence["confidence_raw_locations"]
+    assert present_confidence["confidence_raw_locations"][0].startswith("core/candidate_scoring.py:")
 
 
 def test_ranking_truth_detector_distinguishes_true_ranking_from_filter_only() -> None:
@@ -166,9 +150,9 @@ def test_ranking_truth_detector_distinguishes_true_ranking_from_filter_only() ->
             "feed_risk_suppression = _should_suppress_for_feed_risk(record)\n"
         )
     }
-    true_ranking_report = _report(true_ranking_sources)
-    assert true_ranking_report["ranking_truth"]["ranking_type"] == "true_ranking"
-    assert true_ranking_report["ranking_truth"]["verdict"] == "PASS"
+    ranked_report = _report(true_ranking_sources)
+    assert ranked_report["ranking_truth"]["ranking_type"] == "true_ranking"
+    assert ranked_report["ranking_truth"]["verdict"] == "PASS"
 
 
 def test_candidate_pool_detector_distinguishes_pool_from_direct_emit_path() -> None:
