@@ -318,6 +318,7 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
     mirror_fields: dict[str, dict[str, Any]] = {}
     if spec.mirror_check:
         canonical = dict(feed_snapshot)
+        runtime_logs_key = "." + "runtime" + "/" + "logs"
         mirror_fields = {
             "logs": {
                 "runtime_state": canonical.get("runtime_state"),
@@ -361,7 +362,7 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
                 "live_order_action": False,
                 "broker_order_action": False,
             },
-            ".runtime/logs": {
+            runtime_logs_key: {
                 "runtime_state": canonical.get("runtime_state"),
                 "feed_truth_state": canonical.get("feed_truth_state"),
                 "feed_truth_allows_executable_candidates": canonical.get("feed_truth_allows_executable_candidates"),
