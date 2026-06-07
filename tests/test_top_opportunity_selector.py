@@ -147,6 +147,18 @@ def test_ranking_is_sorted_by_edge_rank_score_desc():
     assert [row.rank for row in report.executable_opportunities] == [1, 2, 3]
 
 
+def test_ties_are_resolved_deterministically_by_symbol_and_trade_id():
+    report = select_top_opportunities(
+        [
+            _row(candidate_id="cand-b", trade_id="trade-b", symbol="BANKNIFTY", edge_rank_score=0.77, rank_score=0.66, confidence_final=0.64),
+            _row(candidate_id="cand-a", trade_id="trade-a", symbol="NIFTY", edge_rank_score=0.77, rank_score=0.66, confidence_final=0.64),
+            _row(candidate_id="cand-c", trade_id="trade-c", symbol="NIFTY", edge_rank_score=0.77, rank_score=0.66, confidence_final=0.64),
+        ]
+    )
+
+    assert [row.trade_id for row in report.executable_opportunities] == ["trade-b", "trade-a", "trade-c"]
+
+
 def test_why_ranked_includes_expectancy_and_execution_quality():
     report = select_top_opportunities([_row(candidate_id="cand-exec", trade_id="trade-exec")])
 

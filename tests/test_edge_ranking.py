@@ -206,6 +206,70 @@ def test_positive_lower_confidence_outranks_unproven_high_confidence():
     assert unproven["rank_score"] == 0.84
 
 
+def test_duplicate_correlated_candidate_is_penalized_below_clean_candidate():
+    clean = apply_edge_ranking(
+        _row(
+            trade_id="T-CLEAN-CROWD",
+            expectancy_status="KEEP",
+            expectancy_sample_count=58,
+            expectancy_avg_cost_adjusted_r=0.21,
+            liquidity_score=0.86,
+            spread_score=0.81,
+            timing_score=0.79,
+            regime_fit=0.88,
+            rr_score=0.74,
+            family_consensus_score=0.88,
+            correlation_penalty=0.0,
+        )
+    )
+    crowded = apply_edge_ranking(
+        _row(
+            trade_id="T-CROWDED",
+            expectancy_status="KEEP",
+            expectancy_sample_count=58,
+            expectancy_avg_cost_adjusted_r=0.21,
+            liquidity_score=0.86,
+            spread_score=0.81,
+            timing_score=0.79,
+            regime_fit=0.88,
+            rr_score=0.74,
+            family_consensus_score=0.24,
+            correlation_penalty=0.42,
+            duplicate_candidate_count=2,
+            duplicate_group_count=1,
+            same_symbol_candidate_count=3,
+        )
+    )
+
+    assert clean["edge_rank_score"] > crowded["edge_rank_score"]
+    assert crowded["edge_rank_reason"].count("correlated_concentration") >= 1
+    assert crowded["edge_rank_components"]["crowding_penalty"] > 0.0
+
+
+def test_regime_mismatch_candidate_ranks_below_regime_aligned_candidate():
+    aligned = apply_edge_ranking(
+        _row(
+            trade_id="T-REGIME-ALIGNED",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.19,
+            regime_fit=0.91,
+        )
+    )
+    mismatched = apply_edge_ranking(
+        _row(
+            trade_id="T-REGIME-MISMATCH",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.19,
+            regime_fit=0.22,
+        )
+    )
+
+    assert aligned["edge_rank_score"] > mismatched["edge_rank_score"]
+    assert aligned["edge_rank_components"]["regime_match"] > mismatched["edge_rank_components"]["regime_match"]
+
+
 def test_edge_ranking_module_does_not_import_broker_or_order_modules():
     source = inspect.getsource(__import__("core.expectancy.edge_ranking", fromlist=["*"]))
     assert "from core.broker" not in source
