@@ -13,6 +13,11 @@ from .expectancy_gate import (
     ExpectancyGateDecision,
     apply_expectancy_gate,
 )
+from .edge_ranking import (
+    EDGE_RANK_SCHEMA_VERSION,
+    EdgeRankDecision,
+    apply_edge_ranking,
+)
 from .strategy_regime_expectancy import (
     STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION,
     StrategyRegimeExpectancyGroup,
@@ -31,6 +36,9 @@ __all__ = [
     "EXPECTANCY_WATCH",
     "ExpectancyGateDecision",
     "apply_expectancy_gate",
+    "EDGE_RANK_SCHEMA_VERSION",
+    "EdgeRankDecision",
+    "apply_edge_ranking",
     "SETUP_FINGERPRINT_SCHEMA_VERSION",
     "SetupFingerprint",
     "attach_setup_fingerprint",
