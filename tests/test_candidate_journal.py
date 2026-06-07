@@ -144,6 +144,34 @@ def test_fallback_candidate_row_marks_fallback_used_without_blocking():
     assert journal_row["final_action"] == "EXECUTE"
 
 
+def test_fallback_candidate_row_preserves_queue_only_lifecycle():
+    row = _base_row()
+    row.update(
+        {
+            "row_kind": "recovered_fallback",
+            "quote_source": "rest_fallback",
+            "fallback_used": True,
+            "permission": "QUEUE_ONLY",
+            "final_action": "QUEUE_ONLY",
+            "execution_status": "queue_only",
+            "readiness": "QUEUE_ONLY",
+            "candidate_status": "advisory_only",
+            "visibility_bucket": "advisory",
+            "execution_allowed": False,
+            "eligible_for_execution": False,
+            "reportable_executable": False,
+        }
+    )
+    journal_row = candidate_journal.build_candidate_journal_row(row)
+    assert journal_row["fallback_used"] is True
+    assert journal_row["permission"] == "QUEUE_ONLY"
+    assert journal_row["final_action"] == "QUEUE_ONLY"
+    assert journal_row["execution_status"] == "queue_only"
+    assert journal_row["readiness"] == "QUEUE_ONLY"
+    assert journal_row["candidate_status"] == "advisory_only"
+    assert journal_row["reportable_executable"] is False
+
+
 def test_queue_only_candidate_row_keeps_queue_only_lifecycle():
     row = _base_row()
     row.update(

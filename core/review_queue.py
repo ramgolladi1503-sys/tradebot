@@ -275,6 +275,104 @@ def _is_synthetic_advisory_entry(entry: dict) -> bool:
     return False
 
 
+def _is_fallback_candidate(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    row_kind = str(entry.get("row_kind") or "").strip().lower()
+    candidate_class = str(entry.get("candidate_class") or "").strip().lower()
+    candidate_type = str(entry.get("candidate_type") or "").strip().lower()
+    candidate_origin = str(entry.get("candidate_origin") or "").strip().lower()
+    quote_source = str(entry.get("quote_source") or "").strip().lower()
+    trade_id = str(entry.get("trade_id") or "").strip().lower()
+    source_flags = entry.get("source_flags")
+    flags = source_flags if isinstance(source_flags, dict) else {}
+    fallback_flag = any(
+        bool(flags.get(key))
+        for key in ("fallback_used", "recovered_fallback", "softened", "soft_reject_fallback")
+    )
+    return bool(
+        fallback_flag
+        or row_kind in {"recovered_fallback", "fallback"}
+        or candidate_class == "fallback"
+        or ("fallback" in candidate_type and candidate_type not in {"fallback_directional", "directional_fallback"})
+        or "fallback" in candidate_origin
+        or quote_source in {"rest_fallback", "synthetic_offhours", "subscription_failed"}
+        or trade_id.startswith("softrej_")
+    )
+
+
+def _fallback_non_executable_reason(entry: dict) -> str:
+    if not isinstance(entry, dict):
+        return "fallback_not_executable"
+    for field in (
+        "final_emit_block_reason",
+        "final_blocker",
+        "permission_reason",
+        "reject_reason",
+        "reason",
+        "entry_block_reason",
+        "hard_reason",
+        "execution_block_reason",
+    ):
+        text = str(entry.get(field) or "").strip()
+        if not text:
+            continue
+        if text.upper() in {"OK", "NONE"}:
+            continue
+        if text.lower() in {"fallback_not_executable"}:
+            continue
+        if "fallback" not in text.lower() or text.lower() in {"rest_fallback", "synthetic_offhours", "subscription_failed"}:
+            return text
+    return "fallback_not_executable"
+
+
+def _apply_fallback_execution_kill(entry: dict) -> dict:
+    if not _is_fallback_candidate(entry):
+        return entry
+    out = dict(entry)
+    block_reason = _fallback_non_executable_reason(out)
+    existing_permission = str(out.get("permission") or "").strip().upper()
+    existing_final_action = str(out.get("final_action") or "").strip().upper()
+    existing_execution_status = str(out.get("execution_status") or "").strip().lower()
+    existing_readiness = str(out.get("readiness") or "").strip().upper()
+    if existing_permission == "BLOCK" or existing_final_action == "BLOCK" or existing_execution_status == "blocked":
+        out["permission"] = "BLOCK"
+        out["final_action"] = "BLOCK"
+        out["execution_status"] = "blocked"
+        out["readiness"] = "BLOCKED"
+        out["candidate_status"] = "blocked"
+        out["visibility_bucket"] = "blocked"
+    else:
+        out["permission"] = "QUEUE_ONLY"
+        out["final_action"] = "QUEUE_ONLY"
+        out["execution_status"] = "queue_only"
+        out["readiness"] = "QUEUE_ONLY"
+        out["candidate_status"] = "advisory_only"
+        out["visibility_bucket"] = "advisory"
+    if existing_readiness == "BLOCKED":
+        out["readiness"] = "BLOCKED"
+    out["reportable_executable"] = False
+    out["execution_allowed"] = False
+    out["eligible_for_execution"] = False
+    out["selected_for_execution"] = False
+    out["tradable"] = False
+    out["is_executable"] = False
+    out["fallback_used"] = True
+    if not str(out.get("final_emit_block_reason") or "").strip():
+        out["final_emit_block_reason"] = block_reason
+    if not str(out.get("permission_reason") or "").strip():
+        out["permission_reason"] = block_reason
+    if not str(out.get("final_blocker") or "").strip():
+        out["final_blocker"] = block_reason
+    if not str(out.get("reject_reason") or "").strip():
+        out["reject_reason"] = block_reason
+    if not str(out.get("reason") or "").strip():
+        out["reason"] = block_reason
+    out.setdefault("execution_truth_blocked", False)
+    out.setdefault("execution_truth_advisory", True)
+    return out
+
+
 _HARD_EXECUTION_BLOCKER_CODES = {
     "FEED_STALE",
     "NO_LIVE_OPTION_FEED",
@@ -357,6 +455,8 @@ def _best_reject_reason(entry: dict, *, default: str = "unspecified_trade_builde
 def _execution_ineligibility_reason(entry: dict, *, default: str = "no_execution_candidates") -> str:
     if not isinstance(entry, dict):
         return str(default or "no_execution_candidates")
+    if _is_fallback_candidate(entry):
+        return _fallback_non_executable_reason(entry)
     execution_truth_blockers = _dedupe_issue_codes(list(entry.get("execution_truth_blockers") or []))
     if bool(entry.get("execution_truth_blocked")) and execution_truth_blockers:
         return execution_truth_blockers[0]
@@ -490,6 +590,8 @@ def _mark_synthetic_advisory_entry(entry: dict, *, emit_log: bool = False) -> di
 
 def _is_execution_eligible(entry: dict) -> bool:
     if not isinstance(entry, dict):
+        return False
+    if _is_fallback_candidate(entry):
         return False
     if bool(entry.get("execution_truth_blocked")) or bool(entry.get("execution_truth_blockers")):
         return False
@@ -1322,7 +1424,7 @@ def _preserve_blocked_candidate_metadata(
 def _classify_candidate_status(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
-    out = dict(entry)
+    out = _apply_fallback_execution_kill(entry)
     if _is_blocked_contract_row(out):
         out["candidate_status"] = "blocked_contract"
         out["eligible_for_execution"] = False
@@ -1797,6 +1899,7 @@ def _finalize_append_payload_for_runtime_write(
             out["strategy_family"] = "forced"
         if not candidate_type or candidate_type == "unknown":
             out["candidate_type"] = "forced"
+    out = _apply_fallback_execution_kill(out)
     if require_terminal_scoring:
         assert bool(out.get("terminal_scoring_applied")), "terminal scoring not applied at emit"
     if require_ranked_candidate_ready:
@@ -3540,6 +3643,7 @@ def _emit_review_queue_logs(entry: dict) -> dict:
     advisory_payload = _preserve_offhours_quote_validation_status(advisory_payload)
     advisory_payload = _apply_synthetic_offhours_advisory_lifecycle(advisory_payload)
     advisory_payload = _apply_candidate_identity(advisory_payload)
+    advisory_payload = _apply_fallback_execution_kill(advisory_payload)
     advisory_payload = _classify_candidate_status(advisory_payload)
     advisory_payload = ensure_trade_lifecycle(advisory_payload, reason="emission_projection")
     if _should_force_missing_queue_only_lifecycle(advisory_payload):
@@ -5416,6 +5520,10 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    if _is_fallback_candidate(out):
+        out = _apply_fallback_execution_kill(out)
+        out["promotion_block_reason"] = _fallback_non_executable_reason(out)
+        return out
     if _is_synthetic_advisory_entry(out):
         out["promotion_block_reason"] = "synthetic_advisory"
         return out
@@ -7965,6 +8073,7 @@ def _finalize_review_queue_entry(
             allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
             market_open_for_entry=market_open_for_entry,
         )
+        entry = _apply_fallback_execution_kill(entry)
         if str(entry.get("permission") or "").strip() and not str(entry.get("permission_base") or "").strip():
             entry["permission_base"] = str(entry.get("permission")).strip().upper()
         if str(entry.get("permission_reason") or "").strip() and not str(entry.get("permission_reason_base") or "").strip():
@@ -8004,6 +8113,7 @@ def _finalize_review_queue_entry(
             allow_stale_quotes_for_entry=allow_stale_quotes_for_entry,
             market_open_for_entry=market_open_for_entry,
         )
+        entry = _apply_fallback_execution_kill(entry)
         entry.pop("permission_downgraded_from", None)
         entry.pop("permission_downgrade_reason", None)
         raw_conf = entry.get("raw_signal_confidence")
@@ -8323,6 +8433,7 @@ def _finalize_review_queue_entry(
     entry = _finalize_suggested_entry(entry)
     entry = _apply_final_queue_only_entry_promotion_block(entry)
     entry = _lock_final_entry(entry)
+    entry = _apply_fallback_execution_kill(entry)
     if entry.get("entry_recovered"):
         print("RECOVERY_PRESERVED:", entry.get("trade_id"))
     append_execution_entry_trace(
@@ -8464,6 +8575,7 @@ def _record_advisory_validation_failure(
     )
     advisory_payload = _reconcile_locked_final_entry(advisory_payload)
     advisory_payload = _ensure_blocked_advisory_hard_blockers(advisory_payload)
+    advisory_payload = _apply_fallback_execution_kill(advisory_payload)
     print(
         "REVIEW_QUEUE_SCORING",
         {

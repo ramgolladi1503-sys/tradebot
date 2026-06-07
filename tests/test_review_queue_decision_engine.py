@@ -44,6 +44,147 @@ def _candidate(**overrides):
     return row
 
 
+@pytest.mark.parametrize(
+    "marker_overrides",
+    [
+        {"row_kind": "recovered_fallback"},
+        {"quote_source": "rest_fallback"},
+        {"trade_id": "softrej_T-FALLBACK"},
+    ],
+)
+def test_fallback_markers_force_advisory_queue_only_lifecycle(marker_overrides):
+    row = _candidate(
+        trade_id="T-FALLBACK-MARKER",
+        permission="EXECUTE",
+        final_action="EXECUTE",
+        readiness="READY",
+        execution_status="executable",
+        candidate_status="executable",
+        selected_for_execution=True,
+        tradable=True,
+        execution_allowed=True,
+        reportable_executable=True,
+        eligible_for_execution=True,
+        visibility_bucket="executable",
+        final_emit_block_reason=None,
+        candidate_class="fallback",
+    )
+    row.update(marker_overrides)
+
+    out = review_queue._apply_fallback_execution_kill(row)
+
+    assert out["fallback_used"] is True
+    assert out["reportable_executable"] is False
+    assert out["execution_allowed"] is False
+    assert out["eligible_for_execution"] is False
+    assert out["selected_for_execution"] is False
+    assert out["tradable"] is False
+    assert out["is_executable"] is False
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out["readiness"] == "QUEUE_ONLY"
+    assert out["candidate_status"] == "advisory_only"
+    assert out["visibility_bucket"] == "advisory"
+    assert out["final_emit_block_reason"] == "fallback_not_executable"
+    assert out["permission_reason"] == "fallback_not_executable"
+
+
+def test_high_confidence_fallback_candidate_never_promotes_to_execute():
+    out = review_queue._maybe_promote_execute_candidate(
+        _candidate(
+            trade_id="T-HIGH-FALLBACK",
+            permission="QUEUE_ONLY",
+            final_action="QUEUE_ONLY",
+            readiness="READY",
+            execution_status="queue_only",
+            candidate_status="near_executable",
+            selected_for_execution=True,
+            tradable=True,
+            execution_allowed=True,
+            execution_ok=True,
+            quote_source="tick_store",
+            quote_validation_status="OK",
+            quote_age_sec=0.5,
+            best_bid=149.8,
+            best_ask=150.2,
+            opt_ltp=150.0,
+            current_ltp=150.0,
+            spread_pct=0.002666,
+            volume=10000,
+            liquidity_score=0.8,
+            data_state="DATA_LIVE",
+            rank_global=1,
+            candidate_class="fallback",
+            candidate_origin="fallback_rest",
+            reportable_executable=True,
+            eligible_for_execution=True,
+            final_emit_block_reason=None,
+        )
+    )
+
+    assert out["permission"] == "QUEUE_ONLY"
+    assert out["final_action"] == "QUEUE_ONLY"
+    assert out["execution_status"] == "queue_only"
+    assert out["promotion_block_reason"] == "fallback_not_executable"
+    assert out["reportable_executable"] is False
+
+
+def test_non_fallback_clean_executable_row_remains_executable():
+    out = review_queue._apply_fallback_execution_kill(
+        _candidate(
+            trade_id="T-CLEAN-EXEC",
+            permission="EXECUTE",
+            final_action="EXECUTE",
+            readiness="READY",
+            execution_status="executable",
+            candidate_status="executable",
+            selected_for_execution=True,
+            tradable=True,
+            execution_allowed=True,
+            reportable_executable=True,
+            eligible_for_execution=True,
+            visibility_bucket="executable",
+            final_emit_block_reason=None,
+        )
+    )
+
+    assert out["permission"] == "EXECUTE"
+    assert out["final_action"] == "EXECUTE"
+    assert out["execution_status"] == "executable"
+    assert out["candidate_status"] == "executable"
+    assert out["reportable_executable"] is True
+    assert out.get("fallback_used", False) is False
+
+
+def test_final_emit_truth_event_never_labels_fallback_executable():
+    row = review_queue._apply_fallback_execution_kill(
+        _candidate(
+            trade_id="T-FALLBACK-EMIT",
+            permission="EXECUTE",
+            final_action="EXECUTE",
+            readiness="READY",
+            execution_status="executable",
+            candidate_status="executable",
+            selected_for_execution=True,
+            tradable=True,
+            execution_allowed=True,
+            reportable_executable=True,
+            eligible_for_execution=True,
+            candidate_class="fallback",
+            quote_source="rest_fallback",
+            final_emit_block_reason=None,
+        )
+    )
+    label, payload = review_queue._final_emit_truth_event(
+        row
+    )
+
+    assert label != "FINAL_EMIT_EXECUTABLE"
+    assert payload["reportable_executable"] is False
+    assert payload["final_emit_state"] in {"queue_only", "non_executable", "blocked", "aborted"}
+
+
 def test_weak_signal_candidate_never_promotes_to_execute(monkeypatch):
     monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_MIN_CONF", 0.72, raising=False)
     monkeypatch.setattr(cfg, "PERMISSION_PROMOTION_MIN_RAW_RANK", 0.35, raising=False)
