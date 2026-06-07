@@ -87,6 +87,10 @@ class StrategyRegimeExpectancyReport:
     candidate_outcome_count: int
     group_count: int
     groups: tuple[StrategyRegimeExpectancyGroup, ...]
+    baseline_comparison_count: int = 0
+    baseline_comparisons: tuple[dict[str, Any], ...] = ()
+    baseline_lookup: dict[str, dict[str, Any]] = field(default_factory=dict)
+    baseline_comparison_summary: dict[str, Any] = field(default_factory=dict)
     read_only: bool = True
     append: bool = False
 
@@ -108,6 +112,9 @@ class StrategyRegimeExpectancyReport:
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["groups"] = [group.to_payload() for group in self.groups]
+        payload["baseline_comparisons"] = [dict(comparison) for comparison in self.baseline_comparisons]
+        payload["baseline_lookup"] = dict(self.baseline_lookup)
+        payload["baseline_comparison_summary"] = dict(self.baseline_comparison_summary)
         payload["safety"] = dict(self.safety)
         return payload
 
@@ -375,6 +382,26 @@ def aggregate_strategy_regime_expectancy(
         _group_metrics(key, grouped_rows[key])
         for key in sorted(grouped_rows.keys())
     )
+    from core.expectancy.strategy_baseline_comparison import compare_strategy_to_baselines
+
+    baseline_report = compare_strategy_to_baselines([group.to_payload() for group in groups])
+    mature_groups = [group for group in baseline_report.comparisons if group.sample_count >= _MIN_SAMPLE_SIZE]
+    baseline_comparison_summary = {
+        "comparison_count": baseline_report.comparison_count,
+        "outperform_count": baseline_report.outperform_count,
+        "match_count": baseline_report.match_count,
+        "underperform_count": baseline_report.underperform_count,
+        "insufficient_sample_count": baseline_report.insufficient_sample_count,
+        "mature_group_count": len(mature_groups),
+        "mature_comparable_count": sum(
+            1 for comparison in mature_groups if comparison.baseline_verdict in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS"}
+        ),
+        "mature_outperform_count": sum(1 for comparison in mature_groups if comparison.baseline_verdict == "OUTPERFORMS"),
+        "mature_match_count": sum(1 for comparison in mature_groups if comparison.baseline_verdict == "MATCHES"),
+        "mature_underperform_count": sum(1 for comparison in mature_groups if comparison.baseline_verdict == "UNDERPERFORMS"),
+        "mature_insufficient_sample_count": sum(1 for comparison in mature_groups if comparison.baseline_verdict == "INSUFFICIENT_SAMPLE"),
+    }
+    baseline_comparison_summary["all_mature_groups_below_baseline_or_insufficient"] = bool(mature_groups) and baseline_comparison_summary["mature_outperform_count"] == 0 and baseline_comparison_summary["mature_match_count"] == 0 and baseline_comparison_summary["mature_underperform_count"] + baseline_comparison_summary["mature_insufficient_sample_count"] == len(mature_groups)
     source = str(candidate_outcome_tracker_path()) if isinstance(candidate_outcomes, (str, Path)) else "in_memory"
     return StrategyRegimeExpectancyReport(
         schema_version=STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION,
@@ -383,6 +410,10 @@ def aggregate_strategy_regime_expectancy(
         candidate_outcome_count=len(rows),
         group_count=len(groups),
         groups=groups,
+        baseline_comparison_count=baseline_report.comparison_count,
+        baseline_comparisons=tuple(comparison.to_payload() for comparison in baseline_report.comparisons),
+        baseline_lookup=dict(baseline_report.baseline_lookup),
+        baseline_comparison_summary=baseline_comparison_summary,
     )
 
 
@@ -432,6 +463,7 @@ def write_strategy_regime_expectancy_report(
         f"- Source: {report.source}",
         f"- Candidate outcome count: {report.candidate_outcome_count}",
         f"- Group count: {report.group_count}",
+        f"- Baseline comparison count: {report.baseline_comparison_count}",
         "",
         "## Safety",
     ]
@@ -454,6 +486,14 @@ def write_strategy_regime_expectancy_report(
             "## Group Metrics",
             "",
             _markdown_table(report.groups),
+            "",
+            "## Baseline Comparisons",
+            "",
+            json.dumps(report.baseline_comparisons, sort_keys=True) if report.baseline_comparisons else "_None_",
+            "",
+            "## Baseline Comparison Summary",
+            "",
+            json.dumps(report.baseline_comparison_summary, sort_keys=True) if report.baseline_comparison_summary else "_None_",
             "",
             "This report does not prove strategy edge or runtime readiness.",
         ]

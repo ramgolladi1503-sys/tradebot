@@ -63,6 +63,10 @@ class EdgeRankDecision:
     expectancy_status: str
     expectancy_sample_count: int
     expectancy_avg_cost_adjusted_r: float | None
+    baseline_verdict: str = "MATCHES"
+    baseline_penalty_or_boost: float = 0.0
+    baseline_source: str = "missing_baseline"
+    baseline_reason: str = ""
     read_only: bool = True
     append: bool = False
 
@@ -258,6 +262,73 @@ def _resolve_expectancy_context(row: Mapping[str, Any], expectancy_lookup: Any =
         status = EXPECTANCY_INSUFFICIENT_DATA
         reason = "missing_expectancy_lookup"
     return status, sample_count, avg_cost_adjusted_r, reason
+
+
+def _resolve_baseline_context(row: Mapping[str, Any], baseline_lookup: Any = None) -> tuple[str, float, str, str]:
+    direct_verdict = _upper(row.get("baseline_verdict") or row.get("expectancy_baseline_verdict"))
+    direct_adjustment = _float(row.get("baseline_penalty_or_boost") or row.get("expectancy_baseline_penalty_or_boost"))
+    direct_source = _text(row.get("baseline_source") or row.get("expectancy_baseline_source")) or "row_baseline"
+    direct_reason = _text(row.get("baseline_reason") or row.get("expectancy_baseline_reason"))
+    if direct_verdict in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS", "INSUFFICIENT_SAMPLE"}:
+        return direct_verdict, float(direct_adjustment or 0.0), direct_source, direct_reason or "row_baseline"
+
+    lookup_value = baseline_lookup
+    if lookup_value is None:
+        lookup_value = row.get("baseline_lookup")
+    if lookup_value is None and isinstance(row.get("metadata"), Mapping):
+        lookup_value = (row.get("metadata") or {}).get("baseline_lookup")
+    if lookup_value is None and isinstance(row.get("source_flags"), Mapping):
+        lookup_value = (row.get("source_flags") or {}).get("baseline_lookup")
+
+    if callable(lookup_value):
+        resolved = lookup_value(row)
+        if isinstance(resolved, Mapping):
+            verdict = _upper(resolved.get("baseline_verdict"))
+            if verdict in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS", "INSUFFICIENT_SAMPLE"}:
+                return (
+                    verdict,
+                    float(_float(resolved.get("baseline_penalty_or_boost")) or 0.0),
+                    _text(resolved.get("baseline_source")) or "callable_baseline_lookup",
+                    _text(resolved.get("baseline_reason")) or "callable_baseline_lookup",
+                )
+        elif resolved is not None:
+            verdict = _upper(resolved)
+            if verdict in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS", "INSUFFICIENT_SAMPLE"}:
+                return verdict, 0.0, "callable_baseline_lookup", "callable_baseline_lookup"
+        return "INSUFFICIENT_SAMPLE", 0.0, "missing_baseline_lookup", "missing_baseline_lookup"
+
+    if isinstance(lookup_value, Mapping):
+        setup_id = _stable_setup_id(row)
+        strategy_family = _lower(row.get("strategy_family"))
+        regime = _lower(row.get("regime"))
+        index = _lower(row.get("index"))
+        expiry_type = _lower(row.get("expiry_type"))
+        option_type = _lower(row.get("option_type"))
+        direction = _lower(row.get("direction") or row.get("side"))
+        candidates: list[Any] = [
+            lookup_value.get(setup_id) if setup_id else None,
+            lookup_value.get((strategy_family, regime, setup_id)) if setup_id else None,
+            lookup_value.get((strategy_family, regime, index, expiry_type, option_type, direction)),
+            lookup_value.get((strategy_family, regime, index)),
+            lookup_value.get((strategy_family, regime)),
+        ]
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if isinstance(candidate, Mapping):
+                verdict = _upper(candidate.get("baseline_verdict"))
+                if verdict not in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS", "INSUFFICIENT_SAMPLE"}:
+                    continue
+                return (
+                    verdict,
+                    float(_float(candidate.get("baseline_penalty_or_boost")) or 0.0),
+                    _text(candidate.get("baseline_source")) or "mapping_baseline_lookup",
+                    _text(candidate.get("baseline_reason")) or "mapping_baseline_lookup",
+                )
+            verdict = _upper(candidate)
+            if verdict in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS", "INSUFFICIENT_SAMPLE"}:
+                return verdict, 0.0, "mapping_baseline_lookup", "mapping_baseline_lookup"
+    return "INSUFFICIENT_SAMPLE", 0.0, "missing_baseline_lookup", "missing_baseline_lookup"
 
 
 def _is_fallback_candidate(row: Mapping[str, Any]) -> bool:
@@ -498,6 +569,7 @@ def apply_edge_ranking(entry: Mapping[str, Any] | dict[str, Any], expectancy_loo
 
     row = dict(entry)
     status, sample_count, avg_cost_adjusted_r, reason_source = _resolve_expectancy_context(row, expectancy_lookup=expectancy_lookup)
+    baseline_verdict, baseline_penalty_or_boost, baseline_source, baseline_reason = _resolve_baseline_context(row, baseline_lookup=expectancy_lookup)
     fallback_candidate = _is_fallback_candidate(row)
     feed_blocked = _is_feed_or_stale_blocked(row)
 
@@ -507,6 +579,9 @@ def apply_edge_ranking(entry: Mapping[str, Any] | dict[str, Any], expectancy_loo
         sample_count=sample_count,
         avg_cost_adjusted_r=avg_cost_adjusted_r,
     )
+    if status == EXPECTANCY_KEEP and not fallback_candidate and not feed_blocked:
+        raw_score = max(0.0, raw_score + baseline_penalty_or_boost)
+        components["raw_edge_rank_score"] = _round(raw_score)
 
     if status == EXPECTANCY_KILL or fallback_candidate or feed_blocked:
         edge_rank_score = 0.0
@@ -519,12 +594,16 @@ def apply_edge_ranking(entry: Mapping[str, Any] | dict[str, Any], expectancy_loo
     components.update(
         {
             "schema_version": EDGE_RANK_SCHEMA_VERSION,
-            "expectancy_status": status,
-            "expectancy_sample_count": sample_count,
-            "expectancy_avg_cost_adjusted_r": _round(avg_cost_adjusted_r),
-            "status_cap": _round(_STATUS_CAP.get(status, 0.30)),
-            "expectancy_reason_source": reason_source,
-            "fallback_candidate": fallback_candidate,
+        "expectancy_status": status,
+        "expectancy_sample_count": sample_count,
+        "expectancy_avg_cost_adjusted_r": _round(avg_cost_adjusted_r),
+        "baseline_verdict": baseline_verdict,
+        "baseline_penalty_or_boost": _round(baseline_penalty_or_boost),
+        "baseline_source": baseline_source,
+        "baseline_reason": baseline_reason,
+        "status_cap": _round(_STATUS_CAP.get(status, 0.30)),
+        "expectancy_reason_source": reason_source,
+        "fallback_candidate": fallback_candidate,
             "feed_blocked": feed_blocked,
             "edge_rank_score": _round(edge_rank_score),
         }
@@ -537,11 +616,17 @@ def apply_edge_ranking(entry: Mapping[str, Any] | dict[str, Any], expectancy_loo
         feed_blocked=feed_blocked,
         crowding_reasons=list(components.get("crowding_reasons") or []),
     )
+    if baseline_verdict in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS"}:
+        row["edge_rank_reason"] = "|".join([row["edge_rank_reason"], f"baseline={baseline_verdict}"])
     row["edge_rank_components"] = components
     row["expectancy_score"] = components["expectancy_score"]
     row["expectancy_status"] = status
     row["expectancy_sample_count"] = sample_count
     row["expectancy_avg_cost_adjusted_r"] = _round(avg_cost_adjusted_r)
+    row["baseline_verdict"] = baseline_verdict
+    row["baseline_penalty_or_boost"] = _round(baseline_penalty_or_boost)
+    row["baseline_source"] = baseline_source
+    row["baseline_reason"] = baseline_reason
     return row
 
 

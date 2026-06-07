@@ -299,6 +299,45 @@ def test_positive_expectancy_does_not_override_regime_mismatch_completely():
     assert "correlated_concentration" in mismatched["edge_rank_reason"] or "duplicate_candidate_cluster" in mismatched["edge_rank_reason"]
 
 
+def test_baseline_underperformance_penalizes_edge_rank_but_keeps_safety_intact():
+    out = apply_edge_ranking(
+        _row(
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.20,
+            baseline_verdict="UNDERPERFORMS",
+            baseline_penalty_or_boost=-0.08,
+            baseline_source="same_regime",
+            baseline_reason="same_regime_baseline_underperforms",
+        )
+    )
+
+    assert out["baseline_verdict"] == "UNDERPERFORMS"
+    assert out["baseline_penalty_or_boost"] < 0
+    assert out["edge_rank_score"] < 0.8
+    assert out["permission"] == "EXECUTE"
+    assert out["reportable_executable"] is True
+
+
+def test_baseline_outperformance_boost_is_capped_and_conservative():
+    out = apply_edge_ranking(
+        _row(
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.20,
+            baseline_verdict="OUTPERFORMS",
+            baseline_penalty_or_boost=0.05,
+            baseline_source="same_regime",
+            baseline_reason="same_regime_baseline_outperforms",
+        )
+    )
+
+    assert out["baseline_verdict"] == "OUTPERFORMS"
+    assert out["baseline_penalty_or_boost"] > 0
+    assert out["edge_rank_score"] <= 1.0
+    assert "baseline=OUTPERFORMS" in out["edge_rank_reason"]
+
+
 def test_edge_ranking_module_does_not_import_broker_or_order_modules():
     source = inspect.getsource(__import__("core.expectancy.edge_ranking", fromlist=["*"]))
     assert "from core.broker" not in source

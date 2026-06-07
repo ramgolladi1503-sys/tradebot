@@ -32,6 +32,7 @@ NoTradeReason = Literal[
     "NO_TRADE_CONFLICTING_SIGNALS",
     "NO_TRADE_INCONCLUSIVE_REGIME",
     "NO_TRADE_POOL_CONCENTRATION",
+    "NO_TRADE_BASELINE_WEAKNESS",
 ]
 
 CHOP_THRESHOLD = 0.60
@@ -194,6 +195,10 @@ def assess_no_trade(
     if pool_signal is not None:
         signals.append(pool_signal)
 
+    baseline_signal = _candidate_baseline_signal(candidate_tuple)
+    if baseline_signal is not None:
+        signals.append(baseline_signal)
+
     signals_tuple = tuple(sorted(signals, key=lambda item: (-item.severity, item.reason)))
     no_trade = bool(signals_tuple)
     primary_reason = signals_tuple[0].reason if signals_tuple else "TRADE_ALLOWED"
@@ -345,6 +350,43 @@ def _candidate_pool_quality_signal(candidates: tuple[StrategyCandidate, ...]) ->
             "bullish_count": report.bullish_count,
             "bearish_count": report.bearish_count,
             "range_count": report.range_count,
+        },
+    )
+
+
+def _candidate_baseline_signal(candidates: tuple[StrategyCandidate, ...]) -> NoTradeSignal | None:
+    if not candidates:
+        return None
+    verdicts: list[str] = []
+    reasons: list[str] = []
+    for candidate in candidates:
+        evidence = candidate.evidence if isinstance(candidate.evidence, dict) else {}
+        verdict = str(evidence.get("baseline_verdict") or evidence.get("expectancy_baseline_verdict") or "").strip().upper()
+        if verdict:
+            verdicts.append(verdict)
+        reason = str(evidence.get("baseline_reason") or evidence.get("expectancy_baseline_reason") or "").strip()
+        if reason:
+            reasons.append(reason)
+    if not verdicts:
+        return None
+    if any(verdict == "OUTPERFORMS" for verdict in verdicts):
+        return None
+    if any(verdict == "MATCHES" for verdict in verdicts):
+        return None
+    if not all(verdict in {"UNDERPERFORMS", "INSUFFICIENT_SAMPLE"} for verdict in verdicts):
+        return None
+
+    return NoTradeSignal(
+        reason="NO_TRADE_BASELINE_WEAKNESS",
+        severity=0.58,
+        message="All available candidates are at or below the baseline and the pool should stay advisory.",
+        blockers=("BASELINE_WEAKNESS",),
+        warnings=tuple(sorted(set(reasons))) if reasons else ("baseline_weakness",),
+        evidence={
+            "candidate_count": len(candidates),
+            "baseline_verdicts": sorted(set(verdicts)),
+            "underperform_count": sum(1 for verdict in verdicts if verdict == "UNDERPERFORMS"),
+            "insufficient_count": sum(1 for verdict in verdicts if verdict == "INSUFFICIENT_SAMPLE"),
         },
     )
 
