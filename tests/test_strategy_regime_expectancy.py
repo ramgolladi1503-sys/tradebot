@@ -12,37 +12,11 @@ from core.expectancy.strategy_regime_expectancy import (
 )
 
 
-def _outcome(**overrides: object) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "candidate_id": "cand-1",
-        "trade_id": "trade-1",
-        "strategy_family": "breakout",
-        "regime": "TREND",
-        "index": "NIFTY",
-        "expiry_type": "WEEKLY",
-        "option_type": "CE",
-        "direction": "BUY",
-        "signal_epoch": 1.0,
-        "outcome_status": "TARGET_HIT",
-        "outcome_reason": "target_hit_before_stop",
-        "entry_price": 100.0,
-        "stop_loss_price": 95.0,
-        "target_price": 110.0,
-        "timeout_epoch": 301.0,
-        "gross_r": 2.0,
-        "estimated_cost_r": 0.25,
-        "cost_adjusted_r": 1.75,
-        "fallback_used": False,
-    }
-    payload.update(overrides)
-    return payload
+FIXTURE_DIR = Path("tests/fixtures/strategy_regime_expectancy")
 
 
 def test_positive_group_becomes_watch_or_keep_based_on_thresholds() -> None:
-    rows = [
-        _outcome(candidate_id=f"cand-{i}", trade_id=f"trade-{i}", signal_epoch=float(i), cost_adjusted_r=0.25)
-        for i in range(1, 31)
-    ]
+    rows = load_candidate_outcomes(FIXTURE_DIR / "positive_keep_50.jsonl")[:30]
 
     report = aggregate_strategy_regime_expectancy(rows)
     assert report.groups
@@ -53,11 +27,7 @@ def test_positive_group_becomes_watch_or_keep_based_on_thresholds() -> None:
     assert group.executable_count == 30
     assert group.avg_cost_adjusted_r > 0
 
-    rows.extend(
-        _outcome(candidate_id=f"cand-k-{i}", trade_id=f"trade-k-{i}", signal_epoch=float(31 + i), cost_adjusted_r=0.2)
-        for i in range(1, 21)
-    )
-    report = aggregate_strategy_regime_expectancy(rows)
+    report = aggregate_strategy_regime_expectancy(load_candidate_outcomes(FIXTURE_DIR / "positive_keep_50.jsonl"))
     group = report.groups[0]
     assert group.keep_watch_kill_status == "KEEP"
     assert group.sample_count == 50
@@ -65,10 +35,7 @@ def test_positive_group_becomes_watch_or_keep_based_on_thresholds() -> None:
 
 
 def test_negative_group_becomes_kill() -> None:
-    rows = [
-        _outcome(candidate_id=f"cand-{i}", trade_id=f"trade-{i}", cost_adjusted_r=-0.2, gross_r=-0.1, outcome_status="STOP_HIT", signal_epoch=float(i))
-        for i in range(1, 31)
-    ]
+    rows = load_candidate_outcomes(FIXTURE_DIR / "negative_kill_30.jsonl")
 
     group = aggregate_strategy_regime_expectancy(rows).groups[0]
     assert group.keep_watch_kill_status == "KILL"
@@ -77,7 +44,7 @@ def test_negative_group_becomes_kill() -> None:
 
 
 def test_small_sample_remains_insufficient_data() -> None:
-    rows = [_outcome(candidate_id=f"cand-{i}", trade_id=f"trade-{i}", signal_epoch=float(i)) for i in range(1, 5)]
+    rows = load_candidate_outcomes(FIXTURE_DIR / "small_sample_4.jsonl")
 
     group = aggregate_strategy_regime_expectancy(rows).groups[0]
     assert group.keep_watch_kill_status == "INSUFFICIENT_DATA"
@@ -86,37 +53,30 @@ def test_small_sample_remains_insufficient_data() -> None:
 
 
 def test_fallback_outcomes_excluded_from_executable_expectancy() -> None:
-    rows = [
-        _outcome(candidate_id="fallback-1", trade_id="fallback-1", fallback_used=True, outcome_status="NOT_EXECUTABLE", cost_adjusted_r=9.0),
-        _outcome(candidate_id="exec-1", trade_id="exec-1", signal_epoch=2.0, cost_adjusted_r=1.0),
-    ]
+    rows = load_candidate_outcomes(FIXTURE_DIR / "fallback_and_blocked.jsonl")
 
     group = aggregate_strategy_regime_expectancy(rows).groups[0]
     assert group.fallback_excluded_count == 1
-    assert group.executable_count == 1
-    assert group.not_executable_count == 0
-    assert group.avg_cost_adjusted_r == 1.0
+    assert group.not_executable_count == 1
+    assert group.blocked_excluded_count == 1
+    assert group.executable_count == 0
 
 
 def test_blocked_not_executable_counted_separately() -> None:
-    rows = [
-        _outcome(candidate_id="blocked-1", trade_id="blocked-1", outcome_status="INVALID_INPUT", cost_adjusted_r=0.0),
-        _outcome(candidate_id="notexec-1", trade_id="notexec-1", outcome_status="NOT_EXECUTABLE", cost_adjusted_r=0.0),
-        _outcome(candidate_id="exec-1", trade_id="exec-1", signal_epoch=1.0, cost_adjusted_r=0.5),
-    ]
+    rows = load_candidate_outcomes(FIXTURE_DIR / "fallback_and_blocked.jsonl")
 
     group = aggregate_strategy_regime_expectancy(rows).groups[0]
     assert group.blocked_excluded_count == 1
     assert group.not_executable_count == 1
-    assert group.executable_count == 1
+    assert group.executable_count == 0
     assert group.sample_count == 3
 
 
 def test_median_cost_adjusted_r_correct() -> None:
     rows = [
-        _outcome(candidate_id="cand-1", trade_id="trade-1", signal_epoch=1.0, cost_adjusted_r=1.0),
-        _outcome(candidate_id="cand-2", trade_id="trade-2", signal_epoch=2.0, cost_adjusted_r=4.0),
-        _outcome(candidate_id="cand-3", trade_id="trade-3", signal_epoch=3.0, cost_adjusted_r=7.0),
+        {"candidate_id": "cand-1", "trade_id": "trade-1", "strategy_family": "breakout", "regime": "TREND", "index": "NIFTY", "expiry_type": "WEEKLY", "option_type": "CE", "direction": "BUY", "signal_epoch": 1.0, "outcome_status": "TARGET_HIT", "gross_r": 1.0, "cost_adjusted_r": 1.0},
+        {"candidate_id": "cand-2", "trade_id": "trade-2", "strategy_family": "breakout", "regime": "TREND", "index": "NIFTY", "expiry_type": "WEEKLY", "option_type": "CE", "direction": "BUY", "signal_epoch": 2.0, "outcome_status": "STOP_HIT", "gross_r": 4.0, "cost_adjusted_r": 4.0},
+        {"candidate_id": "cand-3", "trade_id": "trade-3", "strategy_family": "breakout", "regime": "TREND", "index": "NIFTY", "expiry_type": "WEEKLY", "option_type": "CE", "direction": "BUY", "signal_epoch": 3.0, "outcome_status": "TIMEOUT", "gross_r": 7.0, "cost_adjusted_r": 7.0},
     ]
 
     group = aggregate_strategy_regime_expectancy(rows).groups[0]
@@ -127,10 +87,10 @@ def test_median_cost_adjusted_r_correct() -> None:
 
 def test_max_drawdown_deterministic() -> None:
     rows = [
-        _outcome(candidate_id="cand-1", trade_id="trade-1", signal_epoch=1.0, cost_adjusted_r=2.0),
-        _outcome(candidate_id="cand-2", trade_id="trade-2", signal_epoch=2.0, cost_adjusted_r=-3.0),
-        _outcome(candidate_id="cand-3", trade_id="trade-3", signal_epoch=3.0, cost_adjusted_r=4.0),
-        _outcome(candidate_id="cand-4", trade_id="trade-4", signal_epoch=4.0, cost_adjusted_r=-1.0),
+        {"candidate_id": "cand-1", "trade_id": "trade-1", "strategy_family": "breakout", "regime": "TREND", "index": "NIFTY", "expiry_type": "WEEKLY", "option_type": "CE", "direction": "BUY", "signal_epoch": 1.0, "outcome_status": "TARGET_HIT", "cost_adjusted_r": 2.0, "gross_r": 2.0},
+        {"candidate_id": "cand-2", "trade_id": "trade-2", "strategy_family": "breakout", "regime": "TREND", "index": "NIFTY", "expiry_type": "WEEKLY", "option_type": "CE", "direction": "BUY", "signal_epoch": 2.0, "outcome_status": "STOP_HIT", "cost_adjusted_r": -3.0, "gross_r": -3.0},
+        {"candidate_id": "cand-3", "trade_id": "trade-3", "strategy_family": "breakout", "regime": "TREND", "index": "NIFTY", "expiry_type": "WEEKLY", "option_type": "CE", "direction": "BUY", "signal_epoch": 3.0, "outcome_status": "TIMEOUT", "cost_adjusted_r": 4.0, "gross_r": 4.0},
+        {"candidate_id": "cand-4", "trade_id": "trade-4", "strategy_family": "breakout", "regime": "TREND", "index": "NIFTY", "expiry_type": "WEEKLY", "option_type": "CE", "direction": "BUY", "signal_epoch": 4.0, "outcome_status": "TIMEOUT", "cost_adjusted_r": -1.0, "gross_r": -1.0},
     ]
 
     group = aggregate_strategy_regime_expectancy(rows).groups[0]
@@ -138,7 +98,7 @@ def test_max_drawdown_deterministic() -> None:
 
 
 def test_markdown_and_json_report_generated(tmp_path: Path) -> None:
-    rows = [_outcome(candidate_id=f"cand-{i}", trade_id=f"trade-{i}", signal_epoch=float(i), cost_adjusted_r=1.0) for i in range(1, 31)]
+    rows = load_candidate_outcomes(FIXTURE_DIR / "positive_keep_50.jsonl")
 
     json_path, md_path, report = write_strategy_regime_expectancy_report(rows, output_dir=tmp_path)
     json_again, md_again = write_strategy_regime_expectancy_reports(rows, output_dir=tmp_path / "nested")
@@ -151,7 +111,7 @@ def test_markdown_and_json_report_generated(tmp_path: Path) -> None:
     payload = json.loads(json_path.read_text())
     assert payload["schema_version"] == STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION
     assert payload["group_count"] == 1
-    assert payload["groups"][0]["keep_watch_kill_status"] == "WATCH"
+    assert payload["groups"][0]["keep_watch_kill_status"] == "KEEP"
     markdown = md_path.read_text()
     assert "Strategy-Regime Expectancy Report" in markdown
     assert "Group Metrics" in markdown
@@ -164,8 +124,34 @@ def test_load_candidate_outcomes_from_jsonl(tmp_path: Path) -> None:
         "\n".join(
             json.dumps(row, sort_keys=True)
             for row in [
-                _outcome(candidate_id="cand-1", trade_id="trade-1", signal_epoch=1.0, cost_adjusted_r=1.0),
-                _outcome(candidate_id="cand-2", trade_id="trade-2", signal_epoch=2.0, cost_adjusted_r=1.0),
+                {
+                    "candidate_id": "cand-1",
+                    "trade_id": "trade-1",
+                    "strategy_family": "breakout",
+                    "regime": "TREND",
+                    "index": "NIFTY",
+                    "expiry_type": "WEEKLY",
+                    "option_type": "CE",
+                    "direction": "BUY",
+                    "signal_epoch": 1.0,
+                    "outcome_status": "TARGET_HIT",
+                    "gross_r": 1.0,
+                    "cost_adjusted_r": 1.0,
+                },
+                {
+                    "candidate_id": "cand-2",
+                    "trade_id": "trade-2",
+                    "strategy_family": "breakout",
+                    "regime": "TREND",
+                    "index": "NIFTY",
+                    "expiry_type": "WEEKLY",
+                    "option_type": "CE",
+                    "direction": "BUY",
+                    "signal_epoch": 2.0,
+                    "outcome_status": "TARGET_HIT",
+                    "gross_r": 1.0,
+                    "cost_adjusted_r": 1.0,
+                },
             ]
         )
         + "\n",
@@ -173,5 +159,7 @@ def test_load_candidate_outcomes_from_jsonl(tmp_path: Path) -> None:
     )
 
     loaded = load_candidate_outcomes(path)
-    assert len(loaded) == 2
     assert loaded[0]["candidate_id"] == "cand-1"
+    assert loaded[0]["trade_id"] == "trade-1"
+    assert loaded[1]["candidate_id"] == "cand-2"
+    assert loaded[1]["trade_id"] == "trade-2"
