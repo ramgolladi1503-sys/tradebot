@@ -209,6 +209,236 @@ def _regime_fit(candidate: dict[str, Any], market_data: dict[str, Any], score_in
     return _clamp01(fit, default=0.56)
 
 
+def _regime_bucket(value: Any) -> str:
+    regime = str(value or "").strip().upper()
+    if regime in {"TREND", "TREND_UP", "TREND_DOWN", "UPTREND", "DOWNTREND", "BREAKOUT", "MOMENTUM"}:
+        return "TREND"
+    if regime in {"RANGE", "RANGE_VOLATILE", "MEAN_REVERSION", "SIDEWAYS"}:
+        return "RANGE"
+    if regime in {"CHOP", "NOISE", "UNCLEAR", "INCONCLUSIVE"}:
+        return "CHOP"
+    if regime in {"EXPIRY", "EXPIRY_DAY", "ZERO_HERO", "ZERO_HERO_EXPIRY"}:
+        return "EXPIRY"
+    if regime in {"HIGH_VOL", "HIGH_VOLATILITY", "VOLATILITY_EXPANSION", "EVENT", "PANIC"}:
+        return "HIGH_VOL"
+    if regime in {"LOW_VOL", "LOW_VOLATILITY", "COMPRESSION"}:
+        return "LOW_VOL"
+    return "UNKNOWN"
+
+
+def _candidate_regime_archetype(candidate: dict[str, Any]) -> str:
+    family_text = " ".join(
+        str(candidate.get(field) or "").strip().lower()
+        for field in (
+            "strategy_family",
+            "movement_type",
+            "setup_variant",
+            "candidate_type",
+            "entry_condition",
+            "strategy_name",
+        )
+    )
+    if any(token in family_text for token in ("breakout", "momentum", "trend", "pullback", "opening_drive", "opening_range", "compression_breakout", "volatility_expansion", "opening_drive")):
+        return "TREND"
+    if any(token in family_text for token in ("mean_reversion", "range", "vwap_reclaim", "exhaustion", "reversal")):
+        return "RANGE"
+    if any(token in family_text for token in ("expiry", "zero_hero", "time_window", "scalp")):
+        return "EXPIRY"
+    if any(token in family_text for token in ("chop", "no_trade", "noise", "unclear")):
+        return "CHOP"
+    return "UNKNOWN"
+
+
+def _regime_weight_profile(
+    candidate: dict[str, Any],
+    market_data: dict[str, Any],
+    score_inputs_used: dict[str, Any],
+) -> tuple[dict[str, float], list[str], float]:
+    regime_bucket = _regime_bucket(
+        market_data.get("regime")
+        or candidate.get("regime")
+        or market_data.get("day_type")
+        or candidate.get("day_type")
+        or market_data.get("primary_regime")
+    )
+    archetype = _candidate_regime_archetype(candidate)
+    score_inputs_used["regime_bucket"] = regime_bucket
+    score_inputs_used["candidate_archetype"] = archetype
+    score_inputs_used["regime_profile_applied"] = regime_bucket != "UNKNOWN"
+
+    weights = {
+        "setup_strength": 1.0,
+        "regime_fit": 1.0,
+        "liquidity_score": 1.0,
+        "spread_score": 1.0,
+        "rr_score": 1.0,
+        "timing_score": 1.0,
+    }
+    penalty = 0.0
+    reasons: list[str] = []
+
+    if regime_bucket == "TREND":
+        if archetype == "TREND":
+            weights.update(
+                {
+                    "setup_strength": 1.18,
+                    "regime_fit": 1.20,
+                    "liquidity_score": 0.94,
+                    "spread_score": 0.94,
+                    "rr_score": 1.10,
+                    "timing_score": 1.08,
+                }
+            )
+            reasons.append("trend_regime_breakout_momentum_preferred")
+        elif archetype == "RANGE":
+            weights.update(
+                {
+                    "setup_strength": 0.86,
+                    "regime_fit": 0.84,
+                    "liquidity_score": 1.00,
+                    "spread_score": 1.00,
+                    "rr_score": 0.96,
+                    "timing_score": 0.94,
+                }
+            )
+            penalty += 0.06
+            reasons.append("trend_regime_range_mismatch")
+        elif archetype == "EXPIRY":
+            weights.update(
+                {
+                    "setup_strength": 0.92,
+                    "regime_fit": 0.95,
+                    "liquidity_score": 1.08,
+                    "spread_score": 1.10,
+                    "rr_score": 1.04,
+                    "timing_score": 1.02,
+                }
+            )
+            penalty += 0.03
+            reasons.append("trend_regime_expiry_discounted")
+    elif regime_bucket == "RANGE":
+        if archetype == "RANGE":
+            weights.update(
+                {
+                    "setup_strength": 1.22,
+                    "regime_fit": 1.28,
+                    "liquidity_score": 1.06,
+                    "spread_score": 1.08,
+                    "rr_score": 0.84,
+                    "timing_score": 1.08,
+                }
+            )
+            reasons.append("range_regime_mean_reversion_preferred")
+        elif archetype == "TREND":
+            weights.update(
+                {
+                    "setup_strength": 0.76,
+                    "regime_fit": 0.76,
+                    "liquidity_score": 0.98,
+                    "spread_score": 0.98,
+                    "rr_score": 0.82,
+                    "timing_score": 0.90,
+                }
+            )
+            penalty += 0.20
+            reasons.append("range_regime_breakout_penalty")
+        elif archetype == "EXPIRY":
+            weights.update(
+                {
+                    "setup_strength": 0.96,
+                    "regime_fit": 1.00,
+                    "liquidity_score": 1.14,
+                    "spread_score": 1.16,
+                    "rr_score": 1.05,
+                    "timing_score": 1.08,
+                }
+            )
+            reasons.append("range_regime_expiry_liquidity_sensitive")
+    elif regime_bucket == "CHOP":
+        weights.update(
+            {
+                "setup_strength": 0.30,
+                "regime_fit": 0.34,
+                "liquidity_score": 1.20,
+                "spread_score": 1.18,
+                "rr_score": 0.58,
+                "timing_score": 1.16,
+            }
+        )
+        if archetype in {"TREND", "RANGE"}:
+            penalty += 1.0
+            reasons.append("chop_regime_directional_penalty")
+        else:
+            penalty += 0.60
+            reasons.append("chop_regime_uncertainty_penalty")
+    elif regime_bucket == "EXPIRY":
+        weights.update(
+            {
+                "setup_strength": 0.90,
+                "regime_fit": 0.96,
+                "liquidity_score": 1.25,
+                "spread_score": 1.28,
+                "rr_score": 1.15,
+                "timing_score": 1.14,
+            }
+        )
+        if archetype == "EXPIRY":
+            reasons.append("expiry_regime_liquidity_and_rr_prioritized")
+        else:
+            penalty += 0.04
+            reasons.append("expiry_regime_non_expiry_discount")
+    elif regime_bucket == "HIGH_VOL":
+        weights.update(
+            {
+                "setup_strength": 1.05,
+                "regime_fit": 1.10,
+                "liquidity_score": 0.98,
+                "spread_score": 1.20,
+                "rr_score": 1.12,
+                "timing_score": 1.12,
+            }
+        )
+        if archetype == "TREND":
+            reasons.append("high_vol_trend_requires_volatility_expansion_confirmation")
+        else:
+            penalty += 0.04
+            reasons.append("high_vol_non_expansion_penalty")
+    elif regime_bucket == "LOW_VOL":
+        weights.update(
+            {
+                "setup_strength": 0.90 if archetype == "TREND" else 1.05,
+                "regime_fit": 0.92 if archetype == "TREND" else 1.08,
+                "liquidity_score": 1.10,
+                "spread_score": 1.12,
+                "rr_score": 1.08 if archetype == "RANGE" else 0.96,
+                "timing_score": 1.06,
+            }
+        )
+        if archetype == "TREND":
+            penalty += 0.08
+            reasons.append("low_vol_weak_breakout_penalty")
+        elif archetype == "RANGE":
+            reasons.append("low_vol_range_preferred_if_liquid")
+        else:
+            penalty += 0.04
+            reasons.append("low_vol_unclear_penalty")
+    else:
+        weights.update(
+            {
+                "setup_strength": 0.96,
+                "regime_fit": 0.96,
+                "liquidity_score": 1.04,
+                "spread_score": 1.04,
+                "rr_score": 0.98,
+                "timing_score": 1.00,
+            }
+        )
+        penalty += 0.03
+        reasons.append("unknown_regime_conservative_profile")
+
+    return weights, reasons, _clamp01(penalty, default=0.0)
+
+
 def _liquidity_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
     volume = max(
         _first_float(candidate.get("volume"), market_data.get("volume")) or 0.0,
@@ -515,24 +745,25 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
     spread_score, spread_reasons = _spread_score(row, market, score_inputs_used)
     rr_score, rr_reasons = _rr_score(row, market, score_inputs_used)
     timing_score, timing_reasons = _timing_score(row, market, ctx, score_inputs_used)
+    regime_weights, regime_reasons, regime_penalty = _regime_weight_profile(row, market, score_inputs_used)
 
     missing_reasons = _dedupe_texts(liquidity_reasons + spread_reasons + rr_reasons + timing_reasons)
     confidence_raw = _weighted_average(
         [
-            (setup_strength, _cfg_float("CANDIDATE_SCORING_WEIGHT_SETUP", 0.28)),
-            (regime_fit, _cfg_float("CANDIDATE_SCORING_WEIGHT_REGIME", 0.14)),
-            (liquidity_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_LIQUIDITY", 0.16)),
-            (spread_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_SPREAD", 0.10)),
-            (rr_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_RR", 0.18)),
-            (timing_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_TIMING", 0.14)),
+            (setup_strength, _cfg_float("CANDIDATE_SCORING_WEIGHT_SETUP", 0.28) * regime_weights["setup_strength"]),
+            (regime_fit, _cfg_float("CANDIDATE_SCORING_WEIGHT_REGIME", 0.14) * regime_weights["regime_fit"]),
+            (liquidity_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_LIQUIDITY", 0.16) * regime_weights["liquidity_score"]),
+            (spread_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_SPREAD", 0.10) * regime_weights["spread_score"]),
+            (rr_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_RR", 0.18) * regime_weights["rr_score"]),
+            (timing_score, _cfg_float("CANDIDATE_SCORING_WEIGHT_TIMING", 0.14) * regime_weights["timing_score"]),
         ],
         default=0.55,
     )
     confluence_score = _weighted_average(
         [
-            (setup_strength, 0.45),
-            (regime_fit, 0.25),
-            (timing_score, 0.30),
+            (setup_strength, 0.45 * regime_weights["setup_strength"]),
+            (regime_fit, 0.25 * regime_weights["regime_fit"]),
+            (timing_score, 0.30 * regime_weights["timing_score"]),
         ],
         default=0.55,
     )
@@ -547,30 +778,30 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         missing_reasons=missing_reasons,
     )
     crowding_penalty, crowding_reasons = _crowding_penalty(row, score_inputs_used)
-    penalty_score = _clamp01(penalty_score + crowding_penalty, default=penalty_score)
-    penalty_reasons = _dedupe_texts(list(penalty_reasons) + crowding_reasons)
+    penalty_score = _clamp01(penalty_score + crowding_penalty + regime_penalty, default=penalty_score)
+    penalty_reasons = _dedupe_texts(list(penalty_reasons) + crowding_reasons + regime_reasons)
     penalty_weight = _cfg_float("CANDIDATE_SCORING_PENALTY_WEIGHT", 0.45)
     confidence_final = _clamp01(confidence_raw - (penalty_score * penalty_weight), default=confidence_raw)
     rank_score = _weighted_average(
         [
             (confidence_final, 0.55),
-            (setup_strength, 0.15),
-            (rr_score, 0.12),
-            (liquidity_score, 0.10),
-            (spread_score, 0.04),
-            (timing_score, 0.04),
+            (setup_strength, 0.15 * regime_weights["setup_strength"]),
+            (rr_score, 0.12 * regime_weights["rr_score"]),
+            (liquidity_score, 0.10 * regime_weights["liquidity_score"]),
+            (spread_score, 0.04 * regime_weights["spread_score"]),
+            (timing_score, 0.04 * regime_weights["timing_score"]),
         ],
         default=confidence_final,
     )
     opportunity_score = _weighted_average(
         [
             (confidence_final, 0.42),
-            (setup_strength, 0.16),
-            (regime_fit, 0.10),
-            (liquidity_score, 0.10),
-            (spread_score, 0.06),
-            (rr_score, 0.11),
-            (timing_score, 0.05),
+            (setup_strength, 0.16 * regime_weights["setup_strength"]),
+            (regime_fit, 0.10 * regime_weights["regime_fit"]),
+            (liquidity_score, 0.10 * regime_weights["liquidity_score"]),
+            (spread_score, 0.06 * regime_weights["spread_score"]),
+            (rr_score, 0.11 * regime_weights["rr_score"]),
+            (timing_score, 0.05 * regime_weights["timing_score"]),
         ],
         default=confidence_final,
     )
@@ -616,6 +847,13 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         "opportunity_score": _round_score(opportunity_score),
         "missing_reasons": list(missing_reasons),
         "candidate_class": candidate_class,
+        "regime_profile": {
+            "regime_bucket": score_inputs_used.get("regime_bucket"),
+            "candidate_archetype": score_inputs_used.get("candidate_archetype"),
+            "weights": dict(regime_weights),
+            "penalty": _round_score(regime_penalty),
+            "reasons": list(regime_reasons),
+        },
     }
 
     return {
@@ -636,4 +874,11 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         "penalty_reasons": list(penalty_reasons),
         "score_inputs_used": dict(score_inputs_used),
         "confluence_score": _round_score(confluence_score),
+        "regime_profile": {
+            "regime_bucket": score_inputs_used.get("regime_bucket"),
+            "candidate_archetype": score_inputs_used.get("candidate_archetype"),
+            "weights": dict(regime_weights),
+            "penalty": _round_score(regime_penalty),
+            "reasons": list(regime_reasons),
+        },
     }

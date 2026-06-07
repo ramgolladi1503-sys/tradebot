@@ -270,6 +270,35 @@ def test_regime_mismatch_candidate_ranks_below_regime_aligned_candidate():
     assert aligned["edge_rank_components"]["regime_match"] > mismatched["edge_rank_components"]["regime_match"]
 
 
+def test_positive_expectancy_does_not_override_regime_mismatch_completely():
+    aligned = apply_edge_ranking(
+        _row(
+            trade_id="T-ALIGN-EXPECTANCY",
+            strategy_family="breakout",
+            regime_fit=0.90,
+            expectancy_status="KEEP",
+            expectancy_sample_count=62,
+            expectancy_avg_cost_adjusted_r=0.24,
+        )
+    )
+    mismatched = apply_edge_ranking(
+        _row(
+            trade_id="T-MISMATCH-EXPECTANCY",
+            strategy_family="mean_reversion",
+            regime_fit=0.24,
+            expectancy_status="KEEP",
+            expectancy_sample_count=62,
+            expectancy_avg_cost_adjusted_r=0.24,
+            correlation_penalty=0.18,
+            duplicate_candidate_count=1,
+        )
+    )
+
+    assert aligned["edge_rank_score"] > mismatched["edge_rank_score"]
+    assert mismatched["edge_rank_score"] > 0.0
+    assert "correlated_concentration" in mismatched["edge_rank_reason"] or "duplicate_candidate_cluster" in mismatched["edge_rank_reason"]
+
+
 def test_edge_ranking_module_does_not_import_broker_or_order_modules():
     source = inspect.getsource(__import__("core.expectancy.edge_ranking", fromlist=["*"]))
     assert "from core.broker" not in source
