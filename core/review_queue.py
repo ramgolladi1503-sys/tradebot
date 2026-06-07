@@ -6,6 +6,7 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from typing import Any, Mapping
 
 from core.orders.order_intent import OrderIntent
 from core.learning_paths import canonical_suggestions_log_path, rejected_candidates_paths, suggestion_log_paths
@@ -54,6 +55,7 @@ from core.observability.pipeline import append_trade_lifecycle_event
 from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lifecycle
 from core.time_utils import format_ts_ist
 from core.log_writer import get_jsonl_writer
+from core.expectancy.expectancy_gate import apply_expectancy_gate
 from core.candidate_journal import write_candidate_journal_row
 from core.quote_truth import quote_bundle_is_consistent, quote_consistency_score, resolve_quote_validation_status
 from core.auth_manager import runtime_auth_snapshot
@@ -371,6 +373,41 @@ def _apply_fallback_execution_kill(entry: dict) -> dict:
     out.setdefault("execution_truth_blocked", False)
     out.setdefault("execution_truth_advisory", True)
     return out
+
+
+def _entry_expectancy_lookup(entry: Mapping[str, Any] | None) -> Any:
+    if not isinstance(entry, Mapping):
+        return None
+    direct = entry.get("expectancy_lookup")
+    if direct is not None:
+        return direct
+    metadata = entry.get("metadata")
+    if isinstance(metadata, Mapping):
+        direct = metadata.get("expectancy_lookup")
+        if direct is not None:
+            return direct
+    source_flags = entry.get("source_flags")
+    if isinstance(source_flags, Mapping):
+        direct = source_flags.get("expectancy_lookup")
+        if direct is not None:
+            return direct
+    return None
+
+
+def _apply_expectancy_gate_if_present(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    lookup = _entry_expectancy_lookup(entry)
+    status = str(entry.get("expectancy_status") or entry.get("keep_watch_kill_status") or "").strip().upper()
+    override = str(
+        entry.get("expectancy_override")
+        or entry.get("expectancy_status_override")
+        or entry.get("manual_expectancy_override")
+        or ""
+    ).strip()
+    if lookup is None and not status and not override:
+        return entry
+    return apply_expectancy_gate(entry, expectancy_lookup=lookup)
 
 
 _HARD_EXECUTION_BLOCKER_CODES = {
@@ -8081,6 +8118,7 @@ def _finalize_review_queue_entry(
         entry = _apply_canonical_quote_age(entry)
         entry = enforce_entry_contract(entry, stage="review_queue.add_to_queue")
         _log_entry_lifecycle_resolution(entry)
+        entry = _apply_expectancy_gate_if_present(entry)
         _emit_trade_lifecycle_event(
             entry,
             stage="readiness_gating",
@@ -8292,6 +8330,7 @@ def _finalize_review_queue_entry(
     entry = _refresh_opportunity_survival_state(entry)
     entry = _synchronize_final_confidence(entry)
     entry = _maybe_promote_execute_candidate(entry)
+    entry = _apply_expectancy_gate_if_present(entry)
     entry = _apply_sizing_telemetry(entry)
     if (
         str(entry.get("final_action") or "").strip().upper() == "BLOCK"
