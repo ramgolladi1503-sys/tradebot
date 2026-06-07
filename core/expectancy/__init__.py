@@ -18,6 +18,13 @@ from .edge_ranking import (
     EdgeRankDecision,
     apply_edge_ranking,
 )
+from .top_opportunity_selector import (
+    TOP_OPPORTUNITY_SELECTOR_SCHEMA_VERSION,
+    TopOpportunityRow,
+    TopOpportunitySelectorReport,
+    select_top_opportunities,
+    write_top_opportunities_report,
+)
 from .strategy_regime_expectancy import (
     STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION,
     StrategyRegimeExpectancyGroup,
@@ -39,6 +46,11 @@ __all__ = [
     "EDGE_RANK_SCHEMA_VERSION",
     "EdgeRankDecision",
     "apply_edge_ranking",
+    "TOP_OPPORTUNITY_SELECTOR_SCHEMA_VERSION",
+    "TopOpportunityRow",
+    "TopOpportunitySelectorReport",
+    "select_top_opportunities",
+    "write_top_opportunities_report",
     "SETUP_FINGERPRINT_SCHEMA_VERSION",
     "SetupFingerprint",
     "attach_setup_fingerprint",
