@@ -40,11 +40,11 @@ def _context(**overrides):
     return StrategyContext(**payload)
 
 
-def _candidate(direction="BUY_CALL", blockers=()):
+def _candidate(direction="BUY_CALL", blockers=(), movement_type="COMPRESSION_BREAKOUT"):
     return StrategyCandidate(
         schema_version=1,
         strategy_id=f"unit_{direction.lower()}",
-        movement_type="COMPRESSION_BREAKOUT",
+        movement_type=movement_type,
         symbol="NIFTY",
         direction=direction,
         status="VALIDATED_CANDIDATE" if not blockers else "BLOCKED_CANDIDATE",
@@ -116,9 +116,40 @@ def test_assess_no_trade_detects_conflicting_candidates():
         candidates=[_candidate("BUY_CALL"), _candidate("BUY_PUT")],
     )
 
+    assert assessment.no_trade is False
+    assert assessment.primary_reason == "TRADE_ALLOWED"
+    assert assessment.blockers == ()
+
+
+def test_bearish_mixed_pool_does_not_fail_closed_but_penalizes_mismatched_candidate():
+    assessment = assess_no_trade(
+        _context(),
+        _regime(primary="TREND_DOWN", TREND_DOWN=0.7),
+        candidates=[
+            _candidate("BUY_PUT"),
+            _candidate("BUY_CALL"),
+        ],
+    )
+
+    assert assessment.no_trade is False
+    assert assessment.primary_reason == "TRADE_ALLOWED"
+    assert assessment.blockers == ()
+
+
+def test_chop_directional_heavy_pool_prefers_no_trade():
+    assessment = assess_no_trade(
+        _context(),
+        _regime(primary="CHOP", CHOP=0.82, RANGE=0.12),
+        candidates=[
+            _candidate("BUY_CALL"),
+            _candidate("BUY_CALL"),
+            _candidate("BUY_PUT"),
+        ],
+    )
+
     assert assessment.no_trade is True
-    assert any(signal.reason == "NO_TRADE_CONFLICTING_SIGNALS" for signal in assessment.signals)
-    assert "CONFLICTING_TRAP_SIGNAL" in assessment.blockers
+    assert assessment.primary_reason in {"NO_TRADE_CHOP", "NO_TRADE_POOL_CONCENTRATION"}
+    assert any(signal.reason in {"NO_TRADE_CHOP", "NO_TRADE_POOL_CONCENTRATION"} for signal in assessment.signals)
 
 
 def test_assess_no_trade_allows_clean_context():
@@ -132,6 +163,20 @@ def test_assess_no_trade_allows_clean_context():
     assert assessment.primary_reason == "TRADE_ALLOWED"
     assert assessment.blockers == ()
     assert assessment.signals == ()
+
+
+def test_range_regime_with_range_candidate_does_not_fail_closed():
+    assessment = assess_no_trade(
+        _context(),
+        _regime(primary="RANGE", RANGE=0.75, CHOP=0.05),
+        candidates=[
+            _candidate("BUY_CALL", movement_type="MEAN_REVERSION_EXTENSION"),
+            _candidate("BUY_PUT", movement_type="OPENING_RANGE_RETEST"),
+        ],
+    )
+
+    assert assessment.no_trade is False
+    assert assessment.primary_reason == "TRADE_ALLOWED"
 
 
 def test_generate_no_trade_candidate_emits_no_trade_status():

@@ -4,6 +4,15 @@ from dataclasses import asdict, dataclass
 from hashlib import sha1
 from typing import Any, Mapping
 
+from core.candidate_exposure import (
+    EXPOSURE_BEARISH,
+    EXPOSURE_BULLISH,
+    EXPOSURE_RANGE,
+    EXPOSURE_UNKNOWN,
+    SETUP_DIRECTIONAL,
+    SETUP_RANGE_COMPATIBLE,
+    normalize_directional_exposure,
+)
 from .expectancy_gate import (
     EXPECTANCY_INSUFFICIENT_DATA,
     EXPECTANCY_KEEP,
@@ -452,6 +461,38 @@ def _risk_reward_score(row: Mapping[str, Any]) -> float:
     return _clamp(candidate)
 
 
+def candidate_regime_mismatch_penalty(row: Mapping[str, Any]) -> tuple[float, list[str], dict[str, Any]]:
+    exposure = normalize_directional_exposure(row)
+    regime = _upper(row.get("regime"))
+    strategy_family = _lower(row.get("strategy_family"))
+    movement_type = _upper(row.get("movement_type"))
+    penalty = 0.0
+    reasons: list[str] = []
+
+    if regime in {"BEARISH", "TREND_DOWN"} and exposure.exposure == EXPOSURE_BULLISH:
+        penalty += 0.12
+        reasons.append("bearish_regime_bullish_exposure")
+    if regime in {"RANGE", "SIDEWAYS"} and (
+        exposure.setup_kind == SETUP_DIRECTIONAL
+        or any(token in strategy_family for token in ("breakout", "momentum", "trend", "pullback"))
+        or any(token in movement_type for token in ("BREAKOUT", "MOMENTUM", "TREND", "PULLBACK", "DRIVE"))
+    ):
+        penalty += 0.12
+        reasons.append("range_regime_directional_setup")
+    if regime in {"CHOP", "NOISE", "UNCLEAR"} and exposure.setup_kind == SETUP_DIRECTIONAL and exposure.exposure in {EXPOSURE_BULLISH, EXPOSURE_BEARISH, EXPOSURE_UNKNOWN}:
+        penalty += 0.08
+        reasons.append("chop_regime_directional_setup")
+
+    penalty = _clamp(penalty, 0.0, 0.20)
+    components = {
+        "candidate_exposure": exposure.exposure,
+        "candidate_setup_kind": exposure.setup_kind,
+        "candidate_exposure_confidence": _round(exposure.confidence),
+        "candidate_exposure_evidence": list(exposure.evidence),
+    }
+    return penalty, reasons, components
+
+
 def _crowding_penalty(row: Mapping[str, Any]) -> tuple[float, list[str]]:
     reasons: list[str] = []
     penalty = 0.0
@@ -511,6 +552,7 @@ def _score_components(
     regime_match = _regime_match(row)
     risk_reward_score = _risk_reward_score(row)
     crowding_penalty, crowding_reasons = _crowding_penalty(row)
+    regime_mismatch_penalty, regime_mismatch_reasons, regime_mismatch_components = candidate_regime_mismatch_penalty(row)
     raw_score = (
         expectancy_score * 0.40
         + execution_quality * 0.20
@@ -519,7 +561,7 @@ def _score_components(
         + regime_match * 0.10
         + risk_reward_score * 0.08
     )
-    raw_score = max(0.0, raw_score - crowding_penalty)
+    raw_score = max(0.0, raw_score - crowding_penalty - regime_mismatch_penalty)
     return raw_score, {
         "expectancy_score": _round(expectancy_score),
         "execution_quality": _round(execution_quality),
@@ -529,7 +571,10 @@ def _score_components(
         "risk_reward_score": _round(risk_reward_score),
         "crowding_penalty": _round(crowding_penalty),
         "crowding_reasons": list(crowding_reasons),
+        "candidate_regime_mismatch_penalty": _round(regime_mismatch_penalty),
+        "candidate_regime_mismatch_reasons": list(regime_mismatch_reasons),
         "raw_edge_rank_score": _round(raw_score),
+        **regime_mismatch_components,
     }
 
 
@@ -539,6 +584,7 @@ def _build_reason(
     capped: bool,
     fallback_candidate: bool,
     feed_blocked: bool,
+    regime_mismatch_reasons: list[str] | None = None,
     crowding_reasons: list[str] | None = None,
 ) -> str:
     reasons: list[str] = []
@@ -546,6 +592,8 @@ def _build_reason(
         reasons.append("fallback_not_rankable")
     if feed_blocked:
         reasons.append("feed_truth_blocked")
+    if regime_mismatch_reasons:
+        reasons.extend(regime_mismatch_reasons)
     if crowding_reasons:
         reasons.extend(crowding_reasons)
     if status == EXPECTANCY_KILL:
@@ -614,6 +662,7 @@ def apply_edge_ranking(entry: Mapping[str, Any] | dict[str, Any], expectancy_loo
         capped=capped,
         fallback_candidate=fallback_candidate,
         feed_blocked=feed_blocked,
+        regime_mismatch_reasons=list(components.get("candidate_regime_mismatch_reasons") or []),
         crowding_reasons=list(components.get("crowding_reasons") or []),
     )
     if baseline_verdict in {"OUTPERFORMS", "MATCHES", "UNDERPERFORMS"}:

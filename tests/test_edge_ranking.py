@@ -270,6 +270,75 @@ def test_regime_mismatch_candidate_ranks_below_regime_aligned_candidate():
     assert aligned["edge_rank_components"]["regime_match"] > mismatched["edge_rank_components"]["regime_match"]
 
 
+def test_bearish_regime_penalizes_bullish_exposure_even_without_pool_context():
+    bullish = apply_edge_ranking(
+        _row(
+            trade_id="T-BEARISH-BULLISH",
+            regime="BEARISH",
+            direction="BUY_CALL",
+            option_type="CE",
+            signal_direction="BUY_CALL",
+            strategy_family="breakout",
+            movement_type="COMPRESSION_BREAKOUT",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.18,
+        )
+    )
+    bearish = apply_edge_ranking(
+        _row(
+            trade_id="T-BEARISH-BEARISH",
+            regime="BEARISH",
+            direction="BUY_PUT",
+            option_type="PE",
+            signal_direction="BUY_PUT",
+            strategy_family="breakout",
+            movement_type="COMPRESSION_BREAKOUT",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.18,
+        )
+    )
+
+    assert bearish["edge_rank_score"] > bullish["edge_rank_score"]
+    assert bullish["edge_rank_components"]["candidate_regime_mismatch_penalty"] > 0.0
+    assert bearish["edge_rank_components"]["candidate_regime_mismatch_penalty"] == 0.0
+
+
+def test_range_setup_keeps_range_candidate_competitive_against_breakout():
+    range_candidate = apply_edge_ranking(
+        _row(
+            trade_id="T-RANGE-RANGE",
+            regime="RANGE",
+            direction="BUY_CALL",
+            option_type="CE",
+            signal_direction="RANGE",
+            strategy_family="mean_reversion",
+            movement_type="VWAP_MEAN_REVERSION",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.17,
+        )
+    )
+    breakout_candidate = apply_edge_ranking(
+        _row(
+            trade_id="T-RANGE-BREAKOUT",
+            regime="RANGE",
+            direction="BUY_CALL",
+            option_type="CE",
+            signal_direction="BUY_CALL",
+            strategy_family="breakout",
+            movement_type="COMPRESSION_BREAKOUT",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.17,
+        )
+    )
+
+    assert range_candidate["edge_rank_score"] >= breakout_candidate["edge_rank_score"]
+    assert breakout_candidate["edge_rank_components"]["candidate_regime_mismatch_penalty"] > 0.0
+
+
 def test_positive_expectancy_does_not_override_regime_mismatch_completely():
     aligned = apply_edge_ranking(
         _row(

@@ -18,6 +18,7 @@ from datetime import time
 from typing import Any, Iterable, Literal
 
 from core.candidate_pool_quality import analyze_candidate_pool
+from core.candidate_exposure import EXPOSURE_BEARISH, EXPOSURE_BULLISH, EXPOSURE_RANGE, normalize_directional_exposure
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.option_confirmation import OptionPressureAssessment, assess_option_pressure
@@ -191,7 +192,7 @@ def assess_no_trade(
     if conflict_signal is not None:
         signals.append(conflict_signal)
 
-    pool_signal = _candidate_pool_quality_signal(candidate_tuple)
+    pool_signal = _candidate_pool_quality_signal(candidate_tuple, regime)
     if pool_signal is not None:
         signals.append(pool_signal)
 
@@ -266,7 +267,11 @@ def _candidate_conflict_signal(
     candidates: tuple[StrategyCandidate, ...],
     option_pressure: OptionPressureAssessment,
 ) -> NoTradeSignal | None:
-    directional = [candidate for candidate in candidates if candidate.direction in {"BUY_CALL", "BUY_PUT"}]
+    directional = [
+        candidate
+        for candidate in candidates
+        if normalize_directional_exposure(candidate).exposure in {EXPOSURE_BULLISH, EXPOSURE_BEARISH}
+    ]
     if not directional:
         return None
     call_count = sum(1 for candidate in directional if candidate.direction == "BUY_CALL")
@@ -278,6 +283,8 @@ def _candidate_conflict_signal(
     option_conflict = option_pressure.dominant_direction in {"BUY_CALL", "BUY_PUT"} and any(
         candidate.direction != option_pressure.dominant_direction for candidate in directional
     )
+    if total < 3 and call_count > 0 and put_count > 0:
+        return None
     if conflict_ratio < CONFLICTING_SIGNAL_THRESHOLD and not option_conflict:
         return None
     return NoTradeSignal(
@@ -295,7 +302,7 @@ def _candidate_conflict_signal(
     )
 
 
-def _candidate_pool_quality_signal(candidates: tuple[StrategyCandidate, ...]) -> NoTradeSignal | None:
+def _candidate_pool_quality_signal(candidates: tuple[StrategyCandidate, ...], regime: MovementRegimeResult) -> NoTradeSignal | None:
     if len(candidates) < 3:
         return None
     rows = []
@@ -314,9 +321,10 @@ def _candidate_pool_quality_signal(candidates: tuple[StrategyCandidate, ...]) ->
         rows.append(payload)
 
     report = analyze_candidate_pool(rows)
-    if report.readiness_state not in {"FALLBACK_HEAVY", "CONCENTRATED"}:
+    penalty, coverage_reasons = _pool_regime_coverage_penalty(report, regime)
+    if report.readiness_state not in {"FALLBACK_HEAVY", "CONCENTRATED", "ONE_SIDED"} and penalty <= 0.0:
         return None
-    if report.quality_score >= 0.5 and report.fallback_contamination_ratio < 0.34:
+    if report.quality_score >= 0.5 and report.fallback_contamination_ratio < 0.34 and penalty <= 0.0:
         return None
 
     reason = "NO_TRADE_POOL_CONCENTRATION"
@@ -331,10 +339,11 @@ def _candidate_pool_quality_signal(candidates: tuple[StrategyCandidate, ...]) ->
         blockers.append("SAME_FAMILY_CONCENTRATION")
     if report.bearish_count == 0 or report.bullish_count == 0:
         blockers.append("ONE_SIDED_DIRECTION_COVERAGE")
+    blockers.extend(coverage_reasons)
 
     return NoTradeSignal(
         reason=reason,
-        severity=max(0.55, 1.0 - report.quality_score),
+        severity=max(0.55, 1.0 - report.quality_score, penalty),
         message="Candidate pool is too concentrated or contaminated to trust as trade-ready.",
         blockers=tuple(blockers) if blockers else ("POOL_CONCENTRATION",),
         warnings=tuple(report.reasons),
@@ -350,8 +359,39 @@ def _candidate_pool_quality_signal(candidates: tuple[StrategyCandidate, ...]) ->
             "bullish_count": report.bullish_count,
             "bearish_count": report.bearish_count,
             "range_count": report.range_count,
+            "regime": str(getattr(regime, "primary_regime", "") or "").strip().upper(),
+            "coverage_penalty": penalty,
         },
     )
+
+
+def _pool_regime_coverage_penalty(report: Any, regime: MovementRegimeResult) -> tuple[float, list[str]]:
+    penalty = 0.0
+    reasons: list[str] = []
+    regime_name = str(getattr(regime, "primary_regime", "") or "").strip().upper()
+    directional_count = int(report.bullish_count + report.bearish_count)
+    directional_ratio = clamp_score(directional_count / max(1, report.candidate_count))
+
+    if regime_name in {"BEARISH", "TREND_DOWN"} and report.bearish_count == 0:
+        penalty += 0.20
+        reasons.append("NO_BEARISH_COVERAGE")
+    if regime_name in {"RANGE", "SIDEWAYS"} and report.range_count == 0:
+        penalty += 0.20
+        reasons.append("NO_RANGE_COVERAGE")
+    if regime_name in {"CHOP", "NOISE", "UNCLEAR"}:
+        if report.candidate_count < 3:
+            penalty += 0.12
+            reasons.append("CHOP_THIN_POOL")
+        if directional_ratio > 0.65:
+            penalty += 0.14
+            reasons.append("CHOP_DIRECTIONAL_HEAVY")
+        if report.range_count == 0 and report.advisory_count == 0:
+            penalty += 0.08
+            reasons.append("CHOP_NO_RANGE_OR_ADVISORY")
+        if report.quality_score <= 0.35:
+            penalty += 0.10
+            reasons.append("CHOP_LOW_QUALITY")
+    return _clamp_score(penalty), reasons
 
 
 def _candidate_baseline_signal(candidates: tuple[StrategyCandidate, ...]) -> NoTradeSignal | None:
@@ -389,6 +429,10 @@ def _candidate_baseline_signal(candidates: tuple[StrategyCandidate, ...]) -> NoT
             "insufficient_count": sum(1 for verdict in verdicts if verdict == "INSUFFICIENT_SAMPLE"),
         },
     )
+
+
+def _clamp_score(value: float) -> float:
+    return clamp_score(value)
 
 
 def check_no_trade_conditions() -> dict[str, Any]:

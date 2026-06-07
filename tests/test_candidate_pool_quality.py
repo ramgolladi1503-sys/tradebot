@@ -12,7 +12,11 @@ def _row(**overrides):
         "trade_id": "trade-1",
         "symbol": "NIFTY",
         "strategy_family": "breakout",
+        "movement_type": "COMPRESSION_BREAKOUT",
         "direction": "BUY",
+        "option_type": "CE",
+        "signal_direction": "BULLISH",
+        "regime": "TREND",
         "permission": "EXECUTE",
         "final_action": "EXECUTE",
         "execution_truth_state": "EXEMPLAR",
@@ -87,16 +91,16 @@ def _regime(primary="TREND_UP", **scores):
 def test_pool_quality_scores_diverse_pool_higher_than_duplicate_pool():
     diverse = analyze_candidate_pool(
         [
-            _row(candidate_id="cand-bull", trade_id="trade-bull", symbol="NIFTY", strategy_family="breakout", direction="BUY", edge_rank_score=0.92),
-            _row(candidate_id="cand-bear", trade_id="trade-bear", symbol="BANKNIFTY", strategy_family="mean_reversion", direction="SELL", edge_rank_score=0.88),
-            _row(candidate_id="cand-range", trade_id="trade-range", symbol="FINNIFTY", strategy_family="range", direction="BUY", edge_rank_score=0.84, expectancy_status="WATCH"),
+            _row(candidate_id="cand-bull", trade_id="trade-bull", symbol="NIFTY", strategy_family="breakout", direction="BUY_CALL", option_type="CE", signal_direction="BUY_CALL", edge_rank_score=0.92),
+            _row(candidate_id="cand-bear", trade_id="trade-bear", symbol="BANKNIFTY", strategy_family="mean_reversion", direction="BUY_PUT", option_type="PE", signal_direction="BUY_PUT", edge_rank_score=0.88),
+            _row(candidate_id="cand-range", trade_id="trade-range", symbol="FINNIFTY", strategy_family="mean_reversion", movement_type="MEAN_REVERSION_EXTENSION", direction="BUY_CALL", option_type="CE", signal_direction="RANGE", regime="RANGE", edge_rank_score=0.84, expectancy_status="WATCH"),
         ]
     )
     duplicate = analyze_candidate_pool(
         [
-            _row(candidate_id="cand-1", trade_id="trade-1", symbol="NIFTY", strategy_family="breakout", direction="BUY", edge_rank_score=0.92),
-            _row(candidate_id="cand-2", trade_id="trade-2", symbol="NIFTY", strategy_family="breakout", direction="BUY", edge_rank_score=0.90),
-            _row(candidate_id="cand-3", trade_id="trade-3", symbol="NIFTY", strategy_family="breakout", direction="BUY", edge_rank_score=0.88, fallback_used=True),
+            _row(candidate_id="cand-1", trade_id="trade-1", symbol="NIFTY", strategy_family="breakout", direction="BUY_CALL", option_type="CE", signal_direction="BUY_CALL", edge_rank_score=0.92),
+            _row(candidate_id="cand-2", trade_id="trade-2", symbol="NIFTY", strategy_family="breakout", direction="BUY_CALL", option_type="CE", signal_direction="BUY_CALL", edge_rank_score=0.90),
+            _row(candidate_id="cand-3", trade_id="trade-3", symbol="NIFTY", strategy_family="breakout", direction="BUY_CALL", option_type="CE", signal_direction="BUY_CALL", edge_rank_score=0.88, fallback_used=True),
         ]
     )
 
@@ -160,3 +164,37 @@ def test_pool_quality_is_deterministic():
     first_dict.pop("generated_epoch", None)
     second_dict.pop("generated_epoch", None)
     assert first_dict == second_dict
+
+
+def test_range_pool_counts_range_coverage_without_bullish_only_bias():
+    report = analyze_candidate_pool(
+        [
+            _row(
+                candidate_id="cand-range-a",
+                trade_id="trade-range-a",
+                symbol="NIFTY",
+                strategy_family="mean_reversion",
+                movement_type="MEAN_REVERSION_EXTENSION",
+                direction="BUY_CALL",
+                option_type="CE",
+                signal_direction="RANGE",
+                regime="RANGE",
+            ),
+            _row(
+                candidate_id="cand-range-b",
+                trade_id="trade-range-b",
+                symbol="BANKNIFTY",
+                strategy_family="mean_reversion",
+                movement_type="OPENING_RANGE_RETEST",
+                direction="BUY_PUT",
+                option_type="PE",
+                signal_direction="RANGE",
+                regime="RANGE",
+            ),
+        ]
+    )
+
+    assert report.range_count == 2
+    assert report.bullish_count == 0
+    assert report.bearish_count == 0
+    assert report.quality_score > 0.5
