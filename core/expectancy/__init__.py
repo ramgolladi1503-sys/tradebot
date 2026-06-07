@@ -4,6 +4,15 @@ from .setup_fingerprint import (
     attach_setup_fingerprint,
     build_setup_fingerprint,
 )
+from .expectancy_gate import (
+    EXPECTANCY_GATE_SCHEMA_VERSION,
+    EXPECTANCY_KEEP,
+    EXPECTANCY_INSUFFICIENT_DATA,
+    EXPECTANCY_KILL,
+    EXPECTANCY_WATCH,
+    ExpectancyGateDecision,
+    apply_expectancy_gate,
+)
 from .strategy_regime_expectancy import (
     STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION,
     StrategyRegimeExpectancyGroup,
@@ -15,6 +24,13 @@ from .strategy_regime_expectancy import (
 )
 
 __all__ = [
+    "EXPECTANCY_GATE_SCHEMA_VERSION",
+    "EXPECTANCY_KEEP",
+    "EXPECTANCY_INSUFFICIENT_DATA",
+    "EXPECTANCY_KILL",
+    "EXPECTANCY_WATCH",
+    "ExpectancyGateDecision",
+    "apply_expectancy_gate",
     "SETUP_FINGERPRINT_SCHEMA_VERSION",
     "SetupFingerprint",
     "attach_setup_fingerprint",
