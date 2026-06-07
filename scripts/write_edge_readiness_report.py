@@ -17,6 +17,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-opportunities-path", required=True, help="Path to top_opportunities_latest.json")
     parser.add_argument("--shadow-validation-path", required=True, help="Path to shadow_validation_latest.json")
     parser.add_argument(
+        "--topn-replay-quality-path",
+        default=None,
+        help="Optional explicit path to topn_replay_quality_latest.json.",
+    )
+    parser.add_argument(
         "--candidate-journal-summary",
         default=None,
         help="Optional explicit path to a candidate journal summary JSON/JSONL file.",
@@ -42,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         expectancy_path=Path(args.expectancy_path),
         top_opportunities_path=Path(args.top_opportunities_path),
         shadow_validation_path=Path(args.shadow_validation_path),
+        topn_replay_quality_path=Path(args.topn_replay_quality_path) if args.topn_replay_quality_path else None,
         candidate_journal_summary=Path(args.candidate_journal_summary) if args.candidate_journal_summary else None,
         fallback_exclusion_summary=Path(args.fallback_exclusion_summary) if args.fallback_exclusion_summary else None,
         output_dir=Path(args.out_dir),

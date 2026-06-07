@@ -7,6 +7,7 @@ import pytest
 
 from core.expectancy.shadow_validation import build_shadow_market_validation_report
 from core.expectancy.strategy_regime_expectancy import write_strategy_regime_expectancy_report
+from core.expectancy.topn_replay_quality import write_topn_replay_quality_report
 from core.expectancy.top_opportunity_selector import write_top_opportunities_report
 from core.candidate_outcome_tracker import write_candidate_outcome_records
 from scripts.write_edge_readiness_report import main as write_edge_readiness_report_main
@@ -255,6 +256,12 @@ def test_insufficient_samples_returns_paper_only(tmp_path: Path) -> None:
 
 def test_mature_positive_expectancy_returns_ready_for_manual_pilot(tmp_path: Path) -> None:
     expectancy_path, top_path, shadow_path = _write_positive_fixture_bundle(tmp_path)
+    topn_dir = tmp_path / "topn"
+    topn_path, _, _ = write_topn_replay_quality_report(
+        candidate_outcomes=tmp_path / "candidate_outcomes.jsonl",
+        top_opportunities=top_path,
+        output_dir=topn_dir,
+    )
 
     from core.expectancy.edge_readiness_report import build_edge_readiness_report
 
@@ -262,6 +269,7 @@ def test_mature_positive_expectancy_returns_ready_for_manual_pilot(tmp_path: Pat
         expectancy_path=expectancy_path,
         top_opportunities_path=top_path,
         shadow_validation_path=shadow_path,
+        topn_replay_quality_path=topn_path,
     )
 
     assert report.recommendation == "READY_FOR_MANUAL_PILOT"
@@ -282,6 +290,51 @@ def test_fallback_inflated_result_never_returns_ready(tmp_path: Path) -> None:
 
     assert report.recommendation != "READY_FOR_MANUAL_PILOT"
     assert "fallback" in report.recommendation_reason.lower()
+
+
+def test_topn_underperforming_downgrades_ready_to_paper_only(tmp_path: Path) -> None:
+    expectancy_path, top_path, shadow_path = _write_positive_fixture_bundle(tmp_path)
+    under_top_dir = tmp_path / "topn-underperform"
+    values = [-0.05] * 30
+    under_top_path, _, _ = write_top_opportunities_report(
+        [
+            _top_row(
+                f"cand-{idx}",
+                f"trade-{idx}",
+                edge_rank_score=0.95 - idx * 0.01,
+                rank_score=0.8 - idx * 0.01,
+                execution_truth_state="EXEMPLAR",
+                reportable_executable=True,
+                execution_allowed=True,
+                permission="EXECUTE",
+                final_action="EXECUTE",
+            )
+            for idx in range(1, 31)
+        ],
+        output_dir=under_top_dir,
+    )
+    outcomes_path = tmp_path / "underperform_candidate_outcomes.jsonl"
+    write_candidate_outcome_records(
+        [_outcome_row(f"cand-{idx}", f"trade-{idx}", cost_adjusted_r=value) for idx, value in enumerate(values, start=1)],
+        path=outcomes_path,
+    )
+    topn_report_path, _, _ = write_topn_replay_quality_report(
+        candidate_outcomes=outcomes_path,
+        top_opportunities=under_top_path,
+        output_dir=tmp_path / "topn-underperform-report",
+    )
+
+    from core.expectancy.edge_readiness_report import build_edge_readiness_report
+
+    report = build_edge_readiness_report(
+        expectancy_path=expectancy_path,
+        top_opportunities_path=top_path,
+        shadow_validation_path=shadow_path,
+        topn_replay_quality_path=topn_report_path,
+    )
+
+    assert report.recommendation == "PAPER_ONLY"
+    assert "top-n replay quality underperforms" in report.recommendation_reason.lower()
 
 
 def test_all_mature_baseline_weak_returns_paper_only(tmp_path: Path) -> None:
