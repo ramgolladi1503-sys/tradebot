@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from core.candidate_journal import _fallback_used as _journal_fallback_used
+from core.cost_slippage_model import (
+    DEGRADED as COST_MODEL_DEGRADED,
+    READY as COST_MODEL_READY,
+    CostSlippageModelInput,
+    build_cost_slippage_model,
+)
 from core.candidate_outcome_truth import (
     AMBIGUOUS_SAME_BAR,
     CANDIDATE_OUTCOME_TRUTH_SCHEMA_VERSION,
@@ -227,6 +233,39 @@ def _row_observations(
     return list(rows)
 
 
+def _latest_observation(observations: Sequence[PriceObservation] | None) -> PriceObservation | None:
+    if not observations:
+        return None
+    return sorted(observations, key=lambda item: (item.observed_epoch, item.ltp))[-1]
+
+
+def _cost_model_input_from_row(
+    row: Mapping[str, Any],
+    candidate_input: CandidateOutcomeInput,
+    observations: Sequence[PriceObservation] | None,
+) -> CostSlippageModelInput:
+    latest_observation = _latest_observation(observations)
+    return CostSlippageModelInput(
+        entry_price=candidate_input.entry_price,
+        exit_price=latest_observation.ltp if latest_observation is not None else row.get("exit_price"),
+        bid=(latest_observation.bid if latest_observation is not None else None) or row.get("bid"),
+        ask=(latest_observation.ask if latest_observation is not None else None) or row.get("ask"),
+        best_bid=row.get("best_bid"),
+        best_ask=row.get("best_ask"),
+        spread=(latest_observation.spread if latest_observation is not None else None) or row.get("spread"),
+        spread_pct=row.get("spread_pct"),
+        lot_size=row.get("lot_size"),
+        quantity=row.get("quantity"),
+        risk_per_unit=row.get("risk_per_unit"),
+        brokerage=row.get("brokerage"),
+        taxes=row.get("taxes"),
+        slippage_ticks=row.get("slippage_ticks"),
+        tick_size=row.get("tick_size"),
+        side=row.get("side"),
+        direction=row.get("direction"),
+    )
+
+
 def build_candidate_outcome_records(
     journal_rows: Iterable[Mapping[str, Any]] | None,
     observations: Mapping[str, Iterable[PriceObservation | Mapping[str, Any]]] | Iterable[Mapping[str, Any]] | None = None,
@@ -242,6 +281,13 @@ def build_candidate_outcome_records(
         for window_sec in windows:
             candidate_input = _candidate_input_from_journal_row(row, window_sec=window_sec)
             candidate_observations = _row_observations(row, grouped_observations)
+            cost_model = build_cost_slippage_model(_cost_model_input_from_row(row, candidate_input, candidate_observations))
+            if cost_model.cost_model_status in {COST_MODEL_READY, COST_MODEL_DEGRADED}:
+                candidate_input = replace(
+                    candidate_input,
+                    estimated_cost_r=cost_model.estimated_cost_r,
+                    estimated_cost_abs=cost_model.estimated_cost_abs,
+                )
             truth = build_candidate_outcome_truth(candidate_input, candidate_observations)
             payload = truth.to_payload()
             payload.update(
@@ -255,6 +301,16 @@ def build_candidate_outcome_records(
                     "quote_source": row.get("quote_source"),
                     "source_reportable_executable": bool(row.get("reportable_executable")),
                     "source_execution_allowed": bool(row.get("execution_allowed")),
+                    "cost_model_status": cost_model.cost_model_status,
+                    "cost_model_blockers": list(cost_model.cost_model_blockers),
+                    "cost_model_warnings": list(cost_model.cost_model_warnings),
+                    "estimated_cost_abs": cost_model.estimated_cost_abs,
+                    "estimated_cost_r": cost_model.estimated_cost_r,
+                    "spread_cost_abs": cost_model.spread_cost_abs,
+                    "slippage_cost_abs": cost_model.slippage_cost_abs,
+                    "fee_cost_abs": cost_model.fee_cost_abs,
+                    "effective_entry": cost_model.effective_entry,
+                    "effective_exit": cost_model.effective_exit,
                 }
             )
             outcome_rows.append(payload)

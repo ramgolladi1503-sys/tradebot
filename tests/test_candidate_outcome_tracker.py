@@ -35,6 +35,13 @@ def _journal_row(**overrides: object) -> dict[str, object]:
         "candidate_origin": "trade_builder",
         "candidate_class": "primary",
         "quote_source": "tick_store",
+        "quantity": 2.0,
+        "lot_size": 50.0,
+        "risk_per_unit": 10.0,
+        "brokerage": 1.0,
+        "taxes": 0.5,
+        "slippage_ticks": 1.0,
+        "tick_size": 0.05,
     }
     row.update(overrides)
     return row
@@ -148,7 +155,8 @@ def test_tracker_cost_adjusted_r_equals_gross_minus_cost() -> None:
         [_journal_row()],
         observations={
             "cand-1": [
-                {"observed_epoch": 101.0, "ltp": 110.0},
+                {"observed_epoch": 101.0, "ltp": 104.0, "bid": 103.5, "ask": 104.5, "spread": 1.0},
+                {"observed_epoch": 102.0, "ltp": 110.0, "bid": 109.5, "ask": 110.5, "spread": 1.0},
             ]
         },
         windows_sec=(300,),
@@ -157,6 +165,14 @@ def test_tracker_cost_adjusted_r_equals_gross_minus_cost() -> None:
     row = rows[0]
     assert row["outcome_status"] == TARGET_HIT
     assert row["cost_adjusted_r"] == row["gross_r"] - row.get("estimated_cost_r", 0.0)
+    assert row["cost_model_status"] == "READY"
+    assert row["estimated_cost_abs"] > 0
+    assert row["estimated_cost_r"] is not None
+    assert row["spread_cost_abs"] > 0
+    assert row["slippage_cost_abs"] > 0
+    assert row["fee_cost_abs"] > 0
+    assert row["effective_entry"] is not None
+    assert row["effective_exit"] is not None
 
 
 def test_tracker_write_failure_is_non_fatal(monkeypatch, tmp_path: Path) -> None:
