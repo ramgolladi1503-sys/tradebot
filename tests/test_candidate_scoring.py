@@ -246,3 +246,116 @@ def test_score_candidate_liquidity_does_not_flatten_all_high_volume_rows(monkeyp
     assert moderate["liquidity_score"] < 1.0
     assert extreme["liquidity_score"] <= 1.0
     assert moderate["liquidity_score"] < extreme["liquidity_score"]
+
+
+def test_score_candidate_strong_regime_and_consensus_separate_cleanly():
+    strong = score_candidate(
+        {
+            "trade_id": "T-STRONG-SEPARATION",
+            "trade_score": 84.0,
+            "trade_alignment": 0.82,
+            "builder_confidence": 0.86,
+            "regime_alignment_score": 0.94,
+            "family_consensus_score": 0.89,
+            "instrument_token": 99123,
+            "entry_price": 100.0,
+            "stop_loss": 95.0,
+            "target": 114.0,
+            "volume": 120000,
+            "oi": 180000,
+            "spread_pct": 0.003,
+            "quote_ok": True,
+            "pattern_flags": ["breakout", "trend"],
+        },
+        {
+            "regime": "TREND",
+            "market_open": True,
+            "quote_age_sec": 1.5,
+            "quote_source": "tick_store",
+            "current_ltp": 100.8,
+        },
+        {
+            "mode": "LIVE",
+            "market_open": True,
+            "blockers": [],
+            "hard_blockers": [],
+            "soft_penalties": [],
+            "warnings": [],
+        },
+    )
+    weak = score_candidate(
+        {
+            "trade_id": "T-WEAK-SEPARATION",
+            "trade_score": 24.0,
+            "trade_alignment": 0.26,
+            "builder_confidence": 0.31,
+            "regime_alignment_score": 0.21,
+            "family_consensus_score": 0.18,
+            "correlation_penalty": 0.34,
+            "instrument_token": 99124,
+            "entry_price": 100.0,
+            "stop_loss": 99.4,
+            "target": 100.8,
+            "volume": 1200,
+            "oi": 700,
+            "spread_pct": 0.031,
+            "quote_ok": False,
+            "countertrend": True,
+            "pattern_flags": ["watchlist"],
+        },
+        {
+            "regime": "PANIC",
+            "market_open": True,
+            "quote_age_sec": 240.0,
+            "quote_source": "subscription_failed",
+            "current_ltp": 100.2,
+        },
+        {
+            "mode": "LIVE",
+            "market_open": True,
+            "blockers": ["NO_LIVE_OPTION_FEED"],
+            "hard_blockers": ["NO_LIVE_OPTION_FEED"],
+            "soft_penalties": ["STALE_OPTION_LTP"],
+            "warnings": [],
+        },
+    )
+
+    assert strong["confidence_final"] > weak["confidence_final"]
+    assert strong["rank_score"] > weak["rank_score"]
+    assert strong["opportunity_score"] > weak["opportunity_score"]
+    assert strong["rank_score"] - weak["rank_score"] >= 0.2
+    assert strong["score_breakdown"]["components"]["regime_fit"] > weak["score_breakdown"]["components"]["regime_fit"]
+    assert strong["score_breakdown"]["components"]["penalty_score"] < weak["score_breakdown"]["components"]["penalty_score"]
+
+
+def test_score_candidate_bad_spread_is_penalized_below_good_spread():
+    base = {
+        "trade_id": "T-SPREAD-SEP",
+        "trade_score": 68.0,
+        "trade_alignment": 0.66,
+        "builder_confidence": 0.64,
+        "regime_alignment_score": 0.72,
+        "family_consensus_score": 0.74,
+        "instrument_token": 99123,
+        "entry_price": 100.0,
+        "stop_loss": 96.5,
+        "target": 108.0,
+        "volume": 50000,
+        "oi": 95000,
+        "quote_ok": True,
+    }
+    market_data = {
+        "regime": "TREND",
+        "market_open": True,
+        "quote_age_sec": 2.0,
+        "quote_source": "tick_store",
+        "current_ltp": 100.4,
+    }
+    context = {"mode": "LIVE", "market_open": True, "blockers": [], "hard_blockers": [], "soft_penalties": [], "warnings": []}
+
+    good = score_candidate({**base, "spread_pct": 0.003}, market_data, context)
+    bad = score_candidate({**base, "spread_pct": 0.034}, market_data, context)
+
+    assert good["spread_score"] > bad["spread_score"]
+    assert good["rank_score"] > bad["rank_score"]
+    assert good["confidence_final"] > bad["confidence_final"]

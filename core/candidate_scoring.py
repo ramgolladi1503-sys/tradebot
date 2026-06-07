@@ -147,6 +147,20 @@ def _setup_strength(candidate: dict[str, Any], score_inputs_used: dict[str, Any]
         signal_components.append(strategy_priority)
         score_inputs_used["strategy_priority"] = candidate.get("strategy_priority") or source_flags.get("strategy_priority")
 
+    regime_alignment_score = _normalize_unit(
+        candidate.get("regime_alignment_score") or source_flags.get("regime_alignment_score")
+    )
+    if regime_alignment_score is not None:
+        signal_components.append(regime_alignment_score)
+        score_inputs_used["regime_alignment_score"] = candidate.get("regime_alignment_score") or source_flags.get("regime_alignment_score")
+
+    family_consensus_score = _normalize_unit(
+        candidate.get("family_consensus_score") or source_flags.get("family_consensus_score")
+    )
+    if family_consensus_score is not None:
+        signal_components.append(family_consensus_score)
+        score_inputs_used["family_consensus_score"] = candidate.get("family_consensus_score") or source_flags.get("family_consensus_score")
+
     base = sum(signal_components) / len(signal_components) if signal_components else 0.56
     pattern_flags = _as_list(candidate.get("pattern_flags") or source_flags.get("pattern_flags"))
     pattern_bonus = min(0.12, 0.03 * len([flag for flag in pattern_flags if str(flag or "").strip()]))
@@ -188,6 +202,10 @@ def _regime_fit(candidate: dict[str, Any], market_data: dict[str, Any], score_in
         fit -= 0.22
     if not market_open:
         fit = min(fit, 0.62)
+    explicit_alignment = _normalize_unit(candidate.get("regime_alignment_score"))
+    if explicit_alignment is not None:
+        score_inputs_used["regime_alignment_score"] = candidate.get("regime_alignment_score")
+        fit = _weighted_average([(fit, 0.58), (explicit_alignment, 0.42)], default=fit)
     return _clamp01(fit, default=0.56)
 
 
@@ -446,6 +464,38 @@ def _penalty_score(
     return _clamp01(min(penalty, max_penalty), default=0.0), _dedupe_texts(reasons)
 
 
+def _crowding_penalty(candidate: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
+    reasons: list[str] = []
+    correlation_penalty = _normalize_unit(candidate.get("correlation_penalty"))
+    if correlation_penalty is not None:
+        score_inputs_used["correlation_penalty"] = candidate.get("correlation_penalty")
+
+    duplicate_candidate_count = int(max(_safe_float(candidate.get("duplicate_candidate_count")) or 0.0, 0.0))
+    duplicate_group_count = int(max(_safe_float(candidate.get("duplicate_group_count")) or 0.0, 0.0))
+    correlated_family_count = int(max(_safe_float(candidate.get("family_conflict_count")) or 0.0, 0.0))
+    same_symbol_count = int(max(_safe_float(candidate.get("same_symbol_candidate_count")) or 0.0, 0.0))
+
+    penalty = 0.0
+    if correlation_penalty is not None and correlation_penalty > 0.0:
+        penalty += min(0.22, correlation_penalty * 0.22)
+        reasons.append("correlated_concentration")
+    if duplicate_candidate_count > 0:
+        penalty += min(0.16, 0.04 * duplicate_candidate_count)
+        reasons.append("duplicate_candidate_cluster")
+    if duplicate_group_count > 0:
+        penalty += min(0.08, 0.02 * duplicate_group_count)
+        reasons.append("duplicate_setup_group")
+    if correlated_family_count > 0:
+        penalty += min(0.10, 0.03 * correlated_family_count)
+        reasons.append("family_conflict_concentration")
+    if same_symbol_count > 0:
+        penalty += min(0.06, 0.02 * same_symbol_count)
+        reasons.append("same_symbol_concentration")
+
+    max_penalty = max(_cfg_float("CANDIDATE_SCORING_MAX_CROWDING_PENALTY", 0.35), 0.0)
+    return _clamp01(min(penalty, max_penalty), default=0.0), _dedupe_texts(reasons)
+
+
 def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
     """
     Deterministic, side-effect-free candidate scoring.
@@ -496,6 +546,9 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         timing_score=timing_score,
         missing_reasons=missing_reasons,
     )
+    crowding_penalty, crowding_reasons = _crowding_penalty(row, score_inputs_used)
+    penalty_score = _clamp01(penalty_score + crowding_penalty, default=penalty_score)
+    penalty_reasons = _dedupe_texts(list(penalty_reasons) + crowding_reasons)
     penalty_weight = _cfg_float("CANDIDATE_SCORING_PENALTY_WEIGHT", 0.45)
     confidence_final = _clamp01(confidence_raw - (penalty_score * penalty_weight), default=confidence_raw)
     rank_score = _weighted_average(
@@ -546,6 +599,7 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
             "timing_score": _round_score(timing_score),
             "confluence_score": _round_score(confluence_score),
             "penalty_score": _round_score(penalty_score),
+            "crowding_penalty": _round_score(crowding_penalty),
         },
         "weights": {
             "setup_strength": _round_score(_cfg_float("CANDIDATE_SCORING_WEIGHT_SETUP", 0.28)),
@@ -573,6 +627,7 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         "rr_score": _round_score(rr_score),
         "timing_score": _round_score(timing_score),
         "penalty_score": _round_score(penalty_score),
+        "crowding_penalty": _round_score(crowding_penalty),
         "confidence_raw": _round_score(confidence_raw),
         "confidence_final": _round_score(confidence_final),
         "rank_score": _round_score(rank_score),

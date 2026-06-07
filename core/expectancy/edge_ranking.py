@@ -381,6 +381,40 @@ def _risk_reward_score(row: Mapping[str, Any]) -> float:
     return _clamp(candidate)
 
 
+def _crowding_penalty(row: Mapping[str, Any]) -> tuple[float, list[str]]:
+    reasons: list[str] = []
+    penalty = 0.0
+
+    correlation_penalty = _float(row.get("correlation_penalty"))
+    if correlation_penalty is not None and correlation_penalty > 0.0:
+        penalty += min(0.20, correlation_penalty * 0.20)
+        reasons.append("correlated_concentration")
+
+    family_consensus_score = _float(row.get("family_consensus_score"))
+    if family_consensus_score is not None:
+        if family_consensus_score < 0.35:
+            penalty += 0.04
+            reasons.append("weak_family_consensus")
+        elif family_consensus_score < 0.55:
+            penalty += 0.02
+            reasons.append("moderate_family_consensus")
+
+    duplicate_candidate_count = int(max(_float(row.get("duplicate_candidate_count")) or 0.0, 0.0))
+    duplicate_group_count = int(max(_float(row.get("duplicate_group_count")) or 0.0, 0.0))
+    same_symbol_count = int(max(_float(row.get("same_symbol_candidate_count")) or 0.0, 0.0))
+    if duplicate_candidate_count > 0:
+        penalty += min(0.16, 0.04 * duplicate_candidate_count)
+        reasons.append("duplicate_candidate_cluster")
+    if duplicate_group_count > 0:
+        penalty += min(0.08, 0.02 * duplicate_group_count)
+        reasons.append("duplicate_setup_group")
+    if same_symbol_count > 0:
+        penalty += min(0.06, 0.02 * same_symbol_count)
+        reasons.append("same_symbol_concentration")
+
+    return _clamp(penalty, 0.0, 0.35), reasons
+
+
 def _expectancy_score(status: str, sample_count: int, avg_cost_adjusted_r: float | None) -> float:
     base = _STATUS_BASE_SCORE.get(status, _STATUS_BASE_SCORE[EXPECTANCY_INSUFFICIENT_DATA])
     if status == EXPECTANCY_KILL:
@@ -405,6 +439,7 @@ def _score_components(
     freshness_score = _freshness_score(row)
     regime_match = _regime_match(row)
     risk_reward_score = _risk_reward_score(row)
+    crowding_penalty, crowding_reasons = _crowding_penalty(row)
     raw_score = (
         expectancy_score * 0.40
         + execution_quality * 0.20
@@ -413,6 +448,7 @@ def _score_components(
         + regime_match * 0.10
         + risk_reward_score * 0.08
     )
+    raw_score = max(0.0, raw_score - crowding_penalty)
     return raw_score, {
         "expectancy_score": _round(expectancy_score),
         "execution_quality": _round(execution_quality),
@@ -420,6 +456,8 @@ def _score_components(
         "freshness_score": _round(freshness_score),
         "regime_match": _round(regime_match),
         "risk_reward_score": _round(risk_reward_score),
+        "crowding_penalty": _round(crowding_penalty),
+        "crowding_reasons": list(crowding_reasons),
         "raw_edge_rank_score": _round(raw_score),
     }
 
@@ -430,12 +468,15 @@ def _build_reason(
     capped: bool,
     fallback_candidate: bool,
     feed_blocked: bool,
+    crowding_reasons: list[str] | None = None,
 ) -> str:
     reasons: list[str] = []
     if fallback_candidate:
         reasons.append("fallback_not_rankable")
     if feed_blocked:
         reasons.append("feed_truth_blocked")
+    if crowding_reasons:
+        reasons.extend(crowding_reasons)
     if status == EXPECTANCY_KILL:
         reasons.append("expectancy_kill")
     elif status == EXPECTANCY_INSUFFICIENT_DATA:
@@ -494,6 +535,7 @@ def apply_edge_ranking(entry: Mapping[str, Any] | dict[str, Any], expectancy_loo
         capped=capped,
         fallback_candidate=fallback_candidate,
         feed_blocked=feed_blocked,
+        crowding_reasons=list(components.get("crowding_reasons") or []),
     )
     row["edge_rank_components"] = components
     row["expectancy_score"] = components["expectancy_score"]
