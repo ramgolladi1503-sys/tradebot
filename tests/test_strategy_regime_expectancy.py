@@ -118,6 +118,46 @@ def test_markdown_and_json_report_generated(tmp_path: Path) -> None:
     assert "This report does not prove strategy edge or runtime readiness." in markdown
 
 
+def test_setup_id_grouping_option_groups_by_setup_identity() -> None:
+    rows = [
+        {
+            "candidate_id": "cand-1",
+            "trade_id": "trade-1",
+            "strategy_family": "breakout",
+            "regime": "LIVE",
+            "index": "NIFTY",
+            "expiry_type": "WEEKLY",
+            "option_type": "CE",
+            "direction": "BUY",
+            "setup_id": "breakout__LIVE__HIGH__HIGH__WIDE__T08_11_UTC__WEEKLY__BUY__NIFTY__CE",
+            "signal_epoch": 1.0,
+            "outcome_status": "TARGET_HIT",
+            "gross_r": 1.0,
+            "cost_adjusted_r": 1.0,
+        },
+        {
+            "candidate_id": "cand-2",
+            "trade_id": "trade-2",
+            "strategy_family": "breakout",
+            "regime": "LIVE",
+            "index": "NIFTY",
+            "expiry_type": "WEEKLY",
+            "option_type": "CE",
+            "direction": "BUY",
+            "setup_id": "breakout__LIVE__HIGH__HIGH__WIDE__T08_11_UTC__WEEKLY__BUY__NIFTY__CE",
+            "signal_epoch": 2.0,
+            "outcome_status": "STOP_HIT",
+            "gross_r": -1.0,
+            "cost_adjusted_r": -1.0,
+        },
+    ]
+
+    report = aggregate_strategy_regime_expectancy(rows, group_by_setup_id=True)
+    assert report.group_count == 1
+    assert report.groups[0].group_key == "breakout__LIVE__HIGH__HIGH__WIDE__T08_11_UTC__WEEKLY__BUY__NIFTY__CE"
+    assert report.groups[0].sample_count == 2
+
+
 def test_load_candidate_outcomes_from_jsonl(tmp_path: Path) -> None:
     path = tmp_path / "candidate_outcomes.jsonl"
     path.write_text(
