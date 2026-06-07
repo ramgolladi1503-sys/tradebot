@@ -177,6 +177,21 @@ def test_cost_adjusted_r_lower_than_gross_r() -> None:
     assert math.isclose(truth.cost_adjusted_r, truth.gross_r - 0.5)
 
 
+def test_positive_gross_can_become_negative_net_after_high_cost() -> None:
+    truth = build_candidate_outcome_truth(
+        _candidate(estimated_cost_r=3.5),
+        [
+            PriceObservation(observed_epoch=101.0, ltp=110.0),
+        ],
+    )
+
+    payload = truth.to_payload()
+    _safe_flags(payload)
+    assert truth.outcome_status == TARGET_HIT
+    assert truth.gross_r > 0
+    assert truth.cost_adjusted_r < 0
+
+
 def test_grouping_metadata_preserved() -> None:
     truth = build_candidate_outcome_truth(
         _candidate(candidate_id="cand-9", trade_id="trade-9", strategy_family="mean_reversion", symbol="BANKNIFTY", index="BANKNIFTY", regime="BEARISH", expiry_type="MONTHLY"),
