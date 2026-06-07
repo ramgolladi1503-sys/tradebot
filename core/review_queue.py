@@ -56,6 +56,7 @@ from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lif
 from core.time_utils import format_ts_ist
 from core.log_writer import get_jsonl_writer
 from core.expectancy.expectancy_gate import apply_expectancy_gate
+from core.expectancy.edge_ranking import apply_edge_ranking
 from core.candidate_journal import write_candidate_journal_row
 from core.quote_truth import quote_bundle_is_consistent, quote_consistency_score, resolve_quote_validation_status
 from core.auth_manager import runtime_auth_snapshot
@@ -407,7 +408,8 @@ def _apply_expectancy_gate_if_present(entry: dict) -> dict:
     ).strip()
     if lookup is None and not status and not override:
         return entry
-    return apply_expectancy_gate(entry, expectancy_lookup=lookup)
+    gated = apply_expectancy_gate(entry, expectancy_lookup=lookup)
+    return apply_edge_ranking(gated, expectancy_lookup=lookup)
 
 
 _HARD_EXECUTION_BLOCKER_CODES = {
@@ -1276,6 +1278,11 @@ def _sync_runtime_rank_fields(entry: dict) -> dict:
         {
             "rank_score": _safe_float(out.get("rank_score")),
             "opportunity_score": _safe_float(out.get("opportunity_score")),
+            "edge_rank_score": _safe_float(out.get("edge_rank_score")),
+            "expectancy_score": _safe_float(out.get("expectancy_score")),
+            "expectancy_status": out.get("expectancy_status"),
+            "expectancy_sample_count": out.get("expectancy_sample_count"),
+            "expectancy_avg_cost_adjusted_r": _safe_float(out.get("expectancy_avg_cost_adjusted_r")),
             "opportunity_rank": out.get("opportunity_rank"),
             "rank_global": out.get("rank_global"),
             "rank_within_symbol": out.get("rank_within_symbol"),
