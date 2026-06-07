@@ -294,7 +294,7 @@ def _is_fallback_candidate(entry: dict) -> bool:
         fallback_flag
         or row_kind in {"recovered_fallback", "fallback"}
         or candidate_class == "fallback"
-        or "fallback" in candidate_type
+        or ("fallback" in candidate_type and candidate_type not in {"fallback_directional", "directional_fallback"})
         or "fallback" in candidate_origin
         or quote_source in {"rest_fallback", "synthetic_offhours", "subscription_failed"}
         or trade_id.startswith("softrej_")
