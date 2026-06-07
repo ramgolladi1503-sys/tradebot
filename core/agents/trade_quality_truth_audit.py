@@ -67,6 +67,7 @@ class TradeQualityTruthAuditReport:
     confidence_truth: dict[str, Any]
     ranking_truth: dict[str, Any]
     candidate_pool_truth: dict[str, Any]
+    snapshot_truth_contract: dict[str, Any]
     ui_truth: dict[str, Any]
     next_pr_recommendation: dict[str, Any]
     evidence_index: dict[str, Any] = field(default_factory=dict)
@@ -93,6 +94,7 @@ class TradeQualityTruthAuditReport:
             "confidence_truth": dict(self.confidence_truth),
             "ranking_truth": dict(self.ranking_truth),
             "candidate_pool_truth": dict(self.candidate_pool_truth),
+            "snapshot_truth_contract": dict(self.snapshot_truth_contract),
             "ui_truth": dict(self.ui_truth),
             "next_pr_recommendation": dict(self.next_pr_recommendation),
             "evidence_index": dict(self.evidence_index),
@@ -147,6 +149,7 @@ def build_trade_quality_truth_audit(
         confidence_truth=dict(report["confidence_truth"]),
         ranking_truth=dict(report["ranking_truth"]),
         candidate_pool_truth=dict(report["candidate_pool_truth"]),
+        snapshot_truth_contract=dict(report["snapshot_truth_contract"]),
         ui_truth=dict(report["ui_truth"]),
         next_pr_recommendation=dict(report["next_pr_recommendation"]),
         evidence_index=dict(report["evidence_index"]),
@@ -291,6 +294,14 @@ def analyze_trade_quality_truth(
     ranking_runtime = _evaluate_runtime_ranking_truth(runtime_top, runtime_ranked)
     candidate_pool_runtime = _evaluate_runtime_candidate_pool_truth(runtime_top, runtime_ranked)
     ui_runtime = _evaluate_runtime_ui_truth(runtime_top, runtime_ranked, runtime_feed)
+    snapshot_truth_contract = _evaluate_runtime_snapshot_truth_contract(
+        runtime_top,
+        confidence_runtime,
+        ranking_runtime,
+        fallback_runtime,
+        candidate_pool_runtime,
+        ui_runtime,
+    )
 
     fallback_can_be_executable = _aggregate_bool(
         runtime_value=fallback_runtime.get("can_fallback_be_executable"),
@@ -446,6 +457,7 @@ def analyze_trade_quality_truth(
                 "The repository has an explicit candidate-pool layer and a trade-builder emission path, so the audit should not claim the system lacks a candidate pool.",
             ],
         },
+        "snapshot_truth_contract": snapshot_truth_contract,
         "ui_truth": {
             "is_order_action": False,
             "broker_api_called": False,
@@ -570,6 +582,24 @@ def render_trade_quality_truth_audit_markdown(report: Mapping[str, Any]) -> str:
     lines.append(f"- direct_emit_paths: {', '.join(str(item) for item in pool.get('direct_emit_paths') or []) or 'none'}")
     for item in pool.get("notes", []) or []:
         lines.append(f"- {item}")
+    lines.extend(["", "## Snapshot Truth Contract"])
+    snapshot = report.get("snapshot_truth_contract", {})
+    lines.append(f"- label: `{snapshot.get('label')}`")
+    lines.append(f"- display_source: `{snapshot.get('display_source')}`")
+    lines.append(f"- is_full_candidate_pool: `{snapshot.get('is_full_candidate_pool')}`")
+    lines.append(f"- ranking_type: `{snapshot.get('ranking_type')}`")
+    lines.append(f"- fallback_executable: `{snapshot.get('fallback_executable')}`")
+    lines.append(f"- fallback_penalty_in_raw_confidence: `{snapshot.get('fallback_penalty_in_raw_confidence')}`")
+    lines.append(f"- executable_count: `{snapshot.get('executable_count')}`")
+    lines.append(f"- near_executable_count: `{snapshot.get('near_executable_count')}`")
+    lines.append(f"- advisory_fallback_count: `{snapshot.get('advisory_fallback_count')}`")
+    lines.append(f"- blocked_count: `{snapshot.get('blocked_count')}`")
+    lines.append("- This is persisted snapshot output.")
+    lines.append("- This is not the full candidate pool.")
+    lines.append("- Ranking exists upstream.")
+    lines.append("- Fallback is not executable.")
+    lines.append("- Fallback is not proven to be penalized inside raw confidence.")
+    lines.append("- Counts are displayed for executable / near-executable / advisory-fallback / blocked rows.")
     lines.extend(["", "## UI/display truth"])
     ui = report.get("ui_truth", {})
     lines.append(f"- Verdict: `{ui.get('verdict')}`")
@@ -796,6 +826,46 @@ def _evaluate_runtime_candidate_pool_truth(
     }
 
 
+def _evaluate_runtime_snapshot_truth_contract(
+    top_payload: Mapping[str, Any] | None,
+    confidence_runtime: Mapping[str, Any] | None,
+    ranking_runtime: Mapping[str, Any] | None,
+    fallback_runtime: Mapping[str, Any] | None,
+    candidate_pool_runtime: Mapping[str, Any] | None,
+    ui_runtime: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    payload = dict(top_payload or {})
+    rows = _top_opportunity_rows(payload)
+    executable_rows = _snapshot_rows_with_status(rows, {"executable"})
+    near_executable_rows = _snapshot_rows_with_status(rows, {"near_executable"})
+    advisory_rows = _snapshot_rows_with_status(rows, {"advisory", "advisory_only"})
+    blocked_rows = _snapshot_rows_with_status(rows, {"blocked"})
+    top_executable_count = int(payload.get("top_executable_count") or len(executable_rows))
+    top_advisory_count = int(payload.get("top_advisory_count") or len(advisory_rows))
+    top_blocked_count = int(payload.get("top_blocked_count") or len(blocked_rows))
+    ranking_type = str((ranking_runtime or {}).get("ranking_type") or "unknown")
+    fallback_can_be_executable = bool((fallback_runtime or {}).get("can_fallback_be_executable"))
+    fallback_penalty_in_raw_confidence = bool((confidence_runtime or {}).get("uses_fallback_penalty") or False)
+    display_source = str((ui_runtime or {}).get("rows_display_source") or "persisted_top_opportunity_snapshot")
+    return {
+        "display_source": display_source,
+        "is_full_candidate_pool": False if display_source == "persisted_top_opportunity_snapshot" else None,
+        "ranking_type": ranking_type,
+        "fallback_executable": fallback_can_be_executable,
+        "fallback_penalty_in_raw_confidence": fallback_penalty_in_raw_confidence,
+        "executable_count": top_executable_count,
+        "near_executable_count": len(near_executable_rows) or int((ranking_runtime or {}).get("near_executable_count") or 0),
+        "advisory_fallback_count": len(advisory_rows) if advisory_rows else top_advisory_count,
+        "blocked_count": top_blocked_count,
+        "label": "Snapshot output is not the full candidate pool",
+        "evidence": {
+            "top_opportunities": payload.get("selector_outcome"),
+            "candidate_pool_has_pool": bool((candidate_pool_runtime or {}).get("has_candidate_pool")),
+            "ui_rows_display_source": display_source,
+        },
+    }
+
+
 def _evaluate_runtime_ui_truth(
     top_payload: Mapping[str, Any] | None,
     ranked_payload: Mapping[str, Any] | None,
@@ -840,6 +910,25 @@ def _top_opportunity_rows(payload: Mapping[str, Any] | None) -> list[dict[str, A
             if isinstance(row, Mapping):
                 rows.append(dict(row))
     return rows
+
+
+def _snapshot_rows_with_status(rows: Sequence[Mapping[str, Any]], statuses: set[str]) -> list[dict[str, Any]]:
+    if not rows or not statuses:
+        return []
+    normalized_statuses = {str(status).strip().lower() for status in statuses if str(status).strip()}
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        candidates = (
+            row.get("candidate_status"),
+            row.get("visibility_bucket"),
+            row.get("execution_status"),
+            row.get("final_action"),
+            row.get("readiness"),
+        )
+        candidate_text = {str(value).strip().lower() for value in candidates if value not in (None, "", {}, [], ())}
+        if candidate_text & normalized_statuses:
+            selected.append(dict(row))
+    return selected
 
 
 def _row_is_fallback_like(row: Mapping[str, Any]) -> bool:

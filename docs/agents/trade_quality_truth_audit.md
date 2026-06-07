@@ -9,12 +9,21 @@ This audit is read-only. It inspects code and optional runtime snapshots to answ
 - Distinguish true ranking from filter/display-only ordering.
 - Separate candidate-pool truth from direct emit paths.
 - Clarify whether UI rows are filtered snapshots or true ranked opportunities.
+- Explicitly label persisted snapshot output versus the full candidate pool.
 
 ## Outputs
 
 - `.runtime/trade_quality_audit/trade_quality_truth_audit_latest.json`
 - `.runtime/trade_quality_audit/trade_quality_truth_audit_latest.md`
 - Optional copies in `.runtime/agent_reports/`
+
+## Snapshot Truth Contract
+
+- The displayed snapshot is persisted UI output, not the full candidate pool.
+- Ranking exists upstream and stays score-based.
+- Fallback is not executable in canonical truth.
+- Fallback is not proven to be penalized inside raw confidence.
+- Counts are reported for executable, near-executable, advisory-fallback, and blocked rows.
 
 ## Safety
 
