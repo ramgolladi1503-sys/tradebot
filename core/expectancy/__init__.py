@@ -34,6 +34,12 @@ from .strategy_regime_expectancy import (
     write_strategy_regime_expectancy_report,
     write_strategy_regime_expectancy_reports,
 )
+from .shadow_validation import (
+    SHADOW_VALIDATION_SCHEMA_VERSION,
+    ShadowValidationReport,
+    build_shadow_market_validation_report,
+    write_shadow_market_validation_report,
+)
 
 __all__ = [
     "EXPECTANCY_GATE_SCHEMA_VERSION",
@@ -62,4 +68,8 @@ __all__ = [
     "load_candidate_outcomes",
     "write_strategy_regime_expectancy_report",
     "write_strategy_regime_expectancy_reports",
+    "SHADOW_VALIDATION_SCHEMA_VERSION",
+    "ShadowValidationReport",
+    "build_shadow_market_validation_report",
+    "write_shadow_market_validation_report",
 ]
