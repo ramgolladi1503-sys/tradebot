@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from core.candidate_pool_quality import CandidatePoolQualityReport, analyze_candidate_pool, pool_quality_penalty_for_row
 from core.paths import runtime_dir
 
 TOP_OPPORTUNITY_SELECTOR_SCHEMA_VERSION = 1
@@ -36,6 +37,8 @@ class TopOpportunityRow:
     permission: str
     final_action: str
     fallback_used: bool
+    pool_quality_penalty: float
+    pool_quality_reasons: tuple[str, ...]
     why_ranked: str
     why_not_ranked: str
     blockers: tuple[str, ...]
@@ -59,6 +62,9 @@ class TopOpportunitySelectorReport:
     advisory_count: int
     shadow_count: int
     rejected_count: int
+    pool_quality_state: str
+    pool_quality_score: float
+    pool_quality_reasons: tuple[str, ...]
     executable_opportunities: tuple[TopOpportunityRow, ...]
     advisory_opportunities: tuple[TopOpportunityRow, ...]
     shadow_opportunities: tuple[TopOpportunityRow, ...]
@@ -83,6 +89,11 @@ class TopOpportunitySelectorReport:
             "runtime_wired": False,
             "external_services_used": False,
             "proves_trading_edge": False,
+        }
+        payload["pool_quality"] = {
+            "state": self.pool_quality_state,
+            "score": self.pool_quality_score,
+            "reasons": list(self.pool_quality_reasons),
         }
         return payload
 
@@ -131,6 +142,12 @@ def _sort_key(row: Mapping[str, Any]) -> tuple[Any, ...]:
         _text(row.get("symbol")),
         _text(row.get("trade_id")),
     )
+
+
+def _adjusted_edge_rank_score(row: Mapping[str, Any]) -> float:
+    edge_rank_score = _float(row.get("edge_rank_score")) or 0.0
+    penalty = _float(row.get("pool_quality_penalty")) or 0.0
+    return max(0.0, edge_rank_score - penalty)
 
 
 def _load_rows(source: str | Path | Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -251,6 +268,12 @@ def _why_ranked(row: Mapping[str, Any]) -> str:
         parts.append(f"regime_fit={_float(row.get('regime_fit'))}")
     if _float(row.get("rr_score")) is not None:
         parts.append(f"rr_score={_float(row.get('rr_score'))}")
+    pool_penalty = _float(row.get("pool_quality_penalty"))
+    if pool_penalty is not None and pool_penalty > 0:
+        parts.append(f"pool_quality_penalty={pool_penalty}")
+        pool_reasons = row.get("pool_quality_reasons") or []
+        if pool_reasons:
+            parts.append("pool_quality=" + ",".join(_text(reason) for reason in pool_reasons if _text(reason)))
     if row.get("execution_allowed") is True or row.get("reportable_executable") is True:
         parts.append("execution_eligible")
     return "|".join(parts) if parts else "ranked_by_edge_and_execution_quality"
@@ -278,7 +301,7 @@ def _why_not_ranked(row: Mapping[str, Any]) -> str:
     return "|".join(reasons)
 
 
-def _build_opportunity_rows(rows: list[dict[str, Any]]) -> list[TopOpportunityRow]:
+def _build_opportunity_rows(rows: list[dict[str, Any]], pool_quality: CandidatePoolQualityReport | None = None) -> list[TopOpportunityRow]:
     selected: list[dict[str, Any]] = []
     for row in rows:
         payload = dict(row)
@@ -295,9 +318,23 @@ def _build_opportunity_rows(rows: list[dict[str, Any]]) -> list[TopOpportunityRo
         payload.setdefault("final_action", _upper(payload.get("final_action")))
         payload.setdefault("fallback_used", bool(payload.get("fallback_used")))
         payload.setdefault("blockers", list(payload.get("blockers") or []))
+        pool_penalty, pool_reasons = (0.0, [])
+        if pool_quality is not None:
+            pool_penalty, pool_reasons = pool_quality_penalty_for_row(payload, pool_quality)
+        payload["pool_quality_penalty"] = float(pool_penalty)
+        payload["pool_quality_reasons"] = list(pool_reasons)
         selected.append(payload)
 
-    selected.sort(key=_sort_key)
+    selected.sort(
+        key=lambda row: (
+            -_adjusted_edge_rank_score(row),
+            -float(_float(row.get("edge_rank_score")) or -1.0),
+            -float(_float(row.get("rank_score")) or -1.0),
+            -float(_float(row.get("confidence_final")) or -1.0),
+            _text(row.get("symbol")),
+            _text(row.get("trade_id")),
+        )
+    )
 
     rows_out: list[TopOpportunityRow] = []
     for idx, row in enumerate(selected, start=1):
@@ -329,6 +366,8 @@ def _build_opportunity_rows(rows: list[dict[str, Any]]) -> list[TopOpportunityRo
                 permission=_upper(row.get("permission")),
                 final_action=_upper(row.get("final_action")),
                 fallback_used=bool(row.get("fallback_used")),
+                pool_quality_penalty=float(_float(row.get("pool_quality_penalty")) or 0.0),
+                pool_quality_reasons=tuple(_text(reason) for reason in (row.get("pool_quality_reasons") or [])),
                 why_ranked=_why_ranked(row),
                 why_not_ranked=why_not_ranked,
                 blockers=tuple(_text(blocker) for blocker in (row.get("blockers") or [])),
@@ -341,7 +380,8 @@ def select_top_opportunities(
     rows: str | Path | Iterable[Mapping[str, Any]],
 ) -> TopOpportunitySelectorReport:
     loaded = _load_rows(rows)
-    rows_out = _build_opportunity_rows(loaded)
+    pool_quality = analyze_candidate_pool(loaded)
+    rows_out = _build_opportunity_rows(loaded, pool_quality)
     executable = tuple(
         row for row in rows_out
         if row.expectancy_status == "KEEP"
@@ -377,6 +417,9 @@ def select_top_opportunities(
         advisory_count=len(advisory),
         shadow_count=len(shadow),
         rejected_count=len(rejected),
+        pool_quality_state=pool_quality.readiness_state,
+        pool_quality_score=pool_quality.quality_score,
+        pool_quality_reasons=pool_quality.reasons,
         executable_opportunities=executable,
         advisory_opportunities=advisory,
         shadow_opportunities=shadow,
@@ -407,6 +450,7 @@ def _markdown_table(rows: tuple[TopOpportunityRow, ...]) -> str:
         "permission",
         "final_action",
         "fallback_used",
+        "pool_quality_penalty",
         "why_ranked",
         "why_not_ranked",
         "blockers",
@@ -443,6 +487,9 @@ def write_top_opportunities_report(
         f"- Advisory count: {report.advisory_count}",
         f"- Shadow count: {report.shadow_count}",
         f"- Rejected count: {report.rejected_count}",
+        f"- Pool quality state: {report.pool_quality_state}",
+        f"- Pool quality score: {report.pool_quality_score}",
+        f"- Pool quality reasons: {', '.join(report.pool_quality_reasons) if report.pool_quality_reasons else 'none'}",
         "",
         "## Safety",
         "- read_only: True",
@@ -452,6 +499,11 @@ def write_top_opportunities_report(
         "- live_order_allowed: False",
         "- live_order_action: False",
         "- broker_order_action: False",
+        "",
+        "## Pool Quality",
+        f"- state: {report.pool_quality_state}",
+        f"- score: {report.pool_quality_score}",
+        f"- reasons: {', '.join(report.pool_quality_reasons) if report.pool_quality_reasons else 'none'}",
         "",
         "## Executable Opportunities",
         "",

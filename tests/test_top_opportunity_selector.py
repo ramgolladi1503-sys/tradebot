@@ -159,6 +159,23 @@ def test_ties_are_resolved_deterministically_by_symbol_and_trade_id():
     assert [row.trade_id for row in report.executable_opportunities] == ["trade-b", "trade-a", "trade-c"]
 
 
+def test_duplicate_candidates_do_not_dominate_when_diverse_alternatives_exist():
+    report = select_top_opportunities(
+        [
+            _row(candidate_id="cand-dup-1", trade_id="trade-dup-1", symbol="NIFTY", strategy_family="breakout", edge_rank_score=0.84, rank_score=0.71, confidence_final=0.73),
+            _row(candidate_id="cand-dup-2", trade_id="trade-dup-2", symbol="NIFTY", strategy_family="breakout", edge_rank_score=0.83, rank_score=0.70, confidence_final=0.72),
+            _row(candidate_id="cand-bear", trade_id="trade-bear", symbol="BANKNIFTY", strategy_family="mean_reversion", direction="SELL", edge_rank_score=0.82, rank_score=0.74, confidence_final=0.75),
+            _row(candidate_id="cand-range", trade_id="trade-range", symbol="FINNIFTY", strategy_family="range", direction="BUY", edge_rank_score=0.81, rank_score=0.73, confidence_final=0.74),
+        ]
+    )
+
+    executable_ids = [row.candidate_id for row in report.executable_opportunities]
+    assert executable_ids[0] == "cand-bear"
+    assert "cand-range" in executable_ids[:3]
+    assert report.executable_opportunities[0].why_ranked.startswith("expectancy=keep")
+    assert report.executable_opportunities[0].why_ranked
+
+
 def test_why_ranked_includes_expectancy_and_execution_quality():
     report = select_top_opportunities([_row(candidate_id="cand-exec", trade_id="trade-exec")])
 

@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import time
 from typing import Any, Iterable, Literal
 
+from core.candidate_pool_quality import analyze_candidate_pool
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.option_confirmation import OptionPressureAssessment, assess_option_pressure
@@ -30,6 +31,7 @@ NoTradeReason = Literal[
     "NO_TRADE_WEAK_OPTION_CONFIRMATION",
     "NO_TRADE_CONFLICTING_SIGNALS",
     "NO_TRADE_INCONCLUSIVE_REGIME",
+    "NO_TRADE_POOL_CONCENTRATION",
 ]
 
 CHOP_THRESHOLD = 0.60
@@ -188,6 +190,10 @@ def assess_no_trade(
     if conflict_signal is not None:
         signals.append(conflict_signal)
 
+    pool_signal = _candidate_pool_quality_signal(candidate_tuple)
+    if pool_signal is not None:
+        signals.append(pool_signal)
+
     signals_tuple = tuple(sorted(signals, key=lambda item: (-item.severity, item.reason)))
     no_trade = bool(signals_tuple)
     primary_reason = signals_tuple[0].reason if signals_tuple else "TRADE_ALLOWED"
@@ -280,6 +286,65 @@ def _candidate_conflict_signal(
             "directional_candidate_count": total,
             "conflict_ratio": conflict_ratio,
             "dominant_option_direction": option_pressure.dominant_direction,
+        },
+    )
+
+
+def _candidate_pool_quality_signal(candidates: tuple[StrategyCandidate, ...]) -> NoTradeSignal | None:
+    if len(candidates) < 3:
+        return None
+    rows = []
+    for candidate in candidates:
+        payload = asdict(candidate)
+        blockers = [str(item or "").strip().upper() for item in payload.get("blockers") or [] if str(item or "").strip()]
+        payload["fallback_used"] = any("FALLBACK" in blocker for blocker in blockers)
+        payload["candidate_type"] = payload.get("candidate_type") or payload.get("movement_type")
+        payload["candidate_origin"] = payload.get("candidate_origin") or ",".join(payload.get("source_signals") or [])
+        payload["row_kind"] = "fallback" if payload["fallback_used"] else "primary"
+        payload["permission"] = "BLOCK" if payload["fallback_used"] or str(payload.get("status") or "").upper().startswith("BLOCKED") else "EXECUTE"
+        payload["final_action"] = payload["permission"]
+        payload["reportable_executable"] = not payload["fallback_used"]
+        payload["execution_allowed"] = not payload["fallback_used"]
+        payload["execution_truth_state"] = "RECOVERY_BLOCKED" if payload["fallback_used"] else "EXEMPLAR"
+        rows.append(payload)
+
+    report = analyze_candidate_pool(rows)
+    if report.readiness_state not in {"FALLBACK_HEAVY", "CONCENTRATED"}:
+        return None
+    if report.quality_score >= 0.5 and report.fallback_contamination_ratio < 0.34:
+        return None
+
+    reason = "NO_TRADE_POOL_CONCENTRATION"
+    blockers = []
+    if report.fallback_count > 0:
+        blockers.append("FALLBACK_CONTAMINATION")
+    if report.duplicate_candidate_count > 0:
+        blockers.append("DUPLICATE_CANDIDATES")
+    if report.same_symbol_concentration_count > 1:
+        blockers.append("SAME_SYMBOL_CONCENTRATION")
+    if report.same_family_concentration_count > 1:
+        blockers.append("SAME_FAMILY_CONCENTRATION")
+    if report.bearish_count == 0 or report.bullish_count == 0:
+        blockers.append("ONE_SIDED_DIRECTION_COVERAGE")
+
+    return NoTradeSignal(
+        reason=reason,
+        severity=max(0.55, 1.0 - report.quality_score),
+        message="Candidate pool is too concentrated or contaminated to trust as trade-ready.",
+        blockers=tuple(blockers) if blockers else ("POOL_CONCENTRATION",),
+        warnings=tuple(report.reasons),
+        evidence={
+            "candidate_count": report.candidate_count,
+            "quality_score": report.quality_score,
+            "readiness_state": report.readiness_state,
+            "fallback_count": report.fallback_count,
+            "fallback_contamination_ratio": report.fallback_contamination_ratio,
+            "duplicate_candidate_count": report.duplicate_candidate_count,
+            "unique_symbol_count": report.unique_symbol_count,
+            "unique_strategy_family_count": report.unique_strategy_family_count,
+            "bullish_count": report.bullish_count,
+            "bearish_count": report.bearish_count,
+            "range_count": report.range_count,
         },
     )
 
