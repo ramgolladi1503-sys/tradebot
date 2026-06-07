@@ -25,7 +25,7 @@ _SUPPORTED_OUTCOME_STATUSES = {
     AMBIGUOUS_SAME_BAR,
 }
 
-_SUPPORTED_DIRECTIONS = {"BUY", "LONG"}
+_SUPPORTED_DIRECTIONS = {"BUY", "LONG", "BUY_CALL", "BUY_PUT", "SELL", "SHORT", "SELL_CALL", "SELL_PUT"}
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,7 @@ class CandidateOutcomeInput:
     timeout_epoch: float | int | None = None
     side: str | None = None
     direction: str | None = None
+    underlying_direction: str | None = None
     feed_truth_state: str | None = None
     reportable_executable: bool = False
     execution_allowed: bool = False
@@ -131,10 +132,23 @@ def _candidate_identifier(candidate: CandidateOutcomeInput) -> str | None:
     return candidate.candidate_id or candidate.trade_id
 
 
-def _direction(candidate: CandidateOutcomeInput) -> str:
-    raw = _normalize_text(candidate.direction or candidate.side or "BUY")
+def normalize_outcome_direction(candidate: CandidateOutcomeInput | Mapping[str, Any]) -> str:
+    if isinstance(candidate, CandidateOutcomeInput):
+        row: Mapping[str, Any] = asdict(candidate)
+    elif isinstance(candidate, Mapping):
+        row = candidate
+    else:
+        row = {}
+    raw = _normalize_text(row.get("direction") or row.get("side") or "BUY")
+    underlying_direction = _normalize_text(row.get("underlying_direction"))
     if raw in {"BUY", "LONG"}:
         return "BUY"
+    if raw in {"BUY_CALL", "BUY_PUT"}:
+        return "SELL" if underlying_direction in {"SELL", "SHORT"} else "BUY"
+    if raw in {"SELL", "SHORT"}:
+        return "SELL"
+    if raw in {"SELL_CALL", "SELL_PUT"}:
+        return "BUY" if underlying_direction in {"BUY", "LONG"} else "SELL"
     return raw
 
 
@@ -209,7 +223,7 @@ def build_candidate_outcome_truth(
     valid_observations = [item for item in obs_list if item is not None]
     ordered_observations = sorted(valid_observations, key=lambda item: (item.observed_epoch, item.ltp))
     identifier = _candidate_identifier(candidate)
-    direction = _direction(candidate)
+    direction = normalize_outcome_direction(candidate)
     signal_epoch = _finite_float(candidate.signal_epoch)
     entry_price = _finite_float(candidate.entry_price)
     stop_loss_price = _finite_float(candidate.stop_loss_price)
@@ -274,7 +288,7 @@ def build_candidate_outcome_truth(
     if missing_fields:
         return _invalid_truth(candidate, reason="missing_required_price_or_time_fields", blocker=missing_fields[0])
 
-    if direction not in _SUPPORTED_DIRECTIONS:
+    if direction not in {"BUY", "SELL"}:
         return _invalid_truth(candidate, reason="unsupported_direction", blocker="UNSUPPORTED_DIRECTION")
 
     if not (entry_price is not None and stop_loss_price is not None and target_price is not None and signal_epoch is not None and timeout_epoch is not None):
@@ -285,6 +299,8 @@ def build_candidate_outcome_truth(
 
     if direction == "BUY" and not (stop_loss_price < entry_price < target_price):
         return _invalid_truth(candidate, reason="invalid_buy_risk_model", blocker="INVALID_RISK_MODEL")
+    if direction == "SELL" and not (target_price < entry_price < stop_loss_price):
+        return _invalid_truth(candidate, reason="invalid_short_risk_model", blocker="INVALID_RISK_MODEL")
 
     active_observations = [
         item
@@ -333,16 +349,23 @@ def build_candidate_outcome_truth(
             warnings=(),
         )
 
-    if direction != "BUY":
-        return _invalid_truth(candidate, reason="unsupported_direction", blocker="UNSUPPORTED_DIRECTION")
-
-    max_favorable_price = max(item.ltp for item in active_observations)
-    min_favorable_price = min(item.ltp for item in active_observations)
-    mfe_abs = max(0.0, max_favorable_price - entry_price)
-    mae_abs = max(0.0, entry_price - min_favorable_price)
-    risk_per_unit = entry_price - stop_loss_price
+    max_observed_price = max(item.ltp for item in active_observations)
+    min_observed_price = min(item.ltp for item in active_observations)
+    if direction == "BUY":
+        max_favorable_price = max_observed_price
+        min_favorable_price = min_observed_price
+        mfe_abs = max(0.0, max_favorable_price - entry_price)
+        mae_abs = max(0.0, entry_price - min_favorable_price)
+        risk_per_unit = entry_price - stop_loss_price
+    else:
+        max_favorable_price = min_observed_price
+        min_favorable_price = max_observed_price
+        mfe_abs = max(0.0, entry_price - min_favorable_price)
+        mae_abs = max(0.0, max_favorable_price - entry_price)
+        risk_per_unit = stop_loss_price - entry_price
     if risk_per_unit <= 0:
-        return _invalid_truth(candidate, reason="invalid_risk_per_unit", blocker="INVALID_RISK_MODEL")
+        reason = "invalid_risk_per_unit" if direction == "BUY" else "invalid_short_risk_model"
+        return _invalid_truth(candidate, reason=reason, blocker="INVALID_RISK_MODEL")
 
     mfe_r = mfe_abs / risk_per_unit
     mae_r = mae_abs / risk_per_unit
@@ -354,12 +377,21 @@ def build_candidate_outcome_truth(
     stop_hit_epoch: float | None = None
     ambiguous_epoch: float | None = None
     for observation in active_observations:
-        target_hit = observation.ltp >= target_price
-        stop_hit = observation.ltp <= stop_loss_price
+        if direction == "BUY":
+            target_hit = observation.ltp >= target_price
+            stop_hit = observation.ltp <= stop_loss_price
+        else:
+            target_hit = observation.ltp <= target_price
+            stop_hit = observation.ltp >= stop_loss_price
         if observation.bid is not None and observation.ask is not None:
-            if observation.bid <= stop_loss_price and observation.ask >= target_price:
-                target_hit = True
-                stop_hit = True
+            if direction == "BUY":
+                if observation.bid <= stop_loss_price and observation.ask >= target_price:
+                    target_hit = True
+                    stop_hit = True
+            else:
+                if observation.bid <= target_price and observation.ask >= stop_loss_price:
+                    target_hit = True
+                    stop_hit = True
         if observation.spread is not None and observation.spread < 0:
             return _invalid_truth(candidate, reason="negative_spread", blocker="INVALID_OBSERVATION")
         if target_hit and stop_hit:
@@ -378,7 +410,7 @@ def build_candidate_outcome_truth(
     stop_hit = False
     timeout_hit = True
     first_hit_epoch: float | None = None
-    gross_r = (active_observations[-1].ltp - entry_price) / risk_per_unit
+    gross_r = ((active_observations[-1].ltp - entry_price) / risk_per_unit) if direction == "BUY" else ((entry_price - active_observations[-1].ltp) / risk_per_unit)
 
     if ambiguous_epoch is not None:
         outcome_status = AMBIGUOUS_SAME_BAR
@@ -395,7 +427,7 @@ def build_candidate_outcome_truth(
         stop_hit = False
         timeout_hit = False
         first_hit_epoch = target_hit_epoch
-        gross_r = (target_price - entry_price) / risk_per_unit
+        gross_r = ((target_price - entry_price) / risk_per_unit) if direction == "BUY" else ((entry_price - target_price) / risk_per_unit)
     elif stop_hit_epoch is not None:
         outcome_status = STOP_HIT
         outcome_reason = "stop_hit_before_target"
@@ -467,4 +499,5 @@ __all__ = [
     "TARGET_HIT",
     "TIMEOUT",
     "build_candidate_outcome_truth",
+    "normalize_outcome_direction",
 ]
