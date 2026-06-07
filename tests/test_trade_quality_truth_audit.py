@@ -5,7 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from core.agents.trade_quality_truth_audit import analyze_trade_quality_truth, build_trade_quality_truth_audit
+from core.agents.trade_quality_truth_audit import (
+    analyze_trade_quality_truth,
+    build_trade_quality_truth_audit,
+    render_trade_quality_truth_audit_markdown,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -183,6 +187,68 @@ def test_candidate_pool_detector_distinguishes_pool_from_direct_emit_path() -> N
     candidate_pool_report = _report(candidate_pool_sources)
     assert candidate_pool_report["candidate_pool_truth"]["has_candidate_pool"] is True
     assert candidate_pool_report["candidate_pool_truth"]["verdict"] == "PASS"
+
+
+def test_snapshot_truth_contract_labels_persisted_snapshot_not_full_pool() -> None:
+    source_texts = {
+        "core/candidate_scoring.py": (REPO_ROOT / "core" / "candidate_scoring.py").read_text(encoding="utf-8"),
+        "core/candidate_ranking.py": (REPO_ROOT / "core" / "candidate_ranking.py").read_text(encoding="utf-8"),
+        "core/candidate_pool.py": (REPO_ROOT / "core" / "candidate_pool.py").read_text(encoding="utf-8"),
+        "core/strategy_candidate_pool.py": (REPO_ROOT / "core" / "strategy_candidate_pool.py").read_text(encoding="utf-8"),
+        "dashboard/streamlit_app_runtime.py": (REPO_ROOT / "dashboard" / "streamlit_app_runtime.py").read_text(encoding="utf-8"),
+    }
+    runtime_payloads = {
+        "top_opportunities": {
+            "payload": {
+                "selector_outcome": "NO_EXECUTABLE_OPPORTUNITY",
+                "top_executable_count": 0,
+                "top_advisory_count": 0,
+                "top_blocked_count": 0,
+                "top_executable_opportunities": [],
+                "top_advisory_opportunities": [
+                    {
+                        "trade_id": "NEAR-1",
+                        "candidate_status": "near_executable",
+                        "visibility_bucket": "near_executable",
+                        "final_action": "QUEUE_ONLY",
+                        "readiness": "WAITING",
+                    },
+                    {
+                        "trade_id": "ADV-1",
+                        "candidate_status": "advisory_only",
+                        "visibility_bucket": "advisory",
+                        "final_action": "ADVISORY_ONLY",
+                        "readiness": "ADVISORY_ONLY",
+                    },
+                ],
+                "top_blocked_opportunities": [
+                    {
+                        "trade_id": "BLOCK-1",
+                        "candidate_status": "blocked",
+                        "visibility_bucket": "blocked",
+                        "final_action": "BLOCK",
+                        "readiness": "BLOCKED",
+                    }
+                ],
+            }
+        }
+    }
+    report = _report(source_texts, runtime_payloads)
+    snapshot = report["snapshot_truth_contract"]
+
+    assert snapshot["display_source"] == "persisted_top_opportunity_snapshot"
+    assert snapshot["is_full_candidate_pool"] is False
+    assert snapshot["ranking_type"] == "true_ranking"
+    assert snapshot["fallback_executable"] is False
+    assert snapshot["fallback_penalty_in_raw_confidence"] is False
+    assert snapshot["executable_count"] == 0
+    assert snapshot["near_executable_count"] == 1
+    assert snapshot["advisory_fallback_count"] == 1
+    assert snapshot["blocked_count"] == 1
+    assert snapshot["label"] == "Snapshot output is not the full candidate pool"
+    markdown = render_trade_quality_truth_audit_markdown(report)
+    assert "## Snapshot Truth Contract" in markdown
+    assert "not the full candidate pool" in markdown
 
 
 def test_script_runs_without_runtime_logs_and_writes_reports(tmp_path: Path, monkeypatch) -> None:

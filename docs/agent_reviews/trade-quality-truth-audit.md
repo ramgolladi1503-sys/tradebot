@@ -100,6 +100,26 @@ acceptance_proof:
 - Candidate-pool truth is separated from direct emit paths.
 - UI rows are identified as persisted top-opportunity snapshots, not raw runtime mutation.
 
+## Snapshot Truth Contract
+
+- Verdict: `PASS`
+- label: `Snapshot output is not the full candidate pool`
+- display_source: `persisted_top_opportunity_snapshot`
+- is_full_candidate_pool: `False`
+- ranking_type: `true_ranking`
+- fallback_executable: `False`
+- fallback_penalty_in_raw_confidence: `False`
+- executable_count: `0`
+- near_executable_count: `0`
+- advisory_fallback_count: `0`
+- blocked_count: `0`
+- This is persisted snapshot output.
+- This is not the full candidate pool.
+- Ranking exists upstream.
+- Fallback is not executable.
+- Fallback is not proven to be penalized inside raw confidence.
+- Counts are displayed for executable / near-executable / advisory-fallback / blocked rows.
+
 ## Runtime Proof Required After Merge
 
 - Run the CLI against the current workspace with missing runtime logs and confirm the audit still writes JSON and Markdown.
