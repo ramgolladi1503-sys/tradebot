@@ -182,6 +182,7 @@ def _candidate_journal_summary(journal_rows: Mapping[str, Any] | None, shadow_re
 def _recommendation(
     *,
     expectancy_groups: list[dict[str, Any]],
+    baseline_summary: Mapping[str, Any],
     shadow_report: Mapping[str, Any],
     top_report: Mapping[str, Any],
 ) -> tuple[str, str]:
@@ -221,6 +222,17 @@ def _recommendation(
         return RECOMMENDATION_NO_TRADE, "mature expectancy is negative after costs"
     if hard_safety_blockers or fallback_inflated:
         return RECOMMENDATION_NO_TRADE, "fallback or blocked evidence inflates results or safety blockers exist"
+    all_mature_weak = bool(baseline_summary.get("all_mature_groups_below_baseline_or_insufficient"))
+    mature_count = _int(baseline_summary.get("mature_group_count")) or 0
+    mature_comparable_count = _int(baseline_summary.get("mature_comparable_count")) or 0
+    mature_underperform_count = _int(baseline_summary.get("mature_underperform_count")) or 0
+    mature_insufficient_count = _int(baseline_summary.get("mature_insufficient_sample_count")) or 0
+    if all_mature_weak and mature_count > 0:
+        if mature_comparable_count == 0:
+            return RECOMMENDATION_PAPER_ONLY, "all mature groups are insufficient for baseline comparison"
+        if mature_underperform_count > 0 and mature_underperform_count == mature_comparable_count and (shadow_summary["recommendation"] == RECOMMENDATION_NO_TRADE or not shadow_summary["positive"]):
+            return RECOMMENDATION_NO_TRADE, "all mature groups are below-baseline or insufficient"
+        return RECOMMENDATION_PAPER_ONLY, "all mature groups are below-baseline or insufficient"
     if shadow_summary["recommendation"] == RECOMMENDATION_NO_TRADE:
         shadow_reason = _text(shadow_summary.get("recommendation_reason")).lower()
         if "fallback" in shadow_reason:
@@ -252,6 +264,7 @@ class EdgeReadinessReport:
     shadow_validation_summary: dict[str, Any]
     candidate_journal_summary: dict[str, Any]
     fallback_exclusion_summary: dict[str, Any]
+    baseline_comparison_summary: dict[str, Any]
     top_positive_expectancy_setups: tuple[dict[str, Any], ...]
     killed_setups: tuple[dict[str, Any], ...]
     insufficient_data_setups: tuple[dict[str, Any], ...]
@@ -316,6 +329,9 @@ class EdgeReadinessReport:
             "## Fallback exclusion summary",
             json.dumps(self.fallback_exclusion_summary, sort_keys=True),
             "",
+            "## Baseline comparison summary",
+            json.dumps(self.baseline_comparison_summary, sort_keys=True),
+            "",
             "## Spread/slippage impact",
             json.dumps(self.expectancy_summary.get("spread_slippage_impact", {}), sort_keys=True),
             "",
@@ -371,6 +387,28 @@ def _expectancy_summary(expectancy_payload: Mapping[str, Any]) -> dict[str, Any]
             ],
         },
     }
+
+
+def _baseline_comparison_summary(expectancy_payload: Mapping[str, Any]) -> dict[str, Any]:
+    summary = dict(expectancy_payload.get("baseline_comparison_summary") or {})
+    if summary:
+        return summary
+    comparisons = [dict(item) for item in expectancy_payload.get("baseline_comparisons") or [] if isinstance(item, Mapping)]
+    mature = [item for item in comparisons if (_int(item.get("sample_count")) or 0) >= 30]
+    summary = {
+        "comparison_count": len(comparisons),
+        "outperform_count": sum(1 for item in comparisons if _text(item.get("baseline_verdict")).upper() == "OUTPERFORMS"),
+        "match_count": sum(1 for item in comparisons if _text(item.get("baseline_verdict")).upper() == "MATCHES"),
+        "underperform_count": sum(1 for item in comparisons if _text(item.get("baseline_verdict")).upper() == "UNDERPERFORMS"),
+        "insufficient_sample_count": sum(1 for item in comparisons if _text(item.get("baseline_verdict")).upper() == "INSUFFICIENT_SAMPLE"),
+        "mature_group_count": len(mature),
+        "mature_outperform_count": sum(1 for item in mature if _text(item.get("baseline_verdict")).upper() == "OUTPERFORMS"),
+        "mature_match_count": sum(1 for item in mature if _text(item.get("baseline_verdict")).upper() == "MATCHES"),
+        "mature_underperform_count": sum(1 for item in mature if _text(item.get("baseline_verdict")).upper() == "UNDERPERFORMS"),
+        "mature_insufficient_sample_count": sum(1 for item in mature if _text(item.get("baseline_verdict")).upper() == "INSUFFICIENT_SAMPLE"),
+    }
+    summary["all_mature_groups_below_baseline_or_insufficient"] = bool(mature) and summary["mature_outperform_count"] == 0 and summary["mature_match_count"] == 0 and summary["mature_underperform_count"] + summary["mature_insufficient_sample_count"] == len(mature)
+    return summary
 
 
 def _top_opportunity_summary(top_payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -448,6 +486,7 @@ def _build_report(
     shadow_summary = _shadow_summary(shadow_payload)
     top_summary = _top_opportunity_summary(top_payload)
     expectation_summary = _expectancy_summary(expectancy_payload)
+    baseline_summary = _baseline_comparison_summary(expectancy_payload)
     candidate_summary = _candidate_journal_summary(
         candidate_summary_payload if candidate_summary_payload else None,
         shadow_payload,
@@ -456,6 +495,7 @@ def _build_report(
     fallback_summary = fallback_summary_payload or dict(shadow_summary.get("fallback_exclusion_summary") or {})
     recommendation, reason = _recommendation(
         expectancy_groups=expectancy_groups,
+        baseline_summary=baseline_summary,
         shadow_report=shadow_payload,
         top_report=top_payload,
     )
@@ -478,6 +518,7 @@ def _build_report(
         shadow_validation_summary=shadow_summary,
         candidate_journal_summary=candidate_summary,
         fallback_exclusion_summary=fallback_summary,
+        baseline_comparison_summary=baseline_summary,
         top_positive_expectancy_setups=tuple(
             {
                 "group_key": _group_label(group),

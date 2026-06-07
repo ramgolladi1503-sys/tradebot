@@ -112,10 +112,24 @@ def test_markdown_and_json_report_generated(tmp_path: Path) -> None:
     assert payload["schema_version"] == STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION
     assert payload["group_count"] == 1
     assert payload["groups"][0]["keep_watch_kill_status"] == "KEEP"
+    assert payload["baseline_comparison_summary"]["comparison_count"] == 1
+    assert payload["baseline_comparison_summary"]["mature_group_count"] == 1
     markdown = md_path.read_text()
     assert "Strategy-Regime Expectancy Report" in markdown
     assert "Group Metrics" in markdown
+    assert "Baseline Comparison Summary" in markdown
     assert "This report does not prove strategy edge or runtime readiness." in markdown
+
+
+def test_baseline_comparison_summary_populated() -> None:
+    rows = load_candidate_outcomes(FIXTURE_DIR / "positive_keep_50.jsonl")
+    report = aggregate_strategy_regime_expectancy(rows)
+
+    assert report.baseline_comparison_count == 1
+    assert report.baseline_comparison_summary["comparison_count"] == 1
+    assert report.baseline_comparison_summary["mature_group_count"] == 1
+    assert report.baseline_comparison_summary["mature_comparable_count"] == 0
+    assert report.baseline_comparison_summary["all_mature_groups_below_baseline_or_insufficient"] is True
 
 
 def test_setup_id_grouping_option_groups_by_setup_identity() -> None:

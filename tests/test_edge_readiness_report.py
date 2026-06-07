@@ -284,6 +284,69 @@ def test_fallback_inflated_result_never_returns_ready(tmp_path: Path) -> None:
     assert "fallback" in report.recommendation_reason.lower()
 
 
+def test_all_mature_baseline_weak_returns_paper_only(tmp_path: Path) -> None:
+    expectancy_path = tmp_path / "strategy_regime_expectancy_latest.json"
+    expectancy_path.write_text(json.dumps({
+        "schema_version": 1,
+        "generated_by": "strategy_regime_expectancy_aggregator",
+        "source": "fixture",
+        "candidate_outcome_count": 80,
+        "group_count": 2,
+        "groups": [
+            _expectancy_row("breakout", "LIVE", "NIFTY", "WEEKLY", "CE", "BUY", 50, 0.26, "KEEP"),
+            _expectancy_row("breakout", "LIVE", "NIFTY", "WEEKLY", "PE", "BUY", 50, 0.24, "KEEP"),
+        ],
+        "baseline_comparison_summary": {
+            "comparison_count": 2,
+            "outperform_count": 0,
+            "match_count": 0,
+            "underperform_count": 2,
+            "insufficient_sample_count": 0,
+            "mature_group_count": 2,
+            "mature_outperform_count": 0,
+            "mature_match_count": 0,
+            "mature_underperform_count": 2,
+            "mature_insufficient_sample_count": 0,
+            "all_mature_groups_below_baseline_or_insufficient": True,
+        },
+        "baseline_comparisons": [
+            {
+                "baseline_verdict": "UNDERPERFORMS",
+                "sample_count": 50,
+            },
+            {
+                "baseline_verdict": "UNDERPERFORMS",
+                "sample_count": 50,
+            },
+        ],
+        "read_only": True,
+        "append": False,
+    }, indent=2), encoding="utf-8")
+    top_dir = tmp_path / "top"
+    write_top_opportunities_report([_top_row("cand-1", "trade-1", edge_rank_score=0.95, rank_score=0.8)], output_dir=top_dir)
+    outcomes_path = tmp_path / "candidate_outcomes.jsonl"
+    write_candidate_outcome_records([_outcome_row("cand-1", "trade-1", cost_adjusted_r=0.26)], path=outcomes_path)
+    shadow_dir = tmp_path / "shadow"
+    build_shadow_market_validation_report(
+        candidate_journal=tmp_path / "missing-journal.jsonl",
+        candidate_outcomes=outcomes_path,
+        top_opportunities=top_dir / "top_opportunities_latest.json",
+        output_dir=shadow_dir,
+        session_date="20260607",
+    )
+
+    from core.expectancy.edge_readiness_report import build_edge_readiness_report
+
+    report = build_edge_readiness_report(
+        expectancy_path=expectancy_path,
+        top_opportunities_path=top_dir / "top_opportunities_latest.json",
+        shadow_validation_path=shadow_dir / "shadow_validation_latest.json",
+    )
+
+    assert report.recommendation == "PAPER_ONLY"
+    assert any(token in report.recommendation_reason.lower() for token in {"below-baseline", "insufficient"})
+
+
 def test_missing_input_files_fail_closed_to_no_trade_or_paper_only_with_explicit_reason(tmp_path: Path) -> None:
     from core.expectancy.edge_readiness_report import build_edge_readiness_report
 
