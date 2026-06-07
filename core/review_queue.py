@@ -54,6 +54,7 @@ from core.observability.pipeline import append_trade_lifecycle_event
 from core.trade_state_machine import ensure_trade_lifecycle, rehydrate_trade_lifecycle
 from core.time_utils import format_ts_ist
 from core.log_writer import get_jsonl_writer
+from core.candidate_journal import write_candidate_journal_row
 from core.quote_truth import quote_bundle_is_consistent, quote_consistency_score, resolve_quote_validation_status
 from core.auth_manager import runtime_auth_snapshot
 
@@ -8541,6 +8542,13 @@ def _write_review_queue_artifacts(path: Path, data: list[dict], entry: dict) -> 
     ranked_rows = _rank_review_queue_rows(data, path=path)
     ranked_entry = _find_ranked_queue_entry(ranked_rows, entry)
     write_queue_rows(path, ranked_rows)
+    try:
+        write_candidate_journal_row(
+            ranked_entry,
+            journal_event=str(ranked_entry.get("journal_event") or "candidate_reported"),
+        )
+    except Exception:
+        logger.warning("candidate_journal_emit_failed trade_id=%s", ranked_entry.get("trade_id"))
     emission_result = _emit_review_queue_logs(ranked_entry)
     _update_suggestions_status_latest(
         ranked_entry,
