@@ -15,7 +15,7 @@ source: docs/agent_reviews/edge-11-shadow-market-validation-runner.md
 - The runner must only validate and summarize evidence; it must not place or simulate live orders.
 
 ## Grill Me Review
-- The runner must fail closed when candidate journals, outcomes, or top-opportunity inputs are missing.
+- The runner must fail closed when required inputs are absent.
 - Fallback and blocked candidates must remain separate from executable validation statistics.
 - The report must not imply that shadow evidence authorizes live trading.
 
