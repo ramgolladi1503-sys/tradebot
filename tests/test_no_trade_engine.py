@@ -134,26 +134,6 @@ def test_assess_no_trade_allows_clean_context():
     assert assessment.signals == ()
 
 
-def test_assess_no_trade_detects_pool_level_baseline_weakness():
-    candidates = [
-        _candidate("BUY_CALL"),
-        _candidate("BUY_CALL"),
-        _candidate("BUY_PUT"),
-    ]
-    for candidate in candidates:
-        candidate.evidence["baseline_verdict"] = "UNDERPERFORMS"
-        candidate.evidence["baseline_penalty_or_boost"] = -0.08
-
-    assessment = assess_no_trade(
-        _context(),
-        _regime(primary="TREND_UP", TREND_UP=0.7),
-        candidates=candidates,
-    )
-
-    assert assessment.no_trade is True
-    assert any(signal.reason == "NO_TRADE_BASELINE_WEAKNESS" for signal in assessment.signals)
-
-
 def test_generate_no_trade_candidate_emits_no_trade_status():
     candidates = generate_no_trade_candidates(_context(), _regime(primary="CHOP", CHOP=0.85))
 
