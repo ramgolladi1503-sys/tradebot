@@ -78,6 +78,12 @@ def _load_json_payload(path: str | Path) -> tuple[dict[str, Any], bool]:
     return {}, True
 
 
+def _load_json_payload_optional(path: str | Path | None) -> tuple[dict[str, Any], bool]:
+    if path is None:
+        return {}, False
+    return _load_json_payload(path)
+
+
 def _group_label(group: Mapping[str, Any]) -> str:
     return "|".join(
         _text(group.get(field)) or "UNKNOWN"
@@ -185,6 +191,7 @@ def _recommendation(
     baseline_summary: Mapping[str, Any],
     shadow_report: Mapping[str, Any],
     top_report: Mapping[str, Any],
+    topn_replay_quality_summary: Mapping[str, Any],
 ) -> tuple[str, str]:
     missing_shadow = not shadow_report
     if missing_shadow:
@@ -208,6 +215,7 @@ def _recommendation(
     )
     fallback_inflated = (_int(shadow_summary["fallback_exclusion_summary"].get("fallback_count")) or 0) > 0 and not shadow_summary["fallback_exclusion_summary"].get("executable_excludes_fallback", True)
     hard_safety_blockers = (_int(shadow_summary["feed_block_summary"].get("blocked_count")) or 0) > 0
+    all_mature_weak = bool(baseline_summary.get("all_mature_groups_below_baseline_or_insufficient"))
 
     if not keep_groups:
         if negative_mature:
@@ -222,7 +230,6 @@ def _recommendation(
         return RECOMMENDATION_NO_TRADE, "mature expectancy is negative after costs"
     if hard_safety_blockers or fallback_inflated:
         return RECOMMENDATION_NO_TRADE, "fallback or blocked evidence inflates results or safety blockers exist"
-    all_mature_weak = bool(baseline_summary.get("all_mature_groups_below_baseline_or_insufficient"))
     mature_count = _int(baseline_summary.get("mature_group_count")) or 0
     mature_comparable_count = _int(baseline_summary.get("mature_comparable_count")) or 0
     mature_underperform_count = _int(baseline_summary.get("mature_underperform_count")) or 0
@@ -240,6 +247,19 @@ def _recommendation(
         return RECOMMENDATION_NO_TRADE, "shadow validation is negative"
     if shadow_summary["recommendation"] == RECOMMENDATION_PAPER_ONLY or shadow_summary["incomplete"]:
         return RECOMMENDATION_PAPER_ONLY, "shadow validation is missing or incomplete"
+    topn_present = bool(topn_replay_quality_summary.get("present"))
+    topn_verdict = _text(topn_replay_quality_summary.get("verdict")).upper()
+    topn_sample_count = _int(topn_replay_quality_summary.get("sample_count")) or 0
+    topn_reason = _text(topn_replay_quality_summary.get("reason")).lower()
+    if topn_present:
+        if topn_verdict == "TOPN_UNDERPERFORMS" and topn_sample_count >= 30:
+            if all_mature_weak:
+                return RECOMMENDATION_NO_TRADE, "top-N replay quality underperforms after costs and mature groups are below-baseline or insufficient"
+            return RECOMMENDATION_PAPER_ONLY, "top-N replay quality underperforms after costs"
+        if topn_verdict == "INSUFFICIENT_SAMPLE" or topn_sample_count < 30:
+            return RECOMMENDATION_PAPER_ONLY, "top-N replay quality is insufficient for manual pilot readiness"
+        if topn_verdict not in {"TOPN_OUTPERFORMS", "TOPN_MATCHES"} and "missing" in topn_reason:
+            return RECOMMENDATION_PAPER_ONLY, "top-N replay quality is missing or incomplete"
     if watch_groups and len(watch_groups) >= len(keep_groups):
         return RECOMMENDATION_PAPER_ONLY, "WATCH dominates KEEP"
     if not mature_keep:
@@ -262,6 +282,7 @@ class EdgeReadinessReport:
     expectancy_summary: dict[str, Any]
     top_opportunity_summary: dict[str, Any]
     shadow_validation_summary: dict[str, Any]
+    topn_replay_quality_summary: dict[str, Any]
     candidate_journal_summary: dict[str, Any]
     fallback_exclusion_summary: dict[str, Any]
     baseline_comparison_summary: dict[str, Any]
@@ -344,6 +365,9 @@ class EdgeReadinessReport:
             "## Shadow validation summary",
             json.dumps(self.shadow_validation_summary, sort_keys=True),
             "",
+            "## Top-N replay quality summary",
+            json.dumps(self.topn_replay_quality_summary, sort_keys=True),
+            "",
             "## Final recommendation",
             f"`{self.recommendation}` — {self.recommendation_reason}",
             "",
@@ -411,6 +435,55 @@ def _baseline_comparison_summary(expectancy_payload: Mapping[str, Any]) -> dict[
     return summary
 
 
+def _topn_replay_quality_summary(topn_payload: Mapping[str, Any]) -> dict[str, Any]:
+    if not topn_payload:
+        return {
+            "present": False,
+            "verdict": "MISSING",
+            "reason": "missing_topn_replay_quality_report",
+            "sample_count": 0,
+            "eligible_count": 0,
+            "positive": False,
+            "incomplete": True,
+            "underperforming": False,
+            "top_1_after_cost_expectancy": 0.0,
+            "top_5_after_cost_expectancy": 0.0,
+            "top_3_after_cost_expectancy": 0.0,
+            "top_10_after_cost_expectancy": 0.0,
+            "naive_baseline_after_cost_expectancy": 0.0,
+            "top_1_vs_top_5_delta": 0.0,
+            "top_3_vs_top_10_delta": 0.0,
+            "top_3_vs_baseline_delta": 0.0,
+            "average_return_after_cost": 0.0,
+            "regime_breakdown": {},
+        }
+    verdict = _text(topn_payload.get("verdict")).upper() or "MISSING"
+    reason = _text(topn_payload.get("reason")) or "missing_topn_replay_quality_report"
+    sample_count = _int(topn_payload.get("sample_count")) or 0
+    eligible_count = _int(topn_payload.get("eligible_count")) or 0
+    average = _float(topn_payload.get("average_return_after_cost")) or 0.0
+    return {
+        "present": True,
+        "verdict": verdict,
+        "reason": reason,
+        "sample_count": sample_count,
+        "eligible_count": eligible_count,
+        "positive": verdict == "TOPN_OUTPERFORMS" and average > 0,
+        "incomplete": verdict == "INSUFFICIENT_SAMPLE" or sample_count <= 0,
+        "underperforming": verdict == "TOPN_UNDERPERFORMS",
+        "top_1_after_cost_expectancy": _float(topn_payload.get("top_1_after_cost_expectancy")) or 0.0,
+        "top_5_after_cost_expectancy": _float(topn_payload.get("top_5_after_cost_expectancy")) or 0.0,
+        "top_3_after_cost_expectancy": _float(topn_payload.get("top_3_after_cost_expectancy")) or 0.0,
+        "top_10_after_cost_expectancy": _float(topn_payload.get("top_10_after_cost_expectancy")) or 0.0,
+        "naive_baseline_after_cost_expectancy": _float(topn_payload.get("naive_baseline_after_cost_expectancy")) or 0.0,
+        "top_1_vs_top_5_delta": _float(topn_payload.get("top_1_vs_top_5_delta")) or 0.0,
+        "top_3_vs_top_10_delta": _float(topn_payload.get("top_3_vs_top_10_delta")) or 0.0,
+        "top_3_vs_baseline_delta": _float(topn_payload.get("top_3_vs_baseline_delta")) or 0.0,
+        "average_return_after_cost": average,
+        "regime_breakdown": dict(topn_payload.get("regime_breakdown") or {}),
+    }
+
+
 def _top_opportunity_summary(top_payload: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "candidate_count": _int(top_payload.get("candidate_count")) or 0,
@@ -449,6 +522,7 @@ def _build_report(
     expectancy_path: str | Path,
     top_opportunities_path: str | Path,
     shadow_validation_path: str | Path,
+    topn_replay_quality_path: str | Path | None = None,
     candidate_journal_summary: str | Path | Mapping[str, Any] | None = None,
     fallback_exclusion_summary: str | Path | Mapping[str, Any] | None = None,
     mirror_runtime: bool = False,
@@ -463,6 +537,11 @@ def _build_report(
     shadow_payload, ok = _load_json_payload(shadow_validation_path)
     if not ok:
         missing_inputs.append("shadow_validation")
+    topn_payload: dict[str, Any] = {}
+    if topn_replay_quality_path is not None:
+        topn_payload, ok = _load_json_payload_optional(topn_replay_quality_path)
+        if not ok:
+            missing_inputs.append("topn_replay_quality")
 
     candidate_summary_payload: dict[str, Any] = {}
     if candidate_journal_summary is not None:
@@ -487,6 +566,7 @@ def _build_report(
     top_summary = _top_opportunity_summary(top_payload)
     expectation_summary = _expectancy_summary(expectancy_payload)
     baseline_summary = _baseline_comparison_summary(expectancy_payload)
+    topn_summary = _topn_replay_quality_summary(topn_payload)
     candidate_summary = _candidate_journal_summary(
         candidate_summary_payload if candidate_summary_payload else None,
         shadow_payload,
@@ -498,6 +578,7 @@ def _build_report(
         baseline_summary=baseline_summary,
         shadow_report=shadow_payload,
         top_report=top_payload,
+        topn_replay_quality_summary=topn_summary,
     )
 
     if missing_inputs:
@@ -516,6 +597,7 @@ def _build_report(
         expectancy_summary=expectation_summary,
         top_opportunity_summary=top_summary,
         shadow_validation_summary=shadow_summary,
+        topn_replay_quality_summary=topn_summary,
         candidate_journal_summary=candidate_summary,
         fallback_exclusion_summary=fallback_summary,
         baseline_comparison_summary=baseline_summary,
@@ -611,6 +693,7 @@ def build_edge_readiness_report(
     expectancy_path: str | Path,
     top_opportunities_path: str | Path,
     shadow_validation_path: str | Path,
+    topn_replay_quality_path: str | Path | None = None,
     candidate_journal_summary: str | Path | Mapping[str, Any] | None = None,
     fallback_exclusion_summary: str | Path | Mapping[str, Any] | None = None,
     mirror_runtime: bool = False,
@@ -619,6 +702,7 @@ def build_edge_readiness_report(
         expectancy_path=expectancy_path,
         top_opportunities_path=top_opportunities_path,
         shadow_validation_path=shadow_validation_path,
+        topn_replay_quality_path=topn_replay_quality_path,
         candidate_journal_summary=candidate_journal_summary,
         fallback_exclusion_summary=fallback_exclusion_summary,
         mirror_runtime=mirror_runtime,
@@ -630,6 +714,7 @@ def write_edge_readiness_report(
     expectancy_path: str | Path,
     top_opportunities_path: str | Path,
     shadow_validation_path: str | Path,
+    topn_replay_quality_path: str | Path | None = None,
     candidate_journal_summary: str | Path | Mapping[str, Any] | None = None,
     fallback_exclusion_summary: str | Path | Mapping[str, Any] | None = None,
     output_dir: str | Path | None = None,
@@ -639,6 +724,7 @@ def write_edge_readiness_report(
         expectancy_path=expectancy_path,
         top_opportunities_path=top_opportunities_path,
         shadow_validation_path=shadow_validation_path,
+        topn_replay_quality_path=topn_replay_quality_path,
         candidate_journal_summary=candidate_journal_summary,
         fallback_exclusion_summary=fallback_exclusion_summary,
         mirror_runtime=mirror_runtime,

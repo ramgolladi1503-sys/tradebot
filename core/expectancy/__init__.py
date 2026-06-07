@@ -25,6 +25,16 @@ from .top_opportunity_selector import (
     select_top_opportunities,
     write_top_opportunities_report,
 )
+from .topn_replay_quality import (
+    TOPN_REPLAY_QUALITY_SCHEMA_VERSION,
+    TOPN_VERDICT_INSUFFICIENT_SAMPLE,
+    TOPN_VERDICT_MATCHES,
+    TOPN_VERDICT_OUTPERFORMS,
+    TOPN_VERDICT_UNDERPERFORMS,
+    TopNReplayQualityReport,
+    build_topn_replay_quality_report,
+    write_topn_replay_quality_report,
+)
 from .strategy_regime_expectancy import (
     STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION,
     StrategyRegimeExpectancyGroup,
@@ -79,6 +89,14 @@ __all__ = [
     "TopOpportunitySelectorReport",
     "select_top_opportunities",
     "write_top_opportunities_report",
+    "TOPN_REPLAY_QUALITY_SCHEMA_VERSION",
+    "TOPN_VERDICT_INSUFFICIENT_SAMPLE",
+    "TOPN_VERDICT_MATCHES",
+    "TOPN_VERDICT_OUTPERFORMS",
+    "TOPN_VERDICT_UNDERPERFORMS",
+    "TopNReplayQualityReport",
+    "build_topn_replay_quality_report",
+    "write_topn_replay_quality_report",
     "SETUP_FINGERPRINT_SCHEMA_VERSION",
     "SetupFingerprint",
     "attach_setup_fingerprint",
