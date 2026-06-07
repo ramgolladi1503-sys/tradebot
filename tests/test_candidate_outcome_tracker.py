@@ -65,6 +65,7 @@ def test_tracker_target_hit_builds_default_windows() -> None:
     assert all(row["append"] is False for row in rows)
     assert all(row["is_order_action"] is False for row in rows)
     assert all(row["broker_api_called"] is False for row in rows)
+    assert all(row["setup_id"].startswith("breakout__LIVE__") for row in rows)
 
 
 def test_tracker_stop_hit() -> None:
@@ -173,6 +174,8 @@ def test_tracker_cost_adjusted_r_equals_gross_minus_cost() -> None:
     assert row["fee_cost_abs"] > 0
     assert row["effective_entry"] is not None
     assert row["effective_exit"] is not None
+    assert row["setup_family"] == "breakout"
+    assert row["setup_id"].startswith("breakout__LIVE__")
 
 
 def test_tracker_write_failure_is_non_fatal(monkeypatch, tmp_path: Path) -> None:

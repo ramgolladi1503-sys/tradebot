@@ -24,6 +24,7 @@ from core.candidate_outcome_truth import (
     PriceObservation,
     build_candidate_outcome_truth,
 )
+from core.expectancy.setup_fingerprint import attach_setup_fingerprint
 from core.paths import runtime_dir
 
 logger = logging.getLogger(__name__)
@@ -313,6 +314,7 @@ def build_candidate_outcome_records(
                     "effective_exit": cost_model.effective_exit,
                 }
             )
+            payload = attach_setup_fingerprint(payload)
             outcome_rows.append(payload)
     outcome_rows.sort(
         key=lambda item: (

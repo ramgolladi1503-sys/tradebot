@@ -97,6 +97,10 @@ def test_executable_candidate_row_forces_read_only_safety_flags(tmp_path, monkey
     assert row["execution_behavior_changed"] is False
     assert row["execution_truth_blockers"] == []
     assert row["fallback_used"] is False
+    assert row["setup_id"].startswith("breakout__LIVE__")
+    assert row["setup_family"] == "breakout"
+    assert row["regime_bucket"] == "LIVE"
+    assert row["metadata"]["setup_fingerprint"]["setup_id"] == row["setup_id"]
 
 
 def test_blocked_candidate_row_preserves_blockers_and_truth():

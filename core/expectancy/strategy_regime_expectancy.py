@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping
 
 from core.candidate_outcome_tracker import candidate_outcome_tracker_path
 from core.candidate_outcome_truth import NOT_EXECUTABLE, STOP_HIT, TARGET_HIT, TIMEOUT
+from core.expectancy.setup_fingerprint import build_setup_fingerprint
 from core.paths import runtime_dir
 
 
@@ -155,6 +156,17 @@ def _group_key_label(parts: tuple[str, str, str, str, str, str]) -> str:
     return "|".join(parts)
 
 
+def _setup_group_key(row: Mapping[str, Any]) -> tuple[str]:
+    setup_id = _text(row.get("setup_id"))
+    if setup_id:
+        return (setup_id,)
+    return (build_setup_fingerprint(row).setup_id,)
+
+
+def _setup_group_key_label(parts: tuple[str]) -> str:
+    return parts[0]
+
+
 def _sort_key(row: Mapping[str, Any]) -> tuple[Any, ...]:
     signal_epoch = _float(row.get("signal_epoch"))
     candidate_id = _text(row.get("candidate_id"))
@@ -248,10 +260,15 @@ def _status_for_group(sample_count: int, avg_cost_adjusted_r: float) -> tuple[st
     return "WATCH", "positive_expectancy_but_keep_threshold_not_met"
 
 
-def _group_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str, str, str, str, str], list[dict[str, Any]]]:
-    grouped: dict[tuple[str, str, str, str, str, str], list[dict[str, Any]]] = {}
+def _group_rows(
+    rows: list[dict[str, Any]],
+    *,
+    group_by_setup_id: bool = False,
+) -> dict[tuple[str, ...], list[dict[str, Any]]]:
+    grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for row in rows:
-        grouped.setdefault(_group_key(row), []).append(row)
+        key = _setup_group_key(row) if group_by_setup_id else _group_key(row)
+        grouped.setdefault(key, []).append(row)
     for key, group_rows in grouped.items():
         group_rows.sort(key=_sort_key)
     return grouped
@@ -267,7 +284,19 @@ def _numeric_values(rows: list[Mapping[str, Any]], key: str) -> list[float]:
     return values
 
 
-def _group_metrics(key: tuple[str, str, str, str, str, str], rows: list[dict[str, Any]]) -> StrategyRegimeExpectancyGroup:
+def _group_metrics(key: tuple[str, ...], rows: list[dict[str, Any]]) -> StrategyRegimeExpectancyGroup:
+    if len(key) == 1:
+        first_row = rows[0] if rows else {}
+        group_key = _setup_group_key_label((str(key[0]),))
+        strategy_family = _slug(first_row.get("strategy_family"))
+        regime = _slug(first_row.get("regime"))
+        index = _slug(first_row.get("index"))
+        expiry_type = _slug(first_row.get("expiry_type"))
+        option_type = _slug(first_row.get("option_type"))
+        direction = _slug(first_row.get("direction"))
+    else:
+        group_key = _group_key_label(key)  # type: ignore[arg-type]
+        strategy_family, regime, index, expiry_type, option_type, direction = key  # type: ignore[misc]
     sample_count = len(rows)
     fallback_excluded_count = _count_rows(rows, predicate=_is_fallback)
     executable_rows = [row for row in rows if _is_executable_outcome(row)]
@@ -304,13 +333,13 @@ def _group_metrics(key: tuple[str, str, str, str, str, str], rows: list[dict[str
     keep_watch_kill_status, status_reason = _status_for_group(sample_count, avg_cost_adjusted_r)
     return StrategyRegimeExpectancyGroup(
         schema_version=STRATEGY_REGIME_EXPECTANCY_SCHEMA_VERSION,
-        group_key=_group_key_label(key),
-        strategy_family=key[0],
-        regime=key[1],
-        index=key[2],
-        expiry_type=key[3],
-        option_type=key[4],
-        direction=key[5],
+        group_key=group_key,
+        strategy_family=strategy_family,
+        regime=regime,
+        index=index,
+        expiry_type=expiry_type,
+        option_type=option_type,
+        direction=direction,
         sample_count=sample_count,
         executable_count=exec_count,
         not_executable_count=len(not_executable_rows),
@@ -337,9 +366,11 @@ def _group_metrics(key: tuple[str, str, str, str, str, str], rows: list[dict[str
 
 def aggregate_strategy_regime_expectancy(
     candidate_outcomes: str | Path | Iterable[Mapping[str, Any]],
+    *,
+    group_by_setup_id: bool = False,
 ) -> StrategyRegimeExpectancyReport:
     rows = load_candidate_outcomes(candidate_outcomes)
-    grouped_rows = _group_rows(rows)
+    grouped_rows = _group_rows(rows, group_by_setup_id=group_by_setup_id)
     groups = tuple(
         _group_metrics(key, grouped_rows[key])
         for key in sorted(grouped_rows.keys())
@@ -383,8 +414,10 @@ def _markdown_table(rows: tuple[StrategyRegimeExpectancyGroup, ...]) -> str:
 def write_strategy_regime_expectancy_report(
     candidate_outcomes: str | Path | Iterable[Mapping[str, Any]],
     output_dir: str | Path | None = None,
+    *,
+    group_by_setup_id: bool = False,
 ) -> tuple[Path, Path, StrategyRegimeExpectancyReport]:
-    report = aggregate_strategy_regime_expectancy(candidate_outcomes)
+    report = aggregate_strategy_regime_expectancy(candidate_outcomes, group_by_setup_id=group_by_setup_id)
     root = Path(output_dir).expanduser() if output_dir is not None else runtime_dir() / _DEFAULT_EXPECTANCY_SUBDIR
     root.mkdir(parents=True, exist_ok=True)
     json_path = root / _DEFAULT_EXPECTANCY_FILENAME_JSON
@@ -432,8 +465,14 @@ def write_strategy_regime_expectancy_report(
 def write_strategy_regime_expectancy_reports(
     candidate_outcomes: str | Path | Iterable[Mapping[str, Any]],
     output_dir: str | Path | None = None,
+    *,
+    group_by_setup_id: bool = False,
 ) -> tuple[Path, Path]:
-    json_path, md_path, _ = write_strategy_regime_expectancy_report(candidate_outcomes, output_dir=output_dir)
+    json_path, md_path, _ = write_strategy_regime_expectancy_report(
+        candidate_outcomes,
+        output_dir=output_dir,
+        group_by_setup_id=group_by_setup_id,
+    )
     return json_path, md_path
 
 

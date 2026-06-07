@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from core.expectancy.setup_fingerprint import attach_setup_fingerprint
 from core.log_writer import get_jsonl_writer
 from core.paths import runtime_dir
 
@@ -251,6 +252,8 @@ def _journal_row(payload: Mapping[str, Any], *, journal_event: str, created_at: 
     row["final_emit_block_reason"] = row.get("final_emit_block_reason")
     row["reject_reason"] = row.get("reject_reason")
     row["reason"] = row.get("reason")
+
+    row = attach_setup_fingerprint(row)
 
     row["read_only"] = True
     row["append"] = True
