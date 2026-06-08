@@ -215,6 +215,24 @@ def _stale_option_subscription_consecutive_windows_required() -> int:
     return max(1, min(10, n))
 
 
+def _latest_feed_runtime_truth_snapshot() -> dict[str, object]:
+    candidates = (
+        logs_dir() / "feed_runtime_latest.json",
+        repo_root() / "logs" / "feed_runtime_latest.json",
+        repo_root() / ".runtime" / "feed_runtime_latest.json",
+    )
+    for path in candidates:
+        try:
+            if not path.exists() or not path.is_file():
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
 def _prune_stale_option_subscription_tokens(
     *,
     tokens: list[int],
@@ -1515,15 +1533,43 @@ def _should_mutate_stale_option_symbol_subscription(
 def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) -> tuple[bool, str, dict[str, object]]:
     current_runtime_state = str(_RUNTIME_STATE or "").strip().upper()
     reconnect_blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower()
+    now_value = float(now_epoch) if now_epoch is not None else None
+    ws_connected = _ws_connected_state()
+    option_state = _option_runtime_state(
+        now_epoch=float(now_value) if now_value is not None else float(now_epoch or 0.0),
+        tokens=list(_LAST_TOKENS or []),
+        expected_counts_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+        min_required_by_symbol=dict(_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL or {}),
+        ws_connected=ws_connected,
+    )
+    feed_block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
+    active_blockers_by_symbol = dict(option_state.get("active_blockers_by_symbol") or {})
+    option_blockers = sorted(
+        {
+            str(reason_code).strip().upper()
+            for reason_code in feed_block_reason_by_symbol.values()
+            if str(reason_code or "").strip() and str(reason_code or "").strip().upper() != "OK"
+        }
+    )
+    if not option_blockers:
+        for blockers in active_blockers_by_symbol.values():
+            for blocker in blockers or []:
+                blocker_text = str(blocker or "").strip().upper()
+                if blocker_text and blocker_text != "OK":
+                    option_blockers.append(blocker_text)
+        option_blockers = sorted(set(option_blockers))
     guard_payload: dict[str, object] = {
         "reason": str(reason or "").strip(),
         "runtime_state": current_runtime_state or "UNKNOWN",
-        "ws_connected": _ws_connected_state(),
+        "ws_connected": ws_connected,
         "reconnect_blocked_reason": reconnect_blocked_reason or None,
         "stop_requested": bool(_STOP_REQUESTED),
         "reactor_terminal_restart_block_active": _reactor_terminal_restart_block_active(),
         "reconnect_recovery_blocked_active": _reconnect_recovery_blocked_active(),
-        "now_epoch": float(now_epoch) if now_epoch is not None else None,
+        "now_epoch": now_value,
+        "feed_block_reason_by_symbol": feed_block_reason_by_symbol,
+        "active_blockers_by_symbol": active_blockers_by_symbol,
+        "option_blockers": option_blockers,
     }
     if bool(_STOP_REQUESTED):
         return False, "stop_requested", guard_payload
@@ -1531,16 +1577,15 @@ def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) ->
         return False, reconnect_blocked_reason or "reconnect_recovery_blocked", guard_payload
     if _reactor_terminal_restart_block_active():
         return False, reconnect_blocked_reason or "reactor_terminal_restart_block", guard_payload
-    if current_runtime_state in {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "IMPORT_MISSING", "STOPPED", "STOPPING"}:
+    if current_runtime_state in {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "IMPORT_MISSING", "STOPPED", "STOPPING", "DEGRADED"}:
         return False, current_runtime_state.lower(), guard_payload
     if _KITE_TICKER is None:
         return False, "ws_not_running", guard_payload
-    ws_connected = _ws_connected_state()
     if ws_connected is not True:
         return False, "ws_disconnected", guard_payload
     if _LAST_WS_TICK_EPOCH <= 0.0:
         return False, "no_ws_ticks", guard_payload
-    if now_epoch is not None and float(now_epoch) - float(_LAST_WS_TICK_EPOCH) > float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))) * 3.0:
+    if now_value is not None and now_value - float(_LAST_WS_TICK_EPOCH) > float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))) * 3.0:
         return False, "ws_tick_stale", guard_payload
     return True, "ok", guard_payload
 

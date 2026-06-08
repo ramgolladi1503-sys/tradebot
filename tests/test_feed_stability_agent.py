@@ -37,6 +37,76 @@ def test_feed_stability_agent_flags_overreactive_mutation(tmp_path: Path):
     assert payload["broker_api_called"] is False
 
 
+def test_feed_stability_agent_marks_dead_ws_mutation_as_blocker(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        "\n".join(
+            [
+                '{"event": "FEED_REBALANCE_APPLIED", "subscribe_count": 25, "unsubscribe_count": 1, "source": "on_error", "ws_connected": false, "runtime_state": "RECOVERY_BLOCKED"}',
+                '{"event": "FEED_REBALANCE_SKIPPED", "guard_reason": "ws_disconnected", "subscribe_count": 0, "unsubscribe_count": 0}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "runtime_state": "RECOVERY_BLOCKED",
+                "feed_truth_state": "DEAD",
+                "ws_connected": False,
+                "option_ticks_received_count_by_symbol": {"BANKNIFTY": 24},
+                "option_tokens_subscribed_count_by_symbol": {"BANKNIFTY": 25},
+                "option_feed_block_reason_by_symbol": {"BANKNIFTY": "NO_LIVE_OPTION_FEED"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = analyze_feed_stability(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["verdict"] == "BLOCKER"
+    assert payload["findings"][0]["code"] == "MUTATION_ON_DEAD_WS"
+    assert payload["metrics"]["current_session_rebalance_applied_count"] == 1
+    assert payload["metrics"]["current_session_rebalance_skipped_count"] == 1
+    assert payload["metrics"]["current_session_mutation_on_dead_ws_count"] == 1
+    assert payload["metrics"]["current_session_feed_ltp_stale_count"] >= 0
+    assert payload["metrics"]["current_session_feed_depth_stale_count"] >= 0
+    assert payload["metrics"]["current_session_slo_feed_stale_count"] >= 0
+
+
+def test_feed_stability_agent_treats_skipped_rebalance_as_safety_positive(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        '{"event": "FEED_REBALANCE_SKIPPED", "guard_reason": "ws_disconnected", "subscribe_count": 0, "unsubscribe_count": 0}\n',
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "runtime_state": "RUNNING",
+                "feed_truth_state": "LIVE",
+                "ws_connected": True,
+                "option_ticks_received_count_by_symbol": {"BANKNIFTY": 24},
+                "option_tokens_subscribed_count_by_symbol": {"BANKNIFTY": 25},
+                "option_feed_block_reason_by_symbol": {"BANKNIFTY": "OK"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = analyze_feed_stability(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["verdict"] in {"PASS", "WARN"}
+    assert payload["findings"][0]["code"] != "MUTATION_ON_DEAD_WS"
+
+
 def test_feed_stability_agent_parses_json_watchdog_lines(tmp_path: Path):
     runtime_dir = tmp_path / ".runtime"
     logs_dir = tmp_path / "logs"

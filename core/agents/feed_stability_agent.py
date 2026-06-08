@@ -57,8 +57,18 @@ def analyze_feed_stability(
 
     current_churn_count = 0
     stale_churn_count = 0
+    current_rebalance_applied_count = 0
+    current_rebalance_skipped_count = 0
+    stale_rebalance_applied_count = 0
+    stale_rebalance_skipped_count = 0
     current_ws1006_count = 0
     stale_ws1006_count = 0
+    current_ltp_stale_count = 0
+    stale_ltp_stale_count = 0
+    current_depth_stale_count = 0
+    stale_depth_stale_count = 0
+    current_mutation_on_dead_ws_count = 0
+    current_overreactive_stale_option_mutation_count = 0
     parsed_lines: list[tuple[str, dict[str, object]]] = []
     for line in text.splitlines():
         fields = extract_line_fields(line)
@@ -120,13 +130,35 @@ def analyze_feed_stability(
         if is_churn:
             if scope == "current_session":
                 current_churn_count += 1
+                if event == "FEED_REBALANCE_APPLIED" or "FEED_REBALANCE_APPLIED" in line:
+                    current_rebalance_applied_count += 1
+                    if (not bool(feed_runtime.get("ws_connected"))) or runtime_state in {"RECOVERY_BLOCKED", "DEGRADED"} or feed_truth_state in {"DEAD", "RECOVERY_BLOCKED"}:
+                        current_mutation_on_dead_ws_count += 1
+                if event == "FEED_REBALANCE_SKIPPED" or "FEED_REBALANCE_SKIPPED" in line:
+                    current_rebalance_skipped_count += 1
             elif scope == "historical_tail":
                 stale_churn_count += 1
+                if event == "FEED_REBALANCE_APPLIED" or "FEED_REBALANCE_APPLIED" in line:
+                    stale_rebalance_applied_count += 1
+                if event == "FEED_REBALANCE_SKIPPED" or "FEED_REBALANCE_SKIPPED" in line:
+                    stale_rebalance_skipped_count += 1
         if is_ws1006:
             if scope == "current_session":
                 current_ws1006_count += 1
             elif scope == "historical_tail":
                 stale_ws1006_count += 1
+        if "FEED_LTP_STALE" in event or "FEED_LTP_STALE" in line:
+            if scope == "current_session":
+                current_ltp_stale_count += 1
+            elif scope == "historical_tail":
+                stale_ltp_stale_count += 1
+        if "FEED_DEPTH_STALE" in event or "FEED_DEPTH_STALE" in line:
+            if scope == "current_session":
+                current_depth_stale_count += 1
+            elif scope == "historical_tail":
+                stale_depth_stale_count += 1
+        if current_feed_fresh and scope == "current_session" and is_churn and fresh_ratio_min is not None and fresh_ratio_min > 0.90:
+            current_overreactive_stale_option_mutation_count += 1
 
     metrics = {
         "feed_connect_count": sum("FEED_CONNECT" in (item.get("excerpt") or "") for item in lines),
@@ -154,6 +186,13 @@ def analyze_feed_stability(
         "current_session_ws1006_count": current_ws1006_count,
         "historical_feed_churn_count": stale_churn_count,
         "historical_feed_ws1006_count": stale_ws1006_count,
+        "current_session_rebalance_applied_count": current_rebalance_applied_count,
+        "current_session_rebalance_skipped_count": current_rebalance_skipped_count,
+        "current_session_mutation_on_dead_ws_count": current_mutation_on_dead_ws_count,
+        "current_session_overreactive_stale_option_mutation_count": current_overreactive_stale_option_mutation_count,
+        "current_session_slo_feed_stale_count": current_ltp_stale_count + current_depth_stale_count,
+        "current_session_feed_ltp_stale_count": current_ltp_stale_count,
+        "current_session_feed_depth_stale_count": current_depth_stale_count,
     }
 
     findings = []
@@ -166,6 +205,19 @@ def analyze_feed_stability(
                 message="Rebalance activity is correlated with a WS1006 disconnect.",
                 confidence="HIGH",
                 recommended_action="Inspect stale-option refresh and mutation guard ordering.",
+                files_likely_involved=("core/kite_depth_ws.py",),
+                tests_needed=("tests/test_feed_stability_agent.py",),
+            )
+        )
+    elif current_mutation_on_dead_ws_count:
+        findings.append(
+            AgentFinding(
+                code="MUTATION_ON_DEAD_WS",
+                severity="BLOCKER",
+                layer="feed_stability",
+                message="Subscription mutation appeared while websocket or feed truth was unavailable.",
+                confidence="HIGH",
+                recommended_action="Fail closed when WS is disconnected or feed truth is degraded.",
                 files_likely_involved=("core/kite_depth_ws.py",),
                 tests_needed=("tests/test_feed_stability_agent.py",),
             )
@@ -235,20 +287,6 @@ def analyze_feed_stability(
                 tests_needed=("tests/test_feed_stability_agent.py",),
             )
         )
-    if str(feed_runtime.get("ws_connected")).lower() == "false" and any("SUBSCRIBE" in (item.get("excerpt") or "").upper() for item in lines):
-        findings.append(
-            AgentFinding(
-                code="MUTATION_ON_DEAD_WS",
-                severity="BLOCKER",
-                layer="feed_stability",
-                message="Subscription mutation appeared while websocket was disconnected.",
-                confidence="HIGH",
-                recommended_action="Fail closed when WS is disconnected.",
-                files_likely_involved=("core/kite_depth_ws.py",),
-                tests_needed=("tests/test_feed_stability_agent.py",),
-            )
-        )
-
     verdict = "BLOCKER" if any(item.severity == "BLOCKER" for item in findings) else ("WARN" if findings else "PASS")
     confidence = "HIGH" if findings else "LOW"
     if verdict != "BLOCKER" and (
