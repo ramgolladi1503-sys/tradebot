@@ -128,13 +128,12 @@ class OpportunityScoreRecord:
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class OpportunityScoreReport:
     """Read-only opportunity score report."""
 
     schema_version: int
     read_only: bool
-    is_order_action: bool
     append: bool
     score_count: int
     score_eligible_count: int
@@ -149,12 +148,69 @@ class OpportunityScoreReport:
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
 
+    def __init__(
+        self,
+        *,
+        schema_version: int,
+        read_only: bool,
+        append: bool,
+        score_count: int,
+        score_eligible_count: int,
+        needs_confirmation_count: int,
+        advisory_count: int,
+        suppressed_count: int,
+        no_trade_count: int,
+        scores: tuple[OpportunityScoreRecord, ...],
+        blockers: tuple[str, ...],
+        warnings: tuple[str, ...],
+        safety_flags: tuple[str, ...],
+        metadata: dict[str, Any] | None = None,
+        generated_epoch: float | None = None,
+        **_legacy_kwargs: Any,
+    ) -> None:
+        # Older tests and helper factories pass safety kwargs into this report.
+        # Accept them for compatibility, but never trust or persist their values.
+        object.__setattr__(self, "schema_version", schema_version)
+        object.__setattr__(self, "read_only", read_only)
+        object.__setattr__(self, "append", append)
+        object.__setattr__(self, "score_count", score_count)
+        object.__setattr__(self, "score_eligible_count", score_eligible_count)
+        object.__setattr__(self, "needs_confirmation_count", needs_confirmation_count)
+        object.__setattr__(self, "advisory_count", advisory_count)
+        object.__setattr__(self, "suppressed_count", suppressed_count)
+        object.__setattr__(self, "no_trade_count", no_trade_count)
+        object.__setattr__(self, "scores", scores)
+        object.__setattr__(self, "blockers", blockers)
+        object.__setattr__(self, "warnings", warnings)
+        object.__setattr__(self, "safety_flags", safety_flags)
+        object.__setattr__(self, "metadata", dict(metadata or {}))
+        object.__setattr__(self, "generated_epoch", time.time() if generated_epoch is None else generated_epoch)
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
+
+    @property
+    def live_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_order_action(self) -> bool:
+        return False
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "read_only": self.read_only,
-            "is_order_action": self.is_order_action,
+            "is_order_action": False,
             "append": self.append,
+            "broker_api_called": False,
+            "live_order_action": False,
+            "broker_order_action": False,
             "score_count": self.score_count,
             "score_eligible_count": self.score_eligible_count,
             "needs_confirmation_count": self.needs_confirmation_count,
@@ -176,8 +232,14 @@ class OpportunityScoreReport:
 def score_opportunities(
     candidates: Iterable[StrategyCandidate],
     downgrade_report: HardDowngradeReport | Iterable[HardDowngradeDecision],
+    *,
+    scoring_profile: Any = None,
 ) -> OpportunityScoreReport:
-    """Score candidates using downgrade decisions as the safety source of truth."""
+    """Score candidates using downgrade decisions as the safety source of truth.
+
+    ``scoring_profile`` is intentionally opt-in. When omitted, the existing fixed
+    component weights remain unchanged.
+    """
 
     candidate_tuple = tuple(candidates or ())
     for candidate in candidate_tuple:
@@ -190,7 +252,11 @@ def score_opportunities(
     if missing:
         raise ValueError(f"missing_downgrade_decision:{','.join(sorted(missing))}")
 
-    records = tuple(score_candidate(candidate, decision_by_id[candidate.strategy_id]) for candidate in candidate_tuple)
+    component_weights = _component_weights(scoring_profile)
+    records = tuple(
+        score_candidate(candidate, decision_by_id[candidate.strategy_id], component_weights=component_weights)
+        for candidate in candidate_tuple
+    )
     blockers = tuple(sorted(set(blocker for record in records for blocker in record.blockers)))
     warnings = tuple(sorted(set(warning for record in records for warning in record.warnings)))
     safety_flags = tuple(sorted(set(flag for record in records for flag in record.safety_flags)))
@@ -198,7 +264,6 @@ def score_opportunities(
     return OpportunityScoreReport(
         schema_version=SCORING_SCHEMA_VERSION,
         read_only=True,
-        is_order_action=False,
         append=False,
         score_count=len(records),
         score_eligible_count=sum(1 for record in records if record.score_eligibility == SCORE_ELIGIBLE),
@@ -213,8 +278,10 @@ def score_opportunities(
         metadata={
             "scorer": "opportunity_score_v1",
             "scope": "read_only_no_execution_no_ranking",
-            "component_weights": dict(COMPONENT_WEIGHTS),
-            "bucket_score_caps": dict(BUCKET_SCORE_CAPS),
+            "component_weights": dict(component_weights),
+            "base_component_weights": dict(COMPONENT_WEIGHTS),
+            "scoring_profile_applied": bool(scoring_profile is not None),
+            "scoring_profile_name": _profile_name(scoring_profile),
             "source_downgrade_engine": getattr(downgrade_report, "metadata", {}).get("downgrade_engine")
             if isinstance(downgrade_report, HardDowngradeReport)
             else None,
@@ -222,7 +289,12 @@ def score_opportunities(
     )
 
 
-def score_candidate(candidate: StrategyCandidate, decision: HardDowngradeDecision) -> OpportunityScoreRecord:
+def score_candidate(
+    candidate: StrategyCandidate,
+    decision: HardDowngradeDecision,
+    *,
+    component_weights: Mapping[str, float] | None = None,
+) -> OpportunityScoreRecord:
     """Score a single candidate with a matching hard-downgrade decision."""
 
     if not isinstance(candidate, StrategyCandidate):
@@ -232,8 +304,9 @@ def score_candidate(candidate: StrategyCandidate, decision: HardDowngradeDecisio
     if candidate.strategy_id != decision.strategy_id:
         raise ValueError("candidate_and_downgrade_strategy_id_mismatch")
 
+    weights = _component_weights(component_weights)
     component_scores = _component_scores(candidate)
-    weighted = {name: _round(component_scores[name] * COMPONENT_WEIGHTS[name]) for name in COMPONENT_WEIGHTS}
+    weighted = {name: _round(component_scores[name] * weights[name]) for name in weights}
     base_score = _round(sum(weighted.values()))
     trap_penalty = _round(clamp(float(candidate.trap_risk_score)) * 0.15)
     penalties = _penalties(decision)
@@ -261,7 +334,7 @@ def score_candidate(candidate: StrategyCandidate, decision: HardDowngradeDecisio
         warnings=tuple(sorted(decision.warnings)),
         breakdown=OpportunityScoreBreakdown(
             component_scores=component_scores,
-            component_weights=dict(COMPONENT_WEIGHTS),
+            component_weights=dict(weights),
             weighted_component_scores=weighted,
             base_score=base_score,
             penalties=penalties,
@@ -284,6 +357,31 @@ def _component_scores(candidate: StrategyCandidate) -> dict[str, float]:
         "confluence": _round(clamp(candidate.confluence_score)),
         "volatility": _round(clamp(candidate.volatility_score)),
     }
+
+
+def _component_weights(scoring_profile: Any = None) -> dict[str, float]:
+    if scoring_profile is None:
+        return dict(COMPONENT_WEIGHTS)
+    if isinstance(scoring_profile, Mapping):
+        candidate_weights = dict(scoring_profile)
+    else:
+        candidate_weights = dict(getattr(scoring_profile, "adjusted_component_weights", {}) or {})
+    normalized = {str(key).strip(): clamp(value) for key, value in candidate_weights.items()}
+    if set(normalized) != set(COMPONENT_WEIGHTS):
+        raise ValueError("opportunity_scoring_profile_component_mismatch")
+    total = sum(normalized.values())
+    if total <= 0.0:
+        raise ValueError("opportunity_scoring_profile_weight_sum_zero")
+    return {key: _round(normalized[key] / total) for key in sorted(normalized)}
+
+
+def _profile_name(scoring_profile: Any = None) -> str | None:
+    if scoring_profile is None:
+        return None
+    value = getattr(scoring_profile, "primary_regime", None) or getattr(scoring_profile, "profile_name", None)
+    if value:
+        return str(value)
+    return "custom_component_weights"
 
 
 def _penalties(decision: HardDowngradeDecision) -> dict[str, float]:
@@ -358,6 +456,7 @@ __all__ = [
     "OpportunityScoreBreakdown",
     "OpportunityScoreRecord",
     "OpportunityScoreReport",
+    "clamp",
     "score_candidate",
     "score_opportunities",
 ]
