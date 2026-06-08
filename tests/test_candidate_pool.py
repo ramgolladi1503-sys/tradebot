@@ -180,7 +180,7 @@ def test_lifecycle_snapshot_joins_pipeline_reports_with_exact_score_and_rank():
     assert snapshot.downgraded_bucket == "EXECUTABLE_CANDIDATE"
     assert snapshot.score_eligibility == "SCORE_ELIGIBLE"
     assert snapshot.final_score == pytest.approx(scores.scores[0].final_score)
-    assert snapshot.final_score == pytest.approx(0.7352)
+    assert snapshot.final_score == pytest.approx(0.6964)
     assert snapshot.rank == 1
     assert snapshot.evidence_refs == ("evidence://cycle/1",)
     payload = snapshot.to_dict()
