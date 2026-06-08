@@ -51,13 +51,13 @@ def test_expired_approval_cannot_be_consumed_and_transitions_expired(monkeypatch
     ok, reason = create_proposal(
         intent_hash=intent_hash,
         approver_id="approver-1",
-        expires_at=now + 1,
+        expires_at=now + 120,
         channel="telegram",
         metadata={},
     )
     assert ok is True, reason
     approve(intent_hash, "approver-1")
-    ok, reason = consume_valid_approval(intent_hash, now=now + 2)
+    ok, reason = consume_valid_approval(intent_hash, now=now + 121)
     assert ok is False
     assert reason == "approval_expired"
     assert _db_status(db_path, intent_hash) == "EXPIRED"
