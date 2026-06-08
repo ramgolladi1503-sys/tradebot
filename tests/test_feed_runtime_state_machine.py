@@ -62,6 +62,66 @@ def test_feedtruth_degrades_when_ticks_or_depth_are_stale():
     assert degraded.option_ticks_verified is False
 
 
+def test_feedtruth_treats_recoverable_ws1006_as_degraded_not_restart_required():
+    state = build_canonical_feed_truth_state({
+        "runtime_state": "RECONNECTING",
+        "session_id": "S1",
+        "ws_connected": False,
+        "recovery_in_progress": True,
+        "recovery_state": "RECOVERING_WS_DROP",
+        "feed_error_code": 1006,
+        "ws_error_code": 1006,
+        "ws_error_reason": "connection was closed uncleanly (peer dropped)",
+        "latest_ltp_age_sec": 0.4,
+        "latest_depth_age_sec": 0.2,
+        "latest_option_tick_age_sec": 0.1,
+        "underlying_tick_fresh": True,
+        "depth_fresh": True,
+        "option_ticks_verified": False,
+        "subscribed_option_tokens_count": 12,
+        "verified_option_symbols": ["NIFTY"],
+        "missing_option_symbols": ["BANKNIFTY"],
+    })
+
+    assert state.state == "DEGRADED"
+    assert state.reason_code == "RECONNECTING"
+    assert state.recovery_state == "RECOVERING_WS_DROP"
+    assert state.ws_fault_class == "RECOVERABLE_WS_DROP"
+    assert state.process_restart_required is False
+    assert state.recovery_blocked is False
+
+
+def test_feedtruth_marks_terminal_main_loop_termination_as_restart_required():
+    state = build_canonical_feed_truth_state({
+        "runtime_state": "RECOVERY_BLOCKED",
+        "session_id": "S1",
+        "ws_connected": False,
+        "recovery_blocked": True,
+        "process_restart_required": True,
+        "recovery_state": "TERMINAL",
+        "feed_error_code": 1006,
+        "reconnect_blocked_reason": "reactor_not_restartable_process_restart_required",
+        "ws_error_code": 1006,
+        "ws_error_reason": "main loop terminated after reactor shutdown",
+        "latest_ltp_age_sec": 0.4,
+        "latest_depth_age_sec": 0.2,
+        "latest_option_tick_age_sec": 0.1,
+        "underlying_tick_fresh": True,
+        "depth_fresh": True,
+        "option_ticks_verified": False,
+        "subscribed_option_tokens_count": 12,
+        "verified_option_symbols": ["NIFTY"],
+        "missing_option_symbols": ["BANKNIFTY"],
+    })
+
+    assert state.state == "RESTART_REQUIRED"
+    assert state.reason_code in {"WS1006_PROCESS_RESTART_REQUIRED", "RESTART_REQUIRED"}
+    assert state.recovery_state == "TERMINAL"
+    assert state.ws_fault_class == "TERMINAL"
+    assert state.process_restart_required is True
+    assert state.recovery_blocked is True
+
+
 def test_feedtruth_restart_required_writes_restart_artifact(tmp_path: Path):
     state = build_canonical_feed_truth_state(
         {"feed_error_code": 1006, "session_id": "S1", "ws_connected": False},

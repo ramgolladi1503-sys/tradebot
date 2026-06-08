@@ -31,7 +31,11 @@ def test_write_ranked_pipeline_runtime_evidence_invokes_writer_with_read_only_re
             {"trade_id": "SENSEX_PUT", "symbol": "SENSEX"},
         ],
         market_open=True,
-        feed_truth_payload={"feed_truth_state": "LIVE", "feed_truth_reason_code": "ok"},
+        feed_truth_payload={
+            "feed_truth_state": "",
+            "feed_truth_reason_code": "",
+            "canonical_feed_truth": {"state": "VERIFIED_HEALTHY", "reason_code": "LIVE"},
+        },
         indicator_payload={"indicator_readiness_state": "READY", "indicator_readiness_reason_code": "ok"},
         cycle_blockers={"RISK_HALT": 1},
     )
@@ -47,6 +51,8 @@ def test_write_ranked_pipeline_runtime_evidence_invokes_writer_with_read_only_re
     assert report["metadata"]["orchestrator"] == "ranked_opportunity_pipeline_v1"
     assert report["metadata"]["producer"] == "orchestrator"
     assert report["blocker_counts"] == {"RISK_HALT": 1}
+    assert report["feed_truth_state"] == "VERIFIED_HEALTHY"
+    assert report["feed_truth_reason_code"] == "LIVE"
 
 
 def test_write_ranked_pipeline_runtime_evidence_does_not_touch_broker_or_order_paths(monkeypatch, tmp_path):

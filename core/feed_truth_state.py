@@ -16,6 +16,9 @@ AUTH_BLOCKED = "AUTH_BLOCKED"
 RESTARTING = "RESTARTING"
 RESTART_FAILED = "RESTART_FAILED"
 RESTART_VERIFY_FAILED = "RESTART_VERIFY_FAILED"
+RECONNECTING = "RECONNECTING"
+RESUBSCRIBING = "RESUBSCRIBING"
+RECOVERING_WS_DROP = "RECOVERING_WS_DROP"
 
 _ALL_STATES = {
     MARKET_CLOSED,
@@ -27,6 +30,9 @@ _ALL_STATES = {
     RESTARTING,
     RESTART_FAILED,
     RESTART_VERIFY_FAILED,
+    RECONNECTING,
+    RESUBSCRIBING,
+    RECOVERING_WS_DROP,
 }
 
 
@@ -165,6 +171,15 @@ def classify_feed_truth_state(
         )
 
     ws_connected = _bool_or_none(snapshot.get("effective_ws_connected", snapshot.get("ws_connected")))
+    if runtime_state in {RECONNECTING, RESUBSCRIBING, RECOVERING_WS_DROP}:
+        return FeedTruthStateDecision(
+            state=DEGRADED,
+            reason_code=runtime_state or "recovering",
+            reasons=(runtime_state or "recovering",),
+            feed_health_truth=None,
+            context={"runtime_state": runtime_state, "ws_connected": ws_connected},
+        )
+
     if ws_connected is False:
         return FeedTruthStateDecision(
             state=DEAD,
@@ -259,4 +274,3 @@ def classify_feed_truth_state(
 def normalize_feed_truth_state(value: Any) -> str:
     state = _normalize_state(value)
     return state if state in _ALL_STATES else DEAD
-

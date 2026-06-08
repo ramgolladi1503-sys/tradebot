@@ -17,6 +17,7 @@ from core.tick_store import get_last_tick, get_ltp, get_max_tick_epoch, insert_t
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed_runtime import build_canonical_feed_truth_state
+from core.feed_recovery_coordinator import FeedRecoveryCoordinator
 from core.auth_manager import (
     clear_auth_required_state,
     invalidate_cache,
@@ -139,6 +140,7 @@ _RECOVERY_IN_PROGRESS: bool = False
 _WS1006_RECOVERABLE_ATTEMPTS: int = 0
 _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH: float = 0.0
 _WS1006_RECOVERABLE_LAST_REASON: str = ""
+_FEED_RECOVERY_COORDINATOR = FeedRecoveryCoordinator()
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
 # Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
@@ -1290,6 +1292,37 @@ def _clear_ws1006_recovery_state() -> None:
     _WS1006_RECOVERABLE_ATTEMPTS = 0
     _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH = 0.0
     _WS1006_RECOVERABLE_LAST_REASON = ""
+    try:
+        _FEED_RECOVERY_COORDINATOR.reset()
+    except Exception:
+        pass
+
+
+def _sync_ws1006_recovery_state_from_coordinator() -> None:
+    global _RECOVERY_IN_PROGRESS, _WS1006_RECOVERABLE_ATTEMPTS, _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH, _WS1006_RECOVERABLE_LAST_REASON
+    state = getattr(_FEED_RECOVERY_COORDINATOR, "state", None)
+    if state is None:
+        return
+    _RECOVERY_IN_PROGRESS = bool(getattr(state, "recovery_in_progress", False))
+    _WS1006_RECOVERABLE_ATTEMPTS = int(getattr(state, "recovery_attempt_count", 0) or 0)
+    _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH = float(
+        getattr(state, "recovery_started_epoch", 0.0) or getattr(state, "last_recovery_action_epoch", 0.0) or 0.0
+    )
+    _WS1006_RECOVERABLE_LAST_REASON = str(getattr(state, "recovery_reason", "") or "")
+
+
+def _emit_feed_recovery_events(events: list[str], *, source: str, code: int | None, reason: str | None) -> None:
+    payload = {
+        "source": source,
+        "code": code,
+        "reason": str(reason or ""),
+        "recovery_in_progress": bool(_RECOVERY_IN_PROGRESS),
+        "ws1006_recovery_attempt_count": int(_WS1006_RECOVERABLE_ATTEMPTS or 0),
+    }
+    for event in list(events or []):
+        _log_ws(event, payload)
+        if event == "FEED_WS_1006_RECOVERY_ATTEMPT":
+            _log_ws("FEED_WS_RECOVERY_ATTEMPT", payload)
 
 
 def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
@@ -1308,59 +1341,24 @@ def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
 
 
 def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str | None) -> bool:
-    global _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _RECOVERY_IN_PROGRESS
-    global _WS1006_RECOVERABLE_ATTEMPTS, _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH, _WS1006_RECOVERABLE_LAST_REASON
+    global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
     category = _ws1006_fault_category(code=code, reason_text=reason)
     if category != "RECOVERABLE_WS_DROP":
         return False
-    if _RECOVERY_IN_PROGRESS:
-        _log_ws(
-            "FEED_RECOVERY_ALREADY_IN_PROGRESS",
-            {
-                "source": source,
-                "code": code,
-                "reason": str(reason or ""),
-                "ws1006_recovery_attempt_count": int(_WS1006_RECOVERABLE_ATTEMPTS or 0),
-            },
-        )
-        return True
-    now_epoch = float(now_utc_epoch())
     reason_text = str(reason or "")
-    attempts = int(_WS1006_RECOVERABLE_ATTEMPTS or 0)
-    max_attempts = _ws1006_recoverable_max_attempts_per_session()
-    cooldown_sec = _ws1006_recoverable_retry_cooldown_sec()
-    last_attempt_epoch = float(_WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH or 0.0)
-    if attempts >= max_attempts:
-        _log_ws(
-            "FEED_WS_1006_RECOVERY_ESCALATED",
-            {
-                "source": source,
-                "code": code,
-                "reason": reason_text,
-                "ws1006_recovery_attempt_count": attempts,
-                "ws1006_max_recoverable_attempts": max_attempts,
-            },
-        )
-        _block_reconnect_for_process_restart(source=source, code=code, reason=reason_text, ticker=ws)
-        return True
-    if cooldown_sec > 0.0 and last_attempt_epoch > 0.0 and (now_epoch - last_attempt_epoch) < cooldown_sec:
-        _log_ws(
-            "FEED_WS_1006_RECOVERY_COOLDOWN",
-            {
-                "source": source,
-                "code": code,
-                "reason": reason_text,
-                "ws1006_recovery_attempt_count": attempts,
-                "ws1006_max_recoverable_attempts": max_attempts,
-                "ws1006_recovery_cooldown_sec": cooldown_sec,
-                "last_attempt_epoch": last_attempt_epoch,
-                "now_epoch": now_epoch,
-            },
-        )
+    decision = _FEED_RECOVERY_COORDINATOR.request_recovery(
+        source=source,
+        code=code,
+        reason=reason_text,
+        max_recoverable_attempts_per_session=_ws1006_recoverable_max_attempts_per_session(),
+    )
+    _sync_ws1006_recovery_state_from_coordinator()
+    _emit_feed_recovery_events(decision.events_emitted, source=source, code=code, reason=reason_text)
+    if decision.event == "FEED_RECOVERY_ALREADY_IN_PROGRESS":
         _persist_runtime_snapshot_row(
             ws_connected=False,
-            source=f"{source}:recovery_cooldown",
-            runtime_state="DEGRADED",
+            source=f"{source}:recovery_already_in_progress",
+            runtime_state="RECONNECTING" if _RECOVERY_IN_PROGRESS else "DEGRADED",
             last_error=f"{code}:{reason_text}"[:1000],
             disconnected_code=code if code is None else int(code),
             disconnected_reason=reason_text,
@@ -1369,34 +1367,17 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
             reconnect_blocked_reason=None,
         )
         return True
+    if decision.action == "TERMINAL":
+        _RUNTIME_STATE = "RECOVERY_BLOCKED"
+        _LAST_RUNTIME_ERROR = f"{code}:{reason_text}"[:1000]
+        _block_reconnect_for_process_restart(source=source, code=code, reason=reason_text, ticker=ws)
+        return True
 
-    _RECOVERY_IN_PROGRESS = True
-    _WS1006_RECOVERABLE_ATTEMPTS = attempts + 1
-    _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH = now_epoch
-    _WS1006_RECOVERABLE_LAST_REASON = reason_text
+    now_epoch = float(now_utc_epoch())
+    max_attempts = _ws1006_recoverable_max_attempts_per_session()
+    cooldown_sec = _ws1006_recoverable_retry_cooldown_sec()
     _RUNTIME_STATE = "RECONNECTING"
     _LAST_RUNTIME_ERROR = f"{code}:{reason_text}"[:1000]
-    _log_ws(
-        "FEED_WS_1006_RECOVERABLE",
-        {
-            "source": source,
-            "code": code,
-            "reason": reason_text,
-            "ws1006_recovery_attempt_count": _WS1006_RECOVERABLE_ATTEMPTS,
-            "ws1006_max_recoverable_attempts": max_attempts,
-        },
-    )
-    _log_ws(
-        "FEED_WS_RECOVERY_ATTEMPT",
-        {
-            "source": source,
-            "code": code,
-            "reason": reason_text,
-            "ws1006_recovery_attempt_count": _WS1006_RECOVERABLE_ATTEMPTS,
-            "ws1006_max_recoverable_attempts": max_attempts,
-            "ws1006_recovery_cooldown_sec": cooldown_sec,
-        },
-    )
     _persist_runtime_snapshot_row(
         ws_connected=False,
         source=f"{source}:ws1006_recoverable",
@@ -1417,14 +1398,22 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
                     "source": source,
                     "code": code,
                     "reason": reason_text,
-                    "ws1006_recovery_attempt_count": _WS1006_RECOVERABLE_ATTEMPTS,
+                    "ws1006_recovery_attempt_count": int(_WS1006_RECOVERABLE_ATTEMPTS or 0),
+                    "ws1006_max_recoverable_attempts": max_attempts,
+                    "ws1006_recovery_cooldown_sec": cooldown_sec,
                 },
             )
-            _schedule_restart_depth_ws(
-                reason=f"ws1006_recoverable:{source}",
-                ignore_cooldown=True,
-                force_full_restart=True,
-                source=f"{source}:ws1006_recoverable",
+            _sync_ws1006_recovery_state_from_coordinator()
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"{source}:soft_reconnect_failed",
+                runtime_state="DEGRADED",
+                last_error=_LAST_RUNTIME_ERROR,
+                disconnected_code=code if code is None else int(code),
+                disconnected_reason=reason_text,
+                restart_attempt_allowed=True,
+                restart_attempted=False,
+                reconnect_blocked_reason=None,
             )
     else:
         _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
@@ -2221,15 +2210,23 @@ def _tick_option_feed_verification(*, now_epoch: float) -> None:
                 else:
                     _log_ws("FEED_OPTION_VERIFY_WAITING_TICKS", payload)
 
-    if verified:
-        with _RESTART_VERIFY_LOCK:
-            if _OPTION_FEED_VERIFY_STATE == "PENDING":
-                _OPTION_FEED_VERIFY_STATE = "OK"
-                _OPTION_FEED_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
-                _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
-                _OPTION_FEED_VERIFY_MISSING_SYMBOLS = []
-                _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = list(sorted(set(verified_symbols)))
-        return
+        if verified:
+            with _RESTART_VERIFY_LOCK:
+                if _OPTION_FEED_VERIFY_STATE == "PENDING":
+                    _OPTION_FEED_VERIFY_STATE = "OK"
+                    _OPTION_FEED_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
+                    _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
+                    _OPTION_FEED_VERIFY_MISSING_SYMBOLS = []
+                    _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = list(sorted(set(verified_symbols)))
+            try:
+                _FEED_RECOVERY_COORDINATOR.clear_recovery(
+                    source="option_feed_verification_ok",
+                    reason=reason,
+                )
+            except Exception:
+                pass
+            _sync_ws1006_recovery_state_from_coordinator()
+            return
 
     if deadline > 0.0 and now_epoch_f >= deadline:
         failure_reason = "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE" if missing_symbols else "OPTION_FEED_VERIFY_TIMEOUT"
@@ -2942,6 +2939,12 @@ def _write_feed_runtime_snapshot(
         restart_artifact_dir=runtime_dir(),
     )
     payload["canonical_feed_truth"] = canonical_feed_truth.to_payload()
+    payload["recovery_state"] = canonical_feed_truth.recovery_state
+    payload["recovery_generation_id"] = int(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_generation_id", 0) or 0)
+    payload["recovery_in_progress"] = bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False))
+    payload["ws_error_code"] = canonical_feed_truth.ws_error_code
+    payload["ws_error_reason"] = canonical_feed_truth.ws_error_reason
+    payload["ws_fault_class"] = canonical_feed_truth.ws_fault_class
     payload = canonicalize_feed_runtime_snapshot_truth(payload)
     payload = attach_feed_execution_truth(payload)
     payload = stamp_runtime_payload(
@@ -4383,6 +4386,12 @@ def _schedule_restart_depth_ws(
     source: str,
 ) -> bool:
     global _RESTART_ASYNC_THREAD
+    if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
+        _log_ws(
+            "FEED_RECOVERY_ALREADY_IN_PROGRESS",
+            {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
+        )
+        return False
     if _RECOVERY_IN_PROGRESS:
         _log_ws(
             "FEED_RECOVERY_ALREADY_IN_PROGRESS",
@@ -4712,6 +4721,9 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     """
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
+    if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
+        _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
+        return False
     if _AUTH_REQUIRED_LATCH:
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
         return False
@@ -5431,6 +5443,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             return
         if _handle_ws1006_recoverable(source="on_error", ws=ws, code=code_int, reason=reason_text):
             return
+        if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
+            decision = _FEED_RECOVERY_COORDINATOR.request_recovery(source="on_error", code=code_int, reason=reason_text)
+            _sync_ws1006_recovery_state_from_coordinator()
+            _emit_feed_recovery_events(decision.events_emitted, source="on_error", code=code_int, reason=reason_text)
+            if decision.event == "FEED_RECOVERY_ALREADY_IN_PROGRESS":
+                return
+            _block_reconnect_for_process_restart(source="on_error", code=code_int, reason=reason_text, ticker=ws)
+            return
         fatal = False
         if code in (1011, 1012):
             fatal = True
@@ -5530,6 +5550,14 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         logger.warning("kite_ws_close code=%s reason=%s", code, reason)
         if _handle_ws1006_recoverable(source="on_close", ws=ws, code=code_int, reason=reason_text):
+            return
+        if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
+            decision = _FEED_RECOVERY_COORDINATOR.request_recovery(source="on_close", code=code_int, reason=reason_text)
+            _sync_ws1006_recovery_state_from_coordinator()
+            _emit_feed_recovery_events(decision.events_emitted, source="on_close", code=code_int, reason=reason_text)
+            if decision.event == "FEED_RECOVERY_ALREADY_IN_PROGRESS":
+                return
+            _block_reconnect_for_process_restart(source="on_close", code=code_int, reason=reason_text, ticker=ws)
             return
         fatal = False
         if code_int in (1011, 1012):
