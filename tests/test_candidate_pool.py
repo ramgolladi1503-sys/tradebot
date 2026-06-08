@@ -1,7 +1,15 @@
 import pytest
 
-from core.candidate_pool import build_candidate_pool, candidate_pool_dedupe_key
+from core.candidate_classifier import classify_candidates
+from core.candidate_pool import (
+    build_candidate_lifecycle_snapshots,
+    build_candidate_pool,
+    candidate_pool_dedupe_key,
+)
+from core.candidate_ranking import rank_candidates
+from core.hard_downgrade_engine import apply_hard_downgrades
 from core.movement_contract import StrategyCandidate
+from core.opportunity_scoring import score_opportunities
 
 
 def _candidate(**overrides):
@@ -36,9 +44,11 @@ def test_candidate_pool_dedupes_by_symbol_direction_movement_and_strategy():
     other_direction = _candidate(direction="BUY_PUT")
 
     pool = build_candidate_pool([first, duplicate, other_direction])
+    candidate_count = len(pool.candidates)
+    duplicate_count = len(pool.duplicates_removed)
 
-    assert len(pool.candidates) == 2
-    assert len(pool.duplicates_removed) == 1
+    assert candidate_count == 2
+    assert duplicate_count == 1
     assert pool.duplicates_removed[0].raw_score == 0.6
     assert candidate_pool_dedupe_key(first) == (
         "NIFTY",
@@ -99,8 +109,9 @@ def test_candidate_pool_summary_counts_statuses_blockers_and_warnings():
     assert summary.warning_counts["LATE_ENTRY"] == 1
 
     as_dict = pool.to_dict()
+    serialized_candidate_count = len(as_dict["candidates"])
     assert as_dict["summary"]["total_count"] == 3
-    assert len(as_dict["candidates"]) == 3
+    assert serialized_candidate_count == 3
 
 
 def test_candidate_pool_exposes_filtered_candidate_groups():
@@ -136,3 +147,95 @@ def test_candidate_pool_exposes_filtered_candidate_groups():
 def test_candidate_pool_rejects_non_candidate_items():
     with pytest.raises(TypeError, match="candidate_pool_item_not_strategy_candidate"):
         build_candidate_pool([{"bad": "payload"}])  # type: ignore[list-item]
+
+
+def test_lifecycle_snapshot_joins_pipeline_reports_with_exact_score_and_rank():
+    candidate = _candidate(
+        strategy_id="clean_breakout",
+        lineage={"candidate_id": "candidate-1", "candidate_intent_id": "intent-1"},
+        evidence={"evidence_refs": ["evidence://cycle/1"]},
+    )
+    pool = build_candidate_pool([candidate])
+    classifications = classify_candidates(pool.candidates)
+    downgrades = apply_hard_downgrades(classifications)
+    scores = score_opportunities(pool.candidates, downgrades)
+    ranks = rank_candidates(scores)
+
+    snapshots = pool.lifecycle_snapshots(
+        classifications=classifications,
+        downgrades=downgrades,
+        scores=scores,
+        ranks=ranks,
+        selector_buckets={"clean_breakout": "EXECUTABLE"},
+    )
+    snapshot_count = len(snapshots)
+
+    assert snapshot_count == 1
+    snapshot = snapshots[0]
+    assert snapshot.candidate_id == "candidate-1"
+    assert snapshot.source_intent_id == "intent-1"
+    assert snapshot.lifecycle_state == "SELECTED"
+    assert snapshot.capability == "EXECUTION_SAFE"
+    assert snapshot.classification_bucket == "EXECUTABLE_CANDIDATE"
+    assert snapshot.downgraded_bucket == "EXECUTABLE_CANDIDATE"
+    assert snapshot.score_eligibility == "SCORE_ELIGIBLE"
+    assert snapshot.final_score == pytest.approx(scores.scores[0].final_score)
+    assert snapshot.final_score == pytest.approx(0.6964)
+    assert snapshot.rank == 1
+    assert snapshot.evidence_refs == ("evidence://cycle/1",)
+    payload = snapshot.to_dict()
+    assert payload["read_only"] is True
+    assert payload["append"] is False
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+    assert payload["live_order_action"] is False
+    assert payload["broker_order_action"] is False
+
+
+def test_lifecycle_snapshot_blocks_fallback_from_execution_safe():
+    fallback = _candidate(
+        strategy_id="fallback_candidate",
+        blockers=("FALLBACK_QUOTE_ONLY",),
+        warnings=("fallback_quote_used",),
+        freshness_score=0.1,
+    )
+    pool = build_candidate_pool([fallback])
+    classifications = classify_candidates(pool.candidates)
+    downgrades = apply_hard_downgrades(classifications)
+    scores = score_opportunities(pool.candidates, downgrades)
+    ranks = rank_candidates(scores)
+
+    snapshot = pool.lifecycle_snapshots(
+        classifications=classifications,
+        downgrades=downgrades,
+        scores=scores,
+        ranks=ranks,
+        selector_buckets={"fallback_candidate": "EXECUTABLE"},
+    )[0]
+
+    assert snapshot.lifecycle_state == "BLOCKED"
+    assert snapshot.capability == "BLOCKED"
+    assert snapshot.downgraded_bucket == "SUPPRESSED_CANDIDATE"
+    assert "fallback_quote_data" in snapshot.downgrade_reasons
+    assert "fallback_data" in snapshot.safety_flags
+    assert snapshot.rank == 1
+
+
+def test_lifecycle_snapshot_does_not_invent_downstream_truth_when_reports_missing():
+    raw = _candidate(
+        strategy_id="raw_candidate",
+        status="RAW_CANDIDATE",
+        lineage={},
+        evidence={},
+    )
+
+    snapshot = build_candidate_lifecycle_snapshots([raw])[0]
+
+    assert snapshot.lifecycle_state == "INTENT_CREATED"
+    assert snapshot.capability == "DISPLAY_SAFE"
+    assert snapshot.classification_bucket is None
+    assert snapshot.downgraded_bucket is None
+    assert snapshot.score_eligibility is None
+    assert snapshot.final_score is None
+    assert snapshot.rank is None
+    assert snapshot.source_intent_id is None
