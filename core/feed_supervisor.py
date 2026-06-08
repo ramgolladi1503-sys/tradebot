@@ -90,6 +90,12 @@ class FeedSupervisorSnapshot:
     recovery_timeout: bool = False
     process_restart_required: bool = False
     auth_required: bool = False
+    warmup_clean_cycles: int = 0
+    warmup_required_clean_cycles: int = 3
+    recovery_generation_id: int = 0
+    subscription_generation_id: int = 0
+    last_recovery_generation_id: int = 0
+    last_subscription_generation_id: int = 0
     verified_option_symbols: tuple[str, ...] = ()
     missing_option_symbols: tuple[str, ...] = ()
 
@@ -145,10 +151,17 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
     recovery_timeout = _truthy(source.get("recovery_timeout"), runtime_state in _RECOVERY_TIMEOUT_STATES)
     recovery_blocked = _truthy(source.get("recovery_blocked"), source.get("feed_recovery_blocked"), runtime_state in _RECOVERY_BLOCKED_STATES, recovery_timeout)
     process_restart_required = _truthy(source.get("process_restart_required"), runtime_state in _RESTART_REQUIRED_STATES)
+    warmup_clean_cycles = max(0, _as_int(source.get("warmup_clean_cycles") or source.get("clean_cycle_count")))
+    warmup_required_clean_cycles = max(1, _as_int(source.get("warmup_required_clean_cycles") or source.get("required_clean_cycles") or 3))
+    recovery_generation_id = max(0, _as_int(source.get("recovery_generation_id")))
+    subscription_generation_id = max(0, _as_int(source.get("subscription_generation_id")))
+    last_recovery_generation_id = max(0, _as_int(source.get("last_recovery_generation_id")))
+    last_subscription_generation_id = max(0, _as_int(source.get("last_subscription_generation_id")))
     subscribed_option_tokens_count = _as_int(source.get("subscribed_option_tokens_count") or source.get("option_subscribe_count"))
     subscribed_tokens_count = _as_int(source.get("subscribed_tokens_count"))
-    option_ticks_verified = _truthy(source.get("option_ticks_verified"), source.get("option_verification_ok"))
-    if not option_ticks_verified:
+    explicit_option_ticks_verified = source.get("option_ticks_verified")
+    option_ticks_verified = _truthy(explicit_option_ticks_verified, source.get("option_verification_ok"))
+    if explicit_option_ticks_verified is None and not option_ticks_verified:
         verified_option_symbols = tuple(
             sorted(
                 {
@@ -195,6 +208,10 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         blockers.append("AUTH_REQUIRED")
     if process_restart_required:
         blockers.append("RESTART_REQUIRED")
+    if recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id:
+        blockers.append("RECOVERY_GENERATION_CHANGED")
+    if subscription_generation_id and last_subscription_generation_id and subscription_generation_id != last_subscription_generation_id:
+        blockers.append("SUBSCRIPTION_GENERATION_CHANGED")
     if recovery_timeout:
         blockers.append("RECOVERY_TIMEOUT")
     if recovery_blocked:
@@ -246,16 +263,40 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         state = "CONNECTED"
         reason_code = runtime_state or "CONNECTED"
     elif runtime_state in _SUBSCRIBED_STATES or subscribed_tokens_count > 0:
+        generation_changed = (
+            (recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id)
+            or (subscription_generation_id and last_subscription_generation_id and subscription_generation_id != last_subscription_generation_id)
+        )
+        clean_ready = (
+            warmup_clean_cycles >= warmup_required_clean_cycles
+            and ws_connected
+            and auth_ready
+            and subscribed_option_tokens_count > 0
+            and subscribed_tokens_count > 0
+            and option_ticks_verified
+            and underlying_tick_fresh
+            and depth_fresh
+            and not recovery_in_progress
+            and not recovery_timeout
+            and not recovery_blocked
+            and not auth_required
+            and not process_restart_required
+            and not generation_changed
+            and subscribed_option_tokens_count >= 1
+        )
         if runtime_state in _VERIFYING_STATES or not option_ticks_verified:
             state = "VERIFYING"
             reason_code = runtime_state or "VERIFYING"
-        elif not underlying_tick_fresh or not depth_fresh:
+        elif not underlying_tick_fresh or not depth_fresh or warmup_clean_cycles < warmup_required_clean_cycles or generation_changed:
             state = "WARMING_UP"
             reason_code = runtime_state or "WARMING_UP"
-        else:
+        elif clean_ready:
             state = "CANDIDATE_READY"
             reason_code = runtime_state or "CANDIDATE_READY"
             blockers = []
+        else:
+            state = "WARMING_UP"
+            reason_code = runtime_state or "WARMING_UP"
     elif runtime_state in _VERIFYING_STATES:
         state = "VERIFYING"
         reason_code = runtime_state or "VERIFYING"
@@ -290,6 +331,12 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         recovery_timeout=bool(recovery_timeout),
         process_restart_required=bool(process_restart_required),
         auth_required=bool(auth_required),
+        warmup_clean_cycles=warmup_clean_cycles,
+        warmup_required_clean_cycles=warmup_required_clean_cycles,
+        recovery_generation_id=recovery_generation_id,
+        subscription_generation_id=subscription_generation_id,
+        last_recovery_generation_id=last_recovery_generation_id,
+        last_subscription_generation_id=last_subscription_generation_id,
         verified_option_symbols=verified_option_symbols,
         missing_option_symbols=missing_option_symbols,
     )

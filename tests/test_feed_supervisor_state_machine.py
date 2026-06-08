@@ -54,6 +54,7 @@ def test_supervisor_uses_freshness_to_promote_candidate_ready():
         "option_ticks_verified": True,
         "underlying_tick_fresh": True,
         "depth_fresh": True,
+        "warmup_clean_cycles": 3,
     })
 
     payload = snapshot.to_payload()
@@ -80,6 +81,7 @@ def test_supervisor_marks_warming_up_before_candidate_readiness():
         "option_ticks_verified": True,
         "underlying_tick_fresh": False,
         "depth_fresh": True,
+        "warmup_clean_cycles": 1,
     })
 
     assert snapshot.state == "WARMING_UP"
