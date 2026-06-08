@@ -44,9 +44,11 @@ def test_candidate_pool_dedupes_by_symbol_direction_movement_and_strategy():
     other_direction = _candidate(direction="BUY_PUT")
 
     pool = build_candidate_pool([first, duplicate, other_direction])
+    candidate_count = len(pool.candidates)
+    duplicate_count = len(pool.duplicates_removed)
 
-    assert len(pool.candidates) == 2
-    assert len(pool.duplicates_removed) == 1
+    assert candidate_count == 2
+    assert duplicate_count == 1
     assert pool.duplicates_removed[0].raw_score == 0.6
     assert candidate_pool_dedupe_key(first) == (
         "NIFTY",
@@ -107,8 +109,9 @@ def test_candidate_pool_summary_counts_statuses_blockers_and_warnings():
     assert summary.warning_counts["LATE_ENTRY"] == 1
 
     as_dict = pool.to_dict()
+    serialized_candidate_count = len(as_dict["candidates"])
     assert as_dict["summary"]["total_count"] == 3
-    assert len(as_dict["candidates"]) == 3
+    assert serialized_candidate_count == 3
 
 
 def test_candidate_pool_exposes_filtered_candidate_groups():
@@ -165,8 +168,9 @@ def test_lifecycle_snapshot_joins_pipeline_reports_with_exact_score_and_rank():
         ranks=ranks,
         selector_buckets={"clean_breakout": "EXECUTABLE"},
     )
+    snapshot_count = len(snapshots)
 
-    assert len(snapshots) == 1
+    assert snapshot_count == 1
     snapshot = snapshots[0]
     assert snapshot.candidate_id == "candidate-1"
     assert snapshot.source_intent_id == "intent-1"
