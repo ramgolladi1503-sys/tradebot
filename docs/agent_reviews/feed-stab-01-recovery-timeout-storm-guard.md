@@ -1,5 +1,7 @@
 # FEED-STAB-01 — Real Feed Recovery Timeout & Storm Guard
 
+## Agent Work Contract
+
 source_agent: Codex
 action: generate_patch
 title: FEED-STAB-01 — Real Feed Recovery Timeout & Storm Guard
@@ -34,6 +36,16 @@ acceptance_proof:
 - Three recoveries inside the configured window block further recovery.
 - Auth failures fail closed and do not enter a reconnect loop.
 - Terminal reactor failures remain restart-required.
+
+## High-Risk Path Review
+
+This PR touches high-risk feed and config paths, so the review stays narrow and explicit.
+
+- `config/config.py`: added conservative recovery defaults only.
+- `core/feed_recovery_coordinator.py`: added explicit recovery timing and blocking state.
+- `core/kite_depth_ws.py`: translated coordinator outcomes into fail-closed runtime evidence.
+
+No broker, order, strategy, ranking, or dashboard code was modified.
 
 ## Scope Guard
 
