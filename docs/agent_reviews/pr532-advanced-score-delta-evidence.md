@@ -17,6 +17,27 @@ This PR introduces an offline, read-only evidence engine that compares default o
 
 It does not wire profile scores into runtime ranking, paper trading, live trading, broker paths, feed behavior, dashboard behavior, or strategy generation.
 
+## Scope Guard
+
+In scope:
+
+- Build a standalone offline score delta evidence module.
+- Compare default score vs explicit profile score for the same candidates.
+- Emit candidate-level score deltas, shadow rank-estimate deltas, and component-level weighted delta drivers.
+- Emit promotion/demotion explanations and safety-status preservation evidence.
+- Add focused tests for score movement, rank-estimate movement, component explanations, missing profile rejection, and unsafe candidate suppression.
+
+Out of scope:
+
+- No runtime ranking change.
+- No profile-aware ranking sort cutover.
+- No broker calls.
+- No order actions.
+- No feed/depth subscription changes.
+- No dashboard/UI changes.
+- No strategy changes.
+- No trading-edge claim.
+
 ## What This PR Proves
 
 This PR proves that, for a given candidate set and downgrade report, the system can emit deterministic evidence showing:
@@ -115,7 +136,17 @@ Expected proof:
 - rank estimate movement is shadow/evidence only
 - unsafe candidates remain suppressed
 
-## Acceptance Gates
+## Acceptance Proof
+
+Focused acceptance checks:
+
+```bash
+PYTHONPATH=. pytest tests/test_profile_score_delta_evidence.py
+PYTHONPATH=. pytest tests/test_opportunity_scoring.py tests/test_opportunity_scoring_regime_profile_opt_in.py tests/test_candidate_ranking.py
+python scripts/validate_agent_review_evidence.py --base-ref origin/main
+```
+
+Acceptance gates:
 
 - No broker calls.
 - No order actions.
@@ -125,6 +156,12 @@ Expected proof:
 - No dashboard dependency.
 - No candidate can be promoted without component delta evidence.
 - No safety-suppressed candidate can become executable due to profile score.
+
+## Runtime Proof Required After Merge
+
+No runtime proof is required after merge because this PR does not wire the evidence report into runtime, paper trading, live trading, broker integration, feed subscriptions, dashboard rendering, or strategy generation.
+
+The only post-merge proof required is that CI remains green and the evidence module remains offline/read-only.
 
 ## Human Approval
 
