@@ -128,7 +128,7 @@ class OpportunityScoreRecord:
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class OpportunityScoreReport:
     """Read-only opportunity score report."""
 
@@ -147,18 +147,60 @@ class OpportunityScoreReport:
     safety_flags: tuple[str, ...]
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
-    is_order_action: bool = False
-    broker_api_called: bool = False
-    live_order_action: bool = False
-    broker_order_action: bool = False
 
-    def __post_init__(self) -> None:
-        # Preserve older test/helper constructors that pass safety flags while
-        # keeping this report provably read-only and non-actionable.
-        object.__setattr__(self, "is_order_action", False)
-        object.__setattr__(self, "broker_api_called", False)
-        object.__setattr__(self, "live_order_action", False)
-        object.__setattr__(self, "broker_order_action", False)
+    def __init__(
+        self,
+        *,
+        schema_version: int,
+        read_only: bool,
+        append: bool,
+        score_count: int,
+        score_eligible_count: int,
+        needs_confirmation_count: int,
+        advisory_count: int,
+        suppressed_count: int,
+        no_trade_count: int,
+        scores: tuple[OpportunityScoreRecord, ...],
+        blockers: tuple[str, ...],
+        warnings: tuple[str, ...],
+        safety_flags: tuple[str, ...],
+        metadata: dict[str, Any] | None = None,
+        generated_epoch: float | None = None,
+        **_legacy_kwargs: Any,
+    ) -> None:
+        # Older tests and helper factories pass safety kwargs into this report.
+        # Accept them for compatibility, but never trust or persist their values.
+        object.__setattr__(self, "schema_version", schema_version)
+        object.__setattr__(self, "read_only", read_only)
+        object.__setattr__(self, "append", append)
+        object.__setattr__(self, "score_count", score_count)
+        object.__setattr__(self, "score_eligible_count", score_eligible_count)
+        object.__setattr__(self, "needs_confirmation_count", needs_confirmation_count)
+        object.__setattr__(self, "advisory_count", advisory_count)
+        object.__setattr__(self, "suppressed_count", suppressed_count)
+        object.__setattr__(self, "no_trade_count", no_trade_count)
+        object.__setattr__(self, "scores", scores)
+        object.__setattr__(self, "blockers", blockers)
+        object.__setattr__(self, "warnings", warnings)
+        object.__setattr__(self, "safety_flags", safety_flags)
+        object.__setattr__(self, "metadata", dict(metadata or {}))
+        object.__setattr__(self, "generated_epoch", time.time() if generated_epoch is None else generated_epoch)
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_api_called(self) -> bool:
+        return False
+
+    @property
+    def live_order_action(self) -> bool:
+        return False
+
+    @property
+    def broker_order_action(self) -> bool:
+        return False
 
     def to_dict(self) -> dict[str, Any]:
         return {
