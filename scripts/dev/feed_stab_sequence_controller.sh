@@ -126,7 +126,7 @@ merge_green_pr() {
   log "Merging PR #$pr"
   gh pr view "$pr" --json mergeStateStatus,statusCheckRollup,isDraft,url
 
-  gh pr merge "$pr" --squash --delete-branch
+  gh pr merge "$pr" --auto --squash --delete-branch
 
   sync_main
 }
