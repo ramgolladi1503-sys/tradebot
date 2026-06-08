@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .contracts import AgentFinding, AgentReport, build_read_only_agent_report
 from .evidence_refs import evidence_ref_from_mapping, evidence_ref_from_text
-from .readers import classify_session_scope, discover_runtime_artifacts, extract_line_fields, grep_lines, read_json_file
+from .readers import canonical_feed_truth_payload, classify_session_scope, discover_runtime_artifacts, extract_line_fields, grep_lines, read_json_file
 
 
 def analyze_feed_stability(
@@ -18,6 +18,7 @@ def analyze_feed_stability(
 ) -> AgentReport:
     artifacts = discover_runtime_artifacts(runtime_root=runtime_dir, logs_root=logs_dir, session_root=session_dir)
     feed_runtime = read_json_file(artifacts["feed_runtime_runtime_logs"] or artifacts["feed_runtime_logs"] or artifacts["feed_runtime_runtime"])
+    canonical_feed_truth = canonical_feed_truth_payload(feed_runtime)
     depth_log = artifacts["depth_ws_watchdog"]
     lines = grep_lines(
         paths=[depth_log],
@@ -45,7 +46,7 @@ def analyze_feed_stability(
     unsubscribe_counts: list[int] = []
     fresh_ratio_values: list[float] = []
     stale_count_values: list[int] = []
-    current_run_id = str(feed_runtime.get("run_id") or "").strip() or None
+    current_run_id = str(feed_runtime.get("run_id") or canonical_feed_truth.get("session_id") or "").strip() or None
     current_boot_epoch = None
     try:
         current_boot_epoch = float(feed_runtime.get("boot_epoch")) if feed_runtime.get("boot_epoch") is not None else None
@@ -53,7 +54,11 @@ def analyze_feed_stability(
         current_boot_epoch = None
     current_feed_fresh = False
     runtime_state = str(feed_runtime.get("runtime_state") or "").upper()
-    feed_truth_state = str(feed_runtime.get("feed_truth_state") or "").upper()
+    feed_truth_state = str(canonical_feed_truth.get("state") or feed_runtime.get("feed_truth_state") or "").upper()
+    canonical_reason_code = str(canonical_feed_truth.get("reason_code") or "").upper()
+    canonical_blockers = tuple(str(item) for item in canonical_feed_truth.get("blockers") or ())
+    canonical_state_is_healthy = feed_truth_state == "VERIFIED_HEALTHY"
+    canonical_state_is_blocked = feed_truth_state in {"DEGRADED", "RECOVERY_BLOCKED", "RESTART_REQUIRED"}
     if str(feed_runtime.get("ws_connected")).lower() == "true":
         feed_health_snapshot = feed_runtime.get("feed_health_snapshot") if isinstance(feed_runtime.get("feed_health_snapshot"), dict) else {}
         gate_status = feed_runtime.get("gate_status") if isinstance(feed_runtime.get("gate_status"), dict) else {}
@@ -70,9 +75,12 @@ def analyze_feed_stability(
             return False
 
         current_feed_fresh = (
-            runtime_state not in {"DEAD", "RECOVERY_BLOCKED"}
-            and feed_truth_state not in {"DEAD", "RECOVERY_BLOCKED"}
-            and (_gate_ok(feed_health_snapshot, "N2_FEED_FRESH") or _gate_ok(gate_status, "N2_FEED_FRESH"))
+            canonical_state_is_healthy
+            or (
+                runtime_state not in {"DEAD", "RECOVERY_BLOCKED"}
+                and feed_truth_state not in {"DEAD", "RECOVERY_BLOCKED"}
+                and (_gate_ok(feed_health_snapshot, "N2_FEED_FRESH") or _gate_ok(gate_status, "N2_FEED_FRESH"))
+            )
         )
 
     option_verify = feed_runtime.get("option_feed_verification") if isinstance(feed_runtime.get("option_feed_verification"), dict) else {}
@@ -245,6 +253,11 @@ def analyze_feed_stability(
         "option_ticks_received_by_symbol": feed_runtime.get("option_ticks_received_count_by_symbol") or {},
         "option_feed_block_reasons": feed_runtime.get("option_feed_block_reason_by_symbol") or {},
         "current_session_feed_fresh": current_feed_fresh,
+        "canonical_feed_truth_state": feed_truth_state or "UNKNOWN",
+        "canonical_feed_truth_reason_code": canonical_reason_code or None,
+        "canonical_feed_truth_blockers": canonical_blockers,
+        "canonical_feed_truth_healthy": canonical_state_is_healthy,
+        "canonical_feed_truth_blocked": canonical_state_is_blocked,
         "option_feed_verification_state": option_verify_state or "IDLE",
         "option_feed_verification_failure_detail": option_verify_failure_detail or None,
         "option_feed_verification_reason": option_verify_reason or None,
@@ -286,7 +299,21 @@ def analyze_feed_stability(
     elif option_verify_state == "FAILED" and "OPTION_FEED_VERIFY_TIMEOUT" in option_verify_failure_detail:
         option_verify_failed_code = "OPTION_FEED_VERIFY_TIMEOUT"
 
-    if option_verify_failed_code:
+    if canonical_state_is_blocked and feed_truth_state == "RESTART_REQUIRED":
+        findings.append(
+            AgentFinding(
+                code="CANONICAL_FEED_TRUTH_RESTART_REQUIRED",
+                severity="BLOCKER",
+                layer="feed_stability",
+                message="Canonical feed truth requires a restart before current-session verification can be trusted.",
+                confidence="HIGH",
+                recommended_action="Do not let stale rebalance or disconnect noise override canonical restart-required feed truth.",
+                files_likely_involved=("core/kite_depth_ws.py", "core/feed_runtime.py"),
+                tests_needed=("tests/test_feed_stability_agent.py",),
+            )
+        )
+        first_failing_event = "WS1006_PROCESS_RESTART_REQUIRED"
+    elif option_verify_failed_code:
         findings.append(
             AgentFinding(
                 code=option_verify_failed_code,

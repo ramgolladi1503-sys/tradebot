@@ -1,5 +1,6 @@
 from core.latency_guard import (
     ACTION_COOLDOWN,
+    ACTION_FEED_BLOCKED,
     ACTION_DEGRADE_EXIT_ONLY,
     ACTION_HALT_ALL,
     ACTION_OK,
@@ -170,3 +171,25 @@ def test_latency_guard_ignores_background_overhead_when_guard_metric_stays_healt
     out = guard.evaluate(stats, market_open=True, now_ts=300.0)
     assert out.action == ACTION_OK
     assert out.blocks_new_entries is False
+
+
+
+def test_latency_guard_feed_blocked_when_canonical_feedtruth_unhealthy():
+    _monitor, stats = _build_monitor_with_samples(total_ms=42.0, decision_ms=24.0)
+    guard = LatencyGuard(
+        max_p95_total_ms=120.0,
+        max_p95_decision_ms=80.0,
+        sustained_windows=3,
+        cooldown_sec=10.0,
+        halt_on_breach=True,
+    )
+    out = guard.evaluate(
+        stats,
+        market_open=True,
+        now_ts=400.0,
+        canonical_feed_truth={"state": "RESTART_REQUIRED", "reason_code": "WS1006_PROCESS_RESTART_REQUIRED"},
+    )
+    assert out.action == ACTION_FEED_BLOCKED
+    assert out.reason == "canonical_feed_truth_not_healthy"
+    assert out.blocks_new_entries is True
+    assert out.blocks_non_emergency_exits is False

@@ -10,6 +10,7 @@ ACTION_OK = "OK"
 ACTION_DEGRADE_EXIT_ONLY = "DEGRADE_EXIT_ONLY"
 ACTION_HALT_ALL = "HALT_ALL"
 ACTION_COOLDOWN = "COOLDOWN"
+ACTION_FEED_BLOCKED = "FEED_BLOCKED"
 
 
 @dataclass(frozen=True)
@@ -74,7 +75,7 @@ class LatencyGuard:
         monitor_stats: dict,
     ) -> LatencyGuardResult:
         action_upper = str(action or ACTION_OK).upper()
-        blocks_new_entries = action_upper in {ACTION_COOLDOWN, ACTION_DEGRADE_EXIT_ONLY, ACTION_HALT_ALL}
+        blocks_new_entries = action_upper in {ACTION_COOLDOWN, ACTION_DEGRADE_EXIT_ONLY, ACTION_HALT_ALL, ACTION_FEED_BLOCKED}
         blocks_non_emergency_exits = action_upper == ACTION_HALT_ALL
         stats = dict(monitor_stats or {})
         stats["guard"] = {
@@ -93,9 +94,20 @@ class LatencyGuard:
             stats=stats,
         )
 
-    def evaluate(self, monitor_stats: dict, market_open: bool, now_ts: float | None = None) -> LatencyGuardResult:
+    def evaluate(self, monitor_stats: dict, market_open: bool, now_ts: float | None = None, canonical_feed_truth: dict | None = None) -> LatencyGuardResult:
         now_epoch = float(now_ts if now_ts is not None else time.time())
         stages = dict((monitor_stats or {}).get("stages") or {})
+        canonical_state = str((canonical_feed_truth or {}).get("state") or "").strip().upper()
+        if canonical_state in {"DEGRADED", "RECOVERY_BLOCKED", "RESTART_REQUIRED"}:
+            self._healthy_recovery_windows = 0
+            self._active_action = ACTION_FEED_BLOCKED
+            self._active_reason = "canonical_feed_truth_not_healthy"
+            return self._result(
+                action=ACTION_FEED_BLOCKED,
+                reason="canonical_feed_truth_not_healthy",
+                monitor_stats=monitor_stats or {},
+            )
+
         breach = dict((monitor_stats or {}).get("breach") or {})
         p95_total = float((stages.get("total_loop") or {}).get("p95_ms") or 0.0)
         p95_decision = float((stages.get("decision_build") or {}).get("p95_ms") or 0.0)

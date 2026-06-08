@@ -219,6 +219,7 @@ def test_command_center_prefers_current_session_health_over_stale_feed_churn(tmp
     assert payload["first_blocker_layer"] != "FEED_STABILITY"
     assert payload["metrics_summary"]["evidence_scope"] in {"historical_tail", "mixed"}
     assert payload["metrics_summary"]["current_session_feed_fresh"] is True
+    assert payload["metrics_summary"]["canonical_feed_truth_state"] in {"VERIFIED_HEALTHY", "LIVE"}
     assert payload["metrics_summary"]["stale_evidence_ignored_count"] >= 1
     assert payload["metrics_summary"]["first_current_session_blocker"] in {"CANDIDATE_SUPPLY", "PHASE2_RANKING", "UNKNOWN"}
     assert payload["safety_summary"]["read_only"] is True

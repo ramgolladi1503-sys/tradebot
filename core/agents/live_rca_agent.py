@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .contracts import AgentFinding, AgentReport, build_read_only_agent_report
 from .evidence_refs import evidence_ref_from_mapping, evidence_ref_from_text
-from .readers import classify_session_scope, discover_runtime_artifacts, extract_line_fields, grep_lines, read_json_file
+from .readers import canonical_feed_truth_payload, classify_session_scope, discover_runtime_artifacts, extract_line_fields, grep_lines, read_json_file
 from .timeline import TimelineEvent, sort_timeline_events
 
 
@@ -129,6 +129,7 @@ def analyze_live_rca(
     artifacts = discover_runtime_artifacts(runtime_root=runtime_dir, logs_root=logs_dir, session_root=session_dir)
     depth_log = artifacts["depth_ws_watchdog"]
     feed_runtime = read_json_file(artifacts["feed_runtime_runtime_logs"] or artifacts["feed_runtime_logs"] or artifacts["feed_runtime_runtime"])
+    canonical_feed_truth = canonical_feed_truth_payload(feed_runtime)
     ranked_runtime = read_json_file(artifacts["ranked_pipeline_runtime"])
     starvation_trace = read_json_file(artifacts["candidate_starvation_trace"])
     strategy_no_qualified = read_json_file(artifacts["strategy_no_qualified_reasons"])
@@ -139,7 +140,7 @@ def analyze_live_rca(
     )
 
     timeline_rows = [item.to_evidence_ref() for item in lines_timeline[:40]]
-    current_run_id = str(feed_runtime.get("run_id") or "").strip() or None
+    current_run_id = str(feed_runtime.get("run_id") or canonical_feed_truth.get("session_id") or "").strip() or None
     current_boot_epoch = None
     try:
         current_boot_epoch = float(feed_runtime.get("boot_epoch")) if feed_runtime.get("boot_epoch") is not None else None
@@ -159,12 +160,16 @@ def analyze_live_rca(
             return payload
         return False
 
+    canonical_state = str(canonical_feed_truth.get("state") or "").upper()
     current_session_feed_fresh = (
-        str(feed_runtime.get("ws_connected")).lower() == "true"
-        and str(feed_runtime.get("runtime_state") or "").upper() not in {"DEAD", "RECOVERY_BLOCKED"}
-        and (
-            _nested_gate_ok(feed_runtime.get("feed_health_snapshot"), "N2_FEED_FRESH")
-            or _nested_gate_ok(feed_runtime.get("gate_status"), "N2_FEED_FRESH")
+        canonical_state == "VERIFIED_HEALTHY"
+        or (
+            str(feed_runtime.get("ws_connected")).lower() == "true"
+            and str(feed_runtime.get("runtime_state") or "").upper() not in {"DEAD", "RECOVERY_BLOCKED"}
+            and (
+                _nested_gate_ok(feed_runtime.get("feed_health_snapshot"), "N2_FEED_FRESH")
+                or _nested_gate_ok(feed_runtime.get("gate_status"), "N2_FEED_FRESH")
+            )
         )
     )
 
@@ -300,6 +305,9 @@ def analyze_live_rca(
         "phase2_input_candidate_count": starvation_trace.get("phase2_input_candidate_count"),
         "ranked_executable_count": ranked_runtime.get("executable_count"),
         "current_session_feed_fresh": current_session_feed_fresh,
+        "canonical_feed_truth_state": canonical_state or "UNKNOWN",
+        "canonical_feed_truth_reason_code": str(canonical_feed_truth.get("reason_code") or "") or None,
+        "canonical_feed_truth_blockers": tuple(str(item) for item in canonical_feed_truth.get("blockers") or ()),
         "current_session_feed_churn_count": current_feed_churn_count,
         "current_session_ws1006_count": current_ws1006_count,
         "stale_feed_evidence_count": stale_feed_churn_count + stale_ws1006_count,
@@ -311,7 +319,10 @@ def analyze_live_rca(
 
     first_failing_event = None
     root_cause = "UNKNOWN"
-    if _has_explicit_auth_failure(filtered_depth_text) or any(
+    if canonical_state in {"DEGRADED", "RECOVERY_BLOCKED", "RESTART_REQUIRED"}:
+        root_cause = "WS1006_PROCESS_RESTART_REQUIRED" if canonical_state == "RESTART_REQUIRED" else "FEEDTRUTH_DEAD"
+        first_failing_event = "WS1006_PROCESS_RESTART_REQUIRED" if canonical_state == "RESTART_REQUIRED" else "FEED_TRUTH_DEAD"
+    elif _has_explicit_auth_failure(filtered_depth_text) or any(
         item.event
         in {
             "AUTH_FAILURE",

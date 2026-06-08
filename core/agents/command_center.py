@@ -537,6 +537,10 @@ def run_agent_command_center(
     if feed_stability_report is not None:
         metrics_summary.update(
             {
+                "canonical_feed_truth_state": str(feed_stability_report.metrics.get("canonical_feed_truth_state") or "UNKNOWN"),
+                "canonical_feed_truth_reason_code": str(feed_stability_report.metrics.get("canonical_feed_truth_reason_code") or "") or None,
+                "canonical_feed_truth_blocked": bool(feed_stability_report.metrics.get("canonical_feed_truth_blocked")),
+                "canonical_feed_truth_healthy": bool(feed_stability_report.metrics.get("canonical_feed_truth_healthy")),
                 "current_session_option_subscribe_count": int(feed_stability_report.metrics.get("current_session_option_subscribe_count") or 0),
                 "current_session_option_verify_begin_count": int(feed_stability_report.metrics.get("current_session_option_verify_begin_count") or 0),
                 "current_session_option_verify_waiting_count": int(feed_stability_report.metrics.get("current_session_option_verify_waiting_count") or 0),
