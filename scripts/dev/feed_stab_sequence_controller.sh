@@ -123,10 +123,28 @@ watch_until_green_or_red() {
 merge_green_pr() {
   local pr="$1"
 
-  log "Merging PR #$pr"
+  log "Merging PR #$pr with normal squash merge"
   gh pr view "$pr" --json mergeStateStatus,statusCheckRollup,isDraft,url
 
-  gh pr merge "$pr" --auto --squash --delete-branch
+  if ! gh pr merge "$pr" --squash --delete-branch; then
+    log "Normal merge failed for PR #$pr."
+    log "Rechecking PR #$pr after merge failure..."
+    gh pr view "$pr" --json mergeStateStatus,statusCheckRollup,isDraft,merged,state,url || true
+    log "If checks are still pending, the controller should continue polling."
+    log "If branch protection requires human action, this is a hard blocker."
+    return 2
+  fi
+
+  while true; do
+    merged="$(gh pr view "$pr" --json merged -q .merged || echo false)"
+    if [[ "$merged" == "true" ]]; then
+      log "PR #$pr is merged."
+      break
+    fi
+
+    log "Merge command returned but PR #$pr is not yet marked merged. Sleeping ${POLL_SECONDS}s."
+    sleep "$POLL_SECONDS"
+  done
 
   sync_main
 }
