@@ -48,7 +48,7 @@ def _downgrade_report(candidates):
     return apply_hard_downgrades(classify_candidates(candidates))
 
 
-def test_profile_delta_report_explains_score_and_shadow_rank_change():
+def test_profile_delta_report_explains_score_and_shadow_rank_stability():
     weak_regime = _candidate("weak_regime", regime_alignment_score=0.10, price_structure_score=1.0)
     strong_regime = _candidate("strong_regime", regime_alignment_score=1.0, price_structure_score=0.4)
     candidates = [weak_regime, strong_regime]
@@ -70,12 +70,14 @@ def test_profile_delta_report_explains_score_and_shadow_rank_change():
     by_id = {record.candidate_id: record for record in report.records}
     assert by_id["strong_regime"].score_delta > 0
     assert by_id["weak_regime"].score_delta < 0
-    assert by_id["strong_regime"].rank_delta > 0
-    assert "PROMOTED" in by_id["strong_regime"].promotion_or_demotion_reason
+    assert by_id["strong_regime"].rank_delta == 0
+    assert by_id["weak_regime"].rank_delta == 0
+    assert "SCORE_UP_RANK_UNCHANGED" in by_id["strong_regime"].promotion_or_demotion_reason
     assert "regime_alignment" in by_id["strong_regime"].promotion_or_demotion_reason
-    assert by_id["weak_regime"].rank_delta < 0
-    assert report.promoted_count == 1
-    assert report.demoted_count == 1
+    assert "SCORE_DOWN_RANK_UNCHANGED" in by_id["weak_regime"].promotion_or_demotion_reason
+    assert report.promoted_count == 0
+    assert report.demoted_count == 0
+    assert report.unchanged_rank_count == 2
     assert report.safety_status_changed_count == 0
 
 
