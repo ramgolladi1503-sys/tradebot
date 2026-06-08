@@ -147,22 +147,18 @@ class OpportunityScoreReport:
     safety_flags: tuple[str, ...]
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    live_order_action: bool = False
+    broker_order_action: bool = False
 
-    @property
-    def is_order_action(self) -> bool:
-        return False
-
-    @property
-    def broker_api_called(self) -> bool:
-        return False
-
-    @property
-    def live_order_action(self) -> bool:
-        return False
-
-    @property
-    def broker_order_action(self) -> bool:
-        return False
+    def __post_init__(self) -> None:
+        # Preserve older test/helper constructors that pass safety flags while
+        # keeping this report provably read-only and non-actionable.
+        object.__setattr__(self, "is_order_action", False)
+        object.__setattr__(self, "broker_api_called", False)
+        object.__setattr__(self, "live_order_action", False)
+        object.__setattr__(self, "broker_order_action", False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
