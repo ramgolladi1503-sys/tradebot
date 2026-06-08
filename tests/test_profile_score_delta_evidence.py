@@ -17,7 +17,7 @@ PROFILE_WEIGHTS = {
 }
 
 
-def _candidate(strategy_id, *, regime_alignment_score, price_structure_score=0.4, safety_flags=(), blockers=(), warnings=()):
+def _candidate(strategy_id, *, regime_alignment_score, price_structure_score=0.4, blockers=(), warnings=()):
     return StrategyCandidate(
         schema_version=1,
         strategy_id=strategy_id,
@@ -41,7 +41,6 @@ def _candidate(strategy_id, *, regime_alignment_score, price_structure_score=0.4
         rank_reason="unit",
         blockers=blockers,
         warnings=warnings,
-        safety_flags=safety_flags,
     )
 
 
@@ -86,7 +85,6 @@ def test_profile_delta_preserves_safety_status_for_suppressed_candidate():
         regime_alignment_score=1.0,
         price_structure_score=1.0,
         blockers=("FALLBACK_QUOTE_ONLY",),
-        safety_flags=("fallback_quote_data",),
     )
     clean = _candidate("clean", regime_alignment_score=0.7)
     candidates = [risky, clean]
@@ -111,7 +109,7 @@ def test_profile_delta_requires_explicit_profile():
     except ValueError as exc:
         assert "profile_score_delta_requires_scoring_profile" in str(exc)
     else:
-        raise AssertionError("score delta evidence accepted missing profile")
+        raise AssertionError("score delta evidence accepted absent profile")
 
 
 def test_profile_delta_records_component_breakdown_for_each_candidate():
