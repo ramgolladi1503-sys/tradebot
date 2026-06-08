@@ -95,6 +95,43 @@ SCORE_FIELDS: tuple[str, ...] = (
     "confluence_score",
 )
 
+STRATEGY_OWNED_SCORE_FIELDS: tuple[str, ...] = (
+    "raw_score",
+    "confidence_score",
+    "price_structure_score",
+    "volatility_score",
+    "regime_alignment_score",
+    "timing_score",
+    "trap_risk_score",
+    "confluence_score",
+)
+
+PHASE2_OWNED_SCORE_FIELDS: tuple[str, ...] = (
+    "option_confirmation_score",
+    "liquidity_score",
+    "freshness_score",
+)
+
+PHASE2_TRUTH_EVIDENCE_KEYS: frozenset[str] = frozenset(
+    {
+        "quote_source",
+        "fallback_used",
+        "option_ltp_age_sec",
+        "ce_spread_pct",
+        "pe_spread_pct",
+        "ce_depth",
+        "pe_depth",
+        "resolved_instrument",
+        "resolved_contract",
+        "execution_eligible",
+        "liquidity_truth",
+        "freshness_truth",
+        "option_confirmation_truth",
+    }
+)
+
+PHASE2_NEUTRAL_SCORE = 0.5
+
 
 class MovementContractError(ValueError):
     """Raised when a movement candidate violates the contract."""
@@ -164,6 +201,44 @@ def _jsonable_map(values: dict[str, Any] | None, *, field_name: str) -> dict[str
 def has_hard_blocker(blockers: tuple[str, ...] | list[str] | None) -> bool:
     normalized = {str(item).strip().upper() for item in (blockers or [])}
     return bool(normalized.intersection(HARD_EXECUTION_BLOCKERS))
+
+
+def phase2_boundary_violations(candidate: "StrategyCandidate", *, producer_stage: str) -> tuple[str, ...]:
+    """Return ownership-boundary violations without mutating candidate state.
+
+    Strategy producers own thesis and price-structure evidence. Phase-2 producers
+    own tradability truth: option confirmation, liquidity, freshness, and resolved
+    execution evidence. This helper is opt-in so PR #528 introduces a contract
+    guard without changing current runtime behavior.
+    """
+
+    stage = _clean_text(producer_stage, field_name="producer_stage", uppercase=True)
+    if stage in {"PHASE2", "PHASE_2", "CANDIDATE_FACTORY"}:
+        return ()
+    if stage not in {"STRATEGY", "STRATEGY_MODULE", "MOVEMENT_STRATEGY"}:
+        raise MovementContractError(f"invalid_producer_stage:{stage}")
+
+    violations: list[str] = []
+    for field_name in PHASE2_OWNED_SCORE_FIELDS:
+        value = getattr(candidate, field_name)
+        if value != PHASE2_NEUTRAL_SCORE:
+            violations.append(f"strategy_candidate_claims_phase2_score:{field_name}")
+
+    evidence_keys = {str(key).strip().lower() for key in candidate.evidence.keys()}
+    for key in sorted(PHASE2_TRUTH_EVIDENCE_KEYS):
+        if key.lower() in evidence_keys:
+            violations.append(f"strategy_candidate_claims_phase2_evidence:{key}")
+
+    if candidate.status == "RANKED_OPPORTUNITY":
+        violations.append("strategy_candidate_claims_ranked_opportunity")
+    return tuple(violations)
+
+
+def assert_phase2_boundary(candidate: "StrategyCandidate", *, producer_stage: str) -> "StrategyCandidate":
+    violations = phase2_boundary_violations(candidate, producer_stage=producer_stage)
+    if violations:
+        raise MovementContractError(";".join(violations))
+    return candidate
 
 
 @dataclass(frozen=True)
@@ -283,6 +358,12 @@ class StrategyCandidate:
     def executable_eligible(self) -> bool:
         return self.status in {"VALIDATED_CANDIDATE", "RANKED_OPPORTUNITY"} and not self.has_hard_blocker
 
+    def phase2_boundary_violations(self, *, producer_stage: str) -> tuple[str, ...]:
+        return phase2_boundary_violations(self, producer_stage=producer_stage)
+
+    def assert_phase2_boundary(self, *, producer_stage: str) -> "StrategyCandidate":
+        return assert_phase2_boundary(self, producer_stage=producer_stage)
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["blockers"] = list(self.blockers)
@@ -374,13 +455,19 @@ __all__ = [
     "HARD_EXECUTION_BLOCKERS",
     "MovementContractError",
     "MovementType",
+    "PHASE2_NEUTRAL_SCORE",
+    "PHASE2_OWNED_SCORE_FIELDS",
+    "PHASE2_TRUTH_EVIDENCE_KEYS",
     "SCORE_FIELDS",
+    "STRATEGY_OWNED_SCORE_FIELDS",
     "StrategyCandidate",
     "StrategyContext",
     "VALID_CANDIDATE_STATUSES",
     "VALID_DIRECTIONS",
     "VALID_MOVEMENT_TYPES",
+    "assert_phase2_boundary",
     "candidate_from_dict",
     "context_from_dict",
     "has_hard_blocker",
+    "phase2_boundary_violations",
 ]
