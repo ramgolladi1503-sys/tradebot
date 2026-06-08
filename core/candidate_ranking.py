@@ -177,6 +177,7 @@ def rank_candidates(
     """Rank scored candidates without changing score records or execution state."""
 
     records = _coerce_scores(scores)
+    source_metadata = _source_score_metadata(scores)
     directional_flags = _directional_flags(directional_balance)
     ranked_inputs = sorted(
         records,
@@ -213,7 +214,7 @@ def rank_candidates(
         metadata={
             "ranker": "candidate_ranking_v1",
             "scope": "read_only_no_execution_no_score_mutation",
-            "source_scorer": getattr(scores, "metadata", {}).get("scorer") if isinstance(scores, OpportunityScoreReport) else None,
+            "source_scorer": source_metadata.get("scorer"),
             "source_directional_balance": getattr(directional_balance, "metadata", {}).get("directional_balance")
             if isinstance(directional_balance, DirectionalBalanceReport)
             else None,
@@ -221,6 +222,12 @@ def rank_candidates(
             "bucket_priority": dict(BUCKET_PRIORITY),
             "feed_risk_suppression": "enabled",
             "feed_risk_suppressed_count": feed_risk_suppressed_count,
+            "ranking_sort_score_source": "opportunity_final_score",
+            "profile_sort_cutover_enabled": False,
+            "source_scoring_profile_applied": bool(source_metadata.get("scoring_profile_applied", False)),
+            "source_scoring_profile_name": source_metadata.get("scoring_profile_name"),
+            "source_component_weights": dict(source_metadata.get("component_weights") or {}),
+            "source_base_component_weights": dict(source_metadata.get("base_component_weights") or {}),
         },
     )
 
@@ -415,6 +422,12 @@ def _coerce_scores(scores: OpportunityScoreReport | Iterable[OpportunityScoreRec
         if not isinstance(record, OpportunityScoreRecord):
             raise TypeError("candidate_ranking_expected_opportunity_score_record")
     return records
+
+
+def _source_score_metadata(scores: OpportunityScoreReport | Iterable[OpportunityScoreRecord]) -> dict[str, Any]:
+    if isinstance(scores, OpportunityScoreReport):
+        return dict(scores.metadata or {})
+    return {}
 
 
 __all__ = [
