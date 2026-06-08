@@ -52,6 +52,37 @@ def _find_agent(agent_reports: Sequence[AgentReport], name: str) -> AgentReport 
     return None
 
 
+def _candidate_supply_recommendation(agent: AgentReport | None) -> str:
+    if agent is None:
+        return "Inspect TradeBuilder output and upstream feature readiness before Phase2 or ranking changes."
+    subtype = str(agent.metrics.get("first_candidate_supply_zero_subtype") or "").strip().upper()
+    if subtype == "CANDIDATE_SUPPLY_ZERO_STRATEGY_QUALIFICATION":
+        return "Inspect strategy qualification and regime gate evidence before touching TradeBuilder, Phase2, or ranking."
+    if subtype in {"CANDIDATE_SUPPLY_ZERO_LATENCY_GUARD_COOLDOWN", "CANDIDATE_SUPPLY_ZERO_LATENCY_GUARD_DEGRADE_EXIT_ONLY"}:
+        return "Inspect latency guard prebuild skip attribution before changing strategy logic."
+    if subtype == "CANDIDATE_SUPPLY_ZERO_SLO_FEED_STALE":
+        return "Inspect SLO/feed stale transition after initial feed freshness before changing candidate logic."
+    if subtype == "CANDIDATE_SUPPLY_ZERO_REGIME_UNSTABLE":
+        return "Inspect regime confidence, entropy, and debounced instability before touching TradeBuilder or ranking."
+    if subtype == "CANDIDATE_SUPPLY_ZERO_TRADEBUILDER_REACHED_NO_CANDIDATE":
+        return "Inspect TradeBuilder rejection details before changing Phase2 or ranking."
+    if subtype == "CANDIDATE_SUPPLY_ZERO_TRADEBUILDER_NOT_REACHED":
+        return "Inspect strategy qualification before assuming TradeBuilder was reached."
+    return "Inspect TradeBuilder output and upstream feature readiness before Phase2 or ranking changes."
+
+
+def _evidence_scope_from_candidates(feed_scope: str, candidate_scope: str) -> str:
+    feed_scope = (feed_scope or "unknown").lower()
+    candidate_scope = (candidate_scope or "unknown").lower()
+    if candidate_scope == "mixed" or feed_scope == "mixed":
+        return "mixed"
+    if candidate_scope == "current_session":
+        return "current_session" if feed_scope in {"unknown", "current_session"} else "mixed"
+    if candidate_scope == "historical_tail":
+        return "historical_tail" if feed_scope == "historical_tail" else "mixed"
+    return feed_scope if feed_scope != "unknown" else candidate_scope
+
+
 def _render_markdown(report: CommandCenterReport) -> str:
     evidence_lines: list[str] = []
     for agent in report.agents:
@@ -241,13 +272,15 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
         and live_rca is not None
         and any(finding.code == "STRATEGY_SELECT_NO_QUALIFIED" for finding in live_rca.findings)
     ):
+        candidate_scope = str(candidate_supply.metrics.get("candidate_supply_evidence_scope") or "unknown") if candidate_supply else "unknown"
+        feed_scope = str(feed_stability.metrics.get("evidence_scope") or "unknown") if feed_stability else "unknown"
         summary.update(
             first_blocker_layer="CANDIDATE_SUPPLY",
             first_failing_event=live_rca.first_failing_event or "N8_STRATEGY_SELECT:NO_STRATEGY_QUALIFIED",
             root_cause_summary="Current-session feed is fresh, but strategy selection produced no qualified candidate.",
             confidence="HIGH",
             next_action_type="FIX_CANDIDATE_SUPPLY",
-            next_pr_recommendation="Inspect current-session strategy qualification, regime fit, and candidate construction before blaming feed lifecycle.",
+            next_pr_recommendation=_candidate_supply_recommendation(candidate_supply),
             downstream_impact=(
                 "Phase2 is downstream until strategy selection produces candidates.",
                 "Edge Measurement is not evaluable until candidates exist.",
@@ -256,7 +289,7 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Feed lifecycle is not the first blocker when current-session feed freshness is healthy.",
                 "Edge Measurement is not evaluable until candidates exist.",
             ),
-            evidence_scope=feed_stability_scope,
+            evidence_scope=_evidence_scope_from_candidates(feed_scope, candidate_scope),
             current_session_feed_fresh=True,
             stale_evidence_ignored_count=stale_evidence_ignored_count,
             stale_evidence_reason=stale_evidence_reason,
@@ -266,13 +299,15 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
 
     feed_healthy = bool(feed_stability) and current_session_feed_fresh is True and not current_feed_stability_blocker
     if candidate_supply and candidate_supply.findings and int(candidate_supply.metrics.get("raw_candidate_count") or 0) == 0 and feed_healthy:
+        candidate_scope = str(candidate_supply.metrics.get("candidate_supply_evidence_scope") or "unknown")
+        feed_scope = str(feed_stability.metrics.get("evidence_scope") or "unknown") if feed_stability else "unknown"
         summary.update(
             first_blocker_layer="CANDIDATE_SUPPLY",
             first_failing_event=candidate_supply.first_failing_event or "RAW_CANDIDATE_COUNT=0",
             root_cause_summary="Feed is stable enough, but no real candidates were generated before Phase2.",
             confidence="HIGH",
             next_action_type="FIX_CANDIDATE_SUPPLY",
-            next_pr_recommendation="Inspect TradeBuilder output and upstream feature readiness before Phase2 or ranking changes.",
+            next_pr_recommendation=_candidate_supply_recommendation(candidate_supply),
             downstream_impact=(
                 "Phase2 is downstream until real candidates are produced.",
                 "Edge Measurement is not evaluable until executable or paper outcomes exist.",
@@ -281,7 +316,7 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Phase2 is downstream until candidates exist.",
                 "Edge Measurement is not evaluable until candidates exist.",
             ),
-            evidence_scope=feed_stability_scope,
+            evidence_scope=_evidence_scope_from_candidates(feed_scope, candidate_scope),
             current_session_feed_fresh=current_session_feed_fresh if current_session_feed_fresh is not None else "unknown",
             stale_evidence_ignored_count=stale_evidence_ignored_count,
             stale_evidence_reason=stale_evidence_reason,
