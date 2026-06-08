@@ -146,7 +146,7 @@ def test_candidate_pool_rejects_non_candidate_items():
         build_candidate_pool([{"bad": "payload"}])  # type: ignore[list-item]
 
 
-def test_lifecycle_snapshot_joins_classification_downgrade_score_and_rank():
+def test_lifecycle_snapshot_joins_pipeline_reports_with_exact_score_and_rank():
     candidate = _candidate(
         strategy_id="clean_breakout",
         lineage={"candidate_id": "candidate-1", "candidate_intent_id": "intent-1"},
@@ -175,13 +175,17 @@ def test_lifecycle_snapshot_joins_classification_downgrade_score_and_rank():
     assert snapshot.classification_bucket == "EXECUTABLE_CANDIDATE"
     assert snapshot.downgraded_bucket == "EXECUTABLE_CANDIDATE"
     assert snapshot.score_eligibility == "SCORE_ELIGIBLE"
-    assert snapshot.final_score is not None
+    assert snapshot.final_score == pytest.approx(scores.scores[0].final_score)
+    assert snapshot.final_score == pytest.approx(0.7352)
     assert snapshot.rank == 1
     assert snapshot.evidence_refs == ("evidence://cycle/1",)
     payload = snapshot.to_dict()
+    assert payload["read_only"] is True
+    assert payload["append"] is False
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False
     assert payload["live_order_action"] is False
+    assert payload["broker_order_action"] is False
 
 
 def test_lifecycle_snapshot_blocks_fallback_from_execution_safe():
@@ -210,7 +214,7 @@ def test_lifecycle_snapshot_blocks_fallback_from_execution_safe():
     assert snapshot.downgraded_bucket == "SUPPRESSED_CANDIDATE"
     assert "fallback_quote_data" in snapshot.downgrade_reasons
     assert "fallback_data" in snapshot.safety_flags
-    assert snapshot.rank is not None
+    assert snapshot.rank == 1
 
 
 def test_lifecycle_snapshot_does_not_invent_downstream_truth_when_reports_missing():
