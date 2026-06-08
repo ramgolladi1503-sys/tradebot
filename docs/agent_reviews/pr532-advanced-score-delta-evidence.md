@@ -25,7 +25,7 @@ In scope:
 - Compare default score vs explicit profile score for the same candidates.
 - Emit candidate-level score deltas, shadow rank-estimate deltas, and component-level weighted delta drivers.
 - Emit promotion/demotion explanations and safety-status preservation evidence.
-- Add focused tests for score movement, rank-estimate movement, component explanations, missing profile rejection, and unsafe candidate suppression.
+- Add focused tests for score movement, rank-estimate movement, component explanations, explicit profile requirement, and unsafe suppression.
 
 Out of scope:
 
@@ -73,7 +73,7 @@ This work is unsafe if:
 - profile scoring changes eligibility or bucket status unexpectedly
 - rank estimates are presented as runtime ranking changes
 - component deltas are omitted, making score movement unexplainable
-- the evidence engine accepts missing profiles and silently compares default vs default
+- the evidence engine accepts absent profiles and silently compares default vs default
 
 ## How We Know Runtime Behavior Did Not Change
 
