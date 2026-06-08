@@ -172,6 +172,9 @@ class RegimeScoringProfile:
     read_only: bool
     is_order_action: bool
     append: bool
+    broker_api_called: bool
+    live_order_action: bool
+    broker_order_action: bool
     primary_regime: str
     selected_profiles: tuple[str, ...]
     regime_scores: dict[str, float]
@@ -191,6 +194,9 @@ class RegimeScoringProfile:
             "read_only": self.read_only,
             "is_order_action": self.is_order_action,
             "append": self.append,
+            "broker_api_called": self.broker_api_called,
+            "live_order_action": self.live_order_action,
+            "broker_order_action": self.broker_order_action,
             "primary_regime": self.primary_regime,
             "selected_profiles": list(self.selected_profiles),
             "regime_scores": dict(self.regime_scores),
@@ -238,6 +244,9 @@ def resolve_regime_scoring_profile(
         read_only=True,
         is_order_action=False,
         append=False,
+        broker_api_called=False,
+        live_order_action=False,
+        broker_order_action=False,
         primary_regime=regime_result.primary_regime,
         selected_profiles=selected_profiles,
         regime_scores=dict(regime_result.scores),
@@ -302,7 +311,7 @@ def _merge_profile_texts(selected_profiles: tuple[str, ...], source: Mapping[str
     out: list[str] = []
     seen: set[str] = set()
     for profile in selected_profiles:
-        for item in source.get(profile, ()):
+        for item in source.get(profile, ()): 
             text = str(item).strip()
             if not text or text in seen:
                 continue
