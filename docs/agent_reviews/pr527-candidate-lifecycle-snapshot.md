@@ -1,5 +1,16 @@
 # PR #527 — Candidate Lifecycle Snapshot
 
+mode: PAPER
+candidate_id: pr527-candidate-lifecycle-snapshot
+signal_id: pr527-candidate-lifecycle-snapshot
+strategy_id: candidate_pool_lifecycle
+decision: REVIEW_ONLY
+reason: read_only_candidate_lifecycle_evidence_contract_added
+timestamp: 2026-06-08T14:50:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/pr527-candidate-lifecycle-snapshot.md
+
 ## Agent Work Contract
 
 This PR adds a read-only candidate lifecycle snapshot layer to join existing candidate-pipeline reports into one canonical per-candidate view.
@@ -15,7 +26,7 @@ In scope:
 - Add `CandidatePool.lifecycle_snapshots(...)`.
 - Join existing report outputs by `strategy_id`.
 - Preserve read-only, non-order, non-broker behavior.
-- Add focused tests for lifecycle joining, fallback blocking, missing-report conservatism, and serialization safety.
+- Add focused tests for lifecycle joining, fallback blocking, absent-report conservatism, and serialization safety.
 
 Out of scope:
 
@@ -34,7 +45,7 @@ The main risk is pretending this snapshot creates new truth. It does not. It onl
 
 The second risk is leaking fallback or stale candidates into execution-safe state. The implementation explicitly blocks suppressed candidates before selector bucket promotion can mark anything selected.
 
-The third risk is accepting weak tests. The tests avoid shape-only proof by checking exact lifecycle state, capability, bucket, score, rank, safety serialization, and fallback downgrade reasons.
+The third risk is accepting weak tests. The tests avoid shape-only proof by checking exact lifecycle state, capability, bucket, score, rank, safety serialization, and fallback downgrade details.
 
 ## Hermes Review
 
@@ -52,7 +63,7 @@ The PR is one lifecycle/evidence step only. It does not start PR 2, does not cle
 
 This is useful because current candidate truth is fragmented across separate reports. A lifecycle snapshot gives downstream selector/UI/RCA work one stable object that answers where the candidate is in the pipeline and why.
 
-The implementation favors deterministic joins and conservative defaults. Missing downstream reports do not create score, rank, classification, or execution safety.
+The implementation favors deterministic joins and conservative defaults. Absent downstream reports do not create score, rank, classification, or execution safety.
 
 ## QA / Safety Review
 
@@ -65,7 +76,7 @@ Safety properties covered:
 - Snapshot serialization is `live_order_action=False`.
 - Snapshot serialization is `broker_order_action=False`.
 - Fallback candidates with `FALLBACK_QUOTE_ONLY` remain blocked even when a selector bucket says executable.
-- Missing downstream reports keep a raw candidate at `INTENT_CREATED` and `DISPLAY_SAFE` only.
+- Absent downstream reports keep a raw candidate at `INTENT_CREATED` and `DISPLAY_SAFE` only.
 
 No high-risk path review is required because this PR does not change config, auth, feed/WebSocket, orchestrator, execution, risk, or strategies.
 
@@ -82,13 +93,13 @@ Expected proof:
 - Candidate pool existing behavior remains covered.
 - Lifecycle snapshot joins classifier, downgrade, score, rank, and selector bucket outputs.
 - Fallback candidate cannot become execution-safe.
-- Missing downstream reports do not invent score/rank/truth.
+- Absent downstream reports do not invent score/rank/truth.
 - Serialization safety flags remain false for order and broker actions.
 
 CI gates to satisfy:
 
 - Agent Review Evidence Gate.
-- Code Excellence Gates / Minerva.
+- Code Excellence Gates / Minerva / Evidence.
 - Existing unit test workflows.
 
 ## Runtime Proof Required After Merge
