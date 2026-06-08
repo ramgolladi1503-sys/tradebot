@@ -2,40 +2,44 @@
 
 ## Agent Work Contract
 
+### Source Agent
+
+```text
 source_agent: Codex
-action: generate_patch
+action: GENERATE_PATCH (feed recovery timing, timeout, storm-guard, and fail-closed auth handling)
 title: FEED-STAB-01 — Real Feed Recovery Timeout & Storm Guard
 scope: Harden websocket feed recovery with real time, timeout, storm-guard, and fail-closed auth handling.
 requested_paths:
-- `config/config.py`
-- `core/feed_recovery_coordinator.py`
-- `core/kite_depth_ws.py`
-- `tests/test_feed_recovery_coordinator.py`
-- `tests/test_kite_depth_ws_stability.py`
-- `docs/agent_reviews/feed-stab-01-recovery-timeout-storm-guard.md`
+  - config/config.py
+  - core/feed_recovery_coordinator.py
+  - core/kite_depth_ws.py
+  - tests/test_feed_recovery_coordinator.py
+  - tests/test_kite_depth_ws_stability.py
+  - docs/agent_reviews/feed-stab-01-recovery-timeout-storm-guard.md
 allowed_paths:
-- `config/config.py`
-- `core/feed_recovery_coordinator.py`
-- `core/kite_depth_ws.py`
-- `tests/test_feed_recovery_coordinator.py`
-- `tests/test_kite_depth_ws_stability.py`
-- `docs/agent_reviews/feed-stab-01-recovery-timeout-storm-guard.md`
+  - config/config.py
+  - core/feed_recovery_coordinator.py
+  - core/kite_depth_ws.py
+  - tests/test_feed_recovery_coordinator.py
+  - tests/test_kite_depth_ws_stability.py
+  - docs/agent_reviews/feed-stab-01-recovery-timeout-storm-guard.md
 forbidden_paths:
-- `strategies/`
-- `core/order*`
-- `core/broker*`
-- `dashboard/`
-- `credentials.py`
-- `.env`
+  - strategies/*
+  - core/order*
+  - core/broker*
+  - dashboard/*
+  - credentials.py
+  - .env
 expected_tests:
-- `python -m pytest tests/test_feed_recovery_coordinator.py tests/test_kite_depth_ws_stability.py -q`
+  - python -m pytest tests/test_feed_recovery_coordinator.py tests/test_kite_depth_ws_stability.py -q
 acceptance_proof:
-- `WS1006` starts soft recovery with a real timestamp.
-- Recovery clears when option verification succeeds.
-- Recovery times out after the configured window.
-- Three recoveries inside the configured window block further recovery.
-- Auth failures fail closed and do not enter a reconnect loop.
-- Terminal reactor failures remain restart-required.
+  - WS1006 starts soft recovery with a real timestamp.
+  - Recovery clears when option verification succeeds.
+  - Recovery times out after the configured window.
+  - Three recoveries inside the configured window block further recovery.
+  - Auth failures fail closed and do not enter a reconnect loop.
+  - Terminal reactor failures remain restart-required.
+```
 
 ## High-Risk Path Review
 
