@@ -14,6 +14,7 @@ from .feed_stability_agent import analyze_feed_stability
 from .live_rca_agent import analyze_live_rca
 from .phase2_ranking_truth_agent import analyze_phase2_ranking_truth
 from .safety_regression_gate_agent import analyze_safety_regression_gate
+from .readers import read_json_file
 
 
 COMMAND_CENTER_SCHEMA_VERSION = 2
@@ -128,6 +129,11 @@ def _render_markdown(report: CommandCenterReport) -> str:
         f"- stale_evidence_ignored_count: `{report.metrics_summary.get('stale_evidence_ignored_count', 0)}`",
         f"- stale_evidence_reason: `{report.metrics_summary.get('stale_evidence_reason', '') or 'NONE'}`",
         f"- first_current_session_blocker: `{report.metrics_summary.get('first_current_session_blocker', 'UNKNOWN')}`",
+        f"- latest_raw_candidate_count: `{report.metrics_summary.get('latest_raw_candidate_count', 0)}`",
+        f"- latest_post_real_filter_count: `{report.metrics_summary.get('latest_post_real_filter_count', 0)}`",
+        f"- latest_post_executable_filter_count: `{report.metrics_summary.get('latest_post_executable_filter_count', 0)}`",
+        f"- latest_final_emit_block_reason: `{report.metrics_summary.get('latest_final_emit_block_reason', '') or 'NONE'}`",
+        f"- latest_execution_truth_blockers: `{', '.join(report.metrics_summary.get('latest_execution_truth_blockers') or []) or 'NONE'}`",
         "",
         "# Why this is first",
         f"- {report.root_cause_summary}",
@@ -224,13 +230,7 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
     feed_stability_scope = str((feed_stability.metrics.get("evidence_scope") if feed_stability else None) or "unknown") if feed_stability else "unknown"
     stale_evidence_ignored_count = int(feed_stability.metrics.get("stale_evidence_ignored_count") or 0) if feed_stability else 0
     stale_evidence_reason = str(feed_stability.metrics.get("stale_evidence_reason") or "") if feed_stability else ""
-    current_feed_stability_blocker = False
-    if feed_stability:
-        current_feed_stability_blocker = (
-            int(feed_stability.metrics.get("current_session_churn_count") or 0) > 0
-            or int(feed_stability.metrics.get("current_session_ws1006_count") or 0) > 0
-            or any(item.severity == "BLOCKER" and item.code != "STALE_FEED_CHURN" for item in feed_stability.findings)
-        )
+    current_feed_stability_blocker = bool(feed_stability and feed_stability.verdict == "BLOCKER")
     stale_only_feed_evidence = bool(feed_stability and current_session_feed_fresh is True and stale_evidence_ignored_count > 0 and not current_feed_stability_blocker)
 
     feed_truth_dead = False
@@ -238,17 +238,45 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
         feed_runtime_state = str(feed_stability.metrics.get("feed_truth_state") or feed_stability.metrics.get("runtime_state") or "").upper()
         feed_truth_dead = feed_runtime_state in {"DEAD", "RECOVERY_BLOCKED"}
         block_reason_text = str(feed_stability.metrics.get("option_feed_block_reasons") or feed_stability.metrics.get("option_feed_block_reason_by_symbol") or "").upper()
+        option_verify_failure = str(feed_stability.metrics.get("option_feed_verification_failure_detail") or "").upper()
         feed_truth_dead = feed_truth_dead or "NO_LIVE_OPTION_FEED" in block_reason_text or "DEAD" in block_reason_text or "RECOVERY_BLOCKED" in block_reason_text
+        feed_truth_dead = feed_truth_dead or int(feed_stability.metrics.get("current_session_no_live_option_feed_after_subscribe_count") or 0) > 0
+        feed_truth_dead = feed_truth_dead or int(feed_stability.metrics.get("current_session_recovery_blocked_count") or 0) > 0
+        feed_truth_dead = feed_truth_dead or "OPTION_FEED_VERIFY_TIMEOUT" in option_verify_failure
 
-    if feed_stability and current_feed_stability_blocker and not stale_only_feed_evidence:
+    feed_truth_blocker = bool(
+        feed_truth_dead
+        or (feed_stability and int(feed_stability.metrics.get("current_session_no_live_option_feed_after_subscribe_count") or 0) > 0)
+        or (feed_stability and int(feed_stability.metrics.get("current_session_recovery_blocked_count") or 0) > 0)
+        or (feed_stability and "OPTION_FEED_VERIFY_TIMEOUT" in str(feed_stability.metrics.get("option_feed_verification_failure_detail") or "").upper())
+    )
+    feed_stability_churn_blocker = bool(
+        feed_stability
+        and feed_stability.verdict == "BLOCKER"
+        and not feed_truth_blocker
+        and not stale_only_feed_evidence
+    )
+
+    if feed_stability and (feed_truth_blocker or feed_stability_churn_blocker) and not stale_only_feed_evidence:
         execution_blocked_by_feed_truth = bool(candidate_supply and int(candidate_supply.metrics.get("raw_candidate_count") or 0) > 0 and ranked and int(ranked.metrics.get("executable_count") or 0) == 0)
+        first_event = feed_stability.first_failing_event or "FEED_TRUTH"
+        if feed_truth_blocker:
+            first_event = feed_stability.first_failing_event or "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"
         summary.update(
-            first_blocker_layer="FEED_STABILITY",
-            first_failing_event=feed_stability.first_failing_event or "FEED_REBALANCE_APPLIED",
-            root_cause_summary="Feed lifecycle churn and websocket recovery state are the first observable blocker.",
+            first_blocker_layer="FEED_TRUTH" if feed_truth_blocker else "FEED_STABILITY",
+            first_failing_event=first_event,
+            root_cause_summary=(
+                "Current-session live option feed truth failed after subscribe/resubscribe and must be restored before downstream analysis."
+                if feed_truth_blocker
+                else "Feed lifecycle churn and websocket recovery state are the first observable blocker."
+            ),
             confidence="HIGH" if feed_stability.verdict == "BLOCKER" or feed_stability.findings else "MEDIUM",
-            next_action_type="FIX_FEED_LIFECYCLE",
-            next_pr_recommendation="Feed Lifecycle Stabilization — prevent stale-option refresh and subscription rebalance mutation when freshness guard says mutation is ineligible; keep dead-WS mutation blocked.",
+            next_action_type="FIX_FEED_TRUTH" if feed_truth_blocker else "FIX_FEED_LIFECYCLE",
+            next_pr_recommendation=(
+                "Feed Truth Stabilization — verify live option ticks after subscribe/resubscribe and keep WS1006 recovery blocked until current-session ticks are proven."
+                if feed_truth_blocker
+                else "Feed Lifecycle Stabilization — prevent stale-option refresh and subscription rebalance mutation when freshness guard says mutation is ineligible; keep dead-WS mutation blocked."
+            ),
             downstream_impact=(
                 "Candidate Supply is downstream until feed truth is stable.",
                 "Phase2 is downstream until real candidates enter the pipeline.",
@@ -263,11 +291,15 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
             current_session_feed_fresh=current_session_feed_fresh if current_session_feed_fresh is not None else "unknown",
             stale_evidence_ignored_count=stale_evidence_ignored_count,
             stale_evidence_reason=stale_evidence_reason,
-            first_current_session_blocker="FEED_STABILITY",
+            first_current_session_blocker="FEED_TRUTH" if feed_truth_blocker else "FEED_STABILITY",
         )
         if execution_blocked_by_feed_truth:
             summary["root_cause_summary"] = "Candidates existed, but execution was blocked by feed runtime truth."
-            summary["next_pr_recommendation"] = "Feed Lifecycle Stabilization — prevent stale-option refresh and subscription rebalance mutation when freshness guard says mutation is ineligible; keep dead-WS mutation blocked."
+            summary["next_pr_recommendation"] = (
+                "Feed Truth Stabilization — verify live option ticks after subscribe/resubscribe and keep WS1006 recovery blocked until current-session ticks are proven."
+                if feed_truth_blocker
+                else "Feed Lifecycle Stabilization — prevent stale-option refresh and subscription rebalance mutation when freshness guard says mutation is ineligible; keep dead-WS mutation blocked."
+            )
         return summary
 
     if feed_truth_dead or (live_rca and any(finding.code == "FEEDTRUTH_DEAD" for finding in live_rca.findings)):
@@ -456,6 +488,9 @@ def run_agent_command_center(
     )
     blocker_layers = [agent.agent_name for agent in agent_reports if agent.verdict == "BLOCKER"]
     summary = _derive_command_center_summary(agent_reports)
+    candidate_starvation = read_json_file(runtime_root / "logs" / "candidate_starvation_trace_latest.json")
+    ranked_runtime = read_json_file(runtime_root / "logs" / "ranked_pipeline_runtime_latest.json")
+    feed_stability_report = _find_agent(agent_reports, "feed_stability")
 
     safety_summary = {
         "read_only": True,
@@ -479,7 +514,43 @@ def run_agent_command_center(
         "stale_evidence_ignored_count": summary["stale_evidence_ignored_count"],
         "stale_evidence_reason": summary["stale_evidence_reason"],
         "first_current_session_blocker": summary["first_current_session_blocker"],
+        "latest_raw_candidate_count": int(candidate_starvation.get("raw_candidate_count") or 0),
+        "latest_post_real_filter_count": int(candidate_starvation.get("post_real_filter_count") or 0),
+        "latest_post_executable_filter_count": int(candidate_starvation.get("post_executable_filter_count") or 0),
+        "latest_final_emit_block_reason": str(
+            ranked_runtime.get("final_emit_block_reason")
+            or candidate_starvation.get("final_emit_block_reason")
+            or ""
+        )
+        or None,
+        "latest_execution_truth_blockers": list(
+            dict.fromkeys(
+                [
+                    *list(ranked_runtime.get("execution_truth_blockers") or []),
+                    *list(candidate_starvation.get("execution_truth_blockers") or []),
+                ]
+            )
+        ),
+        "latest_candidate_count": int(candidate_starvation.get("raw_candidate_count") or 0),
+        "latest_execution_truth_blockers_count": len(list(dict.fromkeys([*list(ranked_runtime.get("execution_truth_blockers") or []), *list(candidate_starvation.get("execution_truth_blockers") or [])]))),
     }
+    if feed_stability_report is not None:
+        metrics_summary.update(
+            {
+                "current_session_option_subscribe_count": int(feed_stability_report.metrics.get("current_session_option_subscribe_count") or 0),
+                "current_session_option_verify_begin_count": int(feed_stability_report.metrics.get("current_session_option_verify_begin_count") or 0),
+                "current_session_option_verify_waiting_count": int(feed_stability_report.metrics.get("current_session_option_verify_waiting_count") or 0),
+                "current_session_option_verify_ok_count": int(feed_stability_report.metrics.get("current_session_option_verify_ok_count") or 0),
+                "current_session_option_verify_failed_count": int(feed_stability_report.metrics.get("current_session_option_verify_failed_count") or 0),
+                "current_session_no_live_option_feed_after_subscribe_count": int(feed_stability_report.metrics.get("current_session_no_live_option_feed_after_subscribe_count") or 0),
+                "current_session_recovery_blocked_count": int(feed_stability_report.metrics.get("current_session_recovery_blocked_count") or 0),
+                "current_session_feed_ltp_stale_count": int(feed_stability_report.metrics.get("current_session_feed_ltp_stale_count") or 0),
+                "current_session_feed_depth_stale_count": int(feed_stability_report.metrics.get("current_session_feed_depth_stale_count") or 0),
+                "current_session_slo_feed_stale_count": int(feed_stability_report.metrics.get("current_session_slo_feed_stale_count") or 0),
+                "current_session_rebalance_applied_count": int(feed_stability_report.metrics.get("current_session_rebalance_applied_count") or 0),
+                "current_session_rebalance_skipped_count": int(feed_stability_report.metrics.get("current_session_rebalance_skipped_count") or 0),
+            }
+        )
     report = CommandCenterReport(
         schema_version=COMMAND_CENTER_SCHEMA_VERSION,
         generated_at=_now_iso(),

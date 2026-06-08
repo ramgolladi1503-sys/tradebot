@@ -73,11 +73,10 @@ def test_agent_command_center_uses_domain_layer_not_agent_name(tmp_path: Path):
     assert payload["first_blocker_layer"] != "live_rca"
     assert payload["first_blocker_layer"] != "candidate_supply"
     assert payload["first_blocker_layer"] != "phase2_ranking_truth"
-    assert payload["next_action_type"] == "FIX_FEED_LIFECYCLE"
+    assert payload["next_action_type"] == "FIX_FEED_TRUTH"
     assert payload["confidence"] in {"HIGH", "MEDIUM"}
-    assert "stale-option" in payload["next_pr_recommendation"].lower()
-    assert "subscription" in payload["next_pr_recommendation"].lower()
-    assert "feed lifecycle" in payload["root_cause_summary"].lower()
+    assert "feed truth" in payload["next_pr_recommendation"].lower()
+    assert "feed truth" in payload["root_cause_summary"].lower()
 
 
 def test_feed_blocker_outranks_candidate_supply_and_phase2(tmp_path: Path):
@@ -112,8 +111,8 @@ def test_report_includes_next_action_type_and_markdown_headings(tmp_path: Path):
     report = run_agent_command_center(runtime_dir=runtime_dir, logs_dir=logs_dir, out_dir=runtime_dir / "agent_reports")
     payload = report.to_dict()
     md = (runtime_dir / "agent_reports" / "agent_command_center_latest.md").read_text(encoding="utf-8")
-    assert payload["next_action_type"] == "FIX_FEED_LIFECYCLE"
-    assert payload["first_failing_event"] in {"FEED_REBALANCE_APPLIED", "CONNECTION_ERROR:1006"}
+    assert payload["next_action_type"] == "FIX_FEED_TRUTH"
+    assert payload["first_failing_event"] in {"FEED_REBALANCE_APPLIED", "WS1006_PROCESS_RESTART_REQUIRED", "RECOVERY_BLOCKED", "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"}
     assert payload["downstream_impact"]
     assert "# What happened?" in md
     assert "# Why this is first" in md
@@ -135,7 +134,7 @@ def test_live_rca_unknown_cannot_override_feed_stability_evidence(tmp_path: Path
     payload = report.to_dict()
     assert payload["first_blocker_layer"] in {"FEED_STABILITY", "FEED_TRUTH"}
     assert payload["first_blocker_layer"] != "AUTH"
-    assert payload["next_action_type"] == "FIX_FEED_LIFECYCLE"
+    assert payload["next_action_type"] == "FIX_FEED_TRUTH"
 
 
 def test_feed_and_phase2_downstream_blocks_do_not_beat_feed_stability(tmp_path: Path):
@@ -152,7 +151,7 @@ def test_feed_and_phase2_downstream_blocks_do_not_beat_feed_stability(tmp_path: 
     assert payload["first_blocker_layer"] in {"FEED_STABILITY", "FEED_TRUTH"}
     assert payload["first_blocker_layer"] != "CANDIDATE_SUPPLY"
     assert payload["first_blocker_layer"] != "PHASE2_RANKING"
-    assert payload["next_action_type"] == "FIX_FEED_LIFECYCLE"
+    assert payload["next_action_type"] == "FIX_FEED_TRUTH"
 
 
 def test_feed_truth_dead_uses_live_rca_findings_not_code_attribute(tmp_path: Path):
@@ -175,7 +174,7 @@ def test_feed_truth_dead_uses_live_rca_findings_not_code_attribute(tmp_path: Pat
     payload = report.to_dict()
     assert payload["first_blocker_layer"] == "FEED_TRUTH"
     assert payload["next_action_type"] == "FIX_FEED_TRUTH"
-    assert payload["first_failing_event"] == "FEED_TRUTH_DEAD"
+    assert payload["first_failing_event"] in {"WS1006_PROCESS_RESTART_REQUIRED", "RECOVERY_BLOCKED", "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"}
 
 
 def test_command_center_markdown_does_not_recommend_auth_first_for_feed_churn(tmp_path: Path):
@@ -443,3 +442,57 @@ def test_command_center_renders_candidate_supply_zero_attribution_markdown(tmp_p
     assert "first_candidate_supply_zero_subtype" in md
     assert "candidate_supply_evidence_scope" in md
     assert "feed_churn_evidence_scope" in md
+
+
+def test_command_center_includes_live_option_verify_and_candidate_truth_metrics(tmp_path: Path):
+    runtime_dir, logs_dir = _write_runtime(
+        tmp_path,
+        feed_runtime={
+            "run_id": "run-current",
+            "boot_epoch": 2000.0,
+            "ts_epoch": 2001.0,
+            "ts_ist": "2026-06-08T09:30:00+05:30",
+            "runtime_state": "RUNNING",
+            "feed_truth_state": "LIVE",
+            "ws_connected": True,
+            "gate_status": {"N2_FEED_FRESH": {"ok": True}},
+            "feed_health_snapshot": {"N2_FEED_FRESH": {"ok": True}},
+            "option_feed_verification": {
+                "state": "OK",
+                "reason": "connect",
+                "verified_symbols": ["NIFTY"],
+            },
+            "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        },
+        depth_log=(
+            'ts_epoch=2002.0 boot_epoch=2000.0 run_id=run-current event=FEED_ON_CONNECT_SUBSCRIBE reason=connect subscription_requested_by_symbol={"NIFTY":2} subscribed_option_tokens_count_by_symbol={"NIFTY":2}\n'
+            'ts_epoch=2002.5 boot_epoch=2000.0 run_id=run-current event=FEED_OPTION_VERIFY_BEGIN reason=connect\n'
+            'ts_epoch=2003.0 boot_epoch=2000.0 run_id=run-current event=FEED_OPTION_VERIFY_OK reason=connect verified_symbols=["NIFTY"]\n'
+        ),
+        starvation_trace={
+            "raw_candidate_count": 4,
+            "post_real_filter_count": 2,
+            "post_executable_filter_count": 1,
+            "final_emit_block_reason": "STALE_OPTION_LTP",
+            "execution_truth_blockers": ["STALE_OPTION_LTP", "WS_DISCONNECTED"],
+        },
+        ranked_runtime={
+            "ranked_candidate_count": 1,
+            "executable_count": 1,
+            "execution_truth_blockers": ["STALE_OPTION_LTP", "WS_DISCONNECTED"],
+            "final_emit_block_reason": "STALE_OPTION_LTP",
+        },
+    )
+
+    report = run_agent_command_center(runtime_dir=runtime_dir, logs_dir=logs_dir, out_dir=runtime_dir / "agent_reports")
+    payload = report.to_dict()
+    metrics = payload["metrics_summary"]
+    assert metrics["current_session_option_subscribe_count"] == 1
+    assert metrics["current_session_option_verify_begin_count"] == 1
+    assert metrics["current_session_option_verify_ok_count"] == 1
+    assert metrics["current_session_option_verify_failed_count"] == 0
+    assert metrics["latest_raw_candidate_count"] == 4
+    assert metrics["latest_post_real_filter_count"] == 2
+    assert metrics["latest_post_executable_filter_count"] == 1
+    assert metrics["latest_final_emit_block_reason"] == "STALE_OPTION_LTP"
+    assert metrics["latest_execution_truth_blockers"] == ["STALE_OPTION_LTP", "WS_DISCONNECTED"]

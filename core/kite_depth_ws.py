@@ -148,6 +148,19 @@ _FEED_RESTART_VERIFY_VERIFIED_EPOCH: float | None = None
 _FEED_RESTART_VERIFY_FAILURE_DETAIL: str = ""
 _FEED_RESTART_VERIFY_LAST_STAGE_EVENT: str = ""
 
+_OPTION_FEED_VERIFY_STATE: str = "IDLE"  # IDLE | PENDING | OK | FAILED
+_OPTION_FEED_VERIFY_REASON: str = ""
+_OPTION_FEED_VERIFY_START_EPOCH: float = 0.0
+_OPTION_FEED_VERIFY_DEADLINE_EPOCH: float = 0.0
+_OPTION_FEED_VERIFY_REQUIRED_SYMBOLS: list[str] = []
+_OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL: dict[str, int] = {}
+_OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL: dict[str, int] = {}
+_OPTION_FEED_VERIFY_VERIFIED_SYMBOLS: list[str] = []
+_OPTION_FEED_VERIFY_MISSING_SYMBOLS: list[str] = []
+_OPTION_FEED_VERIFY_VERIFIED_EPOCH: float | None = None
+_OPTION_FEED_VERIFY_FAILURE_DETAIL: str = ""
+_OPTION_FEED_VERIFY_LAST_STAGE_EVENT: str = ""
+
 _RESTART_VERIFY_OPTION_OK_CODES = {"", "OK", "NONE", "HEALTHY", "FRESH"}
 logger = logging.getLogger(__name__)
 _WS_LOGGER = get_rotating_logger("depth_ws_watchdog", _LOG_PATH)
@@ -1413,6 +1426,7 @@ def _reconnect_recovery_blocked_payload(
                 "internal_retry_reason": str(internal_retry_state.get("reason") or "").strip() or None,
             }
         )
+    _log_ws("FEED_RECOVERY_BLOCKED", payload)
     _log_ws("FEED_RECONNECT_SUPPRESSED_RECOVERY_BLOCKED", payload)
     return payload
 
@@ -1823,6 +1837,24 @@ def _restart_verification_min_option_ticks_per_symbol() -> int:
         return 1
 
 
+def _option_feed_verification_enabled() -> bool:
+    return bool(getattr(cfg, "FEED_OPTION_VERIFY_ENABLE", True))
+
+
+def _option_feed_verification_timeout_sec() -> float:
+    try:
+        return max(1.0, float(getattr(cfg, "FEED_OPTION_VERIFY_TIMEOUT_SEC", 15.0)))
+    except Exception:
+        return 15.0
+
+
+def _option_feed_verification_min_ticks_per_symbol() -> int:
+    try:
+        return max(1, int(getattr(cfg, "FEED_OPTION_VERIFY_MIN_OPTION_TICKS_PER_SYMBOL", 1)))
+    except Exception:
+        return 1
+
+
 def _reset_feed_restart_verification(*, reason: str) -> None:
     global _FEED_RESTART_VERIFY_STATE
     global _FEED_RESTART_VERIFY_REASON
@@ -1846,6 +1878,221 @@ def _reset_feed_restart_verification(*, reason: str) -> None:
         _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
         _FEED_RESTART_VERIFY_LAST_STAGE_EVENT = ""
     _clear_last_disconnected_info()
+
+
+def _reset_option_feed_verification(*, reason: str) -> None:
+    global _OPTION_FEED_VERIFY_STATE
+    global _OPTION_FEED_VERIFY_REASON
+    global _OPTION_FEED_VERIFY_START_EPOCH
+    global _OPTION_FEED_VERIFY_DEADLINE_EPOCH
+    global _OPTION_FEED_VERIFY_REQUIRED_SYMBOLS
+    global _OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL
+    global _OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL
+    global _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS
+    global _OPTION_FEED_VERIFY_MISSING_SYMBOLS
+    global _OPTION_FEED_VERIFY_VERIFIED_EPOCH
+    global _OPTION_FEED_VERIFY_FAILURE_DETAIL
+    global _OPTION_FEED_VERIFY_LAST_STAGE_EVENT
+    if not _option_feed_verification_enabled():
+        return
+    with _RESTART_VERIFY_LOCK:
+        _OPTION_FEED_VERIFY_STATE = "IDLE"
+        _OPTION_FEED_VERIFY_REASON = str(reason or "")
+        _OPTION_FEED_VERIFY_START_EPOCH = 0.0
+        _OPTION_FEED_VERIFY_DEADLINE_EPOCH = 0.0
+        _OPTION_FEED_VERIFY_REQUIRED_SYMBOLS = []
+        _OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL = {}
+        _OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL = {}
+        _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = []
+        _OPTION_FEED_VERIFY_MISSING_SYMBOLS = []
+        _OPTION_FEED_VERIFY_VERIFIED_EPOCH = None
+        _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
+        _OPTION_FEED_VERIFY_LAST_STAGE_EVENT = ""
+
+
+def _begin_option_feed_verification(
+    *,
+    reason: str,
+    start_epoch: float,
+    requested_by_symbol: dict[str, int] | None,
+    subscribed_by_symbol: dict[str, int] | None,
+) -> None:
+    global _OPTION_FEED_VERIFY_STATE
+    global _OPTION_FEED_VERIFY_REASON
+    global _OPTION_FEED_VERIFY_START_EPOCH
+    global _OPTION_FEED_VERIFY_DEADLINE_EPOCH
+    global _OPTION_FEED_VERIFY_REQUIRED_SYMBOLS
+    global _OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL
+    global _OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL
+    global _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS
+    global _OPTION_FEED_VERIFY_MISSING_SYMBOLS
+    global _OPTION_FEED_VERIFY_VERIFIED_EPOCH
+    global _OPTION_FEED_VERIFY_FAILURE_DETAIL
+    global _OPTION_FEED_VERIFY_LAST_STAGE_EVENT
+    if not _option_feed_verification_enabled():
+        return
+    start_epoch_f = float(start_epoch or 0.0)
+    if start_epoch_f <= 0.0:
+        start_epoch_f = float(now_utc_epoch())
+    requested_map = {
+        str(symbol or "").upper(): max(0, int(count or 0))
+        for symbol, count in dict(requested_by_symbol or {}).items()
+        if str(symbol or "").strip()
+    }
+    subscribed_map = {
+        str(symbol or "").upper(): max(0, int(count or 0))
+        for symbol, count in dict(subscribed_by_symbol or {}).items()
+        if str(symbol or "").strip()
+    }
+    required_symbols = sorted({sym for sym, count in {**requested_map, **subscribed_map}.items() if int(count or 0) > 0})
+    if not required_symbols:
+        return
+    deadline = start_epoch_f + float(_option_feed_verification_timeout_sec())
+    with _RESTART_VERIFY_LOCK:
+        _OPTION_FEED_VERIFY_STATE = "PENDING"
+        _OPTION_FEED_VERIFY_REASON = str(reason or "")
+        _OPTION_FEED_VERIFY_START_EPOCH = start_epoch_f
+        _OPTION_FEED_VERIFY_DEADLINE_EPOCH = float(deadline)
+        _OPTION_FEED_VERIFY_REQUIRED_SYMBOLS = list(required_symbols)
+        _OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL = dict(requested_map)
+        _OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL = dict(subscribed_map)
+        _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = []
+        _OPTION_FEED_VERIFY_MISSING_SYMBOLS = list(required_symbols)
+        _OPTION_FEED_VERIFY_VERIFIED_EPOCH = None
+        _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
+        _OPTION_FEED_VERIFY_LAST_STAGE_EVENT = ""
+    _log_ws(
+        "FEED_OPTION_VERIFY_BEGIN",
+        {
+            "reason": str(reason or ""),
+            "required_symbols": list(required_symbols),
+            "subscription_requested_by_symbol": dict(requested_map),
+            "subscribed_option_tokens_count_by_symbol": dict(subscribed_map),
+            "verify_deadline_epoch": float(deadline),
+            "start_epoch": start_epoch_f,
+        },
+    )
+
+
+def _option_feed_verification_overlay_payload() -> dict[str, object]:
+    if not _option_feed_verification_enabled():
+        return {}
+    with _RESTART_VERIFY_LOCK:
+        return {
+            "state": str(_OPTION_FEED_VERIFY_STATE or "IDLE").strip().upper(),
+            "reason": str(_OPTION_FEED_VERIFY_REASON or ""),
+            "start_epoch": float(_OPTION_FEED_VERIFY_START_EPOCH or 0.0),
+            "deadline_epoch": float(_OPTION_FEED_VERIFY_DEADLINE_EPOCH or 0.0),
+            "required_symbols": list(_OPTION_FEED_VERIFY_REQUIRED_SYMBOLS or []),
+            "subscription_requested_by_symbol": dict(_OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL or {}),
+            "subscribed_option_tokens_count_by_symbol": dict(_OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL or {}),
+            "verified_symbols": list(_OPTION_FEED_VERIFY_VERIFIED_SYMBOLS or []),
+            "missing_symbols": list(_OPTION_FEED_VERIFY_MISSING_SYMBOLS or []),
+            "verified_epoch": _coerce_epoch(_OPTION_FEED_VERIFY_VERIFIED_EPOCH),
+            "failure_detail": str(_OPTION_FEED_VERIFY_FAILURE_DETAIL or ""),
+        }
+
+
+def _tick_option_feed_verification(*, now_epoch: float) -> None:
+    global _OPTION_FEED_VERIFY_STATE
+    global _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS
+    global _OPTION_FEED_VERIFY_MISSING_SYMBOLS
+    global _OPTION_FEED_VERIFY_VERIFIED_EPOCH
+    global _OPTION_FEED_VERIFY_FAILURE_DETAIL
+    global _OPTION_FEED_VERIFY_LAST_STAGE_EVENT
+    if not _option_feed_verification_enabled():
+        return
+    now_epoch_f = float(now_epoch or 0.0)
+    if now_epoch_f <= 0.0:
+        now_epoch_f = float(now_utc_epoch())
+    with _RESTART_VERIFY_LOCK:
+        state = str(_OPTION_FEED_VERIFY_STATE or "IDLE").strip().upper()
+        if state != "PENDING":
+            return
+        start_epoch = float(_OPTION_FEED_VERIFY_START_EPOCH or 0.0)
+        deadline = float(_OPTION_FEED_VERIFY_DEADLINE_EPOCH or 0.0)
+        reason = str(_OPTION_FEED_VERIFY_REASON or "")
+        required_symbols = list(_OPTION_FEED_VERIFY_REQUIRED_SYMBOLS or [])
+        subscribed_by_symbol = dict(_OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL or {})
+        requested_by_symbol = dict(_OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL or {})
+
+    min_ticks = int(_option_feed_verification_min_ticks_per_symbol())
+    ticks_by_symbol: dict[str, int] = {}
+    verified_symbols: list[str] = []
+    missing_symbols: list[str] = []
+    for symbol in required_symbols:
+        sym = str(symbol or "").upper()
+        if not sym:
+            continue
+        subscribed_count = int(subscribed_by_symbol.get(sym, 0) or 0)
+        requested_count = int(requested_by_symbol.get(sym, 0) or 0)
+        if subscribed_count <= 0 and requested_count <= 0:
+            continue
+        last_tick_ts = _coerce_epoch(_SYMBOL_LAST_OPTION_TICK_TS.get(sym))
+        if last_tick_ts is not None and last_tick_ts >= start_epoch:
+            verified_symbols.append(sym)
+            ticks_by_symbol[sym] = int(ticks_by_symbol.get(sym, 0)) + 1
+        else:
+            missing_symbols.append(sym)
+
+    verified = bool(required_symbols and not missing_symbols and len(verified_symbols) >= min_ticks)
+    stage_event = "FEED_OPTION_VERIFY_OK" if verified else "FEED_OPTION_VERIFY_WAITING_TICKS"
+    if _OPTION_FEED_VERIFY_LAST_STAGE_EVENT != stage_event:
+        with _RESTART_VERIFY_LOCK:
+            if _OPTION_FEED_VERIFY_LAST_STAGE_EVENT != stage_event:
+                _OPTION_FEED_VERIFY_LAST_STAGE_EVENT = stage_event
+                payload = {
+                    "reason": reason,
+                    "required_symbols": required_symbols,
+                    "subscribed_option_tokens_count_by_symbol": subscribed_by_symbol,
+                    "subscription_requested_by_symbol": requested_by_symbol,
+                    "ticks_by_symbol": ticks_by_symbol,
+                    "missing_symbols": missing_symbols,
+                    "elapsed_sec": max(0.0, float(now_epoch_f) - float(start_epoch)),
+                }
+                if verified:
+                    payload["verified_symbols"] = verified_symbols
+                    _log_ws(
+                        "FEED_OPTION_VERIFY_OK",
+                        {
+                            **payload,
+                            "verify_elapsed_sec": max(0.0, float(now_epoch_f) - float(start_epoch)),
+                        },
+                    )
+                else:
+                    _log_ws("FEED_OPTION_VERIFY_WAITING_TICKS", payload)
+
+    if verified:
+        with _RESTART_VERIFY_LOCK:
+            if _OPTION_FEED_VERIFY_STATE == "PENDING":
+                _OPTION_FEED_VERIFY_STATE = "OK"
+                _OPTION_FEED_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
+                _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
+                _OPTION_FEED_VERIFY_MISSING_SYMBOLS = []
+                _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = list(sorted(set(verified_symbols)))
+        return
+
+    if deadline > 0.0 and now_epoch_f >= deadline:
+        failure_reason = "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE" if missing_symbols else "OPTION_FEED_VERIFY_TIMEOUT"
+        with _RESTART_VERIFY_LOCK:
+            if _OPTION_FEED_VERIFY_STATE == "PENDING":
+                _OPTION_FEED_VERIFY_STATE = "FAILED"
+                _OPTION_FEED_VERIFY_FAILURE_DETAIL = failure_reason
+                _OPTION_FEED_VERIFY_MISSING_SYMBOLS = list(sorted(set(missing_symbols or required_symbols)))
+        _log_ws(
+            "FEED_OPTION_VERIFY_FAILED",
+            {
+                "reason": failure_reason,
+                "required_symbols": required_symbols,
+                "missing_symbols": list(sorted(set(missing_symbols or required_symbols))),
+                "ticks_by_symbol": ticks_by_symbol,
+                "subscription_requested_by_symbol": requested_by_symbol,
+                "subscribed_option_tokens_count_by_symbol": subscribed_by_symbol,
+                "ws_connected": _ws_connected_state(),
+                "runtime_state": str(_RUNTIME_STATE or "").strip().upper(),
+                "verify_elapsed_sec": max(0.0, float(now_epoch_f) - float(start_epoch)),
+            },
+        )
 
 
 def _begin_feed_restart_verification(*, reason: str, start_epoch: float, now_epoch: float) -> None:
@@ -2486,6 +2733,9 @@ def _write_feed_runtime_snapshot(
         payload["restart_verification"] = restart_verify
     if restart_verify_failure:
         payload["restart_verification_failure_detail"] = str(restart_verify_failure)
+    option_feed_verification = _option_feed_verification_overlay_payload()
+    if option_feed_verification:
+        payload["option_feed_verification"] = option_feed_verification
     payload["effective_ws_connected"] = derive_effective_ws_connected(payload)
     payload["feed_ok"] = derive_feed_ok(payload)
     feed_truth = classify_feed_truth_state(
@@ -4197,6 +4447,7 @@ def on_ticks(ws, ticks):
     else:
         _RUNTIME_STATE = "RUNNING"
         _LAST_RUNTIME_ERROR = ""
+    _tick_option_feed_verification(now_epoch=now_epoch)
     minute_bucket = int(_LAST_WS_TICK_EPOCH // 60.0)
     if _LAST_FEED_TICK_LOG_MINUTE != minute_bucket:
         _LAST_FEED_TICK_LOG_MINUTE = minute_bucket
@@ -4217,6 +4468,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
     """
     global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
     _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
+    _reset_option_feed_verification(reason=f"stop_depth_ws:{reason}")
     watchdog_thread = None
     ticker_instance = None
     stop_timeout_sec = float(getattr(cfg, "DEPTH_WATCHDOG_STOP_TIMEOUT_SEC", 3.0))
@@ -4830,6 +5082,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 "reason": reason,
                 "tokens": len(desired),
                 "final_token_count_before_subscribe": len(desired),
+                "subscription_requested_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "resolved_option_tokens_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "subscribed_option_tokens_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
                 "option_drop_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
@@ -4842,11 +5095,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 "reason": reason,
                 "tokens": len(tokens),
                 "final_token_count_before_subscribe": len(tokens),
+                "subscription_requested_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "resolved_option_tokens_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "subscribed_option_tokens_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
                 "option_drop_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
                 **selection_payload,
             },
+        )
+        _begin_option_feed_verification(
+            reason=reason,
+            start_epoch=float(now_utc_epoch()),
+            requested_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+            subscribed_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
         )
         if rebalance_state.get("last_rebalance_ts") is None:
             rebalance_state["last_rebalance_ts"] = time.time()
@@ -5172,6 +5432,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
                 min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
             )
+            _tick_option_feed_verification(now_epoch=now_epoch)
             try:
                 with _KITE_TICKER_LOCK:
                     ws_connected_runtime = bool(_KITE_TICKER is not None)
