@@ -1348,6 +1348,10 @@ def _build_ranked_pipeline_runtime_report(
     cycle_blockers: dict,
 ) -> dict:
     ranked_candidates = [cand for cand in list(cycle_ranked_candidates or []) if isinstance(cand, dict)]
+    feed_truth_payload = dict(feed_truth_payload or {})
+    canonical_feed_truth = feed_truth_payload.get("canonical_feed_truth") if isinstance(feed_truth_payload.get("canonical_feed_truth"), dict) else {}
+    feed_truth_state = str(feed_truth_payload.get("feed_truth_state") or canonical_feed_truth.get("state") or "").strip()
+    feed_truth_reason_code = str(feed_truth_payload.get("feed_truth_reason_code") or canonical_feed_truth.get("reason_code") or "").strip()
     report = {
         "schema_version": 1,
         "read_only": True,
@@ -1363,8 +1367,8 @@ def _build_ranked_pipeline_runtime_report(
         "top_executable_count": int(top_payload.get("top_executable_count") or 0),
         "top_advisory_count": int(top_payload.get("top_advisory_count") or 0),
         "market_open": bool(market_open),
-        "feed_truth_state": str((feed_truth_payload or {}).get("feed_truth_state") or ""),
-        "feed_truth_reason_code": str((feed_truth_payload or {}).get("feed_truth_reason_code") or ""),
+        "feed_truth_state": feed_truth_state,
+        "feed_truth_reason_code": feed_truth_reason_code,
         "indicator_readiness_state": str((indicator_payload or {}).get("indicator_readiness_state") or ""),
         "indicator_readiness_reason_code": str((indicator_payload or {}).get("indicator_readiness_reason_code") or ""),
         "blocker_counts": {str(k): int(v) for k, v in dict(cycle_blockers or {}).items()},

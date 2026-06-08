@@ -22,12 +22,17 @@ _RESTART_REQUIRED_STATES = {
     "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED",
     "RESTART_VERIFY_FAILED",
 }
+_RECOVERING_STATES = {"RECOVERING_WS_DROP", "RECONNECTING", "RESUBSCRIBING"}
 
 
 @dataclass(frozen=True)
 class CanonicalFeedTruthState:
     state: str
     reason_code: str
+    recovery_state: str
+    ws_error_code: int | None
+    ws_error_reason: str | None
+    ws_fault_class: str
     blockers: tuple[str, ...]
     ws_connected: bool
     underlying_tick_fresh: bool
@@ -127,6 +132,24 @@ def _truthy_any(*values: Any) -> bool:
     return False
 
 
+def _ws_fault_class(*, feed_error_code: Any, recovery_blocked: bool, process_restart_required: bool, runtime_state: str, reason_code: str) -> str:
+    runtime_state_upper = _upper(runtime_state)
+    reason_code_upper = _upper(reason_code)
+    try:
+        code_int = int(feed_error_code) if feed_error_code is not None else None
+    except Exception:
+        code_int = None
+    if reason_code_upper in {"AUTH_BLOCKED", "TOKEN_INVALID", "LOGIN_REQUIRED"}:
+        return "AUTH_BLOCKED"
+    if recovery_blocked or process_restart_required or runtime_state_upper in {"RECOVERY_BLOCKED", "RESTART_REQUIRED"} or reason_code_upper in {"WS1006_PROCESS_RESTART_REQUIRED", "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED", "RESTART_VERIFY_FAILED"}:
+        return "TERMINAL"
+    if runtime_state_upper in _RECOVERING_STATES:
+        return "RECOVERABLE_WS_DROP"
+    if code_int == 1006:
+        return "RECOVERABLE_WS_DROP"
+    return "UNKNOWN"
+
+
 def build_canonical_feed_truth_state(
     payload: Mapping[str, Any] | None,
     *,
@@ -137,6 +160,9 @@ def build_canonical_feed_truth_state(
     updated_at_ist = str(source.get("updated_at_ist") or _ist_timestamp(now_epoch))
     session_id = str(source.get("session_id") or source.get("run_id") or "").strip()
     runtime_state = _upper(source.get("runtime_state"))
+    recovery_state = _upper(source.get("recovery_state") or source.get("ws_recovery_state") or runtime_state)
+    ws_error_code = _as_int(source.get("ws_error_code") or source.get("feed_error_code") or source.get("disconnected_code") or source.get("ws_error"))
+    ws_error_reason = str(source.get("ws_error_reason") or source.get("disconnected_reason") or source.get("last_error") or "").strip() or None
     ws_connected = _as_bool(source.get("ws_connected"))
     if ws_connected is None:
         ws_connected = _as_bool(source.get("effective_ws_connected"))
@@ -148,7 +174,14 @@ def build_canonical_feed_truth_state(
     subscribed_option_tokens_count = _as_int(source.get("subscribed_option_tokens_count") or source.get("option_subscribe_count"))
     verified_option_symbols = _normalize_symbols(source.get("verified_option_symbols") or source.get("option_symbols_verified") or source.get("verified_symbols"))
     missing_option_symbols = _normalize_symbols(source.get("missing_option_symbols") or source.get("option_symbols_missing"))
-    process_restart_required = _truthy_any(source.get("process_restart_required"), runtime_state in _RESTART_REQUIRED_STATES, _upper(source.get("feed_truth_reason_code")) in _RESTART_REQUIRED_STATES, _upper(source.get("feed_error_code")) == "1006")
+    process_restart_required = _truthy_any(
+        source.get("process_restart_required"),
+        runtime_state in _RESTART_REQUIRED_STATES,
+        _upper(source.get("feed_truth_reason_code")) in _RESTART_REQUIRED_STATES,
+        _upper(source.get("reconnect_blocked_reason")) in _RESTART_REQUIRED_STATES,
+    )
+    if not process_restart_required and ws_connected is False and ws_error_code == 1006 and runtime_state not in _RECOVERING_STATES:
+        process_restart_required = True
     recovery_blocked = _truthy_any(source.get("recovery_blocked"), source.get("feed_recovery_blocked"), runtime_state in _RECOVERY_BLOCKED_STATES, process_restart_required)
     underlying_tick_fresh = _truthy_any(source.get("underlying_tick_fresh"), latest_ltp_age_sec is not None and latest_ltp_age_sec <= float(source.get("max_ltp_age_sec") or 2.5))
     depth_fresh = _truthy_any(source.get("depth_fresh"), latest_depth_age_sec is not None and latest_depth_age_sec <= float(source.get("max_depth_age_sec") or 6.0))
@@ -157,6 +190,8 @@ def build_canonical_feed_truth_state(
     blockers: list[str] = []
     reason_code = _upper(source.get("reason_code") or source.get("feed_truth_reason_code") or runtime_state or "unknown") or "UNKNOWN"
 
+    if recovery_state in _RECOVERING_STATES:
+        reason_code = reason_code if reason_code not in {"UNKNOWN", ""} else recovery_state
     if process_restart_required:
         blockers.append("WS1006_PROCESS_RESTART_REQUIRED")
     if recovery_blocked:
@@ -184,6 +219,9 @@ def build_canonical_feed_truth_state(
     elif runtime_state in _CONNECTING_STATES:
         state = "CONNECTING"
         reason_code = reason_code or "CONNECTING"
+    elif runtime_state in _RECOVERING_STATES:
+        state = "DEGRADED"
+        reason_code = reason_code or recovery_state or "RECOVERING_WS_DROP"
     elif runtime_state in _SUBSCRIBED_STATES and not option_ticks_verified:
         state = "SUBSCRIBED"
         reason_code = reason_code or "SUBSCRIBED"
@@ -224,6 +262,16 @@ def build_canonical_feed_truth_state(
     state_obj = CanonicalFeedTruthState(
         state=state,
         reason_code=reason_code,
+        recovery_state=recovery_state if recovery_state in _RECOVERING_STATES or recovery_state in _VERIFYING_STATES else (recovery_state or state),
+        ws_error_code=ws_error_code if ws_error_code != 0 else None,
+        ws_error_reason=ws_error_reason,
+        ws_fault_class=_ws_fault_class(
+            feed_error_code=ws_error_code,
+            recovery_blocked=bool(recovery_blocked),
+            process_restart_required=bool(process_restart_required),
+            runtime_state=runtime_state,
+            reason_code=reason_code,
+        ),
         blockers=tuple(dict.fromkeys(blockers)),
         ws_connected=bool(ws_connected),
         underlying_tick_fresh=bool(underlying_tick_fresh),

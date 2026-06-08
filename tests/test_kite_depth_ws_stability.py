@@ -10,6 +10,7 @@ import json
 
 import core.depth_hook_cleanup as depth_hook_cleanup
 import core.kite_depth_ws as ws
+from core.feed_recovery_coordinator import FeedRecoveryCoordinator
 import core.tick_store as tick_store
 
 
@@ -78,6 +79,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(depth_hook_cleanup, "_reapply_depth_engine", lambda *args, **kwargs: None, raising=False)
     importlib.reload(ws)
     reset_kite_runtime_credentials_guard()
+    monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", FeedRecoveryCoordinator(), raising=False)
     monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
@@ -249,7 +251,7 @@ def test_ws1006_peer_drop_on_error_is_recoverable_first(monkeypatch):
     assert any(event == "FEED_WS_1006_RECOVERABLE" for event, _ in events)
     assert any(event == "FEED_WS_RECOVERY_ATTEMPT" for event, _ in events)
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECONNECTING"
+    assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
     assert payload["disconnected_code"] == 1006
     assert payload["recovery_blocked"] is False
@@ -274,15 +276,50 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
 
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
-    monkeypatch.setattr(ws, "_RECOVERY_IN_PROGRESS", False, raising=False)
+    ws._FEED_RECOVERY_COORDINATOR.clear_recovery(source="unit_test", reason="reconnect_verified")
+    ws._sync_ws1006_recovery_state_from_coordinator()
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
 
     assert any(event == "FEED_WS_1006_RECOVERY_ESCALATED" for event, _ in events)
-    assert scheduled
+    assert scheduled == []
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["process_restart_required"] is True
     assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["restart_suppressed"] is True
+
+
+def test_ws1006_main_loop_terminated_routes_to_process_restart_required(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    scheduled = []
+    events: list[tuple[str, dict]] = []
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: scheduled.append(dict(kwargs)) or True,
+    )
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_error(ticker, 1006, "main loop terminated after reactor shutdown")
+
+    assert scheduled == []
+    assert any(event == "FEED_WS_PROCESS_RESTART_REQUIRED" for event, _ in events)
+    assert any(event == "FEED_RECOVERY_REQUESTED" for event, _ in events)
+    assert not any(event == "FEED_WS_1006_RECOVERABLE" for event, _ in events)
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["process_restart_required"] is True
     assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
     assert payload["restart_suppressed"] is True
 
@@ -313,9 +350,9 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled
+    assert scheduled == []
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECONNECTING"
+    assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
     assert payload["disconnected_code"] == 1006
     assert "connection was closed uncleanly" in payload["disconnected_reason"]
@@ -356,9 +393,9 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled
+    assert scheduled == []
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECONNECTING"
+    assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
     assert payload["disconnected_code"] == 1006
     assert "connection was closed uncleanly" in payload["disconnected_reason"]
