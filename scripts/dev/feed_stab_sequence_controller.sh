@@ -38,12 +38,18 @@ check_required_green() {
     return 1
   fi
 
-  printf '%s\n' "$pr_json" | python - "$pr" <<'PY'
+  local pr_json_file
+  pr_json_file="$(mktemp "/tmp/pr_checks_${pr}.XXXXXX.json")"
+  printf '%s\n' "$pr_json" > "$pr_json_file"
+
+  python - "$pr" "$pr_json_file" <<'PY'
 import json
 import sys
 
 pr = sys.argv[1]
-data = json.load(sys.stdin)
+path = sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    data = json.load(fh)
 
 if data.get("isDraft"):
     print(f"PR #{pr} is draft")
@@ -76,6 +82,7 @@ if pending:
 print("ALL_GREEN_OR_NON_BLOCKING")
 sys.exit(0)
 PY
+  rm -f "$pr_json_file"
 }
 
 watch_until_green_or_red() {
