@@ -147,6 +147,7 @@ class OpportunityScoreReport:
     safety_flags: tuple[str, ...]
     metadata: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
+    is_order_action: bool = False
 
     def __init__(
         self,
@@ -154,6 +155,7 @@ class OpportunityScoreReport:
         schema_version: int,
         read_only: bool,
         append: bool,
+        is_order_action: bool = False,
         score_count: int,
         score_eligible_count: int,
         needs_confirmation_count: int,
@@ -185,10 +187,7 @@ class OpportunityScoreReport:
         object.__setattr__(self, "safety_flags", safety_flags)
         object.__setattr__(self, "metadata", dict(metadata or {}))
         object.__setattr__(self, "generated_epoch", time.time() if generated_epoch is None else generated_epoch)
-
-    @property
-    def is_order_action(self) -> bool:
-        return False
+        object.__setattr__(self, "is_order_action", bool(is_order_action))
 
     @property
     def broker_api_called(self) -> bool:
@@ -206,7 +205,7 @@ class OpportunityScoreReport:
         return {
             "schema_version": self.schema_version,
             "read_only": self.read_only,
-            "is_order_action": False,
+            "is_order_action": self.is_order_action,
             "append": self.append,
             "broker_api_called": False,
             "live_order_action": False,
