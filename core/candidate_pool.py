@@ -84,8 +84,6 @@ class CandidateLifecycleSnapshot:
     evidence_refs: tuple[str, ...]
     read_only: bool = True
     append: bool = False
-    is_order_action: bool = False
-    broker_api_called: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -110,8 +108,8 @@ class CandidateLifecycleSnapshot:
             "safety_flags": list(self.safety_flags),
             "downgrade_reasons": list(self.downgrade_reasons),
             "evidence_refs": list(self.evidence_refs),
-            "read_only": self.read_only,
-            "append": self.append,
+            "read_only": True,
+            "append": False,
             "is_order_action": False,
             "broker_api_called": False,
             "live_order_action": False,
