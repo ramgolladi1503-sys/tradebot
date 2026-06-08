@@ -1,5 +1,14 @@
 # FEED-STAB-01 — Real Feed Recovery Timeout & Storm Guard
 
+mode: REVIEW
+candidate_id: FEED-STAB-01-RECOVERY-TIMEOUT-STORM-GUARD
+decision: stabilize_feed_recovery_timeout_and_storm_guard
+reason: Make websocket feed recovery time-aware, bounded, and fail-closed without touching strategies, ranking, or broker behavior.
+timestamp: 2026-06-09T00:00:00+05:30
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/feed-stab-01-recovery-timeout-storm-guard.md
+
 ## Agent Work Contract
 
 ### Source Agent
