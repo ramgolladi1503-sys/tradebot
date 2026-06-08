@@ -129,14 +129,21 @@ merge_green_pr() {
   if ! gh pr merge "$pr" --squash --delete-branch; then
     log "Normal merge failed for PR #$pr."
     log "Rechecking PR #$pr after merge failure..."
-    gh pr view "$pr" --json mergeStateStatus,statusCheckRollup,isDraft,merged,state,url || true
-    log "If checks are still pending, the controller should continue polling."
-    log "If branch protection requires human action, this is a hard blocker."
+    local pr_state
+    pr_state="$(gh pr view "$pr" --json mergeStateStatus,statusCheckRollup,isDraft,mergedAt,state,url || true)"
+    printf '%s\n' "$pr_state"
+
+    if printf '%s' "$pr_state" | grep -Eq '"status":"(OPEN|MERGEABLE|BLOCKED)"|"statusCheckRollup".*"status":"(IN_PROGRESS|QUEUED|PENDING)"'; then
+      log "Merge failed while checks or mergeability are still unsettled; continue polling."
+      return 1
+    fi
+
+    log "If branch protection or permissions require human action, this is a hard blocker."
     return 2
   fi
 
   while true; do
-    merged="$(gh pr view "$pr" --json merged -q .merged || echo false)"
+    merged="$(gh pr view "$pr" --json mergedAt,state -q 'if .state == "MERGED" then "true" else "false" end' || echo false)"
     if [[ "$merged" == "true" ]]; then
       log "PR #$pr is merged."
       break
@@ -153,17 +160,33 @@ continue_current_pr() {
   local pr="$1"
 
   log "Continuing current PR #$pr"
-  set +e
-  watch_until_green_or_red "$pr"
-  rc="$?"
-  set -e
+  while true; do
+    set +e
+    watch_until_green_or_red "$pr"
+    rc="$?"
+    set -e
 
-  if [[ "$rc" != "0" ]]; then
+    if [[ "$rc" == "0" ]]; then
+      set +e
+      merge_green_pr "$pr"
+      rc="$?"
+      set -e
+      if [[ "$rc" == "0" ]]; then
+        break
+      fi
+      if [[ "$rc" == "1" ]]; then
+        continue
+      fi
+      exit "$rc"
+    fi
+
+    if [[ "$rc" == "1" ]]; then
+      continue
+    fi
+
     log "Cannot merge PR #$pr because checks are not green."
     exit "$rc"
-  fi
-
-  merge_green_pr "$pr"
+  done
 }
 
 next_branch_for_pr_number() {
