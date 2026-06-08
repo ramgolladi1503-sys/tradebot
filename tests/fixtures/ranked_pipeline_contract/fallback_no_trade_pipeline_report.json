@@ -24,7 +24,6 @@
   "suppressed_rank_count": 2,
   "no_trade_rank_count": 1,
   "blockers": [
-    "CONFLICTING_TRAP_SIGNAL",
     "FALLBACK_QUOTE_ONLY",
     "OPTION_CONFIRMATION_MISSING"
   ],

@@ -125,6 +125,23 @@ def test_normalize_candidates_keeps_different_directions_and_movements_separate(
     }
 
 
+def test_normalize_candidates_preserves_range_like_setup_metadata():
+    range_candidate = _candidate(
+        "range",
+        direction="BUY_CALL",
+        movement_type="MEAN_REVERSION_EXTENSION",
+        source_signals=("mean_reversion", "range_context"),
+    )
+
+    result = normalize_candidates([range_candidate])
+
+    candidate = result.candidates[0]
+    assert candidate.direction == "BUY_CALL"
+    assert candidate.movement_type == "MEAN_REVERSION_EXTENSION"
+    assert "mean_reversion" in candidate.source_signals
+    assert "range_context" in candidate.source_signals
+
+
 def test_normalize_candidates_can_include_strategy_id_in_key():
     first = _candidate("same_setup_a")
     second = _candidate("same_setup_b")

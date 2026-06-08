@@ -102,6 +102,14 @@ def test_soft_warning_keeps_validated_candidate_in_ready_bucket():
     assert out.warnings == ("minor_context_warning",)
 
 
+def test_bearish_candidate_stays_executable_when_not_blocked():
+    out = classify_candidate(_candidate(direction="BUY_PUT", movement_type="MEAN_REVERSION_EXTENSION"))
+
+    assert out.bucket == "EXECUTABLE_CANDIDATE"
+    assert out.executable_candidate is True
+    assert out.direction == "BUY_PUT"
+
+
 def test_classification_report_counts_all_buckets():
     candidates = [
         _candidate("ready"),

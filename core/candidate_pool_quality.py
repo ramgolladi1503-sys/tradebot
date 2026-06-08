@@ -14,6 +14,14 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
+from core.candidate_exposure import (
+    EXPOSURE_BEARISH,
+    EXPOSURE_BULLISH,
+    EXPOSURE_RANGE,
+    EXPOSURE_UNKNOWN,
+    normalize_directional_exposure,
+)
+
 POOL_QUALITY_SCHEMA_VERSION = 1
 _BULLISH_DIRECTIONS = frozenset({"BUY_CALL", "LONG_CALL", "CALL", "CE", "BULLISH", "BUY", "LONG"})
 _BEARISH_DIRECTIONS = frozenset({"BUY_PUT", "LONG_PUT", "PUT", "PE", "BEARISH", "SELL", "SHORT", "SELL_CALL", "SELL_PUT"})
@@ -98,7 +106,8 @@ def analyze_candidate_pool(rows: Iterable[Mapping[str, Any]]) -> CandidatePoolQu
 
     symbol_counts = Counter(_text(row.get("symbol")).upper() or "UNKNOWN" for row in items)
     family_counts = Counter(_text(row.get("strategy_family")).lower() or "unknown" for row in items)
-    direction_counts = Counter(_direction_family(row) for row in items)
+    exposure_signals = tuple(normalize_directional_exposure(row) for row in items)
+    direction_counts = Counter(signal.exposure for signal in exposure_signals)
 
     duplicate_group_count = _duplicate_group_count(items)
     duplicate_candidate_count = _duplicate_candidate_count(items)
@@ -106,9 +115,9 @@ def analyze_candidate_pool(rows: Iterable[Mapping[str, Any]]) -> CandidatePoolQu
     same_family_concentration_count = max(family_counts.values(), default=0)
     unique_symbol_count = len(symbol_counts)
     unique_strategy_family_count = len(family_counts)
-    bullish_count = int(direction_counts.get("BULLISH", 0))
-    bearish_count = int(direction_counts.get("BEARISH", 0))
-    range_count = int(direction_counts.get("RANGE", 0))
+    bullish_count = int(direction_counts.get(EXPOSURE_BULLISH, 0))
+    bearish_count = int(direction_counts.get(EXPOSURE_BEARISH, 0))
+    range_count = int(direction_counts.get(EXPOSURE_RANGE, 0))
     other_direction_count = max(candidate_count - bullish_count - bearish_count - range_count, 0)
 
     fallback_contamination_ratio = _ratio(fallback_count, candidate_count)
@@ -195,7 +204,7 @@ def pool_quality_penalty_for_row(row: Mapping[str, Any], pool: CandidatePoolQual
         penalty += min(0.14, 0.04 * (family_count - 1))
         reasons.append("same_family_concentration")
 
-    direction = _direction_family(payload)
+    direction = normalize_directional_exposure(payload).exposure
     direction_count = int(pool.direction_counts.get(direction, 0))
     if direction_count > 1:
         penalty += min(0.10, 0.03 * (direction_count - 1))
@@ -261,7 +270,10 @@ def _quality_score(
     if same_family_concentration_count > 1:
         score -= min(0.14, 0.04 * (same_family_concentration_count - 1))
         reasons.append("same_family_concentration")
-    if bullish_count == 0 or bearish_count == 0:
+    if bullish_count == 0 and bearish_count == 0 and range_count == 0:
+        score -= 0.10
+        reasons.append("one_sided_direction_coverage")
+    elif range_count == 0 and (bullish_count == 0 or bearish_count == 0):
         score -= 0.10
         reasons.append("one_sided_direction_coverage")
     if range_count == 0 and (bullish_count > 0 or bearish_count > 0):
@@ -286,7 +298,7 @@ def _quality_score(
     elif unique_symbol_count <= 1 or unique_strategy_family_count <= 1 or same_symbol_concentration_count >= 3:
         state = "CONCENTRATED"
     elif bullish_count == 0 or bearish_count == 0:
-        state = "ONE_SIDED"
+        state = "BALANCED" if range_count > 0 else "ONE_SIDED"
     else:
         state = "BALANCED"
     return score, state, _dedupe(reasons)
@@ -313,10 +325,11 @@ def _diversity_score(
 def _duplicate_group_count(rows: tuple[Mapping[str, Any], ...]) -> int:
     groups: dict[tuple[str, str, str], int] = {}
     for row in rows:
+        exposure = normalize_directional_exposure(row).exposure
         key = (
             _text(row.get("symbol")).upper() or "UNKNOWN",
             _text(row.get("strategy_family")).lower() or "unknown",
-            _direction_family(row),
+            exposure,
         )
         groups[key] = groups.get(key, 0) + 1
     return sum(1 for count in groups.values() if count > 1)
@@ -325,10 +338,11 @@ def _duplicate_group_count(rows: tuple[Mapping[str, Any], ...]) -> int:
 def _duplicate_candidate_count(rows: tuple[Mapping[str, Any], ...]) -> int:
     groups: dict[tuple[str, str, str], int] = {}
     for row in rows:
+        exposure = normalize_directional_exposure(row).exposure
         key = (
             _text(row.get("symbol")).upper() or "UNKNOWN",
             _text(row.get("strategy_family")).lower() or "unknown",
-            _direction_family(row),
+            exposure,
         )
         groups[key] = groups.get(key, 0) + 1
     return sum(max(count - 1, 0) for count in groups.values())
@@ -390,17 +404,6 @@ def _is_fallback(row: Mapping[str, Any]) -> bool:
     if _text(row.get("quote_source")).upper() in {"REST_FALLBACK", "SYNTHETIC_OFFHOURS", "SUBSCRIPTION_FAILED"}:
         return True
     return False
-
-
-def _direction_family(row: Mapping[str, Any]) -> str:
-    normalized = _text(row.get("direction") or row.get("side") or row.get("direction_family") or "").upper()
-    if normalized in _BULLISH_DIRECTIONS:
-        return "BULLISH"
-    if normalized in _BEARISH_DIRECTIONS:
-        return "BEARISH"
-    if normalized in _NO_TRADE_DIRECTIONS:
-        return "NO_TRADE"
-    return "OTHER"
 
 
 def _row(row: Mapping[str, Any]) -> dict[str, Any]:
