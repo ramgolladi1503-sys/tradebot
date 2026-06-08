@@ -1098,3 +1098,38 @@ def test_apply_subscription_delta_allows_healthy_rebalance(monkeypatch):
 
     assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is True
     assert any(event == "FEED_REBALANCE_APPLIED" for event, _ in events)
+
+
+def test_option_feed_verification_logs_begin_and_ok(monkeypatch):
+    _patch_common(monkeypatch)
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    ws._reset_option_feed_verification(reason="unit_test")
+    ws._begin_option_feed_verification(
+        reason="connect",
+        start_epoch=1000.0,
+        requested_by_symbol={"NIFTY": 2},
+        subscribed_by_symbol={"NIFTY": 2},
+    )
+    assert events[-1][0] == "FEED_OPTION_VERIFY_BEGIN"
+    assert ws._option_feed_verification_overlay_payload()["state"] == "PENDING"
+    monkeypatch.setitem(ws._SYMBOL_LAST_OPTION_TICK_TS, "NIFTY", 1001.0)
+    ws._tick_option_feed_verification(now_epoch=1002.0)
+    assert any(event == "FEED_OPTION_VERIFY_OK" for event, _ in events)
+    assert ws._option_feed_verification_overlay_payload()["state"] == "OK"
+
+
+def test_option_feed_verification_logs_failed_when_ticks_never_arrive(monkeypatch):
+    _patch_common(monkeypatch)
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    ws._reset_option_feed_verification(reason="unit_test")
+    ws._begin_option_feed_verification(
+        reason="connect",
+        start_epoch=1000.0,
+        requested_by_symbol={"NIFTY": 2},
+        subscribed_by_symbol={"NIFTY": 2},
+    )
+    ws._tick_option_feed_verification(now_epoch=1016.5)
+    assert any(event == "FEED_OPTION_VERIFY_FAILED" for event, _ in events)
+    assert ws._option_feed_verification_overlay_payload()["state"] == "FAILED"

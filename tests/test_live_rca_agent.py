@@ -49,7 +49,7 @@ def test_live_rca_agent_identifies_subscription_churn_first(tmp_path: Path):
     report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
     payload = report.to_dict()
     assert payload["verdict"] == "BLOCKER"
-    assert payload["first_failing_event"] == "FEED_REBALANCE_APPLIED"
+    assert payload["first_failing_event"] == "WS1006_PROCESS_RESTART_REQUIRED"
     assert payload["metrics"]["feed_rebalance_applied_count"] == 1
     assert payload["read_only"] is True
     assert payload["is_order_action"] is False
@@ -99,7 +99,7 @@ def test_live_rca_agent_ignores_generic_auth_text(tmp_path: Path):
     report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
     payload = report.to_dict()
     assert payload["verdict"] == "BLOCKER"
-    assert payload["first_failing_event"] == "FEED_REBALANCE_APPLIED"
+    assert payload["first_failing_event"] == "WS1006_PROCESS_RESTART_REQUIRED"
     assert payload["findings"][0]["code"] != "AUTH_FAILURE"
     assert payload["next_fix_recommendation"] != "Investigate auth_failure first."
 
@@ -169,7 +169,7 @@ def test_live_rca_agent_treats_401_as_auth_only_with_auth_context(tmp_path: Path
 
     report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
     payload = report.to_dict()
-    assert payload["findings"][0]["code"] == "SUBSCRIPTION_CHURN"
+    assert payload["findings"][0]["code"] == "WS1006_PROCESS_RESTART_REQUIRED"
     assert payload["next_fix_recommendation"] != "Investigate auth_failure first."
 
 
@@ -213,8 +213,8 @@ def test_live_rca_agent_ignores_unit_test_auth_failure_when_feed_is_churning(tmp
 
     report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
     payload = report.to_dict()
-    assert payload["findings"][0]["code"] == "SUBSCRIPTION_CHURN"
-    assert payload["first_failing_event"] == "FEED_REBALANCE_APPLIED"
+    assert payload["findings"][0]["code"] == "WS1006_PROCESS_RESTART_REQUIRED"
+    assert payload["first_failing_event"] == "WS1006_PROCESS_RESTART_REQUIRED"
     assert payload["next_fix_recommendation"] != "Investigate auth_failure first."
 
 
@@ -342,3 +342,55 @@ def test_live_rca_agent_keeps_current_session_feed_churn_as_subscription_churn(t
     assert payload["findings"][0]["code"] == "SUBSCRIPTION_CHURN"
     assert payload["metrics"]["current_session_feed_fresh"] is True
     assert payload["metrics"]["stale_feed_evidence_count"] == 0
+
+
+def test_live_rca_agent_classifies_no_live_option_feed_after_subscribe(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        "\n".join(
+            [
+                '{"event": "FEED_ON_CONNECT_SUBSCRIBE", "reason": "connect", "subscription_requested_by_symbol": {"NIFTY": 2}, "subscribed_option_tokens_count_by_symbol": {"NIFTY": 2}}',
+                '{"event": "FEED_OPTION_VERIFY_BEGIN", "reason": "connect"}',
+                '{"event": "FEED_OPTION_VERIFY_WAITING_TICKS", "reason": "connect"}',
+                '{"event": "FEED_OPTION_VERIFY_FAILED", "reason": "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE", "missing_symbols": ["NIFTY"]}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-current",
+                "boot_epoch": 2000.0,
+                "ts_epoch": 2001.0,
+                "runtime_state": "RUNNING",
+                "feed_truth_state": "DEAD",
+                "ws_connected": True,
+                "option_feed_verification": {
+                    "state": "FAILED",
+                    "failure_detail": "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE",
+                    "reason": "connect",
+                },
+                "option_feed_block_reason_by_symbol": {"NIFTY": "NO_LIVE_OPTION_FEED"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "candidate_starvation_trace_latest.json").write_text(
+        json.dumps({"raw_candidate_count": 0, "phase2_input_candidate_count": 0}),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "ranked_pipeline_runtime_latest.json").write_text(
+        json.dumps({"ranked_candidate_count": 0, "executable_count": 0}),
+        encoding="utf-8",
+    )
+
+    report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["verdict"] == "BLOCKER"
+    assert payload["findings"][0]["code"] == "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"
+    assert payload["first_failing_event"] == "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"

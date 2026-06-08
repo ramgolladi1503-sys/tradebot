@@ -54,6 +54,10 @@ def _event_match(line: str) -> str | None:
         "FEED_CONNECT_FAILURE",
         "FEED_ON_CONNECT_SUBSCRIBE",
         "FEED_OPTION_PRUNE_REFRESH",
+        "FEED_OPTION_VERIFY_BEGIN",
+        "FEED_OPTION_VERIFY_WAITING_TICKS",
+        "FEED_OPTION_VERIFY_OK",
+        "FEED_OPTION_VERIFY_FAILED",
         "FEED_REBALANCE_APPLIED",
         "FEED_REBALANCE_SKIPPED",
         "CONNECTION ERROR: 1006",
@@ -61,6 +65,9 @@ def _event_match(line: str) -> str | None:
         "CONNECTION CLOSED: 1006",
         "REACTORNOTRESTARTABLE",
         "RECOVERY_BLOCKED",
+        "FEED_RECOVERY_BLOCKED",
+        "WS1006_PROCESS_RESTART_REQUIRED",
+        "FEED_WS_PROCESS_RESTART_REQUIRED",
         "PHASE2: NO INPUT CANDIDATES",
         "PHASE2: NO VALID CANDIDATES AFTER FILTERING",
         "FINAL_EMIT_ABORT",
@@ -79,11 +86,18 @@ def _timeline_from_logs(paths: list[Path | None], tail_lines: int) -> list[Timel
         "FEED_CONNECT_FAILURE",
         "FEED_ON_CONNECT_SUBSCRIBE",
         "FEED_OPTION_PRUNE_REFRESH",
+        "FEED_OPTION_VERIFY_BEGIN",
+        "FEED_OPTION_VERIFY_WAITING_TICKS",
+        "FEED_OPTION_VERIFY_OK",
+        "FEED_OPTION_VERIFY_FAILED",
         "FEED_REBALANCE_APPLIED",
         "FEED_REBALANCE_SKIPPED",
         "1006",
         "REACTORNOTRESTARTABLE",
         "RECOVERY_BLOCKED",
+        "FEED_RECOVERY_BLOCKED",
+        "WS1006_PROCESS_RESTART_REQUIRED",
+        "FEED_WS_PROCESS_RESTART_REQUIRED",
         "PHASE2: No input candidates",
         "PHASE2: No valid candidates after filtering",
         "FINAL_EMIT_ABORT",
@@ -156,11 +170,36 @@ def analyze_live_rca(
 
     current_feed_churn_count = 0
     stale_feed_churn_count = 0
+    current_feed_rebalance_applied_count = 0
+    current_feed_rebalance_skipped_count = 0
+    stale_feed_rebalance_applied_count = 0
+    stale_feed_rebalance_skipped_count = 0
     current_ws1006_count = 0
     stale_ws1006_count = 0
+    current_option_subscribe_count = 0
+    current_option_verify_begin_count = 0
+    current_option_verify_waiting_count = 0
+    current_option_verify_ok_count = 0
+    current_option_verify_failed_count = 0
+    current_option_verify_failure_detail = ""
+    current_no_live_option_feed_after_subscribe_count = 0
+    current_recovery_blocked_count = 0
     for match in grep_lines(
         paths=[depth_log],
-        patterns=["FEED_REBALANCE_APPLIED", "FEED_REBALANCE_SKIPPED", "1006", "REACTORNOTRESTARTABLE"],
+        patterns=[
+            "FEED_REBALANCE_APPLIED",
+            "FEED_REBALANCE_SKIPPED",
+            "1006",
+            "REACTORNOTRESTARTABLE",
+            "FEED_ON_CONNECT_SUBSCRIBE",
+            "FEED_RESUBSCRIBE",
+            "FEED_OPTION_VERIFY_BEGIN",
+            "FEED_OPTION_VERIFY_WAITING_TICKS",
+            "FEED_OPTION_VERIFY_OK",
+            "FEED_OPTION_VERIFY_FAILED",
+            "FEED_RECOVERY_BLOCKED",
+            "WS1006_PROCESS_RESTART_REQUIRED",
+        ],
         tail_lines=tail_lines,
     ):
         record = extract_line_fields(str(match.get("excerpt") or ""))
@@ -175,16 +214,43 @@ def analyze_live_rca(
         excerpt = str(match.get("excerpt") or "")
         is_churn = "FEED_REBALANCE_APPLIED" in excerpt or "FEED_REBALANCE_SKIPPED" in excerpt
         is_ws1006 = "1006" in excerpt or "REACTORNOTRESTARTABLE" in excerpt
+        if scope == "current_session":
+            if "FEED_ON_CONNECT_SUBSCRIBE" in excerpt or "FEED_RESUBSCRIBE" in excerpt:
+                current_option_subscribe_count += 1
+            if "FEED_OPTION_VERIFY_BEGIN" in excerpt:
+                current_option_verify_begin_count += 1
+            if "FEED_OPTION_VERIFY_WAITING_TICKS" in excerpt:
+                current_option_verify_waiting_count += 1
+            if "FEED_OPTION_VERIFY_OK" in excerpt:
+                current_option_verify_ok_count += 1
+            if "FEED_OPTION_VERIFY_FAILED" in excerpt:
+                current_option_verify_failed_count += 1
+                failure_reason = str(record.get("reason") or record.get("failure_detail") or excerpt).upper()
+                current_option_verify_failure_detail = failure_reason
+                if "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE" in failure_reason:
+                    current_no_live_option_feed_after_subscribe_count += 1
+            if "FEED_RECOVERY_BLOCKED" in excerpt:
+                current_recovery_blocked_count += 1
         if is_churn:
             if scope == "current_session":
                 current_feed_churn_count += 1
+                if "FEED_REBALANCE_APPLIED" in excerpt:
+                    current_feed_rebalance_applied_count += 1
+                if "FEED_REBALANCE_SKIPPED" in excerpt:
+                    current_feed_rebalance_skipped_count += 1
             elif scope == "historical_tail":
                 stale_feed_churn_count += 1
+                if "FEED_REBALANCE_APPLIED" in excerpt:
+                    stale_feed_rebalance_applied_count += 1
+                if "FEED_REBALANCE_SKIPPED" in excerpt:
+                    stale_feed_rebalance_skipped_count += 1
         if is_ws1006:
             if scope == "current_session":
                 current_ws1006_count += 1
             elif scope == "historical_tail":
                 stale_ws1006_count += 1
+        if "FEED_RECOVERY_BLOCKED" in excerpt and scope == "current_session":
+            current_recovery_blocked_count += 1
 
     strategy_current = False
     strategy_stale = False
@@ -199,12 +265,37 @@ def analyze_live_rca(
         )
         strategy_stale = bool(strategy_no_qualified.get("strategy_no_qualified_applicable")) and not strategy_current
 
+    option_verify = feed_runtime.get("option_feed_verification") if isinstance(feed_runtime.get("option_feed_verification"), dict) else {}
+    option_verify_state = str(option_verify.get("state") or "").strip().upper()
+    option_verify_failure_detail = str(option_verify.get("failure_detail") or "").strip().upper() or current_option_verify_failure_detail
+    if option_verify_state == "PENDING":
+        current_option_verify_waiting_count = max(current_option_verify_waiting_count, 1)
+    if option_verify_state == "OK":
+        current_option_verify_ok_count = max(current_option_verify_ok_count, 1)
+    if option_verify_state == "FAILED":
+        current_option_verify_failed_count = max(current_option_verify_failed_count, 1)
+        if "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE" in option_verify_failure_detail:
+            current_no_live_option_feed_after_subscribe_count = max(current_no_live_option_feed_after_subscribe_count, 1)
+    if str(feed_runtime.get("runtime_state") or "").upper() == "RECOVERY_BLOCKED" or str(feed_runtime.get("feed_truth_state") or "").upper() == "RECOVERY_BLOCKED":
+        current_recovery_blocked_count = max(current_recovery_blocked_count, 1)
+
     metrics = {
         "timeline_event_count": len(lines_timeline),
         "ws1006_count": sum(1 for item in lines_timeline if item.event and "1006" in item.event),
         "reactor_not_restartable_count": sum(1 for item in lines_timeline if item.event == "REACTORNOTRESTARTABLE"),
         "feed_rebalance_applied_count": sum(1 for item in lines_timeline if item.event == "FEED_REBALANCE_APPLIED"),
         "feed_rebalance_skipped_count": sum(1 for item in lines_timeline if item.event == "FEED_REBALANCE_SKIPPED"),
+        "current_session_feed_rebalance_applied_count": current_feed_rebalance_applied_count,
+        "current_session_feed_rebalance_skipped_count": current_feed_rebalance_skipped_count,
+        "historical_feed_rebalance_applied_count": stale_feed_rebalance_applied_count,
+        "historical_feed_rebalance_skipped_count": stale_feed_rebalance_skipped_count,
+        "current_session_option_subscribe_count": current_option_subscribe_count,
+        "current_session_option_verify_begin_count": current_option_verify_begin_count,
+        "current_session_option_verify_waiting_count": current_option_verify_waiting_count,
+        "current_session_option_verify_ok_count": current_option_verify_ok_count,
+        "current_session_option_verify_failed_count": current_option_verify_failed_count,
+        "current_session_no_live_option_feed_after_subscribe_count": current_no_live_option_feed_after_subscribe_count,
+        "current_session_recovery_blocked_count": current_recovery_blocked_count,
         "raw_candidate_count": starvation_trace.get("raw_candidate_count"),
         "phase2_input_candidate_count": starvation_trace.get("phase2_input_candidate_count"),
         "ranked_executable_count": ranked_runtime.get("executable_count"),
@@ -214,6 +305,8 @@ def analyze_live_rca(
         "stale_feed_evidence_count": stale_feed_churn_count + stale_ws1006_count,
         "current_session_strategy_select_count": 1 if strategy_current else 0,
         "stale_strategy_select_count": 1 if strategy_stale else 0,
+        "option_verify_state": option_verify_state or "IDLE",
+        "option_verify_failure_detail": option_verify_failure_detail or None,
     }
 
     first_failing_event = None
@@ -241,12 +334,26 @@ def analyze_live_rca(
         first_failing_event = "AUTH_FAILURE"
     elif any("FEED_CONNECT_FAILURE" in (item.event or "") for item in lines_timeline):
         root_cause = "FEED_CONNECT_FAILURE"
-    elif current_feed_churn_count > 0:
+    elif current_no_live_option_feed_after_subscribe_count > 0 or (
+        option_verify_state == "FAILED" and "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE" in option_verify_failure_detail
+    ):
+        root_cause = "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"
+        first_failing_event = "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"
+    elif option_verify_state == "FAILED" and "OPTION_FEED_VERIFY_TIMEOUT" in option_verify_failure_detail:
+        root_cause = "OPTION_FEED_VERIFY_TIMEOUT"
+        first_failing_event = "OPTION_FEED_VERIFY_TIMEOUT"
+    elif current_recovery_blocked_count > 0 or (
+        current_ws1006_count > 0 and (
+            str(feed_runtime.get("reconnect_blocked_reason") or "").strip().lower() == "ws1006_process_restart_required"
+            or str(feed_runtime.get("process_restart_required")).lower() == "true"
+            or option_verify_state == "FAILED"
+        )
+    ):
+        root_cause = "WS1006_PROCESS_RESTART_REQUIRED"
+        first_failing_event = "WS1006_PROCESS_RESTART_REQUIRED"
+    elif current_feed_rebalance_applied_count > 0:
         root_cause = "SUBSCRIPTION_CHURN"
         first_failing_event = "FEED_REBALANCE_APPLIED"
-    elif current_ws1006_count > 0:
-        root_cause = "WS1006_TERMINAL_CLOSE"
-        first_failing_event = "CONNECTION_ERROR:1006"
     elif strategy_current:
         root_cause = "STRATEGY_SELECT_NO_QUALIFIED"
         first_failing_event = "N8_STRATEGY_SELECT:NO_STRATEGY_QUALIFIED"
