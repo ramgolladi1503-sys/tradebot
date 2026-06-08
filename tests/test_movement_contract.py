@@ -4,12 +4,15 @@ import pytest
 
 from core.movement_contract import (
     HARD_EXECUTION_BLOCKERS,
+    PHASE2_NEUTRAL_SCORE,
     MovementContractError,
     StrategyCandidate,
     StrategyContext,
+    assert_phase2_boundary,
     candidate_from_dict,
     context_from_dict,
     has_hard_blocker,
+    phase2_boundary_violations,
 )
 
 
@@ -164,3 +167,54 @@ def test_strategy_context_supports_elite_market_and_option_evidence():
 def test_strategy_context_rejects_invalid_regime_scores():
     with pytest.raises(MovementContractError, match="score_out_of_range:regime_scores.COMPRESSION"):
         StrategyContext(symbol="NIFTY", regime_scores={"COMPRESSION": 1.5})
+
+
+def test_strategy_phase2_boundary_rejects_strategy_claimed_execution_truth():
+    candidate = _candidate(
+        option_confirmation_score=0.91,
+        liquidity_score=0.83,
+        freshness_score=0.77,
+        evidence={
+            "range_width_pct": 0.18,
+            "quote_source": "live_option_tick",
+            "resolved_contract": "NIFTY26JUN24000CE",
+        },
+    )
+
+    violations = phase2_boundary_violations(candidate, producer_stage="STRATEGY")
+
+    assert "strategy_candidate_claims_phase2_score:option_confirmation_score" in violations
+    assert "strategy_candidate_claims_phase2_score:liquidity_score" in violations
+    assert "strategy_candidate_claims_phase2_score:freshness_score" in violations
+    assert "strategy_candidate_claims_phase2_evidence:quote_source" in violations
+    assert "strategy_candidate_claims_phase2_evidence:resolved_contract" in violations
+    with pytest.raises(MovementContractError, match="strategy_candidate_claims_phase2_score:option_confirmation_score"):
+        assert_phase2_boundary(candidate, producer_stage="STRATEGY")
+
+
+def test_strategy_phase2_boundary_allows_strategy_owned_thesis_only():
+    candidate = _candidate(
+        option_confirmation_score=PHASE2_NEUTRAL_SCORE,
+        liquidity_score=PHASE2_NEUTRAL_SCORE,
+        freshness_score=PHASE2_NEUTRAL_SCORE,
+        evidence={"range_width_pct": 0.18, "breakout_trigger": "range_high_break"},
+    )
+
+    assert candidate.phase2_boundary_violations(producer_stage="STRATEGY") == ()
+    assert candidate.assert_phase2_boundary(producer_stage="STRATEGY") is candidate
+
+
+def test_phase2_boundary_allows_phase2_owned_truth_after_resolution():
+    candidate = _candidate(
+        option_confirmation_score=0.91,
+        liquidity_score=0.83,
+        freshness_score=0.77,
+        evidence={
+            "quote_source": "live_option_tick",
+            "option_ltp_age_sec": 0.4,
+            "resolved_contract": "NIFTY26JUN24000CE",
+        },
+    )
+
+    assert phase2_boundary_violations(candidate, producer_stage="PHASE2") == ()
+    assert assert_phase2_boundary(candidate, producer_stage="PHASE2") is candidate
