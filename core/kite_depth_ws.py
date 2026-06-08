@@ -1533,19 +1533,7 @@ def _should_mutate_stale_option_symbol_subscription(
 def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) -> tuple[bool, str, dict[str, object]]:
     current_runtime_state = str(_RUNTIME_STATE or "").strip().upper()
     reconnect_blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower()
-    feed_runtime_truth = _latest_feed_runtime_truth_snapshot()
-    feed_runtime_truth_state = str(feed_runtime_truth.get("runtime_state") or "").strip().upper()
-    feed_runtime_truth_reason = str(feed_runtime_truth.get("reconnect_blocked_reason") or "").strip().lower()
-    feed_truth_state = str(feed_runtime_truth.get("feed_truth_state") or "").strip().upper()
-    feed_runtime_ws_connected = feed_runtime_truth.get("ws_connected")
-    feed_runtime_snapshot_ts = None
-    try:
-        snapshot_ts = feed_runtime_truth.get("ts_epoch")
-        if snapshot_ts is not None:
-            feed_runtime_snapshot_ts = float(snapshot_ts)
-    except Exception:
-        feed_runtime_snapshot_ts = None
-    now_value = float(now_epoch) if now_epoch is not None else (float(feed_runtime_snapshot_ts) if feed_runtime_snapshot_ts is not None else None)
+    now_value = float(now_epoch) if now_epoch is not None else None
     ws_connected = _ws_connected_state()
     option_state = _option_runtime_state(
         now_epoch=float(now_value) if now_value is not None else float(now_epoch or 0.0),
@@ -1575,11 +1563,6 @@ def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) ->
         "runtime_state": current_runtime_state or "UNKNOWN",
         "ws_connected": ws_connected,
         "reconnect_blocked_reason": reconnect_blocked_reason or None,
-        "published_feed_runtime_snapshot_found": bool(feed_runtime_truth),
-        "published_runtime_state": feed_runtime_truth_state or None,
-        "published_reconnect_blocked_reason": feed_runtime_truth_reason or None,
-        "published_feed_truth_state": feed_truth_state or None,
-        "published_ws_connected": feed_runtime_ws_connected,
         "stop_requested": bool(_STOP_REQUESTED),
         "reactor_terminal_restart_block_active": _reactor_terminal_restart_block_active(),
         "reconnect_recovery_blocked_active": _reconnect_recovery_blocked_active(),
@@ -1596,15 +1579,6 @@ def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) ->
         return False, reconnect_blocked_reason or "reactor_terminal_restart_block", guard_payload
     if current_runtime_state in {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "IMPORT_MISSING", "STOPPED", "STOPPING", "DEGRADED"}:
         return False, current_runtime_state.lower(), guard_payload
-    if feed_runtime_truth_reason or feed_runtime_truth_state in {"RECOVERY_BLOCKED", "DEAD", "DEGRADED", "STOPPED", "STOPPING"} or feed_truth_state in {"DEAD", "RECOVERY_BLOCKED"} or feed_runtime_ws_connected is False:
-        if feed_runtime_truth_reason:
-            return False, f"feed_runtime_truth:{feed_runtime_truth_reason}", guard_payload
-        if feed_runtime_truth_state in {"RECOVERY_BLOCKED", "DEAD", "DEGRADED", "STOPPED", "STOPPING"}:
-            return False, f"feed_runtime_truth:{feed_runtime_truth_state.lower()}", guard_payload
-        if feed_truth_state in {"DEAD", "RECOVERY_BLOCKED"}:
-            return False, f"feed_runtime_truth:{feed_truth_state.lower()}", guard_payload
-        if feed_runtime_ws_connected is False:
-            return False, "ws_disconnected", guard_payload
     if _KITE_TICKER is None:
         return False, "ws_not_running", guard_payload
     if ws_connected is not True:
@@ -1613,10 +1587,6 @@ def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) ->
         return False, "no_ws_ticks", guard_payload
     if now_value is not None and now_value - float(_LAST_WS_TICK_EPOCH) > float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0))) * 3.0:
         return False, "ws_tick_stale", guard_payload
-    if feed_runtime_truth and option_blockers:
-        primary_option_blocker = option_blockers[0]
-        if primary_option_blocker in {"FEED_LTP_STALE", "FEED_DEPTH_STALE", "WS_DISCONNECTED", "GLOBAL_FEED_UNHEALTHY", "NO_LIVE_OPTION_FEED"}:
-            return False, f"feed_runtime_truth:{primary_option_blocker.lower()}", guard_payload
     return True, "ok", guard_payload
 
 
