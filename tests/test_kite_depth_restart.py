@@ -26,6 +26,10 @@ def _reset_ws_runtime_state(monkeypatch):
         "_RECONNECT_BLOCKED_SINCE_EPOCH": 0.0,
         "_LAST_INTERNAL_RETRY_SUPPRESSION_STATE": {},
         "_REACTOR_NOT_RESTARTABLE_DETECTED": False,
+        "_RECOVERY_IN_PROGRESS": False,
+        "_WS1006_RECOVERABLE_ATTEMPTS": 0,
+        "_WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH": 0.0,
+        "_WS1006_RECOVERABLE_LAST_REASON": "",
         "_AUTH_REQUIRED_LATCH": False,
         "_AUTH_REQUIRED_LOGGED": False,
         "_LAST_DISCONNECTED_CODE": None,
@@ -413,24 +417,25 @@ def test_on_error_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 0
+    assert calls["schedule"] == 1
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["runtime_state"] in {"RECONNECTING", "SUBSCRIBE_FAILED"}
     assert payload["ws_connected"] is False
     assert payload["disconnected_code"] == 1006
     assert "connection was closed uncleanly" in payload["disconnected_reason"]
-    assert payload["restart_attempt_allowed"] is False
-    assert payload["restart_attempted"] is False
-    assert payload["recovery_blocked"] is True
-    assert payload["process_restart_required"] is True
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["restart_suppressed"] is True
+    assert payload["restart_attempt_allowed"] is True
+    assert payload["restart_attempted"] is True
+    assert payload["recovery_blocked"] is False
+    assert payload["process_restart_required"] is False
+    assert payload["reconnect_blocked_reason"] is None
+    assert payload["restart_suppressed"] is False
     assert payload["ws_reconnect_allowed"] is False
-    assert payload["ws_reconnect_attempted"] is False
+    assert payload["ws_reconnect_attempted"] is True
+    assert payload["ws_recovery_state"] == "RECOVERING_WS_DROP"
     ws.stop_depth_ws(reason="unit_test_cleanup")
 
 
-def test_on_close_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tmp_path):
+def test_on_close_recoverable_ws1006_keeps_retry_path_open(monkeypatch, tmp_path):
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
@@ -467,24 +472,26 @@ def test_on_close_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 0
+    assert calls["schedule"] == 1
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["runtime_state"] in {"RECONNECTING", "SUBSCRIBE_FAILED"}
     assert payload["ws_connected"] is False
     assert payload["disconnected_code"] == 1006
     assert "connection was closed uncleanly" in payload["disconnected_reason"]
-    assert payload["restart_attempt_allowed"] is False
-    assert payload["restart_attempted"] is False
-    assert payload["recovery_blocked"] is True
-    assert payload["process_restart_required"] is True
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["restart_suppressed"] is True
+    assert payload["restart_attempt_allowed"] is True
+    assert payload["restart_attempted"] is True
+    assert payload["recovery_blocked"] is False
+    assert payload["process_restart_required"] is False
+    assert payload["reconnect_blocked_reason"] is None
+    assert payload["restart_suppressed"] is False
     assert payload["ws_reconnect_allowed"] is False
-    assert payload["ws_reconnect_attempted"] is False
+    assert payload["ws_reconnect_attempted"] is True
+    assert payload["ws1006_recovery_attempt_count"] == 1
+    assert payload["ws_recovery_state"] == "RECOVERING_WS_DROP"
     ws.stop_depth_ws(reason="unit_test_cleanup")
 
 
-def test_ws1006_on_error_disables_kiteticker_internal_retry(monkeypatch, tmp_path):
+def test_ws1006_on_error_keeps_reconnect_path_open_first(monkeypatch, tmp_path):
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
@@ -537,23 +544,23 @@ def test_ws1006_on_error_disables_kiteticker_internal_retry(monkeypatch, tmp_pat
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 0
-    assert fake_ticker.stop_retry_called == 1
-    assert fake_ticker.factory.stop_trying_called == 1
-    assert fake_ticker.auto_reconnect is False
+    assert calls["schedule"] == 1
+    assert fake_ticker.stop_retry_called == 0
+    assert fake_ticker.factory.stop_trying_called == 0
+    assert fake_ticker.auto_reconnect is True
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["process_restart_required"] is True
-    assert payload["restart_suppressed"] is True
-    assert payload["internal_retry_disabled"] is True
-    assert payload["stop_retry_called"] is True
-    assert payload["factory_stop_trying_called"] is True
-    assert payload["auto_reconnect_disabled"] is True
-    assert payload["internal_retry_reason"] == "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)"
+    assert payload["runtime_state"] in {"RECONNECTING", "SUBSCRIBE_FAILED"}
+    assert payload["reconnect_blocked_reason"] is None
+    assert payload["process_restart_required"] is False
+    assert payload["restart_suppressed"] is False
+    assert payload.get("internal_retry_disabled") in {None, False}
+    assert payload.get("stop_retry_called") in {None, False}
+    assert payload.get("factory_stop_trying_called") in {None, False}
+    assert payload.get("auto_reconnect_disabled") in {None, False}
+    assert payload.get("internal_retry_reason") is None or "peer dropped" in payload.get("internal_retry_reason")
 
 
-def test_ws1006_on_close_disables_kiteticker_internal_retry(monkeypatch, tmp_path):
+def test_ws1006_on_close_keeps_reconnect_path_open_first(monkeypatch, tmp_path):
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
@@ -606,20 +613,20 @@ def test_ws1006_on_close_disables_kiteticker_internal_retry(monkeypatch, tmp_pat
     monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
-    assert calls["schedule"] == 0
-    assert fake_ticker.stop_retry_called == 1
-    assert fake_ticker.factory.stop_trying_called == 1
-    assert fake_ticker.auto_reconnect is False
+    assert calls["schedule"] == 1
+    assert fake_ticker.stop_retry_called == 0
+    assert fake_ticker.factory.stop_trying_called == 0
+    assert fake_ticker.auto_reconnect is True
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["process_restart_required"] is True
-    assert payload["restart_suppressed"] is True
-    assert payload["internal_retry_disabled"] is True
-    assert payload["stop_retry_called"] is True
-    assert payload["factory_stop_trying_called"] is True
-    assert payload["auto_reconnect_disabled"] is True
-    assert payload["internal_retry_reason"] == "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)"
+    assert payload["runtime_state"] == "RECONNECTING"
+    assert payload["reconnect_blocked_reason"] is None
+    assert payload["process_restart_required"] is False
+    assert payload["restart_suppressed"] is False
+    assert payload.get("internal_retry_disabled") in {None, False}
+    assert payload.get("stop_retry_called") in {None, False}
+    assert payload.get("factory_stop_trying_called") in {None, False}
+    assert payload.get("auto_reconnect_disabled") in {None, False}
+    assert payload.get("internal_retry_reason") is None or "peer dropped" in payload.get("internal_retry_reason")
 
 
 def test_terminal_recovery_internal_retry_suppression_is_safe_without_stop_retry(monkeypatch, tmp_path):
@@ -655,13 +662,57 @@ def test_terminal_recovery_internal_retry_suppression_is_safe_without_stop_retry
 
     assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
     payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
-    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["internal_retry_disabled"] is True
-    assert payload["stop_retry_called"] is False
-    assert payload["factory_stop_trying_called"] is False
-    assert payload["auto_reconnect_disabled"] is True
-    assert payload["restart_suppressed"] is True
+    assert payload["runtime_state"] == "RECONNECTING"
+    assert payload["reconnect_blocked_reason"] is None
+    assert payload.get("internal_retry_disabled") in {None, False}
+    assert payload.get("stop_retry_called") in {None, False}
+    assert payload.get("factory_stop_trying_called") in {None, False}
+    assert payload.get("auto_reconnect_disabled") in {None, False}
+    assert payload["restart_suppressed"] is False
+
+
+def test_ws1006_recovery_does_not_overlap_when_already_in_progress(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_soft_resubscribe_current", lambda reason: False, raising=False)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+
+    calls = {"schedule": 0}
+    monkeypatch.setattr(
+        ws,
+        "_schedule_restart_depth_ws",
+        lambda **kwargs: calls.__setitem__("schedule", calls["schedule"] + 1) or True,
+    )
+
+    class _FakeTicker:
+        def connect(self, threaded=True):
+            self.on_error(self, 1006, "connection was closed uncleanly (peer dropped)")
+            self.on_error(self, 1006, "connection was closed uncleanly (peer dropped)")
+
+    fake_ticker = _FakeTicker()
+    monkeypatch.setattr(ws, "KiteTicker", object(), raising=True)
+    monkeypatch.setattr(ws, "get_kite_ticker", lambda **kwargs: fake_ticker, raising=True)
+    monkeypatch.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=True)
+    monkeypatch.setattr(ws.cfg, "KITE_API_KEY", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.cfg, "KITE_ACCESS_TOKEN", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "ensure", lambda: type("_RestClient", (), {"profile": lambda self: {"user_id": "ABCD1234"}})(), raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_api_key", "kite_test_key", raising=False)
+    monkeypatch.setattr(ws.kite_client, "_active_access_token", "token1234", raising=False)
+    monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=True)
+
+    assert ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True) is False
+    assert calls["schedule"] == 1
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["ws1006_recovery_attempt_count"] == 1
+    assert payload["recovery_in_progress"] is True
+    assert payload["ws_recovery_state"] == "RECOVERING_WS_DROP"
 
 
 def test_recovery_blocked_followup_starting_factory_is_suppressed(monkeypatch, tmp_path):
