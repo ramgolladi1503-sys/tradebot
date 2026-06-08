@@ -10,7 +10,7 @@ from typing import Any, Mapping
 
 from core.orders.order_intent import OrderIntent
 from core.learning_paths import canonical_suggestions_log_path, rejected_candidates_paths, suggestion_log_paths
-from core.paths import logs_dir, data_root
+from core.paths import logs_dir, data_root, repo_root
 from core.upstox_resolver import resolve_upstox_key
 from core.market_calendar import choose_nearest_available_expiry
 from core.trade_schema import build_instrument_id
@@ -698,10 +698,63 @@ def _compute_execution_decision(entry: dict) -> tuple[str, str]:
     return "advisory_only", "low_confidence"
 
 
+
+
+def _current_feed_session_id() -> str:
+    candidates = (
+        logs_dir() / "feed_runtime_latest.json",
+        repo_root() / "logs" / "feed_runtime_latest.json",
+        repo_root() / ".runtime" / "feed_runtime_latest.json",
+    )
+    for path in candidates:
+        try:
+            if not path.exists() or not path.is_file():
+                continue
+            payload = _read_json_dict(path)
+        except Exception:
+            continue
+        canonical = payload.get("canonical_feed_truth") if isinstance(payload, dict) else None
+        if isinstance(canonical, dict):
+            session_id = str(canonical.get("session_id") or "").strip()
+            if session_id:
+                return session_id
+        session_id = str(payload.get("session_id") or "").strip() if isinstance(payload, dict) else ""
+        if session_id:
+            return session_id
+    return ""
+
+
+def _read_json_dict(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _apply_session_isolation(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return entry
+    out = dict(entry)
+    current_session_id = _current_feed_session_id()
+    entry_session_id = str(out.get("session_id") or "").strip()
+    if current_session_id and entry_session_id and entry_session_id != current_session_id:
+        out["visibility_bucket"] = "historical_only"
+        out["execution_allowed"] = False
+        out["reportable_executable"] = False
+        out["permission"] = "ADVISORY_ONLY"
+        out["final_action"] = "ADVISORY_ONLY"
+        out["execution_status"] = "historical_only"
+        out["candidate_status"] = "historical_only"
+        out["final_emit_block_reason"] = "previous_session_candidate"
+        out["previous_session_candidate"] = True
+    return out
+
 def _apply_candidate_identity(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    out = _apply_session_isolation(out)
     if _is_synthetic_advisory_entry(out):
         return _mark_synthetic_advisory_entry(out, emit_log=True)
     identity = infer_candidate_identity(out)
@@ -1586,6 +1639,7 @@ def _apply_candidate_scoring(
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
+    out = _apply_session_isolation(out)
     if _is_synthetic_advisory_entry(out):
         out = _mark_synthetic_advisory_entry(out, emit_log=True)
     else:

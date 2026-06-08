@@ -95,6 +95,7 @@ from core.auto_tune import maybe_auto_tune
 from core import risk_halt
 from core.decision_logger import log_decision, update_execution, update_outcome
 from core.risk_utils import to_pct
+from core.feed_runtime import build_canonical_feed_truth_state
 from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
 from core.meta_model import MetaModel
 from core.decision_trace import decision_config_snapshot
@@ -833,6 +834,28 @@ def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
         if newest[1] is None or mtime >= newest[2]:
             newest = (payload, path, mtime)
     return newest[0], newest[1]
+
+
+def _canonical_feed_truth_state_payload(feed_runtime_payload: dict | None) -> dict:
+    payload = dict(feed_runtime_payload or {})
+    canonical_payload = payload.get("canonical_feed_truth") if isinstance(payload.get("canonical_feed_truth"), dict) else None
+    if isinstance(canonical_payload, dict):
+        return dict(canonical_payload)
+    try:
+        return build_canonical_feed_truth_state(payload).to_payload()
+    except Exception:
+        return {}
+
+
+def _feed_truth_cycle_gate(feed_runtime_payload: dict | None) -> dict:
+    canonical = _canonical_feed_truth_state_payload(feed_runtime_payload)
+    state = str(canonical.get("state") or "").strip().upper()
+    reason_code = str(canonical.get("reason_code") or "").strip().upper()
+    if state in {"BOOTING", "CONNECTING", "SUBSCRIBED", "VERIFYING_OPTION_TICKS"}:
+        return {"skip": True, "reason": "NO_TRADE_FEED_WARMUP", "state": state, "reason_code": reason_code}
+    if state == "DEGRADED":
+        return {"skip": True, "reason": "NO_TRADE_FEED_UNVERIFIED", "state": state, "reason_code": reason_code}
+    return {"skip": False, "reason": "", "state": state, "reason_code": reason_code}
 
 
 def _count_jsonl_rows(path: Path) -> int:
@@ -4753,6 +4776,8 @@ class Orchestrator:
             market_data_list = []
             feature_timing: dict[str, float] = {}
             feed_truth_payload: dict = _read_json_dict(logs_dir() / "feed_truth_latest.json")
+            feed_runtime_payload, _feed_runtime_path = _read_latest_feed_runtime_payload()
+            feed_truth_cycle_gate = _feed_truth_cycle_gate(feed_runtime_payload)
             try:
                 # Hot-reload config to pick up FORCE_REGIME changes
                 try:
@@ -5359,6 +5384,35 @@ class Orchestrator:
                     cycle_trade_build_attempts += 1
                     allow_builder_fallbacks = execution_mode in {"SIM", "PAPER"}
                     allow_builder_baseline = execution_mode in {"SIM", "PAPER"}
+                    if bool(feed_truth_cycle_gate.get("skip")):
+                        cycle_candidates_blocked += 1
+                        gate_reason = str(feed_truth_cycle_gate.get("reason") or "NO_TRADE_FEED_UNVERIFIED")
+                        gate_state = str(feed_truth_cycle_gate.get("state") or "UNKNOWN")
+                        cycle_strategy_no_qualified_attempts.append(
+                            {
+                                "symbol": sym,
+                                "strategy_id": getattr(gate, "family", None),
+                                "raw_candidate_count": 0,
+                                "post_scan_survivor_count": 0,
+                                "trade_generated": False,
+                                "reject_reason": gate_reason,
+                                "reject_gate_reasons": [gate_reason, gate_state] if gate_state else [gate_reason],
+                                "feed_truth_state": gate_state,
+                                "feed_truth_reason_code": str(feed_truth_cycle_gate.get("reason_code") or ""),
+                            }
+                        )
+                        if bool(getattr(cfg, "TRADE_BUILDER_RESULT_TRACE_ENABLE", True)):
+                            print(
+                                "TB_RESULT",
+                                {
+                                    "symbol": sym,
+                                    "trade_is_none": True,
+                                    "decision_stage": "feed_truth_gate",
+                                    "final_action": gate_reason,
+                                    "reject_reason": gate_reason,
+                                },
+                            )
+                        continue
                     logger.debug(
                         "trade_builder_build_with_trace symbol=%s execution_mode=%s allow_fallbacks=%s allow_baseline=%s gate_family=%s",
                         sym,

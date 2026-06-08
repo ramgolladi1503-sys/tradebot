@@ -16,6 +16,7 @@ from core.depth_store import depth_store
 from core.tick_store import get_last_tick, get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.feed_runtime import build_canonical_feed_truth_state
 from core.auth_manager import (
     clear_auth_required_state,
     invalidate_cache,
@@ -36,7 +37,7 @@ from core.runtime_status_overlay import (
 from core.feed_truth_state import classify_feed_truth_state
 from core.feed_execution_truth import attach_feed_execution_truth
 from core import risk_halt
-from core.paths import repo_root, logs_dir
+from core.paths import repo_root, logs_dir, runtime_dir
 from core.log_writer import get_jsonl_writer, get_rotating_logger
 from core.run_lock import RunLock
 from core.runtime_lifecycle import lifecycle
@@ -2749,6 +2750,30 @@ def _write_feed_runtime_snapshot(
     payload["feed_truth_reason_code"] = str(feed_truth.reason_code)
     payload["feed_truth_reasons"] = list(feed_truth.reasons)
     payload["feed_truth_strict_live"] = bool(feed_truth.strict_live)
+    canonical_feed_truth = build_canonical_feed_truth_state(
+        {
+            "runtime_state": effective_state_text,
+            "session_id": f"depth_ws:{int(_DEPTH_WS_START_EPOCH or float(now_epoch))}",
+            "ws_connected": ws_connected,
+            "underlying_tick_fresh": bool(last_tick_age_sec is not None and last_tick_age_sec <= 2.5),
+            "depth_fresh": bool(last_depth_age_sec is not None and last_depth_age_sec <= 6.0),
+            "option_ticks_verified": bool(str((option_feed_verification or {}).get("state") or "").upper() == "OK"),
+            "latest_ltp_age_sec": last_tick_age_sec,
+            "latest_depth_age_sec": last_depth_age_sec,
+            "latest_option_tick_age_sec": None,
+            "subscribed_option_tokens_count": int(subscribed_option_tokens_count or 0),
+            "verified_option_symbols": list((option_feed_verification or {}).get("verified_option_symbols") or []),
+            "missing_option_symbols": list((option_feed_verification or {}).get("missing_option_symbols") or []),
+            "recovery_blocked": bool(payload.get("recovery_blocked")),
+            "process_restart_required": bool(payload.get("process_restart_required")),
+            "feed_error_code": disconnected_code_value,
+            "reason_code": payload.get("feed_truth_reason_code"),
+            "updated_at_epoch": float(now_epoch),
+            "updated_at_ist": now_ist(),
+        },
+        restart_artifact_dir=runtime_dir(),
+    )
+    payload["canonical_feed_truth"] = canonical_feed_truth.to_payload()
     payload = canonicalize_feed_runtime_snapshot_truth(payload)
     payload = attach_feed_execution_truth(payload)
     payload = stamp_runtime_payload(

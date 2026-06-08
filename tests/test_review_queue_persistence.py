@@ -68,3 +68,85 @@ def test_advisory_row_preserves_display_entry_and_blockers():
     assert out.get("soft_penalties") == ["SPREAD_PCT_HIGH"]
     assert out.get("warnings") == ["STALE_OPTION_LTP"]
     assert out["decision_parity"]["ok"] is True
+
+
+
+def test_previous_session_candidate_becomes_historical_only(monkeypatch, tmp_path):
+    import json
+    from core import review_queue
+
+    monkeypatch.setattr(review_queue, "logs_dir", lambda: tmp_path)
+    monkeypatch.setattr(review_queue, "repo_root", lambda: tmp_path)
+    (tmp_path / "feed_runtime_latest.json").write_text(
+        json.dumps({"canonical_feed_truth": {"session_id": "current-session"}}),
+        encoding="utf-8",
+    )
+    entry = {
+        "trade_id": "T-PREV-1",
+        "symbol": "NIFTY",
+        "session_id": "previous-session",
+        "permission": "EXECUTE",
+        "permission_reason": "engine_decision",
+        "readiness": "READY",
+        "final_action": "EXECUTE",
+        "execution_status": "executable",
+        "execution_entry": 121.5,
+        "execution_entry_status": "executable",
+        "display_entry": 121.5,
+        "display_entry_status": "displayable",
+        "entry_status": "displayable",
+        "blockers": [],
+        "hard_blockers": [],
+        "soft_penalties": [],
+        "warnings": [],
+    }
+    out = review_queue._finalize_review_queue_entry(
+        entry,
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+        market_open_for_entry=True,
+    )
+    assert out["visibility_bucket"] == "historical_only"
+    assert out["reportable_executable"] is False
+    assert out["execution_allowed"] is False
+    assert out["final_emit_block_reason"] == "previous_session_candidate"
+    assert out["candidate_status"] == "advisory_only"
+
+
+def test_current_session_candidate_remains_reportable(monkeypatch, tmp_path):
+    import json
+    from core import review_queue
+
+    monkeypatch.setattr(review_queue, "logs_dir", lambda: tmp_path)
+    monkeypatch.setattr(review_queue, "repo_root", lambda: tmp_path)
+    (tmp_path / "feed_runtime_latest.json").write_text(
+        json.dumps({"canonical_feed_truth": {"session_id": "current-session"}}),
+        encoding="utf-8",
+    )
+    entry = {
+        "trade_id": "T-CUR-1",
+        "symbol": "NIFTY",
+        "session_id": "current-session",
+        "permission": "EXECUTE",
+        "permission_reason": "engine_decision",
+        "readiness": "READY",
+        "final_action": "EXECUTE",
+        "execution_status": "executable",
+        "execution_entry": 121.5,
+        "execution_entry_status": "executable",
+        "display_entry": 121.5,
+        "display_entry_status": "displayable",
+        "entry_status": "displayable",
+        "blockers": [],
+        "hard_blockers": [],
+        "soft_penalties": [],
+        "warnings": [],
+    }
+    out = review_queue._finalize_review_queue_entry(
+        entry,
+        mode_for_entry="LIVE",
+        allow_stale_quotes_for_entry=False,
+        market_open_for_entry=True,
+    )
+    assert out["candidate_status"] == "executable"
+    assert out.get("final_emit_block_reason") in (None, "")

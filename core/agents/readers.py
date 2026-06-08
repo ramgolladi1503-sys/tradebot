@@ -52,6 +52,13 @@ def read_jsonl_file(path: Path | None, *, tail_lines: int | None = None) -> list
     return rows
 
 
+def canonical_feed_truth_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(payload, Mapping):
+        return {}
+    canonical = payload.get("canonical_feed_truth")
+    return dict(canonical) if isinstance(canonical, Mapping) else {}
+
+
 def _safe_float(value: Any) -> float | None:
     try:
         if value in (None, "", "None"):

@@ -1119,6 +1119,65 @@ def test_option_feed_verification_logs_begin_and_ok(monkeypatch):
     assert ws._option_feed_verification_overlay_payload()["state"] == "OK"
 
 
+def test_persist_runtime_snapshot_row_publishes_canonical_feed_truth_when_verified(monkeypatch, tmp_path):
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(ws, "logs_dir", lambda: tmp_path)
+    monkeypatch.setattr(ws, "runtime_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        ws,
+        "_option_feed_verification_overlay_payload",
+        lambda: {
+            "state": "OK",
+            "verified_option_symbols": ["NIFTY"],
+            "missing_option_symbols": [],
+        },
+    )
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 1001.6, raising=False)
+    monkeypatch.setattr(ws, "_latest_db_tick_epoch", lambda: 1001.6, raising=False)
+    monkeypatch.setattr(ws, "_latest_depth_epoch_from_store", lambda: 1001.8, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102], raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 2}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 2}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_TOKEN_INCIDENT_TS", {"NIFTY": 1001.9}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 1001.9, 102: 1001.9}, raising=False)
+    ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test",
+        now_epoch=1002.0,
+        runtime_state="RUNNING",
+        last_error="",
+        intended_tokens_count=2,
+    )
+    payload = json.loads((tmp_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["canonical_feed_truth"]["state"] == "VERIFIED_HEALTHY"
+    assert payload["canonical_feed_truth"]["ws_connected"] is True
+    assert payload["canonical_feed_truth"]["option_ticks_verified"] is True
+    assert payload["canonical_feed_truth"]["blockers"] == []
+
+
+def test_persist_runtime_snapshot_row_publishes_restart_required_canonical_feed_truth(monkeypatch, tmp_path):
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(ws, "logs_dir", lambda: tmp_path)
+    monkeypatch.setattr(ws, "runtime_dir", lambda: tmp_path)
+    ws._persist_runtime_snapshot_row(
+        ws_connected=False,
+        source="unit_test_ws1006",
+        now_epoch=1002.0,
+        runtime_state="RECOVERY_BLOCKED",
+        last_error="ws1006",
+        reconnect_blocked_reason="ws1006_process_restart_required",
+        intended_tokens_count=2,
+    )
+    payload = json.loads((tmp_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["canonical_feed_truth"]["state"] == "RESTART_REQUIRED"
+    assert payload["canonical_feed_truth"]["process_restart_required"] is True
+    assert payload["canonical_feed_truth"]["recovery_blocked"] is True
+    assert (tmp_path / "feed_restart_required.json").exists()
+    artifact = json.loads((tmp_path / "feed_restart_required.json").read_text(encoding="utf-8"))
+    assert artifact["reason"] == "ws1006_process_restart_required"
+    assert artifact["restart_allowed_only_if_no_open_positions"] is True
+
+
 def test_option_feed_verification_logs_failed_when_ticks_never_arrive(monkeypatch):
     _patch_common(monkeypatch)
     events: list[tuple[str, dict]] = []

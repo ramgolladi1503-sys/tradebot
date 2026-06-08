@@ -66,3 +66,39 @@ def test_orchestrator_starts_reconciliation_daemon(monkeypatch):
         str(orch_mod.logs_dir() / "strategy_perf.json"),
         str(orch_mod.logs_dir() / "suggestion_strategy_perf.json"),
     ]
+
+
+
+def test_canonical_feed_truth_cycle_gate_blocks_warmup(monkeypatch):
+    import core.orchestrator as orch_mod
+
+    payload = {"canonical_feed_truth": {"state": "VERIFYING_OPTION_TICKS", "reason_code": "VERIFYING_OPTION_TICKS"}}
+    gate = orch_mod._feed_truth_cycle_gate(payload)
+    assert gate["skip"] is True
+    assert gate["reason"] == "NO_TRADE_FEED_WARMUP"
+    assert gate["state"] == "VERIFYING_OPTION_TICKS"
+
+
+def test_canonical_feed_truth_cycle_gate_blocks_degraded(monkeypatch):
+    import core.orchestrator as orch_mod
+
+    payload = {"canonical_feed_truth": {"state": "DEGRADED", "reason_code": "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"}}
+    gate = orch_mod._feed_truth_cycle_gate(payload)
+    assert gate["skip"] is True
+    assert gate["reason"] == "NO_TRADE_FEED_UNVERIFIED"
+    assert gate["reason_code"] == "NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE"
+
+
+def test_canonical_feed_truth_cycle_gate_allows_verified_healthy(monkeypatch):
+    import core.orchestrator as orch_mod
+
+    payload = {
+        "canonical_feed_truth": {
+            "state": "VERIFIED_HEALTHY",
+            "reason_code": "VERIFIED_HEALTHY",
+            "blockers": [],
+        }
+    }
+    gate = orch_mod._feed_truth_cycle_gate(payload)
+    assert gate["skip"] is False
+    assert gate["state"] == "VERIFIED_HEALTHY"

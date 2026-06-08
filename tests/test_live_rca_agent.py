@@ -344,6 +344,59 @@ def test_live_rca_agent_keeps_current_session_feed_churn_as_subscription_churn(t
     assert payload["metrics"]["stale_feed_evidence_count"] == 0
 
 
+def test_live_rca_agent_prefers_canonical_feed_truth_payload(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        "\n".join(
+            [
+                "ts_epoch=1500.0 boot_epoch=1000.0 run_id=run-old event=FEED_REBALANCE_APPLIED subscribe_count=12 unsubscribe_count=11",
+                "ts_epoch=1500.5 boot_epoch=1000.0 run_id=run-old event=CONNECTION_ERROR code=1006",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-current",
+                "boot_epoch": 2000.0,
+                "ts_epoch": 2001.0,
+                "runtime_state": "RUNNING",
+                "feed_truth_state": "LIVE",
+                "ws_connected": True,
+                "feed_health_snapshot": {"N2_FEED_FRESH": {"ok": True}},
+                "gate_status": {"N2_FEED_FRESH": {"ok": True}},
+                "canonical_feed_truth": {
+                    "session_id": "run-current",
+                    "state": "RESTART_REQUIRED",
+                    "reason_code": "WS1006_PROCESS_RESTART_REQUIRED",
+                    "blockers": ["WS1006_PROCESS_RESTART_REQUIRED"],
+                },
+                "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "candidate_starvation_trace_latest.json").write_text(
+        json.dumps({"raw_candidate_count": 0, "phase2_input_candidate_count": 0}),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "ranked_pipeline_runtime_latest.json").write_text(
+        json.dumps({"ranked_candidate_count": 0, "executable_count": 0}),
+        encoding="utf-8",
+    )
+
+    report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["first_failing_event"] == "WS1006_PROCESS_RESTART_REQUIRED"
+    assert payload["metrics"]["canonical_feed_truth_state"] == "RESTART_REQUIRED"
+    assert payload["metrics"]["current_session_feed_fresh"] is True
+
+
 def test_live_rca_agent_classifies_no_live_option_feed_after_subscribe(tmp_path: Path):
     runtime_dir = tmp_path / ".runtime"
     logs_dir = tmp_path / "logs"
