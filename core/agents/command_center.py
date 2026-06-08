@@ -72,6 +72,11 @@ def _render_markdown(report: CommandCenterReport) -> str:
         f"- confidence: `{report.confidence}`",
         f"- next_action_type: `{report.next_action_type}`",
         f"- next_pr_recommendation: `{report.next_pr_recommendation}`",
+        f"- evidence_scope: `{report.metrics_summary.get('evidence_scope', 'unknown')}`",
+        f"- current_session_feed_fresh: `{report.metrics_summary.get('current_session_feed_fresh', 'unknown')}`",
+        f"- stale_evidence_ignored_count: `{report.metrics_summary.get('stale_evidence_ignored_count', 0)}`",
+        f"- stale_evidence_reason: `{report.metrics_summary.get('stale_evidence_reason', '') or 'NONE'}`",
+        f"- first_current_session_blocker: `{report.metrics_summary.get('first_current_session_blocker', 'UNKNOWN')}`",
         "",
         "# Why this is first",
         f"- {report.root_cause_summary}",
@@ -118,6 +123,11 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
         "next_pr_recommendation": "Collect more evidence or extend the current runtime snapshot.",
         "downstream_impact": (),
         "what_is_not_root_cause": (),
+        "evidence_scope": "unknown",
+        "current_session_feed_fresh": "unknown",
+        "stale_evidence_ignored_count": 0,
+        "stale_evidence_reason": "",
+        "first_current_session_blocker": "UNKNOWN",
     }
 
     if safety and (safety.verdict == "BLOCKER" or any(f.severity == "BLOCKER" for f in safety.findings)):
@@ -138,15 +148,36 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Phase2 is downstream until safety is cleared.",
                 "Edge Measurement is not evaluable until safety permits normal progression.",
             ),
+            first_current_session_blocker="SAFETY",
         )
         return summary
 
-    feed_stability_evidence = False
+    def _metric_bool(agent: AgentReport | None, key: str) -> bool | None:
+        if agent is None:
+            return None
+        value = agent.metrics.get(key)
+        if value in (True, False):
+            return bool(value)
+        if isinstance(value, str):
+            lower = value.strip().lower()
+            if lower in {"true", "false"}:
+                return lower == "true"
+            if lower == "unknown":
+                return None
+        return None
+
+    current_session_feed_fresh = _metric_bool(feed_stability, "current_session_feed_fresh")
+    feed_stability_scope = str((feed_stability.metrics.get("evidence_scope") if feed_stability else None) or "unknown") if feed_stability else "unknown"
+    stale_evidence_ignored_count = int(feed_stability.metrics.get("stale_evidence_ignored_count") or 0) if feed_stability else 0
+    stale_evidence_reason = str(feed_stability.metrics.get("stale_evidence_reason") or "") if feed_stability else ""
+    current_feed_stability_blocker = False
     if feed_stability:
-        feed_stability_evidence = any(item.severity == "BLOCKER" for item in feed_stability.findings) or "FEED_REBALANCE_APPLIED" in _evidence_text(feed_stability)
-        feed_stability_evidence = feed_stability_evidence or int(feed_stability.metrics.get("ws1006_count") or 0) > 0
-        feed_stability_evidence = feed_stability_evidence or int(feed_stability.metrics.get("recovery_blocked_count") or 0) > 0
-        feed_stability_evidence = feed_stability_evidence or int(feed_stability.metrics.get("rebalance_applied_count") or 0) > 0
+        current_feed_stability_blocker = (
+            int(feed_stability.metrics.get("current_session_churn_count") or 0) > 0
+            or int(feed_stability.metrics.get("current_session_ws1006_count") or 0) > 0
+            or any(item.severity == "BLOCKER" and item.code != "STALE_FEED_CHURN" for item in feed_stability.findings)
+        )
+    stale_only_feed_evidence = bool(feed_stability and current_session_feed_fresh is True and stale_evidence_ignored_count > 0 and not current_feed_stability_blocker)
 
     feed_truth_dead = False
     if feed_stability:
@@ -155,7 +186,7 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
         block_reason_text = str(feed_stability.metrics.get("option_feed_block_reasons") or feed_stability.metrics.get("option_feed_block_reason_by_symbol") or "").upper()
         feed_truth_dead = feed_truth_dead or "NO_LIVE_OPTION_FEED" in block_reason_text or "DEAD" in block_reason_text or "RECOVERY_BLOCKED" in block_reason_text
 
-    if feed_stability and feed_stability_evidence:
+    if feed_stability and current_feed_stability_blocker and not stale_only_feed_evidence:
         summary.update(
             first_blocker_layer="FEED_STABILITY",
             first_failing_event=feed_stability.first_failing_event or "FEED_REBALANCE_APPLIED",
@@ -173,6 +204,11 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Phase2 is downstream until real candidates enter Phase2.",
                 "Edge Measurement is not evaluable until executable or paper outcomes exist.",
             ),
+            evidence_scope=feed_stability_scope,
+            current_session_feed_fresh=current_session_feed_fresh if current_session_feed_fresh is not None else "unknown",
+            stale_evidence_ignored_count=stale_evidence_ignored_count,
+            stale_evidence_reason=stale_evidence_reason,
+            first_current_session_blocker="FEED_STABILITY",
         )
         return summary
 
@@ -194,10 +230,41 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Phase2 is downstream until feed truth allows real candidates.",
                 "Edge Measurement is not evaluable until feed truth is coherent.",
             ),
+            first_current_session_blocker="FEED_TRUTH",
         )
         return summary
 
-    feed_healthy = bool(feed_stability) and int(feed_stability.metrics.get("recovery_blocked_count") or 0) == 0 and int(feed_stability.metrics.get("rebalance_applied_count") or 0) == 0 and int(feed_stability.metrics.get("ws1006_count") or 0) == 0
+    if (
+        current_session_feed_fresh is True
+        and feed_stability is not None
+        and not current_feed_stability_blocker
+        and live_rca is not None
+        and any(finding.code == "STRATEGY_SELECT_NO_QUALIFIED" for finding in live_rca.findings)
+    ):
+        summary.update(
+            first_blocker_layer="CANDIDATE_SUPPLY",
+            first_failing_event=live_rca.first_failing_event or "N8_STRATEGY_SELECT:NO_STRATEGY_QUALIFIED",
+            root_cause_summary="Current-session feed is fresh, but strategy selection produced no qualified candidate.",
+            confidence="HIGH",
+            next_action_type="FIX_CANDIDATE_SUPPLY",
+            next_pr_recommendation="Inspect current-session strategy qualification, regime fit, and candidate construction before blaming feed lifecycle.",
+            downstream_impact=(
+                "Phase2 is downstream until strategy selection produces candidates.",
+                "Edge Measurement is not evaluable until candidates exist.",
+            ),
+            what_is_not_root_cause=(
+                "Feed lifecycle is not the first blocker when current-session feed freshness is healthy.",
+                "Edge Measurement is not evaluable until candidates exist.",
+            ),
+            evidence_scope=feed_stability_scope,
+            current_session_feed_fresh=True,
+            stale_evidence_ignored_count=stale_evidence_ignored_count,
+            stale_evidence_reason=stale_evidence_reason,
+            first_current_session_blocker="CANDIDATE_SUPPLY",
+        )
+        return summary
+
+    feed_healthy = bool(feed_stability) and current_session_feed_fresh is True and not current_feed_stability_blocker
     if candidate_supply and candidate_supply.findings and int(candidate_supply.metrics.get("raw_candidate_count") or 0) == 0 and feed_healthy:
         summary.update(
             first_blocker_layer="CANDIDATE_SUPPLY",
@@ -214,6 +281,11 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Phase2 is downstream until candidates exist.",
                 "Edge Measurement is not evaluable until candidates exist.",
             ),
+            evidence_scope=feed_stability_scope,
+            current_session_feed_fresh=current_session_feed_fresh if current_session_feed_fresh is not None else "unknown",
+            stale_evidence_ignored_count=stale_evidence_ignored_count,
+            stale_evidence_reason=stale_evidence_reason,
+            first_current_session_blocker="CANDIDATE_SUPPLY",
         )
         return summary
 
@@ -234,6 +306,11 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Candidate Supply is upstream of this failure when the feed is stable.",
                 "Edge Measurement is not evaluable until Phase2 produces outcomes.",
             ),
+            evidence_scope=feed_stability_scope,
+            current_session_feed_fresh=current_session_feed_fresh if current_session_feed_fresh is not None else "unknown",
+            stale_evidence_ignored_count=stale_evidence_ignored_count,
+            stale_evidence_reason=stale_evidence_reason,
+            first_current_session_blocker="PHASE2_RANKING",
         )
         return summary
 
@@ -250,6 +327,11 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
                 "Candidate Supply is upstream of edge measurement.",
                 "Phase2 is upstream of edge measurement.",
             ),
+            evidence_scope=feed_stability_scope,
+            current_session_feed_fresh=current_session_feed_fresh if current_session_feed_fresh is not None else "unknown",
+            stale_evidence_ignored_count=stale_evidence_ignored_count,
+            stale_evidence_reason=stale_evidence_reason,
+            first_current_session_blocker="EDGE_MEASUREMENT",
         )
 
     return summary
@@ -330,6 +412,11 @@ def run_agent_command_center(
             "PASS": sum(1 for item in agent_reports if item.verdict == "PASS"),
             "UNKNOWN": sum(1 for item in agent_reports if item.verdict == "UNKNOWN"),
         },
+        "evidence_scope": summary["evidence_scope"],
+        "current_session_feed_fresh": summary["current_session_feed_fresh"],
+        "stale_evidence_ignored_count": summary["stale_evidence_ignored_count"],
+        "stale_evidence_reason": summary["stale_evidence_reason"],
+        "first_current_session_blocker": summary["first_current_session_blocker"],
     }
     report = CommandCenterReport(
         schema_version=COMMAND_CENTER_SCHEMA_VERSION,

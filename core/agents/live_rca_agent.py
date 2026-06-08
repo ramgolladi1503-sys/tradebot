@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from collections import Counter
 import re
 from pathlib import Path
-from typing import Any
 
 from .contracts import AgentFinding, AgentReport, build_read_only_agent_report
 from .evidence_refs import evidence_ref_from_mapping, evidence_ref_from_text
-from .readers import discover_runtime_artifacts, grep_lines, read_json_file, read_jsonl_file
+from .readers import classify_session_scope, discover_runtime_artifacts, extract_line_fields, grep_lines, read_json_file
 from .timeline import TimelineEvent, sort_timeline_events
 
 
@@ -119,6 +117,7 @@ def analyze_live_rca(
     feed_runtime = read_json_file(artifacts["feed_runtime_runtime_logs"] or artifacts["feed_runtime_logs"] or artifacts["feed_runtime_runtime"])
     ranked_runtime = read_json_file(artifacts["ranked_pipeline_runtime"])
     starvation_trace = read_json_file(artifacts["candidate_starvation_trace"])
+    strategy_no_qualified = read_json_file(artifacts["strategy_no_qualified_reasons"])
     lines_timeline = _timeline_from_logs([depth_log], tail_lines=tail_lines)
     raw_depth_text = depth_log.read_text(encoding="utf-8", errors="replace") if depth_log and depth_log.exists() else ""
     filtered_depth_text = "\n".join(
@@ -126,6 +125,80 @@ def analyze_live_rca(
     )
 
     timeline_rows = [item.to_evidence_ref() for item in lines_timeline[:40]]
+    current_run_id = str(feed_runtime.get("run_id") or "").strip() or None
+    current_boot_epoch = None
+    try:
+        current_boot_epoch = float(feed_runtime.get("boot_epoch")) if feed_runtime.get("boot_epoch") is not None else None
+    except Exception:
+        current_boot_epoch = None
+
+    def _nested_gate_ok(container: object, key: str) -> bool:
+        if not isinstance(container, dict):
+            return False
+        payload = container.get(key)
+        if isinstance(payload, dict):
+            if "ok" in payload:
+                return bool(payload.get("ok"))
+            if "status" in payload:
+                return str(payload.get("status") or "").strip().lower() == "ok"
+        if isinstance(payload, bool):
+            return payload
+        return False
+
+    current_session_feed_fresh = (
+        str(feed_runtime.get("ws_connected")).lower() == "true"
+        and str(feed_runtime.get("runtime_state") or "").upper() not in {"DEAD", "RECOVERY_BLOCKED"}
+        and (
+            _nested_gate_ok(feed_runtime.get("feed_health_snapshot"), "N2_FEED_FRESH")
+            or _nested_gate_ok(feed_runtime.get("gate_status"), "N2_FEED_FRESH")
+        )
+    )
+
+    current_feed_churn_count = 0
+    stale_feed_churn_count = 0
+    current_ws1006_count = 0
+    stale_ws1006_count = 0
+    for match in grep_lines(
+        paths=[depth_log],
+        patterns=["FEED_REBALANCE_APPLIED", "FEED_REBALANCE_SKIPPED", "1006", "REACTORNOTRESTARTABLE"],
+        tail_lines=tail_lines,
+    ):
+        record = extract_line_fields(str(match.get("excerpt") or ""))
+        scope = classify_session_scope(
+            record,
+            current_run_id=current_run_id,
+            current_boot_epoch=current_boot_epoch,
+            path=Path(str(match.get("source_path") or "")) if match.get("source_path") else depth_log,
+        )
+        if current_session_feed_fresh and scope == "current_session" and not any(record.get(key) is not None for key in ("run_id", "boot_epoch", "ts_epoch")):
+            scope = "historical_tail"
+        excerpt = str(match.get("excerpt") or "")
+        is_churn = "FEED_REBALANCE_APPLIED" in excerpt or "FEED_REBALANCE_SKIPPED" in excerpt
+        is_ws1006 = "1006" in excerpt or "REACTORNOTRESTARTABLE" in excerpt
+        if is_churn:
+            if scope == "current_session":
+                current_feed_churn_count += 1
+            elif scope == "historical_tail":
+                stale_feed_churn_count += 1
+        if is_ws1006:
+            if scope == "current_session":
+                current_ws1006_count += 1
+            elif scope == "historical_tail":
+                stale_ws1006_count += 1
+
+    strategy_current = False
+    strategy_stale = False
+    strategy_path = artifacts["strategy_no_qualified_reasons"]
+    if strategy_no_qualified:
+        strategy_current = (
+            strategy_no_qualified.get("strategy_no_qualified_applicable") is True
+            and bool(strategy_no_qualified.get("no_candidate_constructed"))
+            and strategy_path is not None
+            and strategy_path.exists()
+            and (current_boot_epoch is None or strategy_path.stat().st_mtime >= current_boot_epoch)
+        )
+        strategy_stale = bool(strategy_no_qualified.get("strategy_no_qualified_applicable")) and not strategy_current
+
     metrics = {
         "timeline_event_count": len(lines_timeline),
         "ws1006_count": sum(1 for item in lines_timeline if item.event and "1006" in item.event),
@@ -135,6 +208,12 @@ def analyze_live_rca(
         "raw_candidate_count": starvation_trace.get("raw_candidate_count"),
         "phase2_input_candidate_count": starvation_trace.get("phase2_input_candidate_count"),
         "ranked_executable_count": ranked_runtime.get("executable_count"),
+        "current_session_feed_fresh": current_session_feed_fresh,
+        "current_session_feed_churn_count": current_feed_churn_count,
+        "current_session_ws1006_count": current_ws1006_count,
+        "stale_feed_evidence_count": stale_feed_churn_count + stale_ws1006_count,
+        "current_session_strategy_select_count": 1 if strategy_current else 0,
+        "stale_strategy_select_count": 1 if strategy_stale else 0,
     }
 
     first_failing_event = None
@@ -162,12 +241,15 @@ def analyze_live_rca(
         first_failing_event = "AUTH_FAILURE"
     elif any("FEED_CONNECT_FAILURE" in (item.event or "") for item in lines_timeline):
         root_cause = "FEED_CONNECT_FAILURE"
-    elif any(item.event == "FEED_REBALANCE_APPLIED" for item in lines_timeline):
+    elif current_feed_churn_count > 0:
         root_cause = "SUBSCRIPTION_CHURN"
         first_failing_event = "FEED_REBALANCE_APPLIED"
-    elif any("1006" in (item.event or "") for item in lines_timeline):
+    elif current_ws1006_count > 0:
         root_cause = "WS1006_TERMINAL_CLOSE"
         first_failing_event = "CONNECTION_ERROR:1006"
+    elif strategy_current:
+        root_cause = "STRATEGY_SELECT_NO_QUALIFIED"
+        first_failing_event = "N8_STRATEGY_SELECT:NO_STRATEGY_QUALIFIED"
     elif str(feed_runtime.get("feed_truth_state") or "").upper() in {"DEAD", "RECOVERY_BLOCKED"}:
         root_cause = "FEEDTRUTH_DEAD"
         first_failing_event = "FEED_TRUTH_DEAD"
@@ -195,6 +277,21 @@ def analyze_live_rca(
             tests_needed=("tests/test_live_rca_agent.py",),
         ),
     )
+    if root_cause == "STRATEGY_SELECT_NO_QUALIFIED":
+        findings = (
+            AgentFinding(
+                code=root_cause,
+                severity="BLOCKER",
+                layer="live_rca",
+                message="Current-session strategy selection produced no qualified candidate.",
+                confidence="HIGH",
+                first_seen_ts_epoch=None,
+                evidence_refs=tuple(timeline_rows[:3]),
+                recommended_action="Inspect N8_STRATEGY_SELECT and current-session setup qualification before blaming feed stability.",
+                files_likely_involved=("core/decision_dag.py", "core/runtime_strategy_no_qualified_reasons.py"),
+                tests_needed=("tests/test_live_rca_agent.py",),
+            ),
+        )
     verdict = "BLOCKER" if root_cause != "UNKNOWN" else "UNKNOWN"
     return build_read_only_agent_report(
         agent_name="live_rca",

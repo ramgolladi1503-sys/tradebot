@@ -4,7 +4,7 @@ from collections import deque
 import json
 import re
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from core.paths import logs_dir, runtime_dir
 
@@ -50,6 +50,67 @@ def read_jsonl_file(path: Path | None, *, tail_lines: int | None = None) -> list
         if isinstance(payload, dict):
             rows.append(payload)
     return rows
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value in (None, "", "None"):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def extract_line_fields(text: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    line = text.strip()
+    if not line:
+        return payload
+    if line.startswith("{") and line.endswith("}"):
+        try:
+            parsed = json.loads(line)
+        except Exception:
+            parsed = {}
+        if isinstance(parsed, dict):
+            payload.update(parsed)
+    for key in ("run_id", "boot_epoch", "ts_epoch", "ts_ist", "event", "code", "source"):
+        if key in payload:
+            continue
+        match = re.search(rf"{key}\s*[:=]\s*\"?([^\"\s,}}]+)\"?", line, re.IGNORECASE)
+        if not match:
+            continue
+        value = match.group(1)
+        if key in {"boot_epoch", "ts_epoch"}:
+            payload[key] = _safe_float(value)
+        else:
+            payload[key] = value
+    return payload
+
+
+def classify_session_scope(
+    record: Mapping[str, Any] | None,
+    *,
+    current_run_id: str | None = None,
+    current_boot_epoch: float | None = None,
+    path: Path | None = None,
+) -> str:
+    if not isinstance(record, Mapping):
+        return "unknown"
+
+    run_id = str(record.get("run_id") or "").strip()
+    boot_epoch = _safe_float(record.get("boot_epoch"))
+    ts_epoch = _safe_float(record.get("ts_epoch"))
+
+    if current_run_id and run_id and run_id != current_run_id:
+        return "historical_tail"
+    if current_boot_epoch is not None:
+        if boot_epoch is not None and boot_epoch < current_boot_epoch:
+            return "historical_tail"
+        if ts_epoch is not None and ts_epoch < current_boot_epoch:
+            return "historical_tail"
+        if path is not None and path.exists() and path.is_file() and path.stat().st_mtime < current_boot_epoch:
+            return "historical_tail"
+    return "current_session"
 
 
 def discover_latest_existing_path(candidates: Sequence[Path]) -> Path | None:
@@ -105,8 +166,20 @@ def discover_runtime_artifacts(
         ),
         "depth_ws_watchdog": discover_latest_existing_path(
             [
+                *(session / "logs" / "depth_ws_watchdog.log" for session in live_sessions),
+                *(session / "depth_ws_watchdog.log" for session in live_sessions),
                 runtime_root / "logs" / "depth_ws_watchdog.log",
                 logs_root / "watchdog.log",
+                logs_root / "depth_ws_watchdog.log",
+            ]
+        ),
+        "strategy_no_qualified_reasons": discover_latest_existing_path(
+            [
+                *(session / "logs" / "strategy_no_qualified_reasons_latest.json" for session in live_sessions),
+                *(session / "strategy_no_qualified_reasons_latest.json" for session in live_sessions),
+                runtime_root / "logs" / "strategy_no_qualified_reasons_latest.json",
+                runtime_root / "strategy_no_qualified_reasons_latest.json",
+                logs_root / "strategy_no_qualified_reasons_latest.json",
             ]
         ),
         "ranked_pipeline_runtime": discover_latest_existing_path(
