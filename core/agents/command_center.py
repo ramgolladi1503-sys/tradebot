@@ -93,6 +93,26 @@ def _render_markdown(report: CommandCenterReport) -> str:
             evidence_lines.append(f"  - `{finding.code}`: {finding.message}")
     downstream_lines = [f"- {item}" for item in report.downstream_impact] or ["- None identified."]
     not_root_lines = [f"- {item}" for item in report.what_is_not_root_cause] or ["- No downstream exclusions were identified."]
+    candidate_supply = _find_agent(report.agents, "candidate_supply")
+    candidate_supply_lines: list[str] = []
+    if candidate_supply and int(candidate_supply.metrics.get("raw_candidate_count") or 0) == 0 and candidate_supply.metrics.get("first_candidate_supply_zero_subtype"):
+        candidate_supply_lines.extend(
+            [
+                f"- candidate_supply_evidence_scope: `{candidate_supply.metrics.get('candidate_supply_evidence_scope', 'unknown')}`",
+                f"- feed_churn_evidence_scope: `{candidate_supply.metrics.get('feed_churn_evidence_scope', 'unknown')}`",
+                f"- first_candidate_supply_zero_subtype: `{candidate_supply.metrics.get('first_candidate_supply_zero_subtype', 'UNKNOWN')}`",
+                f"- candidate_supply_zero_subtypes: `{', '.join(candidate_supply.metrics.get('candidate_supply_zero_subtypes') or []) or 'NONE'}`",
+                f"- feed_was_fresh_before_candidate_supply_zero: `{candidate_supply.metrics.get('feed_was_fresh_before_candidate_supply_zero', 'unknown')}`",
+                f"- latency_guard_cooldown_count: `{candidate_supply.metrics.get('latency_guard_cooldown_count', 0)}`",
+                f"- latency_guard_degrade_exit_only_count: `{candidate_supply.metrics.get('latency_guard_degrade_exit_only_count', 0)}`",
+                f"- slo_feed_stale_count: `{candidate_supply.metrics.get('slo_feed_stale_count', 0)}`",
+                "- candidate_supply_zero_timeline:",
+            ]
+        )
+        for item in candidate_supply.metrics.get("candidate_supply_zero_timeline") or []:
+            candidate_supply_lines.append(
+                f"  - scope=`{item.get('scope', 'unknown')}` subtype=`{item.get('primary_subtype') or 'UNKNOWN'}` symbol=`{item.get('symbol') or 'UNKNOWN'}` stage=`{item.get('stage') or 'UNKNOWN'}`"
+            )
     lines = [
         "# Tradebot Agent Command Center",
         "",
@@ -119,6 +139,9 @@ def _render_markdown(report: CommandCenterReport) -> str:
     lines.extend(not_root_lines)
     lines.extend(["", "## Downstream Impact"])
     lines.extend(downstream_lines)
+    if candidate_supply_lines:
+        lines.extend(["", "## Candidate Supply Zero Attribution"])
+        lines.extend(candidate_supply_lines)
     lines.extend(["", "## Metadata", f"- Generated at: `{report.generated_at}`", "", "## Safety Summary"])
     for key, value in sorted(report.safety_summary.items()):
         lines.append(f"- {key}: `{value}`")
@@ -218,6 +241,7 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
         feed_truth_dead = feed_truth_dead or "NO_LIVE_OPTION_FEED" in block_reason_text or "DEAD" in block_reason_text or "RECOVERY_BLOCKED" in block_reason_text
 
     if feed_stability and current_feed_stability_blocker and not stale_only_feed_evidence:
+        execution_blocked_by_feed_truth = bool(candidate_supply and int(candidate_supply.metrics.get("raw_candidate_count") or 0) > 0 and ranked and int(ranked.metrics.get("executable_count") or 0) == 0)
         summary.update(
             first_blocker_layer="FEED_STABILITY",
             first_failing_event=feed_stability.first_failing_event or "FEED_REBALANCE_APPLIED",
@@ -241,6 +265,9 @@ def _derive_command_center_summary(agent_reports: Sequence[AgentReport]) -> dict
             stale_evidence_reason=stale_evidence_reason,
             first_current_session_blocker="FEED_STABILITY",
         )
+        if execution_blocked_by_feed_truth:
+            summary["root_cause_summary"] = "Candidates existed, but execution was blocked by feed runtime truth."
+            summary["next_pr_recommendation"] = "Feed Lifecycle Stabilization — prevent stale-option refresh and subscription rebalance mutation when freshness guard says mutation is ineligible; keep dead-WS mutation blocked."
         return summary
 
     if feed_truth_dead or (live_rca and any(finding.code == "FEEDTRUTH_DEAD" for finding in live_rca.findings)):

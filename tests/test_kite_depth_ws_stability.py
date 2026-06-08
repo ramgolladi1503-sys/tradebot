@@ -1014,3 +1014,87 @@ def test_apply_subscription_delta_skips_when_recovery_blocked(monkeypatch):
     assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is False
     assert events[-1][0] == "FEED_REBALANCE_SKIPPED"
     assert events[-1][1]["guard_reason"] == "ws1006_process_restart_required"
+
+
+def test_apply_subscription_delta_skips_when_ws_disconnected(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = False
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is False
+    assert events[-1][0] == "FEED_REBALANCE_SKIPPED"
+    assert events[-1][1]["guard_reason"] == "ws_disconnected"
+    assert events[-1][1]["ws_connected"] is False
+
+
+def test_apply_subscription_delta_skips_when_runtime_degraded_and_option_feed_stale(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = True
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "DEGRADED", raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102], raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY", 102: "NIFTY"}, raising=False)
+    monkeypatch.setattr(
+        ws,
+        "_LAST_OPTION_COUNTS_BY_SYMBOL",
+        {"NIFTY": 2},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL",
+        {"NIFTY": 1},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ws,
+        "_option_runtime_state",
+        lambda **kwargs: {
+            "option_count": 2,
+            "feed_block_reason_by_symbol": {"NIFTY": "FEED_LTP_STALE"},
+            "active_blockers_by_symbol": {"NIFTY": ["FEED_LTP_STALE"]},
+            "subscribed_count_by_symbol": {"NIFTY": 2},
+            "ticks_received_count_by_symbol": {"NIFTY": 0},
+            "option_age_by_symbol": {"NIFTY": 99.0},
+        },
+    )
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is False
+    assert events[-1][0] == "FEED_REBALANCE_SKIPPED"
+    assert "degraded" in str(events[-1][1]["guard_reason"]).lower() or "stale" in str(events[-1][1]["guard_reason"]).lower()
+    assert events[-1][1]["runtime_state"] == "DEGRADED"
+
+
+def test_apply_subscription_delta_allows_healthy_rebalance(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
+    ticker.connected = True
+    monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+    monkeypatch.setattr(
+        ws,
+        "_option_runtime_state",
+        lambda **kwargs: {
+            "option_count": 2,
+            "feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            "active_blockers_by_symbol": {"NIFTY": []},
+            "subscribed_count_by_symbol": {"NIFTY": 2},
+            "ticks_received_count_by_symbol": {"NIFTY": 2},
+            "option_age_by_symbol": {"NIFTY": 0.5},
+        },
+    )
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is True
+    assert any(event == "FEED_REBALANCE_APPLIED" for event, _ in events)
