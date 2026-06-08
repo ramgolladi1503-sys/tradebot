@@ -35,6 +35,103 @@ acceptance_proof:
 - Auth failures fail closed and do not enter a reconnect loop.
 - Terminal reactor failures remain restart-required.
 
+## Scope Guard
+
+This PR is intentionally narrow and only changes feed recovery timing and fail-closed handling.
+
+### In Scope
+
+- Make feed recovery use a real clock or injected test clock.
+- Add timeout and storm-guard state to the recovery coordinator.
+- Fail closed on auth-required and terminal restart-required faults.
+- Wire the websocket handler to respect the new recovery outcomes.
+- Add focused recovery tests.
+
+### Out of Scope
+
+- No strategy changes.
+- No ranking or scoring changes.
+- No broker order changes.
+- No dashboard/UI changes.
+- No live-mode changes.
+- No credential changes.
+
+## Grill Me Review
+
+The main risk is loosening recovery gating while trying to make it more observable. This PR avoids that by blocking on timeout, auth-required, and recovery-storm conditions instead of retrying indefinitely.
+
+The second risk is silently changing existing feed behavior. The new outcomes are explicit, and the tests pin the fail-closed paths rather than relaxing them.
+
+The third risk is broadening into strategy or broker logic. This PR does not touch those paths.
+
+## Hermes Review
+
+The architecture stays constrained to the recovery coordinator and websocket callback integration.
+
+The coordinator now owns the timing state and recovery-window logic, while `core/kite_depth_ws.py` only translates those outcomes into runtime snapshots and logs.
+
+## GSD Review
+
+This PR turns recovery from a static or best-effort loop into an explicit state machine with time-bound outcomes.
+
+That makes recovery behavior observable, reproducible in tests, and safe to gate future candidate generation on.
+
+## QA / Safety Review
+
+Safety properties covered:
+
+- Recovery timestamps come from the injected or real clock.
+- Recovery loops cannot run forever without timing out.
+- Recovery storms are blocked inside the configured window.
+- Auth-required faults fail closed and do not reconnect.
+- Terminal reactor faults remain restart-required.
+- Candidate generation stays blocked whenever recovery is active, timed out, blocked, auth-required, or restart-required.
+
+## Acceptance Proof
+
+Focused commands:
+
+```bash
+python -m pytest tests/test_feed_recovery_coordinator.py tests/test_kite_depth_ws_stability.py -q
+```
+
+Expected proof:
+
+- WS1006 enters soft recovery with a non-fake timestamp.
+- Successful recovery clears the state.
+- Timeouts flip recovery into a blocked state.
+- Three recovery failures in the configured window block further recovery.
+- Auth failures emit auth-required evidence and do not loop reconnects.
+- Terminal reactor failures remain restart-required.
+
+## Runtime Proof Required After Merge
+
+No runtime proof is required to validate broker/order behavior because this PR does not touch broker APIs, orders, or strategy execution.
+
+Runtime proof is still required for the websocket feed path after merge:
+
+- confirm recovery timeout evidence appears in runtime snapshots
+- confirm recovery-blocked evidence prevents candidate generation
+- confirm auth-required latching suppresses reconnect loops
+
+## What This PR Does Not Prove
+
+This PR does not prove feed quality or trading edge.
+
+It does not prove ranking quality.
+
+It does not prove candidate profitability.
+
+It does not prove strategy correctness.
+
+It only proves feed recovery timing and blocking behavior are explicit, bounded, and fail closed.
+
+## Human Approval
+
+Human approval is required before merge.
+
+Do not merge this PR only because the tests are green. Review that the recovery state machine stayed narrow and that no strategy, ranking, or broker behavior changed.
+
 ## Scope
 
 This PR makes websocket feed recovery time-aware, bounded, and fail-closed.
