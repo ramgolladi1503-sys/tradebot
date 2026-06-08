@@ -305,3 +305,72 @@ def test_command_center_fresh_feed_with_strategy_no_candidate_returns_supply_blo
     assert payload["first_blocker_layer"] in {"CANDIDATE_SUPPLY", "PHASE2_RANKING"}
     assert payload["first_blocker_layer"] != "FEED_STABILITY"
     assert payload["metrics_summary"]["first_current_session_blocker"] in {"CANDIDATE_SUPPLY", "PHASE2_RANKING"}
+
+
+def test_command_center_candidate_supply_zero_recommendation_mentions_strategy_qualification(tmp_path: Path):
+    runtime_dir, logs_dir = _write_runtime(
+        tmp_path,
+        feed_runtime={
+            "run_id": "run-current",
+            "boot_epoch": 2000.0,
+            "ts_epoch": 2001.0,
+            "ts_ist": "2026-06-08T09:30:00+05:30",
+            "runtime_state": "RUNNING",
+            "feed_truth_state": "LIVE",
+            "ws_connected": True,
+            "gate_status": {"N2_FEED_FRESH": {"ok": True}},
+            "feed_health_snapshot": {"N2_FEED_FRESH": {"ok": True}},
+            "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        },
+        depth_log="ts_epoch=1500.0 boot_epoch=1000.0 run_id=run-old event=FEED_REBALANCE_APPLIED\n",
+        starvation_trace={"raw_candidate_count": 0, "phase2_input_candidate_count": 0},
+        ranked_runtime={"ranked_candidate_count": 0, "executable_count": 0},
+        strategy_no_qualified={
+            "strategy_no_qualified_applicable": True,
+            "no_candidate_constructed": True,
+            "gate_reasons": {"NO_STRATEGY_QUALIFIED": 1},
+            "latency_guard": {"latency_guard_triggered": True, "latency_guard_action": "cooldown"},
+            "by_symbol": {
+                "NIFTY": {
+                    "attempt_count": 1,
+                    "strategies_attempted": ["MEAN_REVERT"],
+                    "trade_builder_ran": True,
+                    "candidate_produced_count": 0,
+                    "candidate_generated_then_dropped_count": 0,
+                    "no_setup_qualified_count": 1,
+                    "reason_categories": {"direction_or_regime_mismatch": 1},
+                    "attempts": [
+                        {
+                            "symbol": "NIFTY",
+                            "strategy_id": "MEAN_REVERT",
+                            "trade_builder_reached": True,
+                            "no_candidate_constructed": True,
+                            "no_setup_reason": "regime_low_confidence",
+                            "reason_category": "direction_or_regime_mismatch",
+                            "strategy_blocker_stage": "N8_STRATEGY_SELECT",
+                            "strategy_blocker_reasons": [
+                                "NO_STRATEGY_QUALIFIED",
+                                "cross_asset_optional_stale",
+                                "regime_unstable_debounced:1/2",
+                                "regime_low_confidence",
+                            ],
+                            "candidate_family_considered": None,
+                            "picked_candidate_family": None,
+                            "regime_confidence": 0.17,
+                            "regime_entropy": 0.88,
+                            "regime_unstable_debounced": True,
+                        }
+                    ],
+                }
+            },
+        },
+    )
+
+    report = run_agent_command_center(runtime_dir=runtime_dir, logs_dir=logs_dir, out_dir=runtime_dir / "agent_reports")
+    payload = report.to_dict()
+    assert payload["first_blocker_layer"] == "CANDIDATE_SUPPLY"
+    assert payload["next_action_type"] == "FIX_CANDIDATE_SUPPLY"
+    assert "strategy qualification" in payload["next_pr_recommendation"].lower()
+    assert "feed lifecycle" not in payload["next_pr_recommendation"].lower()
+    assert payload["metrics_summary"]["evidence_scope"] == "mixed"
+    assert payload["metrics_summary"]["current_session_feed_fresh"] is True
