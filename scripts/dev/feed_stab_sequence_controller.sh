@@ -133,9 +133,23 @@ merge_green_pr() {
     pr_state="$(gh pr view "$pr" --json mergeStateStatus,statusCheckRollup,isDraft,mergedAt,state,url || true)"
     printf '%s\n' "$pr_state"
 
-    if printf '%s' "$pr_state" | grep -Eq '"status":"(OPEN|MERGEABLE|BLOCKED)"|"statusCheckRollup".*"status":"(IN_PROGRESS|QUEUED|PENDING)"'; then
-      log "Merge failed while checks or mergeability are still unsettled; continue polling."
-      return 1
+    if printf '%s' "$pr_state" | grep -q '"mergedAt":null' && printf '%s' "$pr_state" | grep -q '"state":"OPEN"'; then
+      if printf '%s' "$pr_state" | grep -Eq '"statusCheckRollup".*"status":"(IN_PROGRESS|QUEUED|PENDING)"'; then
+        log "Merge failed while checks are still unsettled; continue polling."
+        return 1
+      fi
+
+      if printf '%s' "$pr_state" | grep -q '"mergeStateStatus":"BLOCKED"'; then
+        log "MANUAL_MERGE_REQUIRED: PR #$pr"
+        log "Open PR in GitHub UI."
+        log "Confirm all required checks are green."
+        log "Confirm PR is not draft."
+        log "Use the GitHub UI merge button if available."
+        log "If GitHub asks for review, approve/review as required."
+        log "If GitHub says branch policy blocks merge, update repository branch protection or perform the permitted merge path."
+        log "After manual merge, rerun controller in resume-after-manual-merge mode."
+        return 3
+      fi
     fi
 
     log "If branch protection or permissions require human action, this is a hard blocker."
@@ -154,6 +168,34 @@ merge_green_pr() {
   done
 
   sync_main
+}
+
+resume_after_manual_merge() {
+  local pr="$1"
+  local current_seq="$2"
+  local next_seq=$((current_seq + 1))
+
+  local pr_state
+  pr_state="$(gh pr view "$pr" --json merged,state,mergedAt,url)"
+  printf '%s\n' "$pr_state"
+
+  if ! printf '%s' "$pr_state" | grep -q '"merged":true'; then
+    echo "PR_NOT_MERGED_YET"
+    return 1
+  fi
+
+  sync_main
+
+  if [[ "$next_seq" -gt 12 ]]; then
+    log "FEED-STAB-12 merged. Sequence complete."
+    return 0
+  fi
+
+  local next_branch
+  next_branch="$(next_branch_for_pr_number "$next_seq")"
+  log "Ready for next PR: FEED-STAB-${next_seq}"
+  log "Next branch should be: $next_branch"
+  log "READY_FOR_NEXT_PR_IMPLEMENTATION: FEED-STAB-${next_seq}"
 }
 
 continue_current_pr() {
@@ -182,6 +224,10 @@ continue_current_pr() {
 
     if [[ "$rc" == "1" ]]; then
       continue
+    fi
+
+    if [[ "$rc" == "3" ]]; then
+      exit 3
     fi
 
     log "Cannot merge PR #$pr because checks are not green."
@@ -228,6 +274,14 @@ next_title_for_pr_number() {
 }
 
 main() {
+  if [[ "${1:-}" == "resume-after-manual-merge" ]]; then
+    local resume_pr="${2:-534}"
+    local resume_seq="${3:-2}"
+    log "Resuming after manual merge for PR #$resume_pr / sequence $resume_seq"
+    resume_after_manual_merge "$resume_pr" "$resume_seq"
+    return
+  fi
+
   local current_pr="${1:-534}"
   local current_seq="${2:-2}"
 
