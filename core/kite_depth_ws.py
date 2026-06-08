@@ -1279,6 +1279,27 @@ def _ws1006_recoverable_max_attempts_per_session() -> int:
         return 2
 
 
+def _ws_recovery_timeout_sec() -> float:
+    try:
+        return max(0.0, float(getattr(cfg, "DEPTH_WS_RECOVERY_TIMEOUT_SEC", 90.0)))
+    except Exception:
+        return 90.0
+
+
+def _ws_max_recoveries_per_window() -> int:
+    try:
+        return max(1, int(getattr(cfg, "DEPTH_WS_MAX_RECOVERIES_PER_WINDOW", 3)))
+    except Exception:
+        return 3
+
+
+def _ws_recovery_window_sec() -> float:
+    try:
+        return max(0.0, float(getattr(cfg, "DEPTH_WS_RECOVERY_WINDOW_SEC", 600.0)))
+    except Exception:
+        return 600.0
+
+
 def _ws1006_recoverable_retry_cooldown_sec() -> float:
     try:
         return max(0.0, float(getattr(cfg, "DEPTH_WS_WS1006_RECOVERABLE_RETRY_COOLDOWN_SEC", 10.0)))
@@ -1354,6 +1375,24 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
     )
     _sync_ws1006_recovery_state_from_coordinator()
     _emit_feed_recovery_events(decision.events_emitted, source=source, code=code, reason=reason_text)
+    if decision.action == "AUTH_REQUIRED":
+        _mark_auth_required(_auth_error_text(code, reason_text), code=code, source="kite_depth_ws_recovery")
+        return True
+    if decision.action in {"RECOVERY_TIMEOUT", "RECOVERY_BLOCKED"}:
+        _RUNTIME_STATE = "RECOVERY_BLOCKED"
+        _LAST_RUNTIME_ERROR = f"{code}:{reason_text}"[:1000]
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source=f"{source}:{decision.action.lower()}",
+            runtime_state="RECOVERY_BLOCKED",
+            last_error=_LAST_RUNTIME_ERROR,
+            disconnected_code=code if code is None else int(code),
+            disconnected_reason=reason_text,
+            restart_attempt_allowed=False,
+            restart_attempted=False,
+            reconnect_blocked_reason=decision.action,
+        )
+        return True
     if decision.event == "FEED_RECOVERY_ALREADY_IN_PROGRESS":
         _persist_runtime_snapshot_row(
             ws_connected=False,
@@ -1401,6 +1440,8 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
                     "ws1006_recovery_attempt_count": int(_WS1006_RECOVERABLE_ATTEMPTS or 0),
                     "ws1006_max_recoverable_attempts": max_attempts,
                     "ws1006_recovery_cooldown_sec": cooldown_sec,
+                    "ws1006_recovery_timeout_sec": _ws_recovery_timeout_sec(),
+                    "ws1006_recovery_window_sec": _ws_recovery_window_sec(),
                 },
             )
             _sync_ws1006_recovery_state_from_coordinator()

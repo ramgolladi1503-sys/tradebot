@@ -258,8 +258,67 @@ def test_ws1006_peer_drop_on_error_is_recoverable_first(monkeypatch):
     assert payload["process_restart_required"] is False
     assert payload["reconnect_blocked_reason"] is None
     assert payload["restart_suppressed"] is False
+
+
+def test_ws1006_auth_failure_blocks_reconnect_loop(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    events: list[tuple[str, dict]] = []
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_error(ticker, 403, "invalid auth token")
+
+    assert any(event == "FEED_AUTH_REQUIRED" for event, _ in events)
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] in {"AUTH_BLOCKED", "STOPPED"}
+    assert payload["ws_connected"] is False
+    assert ws._AUTH_REQUIRED_LATCH is True
+
+
+def test_ws1006_recovery_timeout_is_fail_closed(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clock = {"now": 100.0}
+
+    class _ClockedCoordinator(FeedRecoveryCoordinator):
+        def __init__(self):
+            super().__init__(
+                max_recoverable_attempts_per_session=2,
+                recoverable_retry_cooldown_sec=0.0,
+                recovery_timeout_sec=90.0,
+                max_recoveries_per_window=3,
+                recovery_window_sec=600.0,
+                now_epoch_fn=lambda: clock["now"],
+            )
+
+    def _factory(api_key, access_token, debug=True):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", _ClockedCoordinator(), raising=False)
+
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_error(ticker, 1006, "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)")
+    clock["now"] += 91.0
+    ticker.on_error(ticker, 1006, "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)")
+
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["runtime_state"] == "RECOVERY_BLOCKED"
+    assert payload["recovery_blocked"] is True
     assert payload["ws1006_recovery_attempt_count"] == 1
-    assert payload["ws_recovery_state"] == "RECOVERING_WS_DROP"
+    assert payload["ws_recovery_state"] == "RECOVERY_BLOCKED"
 
 
 def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
@@ -280,13 +339,12 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     ws._sync_ws1006_recovery_state_from_coordinator()
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
 
-    assert any(event == "FEED_WS_1006_RECOVERY_ESCALATED" for event, _ in events)
+    assert any(event == "FEED_RECOVERY_BLOCKED" for event, _ in events)
     assert scheduled == []
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["process_restart_required"] is True
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
-    assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
+    assert payload["reconnect_blocked_reason"] == "recovery_blocked"
     assert payload["restart_suppressed"] is True
 
 

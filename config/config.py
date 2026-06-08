@@ -104,6 +104,13 @@ KITE_API_SECRET = os.getenv("KITE_API_SECRET", "")
 KITE_ACCESS_TOKEN = ""
 
 # -------------------------------
+# Feed recovery stability
+# -------------------------------
+DEPTH_WS_RECOVERY_TIMEOUT_SEC = float(os.getenv("DEPTH_WS_RECOVERY_TIMEOUT_SEC", "90"))
+DEPTH_WS_MAX_RECOVERIES_PER_WINDOW = int(os.getenv("DEPTH_WS_MAX_RECOVERIES_PER_WINDOW", "3"))
+DEPTH_WS_RECOVERY_WINDOW_SEC = float(os.getenv("DEPTH_WS_RECOVERY_WINDOW_SEC", "600"))
+
+# -------------------------------
 # Telegram bot credentials
 # -------------------------------
 ENABLE_TELEGRAM = os.getenv("ENABLE_TELEGRAM", "true").lower() == "true"
