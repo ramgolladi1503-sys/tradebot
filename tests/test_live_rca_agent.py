@@ -216,3 +216,129 @@ def test_live_rca_agent_ignores_unit_test_auth_failure_when_feed_is_churning(tmp
     assert payload["findings"][0]["code"] == "SUBSCRIPTION_CHURN"
     assert payload["first_failing_event"] == "FEED_REBALANCE_APPLIED"
     assert payload["next_fix_recommendation"] != "Investigate auth_failure first."
+
+
+def test_live_rca_agent_prefers_current_session_strategy_select_when_feed_is_fresh(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        "\n".join(
+            [
+                "ts_epoch=1500.0 boot_epoch=1000.0 run_id=run-old event=FEED_REBALANCE_APPLIED subscribe_count=12 unsubscribe_count=11",
+                "ts_epoch=1500.5 boot_epoch=1000.0 run_id=run-old event=CONNECTION_ERROR code=1006",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-current",
+                "boot_epoch": 2000.0,
+                "ts_epoch": 2001.0,
+                "runtime_state": "RUNNING",
+                "feed_truth_state": "LIVE",
+                "ws_connected": True,
+                "feed_health_snapshot": {"N2_FEED_FRESH": {"ok": True}},
+                "gate_status": {"N2_FEED_FRESH": {"ok": True}},
+                "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "strategy_no_qualified_reasons_latest.json").write_text(
+        json.dumps(
+            {
+                "strategy_no_qualified_applicable": True,
+                "no_candidate_constructed": True,
+                "gate_reasons": {"NO_STRATEGY_QUALIFIED": 1},
+                "writer_name": "runtime_strategy_no_qualified_reasons",
+                "by_symbol": {
+                    "NIFTY": {
+                        "attempt_count": 1,
+                        "strategies_attempted": ["MEAN_REVERT"],
+                        "no_setup_qualified_count": 1,
+                        "candidate_generated_then_dropped_count": 0,
+                        "reason_categories": {"direction_or_regime_mismatch": 1},
+                        "attempts": [
+                            {
+                                "symbol": "NIFTY",
+                                "strategy_id": "MEAN_REVERT",
+                                "no_candidate_constructed": True,
+                                "reason_category": "direction_or_regime_mismatch",
+                                "no_setup_reason": "regime_low_confidence",
+                            }
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "candidate_starvation_trace_latest.json").write_text(
+        json.dumps({"raw_candidate_count": 4, "phase2_input_candidate_count": 4}),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "ranked_pipeline_runtime_latest.json").write_text(
+        json.dumps({"ranked_candidate_count": 4, "executable_count": 0}),
+        encoding="utf-8",
+    )
+
+    report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["verdict"] == "BLOCKER"
+    assert payload["findings"][0]["code"] in {"STRATEGY_SELECT_NO_QUALIFIED", "CANDIDATE_SUPPLY_EMPTY", "PHASE2_FILTERED_ALL"}
+    assert payload["metrics"]["current_session_feed_fresh"] is True
+    assert payload["metrics"]["stale_feed_evidence_count"] >= 1
+    assert payload["metrics"]["current_session_strategy_select_count"] >= 1
+
+
+def test_live_rca_agent_keeps_current_session_feed_churn_as_subscription_churn(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        "\n".join(
+            [
+                "ts_epoch=2002.0 boot_epoch=2000.0 run_id=run-current event=FEED_REBALANCE_APPLIED subscribe_count=12 unsubscribe_count=11",
+                "ts_epoch=2002.5 boot_epoch=2000.0 run_id=run-current event=CONNECTION_ERROR code=1006",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-current",
+                "boot_epoch": 2000.0,
+                "ts_epoch": 2001.0,
+                "runtime_state": "RUNNING",
+                "feed_truth_state": "LIVE",
+                "ws_connected": True,
+                "feed_health_snapshot": {"N2_FEED_FRESH": {"ok": True}},
+                "gate_status": {"N2_FEED_FRESH": {"ok": True}},
+                "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "candidate_starvation_trace_latest.json").write_text(
+        json.dumps({"raw_candidate_count": 4, "phase2_input_candidate_count": 4}),
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "ranked_pipeline_runtime_latest.json").write_text(
+        json.dumps({"ranked_candidate_count": 4, "executable_count": 0}),
+        encoding="utf-8",
+    )
+
+    report = analyze_live_rca(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["verdict"] == "BLOCKER"
+    assert payload["findings"][0]["code"] == "SUBSCRIPTION_CHURN"
+    assert payload["metrics"]["current_session_feed_fresh"] is True
+    assert payload["metrics"]["stale_feed_evidence_count"] == 0

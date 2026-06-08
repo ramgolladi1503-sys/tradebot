@@ -73,3 +73,84 @@ def test_feed_stability_agent_parses_json_watchdog_lines(tmp_path: Path):
     assert payload["metrics"]["ws1006_count"] >= 1
     assert payload["metrics"]["fresh_ratio_min"] > 0.90
     assert payload["metrics"]["stale_count_max"] >= 1
+
+
+def test_feed_stability_agent_marks_stale_tail_churn_as_historical_when_current_feed_is_fresh(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        "\n".join(
+            [
+                "ts_epoch=1500.0 boot_epoch=1000.0 run_id=run-old event=FEED_REBALANCE_APPLIED subscribe_count=12 unsubscribe_count=11",
+                "ts_epoch=1500.5 boot_epoch=1000.0 run_id=run-old event=CONNECTION_ERROR code=1006",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-current",
+                "boot_epoch": 2000.0,
+                "ts_epoch": 2001.0,
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "feed_health_snapshot": {"N2_FEED_FRESH": {"ok": True}},
+                "gate_status": {"N2_FEED_FRESH": {"ok": True}},
+                "option_ticks_received_count_by_symbol": {"BANKNIFTY": 25},
+                "option_tokens_subscribed_count_by_symbol": {"BANKNIFTY": 25},
+                "option_feed_block_reason_by_symbol": {"BANKNIFTY": "OK"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = analyze_feed_stability(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["metrics"]["current_session_feed_fresh"] is True
+    assert payload["metrics"]["evidence_scope"] == "historical_tail"
+    assert payload["metrics"]["stale_evidence_ignored_count"] >= 1
+    assert payload["metrics"]["stale_evidence_reason"]
+
+
+def test_feed_stability_agent_keeps_current_session_churn_as_current(tmp_path: Path):
+    runtime_dir = tmp_path / ".runtime"
+    logs_dir = tmp_path / "logs"
+    (runtime_dir / "logs").mkdir(parents=True)
+    logs_dir.mkdir()
+    (runtime_dir / "logs" / "depth_ws_watchdog.log").write_text(
+        "\n".join(
+            [
+                "ts_epoch=2002.0 boot_epoch=2000.0 run_id=run-current event=FEED_REBALANCE_APPLIED subscribe_count=12 unsubscribe_count=11",
+                "ts_epoch=2002.5 boot_epoch=2000.0 run_id=run-current event=CONNECTION_ERROR code=1006",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "feed_runtime_latest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-current",
+                "boot_epoch": 2000.0,
+                "ts_epoch": 2001.0,
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "feed_health_snapshot": {"N2_FEED_FRESH": {"ok": True}},
+                "gate_status": {"N2_FEED_FRESH": {"ok": True}},
+                "option_ticks_received_count_by_symbol": {"BANKNIFTY": 25},
+                "option_tokens_subscribed_count_by_symbol": {"BANKNIFTY": 25},
+                "option_feed_block_reason_by_symbol": {"BANKNIFTY": "OK"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = analyze_feed_stability(runtime_dir=runtime_dir, logs_dir=logs_dir)
+    payload = report.to_dict()
+    assert payload["metrics"]["current_session_feed_fresh"] is True
+    assert payload["metrics"]["evidence_scope"] == "current_session"
+    assert payload["metrics"]["stale_evidence_ignored_count"] == 0
