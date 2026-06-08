@@ -25,9 +25,20 @@ sync_main() {
 check_required_green() {
   local pr="$1"
 
-  gh pr view "$pr" --json statusCheckRollup,mergeStateStatus,isDraft > /tmp/pr_checks_"$pr".json
+  local pr_json
+  if ! pr_json="$(gh pr view "$pr" --json statusCheckRollup,mergeStateStatus,isDraft 2>/dev/null)"; then
+    echo "PENDING_CHECKS"
+    echo "gh pr view failed for PR #$pr"
+    return 1
+  fi
 
-  python - "$pr" < /tmp/pr_checks_"$pr".json <<'PY'
+  if [[ -z "$pr_json" ]]; then
+    echo "PENDING_CHECKS"
+    echo "empty GitHub response for PR #$pr"
+    return 1
+  fi
+
+  printf '%s\n' "$pr_json" | python - "$pr" <<'PY'
 import json
 import sys
 
