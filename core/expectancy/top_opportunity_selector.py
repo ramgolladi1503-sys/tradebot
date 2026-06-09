@@ -316,7 +316,7 @@ def _build_opportunity_rows(rows: list[dict[str, Any]], pool_quality: CandidateP
         payload.setdefault("execution_allowed", bool(payload.get("execution_allowed")))
         payload.setdefault("permission", _upper(payload.get("permission")))
         payload.setdefault("final_action", _upper(payload.get("final_action")))
-        payload.setdefault("fallback_used", bool(payload.get("fallback_used")))
+        payload["fallback_used"] = _is_fallback(payload)
         payload.setdefault("blockers", list(payload.get("blockers") or []))
         pool_penalty, pool_reasons = (0.0, [])
         if pool_quality is not None:
