@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
+from core.exact_option_token_freshness_gate import (
+    EXACT_OPTION_TOKEN_FRESHNESS_BLOCKER,
+    classify_exact_option_token_freshness,
+)
+
 
 FEED_READINESS_FOR_CANDIDATES_SCHEMA_VERSION = 1
 FEED_READINESS_FOR_CANDIDATES_SOURCE = "feed_readiness_for_candidates_v1"
@@ -76,6 +81,7 @@ def _dedupe(items: list[str]) -> tuple[str, ...]:
 def build_feed_readiness_for_candidates_contract(snapshot: Mapping[str, Any] | None) -> FeedReadinessForCandidatesContract:
     source = _as_mapping(snapshot)
     supervisor = _as_mapping(source.get("feed_supervisor") or source.get("supervisor") or source)
+    token_evidence = source.get("token_evidence")
     state = _upper(supervisor.get("state") or source.get("state"))
     reason_code = _upper(supervisor.get("reason_code") or source.get("reason_code") or state or "UNKNOWN")
 
@@ -85,21 +91,32 @@ def build_feed_readiness_for_candidates_contract(snapshot: Mapping[str, Any] | N
 
     blockers: list[str] = []
     warnings: list[str] = []
+    token_freshness_ok = True
+    token_freshness_blockers: tuple[str, ...] = ()
+
+    if token_evidence is not None:
+        token_decision = classify_exact_option_token_freshness(token_evidence, max_tick_age_sec=float(source.get("max_tick_age_sec") or 3.0))
+        token_freshness_ok = bool(token_decision.token_freshness_ok)
+        token_freshness_blockers = tuple(token_decision.blockers)
+        if not token_freshness_ok:
+            blockers.append(EXACT_OPTION_TOKEN_FRESHNESS_BLOCKER)
+            blockers.extend(token_freshness_blockers)
+            warnings.append("EXACT_OPTION_TOKEN_FRESHNESS_BLOCKED")
 
     if state in {"AUTH_REQUIRED", "RESTART_REQUIRED", "RECOVERY_BLOCKED", "RECOVERY_TIMEOUT"}:
         blockers.append(state)
     if state in {"RECOVERING", "VERIFYING", "WARMING_UP", "CONNECTED", "SUBSCRIBED", "CONNECTING", "BOOTING"} and clean_cycles_remaining > 0:
         warnings.append("WARMUP_NOT_COMPLETE")
-    if state == "CANDIDATE_READY":
+    if state == "CANDIDATE_READY" and token_freshness_ok:
         blockers = []
         warnings = []
 
-    candidate_generation_allowed = state == "CANDIDATE_READY" and not blockers and clean_cycles_remaining == 0
+    candidate_generation_allowed = state == "CANDIDATE_READY" and not blockers and clean_cycles_remaining == 0 and token_freshness_ok
     readiness_state = (
         READINESS_STATE_READY
         if candidate_generation_allowed
         else READINESS_STATE_BLOCKED
-        if blockers or state in {"AUTH_REQUIRED", "RESTART_REQUIRED", "RECOVERY_BLOCKED", "RECOVERY_TIMEOUT"}
+        if blockers or state in {"AUTH_REQUIRED", "RESTART_REQUIRED", "RECOVERY_BLOCKED", "RECOVERY_TIMEOUT"} or (token_evidence is not None and not token_freshness_ok)
         else READINESS_STATE_WARMING_UP
     )
 
@@ -124,6 +141,7 @@ def build_feed_readiness_for_candidates_contract(snapshot: Mapping[str, Any] | N
             "does_not_score_edge": True,
             "does_not_select_candidates": True,
             "does_not_allocate_capital": True,
+            "uses_exact_option_token_freshness": token_evidence is not None,
         },
     )
 
