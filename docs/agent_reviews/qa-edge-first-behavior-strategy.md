@@ -1,5 +1,14 @@
 # QA Gate Foundation + Fallback Executable Firewall — Agent Review Evidence
 
+mode: PAPER
+candidate_id: qa-edge-first-behavior-strategy-pr542
+decision: fallback-executable-firewall-added
+reason: Prevent fallback-derived quote evidence from being promoted into executable top opportunities and lock edge-first QA governance.
+timestamp: 2026-06-09T11:27:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/qa-edge-first-behavior-strategy.md
+
 ## Agent Work Contract
 
 This PR establishes the edge-first QA governance foundation for Tradebot and fixes one proven top-opportunity selector safety gap.
