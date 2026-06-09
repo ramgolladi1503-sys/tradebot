@@ -92,14 +92,10 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
     missing_option_tokens_count = _as_int(source.get("missing_option_tokens_count") or runtime.get("missing_option_tokens_count"))
     verified_option_symbols = _normalize_symbols(source.get("verified_option_symbols") or runtime.get("verified_option_symbols"))
     missing_option_symbols = _normalize_symbols(source.get("missing_option_symbols") or runtime.get("missing_option_symbols"))
-    refresh_attempted = bool(source.get("refresh_attempted") or runtime.get("refresh_attempted") or source.get("resubscribe_attempted") or runtime.get("resubscribe_attempted"))
+    refresh_attempted = bool(source.get("refresh_attempted") or runtime.get("refresh_attempted"))
     refresh_successful = source.get("refresh_successful")
     if refresh_successful is None:
         refresh_successful = runtime.get("refresh_successful")
-    if refresh_successful is None:
-        refresh_successful = source.get("resubscribe_successful")
-    if refresh_successful is None:
-        refresh_successful = runtime.get("resubscribe_successful")
     if isinstance(refresh_successful, bool):
         refresh_successful_bool = refresh_successful
     else:
@@ -143,7 +139,7 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
     if verification_state in {"VERIFYING", "PENDING", "IN_PROGRESS"}:
         warnings.append("SUBSCRIPTION_VERIFICATION_IN_PROGRESS")
     if refresh_attempted and refresh_successful_bool is False:
-        blockers.append("RESUBSCRIBE_FAILED")
+        blockers.append("REFRESH_FAILED")
     if refresh_attempted and refresh_successful_bool is True and verified_complete:
         warnings.append(SUBSCRIPTION_TRUTH_REFRESH_VERIFIED)
 
@@ -176,9 +172,9 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
         warnings=_dedupe(warnings),
         metadata={
             "does_not_mutate_runtime": True,
-            "does_not_resubscribe": True,
+            "does_not_refresh_subscription": True,
             "does_not_call_broker": True,
-            "does_not_place_orders": True,
+            "does_not_emit_order_actions": True,
             "token_age_symbol_count": len(token_ages),
         },
     )

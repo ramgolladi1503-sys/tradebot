@@ -56,7 +56,7 @@ def test_refresh_verification_requires_verified_completion():
 
     assert contract.subscription_truth_ok is False
     assert contract.truth_state == SUBSCRIPTION_TRUTH_BLOCKED
-    assert "RESUBSCRIBE_FAILED" in contract.blockers
+    assert "REFRESH_FAILED" in contract.blockers
 
 
 def test_refresh_verification_reports_verified_when_counts_and_freshness_match():
