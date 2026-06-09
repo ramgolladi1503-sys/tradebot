@@ -9,8 +9,8 @@ SUBSCRIPTION_TRUTH_CONTRACT_SOURCE = "subscription_truth_contract_v1"
 
 SUBSCRIPTION_TRUTH_OK = "SUBSCRIPTION_TRUTH_OK"
 SUBSCRIPTION_TRUTH_BLOCKED = "SUBSCRIPTION_TRUTH_BLOCKED"
-SUBSCRIPTION_TRUTH_RESUBSCRIBE_REQUIRED = "RESUBSCRIBE_REQUIRED"
-SUBSCRIPTION_TRUTH_RESUBSCRIBE_VERIFIED = "RESUBSCRIBE_VERIFIED"
+SUBSCRIPTION_TRUTH_REFRESH_REQUIRED = "REFRESH_REQUIRED"
+SUBSCRIPTION_TRUTH_REFRESH_VERIFIED = "REFRESH_VERIFIED"
 
 _ORDER_ACTION_KEY = "is_" + "order_action"
 _BROKER_KEY = "broker_" + "api_called"
@@ -24,7 +24,7 @@ class SubscriptionTruthContract:
     source: str
     truth_state: str
     subscription_truth_ok: bool
-    resubscribe_verified: bool
+    refresh_verified: bool
     intended_tokens_count: int
     subscribed_tokens_count: int
     subscribed_option_tokens_count: int
@@ -92,14 +92,18 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
     missing_option_tokens_count = _as_int(source.get("missing_option_tokens_count") or runtime.get("missing_option_tokens_count"))
     verified_option_symbols = _normalize_symbols(source.get("verified_option_symbols") or runtime.get("verified_option_symbols"))
     missing_option_symbols = _normalize_symbols(source.get("missing_option_symbols") or runtime.get("missing_option_symbols"))
-    resubscribe_attempted = bool(source.get("resubscribe_attempted") or runtime.get("resubscribe_attempted"))
-    resubscribe_successful = source.get("resubscribe_successful")
-    if resubscribe_successful is None:
-        resubscribe_successful = runtime.get("resubscribe_successful")
-    if isinstance(resubscribe_successful, bool):
-        resubscribe_successful_bool = resubscribe_successful
+    refresh_attempted = bool(source.get("refresh_attempted") or runtime.get("refresh_attempted") or source.get("resubscribe_attempted") or runtime.get("resubscribe_attempted"))
+    refresh_successful = source.get("refresh_successful")
+    if refresh_successful is None:
+        refresh_successful = runtime.get("refresh_successful")
+    if refresh_successful is None:
+        refresh_successful = source.get("resubscribe_successful")
+    if refresh_successful is None:
+        refresh_successful = runtime.get("resubscribe_successful")
+    if isinstance(refresh_successful, bool):
+        refresh_successful_bool = refresh_successful
     else:
-        resubscribe_successful_bool = None
+        refresh_successful_bool = None
     option_reason_map = _as_mapping(source.get("option_feed_block_reason_by_symbol") or runtime.get("option_feed_block_reason_by_symbol"))
     option_blockers = tuple(
         sorted(
@@ -138,20 +142,20 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
     )
     if verification_state in {"VERIFYING", "PENDING", "IN_PROGRESS"}:
         warnings.append("SUBSCRIPTION_VERIFICATION_IN_PROGRESS")
-    if resubscribe_attempted and resubscribe_successful_bool is False:
+    if refresh_attempted and refresh_successful_bool is False:
         blockers.append("RESUBSCRIBE_FAILED")
-    if resubscribe_attempted and resubscribe_successful_bool is True and verified_complete:
-        warnings.append(SUBSCRIPTION_TRUTH_RESUBSCRIBE_VERIFIED)
+    if refresh_attempted and refresh_successful_bool is True and verified_complete:
+        warnings.append(SUBSCRIPTION_TRUTH_REFRESH_VERIFIED)
 
     subscription_truth_ok = not blockers and verified_complete
-    resubscribe_verified = bool(resubscribe_attempted and resubscribe_successful_bool is True and verified_complete)
+    refresh_verified = bool(refresh_attempted and refresh_successful_bool is True and verified_complete)
 
     if subscription_truth_ok:
-        truth_state = SUBSCRIPTION_TRUTH_OK if not resubscribe_attempted else SUBSCRIPTION_TRUTH_RESUBSCRIBE_VERIFIED
+        truth_state = SUBSCRIPTION_TRUTH_OK if not refresh_attempted else SUBSCRIPTION_TRUTH_REFRESH_VERIFIED
     elif blockers:
         truth_state = SUBSCRIPTION_TRUTH_BLOCKED
     else:
-        truth_state = SUBSCRIPTION_TRUTH_RESUBSCRIBE_REQUIRED
+        truth_state = SUBSCRIPTION_TRUTH_REFRESH_REQUIRED
         warnings.append("SUBSCRIPTION_VERIFICATION_REQUIRED")
 
     return SubscriptionTruthContract(
@@ -161,7 +165,7 @@ def build_subscription_truth_contract(payload: Mapping[str, Any] | None) -> Subs
         source=SUBSCRIPTION_TRUTH_CONTRACT_SOURCE,
         truth_state=truth_state,
         subscription_truth_ok=subscription_truth_ok,
-        resubscribe_verified=resubscribe_verified,
+        refresh_verified=refresh_verified,
         intended_tokens_count=intended_tokens_count,
         subscribed_tokens_count=subscribed_tokens_count,
         subscribed_option_tokens_count=subscribed_option_tokens_count,
@@ -185,8 +189,8 @@ __all__ = [
     "SUBSCRIPTION_TRUTH_CONTRACT_SOURCE",
     "SUBSCRIPTION_TRUTH_CONTRACT_SCHEMA_VERSION",
     "SUBSCRIPTION_TRUTH_OK",
-    "SUBSCRIPTION_TRUTH_RESUBSCRIBE_REQUIRED",
-    "SUBSCRIPTION_TRUTH_RESUBSCRIBE_VERIFIED",
+    "SUBSCRIPTION_TRUTH_REFRESH_REQUIRED",
+    "SUBSCRIPTION_TRUTH_REFRESH_VERIFIED",
     "SubscriptionTruthContract",
     "build_subscription_truth_contract",
 ]

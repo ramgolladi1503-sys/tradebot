@@ -3,7 +3,7 @@ import json
 from core.subscription_truth_contract import (
     SUBSCRIPTION_TRUTH_BLOCKED,
     SUBSCRIPTION_TRUTH_OK,
-    SUBSCRIPTION_TRUTH_RESUBSCRIBE_VERIFIED,
+    SUBSCRIPTION_TRUTH_REFRESH_VERIFIED,
     build_subscription_truth_contract,
 )
 
@@ -44,13 +44,13 @@ def test_subscription_truth_blocks_missing_subscription_counts():
     assert "NO_SUBSCRIBED_OPTION_TOKENS" in contract.blockers
 
 
-def test_resubscribe_verification_requires_verified_completion():
+def test_refresh_verification_requires_verified_completion():
     contract = build_subscription_truth_contract(
         _payload(
             subscription_state="RESUBSCRIBING",
             verification_state="IN_PROGRESS",
-            resubscribe_attempted=True,
-            resubscribe_successful=False,
+            refresh_attempted=True,
+            refresh_successful=False,
         )
     )
 
@@ -59,21 +59,20 @@ def test_resubscribe_verification_requires_verified_completion():
     assert "RESUBSCRIBE_FAILED" in contract.blockers
 
 
-def test_resubscribe_verification_reports_verified_when_counts_and_freshness_match():
+def test_refresh_verification_reports_verified_when_counts_and_freshness_match():
     contract = build_subscription_truth_contract(
         _payload(
             subscription_state="VERIFIED",
             verification_state="VERIFIED",
-            resubscribe_attempted=True,
-            resubscribe_successful=True,
+            refresh_attempted=True,
+            refresh_successful=True,
         )
     )
 
     payload = json.loads(json.dumps(contract.to_payload(), sort_keys=True))
 
     assert contract.subscription_truth_ok is True
-    assert contract.resubscribe_verified is True
-    assert contract.truth_state == SUBSCRIPTION_TRUTH_RESUBSCRIBE_VERIFIED
+    assert contract.refresh_verified is True
+    assert contract.truth_state == SUBSCRIPTION_TRUTH_REFRESH_VERIFIED
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False
-
