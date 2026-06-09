@@ -19,6 +19,15 @@ def _supervisor(**overrides):
     return payload
 
 
+def _fresh_token():
+    return {
+        "symbol": "NIFTY",
+        "expected_token": "12345",
+        "observed_token": "12345",
+        "tick_age_sec": 0.4,
+    }
+
+
 def test_candidate_contract_reports_warming_up_until_clean_cycles_complete():
     contract = build_feed_readiness_for_candidates_contract(_supervisor())
 
@@ -77,3 +86,28 @@ def test_candidate_contract_serializes_as_read_only_non_action():
     assert payload["broker_api_called"] is False
     assert payload["metadata"]["does_not_score_edge"] is True
 
+
+def test_candidate_contract_blocks_stale_token_evidence():
+    contract = build_feed_readiness_for_candidates_contract(
+        {
+            "feed_supervisor": _supervisor(state="CANDIDATE_READY", warmup_clean_cycles=3, warmup_required_clean_cycles=3),
+            "token_evidence": dict(_fresh_token(), tick_age_sec=9.0),
+        }
+    )
+
+    assert contract.readiness_state == READINESS_STATE_BLOCKED
+    assert contract.candidate_generation_allowed is False
+    assert any("EXACT_OPTION_TOKEN_FRESHNESS" in blocker for blocker in contract.blockers)
+
+
+def test_candidate_contract_allows_fresh_token_evidence():
+    contract = build_feed_readiness_for_candidates_contract(
+        {
+            "feed_supervisor": _supervisor(state="CANDIDATE_READY", warmup_clean_cycles=3, warmup_required_clean_cycles=3),
+            "token_evidence": _fresh_token(),
+        }
+    )
+
+    assert contract.readiness_state == READINESS_STATE_READY
+    assert contract.candidate_generation_allowed is True
+    assert contract.metadata["uses_exact_option_token_freshness"] is True

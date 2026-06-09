@@ -4,7 +4,7 @@
 
 ### Goal
 
-Add a pure feed-readiness-for-candidates contract that consumes feed supervisor evidence and deterministically reports whether candidate generation is allowed.
+Add a pure feed-readiness-for-candidates contract that consumes feed supervisor evidence, optionally exact option-token freshness evidence, and deterministically reports whether candidate generation is allowed.
 
 ### Files changed
 
@@ -30,12 +30,13 @@ source: docs/agent_reviews/feed-stab-04-feed-readiness-for-candidates-contract.m
 - No strategy, ranking, or scoring changes.
 - No dashboard/UI changes.
 - No credentials or auth wiring changes.
+- No token resolution or subscription mutation.
 
 ## Grill Me Review
 
 ### Pushback
 
-This contract could become fake readiness if it ignores feed warmup, recovery, or terminal blocker evidence. The implementation stays conservative by only marking readiness when the feed supervisor is already `CANDIDATE_READY` and all warmup evidence is complete.
+This contract could become fake readiness if it ignores feed warmup, recovery, terminal blocker evidence, or exact token freshness. The implementation stays conservative by only marking readiness when the feed supervisor is already `CANDIDATE_READY`, all warmup evidence is complete, and any supplied token evidence is fresh.
 
 ## Hermes Review
 
@@ -64,6 +65,8 @@ Tests assert:
 - warming-up stays warming-up until clean cycles complete;
 - candidate-ready only becomes ready when the feed supervisor is already candidate-ready;
 - auth-required and restart-required block immediately;
+- stale token evidence blocks readiness;
+- fresh token evidence preserves readiness;
 - serialization remains read-only and non-order-action.
 
 ## Acceptance Proof
@@ -81,7 +84,7 @@ PYTHONPATH=. python scripts/run_unified_ce_gates.py --changed-paths-file /tmp/fe
 
 ## Runtime Proof Required After Merge
 
-Confirm the runtime feed supervisor continues to supply the warmup and blocker fields this contract consumes.
+Confirm the runtime feed supervisor continues to supply the warmup and blocker fields this contract consumes, and that any exact token evidence passed in remains synchronized with the live option-token source.
 
 ## What This PR Does Not Prove
 
