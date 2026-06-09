@@ -38,30 +38,43 @@ def _executable_claim(**overrides):
     return row
 
 
-def test_rest_fallback_quote_source_cannot_become_top_executable_even_when_row_claims_execute():
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"quote_source": "REST_FALLBACK", "fallback_used": False},
+        {"quote_source": "SYNTHETIC_OFFHOURS", "fallback_used": False},
+        {"quote_source": "SUBSCRIPTION_FAILED", "fallback_used": False},
+        {"row_kind": "recovered_fallback", "fallback_used": False},
+        {"candidate_class": "fallback", "fallback_used": False},
+        {"candidate_type": "execution_fallback", "fallback_used": False},
+        {"candidate_origin": "fallback_recovery", "fallback_used": False},
+        {"trade_id": "softrej_trade-1", "fallback_used": False},
+    ],
+)
+def test_fallback_truth_cannot_become_top_executable_even_when_row_claims_execute(overrides):
     """
     Edge purpose:
-    Prevents fake executable opportunities from REST fallback quote data.
-    A row may carry EXECUTE flags from an upstream bug or stale artifact, but the selector must
-    use product truth: fallback-derived quotes are display/debug evidence, never executable edge.
+    Prevents fake executable opportunities from fallback, recovered, synthetic,
+    soft-rejected, or subscription-failed quote paths.
     """
+    row_overrides = dict(overrides)
+    row_overrides.setdefault("trade_id", "trade-fallback-liar")
+
     report = select_top_opportunities(
         [
             _executable_claim(
-                candidate_id="cand-rest-fallback-liar",
-                trade_id="trade-rest-fallback-liar",
-                quote_source="REST_FALLBACK",
-                fallback_used=False,
+                candidate_id="cand-fallback-liar",
                 edge_rank_score=0.99,
                 rank_score=0.98,
                 confidence_final=0.97,
+                **row_overrides,
             )
         ]
     )
 
     assert report.executable_count == 0
     assert report.rejected_count == 1
-    assert report.rejected_opportunities[0].candidate_id == "cand-rest-fallback-liar"
+    assert report.rejected_opportunities[0].candidate_id == "cand-fallback-liar"
     assert "fallback_not_rankable" in report.rejected_opportunities[0].why_not_ranked
 
 
@@ -71,7 +84,9 @@ def test_clean_live_quote_can_still_become_top_executable_after_fallback_firewal
     Protects real trading edge by proving the fallback firewall does not over-block a clean,
     live, expectancy-positive candidate with execution truth.
     """
-    report = select_top_opportunities([_executable_claim(candidate_id="cand-clean-live", trade_id="trade-clean-live")])
+    report = select_top_opportunities(
+        [_executable_claim(candidate_id="cand-clean-live", trade_id="trade-clean-live")]
+    )
 
     assert report.executable_count == 1
     assert report.executable_opportunities[0].candidate_id == "cand-clean-live"
