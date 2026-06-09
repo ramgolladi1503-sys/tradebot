@@ -84,6 +84,9 @@ def build_feed_readiness_for_candidates_contract(snapshot: Mapping[str, Any] | N
     token_evidence = source.get("token_evidence")
     state = _upper(supervisor.get("state") or source.get("state"))
     reason_code = _upper(supervisor.get("reason_code") or source.get("reason_code") or state or "UNKNOWN")
+    supervisor_blockers = _dedupe(list(supervisor.get("blockers") or []))
+    feed_truth_state = _upper(supervisor.get("feed_truth_state") or source.get("feed_truth_state"))
+    feed_truth_reason_code = _upper(supervisor.get("feed_truth_reason_code") or source.get("feed_truth_reason_code"))
 
     warmup_clean_cycles = max(0, _as_int(supervisor.get("warmup_clean_cycles") or source.get("warmup_clean_cycles")))
     warmup_required_clean_cycles = max(1, _as_int(supervisor.get("warmup_required_clean_cycles") or source.get("warmup_required_clean_cycles") or 3))
@@ -105,9 +108,13 @@ def build_feed_readiness_for_candidates_contract(snapshot: Mapping[str, Any] | N
 
     if state in {"AUTH_REQUIRED", "RESTART_REQUIRED", "RECOVERY_BLOCKED", "RECOVERY_TIMEOUT"}:
         blockers.append(state)
+    if feed_truth_state in {"DEAD", "RECOVERY_BLOCKED", "RESTART_REQUIRED"} or feed_truth_reason_code in {"FEED_UNHEALTHY", "WS1006_PROCESS_RESTART_REQUIRED", "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED"}:
+        blockers.append("BAD_FEED")
+    if any(reason in {"DEAD", "NO_LIVE_OPTION_FEED", "RESTART_REQUIRED", "RECOVERY_BLOCKED"} for reason in supervisor_blockers):
+        blockers.append("SUPERVISOR_BLOCKED")
     if state in {"RECOVERING", "VERIFYING", "WARMING_UP", "CONNECTED", "SUBSCRIBED", "CONNECTING", "BOOTING"} and clean_cycles_remaining > 0:
         warnings.append("WARMUP_NOT_COMPLETE")
-    if state == "CANDIDATE_READY" and token_freshness_ok:
+    if state == "CANDIDATE_READY" and token_freshness_ok and not blockers:
         blockers = []
         warnings = []
 

@@ -111,3 +111,23 @@ def test_candidate_contract_allows_fresh_token_evidence():
     assert contract.readiness_state == READINESS_STATE_READY
     assert contract.candidate_generation_allowed is True
     assert contract.metadata["uses_exact_option_token_freshness"] is True
+
+
+def test_candidate_contract_blocks_candidate_ready_when_feed_is_bad():
+    contract = build_feed_readiness_for_candidates_contract(
+        {
+            "feed_supervisor": {
+                "state": "CANDIDATE_READY",
+                "reason_code": "CANDIDATE_READY",
+                "warmup_clean_cycles": 3,
+                "warmup_required_clean_cycles": 3,
+                "blockers": ["NO_LIVE_OPTION_FEED", "DEAD"],
+                "feed_truth_state": "DEAD",
+                "feed_truth_reason_code": "feed_unhealthy",
+            }
+        }
+    )
+
+    assert contract.readiness_state == READINESS_STATE_BLOCKED
+    assert contract.candidate_generation_allowed is False
+    assert "BAD_FEED" in contract.blockers or "SUPERVISOR_BLOCKED" in contract.blockers

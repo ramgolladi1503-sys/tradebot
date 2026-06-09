@@ -107,3 +107,31 @@ def test_restart_required_blocks_immediately():
     assert snapshot.state == "RESTART_REQUIRED"
     assert "RESTART_REQUIRED" in snapshot.blockers
 
+
+def test_dead_feed_blocks_candidate_readiness_and_resets_warmup():
+    payload = _base_payload()
+    payload.update({
+        "runtime_state": "RUNNING",
+        "feed_truth_state": "DEAD",
+        "feed_truth_reason_code": "feed_unhealthy",
+        "option_feed_block_reason": "NO_LIVE_OPTION_FEED",
+        "warmup_clean_cycles": 3,
+    })
+    snapshot = build_feed_supervisor_snapshot(payload)
+
+    assert snapshot.state == "WARMING_UP"
+    assert "DEAD" in snapshot.blockers
+    assert "NO_LIVE_OPTION_FEED" in snapshot.blockers
+
+
+def test_restart_failure_reason_is_preserved_on_snapshot():
+    payload = _base_payload()
+    payload.update({
+        "process_restart_required": True,
+        "restart_failure_reason": "reactor_not_restartable_process_restart_required",
+        "runtime_state": "WS1006_PROCESS_RESTART_REQUIRED",
+    })
+    snapshot = build_feed_supervisor_snapshot(payload)
+
+    assert snapshot.state == "RESTART_REQUIRED"
+    assert snapshot.restart_failure_reason == "reactor_not_restartable_process_restart_required"

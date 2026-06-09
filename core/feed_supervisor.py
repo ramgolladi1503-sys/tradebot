@@ -68,6 +68,22 @@ def _truthy(*values: Any) -> bool:
     return False
 
 
+def _contains_no_live_option_feed(values: Any) -> bool:
+    if isinstance(values, Mapping):
+        iterable = values.values()
+    elif isinstance(values, (list, tuple, set)):
+        iterable = values
+    else:
+        iterable = ()
+    for value in iterable:
+        if isinstance(value, (list, tuple, set)):
+            if any(_upper(item) == "NO_LIVE_OPTION_FEED" for item in value):
+                return True
+        elif _upper(value) == "NO_LIVE_OPTION_FEED":
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class FeedSupervisorSnapshot:
     state: str
@@ -89,6 +105,7 @@ class FeedSupervisorSnapshot:
     recovery_blocked: bool = False
     recovery_timeout: bool = False
     process_restart_required: bool = False
+    restart_failure_reason: str = ""
     auth_required: bool = False
     warmup_clean_cycles: int = 0
     warmup_required_clean_cycles: int = 3
@@ -151,6 +168,13 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
     recovery_timeout = _truthy(source.get("recovery_timeout"), runtime_state in _RECOVERY_TIMEOUT_STATES)
     recovery_blocked = _truthy(source.get("recovery_blocked"), source.get("feed_recovery_blocked"), runtime_state in _RECOVERY_BLOCKED_STATES, recovery_timeout)
     process_restart_required = _truthy(source.get("process_restart_required"), runtime_state in _RESTART_REQUIRED_STATES)
+    restart_failure_reason = str(
+        source.get("restart_failure_reason")
+        or source.get("restart_blocked_reason")
+        or source.get("reconnect_blocked_reason")
+        or source.get("last_error")
+        or ""
+    ).strip()
     warmup_clean_cycles = max(0, _as_int(source.get("warmup_clean_cycles") or source.get("clean_cycle_count")))
     warmup_required_clean_cycles = max(1, _as_int(source.get("warmup_required_clean_cycles") or source.get("required_clean_cycles") or 3))
     recovery_generation_id = max(0, _as_int(source.get("recovery_generation_id")))
@@ -198,10 +222,22 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
                     for symbol in list(source.get("missing_option_symbols") or [])
                     if str(symbol).strip()
                 }
-            )
         )
+    )
     underlying_tick_fresh = _truthy(source.get("underlying_tick_fresh"), _as_float(source.get("latest_ltp_age_sec")) is not None and _as_float(source.get("latest_ltp_age_sec")) <= float(source.get("max_ltp_age_sec") or 2.5))
     depth_fresh = _truthy(source.get("depth_fresh"), _as_float(source.get("latest_depth_age_sec")) is not None and _as_float(source.get("latest_depth_age_sec")) <= float(source.get("max_depth_age_sec") or 6.0))
+    feed_truth_state = _upper(source.get("feed_truth_state"))
+    feed_truth_reason_code = _upper(source.get("feed_truth_reason_code"))
+    option_feed_block_reason = _upper(source.get("option_feed_block_reason"))
+    option_feed_block_reason_by_symbol = _as_mapping(source.get("option_feed_block_reason_by_symbol"))
+    option_active_blockers_by_symbol = _as_mapping(source.get("option_active_blockers_by_symbol"))
+    no_live_option_feed = (
+        feed_truth_state == "DEAD"
+        or feed_truth_reason_code == "FEED_UNHEALTHY"
+        or option_feed_block_reason == "NO_LIVE_OPTION_FEED"
+        or _contains_no_live_option_feed(option_feed_block_reason_by_symbol)
+        or _contains_no_live_option_feed(option_active_blockers_by_symbol)
+    )
 
     blockers: list[str] = []
     if auth_required:
@@ -218,6 +254,10 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         blockers.append("RECOVERY_BLOCKED")
     if recovery_in_progress:
         blockers.append("RECOVERING")
+    if no_live_option_feed:
+        blockers.append("NO_LIVE_OPTION_FEED")
+    if feed_truth_state == "DEAD":
+        blockers.append("DEAD")
     if not ws_connected and runtime_state not in _BOOTING_STATES:
         blockers.append("WS_DISCONNECTED")
     if (
@@ -250,6 +290,9 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
     elif recovery_in_progress:
         state = "RECOVERING"
         reason_code = runtime_state or "RECOVERING"
+    elif process_restart_required or feed_truth_state == "DEAD" or no_live_option_feed:
+        state = "WARMING_UP"
+        reason_code = runtime_state or feed_truth_reason_code or "WARMING_UP"
     elif runtime_state in _BOOTING_STATES or (not ws_connected and not auth_ready and subscribed_tokens_count <= 0):
         state = "BOOTING"
         reason_code = runtime_state or "BOOTING"
@@ -330,6 +373,7 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         recovery_blocked=bool(recovery_blocked),
         recovery_timeout=bool(recovery_timeout),
         process_restart_required=bool(process_restart_required),
+        restart_failure_reason=restart_failure_reason,
         auth_required=bool(auth_required),
         warmup_clean_cycles=warmup_clean_cycles,
         warmup_required_clean_cycles=warmup_required_clean_cycles,
