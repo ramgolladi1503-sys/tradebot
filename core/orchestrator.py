@@ -3931,7 +3931,9 @@ class Orchestrator:
             stale_reasons: list[str] = []
             health_evidence_found = False
             runtime_health_path = logs_dir() / "runtime_health_latest.json"
+            feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
             runtime_health_max_age_sec = float(getattr(cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 30.0))
+            feed_runtime_max_age_sec = float(getattr(cfg, "FEED_RUNTIME_MAX_AGE_SEC", 15.0))
 
             def _safe_float(value):
                 try:
@@ -3952,8 +3954,6 @@ class Orchestrator:
 
             snapshot_ts = _safe_float(runtime_payload.get("snapshot_ts_epoch") or runtime_payload.get("ts_epoch"))
             snapshot_age = (now_epoch - snapshot_ts) if snapshot_ts is not None else None
-            if snapshot_age is not None and snapshot_age > runtime_health_max_age_sec:
-                stale_reasons.append("feed_stale:RUNTIME_HEALTH_STALE")
 
             execution_payload = runtime_payload.get("execution") if isinstance(runtime_payload.get("execution"), dict) else {}
             decision_breakers = execution_payload.get("decision_breakers") if isinstance(execution_payload.get("decision_breakers"), dict) else {}
@@ -3977,6 +3977,29 @@ class Orchestrator:
                 blockers = [str(x).strip() for x in (feed_payload.get("blockers") or []) if str(x).strip()]
                 stale_reasons.extend([f"feed_stale:{reason}" for reason in blockers])
 
+            feed_runtime_payload = {}
+            feed_runtime_age = None
+            if feed_runtime_path.exists():
+                try:
+                    feed_runtime_payload = json.loads(feed_runtime_path.read_text(encoding="utf-8"))
+                except Exception:
+                    feed_runtime_payload = {}
+            if feed_runtime_payload:
+                health_evidence_found = True
+                feed_runtime_ts = _safe_float(feed_runtime_payload.get("ts_epoch"))
+                feed_runtime_age = (now_epoch - feed_runtime_ts) if feed_runtime_ts is not None else None
+                if snapshot_age is None or (feed_runtime_age is not None and feed_runtime_age < snapshot_age):
+                    snapshot_age = feed_runtime_age
+                if not stale_reasons:
+                    feed_runtime_feed = feed_runtime_payload.get("feed_truth_state")
+                    feed_runtime_reason = str(feed_runtime_payload.get("feed_truth_reason_code") or "").strip().upper()
+                    feed_runtime_ok = bool(feed_runtime_payload.get("feed_ok"))
+                    feed_runtime_blockers = [str(x).strip().upper() for x in (feed_runtime_payload.get("feed_reasons") or []) if str(x).strip()]
+                    if feed_runtime_feed == "DEAD" or feed_runtime_reason == "FEED_UNHEALTHY":
+                        stale_reasons.append("feed_stale:FEED_RUNTIME_DEAD")
+                    elif feed_runtime_ok is False:
+                        stale_reasons.extend([f"feed_stale:{reason}" for reason in feed_runtime_blockers or ["FEED_RUNTIME_NOT_OK"]])
+
             if runtime_payload:
                 state_machine = runtime_payload.get("state_machine")
                 if isinstance(state_machine, dict):
@@ -3984,6 +4007,10 @@ class Orchestrator:
                     reason = str(state_machine.get("reason") or "").strip()
                     if state == "DOWN":
                         stale_reasons.append(f"feed_stale:STATE_{reason or 'DOWN'}")
+
+            if snapshot_age is not None and snapshot_age > runtime_health_max_age_sec and not stale_reasons:
+                if feed_runtime_age is None or feed_runtime_age > feed_runtime_max_age_sec:
+                    stale_reasons.append("feed_stale:RUNTIME_HEALTH_STALE")
 
             return health_evidence_found, sorted(set(stale_reasons)), bool(stale_reasons)
 
