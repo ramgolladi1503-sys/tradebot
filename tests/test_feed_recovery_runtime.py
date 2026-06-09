@@ -17,9 +17,15 @@ def _payload(**updates):
         "missing_option_tokens_count": 0,
         "last_tick_age_sec": 0.5,
         "last_depth_age_sec": 0.8,
+        "warmup_clean_cycles": 3,
+        "warmup_required_clean_cycles": 3,
+        "verified_option_symbols": ["NIFTY", "BANKNIFTY"],
+        "missing_option_symbols": [],
+        "option_ticks_verified": True,
         "restart_count_1h": 0,
         "stale_strikes": 0,
         "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
+        "option_active_blockers_by_symbol": {"NIFTY": []},
     }
     payload.update(updates)
     return payload
@@ -47,6 +53,24 @@ def test_healthy_feed_has_no_recovery_action():
     assert decision.recovery_state == "HEALTHY"
     assert decision.action_hint == "no_recovery_needed"
     assert decision.should_attempt_recovery is False
+
+
+def test_feed_with_warmup_incomplete_proves_not_yet_healthy():
+    decision = classify_feed_recovery_runtime(_payload(feed_ok=True, warmup_clean_cycles=1))
+
+    assert decision.recovery_state == "RECOVERY_PROOF_PENDING"
+    assert decision.action_hint == "await_full_feed_proof"
+    assert decision.should_attempt_recovery is False
+    assert "WARMUP_INCOMPLETE" in decision.context["full_feed_proof_blockers"]
+
+
+def test_feed_with_stale_underlying_does_not_unlock_healthy():
+    decision = classify_feed_recovery_runtime(_payload(feed_ok=True, last_tick_age_sec=4.0))
+
+    assert decision.recovery_state == "RECOVERY_PROOF_PENDING"
+    assert decision.action_hint == "await_full_feed_proof"
+    assert decision.should_attempt_recovery is False
+    assert "UNDERLYING_TICK_STALE" in decision.context["full_feed_proof_blockers"]
 
 
 def test_disconnected_websocket_is_full_recovery_candidate():

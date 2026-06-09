@@ -46,6 +46,7 @@ class CanonicalFeedTruthState:
     missing_option_symbols: tuple[str, ...]
     recovery_blocked: bool
     process_restart_required: bool
+    restart_failure_reason: str | None
     session_id: str
     updated_at_epoch: float
     updated_at_ist: str
@@ -61,9 +62,10 @@ class CanonicalFeedTruthState:
         payload["append"] = True
         return payload
 
-    def restart_artifact_payload(self) -> dict[str, Any]:
+    def restart_artifact_payload(self, *, restart_failure_reason: str | None = None) -> dict[str, Any]:
         return {
-            "reason": "ws1006_process_restart_required",
+            "reason": restart_failure_reason or "ws1006_process_restart_required",
+            "restart_failure_reason": restart_failure_reason or "ws1006_process_restart_required",
             "no_order_action": True,
             "order_safe": True,
             "session_id": self.session_id,
@@ -163,6 +165,13 @@ def build_canonical_feed_truth_state(
     recovery_state = _upper(source.get("recovery_state") or source.get("ws_recovery_state") or runtime_state)
     ws_error_code = _as_int(source.get("ws_error_code") or source.get("feed_error_code") or source.get("disconnected_code") or source.get("ws_error"))
     ws_error_reason = str(source.get("ws_error_reason") or source.get("disconnected_reason") or source.get("last_error") or "").strip() or None
+    restart_failure_reason = str(
+        source.get("restart_failure_reason")
+        or source.get("restart_blocked_reason")
+        or source.get("reconnect_blocked_reason")
+        or ws_error_reason
+        or ""
+    ).strip() or None
     ws_connected = _as_bool(source.get("ws_connected"))
     if ws_connected is None:
         ws_connected = _as_bool(source.get("effective_ws_connected"))
@@ -285,6 +294,7 @@ def build_canonical_feed_truth_state(
         missing_option_symbols=missing_option_symbols,
         recovery_blocked=bool(recovery_blocked),
         process_restart_required=bool(process_restart_required),
+        restart_failure_reason=restart_failure_reason,
         session_id=session_id,
         updated_at_epoch=now_epoch,
         updated_at_ist=updated_at_ist,
@@ -293,6 +303,9 @@ def build_canonical_feed_truth_state(
     if state_obj.process_restart_required and restart_artifact_dir is not None:
         restart_artifact_dir.mkdir(parents=True, exist_ok=True)
         restart_path = restart_artifact_dir / "feed_restart_required.json"
-        restart_path.write_text(json.dumps(state_obj.restart_artifact_payload(), sort_keys=True), encoding="utf-8")
+        restart_path.write_text(
+            json.dumps(state_obj.restart_artifact_payload(restart_failure_reason=restart_failure_reason), sort_keys=True),
+            encoding="utf-8",
+        )
 
     return state_obj

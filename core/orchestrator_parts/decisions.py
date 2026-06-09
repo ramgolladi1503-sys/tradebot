@@ -86,6 +86,28 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
     if quote_ts_epoch is None:
         quote_ts_epoch = market_data.get("quote_ts_epoch")
     feed_health = market_data.get("feed_health") if isinstance(market_data.get("feed_health"), dict) else {}
+    if not market_data.get("timestamp_epoch"):
+        market_data["timestamp_epoch"] = feed_health.get("ts_epoch") or feed_health.get("feed_timestamp_epoch") or feed_health.get("last_ws_tick_epoch")
+    if market_data.get("latest_option_tick_ts") is None:
+        market_data["latest_option_tick_ts"] = feed_health.get("latest_option_tick_ts") or feed_health.get("last_option_tick_ts")
+    if market_data.get("latest_option_tick_age_sec") is None:
+        market_data["latest_option_tick_age_sec"] = feed_health.get("latest_option_tick_age_sec") or feed_health.get("last_ws_tick_age_sec")
+    if market_data.get("ws_connected") is None:
+        market_data["ws_connected"] = feed_health.get("ws_connected")
+    if market_data.get("subscribed_option_tokens_count") is None:
+        market_data["subscribed_option_tokens_count"] = feed_health.get("subscribed_option_tokens_count")
+    if market_data.get("underlying_ltp_stale_symbols") is None:
+        market_data["underlying_ltp_stale_symbols"] = feed_health.get("underlying_ltp_stale_symbols")
+    if market_data.get("underlying_ltp_age_by_symbol") is None:
+        market_data["underlying_ltp_age_by_symbol"] = feed_health.get("underlying_ltp_age_by_symbol")
+    if market_data.get("underlying_ltp_proof_state") is None:
+        market_data["underlying_ltp_proof_state"] = feed_health.get("underlying_ltp_proof_state")
+    if market_data.get("depth_proof_state") is None:
+        market_data["depth_proof_state"] = feed_health.get("depth_proof_state")
+    if market_data.get("recovery_generation_id") is None:
+        market_data["recovery_generation_id"] = feed_health.get("recovery_generation_id")
+    if market_data.get("subscription_generation_id") is None:
+        market_data["subscription_generation_id"] = feed_health.get("subscription_generation_id")
     if quote_ts_epoch is None:
         for candidate_epoch in (
             market_data.get("timestamp_epoch"),
@@ -338,8 +360,8 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
             market_data.get("timestamp_epoch"),
             market_data.get("latest_option_tick_ts"),
             market_data.get("latest_option_tick_age_sec"),
-            market_data.get("ws_connected", feed_health.get("ws_connected")),
-            market_data.get("subscribed_option_tokens_count", feed_health.get("subscribed_option_tokens_count")),
+            market_data.get("ws_connected"),
+            market_data.get("subscribed_option_tokens_count"),
             quote_ts_epoch,
             event.get("quote_age_sec"),
             list(veto_reasons),
@@ -348,6 +370,17 @@ def build_decision_event(orch, trade, market_data: dict, gatekeeper_allowed: boo
         if not is_global_event and "epoch_missing" not in veto_reasons:
             veto_reasons.append("epoch_missing")
         event["veto_reasons"] = veto_reasons
+    event["timestamp_epoch"] = market_data.get("timestamp_epoch") or feed_health.get("ts_epoch")
+    event["latest_option_tick_ts"] = market_data.get("latest_option_tick_ts") or feed_health.get("latest_option_tick_ts")
+    event["latest_option_tick_age_sec"] = market_data.get("latest_option_tick_age_sec") or feed_health.get("latest_option_tick_age_sec")
+    event["ws_connected"] = market_data.get("ws_connected") if market_data.get("ws_connected") is not None else feed_health.get("ws_connected")
+    event["subscribed_option_tokens_count"] = market_data.get("subscribed_option_tokens_count") if market_data.get("subscribed_option_tokens_count") is not None else feed_health.get("subscribed_option_tokens_count")
+    event["underlying_ltp_stale_symbols"] = market_data.get("underlying_ltp_stale_symbols") or feed_health.get("underlying_ltp_stale_symbols")
+    event["underlying_ltp_age_by_symbol"] = market_data.get("underlying_ltp_age_by_symbol") or feed_health.get("underlying_ltp_age_by_symbol")
+    event["underlying_ltp_proof_state"] = market_data.get("underlying_ltp_proof_state") or feed_health.get("underlying_ltp_proof_state")
+    event["depth_proof_state"] = market_data.get("depth_proof_state") or feed_health.get("depth_proof_state")
+    event["recovery_generation_id"] = market_data.get("recovery_generation_id") or feed_health.get("recovery_generation_id")
+    event["subscription_generation_id"] = market_data.get("subscription_generation_id") or feed_health.get("subscription_generation_id")
     if decision_snapshot is not None:
         event["decision_snapshot"] = decision_snapshot
     return event

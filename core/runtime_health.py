@@ -12,6 +12,7 @@ from typing import Any
 
 from config import config as cfg
 from core.feed_debug import get_feed_debug
+from core.feed_recovery_runtime import classify_feed_recovery_runtime
 from core.feed_zombie_state import classify_feed_zombie_state
 from core.freshness_sla import get_freshness_status
 from core.time_utils import is_market_open_ist, now_utc_epoch
@@ -89,6 +90,27 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "sla_status": raw_sla_status or freshness.get("state"),
         "reasons": list(freshness.get("reasons") or []),
     }
+    recovery_runtime = classify_feed_recovery_runtime(feed)
+    feed["recovery_runtime"] = recovery_runtime.to_payload()
+    feed["full_feed_proof_ready"] = bool(recovery_runtime.context.get("full_feed_proof_ready"))
+    feed["full_feed_proof_blockers"] = list(recovery_runtime.context.get("full_feed_proof_blockers") or [])
+    feed["latest_option_tick_ts"] = feed_debug.get("last_ws_tick_epoch")
+    feed["latest_option_tick_age_sec"] = feed_debug.get("last_ws_tick_age_sec")
+    feed["underlying_ltp_age_sec"] = feed_debug.get("last_tick_age_sec")
+    feed["underlying_ltp_stale_symbols"] = list(
+        symbol
+        for symbol, age in dict(feed_debug.get("option_last_tick_age_by_symbol") or {}).items()
+        if age is None or (float(age) if age is not None else 0.0) > float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5))
+    )
+    feed["underlying_ltp_age_by_symbol"] = dict(feed_debug.get("option_last_tick_age_by_symbol") or {})
+    feed["underlying_ltp_proof_state"] = "FULL" if bool(recovery_runtime.context.get("full_feed_proof_ready")) else "STALE"
+    feed["depth_proof_state"] = "FULL" if bool(feed_debug.get("last_depth_age_sec") is not None and float(feed_debug.get("last_depth_age_sec")) <= float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0))) else "STALE"
+    feed["warmup_clean_cycles"] = feed_debug.get("warmup_clean_cycles")
+    feed["warmup_required_clean_cycles"] = feed_debug.get("warmup_required_clean_cycles")
+    feed["recovery_generation_id"] = feed_debug.get("recovery_generation_id")
+    feed["last_recovery_generation_id"] = feed_debug.get("last_recovery_generation_id")
+    feed["subscription_generation_id"] = feed_debug.get("subscription_generation_id")
+    feed["last_subscription_generation_id"] = feed_debug.get("last_subscription_generation_id")
     blockers = list(feed.get("reasons") or [])
     if feed.get("runtime_state") in {"IMPORT_MISSING", "AUTH_BLOCKED", "SUBSCRIBE_FAILED", "RECOVERY_BLOCKED"}:
         blockers.append(f"ws_runtime:{feed.get('runtime_state')}")
