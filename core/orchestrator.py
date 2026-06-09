@@ -3963,6 +3963,10 @@ class Orchestrator:
 
             feed_payload = runtime_payload.get("feed") if isinstance(runtime_payload.get("feed"), dict) else {}
             if feed_payload:
+                full_feed_proof_ready = bool(feed_payload.get("full_feed_proof_ready"))
+                full_feed_proof_blockers = [str(x).strip().upper() for x in (feed_payload.get("full_feed_proof_blockers") or []) if str(x).strip()]
+                if full_feed_proof_ready is False and full_feed_proof_blockers:
+                    stale_reasons.extend([f"feed_stale:{reason}" for reason in full_feed_proof_blockers])
                 ws_connected = feed_payload.get("ws_connected")
                 ltp_required = bool(feed_payload.get("ltp_required", True))
                 ltp_age = _safe_float(feed_payload.get("ltp_age_sec"))
@@ -3971,6 +3975,9 @@ class Orchestrator:
                     stale_reasons.append("feed_stale:WS_DISCONNECTED")
                 if ltp_required and ltp_age is not None and ltp_max_age is not None and ltp_age > ltp_max_age:
                     stale_reasons.append("feed_stale:LTP_STALE")
+                underlying_stale_symbols = [str(symbol).strip().upper() for symbol in (feed_payload.get("underlying_ltp_stale_symbols") or []) if str(symbol).strip()]
+                if underlying_stale_symbols:
+                    stale_reasons.append("feed_stale:UNDERLYING_LTP_STALE")
                 sla_status = str(feed_payload.get("sla_status") or "").upper()
                 if sla_status in {"FAIL", "STALE"}:
                     stale_reasons.append("feed_stale:SLA_FAIL")

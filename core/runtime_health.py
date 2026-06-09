@@ -94,6 +94,17 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     feed["recovery_runtime"] = recovery_runtime.to_payload()
     feed["full_feed_proof_ready"] = bool(recovery_runtime.context.get("full_feed_proof_ready"))
     feed["full_feed_proof_blockers"] = list(recovery_runtime.context.get("full_feed_proof_blockers") or [])
+    feed["latest_option_tick_ts"] = feed_debug.get("last_ws_tick_epoch")
+    feed["latest_option_tick_age_sec"] = feed_debug.get("last_ws_tick_age_sec")
+    feed["underlying_ltp_age_sec"] = feed_debug.get("last_tick_age_sec")
+    feed["underlying_ltp_stale_symbols"] = list(
+        symbol
+        for symbol, age in dict(feed_debug.get("option_last_tick_age_by_symbol") or {}).items()
+        if age is None or (float(age) if age is not None else 0.0) > float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5))
+    )
+    feed["underlying_ltp_age_by_symbol"] = dict(feed_debug.get("option_last_tick_age_by_symbol") or {})
+    feed["underlying_ltp_proof_state"] = "FULL" if bool(recovery_runtime.context.get("full_feed_proof_ready")) else "STALE"
+    feed["depth_proof_state"] = "FULL" if bool(feed_debug.get("last_depth_age_sec") is not None and float(feed_debug.get("last_depth_age_sec")) <= float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0))) else "STALE"
     feed["warmup_clean_cycles"] = feed_debug.get("warmup_clean_cycles")
     feed["warmup_required_clean_cycles"] = feed_debug.get("warmup_required_clean_cycles")
     feed["recovery_generation_id"] = feed_debug.get("recovery_generation_id")

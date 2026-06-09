@@ -176,6 +176,47 @@ def test_build_decision_event_global_halt_does_not_inject_epoch_missing():
     assert event["quote_age_sec"] == -1.0
 
 
+def test_build_decision_event_uses_feed_health_fallbacks_for_missing_decision_fields():
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.portfolio = {
+        "capital": 100000.0,
+        "equity_high": 100000.0,
+        "daily_pnl": 0.0,
+        "daily_pnl_pct": 0.0,
+        "open_risk": 0.0,
+        "open_risk_pct": 0.0,
+    }
+    orch.loss_streak = {}
+    orch.risk_state = SimpleNamespace(daily_max_drawdown=0.0)
+    orch._open_risk = lambda: 0.0
+
+    market_data = {
+        "symbol": "GLOBAL",
+        "feed_health": {
+            "ts_epoch": 2000.0,
+            "latest_option_tick_ts": 1999.5,
+            "latest_option_tick_age_sec": 0.5,
+            "ws_connected": True,
+            "subscribed_option_tokens_count": 18,
+            "underlying_ltp_stale_symbols": ["NIFTY"],
+            "underlying_ltp_age_by_symbol": {"NIFTY": 4.2},
+            "underlying_ltp_proof_state": "STALE",
+            "depth_proof_state": "FULL",
+            "recovery_generation_id": 2,
+            "subscription_generation_id": 7,
+        },
+        "market_context": {"execution_mode": "LIVE", "market_open": True},
+    }
+
+    event = orch._build_decision_event(None, market_data, gatekeeper_allowed=False, veto_reasons=["latency_breach"])
+
+    assert event["timestamp_epoch"] == 2000.0
+    assert event["latest_option_tick_ts"] == 1999.5
+    assert event["latest_option_tick_age_sec"] == 0.5
+    assert event["ws_connected"] is True
+    assert event["subscribed_option_tokens_count"] == 18
+
+
 def test_candidate_pool_counts_handle_trade_objects_without_dict_get():
     real_candidates = [
         SimpleNamespace(latency_softened=True),
