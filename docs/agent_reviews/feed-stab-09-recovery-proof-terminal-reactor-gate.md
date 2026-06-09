@@ -35,6 +35,24 @@ This change must not hide a terminal runtime failure behind reconnect optimism. 
 
 The contracts remain pure/read-only classifiers. They only interpret supplied evidence and never call brokers, place orders, or mutate runtime state.
 
+## High-Risk Path Review
+
+Reviewed the high-risk feed/runtime paths touched by this work:
+
+- `core/feed_supervisor.py`
+- `core/feed_runtime.py`
+- `core/feed/runtime_store.py`
+- `core/feed_readiness_for_candidates.py`
+- `core/feed_soak_acceptance.py`
+- `core/orchestrator.py`
+
+Observed behavior remains fail-closed:
+
+- `ReactorNotRestartable` still maps to terminal restart-required evidence.
+- `NO_LIVE_OPTION_FEED`, `DEAD`, stale LTP, and stale depth still block readiness.
+- full feed proof now requires websocket connectivity, option freshness, underlying LTP freshness, depth freshness, current runtime snapshot, and no auth/restart blockers.
+- no order action or broker API path is introduced.
+
 ## GSD Review
 
 Files changed are intentionally narrow:

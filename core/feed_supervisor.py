@@ -84,6 +84,78 @@ def _contains_no_live_option_feed(values: Any) -> bool:
     return False
 
 
+def _proof_blockers(
+    *,
+    ws_connected: bool,
+    auth_ready: bool,
+    auth_required: bool,
+    process_restart_required: bool,
+    recovery_in_progress: bool,
+    recovery_blocked: bool,
+    recovery_timeout: bool,
+    feed_truth_state: str,
+    feed_truth_reason_code: str,
+    underlying_tick_fresh: bool,
+    depth_fresh: bool,
+    option_ticks_verified: bool,
+    subscribed_option_tokens_count: int,
+    subscribed_tokens_count: int,
+    warmup_clean_cycles: int,
+    warmup_required_clean_cycles: int,
+    recovery_generation_id: int,
+    last_recovery_generation_id: int,
+    subscription_generation_id: int,
+    last_subscription_generation_id: int,
+    runtime_state: str,
+    no_live_option_feed: bool,
+) -> list[str]:
+    blockers: list[str] = []
+    generation_changed = (
+        (recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id)
+        or (subscription_generation_id and last_subscription_generation_id and subscription_generation_id != last_subscription_generation_id)
+    )
+    warmup_active = bool(
+        recovery_in_progress
+        or recovery_blocked
+        or recovery_timeout
+        or generation_changed
+        or feed_truth_state in {"DEAD", "RECOVERY_BLOCKED"}
+        or feed_truth_reason_code in {"FEED_UNHEALTHY", "WS1006_PROCESS_RESTART_REQUIRED", "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED"}
+        or runtime_state in _RECOVERING_STATES
+    )
+    if auth_required:
+        blockers.append("AUTH_REQUIRED")
+    if process_restart_required:
+        blockers.append("RESTART_REQUIRED")
+    if recovery_timeout:
+        blockers.append("RECOVERY_TIMEOUT")
+    if recovery_blocked:
+        blockers.append("RECOVERY_BLOCKED")
+    if recovery_in_progress:
+        blockers.append("RECOVERING")
+    if no_live_option_feed:
+        blockers.append("NO_LIVE_OPTION_FEED")
+    if feed_truth_state == "DEAD":
+        blockers.append("DEAD")
+    if not ws_connected and runtime_state not in _BOOTING_STATES:
+        blockers.append("WS_DISCONNECTED")
+    if subscribed_option_tokens_count <= 0 and runtime_state not in (_BOOTING_STATES | _SHUTDOWN_STATES | _SUBSCRIBED_STATES | _VERIFYING_STATES | _WARMING_UP_STATES):
+        blockers.append("NO_OPTION_SUBSCRIPTIONS")
+    if not option_ticks_verified and runtime_state not in _BOOTING_STATES | _SHUTDOWN_STATES:
+        blockers.append("OPTION_TICKS_UNVERIFIED")
+    if not underlying_tick_fresh and runtime_state not in _BOOTING_STATES | _SHUTDOWN_STATES:
+        blockers.append("UNDERLYING_TICK_STALE")
+    if not depth_fresh and runtime_state not in _BOOTING_STATES | _SHUTDOWN_STATES:
+        blockers.append("DEPTH_STALE")
+    if warmup_active and warmup_clean_cycles < warmup_required_clean_cycles:
+        blockers.append("WARMUP_INCOMPLETE")
+    if generation_changed:
+        blockers.append("RECOVERY_GENERATION_CHANGED" if recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id else "SUBSCRIPTION_GENERATION_CHANGED")
+    if feed_truth_reason_code in {"FEED_UNHEALTHY", "WS1006_PROCESS_RESTART_REQUIRED", "REACTOR_NOT_RESTARTABLE_PROCESS_RESTART_REQUIRED"}:
+        blockers.append(feed_truth_reason_code)
+    return blockers
+
+
 @dataclass(frozen=True)
 class FeedSupervisorSnapshot:
     state: str
@@ -238,39 +310,54 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         or _contains_no_live_option_feed(option_feed_block_reason_by_symbol)
         or _contains_no_live_option_feed(option_active_blockers_by_symbol)
     )
-
-    blockers: list[str] = []
-    if auth_required:
-        blockers.append("AUTH_REQUIRED")
-    if process_restart_required:
-        blockers.append("RESTART_REQUIRED")
-    if recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id:
-        blockers.append("RECOVERY_GENERATION_CHANGED")
-    if subscription_generation_id and last_subscription_generation_id and subscription_generation_id != last_subscription_generation_id:
-        blockers.append("SUBSCRIPTION_GENERATION_CHANGED")
-    if recovery_timeout:
-        blockers.append("RECOVERY_TIMEOUT")
-    if recovery_blocked:
-        blockers.append("RECOVERY_BLOCKED")
-    if recovery_in_progress:
-        blockers.append("RECOVERING")
-    if no_live_option_feed:
-        blockers.append("NO_LIVE_OPTION_FEED")
-    if feed_truth_state == "DEAD":
-        blockers.append("DEAD")
-    if not ws_connected and runtime_state not in _BOOTING_STATES:
-        blockers.append("WS_DISCONNECTED")
-    if (
-        subscribed_option_tokens_count <= 0
-        and runtime_state not in _BOOTING_STATES | _SHUTDOWN_STATES | _SUBSCRIBED_STATES | _VERIFYING_STATES | _WARMING_UP_STATES
-    ):
-        blockers.append("NO_OPTION_SUBSCRIPTIONS")
-    if not option_ticks_verified and runtime_state not in _BOOTING_STATES | _SHUTDOWN_STATES:
-        blockers.append("OPTION_TICKS_UNVERIFIED")
-    if not underlying_tick_fresh and runtime_state not in _BOOTING_STATES | _SHUTDOWN_STATES:
-        blockers.append("UNDERLYING_TICK_STALE")
-    if not depth_fresh and runtime_state not in _BOOTING_STATES | _SHUTDOWN_STATES:
-        blockers.append("DEPTH_STALE")
+    full_feed_proof_ready = not _proof_blockers(
+        ws_connected=bool(ws_connected),
+        auth_ready=bool(auth_ready),
+        auth_required=bool(auth_required),
+        process_restart_required=bool(process_restart_required),
+        recovery_in_progress=bool(recovery_in_progress),
+        recovery_blocked=bool(recovery_blocked),
+        recovery_timeout=bool(recovery_timeout),
+        feed_truth_state=feed_truth_state,
+        feed_truth_reason_code=feed_truth_reason_code,
+        underlying_tick_fresh=bool(underlying_tick_fresh),
+        depth_fresh=bool(depth_fresh),
+        option_ticks_verified=bool(option_ticks_verified),
+        subscribed_option_tokens_count=subscribed_option_tokens_count,
+        subscribed_tokens_count=subscribed_tokens_count,
+        warmup_clean_cycles=warmup_clean_cycles,
+        warmup_required_clean_cycles=warmup_required_clean_cycles,
+        recovery_generation_id=recovery_generation_id,
+        last_recovery_generation_id=last_recovery_generation_id,
+        subscription_generation_id=subscription_generation_id,
+        last_subscription_generation_id=last_subscription_generation_id,
+        runtime_state=runtime_state,
+        no_live_option_feed=bool(no_live_option_feed),
+    )
+    blockers: list[str] = list(_proof_blockers(
+        ws_connected=bool(ws_connected),
+        auth_ready=bool(auth_ready),
+        auth_required=bool(auth_required),
+        process_restart_required=bool(process_restart_required),
+        recovery_in_progress=bool(recovery_in_progress),
+        recovery_blocked=bool(recovery_blocked),
+        recovery_timeout=bool(recovery_timeout),
+        feed_truth_state=feed_truth_state,
+        feed_truth_reason_code=feed_truth_reason_code,
+        underlying_tick_fresh=bool(underlying_tick_fresh),
+        depth_fresh=bool(depth_fresh),
+        option_ticks_verified=bool(option_ticks_verified),
+        subscribed_option_tokens_count=subscribed_option_tokens_count,
+        subscribed_tokens_count=subscribed_tokens_count,
+        warmup_clean_cycles=warmup_clean_cycles,
+        warmup_required_clean_cycles=warmup_required_clean_cycles,
+        recovery_generation_id=recovery_generation_id,
+        last_recovery_generation_id=last_recovery_generation_id,
+        subscription_generation_id=subscription_generation_id,
+        last_subscription_generation_id=last_subscription_generation_id,
+        runtime_state=runtime_state,
+        no_live_option_feed=bool(no_live_option_feed),
+    ))
 
     if runtime_state in _SHUTDOWN_STATES:
         state = "SHUTDOWN"
@@ -306,10 +393,6 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         state = "CONNECTED"
         reason_code = runtime_state or "CONNECTED"
     elif runtime_state in _SUBSCRIBED_STATES or subscribed_tokens_count > 0:
-        generation_changed = (
-            (recovery_generation_id and last_recovery_generation_id and recovery_generation_id != last_recovery_generation_id)
-            or (subscription_generation_id and last_subscription_generation_id and subscription_generation_id != last_subscription_generation_id)
-        )
         clean_ready = (
             warmup_clean_cycles >= warmup_required_clean_cycles
             and ws_connected
@@ -324,13 +407,13 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
             and not recovery_blocked
             and not auth_required
             and not process_restart_required
-            and not generation_changed
+            and full_feed_proof_ready
             and subscribed_option_tokens_count >= 1
         )
         if runtime_state in _VERIFYING_STATES or not option_ticks_verified:
             state = "VERIFYING"
             reason_code = runtime_state or "VERIFYING"
-        elif not underlying_tick_fresh or not depth_fresh or warmup_clean_cycles < warmup_required_clean_cycles or generation_changed:
+        elif not full_feed_proof_ready:
             state = "WARMING_UP"
             reason_code = runtime_state or "WARMING_UP"
         elif clean_ready:

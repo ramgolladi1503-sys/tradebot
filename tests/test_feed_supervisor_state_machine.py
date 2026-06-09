@@ -69,6 +69,51 @@ def test_supervisor_uses_freshness_to_promote_candidate_ready():
     assert payload["allowed_for_live_execution"] is False
 
 
+def test_supervisor_requires_full_feed_proof_after_reconnect():
+    warming = build_feed_supervisor_snapshot({
+        "runtime_state": "RUNNING",
+        "ws_connected": True,
+        "auth_ready": True,
+        "subscribed_tokens_count": 8,
+        "subscribed_option_tokens_count": 12,
+        "verified_option_symbols": ["BANKNIFTY", "NIFTY"],
+        "missing_option_symbols": [],
+        "option_ticks_verified": True,
+        "underlying_tick_fresh": True,
+        "depth_fresh": True,
+        "warmup_clean_cycles": 1,
+        "warmup_required_clean_cycles": 3,
+        "recovery_generation_id": 5,
+        "last_recovery_generation_id": 4,
+        "subscription_generation_id": 11,
+        "last_subscription_generation_id": 10,
+    })
+    ready = build_feed_supervisor_snapshot({
+        "runtime_state": "RUNNING",
+        "ws_connected": True,
+        "auth_ready": True,
+        "subscribed_tokens_count": 8,
+        "subscribed_option_tokens_count": 12,
+        "verified_option_symbols": ["BANKNIFTY", "NIFTY"],
+        "missing_option_symbols": [],
+        "option_ticks_verified": True,
+        "underlying_tick_fresh": True,
+        "depth_fresh": True,
+        "warmup_clean_cycles": 3,
+        "warmup_required_clean_cycles": 3,
+        "recovery_generation_id": 5,
+        "last_recovery_generation_id": 5,
+        "subscription_generation_id": 11,
+        "last_subscription_generation_id": 11,
+    })
+
+    assert warming.state == "WARMING_UP"
+    assert "WARMUP_INCOMPLETE" in warming.blockers
+    assert "RECOVERY_GENERATION_CHANGED" in warming.blockers or "SUBSCRIPTION_GENERATION_CHANGED" in warming.blockers
+    assert ready.state == "CANDIDATE_READY"
+    assert ready.blockers == ()
+
+
 def test_supervisor_marks_warming_up_before_candidate_readiness():
     snapshot = build_feed_supervisor_snapshot({
         "runtime_state": "SUBSCRIBED",
