@@ -47,6 +47,9 @@ def _candidate(**overrides):
         "feed_ok": True,
         "ws_connected": True,
         "effective_ws_connected": True,
+        "last_tick_age_sec": 0.5,
+        "last_depth_age_sec": 1.0,
+        "subscribed_option_tokens_count": 2,
     }
     candidate.update(overrides)
     return candidate

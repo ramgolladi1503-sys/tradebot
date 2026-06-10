@@ -87,3 +87,5 @@ build/
 # Jupyter
 .ipynb_checkpoints/
 
+runtime/live_observation/
+runtime/feed_soak/

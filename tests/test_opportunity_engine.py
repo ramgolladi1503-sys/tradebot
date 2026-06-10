@@ -94,6 +94,14 @@ def _trade(
         option_type="CE",
         right="CE",
         instrument_type="OPT",
+        source_flags={
+            "last_tick_age_sec": 0.5,
+            "last_depth_age_sec": 1.0,
+            "subscribed_option_tokens_count": 2,
+            "option_feed_block_reason_by_symbol": {normalized_symbol: "OK"},
+            "option_last_tick_age_by_symbol": {normalized_symbol: 0.5},
+            "symbol_feed_ok_by_symbol": {normalized_symbol: True},
+        },
         tradingsymbol=f"{normalized_symbol}2631723850CE",
         instrument_id=f"{normalized_symbol}|2026-03-17|23850|CE",
     )
@@ -293,7 +301,8 @@ def test_opportunity_engine_keeps_display_only_candidate_non_selected():
         top_n=1,
     )
 
-    assert len(ranked) == 1
+    ranked_count = len(ranked)
+    assert ranked_count == 1
     assert ranked[0].selected_for_execution is False
     assert ranked[0].selection_reason == "not_execution_eligible"
     assert ranked[0].opportunity_rank == 1

@@ -4815,6 +4815,21 @@ class Orchestrator:
             feature_timing: dict[str, float] = {}
             feed_truth_payload: dict = _read_json_dict(logs_dir() / "feed_truth_latest.json")
             feed_runtime_payload, _feed_runtime_path = _read_latest_feed_runtime_payload()
+
+            # Defensive check: if feed is fatally dead, sleep to prevent high CPU spin.
+            rstate = str(feed_runtime_payload.get("runtime_state") or "").upper()
+            is_fatal = (
+                rstate in {"FEED_LIFECYCLE_FATAL", "RECOVERY_BLOCKED", "RECONNECT_BLOCKED"}
+                or bool(feed_runtime_payload.get("recovery_blocked"))
+                or str(feed_runtime_payload.get("ws_lifecycle_state") or "").upper() == "FATAL"
+            )
+            if is_fatal:
+                logger.warning("orchestrator_live_monitoring_feed_fatal_sleep state=%s", rstate)
+                time.sleep(max(2.0, self.poll_interval))
+                if run_once:
+                    break
+                continue
+
             feed_truth_cycle_gate = _feed_truth_cycle_gate(feed_runtime_payload)
             try:
                 # Hot-reload config to pick up FORCE_REGIME changes
