@@ -1385,6 +1385,6 @@ def test_option_feed_verification_logs_failed_when_ticks_never_arrive(monkeypatc
         requested_by_symbol={"NIFTY": 2},
         subscribed_by_symbol={"NIFTY": 2},
     )
-    ws._tick_option_feed_verification(now_epoch=1016.5)
+    ws._tick_option_feed_verification(now_epoch=1100.0)
     assert any(event == "FEED_OPTION_VERIFY_FAILED" for event, _ in events)
     assert ws._option_feed_verification_overlay_payload()["state"] == "FAILED"

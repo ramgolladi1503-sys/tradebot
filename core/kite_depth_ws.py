@@ -2033,9 +2033,9 @@ def _restart_verification_require_options() -> bool:
 
 def _restart_verification_timeout_sec() -> float:
     try:
-        return max(1.0, float(getattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 15.0)))
+        return max(1.0, float(getattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 45.0)))
     except Exception:
-        return 15.0
+        return 45.0
 
 
 def _restart_verification_min_option_ticks_per_symbol() -> int:
@@ -2051,9 +2051,21 @@ def _option_feed_verification_enabled() -> bool:
 
 def _option_feed_verification_timeout_sec() -> float:
     try:
-        return max(1.0, float(getattr(cfg, "FEED_OPTION_VERIFY_TIMEOUT_SEC", 15.0)))
+        base = max(1.0, float(getattr(cfg, "FEED_OPTION_VERIFY_TIMEOUT_SEC", 45.0)))
+        try:
+            from core.time_utils import is_market_open_ist
+            from datetime import datetime
+            import pytz
+
+            if is_market_open_ist():
+                now_ist = datetime.now(pytz.timezone("Asia/Kolkata"))
+                if now_ist.hour == 9 and now_ist.minute < 30:
+                    return max(base, float(getattr(cfg, "FEED_OPTION_VERIFY_TIMEOUT_MARKET_OPEN_SEC", 90.0)))
+        except Exception:
+            pass
+        return base
     except Exception:
-        return 15.0
+        return 45.0
 
 
 def _option_feed_verification_min_ticks_per_symbol() -> int:
