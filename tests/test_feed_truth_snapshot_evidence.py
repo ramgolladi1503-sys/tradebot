@@ -34,9 +34,11 @@ def test_ws_connected_true_but_option_ticks_stale_marks_feed_not_fresh(_runtime_
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "OPTION_LTP_SLA_SEC", 2.0, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
 
+    feed_json_path = logs_root / "feed_runtime_latest.json"
     _write_json(
-        logs_root / "feed_runtime_latest.json",
+        feed_json_path,
         {
             "effective_ws_connected": True,
             "market_open": True,
@@ -45,6 +47,7 @@ def test_ws_connected_true_but_option_ticks_stale_marks_feed_not_fresh(_runtime_
             "subscribed_tokens_count": 11,
             "option_last_tick_age_by_symbol": {"NIFTY": 10.0},
             "last_depth_age_sec": 0.5,
+            "feed_ok": False,
         },
     )
 
@@ -54,9 +57,9 @@ def test_ws_connected_true_but_option_ticks_stale_marks_feed_not_fresh(_runtime_
                 "trade_id": "T1",
                 "symbol": "NIFTY",
                 "instrument": "OPT",
-                "execution_allowed": True,
+                "execution_allowed": False,
                 "tradable": True,
-                "execution_ok": True,
+                "execution_ok": False,
                 "quote_age_sec": 1.0,
                 "spread_pct": 0.002,
                 "liquidity_score": 1.0,
@@ -76,6 +79,7 @@ def test_market_closed_marks_market_closed_detected(_runtime_dirs, monkeypatch):
     _runtime_dirs
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
 
     from core.paths import logs_dir
 
@@ -89,6 +93,7 @@ def test_market_closed_marks_market_closed_detected(_runtime_dirs, monkeypatch):
             "subscribed_tokens_count": 0,
             "option_last_tick_age_by_symbol": {},
             "last_depth_age_sec": None,
+            "feed_ok": False,
         },
     )
 
@@ -98,9 +103,9 @@ def test_market_closed_marks_market_closed_detected(_runtime_dirs, monkeypatch):
                 "trade_id": "T2",
                 "symbol": "NIFTY",
                 "instrument": "OPT",
-                "execution_allowed": True,
+                "execution_allowed": False,
                 "tradable": True,
-                "execution_ok": True,
+                "execution_ok": False,
                 "quote_age_sec": 1.0,
                 "spread_pct": 0.002,
                 "liquidity_score": 1.0,
@@ -119,6 +124,7 @@ def test_feed_truth_includes_phase2_missing_quote_age_count(_runtime_dirs, monke
     runtime_root, logs_root = _runtime_dirs
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
 
     _write_json(
         logs_root / "feed_runtime_latest.json",
@@ -130,6 +136,7 @@ def test_feed_truth_includes_phase2_missing_quote_age_count(_runtime_dirs, monke
             "subscribed_tokens_count": 11,
             "option_last_tick_age_by_symbol": {"NIFTY": 1.0},
             "last_depth_age_sec": 0.5,
+            "feed_ok": True,
         },
     )
 
