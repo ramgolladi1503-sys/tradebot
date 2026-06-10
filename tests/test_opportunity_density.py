@@ -102,6 +102,12 @@ def _trade(
             "strategy_regime_mode": strategy_regime_mode,
             "strategy_family": strategy_family,
             "direction_family": direction_family,
+            "last_tick_age_sec": 0.5,
+            "last_depth_age_sec": 1.0,
+            "subscribed_option_tokens_count": 2,
+            "option_feed_block_reason_by_symbol": {normalized_symbol: "OK"},
+            "option_last_tick_age_by_symbol": {normalized_symbol: 0.5},
+            "symbol_feed_ok_by_symbol": {normalized_symbol: True},
         },
     )
 

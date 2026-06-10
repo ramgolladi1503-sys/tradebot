@@ -64,7 +64,7 @@ def test_ws_connected_true_but_option_ticks_stale_marks_feed_not_fresh(_runtime_
             }
         ]
     )
-    assert out
+    assert out == []
 
     truth = _read_json(logs_root / "feed_truth_latest.json")
     assert truth["ws_connected"] is True
@@ -108,7 +108,7 @@ def test_market_closed_marks_market_closed_detected(_runtime_dirs, monkeypatch):
             }
         ]
     )
-    assert out
+    assert out == []
 
     truth = _read_json(logs_dir() / "feed_truth_latest.json")
     assert truth["market_closed_detected"] is True

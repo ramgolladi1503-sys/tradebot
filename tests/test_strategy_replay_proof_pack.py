@@ -15,8 +15,9 @@ def healthy_feed_payload():
         "state_machine": {"state": "LIVE"},
         "last_tick_age_sec": 0.5,
         "last_depth_age_sec": 1.0,
-        "option_feed_block_reason_by_symbol": {"NIFTY": "OK"},
-        "option_last_tick_age_by_symbol": {"NIFTY": 0.5},
+        "option_feed_block_reason_by_symbol": {"NIFTY": "OK", "BANKNIFTY": "OK"},
+        "option_last_tick_age_by_symbol": {"NIFTY": 0.5, "BANKNIFTY": 0.5},
+        "symbol_feed_ok_by_symbol": {"NIFTY": True, "BANKNIFTY": True},
     }
 
 
