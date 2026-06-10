@@ -1,0 +1,21 @@
+# PR Review: Increase Option Verification Timeout (MOD-6)
+
+## What changed?
+1. Added `FEED_OPTION_VERIFY_TIMEOUT_SEC`, `FEED_RESTART_VERIFY_TIMEOUT_SEC`, and `FEED_OPTION_VERIFY_TIMEOUT_MARKET_OPEN_SEC` to `config/config.py` with default values of `45.0` and `90.0` (for market open).
+2. Updated `_option_feed_verification_timeout_sec()` in `core/kite_depth_ws.py` to use `45.0` as base, and dynamically check `is_market_open_ist()` to extend the timeout to `90.0` seconds during the first 15 minutes of market open (9:15-9:30).
+3. Updated `_restart_verification_timeout_sec()` in `core/kite_depth_ws.py` to use `45.0` seconds.
+
+## Why does this move safety/stability/readiness forward?
+At 9:15–9:30 IST market open, Kite's option ticks can have latency. A 15-second verification window was causing the verification to expire before ticks arrived, permanently blocking `feed_ok` and starving Phase2 of candidates. By bumping the timeout to 45 seconds (90 at open), we handle the latency while preserving verification logic.
+
+## What did not change?
+- No real orders are placed.
+- `feed_ok` logic itself is not bypassed; it just waits longer.
+- `MANUAL_APPROVAL_REQUIRED` remains 1.
+- No live trading is enabled.
+
+## What tests prove it?
+- Existing `test_option_feed_verification_logs_failed_when_ticks_never_arrive` is updated to verify the new longer timeout duration and still ensures `FAILED` state if the timeout completes without ticks.
+
+## What could still fail?
+- If Kite has latency > 90 seconds at market open, the verification will still timeout and enter a `FAILED` state.
