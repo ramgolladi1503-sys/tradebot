@@ -1984,3 +1984,120 @@ def test_auth_required_latch_blocks_hard_restart(monkeypatch):
     )
     assert calls == {"stop": 0, "start": 0}
     assert "FEED_RESTART_BLOCKED_AUTH_REQUIRED" in [event for event, _payload in events]
+
+
+def test_storm_breaker_trips_on_velocity(monkeypatch):
+    from core import kite_depth_ws as ws
+    from config import config as cfg
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    
+    # 4 restarts within 5 minutes (300s). e.g., 0, 100, 200, 250.
+    # Current time = 299
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [0.0, 100.0, 200.0, 250.0], raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 99, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_TRIP", 4, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_WINDOW_SEC", 300.0, raising=False)
+
+    calls = {"breaker": 0, "risk": 0}
+    monkeypatch.setattr(ws, "trip_feed_breaker", lambda **kwargs: calls.__setitem__("breaker", calls["breaker"] + 1))
+    monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws.time, "time", lambda: 299.0)
+
+    # 5th restart attempt should fail because there are already 4 in the 300s window.
+    assert ws.restart_depth_ws(reason="velocity_trip", ignore_cooldown=True, force_full_restart=True) is False
+    assert "FEED_RESTART_STORM_TRIP" in [event for event, _payload in events]
+    assert calls["breaker"] == 1
+
+
+def test_storm_breaker_allows_restarts_over_long_window(monkeypatch):
+    from core import kite_depth_ws as ws
+    from config import config as cfg
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    
+    # 6 restarts, but spread out over 2 hours (120 minutes)
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [0.0, 1000.0, 2000.0, 3000.0, 4000.0, 5000.0], raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 99, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_TRIP", 4, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_WINDOW_SEC", 300.0, raising=False)
+
+    calls = {"breaker": 0, "risk": 0}
+    monkeypatch.setattr(ws, "trip_feed_breaker", lambda **kwargs: calls.__setitem__("breaker", calls["breaker"] + 1))
+    monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    
+    # Current time is 5010.
+    # In the last 300 seconds (4710 to 5010), there is only 1 restart (5000.0).
+    monkeypatch.setattr(ws.time, "time", lambda: 5010.0)
+
+    # We mock stop and start to return True to ensure it proceeds past the gates
+    monkeypatch.setattr(ws, "stop_depth_ws", lambda **kwargs: True)
+    monkeypatch.setattr(ws, "start_depth_ws", lambda **kwargs: True)
+
+    ws.restart_depth_ws(reason="long_window", ignore_cooldown=True, force_full_restart=True)
+    assert "FEED_RESTART_STORM_TRIP" not in [event for event, _payload in events]
+    assert calls["breaker"] == 0
+    assert "FEED_FULL_RESTART_BEGIN" in [event for event, _payload in events]
+
+
+def test_hourly_cap_rate_limits_safely(monkeypatch):
+    from core import kite_depth_ws as ws
+    from config import config as cfg
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
+    monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
+    monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
+    
+    # 6 restarts, spread out within an hour
+    monkeypatch.setattr(ws, "_FULL_RESTARTS", [0.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0], raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False)
+    monkeypatch.setattr(ws.feed_restart_guard, "allow_restart", lambda **kwargs: True)
+    
+    monkeypatch.setattr(cfg, "FEED_FULL_RESTART_COOLDOWN_SEC", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_TRIP", 4, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_STORM_WINDOW_SEC", 300.0, raising=False)
+
+    calls = {"breaker": 0, "risk": 0}
+    monkeypatch.setattr(ws, "trip_feed_breaker", lambda **kwargs: calls.__setitem__("breaker", calls["breaker"] + 1))
+    monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    
+    # Current time is 2510.
+    # In the last 300s (2210 to 2510), there is only 1 restart (2500.0), so storm breaker doesn't trip.
+    # But total in last hour (3600s) is 6, which >= max_per_hour (6).
+    monkeypatch.setattr(ws.time, "time", lambda: 2510.0)
+
+    assert ws.restart_depth_ws(reason="hourly_cap", ignore_cooldown=True, force_full_restart=True) is False
+    assert "FEED_RESTART_STORM_TRIP" not in [event for event, _payload in events]
+    assert calls["breaker"] == 0
+    assert "FEED_RESTART_RATE_LIMIT_HOURLY" in [event for event, _payload in events]
