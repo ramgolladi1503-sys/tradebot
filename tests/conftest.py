@@ -62,6 +62,11 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     except Exception as exc:
         monkeypatch.setenv("PYTEST_KITE_COOLDOWN_RESET_ERROR", type(exc).__name__)
 
+    import json
+    feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
+    feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
+
     yield
 
 
