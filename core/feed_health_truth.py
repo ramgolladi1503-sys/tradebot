@@ -166,8 +166,7 @@ def classify_symbol_feed_truth(
     if block_reason not in _OPTION_OK_CODES:
         _append_unique(reasons, OPTION_FEED_BLOCKED_REASON)
     if option_age is None:
-        if block_reason not in _OPTION_OK_CODES or symbol_feed_ok is False:
-            _append_unique(reasons, OPTION_AGE_MISSING_REASON)
+        _append_unique(reasons, OPTION_AGE_MISSING_REASON)
     elif option_age > max_option_tick_age_sec:
         _append_unique(reasons, OPTION_TICKS_STALE_REASON)
     if symbol_feed_ok is False:
@@ -231,10 +230,22 @@ def classify_feed_health_truth(
         _append_unique(reasons, FEED_STATE_UNSAFE_REASON)
     if runtime_state and runtime_state not in _SAFE_RUNTIME_STATES:
         _append_unique(reasons, RUNTIME_STATE_UNSAFE_REASON)
-    if max_ltp_age is not None and last_tick_age is not None and last_tick_age > max_ltp_age:
+    if last_tick_age is None:
+        _append_unique(reasons, "LTP_AGE_MISSING")
+    elif max_ltp_age is not None and last_tick_age > max_ltp_age:
         _append_unique(reasons, LTP_TICKS_STALE_REASON)
-    if max_depth_age is not None and last_depth_age is not None and last_depth_age > max_depth_age:
+    if last_depth_age is None:
+        _append_unique(reasons, "DEPTH_AGE_MISSING")
+    elif max_depth_age is not None and last_depth_age > max_depth_age:
         _append_unique(reasons, DEPTH_TICKS_STALE_REASON)
+    sub_option_count = int(
+        payload.get("subscribed_option_tokens_count")
+        or payload.get("option_subscribe_count")
+        or payload.get("subscribed_option_tokens")
+        or 0
+    )
+    if sub_option_count <= 0:
+        _append_unique(reasons, "NO_SUBSCRIBED_OPTIONS")
     for symbol_truth in symbol_truths:
         for reason in symbol_truth.reasons:
             _append_unique(reasons, f"{symbol_truth.symbol}:{reason}")

@@ -7,11 +7,13 @@ from config import config as cfg
 from core.feed.runtime_store import read_latest_runtime_snapshot, write_runtime_snapshot
 import core.feed.runtime_store as runtime_store
 import core.kite_depth_ws as depth_ws
+from core.blocker_lifecycle import reset_blocker_registries
 from core.runtime_status_overlay import derive_effective_ws_connected, derive_feed_ok
 import pytest
 
 
 def _reset_depth_ws_test_state(monkeypatch):
+    reset_blocker_registries()
     for name, value in {
         "_KITE_TICKER": None,
         "_WATCHDOG_THREAD": None,
@@ -150,6 +152,8 @@ def test_persist_runtime_snapshot_row_updates_json_artifact(monkeypatch, tmp_pat
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
 
@@ -409,6 +413,8 @@ def test_persist_runtime_snapshot_uses_latest_option_tick_for_symbol_freshness(m
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 100.0, 102: 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 3, raising=False)
 
@@ -444,6 +450,8 @@ def test_persist_runtime_snapshot_keeps_symbol_ok_with_fresh_option_tick_cache(m
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 100.0, 102: 110.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"NIFTY": 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 3, raising=False)
 
@@ -589,6 +597,8 @@ def test_healthy_runtime_snapshot_still_reports_executable_true_everywhere(monke
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 199.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
 
@@ -740,6 +750,7 @@ def test_write_feed_runtime_snapshot_heals_stale_feed_overlay_after_recovery(mon
         market_open=True,
         state_machine={"state": "LIVE", "reason": "ticks_flowing"},
         subscribed_option_tokens_count=1,
+        option_last_tick_age_by_symbol={"NIFTY": 1.0},
         option_feed_block_reason_by_symbol={"NIFTY": "OK"},
         option_active_blockers_by_symbol={"NIFTY": []},
         runtime_state="RUNNING",

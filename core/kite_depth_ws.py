@@ -1245,6 +1245,14 @@ def _reactor_not_restartable_block_reason() -> str:
 
 
 def _reactor_terminal_restart_block_active() -> bool:
+    global _REACTOR_NOT_RESTARTABLE_DETECTED
+    if not _REACTOR_NOT_RESTARTABLE_DETECTED:
+        try:
+            from twisted.internet import reactor
+            if getattr(reactor, "_started", False) and not getattr(reactor, "running", False):
+                _REACTOR_NOT_RESTARTABLE_DETECTED = True
+        except Exception:
+            pass
     blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower()
     return bool(_REACTOR_NOT_RESTARTABLE_DETECTED or blocked_reason.startswith("reactor_not_restartable"))
 
@@ -1470,7 +1478,10 @@ def _set_reconnect_blocked_reason(reason: str) -> str:
             _RECONNECT_BLOCKED_SINCE_EPOCH = float(time.time())
         except Exception:
             _RECONNECT_BLOCKED_SINCE_EPOCH = 0.0
-    _RUNTIME_STATE = "RECOVERY_BLOCKED"
+    if blocked.startswith("reactor_not_restartable") or blocked.startswith("ws1006_process_restart"):
+        _RUNTIME_STATE = "FEED_LIFECYCLE_FATAL"
+    else:
+        _RUNTIME_STATE = "RECOVERY_BLOCKED"
     _LAST_RUNTIME_ERROR = blocked[:1000]
     if blocked.startswith("reactor_not_restartable"):
         _REACTOR_NOT_RESTARTABLE_DETECTED = True
@@ -1503,6 +1514,8 @@ def _block_reconnect_for_process_restart(
     if "connection was closed uncleanly" in reason_lower or "peer dropped" in reason_lower or "main loop terminated" in reason_lower:
         blocked_reason = "ws1006_process_restart_required"
     _set_reconnect_blocked_reason(blocked_reason)
+    _log_ws("ws_reactor_not_restartable", {"reason": str(reason or "")})
+    _log_ws("ws_lifecycle_fatal", {"reason": str(reason or ""), "ws_lifecycle_state": "FATAL"})
     try:
         if _WATCHDOG_STOP is not None:
             _WATCHDOG_STOP.set()
@@ -2496,6 +2509,7 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
                 _FEED_RESTART_VERIFY_STATE = "OK"
                 _FEED_RESTART_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
                 _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
+        _log_ws("subscription_replay_verified", {"reason": "verified"})
         if _reconnect_recovery_blocked_active():
             cleared_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
             _clear_reconnect_blocked_reason()
@@ -4762,6 +4776,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     """
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
+    _log_ws("feed_restart_required", {"reason": reason})
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
         _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
         return False
@@ -4902,8 +4917,10 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         _STOP_REQUESTED = False
 
         try:
+            _log_ws("feed_restart_attempt", {"reason": reason})
             started = start_depth_ws(tokens, profile_verified=False, skip_guard=True)
         except Exception as exc:
+            _log_ws("feed_restart_failed", {"reason": reason, "error": str(exc)})
             _RUNTIME_STATE = "RESTART_FAILED"
             _LAST_RUNTIME_ERROR = f"start_exception:{type(exc).__name__}:{exc}"[:1000]
             _persist_runtime_snapshot_row(
@@ -4917,6 +4934,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             return False
 
         if started is False:
+            _log_ws("feed_restart_failed", {"reason": reason, "error": "start_returned_false"})
             _RUNTIME_STATE = "RESTART_FAILED"
             _LAST_RUNTIME_ERROR = f"start_returned_false:{reason}"[:1000]
             _persist_runtime_snapshot_row(
@@ -4931,6 +4949,8 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                 {"reason": reason, "tokens": len(tokens), **selection_payload},
             )
             return False
+
+        _log_ws("feed_restart_success", {"reason": reason})
 
         _persist_runtime_snapshot_row(
             ws_connected=None,
@@ -4953,6 +4973,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
     global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower() or _reactor_not_restartable_block_reason()
         _emit_reconnect_recovery_blocked_snapshot(
@@ -5304,6 +5325,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
 
     def _resubscribe_full(ws, reason: str):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+        _log_ws("subscription_replay_requested", {"reason": reason})
         desired, selection_payload = _resubscribe_token_selection()
         if not desired:
             desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
@@ -5371,6 +5393,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         try:
             _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
+            _log_ws("ws_connected", {"response": str(response), "ws_lifecycle_state": "CONNECTED"})
             _log_ws("FEED_CONNECT", {"tokens": len(tokens), "response": str(response)})
             logger.info(
                 "depth_ws_connected token_count=%d first_tokens=%s",
@@ -5410,6 +5433,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         try:
             _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
+            _log_ws("ws_reconnect_success", {"attempts": attempts, "ws_lifecycle_state": "CONNECTED"})
             _resubscribe_full(ws, reason=f"reconnect:{attempts}")
             _RUNTIME_STATE = "RUNNING"
             _LAST_RUNTIME_ERROR = ""
@@ -5444,6 +5468,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             code_int = None
         _set_last_disconnected_info(code=code_int, reason=reason_text)
         ws_fault_seen = True
+        _log_ws("ws_reconnect_failed", {"code": code_int, "reason": reason_text, "ws_lifecycle_state": "DISCONNECTED"})
         _log_ws("FEED_ERROR", {"code": code, "reason": reason_text, "profile_verified": bool(computed_profile_verified)})
         _RUNTIME_STATE = "SUBSCRIBE_FAILED"
         _LAST_RUNTIME_ERROR = f"{code}:{reason_text}"[:1000]
@@ -5544,6 +5569,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         reason_lower = reason_text.lower()
         _set_last_disconnected_info(code=code_int, reason=reason_text)
         ws_fault_seen = True
+        _log_ws("ws_disconnected", {"code": code_int, "reason": reason_text, "ws_lifecycle_state": "DISCONNECTED"})
         if _AUTH_REQUIRED_LATCH:
             close_failure_proof = build_ws_auth_failure_proof_event(
                 public_key=api_key,
@@ -5642,6 +5668,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     "FEED_INTERNAL_RECONNECT_WAIT",
                     {"source": "on_close", "code": code, "reason": reason_text},
                 )
+                _log_ws("ws_reconnect_attempt", {"attempts": 1, "source": "on_close", "ws_lifecycle_state": "RECONNECTING"})
                 _soft_resubscribe_current(reason=f"on_close:{code}")
                 return
             restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
@@ -6135,6 +6162,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         join_fn=lambda timeout_sec=3.0: _join_thread_safe(watchdog_thread, timeout_sec),
     )
     try:
+        from twisted.internet import reactor
+        if getattr(reactor, "_started", False) and not getattr(reactor, "running", False):
+            raise RuntimeError("ReactorNotRestartable: Twisted reactor was started and stopped")
         kws.connect(threaded=True)
     except Exception as exc:
         reconnect_blocked_reason = None
@@ -6180,4 +6210,6 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         return False
 
+    if not ws_fault_seen:
+        _log_ws("ws_started", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTED"})
     return not ws_fault_seen

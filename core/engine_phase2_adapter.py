@@ -366,40 +366,52 @@ def _finalize_phase2_output(rows: list[Any]) -> list[Any]:
 
 def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dict[str, Any]]:  # noqa: F811
     """Build Phase2 candidates with formerly hooked Phase2 contracts inline."""
-    raw = [dict(row) for row in list(raw_candidates or []) if isinstance(row, dict)]
+    feed_path = logs_dir() / "feed_runtime_latest.json"
+    feed_ok = False
+    if feed_path.exists():
+        try:
+            feed_payload = json.loads(feed_path.read_text(encoding="utf-8"))
+            feed_ok = bool(feed_payload.get("feed_ok"))
+        except Exception:
+            feed_ok = False
 
-    # Keep the private implementation aligned when it calls its own helpers.
-    _phase2_base._candidate_hour = _candidate_hour
-    _phase2_base._spread_pct = _spread_pct
-    _phase2_base._effective_max_spread_pct = _effective_max_spread_pct
+    if not feed_ok:
+        out = []
+    else:
+        raw = [dict(row) for row in list(raw_candidates or []) if isinstance(row, dict)]
 
-    current = [
-        dict(row) if isinstance(row, dict) else row
-        for row in list(_base_build_candidates_phase2(raw_candidates) or [])
-    ]
-    out = [
-        row
-        for row in current
-        if not isinstance(row, dict)
-        or (not _phase2_contract_hard_drop(row) and _phase2_contract_spread_ok(row))
-    ]
+        # Keep the private implementation aligned when it calls its own helpers.
+        _phase2_base._candidate_hour = _candidate_hour
+        _phase2_base._spread_pct = _spread_pct
+        _phase2_base._effective_max_spread_pct = _effective_max_spread_pct
 
-    seen = {str(row.get("trade_id")) for row in out if isinstance(row, dict)}
-    for row in raw:
-        trade_id = str(row.get("trade_id") or "")
-        if trade_id and trade_id not in seen and _phase2_contract_normal_ok(row):
-            out.append(row)
-            seen.add(trade_id)
+        current = [
+            dict(row) if isinstance(row, dict) else row
+            for row in list(_base_build_candidates_phase2(raw_candidates) or [])
+        ]
+        out = [
+            row
+            for row in current
+            if not isinstance(row, dict)
+            or (not _phase2_contract_hard_drop(row) and _phase2_contract_spread_ok(row))
+        ]
 
-    out = _finalize_phase2_output(out)
-    out.sort(
-        key=lambda row: (
-            _sf(row.get("final_score", row.get("score", 0.0)), 0.0)
-            if isinstance(row, dict)
-            else 0.0
-        ),
-        reverse=True,
-    )
+        seen = {str(row.get("trade_id")) for row in out if isinstance(row, dict)}
+        for row in raw:
+            trade_id = str(row.get("trade_id") or "")
+            if trade_id and trade_id not in seen and _phase2_contract_normal_ok(row):
+                out.append(row)
+                seen.add(trade_id)
+
+        out = _finalize_phase2_output(out)
+        out.sort(
+            key=lambda row: (
+                _sf(row.get("final_score", row.get("score", 0.0)), 0.0)
+                if isinstance(row, dict)
+                else 0.0
+            ),
+            reverse=True,
+        )
     try:
         if bool(getattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True)):
             drop_counts = getattr(_phase2_base.build_candidates_phase2, "_last_drop_reason_counts", {}) or {}

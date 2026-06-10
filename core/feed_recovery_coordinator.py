@@ -160,7 +160,7 @@ class FeedRecoveryCoordinator:
 
     def _is_terminal_reactor_failure(self, *, reason: str) -> bool:
         reason_lower = reason.lower()
-        return "main loop terminated" in reason_lower or "reactornotrestartable" in reason_lower
+        return "main loop terminated" in reason_lower or "reactornotrestartable" in reason_lower or "ws1006_process_restart" in reason_lower
 
     def _is_auth_failure(self, *, code: int | None, reason: str) -> bool:
         reason_lower = reason.lower()
