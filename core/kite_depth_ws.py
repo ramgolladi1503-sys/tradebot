@@ -5804,7 +5804,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked",
                     reason=blocked_reason,
                 )
-                break
+                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
+                    time.sleep(5.0)
+                    _emit_reconnect_recovery_blocked_snapshot(
+                        source="watchdog:monitoring_fatal",
+                        reason=blocked_reason,
+                    )
+                    if not _reconnect_recovery_blocked_active():
+                        break
+                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                    break
+                continue
             time.sleep(max(0.5, watchdog_poll_sec))
             if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
                 break
@@ -5814,7 +5824,17 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked_after_sleep",
                     reason=blocked_reason,
                 )
-                break
+                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
+                    time.sleep(5.0)
+                    _emit_reconnect_recovery_blocked_snapshot(
+                        source="watchdog:monitoring_fatal",
+                        reason=blocked_reason,
+                    )
+                    if not _reconnect_recovery_blocked_active():
+                        break
+                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                    break
+                continue
             now_loop = float(time.time())
             if (now_loop - float(last_tick_watchdog_check)) >= max(0.5, tick_watchdog_poll_sec):
                 last_tick_watchdog_check = now_loop
