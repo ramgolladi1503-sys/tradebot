@@ -5400,6 +5400,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 **selection_payload,
             },
         )
+        _reset_option_feed_verification(reason=f"resubscribe_full:{reason}")
         _begin_option_feed_verification(
             reason=reason,
             start_epoch=float(now_utc_epoch()),
