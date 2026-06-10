@@ -4852,24 +4852,27 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
             return False
         _FULL_RESTARTS = [ts for ts in _FULL_RESTARTS if (now - ts) <= 3600.0]
 
-        if len(_FULL_RESTARTS) >= storm_trip:
+        storm_window = float(getattr(cfg, "FEED_RESTART_STORM_WINDOW_SEC", 300.0))
+        recent_storm = [ts for ts in _FULL_RESTARTS if (now - ts) <= storm_window]
+
+        if len(recent_storm) >= storm_trip:
             try:
                 trip_feed_breaker(
                     reason="feed_restart_storm",
-                    meta={"count": len(_FULL_RESTARTS), "window_sec": 3600.0, "reason": reason},
+                    meta={"count": len(recent_storm), "window_sec": storm_window, "reason": reason},
                 )
             except Exception:
                 pass
             try:
                 risk_halt.set_halt(
                     "feed_restart_storm",
-                    details={"count": len(_FULL_RESTARTS), "window_sec": 3600.0, "reason": reason},
+                    details={"count": len(recent_storm), "window_sec": storm_window, "reason": reason},
                 )
             except Exception:
                 pass
             _log_ws(
                 "FEED_RESTART_STORM_TRIP",
-                {"reason": reason, "count": len(_FULL_RESTARTS), "window_sec": 3600.0},
+                {"reason": reason, "count": len(recent_storm), "window_sec": storm_window},
             )
             return False
 
