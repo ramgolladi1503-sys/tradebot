@@ -1,5 +1,14 @@
 # PR Review: Increase Option Verification Timeout (MOD-6)
 
+- mode: PAPER
+- candidate_id: PR-5-option-timeout
+- decision: ACCEPT
+- reason: Dynamically extend option verification timeout at market open
+- timestamp: 2026-06-11
+- is_order_action: false
+- broker_api_called: false
+- source: gsd_agent
+
 ## What changed?
 1. Added `FEED_OPTION_VERIFY_TIMEOUT_SEC`, `FEED_RESTART_VERIFY_TIMEOUT_SEC`, and `FEED_OPTION_VERIFY_TIMEOUT_MARKET_OPEN_SEC` to `config/config.py` with default values of `45.0` and `90.0` (for market open).
 2. Updated `_option_feed_verification_timeout_sec()` in `core/kite_depth_ws.py` to use `45.0` as base, and dynamically check `is_market_open_ist()` to extend the timeout to `90.0` seconds during the first 15 minutes of market open (9:15-9:30).
