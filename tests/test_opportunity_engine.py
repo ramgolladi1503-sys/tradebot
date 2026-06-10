@@ -301,7 +301,8 @@ def test_opportunity_engine_keeps_display_only_candidate_non_selected():
         top_n=1,
     )
 
-    assert len(ranked) == 1
+    ranked_count = len(ranked)
+    assert ranked_count == 1
     assert ranked[0].selected_for_execution is False
     assert ranked[0].selection_reason == "not_execution_eligible"
     assert ranked[0].opportunity_rank == 1
