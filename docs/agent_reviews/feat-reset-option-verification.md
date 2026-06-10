@@ -46,5 +46,11 @@ I successfully updated `_resubscribe_full` with the single function call.
 ## Acceptance Proof
 `test_kite_depth_ws_stability.py` passes completely.
 
+## Runtime Proof Required After Merge
+Logs should show `_reset_option_feed_verification` called during any `resubscribe_full` event, with the verification state returning to `PENDING` instead of being stuck in `FAILED`.
+
+## What This PR Does Not Prove
+This PR does not prove that option verification will succeed within the timeout; it only proves that the verification window is correctly reset upon a subscription replay.
+
 ## Human Approval
 Requires explicit human review before merge, per standard project protocol.
