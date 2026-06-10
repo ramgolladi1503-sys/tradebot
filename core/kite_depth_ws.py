@@ -1282,9 +1282,9 @@ def _should_require_process_restart_for_ws_fault(*, code: int | None, reason_tex
 
 def _ws1006_recoverable_max_attempts_per_session() -> int:
     try:
-        return max(1, int(getattr(cfg, "DEPTH_WS_WS1006_RECOVERABLE_MAX_ATTEMPTS_PER_SESSION", 2)))
+        return max(1, int(getattr(cfg, "DEPTH_WS_WS1006_RECOVERABLE_MAX_ATTEMPTS_PER_SESSION", 3)))
     except Exception:
-        return 2
+        return 3
 
 
 def _ws_recovery_timeout_sec() -> float:
@@ -1463,6 +1463,12 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
                 restart_attempt_allowed=True,
                 restart_attempted=False,
                 reconnect_blocked_reason=None,
+            )
+            _schedule_restart_depth_ws(
+                reason=f"soft_reconnect_failed:{source}",
+                ignore_cooldown=False,
+                force_full_restart=True,
+                source=f"{source}:escalate",
             )
     else:
         _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
