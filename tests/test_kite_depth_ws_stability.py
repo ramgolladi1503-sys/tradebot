@@ -340,7 +340,7 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
 
     assert any(event == "FEED_RECOVERY_BLOCKED" for event, _ in events)
-    assert scheduled == []
+    assert len(scheduled) == 1
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["process_restart_required"] is True
@@ -408,7 +408,7 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert len(scheduled) == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -451,7 +451,7 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert len(scheduled) == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
