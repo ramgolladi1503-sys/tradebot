@@ -3,6 +3,15 @@
 **Branch:** `feat/audit-only-live-supervisor`
 **Author:** Tradebot Autonomous Agent (GSD)
 
+- mode: PAPER
+- candidate_id: PR-546
+- decision: ACCEPT
+- reason: Supervisor wrapper safely restarts crashed process
+- timestamp: 2026-06-10
+- is_order_action: false
+- broker_api_called: false
+- source: gsd_agent
+
 ## Agent Work Contract
 This PR implements the process-level supervisor required by the Feed Module RCA (MOD-10) to safely restart the system after a fatal WS feed disconnect or Twisted ReactorNotRestartable failure. It preserves all safety gates.
 
