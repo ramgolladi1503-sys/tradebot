@@ -38,6 +38,9 @@ class DataCatalog:
             source_type: tuple(record for record in self.by_type(source_type) if record.schema_valid)
             for source_type in HistoricalSourceType
         }
+        runtime_records_all = self.by_type(HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA)
+        runtime_valid_records = valid_by_type[HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA]
+        runtime_ready_records = tuple(record for record in runtime_valid_records if record.replay_ready)
         symbols_requested = set(self.config.symbols)
         underlying_ok = _has_symbol_coverage(valid_by_type[HistoricalSourceType.UNDERLYING_INDEX_CANDLES], symbols_requested)
         futures_ok = _has_symbol_coverage(valid_by_type[HistoricalSourceType.FUTURES_CANDLES], symbols_requested)
@@ -59,7 +62,7 @@ class DataCatalog:
             span_days_required=self.config.required_span_days,
         )
         option_eod_ok = _has_symbol_coverage(option_eod_records, symbols_requested)
-        runtime_ok = bool(valid_by_type[HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA])
+        runtime_ok = bool(runtime_ready_records)
         underlying_true_intraday_ok = underlying_long_span_ok or futures_long_span_ok
         hybrid_ok = (underlying_ok or futures_ok) and bool(option_intraday_records or option_eod_records)
         proxy_ok = underlying_ok or futures_ok
@@ -95,8 +98,12 @@ class DataCatalog:
             ModeFeasibility(
                 mode=BacktestMode.LIVE_CAPTURE_REPLAY,
                 feasible=bool(runtime_ok),
-                reasons=() if runtime_ok else ("missing_runtime_replay_data",),
-                supporting_sources=_supporting_sources(valid_by_type, HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA),
+                reasons=_runtime_replay_reasons(
+                    runtime_records=runtime_records_all,
+                    runtime_valid_records=runtime_valid_records,
+                    runtime_ready_records=runtime_ready_records,
+                ),
+                supporting_sources=tuple(record.path for record in runtime_ready_records),
             ),
             ModeFeasibility(
                 mode=BacktestMode.HYBRID,
@@ -153,6 +160,7 @@ class DataCatalog:
         futures_records = valid_by_type[HistoricalSourceType.FUTURES_CANDLES]
         eod_records = valid_by_type[HistoricalSourceType.OPTION_CONTRACT_EOD]
         runtime_records = valid_by_type[HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA]
+        runtime_ready_records = tuple(record for record in runtime_records if record.replay_ready)
         underlying_long_span_ok = _has_symbol_coverage(
             underlying_records,
             set(self.config.symbols),
@@ -177,7 +185,7 @@ class DataCatalog:
             return 50
         if underlying_records or futures_records:
             return 35
-        if runtime_records:
+        if runtime_ready_records:
             return 20
         return 0
 
@@ -397,6 +405,28 @@ def _eod_reasons(*, underlying_ok: bool, futures_ok: bool, option_eod_ok: bool) 
     if not (underlying_ok or futures_ok):
         reasons.append("missing_underlying_or_futures_signal_history")
     return tuple(reasons)
+
+
+def _runtime_replay_reasons(
+    *,
+    runtime_records: tuple[HistoricalDataSourceRecord, ...],
+    runtime_valid_records: tuple[HistoricalDataSourceRecord, ...],
+    runtime_ready_records: tuple[HistoricalDataSourceRecord, ...],
+) -> tuple[str, ...]:
+    if runtime_ready_records:
+        return ()
+    reasons: list[str] = []
+    if not runtime_records:
+        return ("missing_runtime_replay_data",)
+    if any("no_replay_rows" in record.warnings for record in runtime_valid_records):
+        reasons.append("no_replay_rows")
+    if any("empty_runtime_replay_source" in record.warnings for record in runtime_valid_records):
+        reasons.append("empty_runtime_replay_source")
+    if any("missing_replay_timestamp" in record.warnings for record in runtime_records):
+        reasons.append("missing_replay_timestamp")
+    if not reasons:
+        reasons.append("missing_runtime_replay_data")
+    return tuple(dict.fromkeys(reasons))
 
 
 def _recommended_next_action(*, readiness_verdict: str, blocked_modes: list[str]) -> str:

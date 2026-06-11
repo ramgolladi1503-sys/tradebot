@@ -81,9 +81,11 @@ If true intraday options are missing, the system must remain fail-closed and rep
 
 - `READY_FOR_TRUE_INTRADAY_OPTIONS_BACKTEST`: real intraday options plus required underlying support are feasible
 - `READY_FOR_EOD_OR_PROXY_ONLY`: either `OPTIONS_EOD` or `UNDERLYING_SIGNAL_WITH_OPTION_PROXY` is feasible
-- `READY_FOR_RUNTIME_REPLAY_ONLY`: only `LIVE_CAPTURE_REPLAY` is feasible
+- `READY_FOR_RUNTIME_REPLAY_ONLY`: only `LIVE_CAPTURE_REPLAY` is feasible, and at least one runtime source is schema-valid, has `row_count > 0`, and has usable timestamp/date coverage
 - `BLOCKED_BY_SCHEMA`: sources exist, but required fields are missing or invalid
 - `NEED_USER_HISTORICAL_DATA`: no qualifying sources are available
+
+Runtime replay does not unlock from file existence alone. Empty SQLite files, empty CSV logs, or runtime files without a usable `timestamp` column remain visible in the catalog but must not unlock replay readiness.
 
 ## Folder layout
 

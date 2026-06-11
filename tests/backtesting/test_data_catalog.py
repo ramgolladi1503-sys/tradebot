@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sqlite3
 
 from core.backtesting.data_catalog import build_catalog_from_config, build_diagnostics_report, load_backtest_config
 from core.backtesting.models import BacktestMode, DataReadinessVerdict, HistoricalSourceType, PhaseOneVerdict
@@ -15,6 +16,15 @@ def _write_csv(path: Path, header: str, rows: list[str]) -> None:
 def _write_config(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _write_runtime_sqlite(path: Path, *, rows: list[tuple[str, str]] | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE ticks(timestamp TEXT, symbol TEXT)")
+        for row in rows or []:
+            conn.execute("INSERT INTO ticks(timestamp, symbol) VALUES(?, ?)", row)
+        conn.commit()
 
 
 def test_date_and_symbol_coverage_and_provenance_are_preserved(tmp_path: Path) -> None:
@@ -246,6 +256,106 @@ def test_live_capture_only_unlocks_runtime_replay_only(tmp_path: Path) -> None:
     assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.LIVE_CAPTURE_REPLAY.value] is True
     assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.OPTIONS_EOD.value] is False
     assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.UNDERLYING_SIGNAL_WITH_OPTION_PROXY.value] is False
+
+
+def test_empty_runtime_sqlite_does_not_unlock_live_capture_replay(tmp_path: Path) -> None:
+    _write_runtime_sqlite(tmp_path / ".runtime/db/DEFAULT.sqlite")
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": [],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": []
+            },
+            "runtime_replay_roots": [".runtime/db"]
+        },
+    )
+
+    config = load_backtest_config(tmp_path / "configs/backtest.json")
+    catalog = build_catalog_from_config(config)
+    runtime_source = catalog.by_type(HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA)[0]
+    report = build_diagnostics_report(config)
+
+    assert runtime_source.schema_valid is True
+    assert runtime_source.replay_ready is False
+    assert runtime_source.coverage.row_count == 0
+    assert "empty_runtime_replay_source" in runtime_source.warnings
+    assert "no_replay_rows" in runtime_source.warnings
+    assert report["phase_one_verdict"] == PhaseOneVerdict.NEED_USER_HISTORICAL_DATA.value
+    assert report["data_readiness_verdict"] == DataReadinessVerdict.NEED_USER_HISTORICAL_DATA.value
+    assert report["data_readiness_score"] == 0
+    assert report["available_modes"] == []
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.LIVE_CAPTURE_REPLAY.value] is False
+
+
+def test_runtime_csv_missing_timestamp_remains_invalid(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / ".runtime/logs/premarket_plan.csv",
+        "symbol,close",
+        [
+            "NIFTY,23000",
+        ],
+    )
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": [],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": []
+            },
+            "runtime_replay_roots": [".runtime/logs"]
+        },
+    )
+
+    catalog = build_catalog_from_config(load_backtest_config(tmp_path / "configs/backtest.json"))
+    runtime_source = catalog.by_type(HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA)[0]
+
+    assert runtime_source.schema_valid is False
+    assert runtime_source.replay_ready is False
+    assert runtime_source.missing_required_fields == ("timestamp",)
+    assert "missing_replay_timestamp" in runtime_source.warnings
+
+
+def test_valid_runtime_sqlite_unlocks_live_capture_replay(tmp_path: Path) -> None:
+    _write_runtime_sqlite(
+        tmp_path / ".runtime/db/DEFAULT.sqlite",
+        rows=[("2026-01-01T09:15:00+05:30", "NIFTY")],
+    )
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": [],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": []
+            },
+            "runtime_replay_roots": [".runtime/db"]
+        },
+    )
+
+    config = load_backtest_config(tmp_path / "configs/backtest.json")
+    catalog = build_catalog_from_config(config)
+    runtime_source = catalog.by_type(HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA)[0]
+    report = build_diagnostics_report(config)
+
+    assert runtime_source.replay_ready is True
+    assert report["data_readiness_verdict"] == DataReadinessVerdict.READY_FOR_RUNTIME_REPLAY_ONLY.value
+    assert report["data_readiness_score"] == 20
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.LIVE_CAPTURE_REPLAY.value] is True
 
 
 def test_missing_bid_ask_reduces_readiness_score_without_blocking_intraday(tmp_path: Path) -> None:

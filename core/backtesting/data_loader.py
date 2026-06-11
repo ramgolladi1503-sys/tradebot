@@ -67,6 +67,7 @@ def load_historical_source(
     missing_required_fields: tuple[str, ...] = ()
     optional_fields_present: tuple[str, ...] = ()
     metadata: dict[str, Any] = {}
+    replay_ready = False
 
     try:
         if data_format == DataFormat.CSV:
@@ -101,6 +102,20 @@ def load_historical_source(
 
     if source_type == HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA:
         metadata["runtime_replay_only"] = True
+        metadata["has_replay_rows"] = bool(summary.row_count > 0)
+        replay_ready = bool(
+            schema_valid
+            and summary.row_count > 0
+            and summary.coverage.start_date is not None
+            and summary.coverage.end_date is not None
+        )
+        if schema_valid and summary.row_count == 0:
+            warnings.extend(["empty_runtime_replay_source", "no_replay_rows"])
+        elif schema_valid and (summary.coverage.start_date is None or summary.coverage.end_date is None):
+            warnings.append("missing_replay_timestamp")
+        elif not schema_valid and "timestamp" in missing_required_fields:
+            warnings.append("missing_replay_timestamp")
+        metadata["replay_ready"] = replay_ready
 
     return HistoricalDataSourceRecord(
         source_type=source_type,
@@ -117,6 +132,7 @@ def load_historical_source(
         optional_fields_present=optional_fields_present,
         warnings=tuple(warnings),
         eight_year_coverage=summary.coverage.span_days >= 2890,
+        replay_ready=replay_ready,
         metadata=metadata,
     )
 

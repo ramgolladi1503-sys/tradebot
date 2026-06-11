@@ -77,6 +77,7 @@ class HistoricalDataSourceRecord:
     optional_fields_present: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     eight_year_coverage: bool = False
+    replay_ready: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, Any]:
@@ -95,6 +96,7 @@ class HistoricalDataSourceRecord:
             "optional_fields_present": list(self.optional_fields_present),
             "warnings": list(self.warnings),
             "eight_year_coverage": bool(self.eight_year_coverage),
+            "replay_ready": bool(self.replay_ready),
             "metadata": dict(self.metadata),
         }
 
