@@ -1923,7 +1923,7 @@ def test_candidate_separates_setup_trigger_and_entry_quality(monkeypatch):
     assert directional.trigger_score is not None
     assert directional.entry_quality_score is not None
     assert directional.entry_quality_reason is not None
-    assert ({round(float(directional.setup_score).__len__(), 4), round(float(directional.trigger_score), 4), round(float(directional.entry_quality_score), 4)}) >= 2
+    assert ({round(float(directional.setup_score), 4), round(float(directional.trigger_score), 4), round(float(directional.entry_quality_score), 4)}).__len__() >= 2
 
 
 def test_overextended_entry_is_penalized_or_rejected(monkeypatch):
