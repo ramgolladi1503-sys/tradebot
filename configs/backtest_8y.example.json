@@ -1,0 +1,20 @@
+{
+  "symbols": ["NIFTY", "BANKNIFTY", "SENSEX"],
+  "start_date": "2018-01-01",
+  "end_date": "",
+  "required_span_days": 2890,
+  "parquet_enabled": true,
+  "reports_dir": ".runtime/reports/backtesting",
+  "catalog_output_path": ".runtime/reports/backtesting/historical_data_catalog_latest.json",
+  "diagnostics_output_path": ".runtime/reports/backtesting/backtest_data_diagnostics_latest.json",
+  "readiness_output_path": ".runtime/reports/backtesting/data_readiness_latest.json",
+  "data_roots": {
+    "UNDERLYING_INDEX_CANDLES": ["data/historical/index"],
+    "FUTURES_CANDLES": ["data/historical/futures"],
+    "OPTION_CONTRACT_CANDLES_INTRADAY": ["data/historical/options_intraday"],
+    "OPTION_CONTRACT_EOD": ["data/historical/options_eod"],
+    "OPTION_CHAIN_SNAPSHOT": ["data/historical/option_chain"],
+    "RUNTIME_CAPTURED_LIVE_DATA": [".runtime/db", ".runtime/logs"]
+  },
+  "runtime_replay_roots": [".runtime/db", ".runtime/logs", "logs"]
+}
