@@ -23,6 +23,7 @@ def test_feed_freshness_normalizes_ms_epochs(monkeypatch, tmp_path):
     conn.close()
 
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", False, raising=False)
     monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
     freshness_sla._reset_cache_for_tests()
 

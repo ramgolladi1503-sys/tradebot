@@ -16,6 +16,7 @@ def test_feed_health_epoch_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "SLA_REQUIRE_OPTIONS_DEPTH_LIVE", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", False, raising=False)
     monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
     monkeypatch.setattr(freshness_sla, "_depth_store_tokens", lambda: [])
     freshness_sla._reset_cache_for_tests()
@@ -37,6 +38,7 @@ def test_feed_health_sim_does_not_require_depth_for_index(tmp_path, monkeypatch)
 
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", False, raising=False)
     monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 1700000000.2)
     monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
@@ -60,6 +62,7 @@ def test_feed_health_idle_state_when_no_ticks_in_sim(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "SIM", raising=False)
+    monkeypatch.setattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", False, raising=False)
     monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 1700000000.2)
     monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
