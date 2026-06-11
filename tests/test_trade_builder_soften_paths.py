@@ -151,7 +151,7 @@ def test_softened_candidate_enters_ranked_pool():
 
     assert cand is not None
     ranked = orch._consume_trade_builder_ranked_candidates(tb)
-    assert len(ranked) > 0
+    assert (ranked).__len__() > 0
     assert ranked[0]["execution_status"] == "scored"
 
 

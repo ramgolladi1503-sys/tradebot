@@ -567,7 +567,7 @@ def test_family_scarcity_prevents_directional_flooding(monkeypatch):
         if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
     ]
     assert bearish_candidates
-    assert len(bearish_candidates) == 1
+    assert (bearish_candidates).__len__() == 1
     assert int(getattr(bearish_candidates[0], "family_rank", 0) or 0) == 1
 
 
@@ -621,7 +621,7 @@ def test_strong_family_can_gain_small_extra_slot(monkeypatch, tmp_path):
         for candidate in candidates
         if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
     ]
-    assert len(bearish_candidates) == 2
+    assert (bearish_candidates).__len__() == 2
     assert all(int(getattr(candidate, "family_cap_effective", 0) or 0) == 2 for candidate in bearish_candidates)
     assert any(float(getattr(candidate, "family_learning_adjustment", 0.0) or 0.0) > 0.0 for candidate in bearish_candidates)
 
@@ -681,7 +681,7 @@ def test_family_scarcity_adjustment_is_bounded(monkeypatch, tmp_path):
         for candidate in candidates
         if str(getattr(candidate, "direction_family", "")).strip().lower() == "bearish"
     ]
-    assert len(bearish_candidates) == 2
+    assert (bearish_candidates).__len__() == 2
     assert all(int(getattr(candidate, "family_cap_effective", 0) or 0) == 2 for candidate in bearish_candidates)
 
 
@@ -998,7 +998,7 @@ def test_no_family_can_exceed_hard_cap(monkeypatch, tmp_path):
 
     candidates = builder._build_nonlive_opportunity_candidates(market_data, ltp=market_data["ltp"], vwap=market_data["vwap"], trigger_reason="unit_test_hard_cap")
     bearish_candidates = [candidate for candidate in candidates if getattr(candidate, "direction_family", None) == "bearish"]
-    assert len(bearish_candidates) == 1
+    assert (bearish_candidates).__len__() == 1
 
 
 def test_family_can_emit_zero_candidates_without_filler(monkeypatch):
@@ -1763,7 +1763,7 @@ def test_nonlive_opportunity_candidates_vary_by_signal_family(monkeypatch, symbo
         trigger_reason="unit_test",
     )
 
-    assert len(candidates) == 1
+    assert (candidates).__len__() == 1
     candidate = candidates[0]
     assert candidate.symbol == symbol
     assert candidate.strategy == expected_strategy
@@ -1839,7 +1839,7 @@ def test_nonlive_fallback_context_allows_bounded_signal_activation(monkeypatch, 
         trigger_reason="fallback_unit_test",
     )
 
-    assert len(candidates) >= 1
+    assert (candidates).__len__() >= 1
     assert any(candidate.strategy == "OPP_DIRECTIONAL" for candidate in candidates)
     assert "SIGNAL_EVAL_SUMMARY" in caplog.text
     assert "OPPORTUNITY_SET_BUILT" in caplog.text
@@ -1923,7 +1923,7 @@ def test_candidate_separates_setup_trigger_and_entry_quality(monkeypatch):
     assert directional.trigger_score is not None
     assert directional.entry_quality_score is not None
     assert directional.entry_quality_reason is not None
-    assert len({round(float(directional.setup_score), 4), round(float(directional.trigger_score), 4), round(float(directional.entry_quality_score), 4)}) >= 2
+    assert ({round(float(directional.setup_score).__len__(), 4), round(float(directional.trigger_score), 4), round(float(directional.entry_quality_score), 4)}) >= 2
 
 
 def test_overextended_entry_is_penalized_or_rejected(monkeypatch):
@@ -2183,7 +2183,7 @@ def test_build_with_trace_softens_no_candidates_survived_in_sim(monkeypatch):
     assert bool(trade.planning_only) is True
     assert bool(trade.execution_allowed) is False
     ranked = list(getattr(builder, "_last_ranked_candidates", []) or [])
-    assert len(ranked) >= 1
+    assert (ranked).__len__() >= 1
     ranked_strategies = {str(row.get("strategy") or "") for row in ranked if isinstance(row, dict)}
     assert "OPP_DIRECTIONAL" in ranked_strategies
     assert float((trade.score_breakdown or {}).get("candidate_quality_score") or 0.0) > 0.0

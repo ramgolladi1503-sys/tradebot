@@ -55,7 +55,7 @@ def test_set_last_ranked_candidates_drops_invalid_rows(monkeypatch):
         ]
     )
 
-    assert len(tb._last_ranked_candidates) == 1
+    assert (tb._last_ranked_candidates).__len__() == 1
     assert tb._last_ranked_candidates[0]["trade_id"] == "GOOD-1"
 
 

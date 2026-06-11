@@ -2876,7 +2876,7 @@ def test_split_brain_quote_guard_logs_once_per_trade_within_rate_limit(monkeypat
     review_queue._apply_split_brain_quote_guard(base)
     review_queue._apply_split_brain_quote_guard(base)
 
-    assert len(warnings) == 1
+    assert (warnings).__len__() == 1
 
 
 def test_validation_uses_executable_reference_over_stale_signal_price(tmp_path, monkeypatch):

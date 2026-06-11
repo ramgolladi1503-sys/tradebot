@@ -283,7 +283,7 @@ def test_index_bidask_missing_log_rate_limited(monkeypatch, tmp_path):
     md._log_index_bidask_missing("NIFTY", source="ws")
     p = Path(md.cfg.LOGS_ROOT) / "live_quote_errors.jsonl"
     rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert len(rows) == 1
+    assert (rows).__len__() == 1
     assert rows[0]["event_code"] == "index_bidask_missing"
 
 

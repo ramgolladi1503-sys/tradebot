@@ -33,7 +33,7 @@ The files modified (`config.py`, `auth.py`, `kite_depth_ws.py`) are highly sensi
 Is it safe to disable internal reconnects? Yes. Relying on Twisted's internal reconnects across threads caused the `ReactorNotRestartable` crashes. By relying on the orchestrator to fully restart the `KiteTicker` subprocess, we guarantee clean slate recovery.
 
 ## Hermes Review
-Architectural decision is correct. Enforcing `DEPTH_WS_USE_SUBPROCESS=True` and completely bypassing `_soft_resubscribe_current` in favor of full subprocess tear downs aligns with the fail-safe design philosophy. 
+Architectural decision is correct. Enforcing `DEPTH_WS_USE_SUBPROCESS=True` and completely bypassing `_soft_resubscribe_current` in favor of full subprocess tear downs aligns with the design philosophy. 
 
 ## GSD Review
 Changes were carefully implemented. Removed the auto-reconnect flag in `auth.py`, set configuration toggles in `config.py`, and forced `FEED_LIFECYCLE_FATAL` restart in `kite_depth_ws.py` for WS 1006 disconnects.
