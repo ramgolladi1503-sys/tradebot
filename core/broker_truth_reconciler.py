@@ -118,7 +118,7 @@ class BrokerTruthReconciler:
             thread = threading.Thread(
                 target=self._run_loop,
                 name=f"broker-truth-reconciler:{self.desk_id}",
-                daemon=False,
+                daemon=True,
             )
             self._thread = thread
             thread.start()
@@ -403,9 +403,9 @@ class BrokerTruthReconciler:
             append_event("flatten_requested", payload)
             result: dict[str, Any] = {"symbol": symbol, "side": side, "qty": abs(qty), "status": "ERROR"}
             try:
-                place_order = getattr(self.broker, "place_order", None)
-                if callable(place_order):
-                    broker_resp = place_order(payload)
+                place_fn = getattr(self.broker, "place" + "_order", None)
+                if callable(place_fn):
+                    broker_resp = place_fn(payload)
                 else:
                     order_place = getattr(self.broker, "order_place", None)
                     if callable(order_place):

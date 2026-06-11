@@ -203,7 +203,7 @@ class OrderReconciliationDaemon:
             thread = threading.Thread(
                 target=self._thread_main,
                 name="order-reconciliation-daemon",
-                daemon=False,
+                daemon=True,
             )
             self._thread = thread
             self._thread.start()

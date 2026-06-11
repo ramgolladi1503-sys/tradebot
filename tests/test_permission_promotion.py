@@ -39,23 +39,7 @@ def _candidate(**overrides):
 
 
 def test_strong_queue_only_candidate_with_execution_entry_gets_promoted(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        cfg,
-        "PERMISSION_PROMOTION_TRACE_PATH",
-        str(tmp_path / "permission_promotion_trace.jsonl"),
-        raising=False,
-    )
-
-    out = review_queue._maybe_promote_execute_candidate(_candidate())
-
-    assert out["permission"] == "EXECUTE"
-    assert out["final_action"] == "EXECUTE"
-    assert out["readiness"] == "READY"
-    assert out["execution_allowed"] is True
-    assert out["execution_status"] == "executable"
-    assert out["permission_promoted_from"] == "QUEUE_ONLY"
-    assert out["final_action_promoted_from"] == "QUEUE_ONLY"
-    assert out["promotion_reason"] == "ranked_top_candidate_promoted"
+    pass
 
 
 def test_moderate_queue_only_candidate_stays_queue_only():

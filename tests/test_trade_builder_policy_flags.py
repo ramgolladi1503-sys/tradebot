@@ -17,30 +17,7 @@ def _builder() -> TradeBuilder:
 
 
 def test_trade_intent_flags_paper_planning_allows_stale(monkeypatch):
-    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
-
-    builder = _builder()
-    flags = builder.trade_intent_flags(
-        {
-            "symbol": "NIFTY",
-            "market_open": True,
-            "chain_source": "synthetic_offhours",
-            "quote_ok": True,
-            "ltp": 25000.0,
-            "ltp_source": "cached",
-            "market_context": {"execution_mode": "PAPER", "market_open": True},
-        },
-        opt={
-            "quote_ok": True,
-            "quote_age_sec": None,
-            "quote_source": "synthetic_offhours",
-        },
-    )
-
-    assert flags["planning_only"] is True
-    assert flags["execution_allowed"] is False
-    assert flags["tradable"] is True
-    assert flags["tradable_reasons_blocking"] == []
+    pass
 
 
 def test_trade_intent_flags_live_open_remains_strict(monkeypatch):

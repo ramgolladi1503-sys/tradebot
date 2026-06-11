@@ -1,7 +1,11 @@
 import os
 import atexit
 import time
+import signal
 from pathlib import Path
+
+if hasattr(signal, 'SIGPIPE'):
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 import core.runtime_guard  # noqa: F401  (import side-effects intentional)
 from config import config as cfg

@@ -46,7 +46,7 @@ def start_depth_ws_subprocess(tokens: list[int], profile_verified: bool = True) 
         args=(tokens, profile_verified),
         name="kite_depth_ws_subprocess",
     )
-    _WS_PROCESS.daemon = False # We want it to be managed explicitly
+    _WS_PROCESS.daemon = True # We want it to be killed if main exits unexpectedly
     _WS_PROCESS.start()
     _LAST_RESTART_TIME = time.time()
     logger.info(f"Subprocess spawned with PID {_WS_PROCESS.pid}")
