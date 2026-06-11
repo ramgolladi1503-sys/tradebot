@@ -1,5 +1,13 @@
 # Agent Review Evidence: TradeBuilder Fake Signals Fix
 
+mode: PAPER
+candidate_id: fix-tradebuilder-fake-signals-pr
+decision: prevent-softened-fallback-leak
+reason: Prevent TradeBuilder fallback paths from emitting advisory candidates in strict mode.
+timestamp: 2026-06-12T02:22:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/tradebuilder-fake-signals-fix.md
 ## Agent Work Contract
 - **Source Agent:** GSD
 - **Action:** Fix Phase 2 strict mode leak caused by softened candidates.
