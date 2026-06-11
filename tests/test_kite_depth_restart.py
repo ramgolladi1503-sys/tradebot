@@ -55,6 +55,7 @@ def _reset_ws_runtime_state(monkeypatch):
         "_FULL_RESTARTS": [],
     }.items():
         monkeypatch.setattr(ws, name, value, raising=False)
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False, raising=False)
     monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", FeedRecoveryCoordinator(), raising=False)
     monkeypatch.setattr(ws.kite_client, "_next_expiry_cache", {}, raising=False)
     monkeypatch.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
