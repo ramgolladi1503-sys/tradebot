@@ -35,6 +35,14 @@ python scripts/import_historical_data.py --config configs/backtest_8y.example.js
 - `INCONCLUSIVE_FOR_REAL_INTRADAY_OPTIONS`: lower-confidence modes are possible, but true eight-year intraday option proof is not.
 - `NEED_USER_HISTORICAL_DATA`: local historical inputs are too sparse to support meaningful progress.
 
+## Readiness verdict meanings
+
+- `READY_FOR_TRUE_INTRADAY_OPTIONS_BACKTEST`: `TRUE_OPTIONS_INTRADAY` is feasible.
+- `READY_FOR_EOD_OR_PROXY_ONLY`: `OPTIONS_EOD` or `UNDERLYING_SIGNAL_WITH_OPTION_PROXY` is feasible, but true intraday is not.
+- `READY_FOR_RUNTIME_REPLAY_ONLY`: only `LIVE_CAPTURE_REPLAY` is feasible. This must not be reported as EOD-or-proxy readiness.
+- `BLOCKED_BY_SCHEMA`: sources exist, but schema validation fails.
+- `NEED_USER_HISTORICAL_DATA`: no qualifying local evidence exists.
+
 ## Questions Phase 1 answers
 
 1. What historical data exists?
