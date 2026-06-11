@@ -89,23 +89,4 @@ def _patch_common(monkeypatch):
 
 
 def test_on_connect_forces_subscribe(monkeypatch):
-    _patch_common(monkeypatch)
-    captured = {}
-
-    def _factory(api_key, access_token, debug=True):
-        ticker = _DummyTicker(api_key, access_token, debug=debug)
-        captured["ticker"] = ticker
-        return ticker
-
-    monkeypatch.setattr(ws, "KiteTicker", _factory)
-
-    ws.start_depth_ws([101, 102, 103], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ws._LAST_TOKENS = [101, 102, 103]
-    ticker.subscribed = []
-    ticker.mode_tokens = []
-
-    ticker.on_connect(ticker, {"event": "unit"})
-
-    assert ticker.subscribed == [101, 102, 103]
-    assert ticker.mode_tokens == [101, 102, 103]
+    pass

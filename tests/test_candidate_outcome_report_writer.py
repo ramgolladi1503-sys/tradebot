@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -125,6 +126,7 @@ def test_cli_writes_reports_offline(tmp_path: Path) -> None:
             "--output-dir",
             str(tmp_path),
         ],
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).parent.parent)},
         check=False,
         capture_output=True,
         text=True,

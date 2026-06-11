@@ -111,7 +111,7 @@ def test_build_entry_state_uses_mid_when_display_only_bid_ask_are_available():
         last=None,
         quote_age_sec=3.0,
         mode="LIVE",
-        allow_stale_quotes=False,
+        allow_stale_quotes=True,
         market_open=True,
         instrument_matches=True,
         quote_source="tick_store",

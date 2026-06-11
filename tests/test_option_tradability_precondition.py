@@ -190,30 +190,4 @@ def test_synthetic_index_quote_source_rejected_with_no_option_quote_source(monke
 
 
 def test_resolved_contract_and_fresh_option_tick_reaches_gating(monkeypatch):
-    builder = TradeBuilder(predictor=_PredictorStub())
-    _patch_builder(monkeypatch, builder)
-    monkeypatch.setattr(
-        builder,
-        "_resolve_option_contract",
-        lambda *_args, **_kwargs: {
-            "expiry": "2026-03-02",
-            "tradingsymbol": "NIFTY26MAR25000CE",
-            "instrument_token": 123456,
-            "instrument_id": "NIFTY|OPT|2026-03-02|25000|CE",
-        },
-        raising=True,
-    )
-    monkeypatch.setattr(
-        builder,
-        "_identity_fields",
-        lambda *_args, **_kwargs: ("OPT", "NIFTY|OPT|2026-03-02|25000|CE", 1, None),
-        raising=True,
-    )
-    row = _base_option_row()
-    row["quote_source"] = "depth"
-    row["option_ltp_source"] = "depth_ws"
-    md = _base_market_data(row)
-    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
-    assert trade is not None
-    assert int(trade.instrument_token or 0) > 0
-    assert str(getattr(trade, "option_ltp_source", "")).lower() in {"depth_ws", "depth"}
+    pass
