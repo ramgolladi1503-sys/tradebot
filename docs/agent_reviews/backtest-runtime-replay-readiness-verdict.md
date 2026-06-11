@@ -1,5 +1,14 @@
 # Agent Review Evidence — Runtime Replay Readiness Verdict
 
+mode: PAPER
+candidate_id: fix-backtest-runtime-replay-readiness-verdict-pr558
+decision: classify-runtime-replay-readiness-separately
+reason: Prevent runtime-replay-only evidence from being mislabeled as EOD or proxy backtest readiness.
+timestamp: 2026-06-11T14:20:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/agent_reviews/backtest-runtime-replay-readiness-verdict.md
+
 ## Agent Work Contract
 
 This PR is a small fix-only patch for the Phase 1.5 backtesting readiness classifier.
