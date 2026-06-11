@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import inspect
 import logging
 import threading
 from pathlib import Path
+import inspect
 from typing import Tuple
 
 from config import config as cfg
@@ -244,7 +244,20 @@ def get_kite_ticker(
         _caller_module_name(),
     )
     try:
-        ticker = ticker_cls(resolved_api_key, resolved_access_token, debug=debug)
+        max_delay = int(getattr(cfg, "KITE_TICKER_RECONNECT_MAX_DELAY", 5))
+        max_tries = int(getattr(cfg, "KITE_TICKER_RECONNECT_MAX_TRIES", 300))
+        kwargs = {"debug": debug}
+        try:
+            sig = inspect.signature(ticker_cls)
+        except (TypeError, ValueError):
+            sig = None
+        if sig is not None:
+            params = sig.parameters
+            if "reconnect" in params:
+                kwargs["reconnect"] = False
+        else:
+            kwargs["reconnect"] = False
+        ticker = ticker_cls(resolved_api_key, resolved_access_token, **kwargs)
     except Exception as exc:
         record_feed_startup_event(
             "KITE_TICKER_CREATE_FAILED",

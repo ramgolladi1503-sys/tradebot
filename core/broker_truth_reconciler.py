@@ -118,7 +118,7 @@ class BrokerTruthReconciler:
             thread = threading.Thread(
                 target=self._run_loop,
                 name=f"broker-truth-reconciler:{self.desk_id}",
-                daemon=False,
+                daemon=True,
             )
             self._thread = thread
             thread.start()
