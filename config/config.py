@@ -2554,9 +2554,8 @@ KITE_STORE_TICKS = os.getenv("KITE_STORE_TICKS", "true").lower() == "true"
 DEPTH_WS_LOCK_NAME = os.getenv("DEPTH_WS_LOCK_NAME", "depth_ws.lock")
 DEPTH_WS_LOCK_MAX_AGE_SEC = float(os.getenv("DEPTH_WS_LOCK_MAX_AGE_SEC", "3600"))
 DEPTH_WS_SINGLETON = os.getenv("DEPTH_WS_SINGLETON", "true").lower() == "true"
-DEPTH_WS_USE_INTERNAL_RECONNECT = os.getenv("DEPTH_WS_USE_INTERNAL_RECONNECT", "false").lower() == "true"
+DEPTH_WS_USE_INTERNAL_RECONNECT = os.getenv("DEPTH_WS_USE_INTERNAL_RECONNECT", "true").lower() == "true"
 DEPTH_WS_STARTUP_FAIL_CLOSED = os.getenv("DEPTH_WS_STARTUP_FAIL_CLOSED", "true").lower() == "true"
-FEED_USE_SUBPROCESS = os.getenv("FEED_USE_SUBPROCESS", "true").lower() == "true"
 DEPTH_WS_STARTUP_FAIL_OPEN_ON_RECOVERABLE_ERRORS = os.getenv(
     "DEPTH_WS_STARTUP_FAIL_OPEN_ON_RECOVERABLE_ERRORS",
     "true",

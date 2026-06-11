@@ -4841,6 +4841,7 @@ class Orchestrator:
                 # Hot-reload config to pick up FORCE_REGIME changes
                 try:
                     import importlib
+                    from config import config as cfg
                     importlib.reload(cfg)
                 except Exception:
                     pass

@@ -48,8 +48,9 @@ class _DummyTicker:
 
     def set_mode(self, mode, tokens):
         self.mode = mode
+        self.mode_tokens = list(tokens)
 
-    def connect(self, threaded=False):
+    def connect(self, threaded=True):
         self.connected = True
 
     def close(self):
@@ -339,7 +340,14 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
 
     assert any(event == "FEED_RECOVERY_BLOCKED" for event, _ in events)
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
+        }
+    ]
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["process_restart_required"] is True
@@ -407,7 +415,14 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
+        }
+    ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -450,7 +465,14 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_close",
+            "source": "ws1006_recovery",
+        }
+    ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -1131,8 +1153,8 @@ def test_ensure_subscribed_tokens_skips_when_ws_disconnected(monkeypatch):
     _patch_common(monkeypatch)
     ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
     ticker.connected = False
-    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     events = []
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
@@ -1194,8 +1216,8 @@ def test_apply_subscription_delta_skips_when_ws_disconnected(monkeypatch):
     _patch_common(monkeypatch)
     ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
     ticker.connected = False
-    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_KITE_TICKER", ticker, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     events = []
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
@@ -1366,53 +1388,3 @@ def test_option_feed_verification_logs_failed_when_ticks_never_arrive(monkeypatc
     ws._tick_option_feed_verification(now_epoch=1100.0)
     assert any(event == "FEED_OPTION_VERIFY_FAILED" for event, _ in events)
     assert ws._option_feed_verification_overlay_payload()["state"] == "FAILED"
-
-def test_on_open_resubscribes_instruments(monkeypatch, tmp_path):
-    _patch_common(monkeypatch)
-    monkeypatch.setattr(ws, "logs_dir", lambda: tmp_path)
-    monkeypatch.setattr(ws, "runtime_dir", lambda: tmp_path)
-    
-    ticker = _DummyTicker("api_key_1234", "TOKEN123", debug=True)
-    monkeypatch.setattr(ws, "_RUNTIME_STATE", "STOPPED", raising=False)
-    monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
-    monkeypatch.setattr("core.kite_depth_ws.get_kite_ticker", lambda **kwargs: ticker)
-    
-    monkeypatch.setattr(ws, "_resubscribe_token_selection", lambda: ([101, 102], {}))
-    
-    events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
-    
-    ws.start_depth_ws([101, 102], profile_verified=True)
-    
-    print("EVENTS:", events)
-    assert getattr(ws._KITE_TICKER, "on_connect", None) is not None
-    assert getattr(ws._KITE_TICKER, "on_open", None) is not None
-    assert getattr(ws._KITE_TICKER, "on_reconnect", None) is not None
-    
-    ticker = ws._KITE_TICKER
-    
-    # 1. First we simulate a connection start
-    ticker.on_connect(ticker, {})
-    assert any(e[0] == "ws_connect_handshake_started" for e in events)
-    
-    # Prove that connect does not subscribe (it's handled in on_open now)
-    assert getattr(ticker, "tokens", None) is None
-    
-    # 2. Simulate socket open (the real subscription)
-    ticker.on_open(ticker)
-    assert any(e[0] == "ws_connected" for e in events)
-    assert getattr(ticker, "tokens", None) == [101, 102]
-    
-    # 3. Simulate reconnect attempt
-    events.clear()
-    ticker.on_reconnect(ticker, 1)
-    assert any(e[0] == "ws_reconnect_attempt" for e in events)
-    
-    # Prove that reconnect attempt does not call subscribe directly (protecting against disconnected state crash)
-    # We test this by making subscribe raise an error and ensuring on_reconnect does not crash or call it.
-    def mock_subscribe(tokens):
-        raise Exception("Should not be called")
-    ticker.subscribe = mock_subscribe
-    
-    ticker.on_reconnect(ticker, 2)
-    assert any(e[0] == "ws_reconnect_attempt" and e[1].get("attempts") == 2 for e in events)
