@@ -45,7 +45,9 @@ def test_date_and_symbol_coverage_and_provenance_are_preserved(tmp_path: Path) -
     catalog = build_catalog_from_config(config)
 
     records = catalog.by_type(HistoricalSourceType.UNDERLYING_INDEX_CANDLES)
-    assert len(records) == 1
+    assert records == (
+        records[0],
+    )
     assert records[0].provenance == "user_csv"
     assert records[0].coverage.start_date == "2018-01-01"
     assert records[0].coverage.end_date == "2026-01-01"
@@ -333,7 +335,9 @@ def test_duplicate_runtime_roots_do_not_double_count_sources(tmp_path: Path) -> 
     catalog = build_catalog_from_config(load_backtest_config(tmp_path / "configs/backtest.json"))
     runtime_sources = catalog.by_type(HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA)
 
-    assert len(runtime_sources) == 1
+    assert runtime_sources == (
+        runtime_sources[0],
+    )
 
 
 def test_partial_date_coverage_is_reported_accurately(tmp_path: Path) -> None:

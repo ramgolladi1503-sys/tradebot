@@ -1,7 +1,9 @@
 # Eight-Year Backtesting Phase 1 and 1.5 - Agent Review Evidence
 
 mode: PAPER
+candidate_id: qa-eight-year-backtest-strategy-edge-pr557
 decision: historical-data-readiness-foundation
+reason: establish fail-closed historical data readiness and review-backed gating for eight-year backtesting
 timestamp: 2026-06-11T13:25:00Z
 is_order_action: false
 broker_api_called: false
