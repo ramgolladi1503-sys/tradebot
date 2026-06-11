@@ -343,9 +343,9 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     assert scheduled == [
         {
             "force_full_restart": True,
-            "ignore_cooldown": False,
-            "reason": "soft_reconnect_failed:on_error",
-            "source": "on_error:escalate",
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
         }
     ]
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
@@ -418,9 +418,9 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
     assert scheduled == [
         {
             "force_full_restart": True,
-            "ignore_cooldown": False,
-            "reason": "soft_reconnect_failed:on_error",
-            "source": "on_error:escalate",
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
         }
     ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
@@ -468,9 +468,9 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
     assert scheduled == [
         {
             "force_full_restart": True,
-            "ignore_cooldown": False,
-            "reason": "soft_reconnect_failed:on_close",
-            "source": "on_close:escalate",
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_close",
+            "source": "ws1006_recovery",
         }
     ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
