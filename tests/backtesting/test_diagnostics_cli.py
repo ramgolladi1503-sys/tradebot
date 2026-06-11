@@ -59,6 +59,48 @@ def test_diagnostics_report_is_generated(tmp_path: Path) -> None:
     assert "questions" in report
 
 
+def test_diagnostics_report_marks_runtime_replay_only_distinctly(tmp_path: Path) -> None:
+    _write(
+        tmp_path / ".runtime/logs/replay.csv",
+        "\n".join(
+            [
+                "timestamp,symbol",
+                "2026-01-01T09:15:00+05:30,NIFTY",
+            ]
+        ),
+    )
+    config_path = tmp_path / "configs/backtest.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "symbols": ["NIFTY"],
+                "diagnostics_output_path": str(tmp_path / "reports/diagnostics.json"),
+                "readiness_output_path": str(tmp_path / "reports/data_readiness_latest.json"),
+                "catalog_output_path": str(tmp_path / "reports/catalog.json"),
+                "data_roots": {
+                    "UNDERLYING_INDEX_CANDLES": [],
+                    "FUTURES_CANDLES": [],
+                    "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                    "OPTION_CONTRACT_EOD": [],
+                    "OPTION_CHAIN_SNAPSHOT": [],
+                    "RUNTIME_CAPTURED_LIVE_DATA": []
+                },
+                "runtime_replay_roots": [str(tmp_path / ".runtime/logs")]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    diagnostics_main = _load_main(Path("scripts/backtest_data_diagnostics.py"))
+    rc = diagnostics_main(["--config", str(config_path)])
+    assert rc == 0
+    readiness_report = json.loads((tmp_path / "reports/data_readiness_latest.json").read_text(encoding="utf-8"))
+    assert readiness_report["phase_one_verdict"] == "NEED_USER_HISTORICAL_DATA"
+    assert readiness_report["data_readiness_verdict"] == "READY_FOR_RUNTIME_REPLAY_ONLY"
+    assert readiness_report["data_readiness_score"] == 20
+
+
 def test_import_catalog_manifest_is_generated(tmp_path: Path) -> None:
     _write(
         tmp_path / "data/historical/options_eod/nifty.csv",
