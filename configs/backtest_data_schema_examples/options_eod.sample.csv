@@ -1,0 +1,2 @@
+date,underlying,expiry,strike,option_type,open,high,low,close,volume,oi,settlement
+2018-01-01,NIFTY,2018-01-04,10500,CE,82.50,105.00,72.00,91.20,250000,1200000,91.20
