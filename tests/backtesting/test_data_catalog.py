@@ -226,6 +226,116 @@ def test_missing_bid_ask_reduces_readiness_score_without_blocking_intraday(tmp_p
     assert "missing_bid_ask_reduces_fill_realism" in intraday_mode["reasons"]
 
 
+def test_true_intraday_requires_long_span_underlying_or_futures(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / "data/historical/index/nifty.csv",
+        "timestamp,symbol,open,high,low,close,volume",
+        [
+            "2026-01-01T09:15:00+05:30,NIFTY,1,2,0.5,1.5,12",
+        ],
+    )
+    _write_csv(
+        tmp_path / "data/historical/options_intraday/nifty.csv",
+        "timestamp,underlying,expiry,strike,option_type,open,high,low,close,volume,oi,bid,ask",
+        [
+            "2018-01-01T09:15:00+05:30,NIFTY,2018-01-25,11000,CE,10,12,9,11,100,1000,10.5,11.0",
+            "2026-01-01T09:15:00+05:30,NIFTY,2026-01-29,23000,CE,10,12,9,11,100,1000,10.5,11.0",
+        ],
+    )
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "required_span_days": 2890,
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": ["data/historical/index"],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": ["data/historical/options_intraday"],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": []
+            }
+        },
+    )
+
+    report = build_diagnostics_report(load_backtest_config(tmp_path / "configs/backtest.json"))
+    intraday_mode = next(item for item in report["mode_feasibility"] if item["mode"] == BacktestMode.TRUE_OPTIONS_INTRADAY.value)
+
+    assert report["phase_one_verdict"] == PhaseOneVerdict.INCONCLUSIVE_FOR_REAL_INTRADAY_OPTIONS.value
+    assert report["data_readiness_verdict"] == DataReadinessVerdict.READY_FOR_EOD_OR_PROXY_ONLY.value
+    assert report["data_readiness_score"] == 65
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.TRUE_OPTIONS_INTRADAY.value] is False
+    assert "missing_underlying_or_futures_signal_history" in intraday_mode["reasons"]
+
+
+def test_hybrid_requires_real_options_not_runtime_replay(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / "data/historical/index/nifty.csv",
+        "timestamp,symbol,open,high,low,close,volume",
+        [
+            "2018-01-01T09:15:00+05:30,NIFTY,1,2,0.5,1.5,10",
+            "2026-01-01T09:15:00+05:30,NIFTY,1,2,0.5,1.5,12",
+        ],
+    )
+    _write_csv(
+        tmp_path / ".runtime/logs/replay.csv",
+        "timestamp,symbol",
+        [
+            "2026-01-01T09:15:00+05:30,NIFTY",
+        ],
+    )
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": ["data/historical/index"],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": []
+            },
+            "runtime_replay_roots": [".runtime/logs"]
+        },
+    )
+
+    report = build_diagnostics_report(load_backtest_config(tmp_path / "configs/backtest.json"))
+
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.LIVE_CAPTURE_REPLAY.value] is True
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.HYBRID.value] is False
+
+
+def test_duplicate_runtime_roots_do_not_double_count_sources(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / ".runtime/logs/replay.csv",
+        "timestamp,symbol",
+        [
+            "2026-01-01T09:15:00+05:30,NIFTY",
+        ],
+    )
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": [],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": [".runtime/logs"]
+            },
+            "runtime_replay_roots": [".runtime/logs"]
+        },
+    )
+
+    catalog = build_catalog_from_config(load_backtest_config(tmp_path / "configs/backtest.json"))
+    runtime_sources = catalog.by_type(HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA)
+
+    assert len(runtime_sources) == 1
+
+
 def test_partial_date_coverage_is_reported_accurately(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "data/historical/options_intraday/nifty.csv",

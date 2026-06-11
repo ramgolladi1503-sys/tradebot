@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from core.paths import repo_root, reports_dir
+from core.paths import reports_dir
 
 from .data_loader import scan_source_path, summarize_source_coverage
 from .models import (
@@ -41,15 +41,27 @@ class DataCatalog:
         symbols_requested = set(self.config.symbols)
         underlying_ok = _has_symbol_coverage(valid_by_type[HistoricalSourceType.UNDERLYING_INDEX_CANDLES], symbols_requested)
         futures_ok = _has_symbol_coverage(valid_by_type[HistoricalSourceType.FUTURES_CANDLES], symbols_requested)
+        underlying_long_span_ok = _has_symbol_coverage(
+            valid_by_type[HistoricalSourceType.UNDERLYING_INDEX_CANDLES],
+            symbols_requested,
+            span_days_required=self.config.required_span_days,
+        )
+        futures_long_span_ok = _has_symbol_coverage(
+            valid_by_type[HistoricalSourceType.FUTURES_CANDLES],
+            symbols_requested,
+            span_days_required=self.config.required_span_days,
+        )
         option_intraday_records = valid_by_type[HistoricalSourceType.OPTION_CONTRACT_CANDLES_INTRADAY]
+        option_eod_records = valid_by_type[HistoricalSourceType.OPTION_CONTRACT_EOD]
         option_intraday_ok = _has_symbol_coverage(
             valid_by_type[HistoricalSourceType.OPTION_CONTRACT_CANDLES_INTRADAY],
             symbols_requested,
             span_days_required=self.config.required_span_days,
         )
-        option_eod_ok = _has_symbol_coverage(valid_by_type[HistoricalSourceType.OPTION_CONTRACT_EOD], symbols_requested)
+        option_eod_ok = _has_symbol_coverage(option_eod_records, symbols_requested)
         runtime_ok = bool(valid_by_type[HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA])
-        hybrid_ok = (underlying_ok or futures_ok) and (option_intraday_ok or option_eod_ok or runtime_ok)
+        underlying_true_intraday_ok = underlying_long_span_ok or futures_long_span_ok
+        hybrid_ok = (underlying_ok or futures_ok) and bool(option_intraday_records or option_eod_records)
         proxy_ok = underlying_ok or futures_ok
         option_intraday_bidask_missing = any(
             ("bid" not in record.optional_fields_present or "ask" not in record.optional_fields_present)
@@ -59,10 +71,10 @@ class DataCatalog:
         modes = [
             ModeFeasibility(
                 mode=BacktestMode.TRUE_OPTIONS_INTRADAY,
-                feasible=bool(option_intraday_ok and (underlying_ok or futures_ok)),
+                feasible=bool(option_intraday_ok and underlying_true_intraday_ok),
                 reasons=_true_intraday_reasons(
-                    underlying_ok=underlying_ok,
-                    futures_ok=futures_ok,
+                    underlying_ok=underlying_long_span_ok,
+                    futures_ok=futures_long_span_ok,
                     option_intraday_ok=option_intraday_ok,
                     bidask_missing=option_intraday_bidask_missing,
                 ),
@@ -96,7 +108,6 @@ class DataCatalog:
                     HistoricalSourceType.FUTURES_CANDLES,
                     HistoricalSourceType.OPTION_CONTRACT_CANDLES_INTRADAY,
                     HistoricalSourceType.OPTION_CONTRACT_EOD,
-                    HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA,
                 ),
             ),
         ]
@@ -139,7 +150,17 @@ class DataCatalog:
         futures_records = valid_by_type[HistoricalSourceType.FUTURES_CANDLES]
         eod_records = valid_by_type[HistoricalSourceType.OPTION_CONTRACT_EOD]
         runtime_records = valid_by_type[HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA]
-        if intraday_records and any(record.eight_year_coverage for record in intraday_records) and (underlying_records or futures_records):
+        underlying_long_span_ok = _has_symbol_coverage(
+            underlying_records,
+            set(self.config.symbols),
+            span_days_required=self.config.required_span_days,
+        )
+        futures_long_span_ok = _has_symbol_coverage(
+            futures_records,
+            set(self.config.symbols),
+            span_days_required=self.config.required_span_days,
+        )
+        if intraday_records and any(record.eight_year_coverage for record in intraday_records) and (underlying_long_span_ok or futures_long_span_ok):
             bidask_complete = all("bid" in record.optional_fields_present and "ask" in record.optional_fields_present for record in intraday_records)
             vol_oi_complete = all("volume" in record.optional_fields_present and "oi" in record.optional_fields_present for record in intraday_records)
             if bidask_complete and vol_oi_complete:
@@ -227,8 +248,13 @@ def load_backtest_config(path: str | Path) -> BacktestDataConfig:
 
 def build_catalog_from_config(config: BacktestDataConfig) -> DataCatalog:
     records: list[HistoricalDataSourceRecord] = []
+    scanned_roots: set[tuple[HistoricalSourceType, str]] = set()
     for source_type, roots in config.data_roots.items():
         for root in roots:
+            key = (source_type, str(root.resolve()))
+            if key in scanned_roots:
+                continue
+            scanned_roots.add(key)
             provenance = "repo_runtime" if source_type == HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA else "user_csv"
             if "nse_reports" in str(root):
                 provenance = "nse_report"
@@ -241,6 +267,10 @@ def build_catalog_from_config(config: BacktestDataConfig) -> DataCatalog:
                 )
             )
     for runtime_root in config.runtime_replay_roots:
+        key = (HistoricalSourceType.RUNTIME_CAPTURED_LIVE_DATA, str(runtime_root.resolve()))
+        if key in scanned_roots:
+            continue
+        scanned_roots.add(key)
         records.extend(
             scan_source_path(
                 runtime_root,

@@ -14,7 +14,7 @@
     "OPTION_CONTRACT_CANDLES_INTRADAY": ["data/historical/options_intraday"],
     "OPTION_CONTRACT_EOD": ["data/historical/options_eod"],
     "OPTION_CHAIN_SNAPSHOT": ["data/historical/option_chain"],
-    "RUNTIME_CAPTURED_LIVE_DATA": [".runtime/db", ".runtime/logs"]
+    "RUNTIME_CAPTURED_LIVE_DATA": []
   },
-  "runtime_replay_roots": [".runtime/db", ".runtime/logs", "logs"]
+  "runtime_replay_roots": [".runtime/db", ".runtime/logs"]
 }
