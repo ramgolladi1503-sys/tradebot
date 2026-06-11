@@ -113,6 +113,34 @@ def test_missing_data_returns_need_user_historical_data(tmp_path: Path) -> None:
     assert report["data_readiness_score"] == 0
 
 
+def test_invalid_sources_produce_blocked_by_schema(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / "data/historical/index/broken.csv",
+        "timestamp,symbol,open,high,low,close",
+        [
+            "2026-01-01T09:15:00+05:30,NIFTY,1,2,0.5,1.5",
+        ],
+    )
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": ["data/historical/index"],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": []
+            }
+        },
+    )
+
+    report = build_diagnostics_report(load_backtest_config(tmp_path / "configs/backtest.json"))
+    assert report["phase_one_verdict"] == PhaseOneVerdict.BLOCKED_BY_DATA_SCHEMA.value
+    assert report["data_readiness_verdict"] == DataReadinessVerdict.BLOCKED_BY_SCHEMA.value
+
+
 def test_full_eight_year_intraday_data_unlocks_true_intraday_mode(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "data/historical/index/nifty.csv",
@@ -185,6 +213,39 @@ def test_underlying_only_unlocks_proxy_mode_only(tmp_path: Path) -> None:
     assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.UNDERLYING_SIGNAL_WITH_OPTION_PROXY.value] is True
     assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.TRUE_OPTIONS_INTRADAY.value] is False
     assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.HYBRID.value] is False
+
+
+def test_live_capture_only_unlocks_runtime_replay_only(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / ".runtime/logs/replay.csv",
+        "timestamp,symbol",
+        [
+            "2026-01-01T09:15:00+05:30,NIFTY",
+        ],
+    )
+    _write_config(
+        tmp_path / "configs/backtest.json",
+        {
+            "symbols": ["NIFTY"],
+            "data_roots": {
+                "UNDERLYING_INDEX_CANDLES": [],
+                "FUTURES_CANDLES": [],
+                "OPTION_CONTRACT_CANDLES_INTRADAY": [],
+                "OPTION_CONTRACT_EOD": [],
+                "OPTION_CHAIN_SNAPSHOT": [],
+                "RUNTIME_CAPTURED_LIVE_DATA": []
+            },
+            "runtime_replay_roots": [".runtime/logs"]
+        },
+    )
+
+    report = build_diagnostics_report(load_backtest_config(tmp_path / "configs/backtest.json"))
+    assert report["phase_one_verdict"] == PhaseOneVerdict.NEED_USER_HISTORICAL_DATA.value
+    assert report["data_readiness_verdict"] == DataReadinessVerdict.READY_FOR_RUNTIME_REPLAY_ONLY.value
+    assert report["data_readiness_score"] == 20
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.LIVE_CAPTURE_REPLAY.value] is True
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.OPTIONS_EOD.value] is False
+    assert report["questions"]["which_backtest_modes_are_feasible"][BacktestMode.UNDERLYING_SIGNAL_WITH_OPTION_PROXY.value] is False
 
 
 def test_missing_bid_ask_reduces_readiness_score_without_blocking_intraday(tmp_path: Path) -> None:

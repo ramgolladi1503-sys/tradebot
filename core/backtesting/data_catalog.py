@@ -130,14 +130,17 @@ class DataCatalog:
         return PhaseOneVerdict.BLOCKED_BY_DATA_SCHEMA if invalid_sources else PhaseOneVerdict.NEED_USER_HISTORICAL_DATA
 
     def readiness_verdict(self) -> DataReadinessVerdict:
-        phase = self.phase_one_verdict()
         modes = {item.mode: item for item in self.mode_feasibility()}
-        if phase == PhaseOneVerdict.READY_FOR_PHASE_2 and modes[BacktestMode.TRUE_OPTIONS_INTRADAY].feasible:
+        valid_sources = self.available_sources()
+        invalid_sources = self.invalid_sources()
+        if modes[BacktestMode.TRUE_OPTIONS_INTRADAY].feasible:
             return DataReadinessVerdict.READY_FOR_TRUE_INTRADAY_OPTIONS_BACKTEST
-        if phase == PhaseOneVerdict.BLOCKED_BY_DATA_SCHEMA:
-            return DataReadinessVerdict.BLOCKED_BY_SCHEMA
-        if any(item.feasible for item in modes.values()):
+        if modes[BacktestMode.OPTIONS_EOD].feasible or modes[BacktestMode.UNDERLYING_SIGNAL_WITH_OPTION_PROXY].feasible:
             return DataReadinessVerdict.READY_FOR_EOD_OR_PROXY_ONLY
+        if modes[BacktestMode.LIVE_CAPTURE_REPLAY].feasible:
+            return DataReadinessVerdict.READY_FOR_RUNTIME_REPLAY_ONLY
+        if invalid_sources and not valid_sources:
+            return DataReadinessVerdict.BLOCKED_BY_SCHEMA
         return DataReadinessVerdict.NEED_USER_HISTORICAL_DATA
 
     def data_readiness_score(self) -> int:
@@ -401,6 +404,8 @@ def _recommended_next_action(*, readiness_verdict: str, blocked_modes: list[str]
         return "true_intraday_options_history_present_continue_to_phase_2"
     if readiness_verdict == DataReadinessVerdict.READY_FOR_EOD_OR_PROXY_ONLY.value:
         return "collect_expired_intraday_options_history_if_true_intraday_edge_is_required"
+    if readiness_verdict == DataReadinessVerdict.READY_FOR_RUNTIME_REPLAY_ONLY.value:
+        return "runtime_replay_is_available_but_real_historical_options_or_underlying_data_is_still_required"
     if readiness_verdict == DataReadinessVerdict.BLOCKED_BY_SCHEMA.value:
         return "fix_schema_errors_in_blocked_sources"
     if BacktestMode.TRUE_OPTIONS_INTRADAY.value in blocked_modes:

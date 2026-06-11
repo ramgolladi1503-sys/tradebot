@@ -77,6 +77,14 @@ To unlock `TRUE_OPTIONS_INTRADAY`, the operator should provide:
 
 If true intraday options are missing, the system must remain fail-closed and report `INCONCLUSIVE_FOR_REAL_INTRADAY_OPTIONS` or `NEED_USER_HISTORICAL_DATA`.
 
+## Readiness verdict interpretation
+
+- `READY_FOR_TRUE_INTRADAY_OPTIONS_BACKTEST`: real intraday options plus required underlying support are feasible
+- `READY_FOR_EOD_OR_PROXY_ONLY`: either `OPTIONS_EOD` or `UNDERLYING_SIGNAL_WITH_OPTION_PROXY` is feasible
+- `READY_FOR_RUNTIME_REPLAY_ONLY`: only `LIVE_CAPTURE_REPLAY` is feasible
+- `BLOCKED_BY_SCHEMA`: sources exist, but required fields are missing or invalid
+- `NEED_USER_HISTORICAL_DATA`: no qualifying sources are available
+
 ## Folder layout
 
 - `data/historical/index/`

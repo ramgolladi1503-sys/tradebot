@@ -25,5 +25,6 @@ Collect operator-verified local historical data without assuming broker support 
 
 - `READY_FOR_TRUE_INTRADAY_OPTIONS_BACKTEST`
 - `READY_FOR_EOD_OR_PROXY_ONLY`
+- `READY_FOR_RUNTIME_REPLAY_ONLY`
 - `NEED_USER_HISTORICAL_DATA`
 - `BLOCKED_BY_SCHEMA`
