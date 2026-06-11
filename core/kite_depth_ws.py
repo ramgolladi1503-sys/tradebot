@@ -1464,12 +1464,15 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
                 restart_attempted=False,
                 reconnect_blocked_reason=None,
             )
-            _schedule_restart_depth_ws(
-                reason=f"soft_reconnect_failed:{source}",
-                ignore_cooldown=False,
-                force_full_restart=True,
-                source=f"{source}:escalate",
-            )
+            if (not _reconnect_recovery_blocked_active()
+                    and not feed_breaker_tripped()
+                    and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
+                _schedule_restart_depth_ws(
+                    reason=f"ws1006_recovery_full:{source}",
+                    ignore_cooldown=True,
+                    force_full_restart=True,
+                    source="ws1006_recovery",
+                )
     else:
         _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
     return True
@@ -3072,6 +3075,7 @@ def _persist_runtime_snapshot_row(
     auto_reconnect_disabled: bool | None = None,
     internal_retry_error: str | None = None,
     internal_retry_reason: str | None = None,
+    process_restart_required: bool | None = None,
 ) -> None:
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
@@ -3210,7 +3214,7 @@ def _persist_runtime_snapshot_row(
     else:
         payload.update(
             {
-                "process_restart_required": False,
+                "process_restart_required": bool(process_restart_required) if process_restart_required is not None else False,
                 "recovery_blocked": False,
                 "restart_attempt_allowed": bool(restart_attempt_allowed) if restart_attempt_allowed is not None else (state_text not in {"STOPPED", "AUTH_BLOCKED", "IMPORT_MISSING"}),
                 "restart_attempted": bool(restart_attempted) if restart_attempted is not None else bool(
@@ -4923,73 +4927,18 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         _persist_runtime_snapshot_row(
             ws_connected=False,
             source=f"restart_depth_ws:begin:{reason}",
-            runtime_state="RESTARTING",
+            runtime_state="RESTART_REQUIRED",
             last_error=str(reason),
             intended_tokens_count=len(tokens),
             restart_attempt_allowed=True,
             restart_attempted=True,
+            process_restart_required=True,
         )
 
-        stop_depth_ws(reason=f"restart:{reason}")
+        import os
+        _log_ws("feed_restart_subprocess_exit", {"reason": reason})
+        os._exit(1)
 
-        # A restart stop is not a manual/operator stop. Clear the stop latch before
-        # constructing the replacement ticker so close callbacks from the old ticker
-        # cannot leave the new feed in manual-stop mode.
-        _STOP_REQUESTED = False
-
-        try:
-            _log_ws("feed_restart_attempt", {"reason": reason})
-            started = start_depth_ws(tokens, profile_verified=False, skip_guard=True)
-        except Exception as exc:
-            _log_ws("feed_restart_failed", {"reason": reason, "error": str(exc)})
-            _RUNTIME_STATE = "RESTART_FAILED"
-            _LAST_RUNTIME_ERROR = f"start_exception:{type(exc).__name__}:{exc}"[:1000]
-            _persist_runtime_snapshot_row(
-                ws_connected=False,
-                source=f"restart_depth_ws:start_exception:{reason}",
-                runtime_state="RESTART_FAILED",
-                last_error=_LAST_RUNTIME_ERROR,
-                intended_tokens_count=len(tokens),
-            )
-            _log_ws("FEED_FULL_RESTART_FAILED", {"reason": reason, "error": str(exc)})
-            return False
-
-        if started is False:
-            _log_ws("feed_restart_failed", {"reason": reason, "error": "start_returned_false"})
-            _RUNTIME_STATE = "RESTART_FAILED"
-            _LAST_RUNTIME_ERROR = f"start_returned_false:{reason}"[:1000]
-            _persist_runtime_snapshot_row(
-                ws_connected=False,
-                source=f"restart_depth_ws:start_failed:{reason}",
-                runtime_state="RESTART_FAILED",
-                last_error=_LAST_RUNTIME_ERROR,
-                intended_tokens_count=len(tokens),
-            )
-            _log_ws(
-                "FEED_FULL_RESTART_FAILED_AFTER_STOP",
-                {"reason": reason, "tokens": len(tokens), **selection_payload},
-            )
-            return False
-
-        _log_ws("feed_restart_success", {"reason": reason})
-
-        _persist_runtime_snapshot_row(
-            ws_connected=None,
-            source=f"restart_depth_ws:start_requested:{reason}",
-            runtime_state="STARTING",
-            last_error="",
-            intended_tokens_count=len(tokens),
-        )
-        _LAST_FULL_RESTART_EPOCH = now
-        _FULL_RESTARTS.append(now)
-        _STALE_STRIKES = 0
-        _log_ws("FEED_FULL_RESTART_OK", {"reason": reason, "tokens": len(tokens), **selection_payload})
-        _begin_feed_restart_verification(
-            reason=str(reason or ""),
-            start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
-            now_epoch=float(now),
-        )
-        return True
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
