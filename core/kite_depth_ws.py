@@ -1436,6 +1436,38 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
         restart_attempted=True,
         reconnect_blocked_reason=None,
     )
+    if not getattr(cfg, "DEPTH_WS_ALLOW_SOFT_RECONNECTS", True):
+        _log_ws(
+            "FEED_WS_1006_RECOVERY_DELEGATED_TO_SUBPROCESS",
+            {
+                "source": source,
+                "code": code,
+                "reason": reason_text,
+            },
+        )
+        _sync_ws1006_recovery_state_from_coordinator()
+        _persist_runtime_snapshot_row(
+            ws_connected=False,
+            source=f"{source}:soft_reconnect_disabled",
+            runtime_state="DEGRADED",
+            last_error=_LAST_RUNTIME_ERROR,
+            disconnected_code=code if code is None else int(code),
+            disconnected_reason=reason_text,
+            restart_attempt_allowed=True,
+            restart_attempted=False,
+            reconnect_blocked_reason=None,
+        )
+        if (not _reconnect_recovery_blocked_active()
+                and not feed_breaker_tripped()
+                and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
+            _schedule_restart_depth_ws(
+                reason=f"ws1006_recovery_full:{source}",
+                ignore_cooldown=True,
+                force_full_restart=True,
+                source="ws1006_recovery",
+            )
+        return True
+
     if _use_internal_reconnect():
         soft_ok = _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
         if not soft_ok:

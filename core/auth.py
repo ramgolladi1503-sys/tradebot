@@ -244,7 +244,12 @@ def get_kite_ticker(
         _caller_module_name(),
     )
     try:
-        ticker = ticker_cls(resolved_api_key, resolved_access_token, debug=debug)
+        ticker = ticker_cls(
+            resolved_api_key,
+            resolved_access_token,
+            debug=debug,
+            reconnect=False,
+        )
     except Exception as exc:
         record_feed_startup_event(
             "KITE_TICKER_CREATE_FAILED",
