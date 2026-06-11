@@ -10477,14 +10477,15 @@ class TradeBuilder:
                         exec_mode in {"SIM", "PAPER"}
                         and reject_reason_ctx in {"trend_vwap_fallback"}
                     ):
-                        softened = self._soften_reject_to_candidate(
-                            market_data=market_data,
-                            reject_ctx=dict(self._reject_ctx or {}),
-                            strategy_tag=candidate_strategy_tag,
-                            direction=direction,
-                        )
-                        if softened is not None:
-                            return softened
+                        if allow_fallbacks:
+                            softened = self._soften_reject_to_candidate(
+                                market_data=market_data,
+                                reject_ctx=dict(self._reject_ctx or {}),
+                                strategy_tag=candidate_strategy_tag,
+                                direction=direction,
+                            )
+                            if softened is not None:
+                                return softened
                     return None
             # Quick fallback: synthesize ATM option if chain is empty
             if quick_mode:
@@ -10829,14 +10830,15 @@ class TradeBuilder:
                 exec_mode in {"SIM", "PAPER", "OFFHOURS"}
                 and reject_reason_ctx == "trend_vwap_fallback"
             ):
-                softened = self._soften_reject_to_candidate(
-                    market_data=market_data,
-                    reject_ctx=dict(self._reject_ctx or {}),
-                    strategy_tag=candidate_strategy_tag,
-                    direction=direction,
-                )
-                if softened is not None:
-                    return softened
+                if allow_fallbacks:
+                    softened = self._soften_reject_to_candidate(
+                        market_data=market_data,
+                        reject_ctx=dict(self._reject_ctx or {}),
+                        strategy_tag=candidate_strategy_tag,
+                        direction=direction,
+                    )
+                    if softened is not None:
+                        return softened
             return None
 
         best_trade, ranked_candidates = select_best_opportunity(
@@ -10941,14 +10943,14 @@ class TradeBuilder:
                             top_ranked = (self._last_ranked_candidates or [None])[0]
                         except Exception:
                             top_ranked = None
-                        if top_ranked is not None:
+                        if top_ranked is not None and allow_fallbacks:
                             best_trade = self._soften_reject_to_candidate(
                                 market_data=market_data or {},
                                 reject_ctx=dict(self._reject_ctx or {}),
                                 strategy_tag=strategy_tag,
                                 direction=direction,
                             )
-                        if best_trade is None and reject_reason not in {"no_candidates_survived", "no_signal"}:
+                        if best_trade is None and reject_reason not in {"no_candidates_survived", "no_signal"} and allow_fallbacks:
                             fallback_ctx = dict(self._reject_ctx or {})
                             fallback_ctx["reason"] = "no_candidates_survived"
                             best_trade = self._soften_reject_to_candidate(

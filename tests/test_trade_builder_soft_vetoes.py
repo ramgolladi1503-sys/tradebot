@@ -2173,7 +2173,7 @@ def test_build_with_trace_softens_no_candidates_survived_in_sim(monkeypatch):
             "option_chain": _opportunity_market_data(symbol="NIFTY")["option_chain"],
         },
         quick_mode=False,
-        allow_fallbacks=False,
+        allow_fallbacks=True,
         allow_baseline=False,
     )
 
