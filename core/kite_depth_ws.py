@@ -4924,20 +4924,91 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         _log_ws("FEED_FULL_RESTART_BEGIN", {"reason": reason, "tokens": len(tokens), **selection_payload})
         _RUNTIME_STATE = "RESTARTING"
         _LAST_RUNTIME_ERROR = str(reason)
-        _persist_runtime_snapshot_row(
-            ws_connected=False,
-            source=f"restart_depth_ws:begin:{reason}",
-            runtime_state="RESTART_REQUIRED",
-            last_error=str(reason),
-            intended_tokens_count=len(tokens),
-            restart_attempt_allowed=True,
-            restart_attempted=True,
-            process_restart_required=True,
-        )
+        import multiprocessing
+        in_child_process = multiprocessing.current_process().name != "MainProcess"
+        
+        if getattr(cfg, "FEED_USE_SUBPROCESS", False) and in_child_process:
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"restart_depth_ws:begin:{reason}",
+                runtime_state="RESTART_REQUIRED",
+                last_error=str(reason),
+                intended_tokens_count=len(tokens),
+                restart_attempt_allowed=True,
+                restart_attempted=True,
+                process_restart_required=True,
+            )
+            import os
+            _log_ws("feed_restart_subprocess_exit", {"reason": reason})
+            os._exit(1)
+        else:
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"restart_depth_ws:begin:{reason}",
+                runtime_state="RESTARTING",
+                last_error=str(reason),
+                intended_tokens_count=len(tokens),
+                restart_attempt_allowed=True,
+                restart_attempted=True,
+            )
 
-        import os
-        _log_ws("feed_restart_subprocess_exit", {"reason": reason})
-        os._exit(1)
+            stop_depth_ws(reason=f"restart:{reason}")
+
+            _STOP_REQUESTED = False
+
+            try:
+                _log_ws("feed_restart_attempt", {"reason": reason})
+                started = start_depth_ws(tokens, profile_verified=False, skip_guard=True)
+            except Exception as exc:
+                _log_ws("feed_restart_failed", {"reason": reason, "error": str(exc)})
+                _RUNTIME_STATE = "RESTART_FAILED"
+                _LAST_RUNTIME_ERROR = f"start_exception:{type(exc).__name__}:{exc}"[:1000]
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"restart_depth_ws:start_exception:{reason}",
+                    runtime_state="RESTART_FAILED",
+                    last_error=_LAST_RUNTIME_ERROR,
+                    intended_tokens_count=len(tokens),
+                )
+                _log_ws("FEED_FULL_RESTART_FAILED", {"reason": reason, "error": str(exc)})
+                return False
+
+            if started is False:
+                _log_ws("feed_restart_failed", {"reason": reason, "error": "start_returned_false"})
+                _RUNTIME_STATE = "RESTART_FAILED"
+                _LAST_RUNTIME_ERROR = f"start_returned_false:{reason}"[:1000]
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"restart_depth_ws:start_failed:{reason}",
+                    runtime_state="RESTART_FAILED",
+                    last_error=_LAST_RUNTIME_ERROR,
+                    intended_tokens_count=len(tokens),
+                )
+                _log_ws(
+                    "FEED_FULL_RESTART_FAILED_AFTER_STOP",
+                    {"reason": reason, "tokens": len(tokens), **selection_payload},
+                )
+                return False
+
+            _log_ws("feed_restart_success", {"reason": reason})
+
+            _persist_runtime_snapshot_row(
+                ws_connected=None,
+                source=f"restart_depth_ws:start_requested:{reason}",
+                runtime_state="STARTING",
+                last_error="",
+                intended_tokens_count=len(tokens),
+            )
+            _LAST_FULL_RESTART_EPOCH = now
+            _FULL_RESTARTS.append(now)
+            _STALE_STRIKES = 0
+            _log_ws("FEED_FULL_RESTART_OK", {"reason": reason, "tokens": len(tokens), **selection_payload})
+            _begin_feed_restart_verification(
+                reason=str(reason or ""),
+                start_epoch=float(_DEPTH_WS_START_EPOCH or 0.0),
+                now_epoch=float(now),
+            )
+            return True
 
 
 
