@@ -87,6 +87,7 @@ def _patch_start_depth_ws_dependencies(monkeypatch, *, runtime_snapshot: dict):
     monkeypatch.setattr(ws, "build_depth_subscription_tokens", lambda symbols: ([101], [{"symbol": "NIFTY", "count": 1}]))
     monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: runtime_snapshot)
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_USE_SUBPROCESS", False, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_SNAPSHOT_MAX_AGE_SEC", 30.0, raising=False)
     return orchestrator_mod, start_mock
