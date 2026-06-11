@@ -105,11 +105,7 @@ def test_on_connect_forces_subscribe(monkeypatch):
     ticker.subscribed = []
     ticker.mode_tokens = []
 
-    callback = getattr(ticker, "on_open", None) or getattr(ticker, "on_connect")
-    try:
-        callback(ticker, {"event": "unit"})
-    except TypeError:
-        callback(ticker)
+    ticker.on_connect(ticker, {"event": "unit"})
 
     assert ticker.subscribed == [101, 102, 103]
     assert ticker.mode_tokens == [101, 102, 103]
