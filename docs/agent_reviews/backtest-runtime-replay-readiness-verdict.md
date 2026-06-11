@@ -26,7 +26,7 @@ Out of scope:
 - Live feed, live order, execution, or risk gate changes.
 - Historical data acquisition.
 
-## Grill Me
+## Grill Me Review
 
 Question: Why is this patch needed?
 
@@ -44,7 +44,7 @@ Question: Does this PR unlock true intraday options backtesting?
 
 Answer: No. `TRUE_OPTIONS_INTRADAY` still requires valid historical intraday option contract data.
 
-## Hermes
+## Hermes Review
 
 Traceability:
 
@@ -53,7 +53,7 @@ Traceability:
 - Safety property: the classifier no longer overstates available historical evidence.
 - Verification: tests cover true intraday, EOD/proxy, runtime replay only, invalid schema, and no-data cases.
 
-## GSD
+## GSD Review
 
 Changed files:
 
@@ -75,7 +75,7 @@ Implementation:
   4. invalid-only sources -> `BLOCKED_BY_SCHEMA`
   5. otherwise -> `NEED_USER_HISTORICAL_DATA`
 
-## QA/Safety
+## QA / Safety Review
 
 Safety checks:
 
