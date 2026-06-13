@@ -17,11 +17,13 @@ class EliteBacktestConfig:
     vol_target: float = 0.002
     entry_window: int = 3
     horizon: int = 5
-    slippage_bps: float = 5.0
+    slippage_bps: float = 1.0
     fee_per_trade: float = 0.0
-    spread_bps: float = 5.0
+    spread_bps: float = 1.0
     use_synth_chain: bool = True
     starting_capital: float = 100000.0
+    target_atr_mult: float = 1.5
+    stop_atr_mult: float = 1.0
 
 
 class VectorizedBacktestEngine:
