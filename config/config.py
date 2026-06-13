@@ -3319,8 +3319,8 @@ AUTO_FLATTEN_ON_DRIFT = os.getenv("AUTO_FLATTEN_ON_DRIFT", "false").lower() == "
 DRIFT_HALT_ENTRIES_ON_DETECT = os.getenv("DRIFT_HALT_ENTRIES_ON_DETECT", "true").lower() == "true"
 # Latency budget guard.
 LATENCY_MONITOR_WINDOW_SIZE = int(os.getenv("LATENCY_MONITOR_WINDOW_SIZE", "120"))
-MAX_P95_TOTAL_MS = float(os.getenv("MAX_P95_TOTAL_MS", "120"))
-MAX_P95_DECISION_MS = float(os.getenv("MAX_P95_DECISION_MS", "80"))
+MAX_P95_TOTAL_MS = float(os.getenv("MAX_P95_TOTAL_MS", "600"))
+MAX_P95_DECISION_MS = float(os.getenv("MAX_P95_DECISION_MS", "300"))
 SUSTAINED_WINDOWS = int(os.getenv("SUSTAINED_WINDOWS", "3"))
 LATENCY_GUARD_RECOVERY_WINDOWS = int(
     os.getenv("LATENCY_GUARD_RECOVERY_WINDOWS", str(SUSTAINED_WINDOWS))

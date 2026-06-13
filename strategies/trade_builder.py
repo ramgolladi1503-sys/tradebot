@@ -6402,9 +6402,9 @@ class TradeBuilder:
                 )
         if has_mean_signal:
             mean_quality = self._clamp_confidence(
-                0.32
-                + min(0.44, mean_reversion_strength * 0.16)
-                + (0.08 if mean_signal is not None else 0.0),
+                0.40
+                + min(0.40, mean_reversion_strength * 0.20)
+                + (0.10 if mean_signal is not None else 0.0),
             ) or 0.4
             mean_spec = {
                 "strategy": "OPP_MEAN_REVERT",
