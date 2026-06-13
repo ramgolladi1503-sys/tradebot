@@ -24,6 +24,10 @@ class EliteBacktestConfig:
     starting_capital: float = 100000.0
     target_atr_mult: float = 1.5
     stop_atr_mult: float = 1.0
+    allowed_time_start: str = "09:15"
+    allowed_time_end: str = "15:30"
+    trailing_stop_activation_mult: float = 0.0
+    trailing_stop_trail_mult: float = 0.0
 
 
 class VectorizedBacktestEngine:
@@ -92,23 +96,66 @@ class VectorizedBacktestEngine:
 
             entry_fill = self._apply_cost(entry_price, side)
             
-            # Simple threshold checks on arrays
-            hit_target = np.any(future_highs >= target) if side == "BUY" else np.any(future_lows <= target)
-            hit_stop = np.any(future_lows <= stop_loss) if side == "BUY" else np.any(future_highs >= stop_loss)
+            ts_act_mult = self.config.trailing_stop_activation_mult
+            ts_trail_mult = self.config.trailing_stop_trail_mult
             
             outcome = "TIMEOUT"
             exit_price = future_closes[-1]
             
-            if hit_target and not hit_stop:
-                outcome = "TARGET"
-                exit_price = target
-            elif hit_stop and not hit_target:
-                outcome = "STOP"
-                exit_price = stop_loss
-            elif hit_stop and hit_target:
-                # Collision: assume stop hit first in pessimistic model
-                outcome = "STOP"
-                exit_price = stop_loss
+            if ts_act_mult > 0 and ts_trail_mult > 0:
+                # We need ATR to calculate absolute trailing levels
+                # We can approximate ATR from the distance of original stop to entry
+                base_atr = abs(entry_price - stop_loss) / max(self.config.stop_atr_mult, 0.0001)
+                activation_dist = base_atr * ts_act_mult
+                trail_dist = base_atr * ts_trail_mult
+                
+                current_stop = stop_loss
+                if side == "BUY":
+                    activation_price = entry_price + activation_dist
+                    for i in range(len(future_highs)):
+                        h, l = future_highs[i], future_lows[i]
+                        if l <= current_stop:
+                            outcome = "STOP"
+                            exit_price = current_stop
+                            break
+                        if h >= target:
+                            outcome = "TARGET"
+                            exit_price = target
+                            break
+                        if h >= activation_price:
+                            new_stop = h - trail_dist
+                            if new_stop > current_stop:
+                                current_stop = new_stop
+                else:
+                    activation_price = entry_price - activation_dist
+                    for i in range(len(future_lows)):
+                        h, l = future_highs[i], future_lows[i]
+                        if h >= current_stop:
+                            outcome = "STOP"
+                            exit_price = current_stop
+                            break
+                        if l <= target:
+                            outcome = "TARGET"
+                            exit_price = target
+                            break
+                        if l <= activation_price:
+                            new_stop = l + trail_dist
+                            if new_stop < current_stop:
+                                current_stop = new_stop
+            else:
+                # Original fast evaluation
+                hit_target = np.any(future_highs >= target) if side == "BUY" else np.any(future_lows <= target)
+                hit_stop = np.any(future_lows <= stop_loss) if side == "BUY" else np.any(future_highs >= stop_loss)
+                
+                if hit_target and not hit_stop:
+                    outcome = "TARGET"
+                    exit_price = target
+                elif hit_stop and not hit_target:
+                    outcome = "STOP"
+                    exit_price = stop_loss
+                elif hit_stop and hit_target:
+                    outcome = "STOP"
+                    exit_price = stop_loss
                 
             exit_fill = self._apply_cost(exit_price, "SELL" if side == "BUY" else "BUY")
             

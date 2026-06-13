@@ -11,15 +11,19 @@ def evaluate_params(args):
     """
     Evaluates a specific parameter combination.
     """
-    data, horizon, sl_bps, target_atr, stop_atr = args
+    data, horizon, sl_bps, target_atr, stop_atr, ts_act, ts_trail = args
     
     config = EliteBacktestConfig(
         use_synth_chain=False,
         horizon=horizon,
         slippage_bps=sl_bps,
-        spread_bps=sl_bps,  # mirroring slippage to spread for simplicity in grid
+        spread_bps=sl_bps,
         target_atr_mult=target_atr,
-        stop_atr_mult=stop_atr
+        stop_atr_mult=stop_atr,
+        allowed_time_start="09:15",
+        allowed_time_end="15:30",
+        trailing_stop_activation_mult=ts_act,
+        trailing_stop_trail_mult=ts_trail
     )
     
     engine = VectorizedBacktestEngine(data, config)
@@ -28,22 +32,24 @@ def evaluate_params(args):
     results = engine.generate_signals_vectorized()
     
     if results.empty:
-        return (horizon, sl_bps, target_atr, stop_atr, {"error": "No trades executed"})
+        return (horizon, sl_bps, target_atr, stop_atr, ts_act, ts_trail, {"error": "No trades executed"})
         
     metrics = generate_tearsheet(results)
-    return (horizon, sl_bps, target_atr, stop_atr, metrics)
+    return (horizon, sl_bps, target_atr, stop_atr, ts_act, ts_trail, metrics)
 
 def run_grid_search(data: pd.DataFrame):
     """
     Spawns multiple processes to evaluate backtest parameters concurrently.
     """
-    horizons = [10, 15]
-    slippage_bps = [0.5, 1.0, 1.5]
-    target_atrs = [1.5, 2.5, 4.0]
-    stop_atrs = [0.5, 1.0]
+    horizons = [15]
+    slippage_bps = [1.5]
+    target_atrs = [3.0, 4.0]
+    stop_atrs = [1.0]
+    ts_act_mults = [0.0, 1.5, 2.0]
+    ts_trail_mults = [0.5, 1.0]
     
-    param_grid = list(product(horizons, slippage_bps, target_atrs, stop_atrs))
-    tasks = [(data, hz, sl, tgt, stp) for hz, sl, tgt, stp in param_grid]
+    param_grid = list(product(horizons, slippage_bps, target_atrs, stop_atrs, ts_act_mults, ts_trail_mults))
+    tasks = [(data, hz, sl, tgt, stp, ts_act, ts_trail) for hz, sl, tgt, stp, ts_act, ts_trail in param_grid]
     
     print(f"Starting Elite Grid Search for {len(param_grid)} permutations on {len(data)} rows...")
     start_time = time.time()
@@ -59,17 +65,17 @@ def run_grid_search(data: pd.DataFrame):
     best_sortino = -float('inf')
     best_metrics = None
     
-    for hz, sl, tgt, stp, metrics in results:
+    for hz, sl, tgt, stp, ts_act, ts_trail, metrics in results:
         if "error" in metrics:
             continue
         sortino = metrics.get("sortino_ratio_per_trade", 0)
         if sortino > best_sortino:
             best_sortino = sortino
-            best_params = (hz, sl, tgt, stp)
+            best_params = (hz, sl, tgt, stp, ts_act, ts_trail)
             best_metrics = metrics
             
     if best_params:
-        print(f"\nOptimal Parameters found: Horizon={best_params[0]}, Slippage={best_params[1]} bps, Target ATR={best_params[2]}x, Stop ATR={best_params[3]}x")
+        print(f"\nOptimal Parameters found: Horizon={best_params[0]}, Slippage={best_params[1]} bps, Target ATR={best_params[2]}x, Stop ATR={best_params[3]}x, TS Act={best_params[4]}x, TS Trail={best_params[5]}x")
         print_tearsheet(best_metrics)
     else:
         print("No profitable parameters found.")
