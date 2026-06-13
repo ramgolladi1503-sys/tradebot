@@ -11,23 +11,23 @@ Generated from local repo-forensics scanner output.
 
 | Metric | Count |
 |---|---:|
-| Total files | 1821 |
-| Hard failures | 113 |
-| Unknowns | 59 |
-| Warnings | 135 |
+| Total files | 4433 |
+| Hard failures | 141 |
+| Unknowns | 98 |
+| Warnings | 132 |
 | Missing required entrypoints | 0 |
 | Missing critical modules | 0 |
-| Runtime flow failures | 5 |
-| Runtime flow unknowns | 4 |
-| Safety critical | 16 |
-| Evidence high | 88 |
+| Runtime flow failures | 0 |
+| Runtime flow unknowns | 0 |
+| Safety critical | 21 |
+| Evidence high | 116 |
 | Drift high | 0 |
 
 ### Scope Guard
 
 Verdict: `BLOCKED`
 
-- Hard failures: `113`.
+- Hard failures: `141`.
 - Skipped checks: `none`.
 - Scanner output is static/read-only evidence only.
 
@@ -36,9 +36,9 @@ Verdict: `BLOCKED`
 Verdict: `BLOCKED`
 
 - Weakest assumption: Hard failures exist; do not treat this PR as proven.
-- Fake-confidence tests: `130`.
-- Unknown tests: `11`.
-- Runtime flow unknowns: `4`.
+- Fake-confidence tests: `115`.
+- Unknown tests: `9`.
+- Runtime flow unknowns: `0`.
 - Critical caller unreferenced: `1`.
 
 ### Hermes Review
@@ -47,8 +47,8 @@ Verdict: `BLOCKED`
 
 - Missing required entrypoints: `0`.
 - Missing critical modules: `0`.
-- Safety critical: `16`.
-- Safety high: `38`.
+- Safety critical: `21`.
+- Safety high: `81`.
 - Safety unknown: `0`.
 - No broker/live/order action was executed by the scanner.
 
@@ -57,9 +57,9 @@ Verdict: `BLOCKED`
 Verdict: `BLOCKED`
 
 - Report path: `docs/repo_forensics/reports/baseline_latest.md`.
-- Hard failures: `113`.
-- Unknowns: `59`.
-- Warnings: `135`.
+- Hard failures: `141`.
+- Unknowns: `98`.
+- Warnings: `132`.
 - Next action: Fix hard failures or explicitly defer them with evidence before merge.
 
 ### Scope Guard
