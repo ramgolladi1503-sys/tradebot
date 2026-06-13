@@ -338,7 +338,6 @@ agent_parameters:
       - .runtime/logs
       - .runtime/reports
       - runtime/analytics
-      - docs/repo_forensics/reports
       - docs/agent_reviews
     weak_evidence_patterns:
       - "status ok only"
