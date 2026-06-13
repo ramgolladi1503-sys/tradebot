@@ -24,7 +24,7 @@ class StubPredictor:
 def _market_data():
     return {
         "symbol": "NIFTY",
-        "ltp": 25000.0,
+        "ltp": 25100.0,
         "vwap": 24950.0,
         "vwap_slope": 0.1,
         "atr": 50.0,

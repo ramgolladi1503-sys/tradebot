@@ -28,24 +28,24 @@ def test_nifty_intraday_candidate_survives_moderate_imperfection():
     assert debug["candidates_scored"] == 1
 
 
-def test_ensemble_scores_soft_trend_mismatch_and_records_debug():
+def test_ensemble_requires_strict_trend_and_records_debug():
     market_data = {
         "regime": "TREND",
-        "ltp": 100.25,
+        "ltp": 100.30,
         "vwap": 100.0,
-        "vwap_slope": -0.01,
+        "vwap_slope": 0.01,
         "rsi_mom": 0.1,
         "atr": 0.6,
         "orb_high": 101.0,
         "orb_low": 99.0,
-        "vol_z": 0.3,
+        "vol_z": 0.6,
     }
 
     signal = ensemble.ensemble_signal(market_data)
 
     assert signal is not None
     assert signal.direction == "BUY_CALL"
-    assert "soft slope mismatch" in signal.reason
+    assert "VWAP strong trend up" in signal.reason
     stats = market_data["strategy_debug"]["ensemble"]
     assert stats["candidates_considered"] >= 1
     assert stats["candidates_scored"] >= 1

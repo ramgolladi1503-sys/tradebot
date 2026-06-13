@@ -53,18 +53,12 @@ def trend_vwap_signal(ltp, vwap, vwap_slope, atr):
         return None
     trend = (ltp - vwap) / vwap
     slope = float(vwap_slope or 0.0)
-    if trend > 0.0015 and slope >= -0.02:
-        score = min(1.0, 0.46 + abs(trend) * 50)
-        if slope <= 0:
-            score -= 0.07
-            return StrategySignal("BUY_CALL", max(0.05, score), "VWAP trend up (soft slope mismatch)")
-        return StrategySignal("BUY_CALL", score, "VWAP trend up")
-    if trend < -0.0015 and slope <= 0.02:
-        score = min(1.0, 0.46 + abs(trend) * 50)
-        if slope >= 0:
-            score -= 0.07
-            return StrategySignal("BUY_PUT", max(0.05, score), "VWAP trend down (soft slope mismatch)")
-        return StrategySignal("BUY_PUT", score, "VWAP trend down")
+    if trend > 0.0025 and slope > 0.0:
+        score = min(1.0, 0.50 + abs(trend) * 100)
+        return StrategySignal("BUY_CALL", score, "VWAP strong trend up")
+    if trend < -0.0025 and slope < 0.0:
+        score = min(1.0, 0.50 + abs(trend) * 100)
+        return StrategySignal("BUY_PUT", score, "VWAP strong trend down")
     return None
 
 def mean_reversion_signal(ltp, vwap, rsi_mom):
@@ -72,53 +66,43 @@ def mean_reversion_signal(ltp, vwap, rsi_mom):
         return None
     dev = (ltp - vwap) / vwap
     rsi = float(rsi_mom or 0.0)
-    if dev > 0.003:
-        score = min(1.0, 0.38 + abs(dev) * 40)
-        if rsi < 0:
-            return StrategySignal("BUY_PUT", score, "Mean reversion down")
-        if rsi <= 0.2:
-            return StrategySignal("BUY_PUT", max(0.05, score - 0.08), "Mean reversion down (soft RSI confirm)")
-    if dev < -0.003:
-        score = min(1.0, 0.38 + abs(dev) * 40)
-        if rsi > 0:
-            return StrategySignal("BUY_CALL", score, "Mean reversion up")
-        if rsi >= -0.2:
-            return StrategySignal("BUY_CALL", max(0.05, score - 0.08), "Mean reversion up (soft RSI confirm)")
+    if dev > 0.005:
+        score = min(1.0, 0.45 + abs(dev) * 50)
+        if rsi < -0.3:
+            return StrategySignal("BUY_PUT", score, "Mean reversion down (exhaustion)")
+    if dev < -0.005:
+        score = min(1.0, 0.45 + abs(dev) * 50)
+        if rsi > 0.3:
+            return StrategySignal("BUY_CALL", score, "Mean reversion up (exhaustion)")
     return None
 
 def orb_breakout_signal(ltp, orb_high, orb_low, vol_z):
     if not ltp:
         return None
     vol = float(vol_z or 0.0)
-    if orb_high and ltp > orb_high and vol > 0.2:
-        score = min(1.0, 0.52 + max(vol, 0.5) * 0.2)
-        if vol <= 0.5:
-            score -= 0.08
-            return StrategySignal("BUY_CALL", max(0.05, score), "ORB breakout up (soft volume confirm)")
-        return StrategySignal("BUY_CALL", score, "ORB breakout up")
-    if orb_low and ltp < orb_low and vol > 0.2:
-        score = min(1.0, 0.52 + max(vol, 0.5) * 0.2)
-        if vol <= 0.5:
-            score -= 0.08
-            return StrategySignal("BUY_PUT", max(0.05, score), "ORB breakdown (soft volume confirm)")
-        return StrategySignal("BUY_PUT", score, "ORB breakdown")
+    if orb_high and ltp > orb_high and vol > 1.0:
+        score = min(1.0, 0.60 + max(vol, 1.0) * 0.1)
+        return StrategySignal("BUY_CALL", score, "ORB breakout up (strong volume)")
+    if orb_low and ltp < orb_low and vol > 1.0:
+        score = min(1.0, 0.60 + max(vol, 1.0) * 0.1)
+        return StrategySignal("BUY_PUT", score, "ORB breakdown (strong volume)")
     return None
 
 def volatility_filter(atr, ltp):
     if not atr or not ltp:
         return False
-    return (atr / ltp) >= 0.001
+    return (atr / ltp) >= 0.0015
 
 def event_breakout_signal(ltp, atr, ltp_change_window):
     if not ltp or not atr:
         return None
     try:
         from config import config as cfg
-        thresh = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.005)
-        if abs(ltp_change_window) >= thresh:
+        thresh = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.5)
+        if abs(ltp_change_window) >= max(thresh, atr * 0.5):
             direction = "BUY_CALL" if ltp_change_window > 0 else "BUY_PUT"
-            score = min(1.0, 0.65 + abs(ltp_change_window) / max(atr, 1e-6))
-            return StrategySignal(direction, score, "Event breakout")
+            score = min(1.0, 0.70 + abs(ltp_change_window) / max(atr, 1e-6))
+            return StrategySignal(direction, score, "Event strong breakout")
     except Exception:
         pass
     return None
@@ -169,9 +153,6 @@ def ensemble_signal(market_data):
         if sig is None:
             _debug_count(debug, rejected=1, reason=name)
             return None
-        if low_volatility:
-            sig.score = max(0.05, float(sig.score) - 0.08)
-            sig.reason = f"{sig.reason}; low volatility"
         _debug_count(debug, scored=1)
         return sig
 
@@ -223,57 +204,27 @@ def ensemble_signal(market_data):
         if sig:
             signals.append(sig)
 
-    if not signals:
-        for name, fn, args in [
-            ("trend_vwap_fallback", trend_vwap_signal, (ltp, vwap, vwap_slope, atr)),
-            ("orb_breakout_fallback", orb_breakout_signal, (ltp, orb_high, orb_low, vol_z)),
-            ("mean_reversion_fallback", mean_reversion_signal, (ltp, vwap, rsi_mom)),
-            (
-                "micro_pattern_fallback",
-                micro_pattern_signal,
-                (market_data.get("ltp_change_5m", 0), market_data.get("ltp_change_10m", 0)),
-            ),
-            ("event_breakout_fallback", event_breakout_signal, (ltp, atr, ltp_change_window)),
-        ]:
-            sig = _attempt(name, fn, *args)
-            if sig:
-                sig.reason = f"{sig.reason}; regime fallback"
-                signals.append(sig)
-
-    if not signals:
-        # fallback: short-term momentum when indicators missing
-        try:
-            from config import config as cfg
-            if not getattr(cfg, "ALLOW_BASELINE_SIGNAL", True):
-                return None
-            atr = atr or 0
-            if atr > 0 and abs(ltp_change) > atr * getattr(cfg, "LTP_MOM_ATR_MULT", 0.2):
-                direction = "BUY_CALL" if ltp_change > 0 else "BUY_PUT"
-                score = min(1.0, 0.6 + abs(ltp_change) / max(atr, 1e-6))
-                reason = "LTP momentum fallback"
-                _debug_count(debug, considered=1, scored=1)
-                return StrategySignal(direction, score, reason)
-            if atr > 0 and abs(ltp_change_window) > atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.02):
-                direction = "BUY_CALL" if ltp_change_window > 0 else "BUY_PUT"
-                score = min(1.0, 0.58 + abs(ltp_change_window) / max(atr, 1e-6))
-                reason = "LTP window momentum"
-                _debug_count(debug, considered=1, scored=1)
-                return StrategySignal(direction, score, reason)
-        except Exception:
-            pass
+    # Hard veto on low volatility to avoid chop
+    if low_volatility:
         return None
 
     # Vote by average score, prefer majority direction
     buy_call_score = sum(s.score for s in signals if s.direction == "BUY_CALL")
     buy_put_score = sum(s.score for s in signals if s.direction == "BUY_PUT")
+    
+    if not signals:
+        return None
+
     if buy_call_score == buy_put_score:
-        best = max(signals, key=lambda s: float(s.score), default=None)
-        if best is None or float(best.score) < 0.45:
-            return None
-        return StrategySignal(best.direction, float(best.score), f"{best.reason}; tie-broken by best score")
+        return None  # Fail immediately on tie to avoid ambiguous conviction
 
     direction = "BUY_CALL" if buy_call_score > buy_put_score else "BUY_PUT"
     score = max(buy_call_score, buy_put_score) / max(1, len(signals))
+    
+    # Require strong ensemble conviction
+    if score < 0.65:
+        return None
+        
     reason = "; ".join(s.reason for s in signals if s.direction == direction)
     return StrategySignal(direction, score, reason)
 

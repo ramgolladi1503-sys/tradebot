@@ -10942,13 +10942,16 @@ class TradeBuilder:
                         except Exception:
                             top_ranked = None
                         if top_ranked is not None:
-                            best_trade = self._soften_reject_to_candidate(
-                                market_data=market_data or {},
-                                reject_ctx=dict(self._reject_ctx or {}),
-                                strategy_tag=strategy_tag,
-                                direction=direction,
-                            )
-                        if best_trade is None and reject_reason not in {"no_candidates_survived", "no_signal"}:
+                            if not allow_fallbacks:
+                                best_trade = None
+                            else:
+                                best_trade = self._soften_reject_to_candidate(
+                                    market_data=market_data or {},
+                                    reject_ctx=dict(self._reject_ctx or {}),
+                                    strategy_tag=strategy_tag,
+                                    direction=direction,
+                                )
+                        if best_trade is None and reject_reason not in {"no_candidates_survived", "no_signal"} and allow_fallbacks:
                             fallback_ctx = dict(self._reject_ctx or {})
                             fallback_ctx["reason"] = "no_candidates_survived"
                             best_trade = self._soften_reject_to_candidate(

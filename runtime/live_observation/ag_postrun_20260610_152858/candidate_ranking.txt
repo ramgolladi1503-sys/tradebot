@@ -1,0 +1,27 @@
+strategy_perf_shadow_fallback_used primary=/Users/madhuram/tradebot/.runtime/logs/strategy_perf.json fallback=/Users/madhuram/tradebot/.runtime/logs/suggestion_strategy_perf.json selected=/Users/madhuram/tradebot/.runtime/logs/suggestion_strategy_perf.json
+2026-06-10 15:21:35+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:21:49+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:21:59+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:22:18+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:22:27+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:22:55+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:23:23+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:23:50+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:24:13+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:24:30+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:24:52+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:25:15+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:25:31+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:25:46+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:25:57+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:26:05+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:26:15+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:26:31+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:26:52+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:27:15+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:27:31+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:27:39+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:27:49+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:27:58+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:28:17+0530 [-] PHASE2: No input candidates for phase2 raw_count=0
+2026-06-10 15:28:41+0530 [-] PHASE2: No input candidates for phase2 raw_count=0

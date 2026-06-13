@@ -47,6 +47,7 @@ class CandidatePoolQualityReport:
     other_direction_count: int
     duplicate_group_count: int
     duplicate_candidate_count: int
+    duplicate_trade_id_count: int
     same_symbol_concentration_count: int
     same_family_concentration_count: int
     fallback_contamination_ratio: float
@@ -78,6 +79,7 @@ class CandidatePoolQualityReport:
             "other_direction_count": self.other_direction_count,
             "duplicate_group_count": self.duplicate_group_count,
             "duplicate_candidate_count": self.duplicate_candidate_count,
+            "duplicate_trade_id_count": self.duplicate_trade_id_count,
             "same_symbol_concentration_count": self.same_symbol_concentration_count,
             "same_family_concentration_count": self.same_family_concentration_count,
             "fallback_contamination_ratio": self.fallback_contamination_ratio,
@@ -96,7 +98,7 @@ class CandidatePoolQualityReport:
 
 
 def analyze_candidate_pool(rows: Iterable[Mapping[str, Any]]) -> CandidatePoolQualityReport:
-    items = tuple(_row(row) for row in rows or ())
+    items = tuple(_row(row) for row in rows or () if isinstance(row, Mapping))
     candidate_count = len(items)
     executable_count = sum(1 for row in items if _is_executable(row))
     near_executable_count = sum(1 for row in items if _is_near_executable(row))
@@ -111,6 +113,7 @@ def analyze_candidate_pool(rows: Iterable[Mapping[str, Any]]) -> CandidatePoolQu
 
     duplicate_group_count = _duplicate_group_count(items)
     duplicate_candidate_count = _duplicate_candidate_count(items)
+    duplicate_trade_id_count = _duplicate_trade_id_count(items)
     same_symbol_concentration_count = max(symbol_counts.values(), default=0)
     same_family_concentration_count = max(family_counts.values(), default=0)
     unique_symbol_count = len(symbol_counts)
@@ -143,6 +146,7 @@ def analyze_candidate_pool(rows: Iterable[Mapping[str, Any]]) -> CandidatePoolQu
         range_count=range_count,
         duplicate_group_count=duplicate_group_count,
         duplicate_candidate_count=duplicate_candidate_count,
+        duplicate_trade_id_count=duplicate_trade_id_count,
         same_symbol_concentration_count=same_symbol_concentration_count,
         same_family_concentration_count=same_family_concentration_count,
         fallback_contamination_ratio=fallback_contamination_ratio,
@@ -167,6 +171,7 @@ def analyze_candidate_pool(rows: Iterable[Mapping[str, Any]]) -> CandidatePoolQu
         other_direction_count=other_direction_count,
         duplicate_group_count=duplicate_group_count,
         duplicate_candidate_count=duplicate_candidate_count,
+        duplicate_trade_id_count=duplicate_trade_id_count,
         same_symbol_concentration_count=same_symbol_concentration_count,
         same_family_concentration_count=same_family_concentration_count,
         fallback_contamination_ratio=fallback_contamination_ratio,
@@ -213,6 +218,11 @@ def pool_quality_penalty_for_row(row: Mapping[str, Any], pool: CandidatePoolQual
     if pool.duplicate_group_count > 0:
         penalty += min(0.08, 0.02 * pool.duplicate_group_count)
         reasons.append("duplicate_group_concentration")
+        
+    if pool.duplicate_trade_id_count > 0:
+        penalty += min(0.08, 0.02 * pool.duplicate_trade_id_count)
+        reasons.append("duplicate_trade_ids")
+        
     if pool.fallback_contamination_ratio > 0.25:
         penalty += min(0.12, pool.fallback_contamination_ratio * 0.18)
         reasons.append("fallback_contamination")
@@ -238,6 +248,7 @@ def _quality_score(
     range_count: int,
     duplicate_group_count: int,
     duplicate_candidate_count: int,
+    duplicate_trade_id_count: int,
     same_symbol_concentration_count: int,
     same_family_concentration_count: int,
     fallback_contamination_ratio: float,
@@ -262,8 +273,13 @@ def _quality_score(
         score -= min(0.18, 0.04 * duplicate_candidate_count)
         reasons.append("duplicate_candidates")
     if duplicate_group_count > 0:
-        score -= min(0.10, 0.02 * duplicate_group_count)
         reasons.append("duplicate_groups")
+        score -= min(0.18, duplicate_group_count * 0.06)
+        
+    if duplicate_trade_id_count > 0:
+        reasons.append("duplicate_trade_ids")
+        score -= min(0.24, duplicate_trade_id_count * 0.08)
+
     if same_symbol_concentration_count > 1:
         score -= min(0.18, 0.05 * (same_symbol_concentration_count - 1))
         reasons.append("same_symbol_concentration")
@@ -346,6 +362,16 @@ def _duplicate_candidate_count(rows: tuple[Mapping[str, Any], ...]) -> int:
         )
         groups[key] = groups.get(key, 0) + 1
     return sum(max(count - 1, 0) for count in groups.values())
+
+
+def _duplicate_trade_id_count(rows: tuple[Mapping[str, Any], ...]) -> int:
+    groups: dict[str, int] = {}
+    for row in rows:
+        tid = _text(row.get("trade_id"))
+        if not tid:
+            continue
+        groups[tid] = groups.get(tid, 0) + 1
+    return sum(1 for count in groups.values() if count > 1)
 
 
 def _is_executable(row: Mapping[str, Any]) -> bool:
