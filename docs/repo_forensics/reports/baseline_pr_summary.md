@@ -1,5 +1,14 @@
 # Repo Forensics — PR Gate
 
+mode: PAPER
+candidate_id: qa-edge-first-behavioral-strategy-pr543
+decision: modify-ensemble-and-trade-builder
+reason: The user asked to optimize the strategy to achieve a 77% win rate/profitability.
+timestamp: 2026-06-13T23:00:00Z
+is_order_action: false
+broker_api_called: false
+source: docs/repo_forensics/reports/baseline_pr_summary.md
+
 ## Purpose
 
 Compare current static repo-forensics output against the committed baseline.
