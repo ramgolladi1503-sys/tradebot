@@ -745,9 +745,9 @@ SMTP_TO = os.getenv("SMTP_TO", "")
 
 # Lot sizes per instrument
 LOT_SIZE = {
-    "NIFTY": 50,
-    "BANKNIFTY": 15,
-    "SENSEX": 10
+    "NIFTY": 65,
+    "BANKNIFTY": 30,
+    "SENSEX": 20
 }
 
 # -------------------------------
