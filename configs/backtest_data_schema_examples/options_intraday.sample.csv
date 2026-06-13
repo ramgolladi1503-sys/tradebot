@@ -1,0 +1,2 @@
+timestamp,underlying,expiry,strike,option_type,open,high,low,close,volume,oi,bid,ask
+2018-01-01 09:15:00,NIFTY,2018-01-04,10500,CE,82.50,86.00,80.00,84.25,25000,1200000,83.80,84.70

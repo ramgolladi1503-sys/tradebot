@@ -5677,8 +5677,18 @@ def _render_upstox_table(table_df: pd.DataFrame, display_cols: list[str], key_pr
     cols = [c for c in display_cols if c in table_df.columns]
     display = table_df[cols].copy()
     for col in display.columns:
-        if pd.api.types.is_datetime64_any_dtype(display[col]):
-            display[col] = pd.to_datetime(display[col], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S")
+        is_date = pd.api.types.is_datetime64_any_dtype(display[col])
+        if not is_date and isinstance(col, str) and any(x in col.lower() for x in ("_ts", "ts_", "timestamp", "time", "_utc")):
+            is_date = True
+            
+        if is_date:
+            dt_col = pd.to_datetime(display[col], errors="coerce")
+            try:
+                if dt_col.dt.tz is None:
+                    dt_col = dt_col.dt.tz_localize("UTC")
+                display[col] = dt_col.dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S IST")
+            except Exception:
+                display[col] = dt_col.dt.strftime("%Y-%m-%d %H:%M:%S")
         display[col] = display[col].apply(_table_display_cell)
     use_container_width = bool(getattr(cfg, "UI_TABLE_USE_CONTAINER_WIDTH", False))
     st.dataframe(

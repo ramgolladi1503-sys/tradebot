@@ -175,7 +175,7 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -196,7 +196,7 @@ def test_on_close_does_not_restart_after_stop(monkeypatch):
     captured = {}
     restarts = {"count": 0}
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -223,13 +223,14 @@ def test_ws1006_peer_drop_on_error_is_recoverable_first(monkeypatch):
     reconnects = []
     events: list[tuple[str, dict]] = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
 
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(cfg, "DEPTH_WS_ALLOW_SOFT_RECONNECTS", True, raising=False)
     monkeypatch.setattr(ws, "_soft_resubscribe_current", lambda reason: reconnects.append(reason) or True)
     monkeypatch.setattr(
         ws,
@@ -265,7 +266,7 @@ def test_ws1006_auth_failure_blocks_reconnect_loop(monkeypatch):
     captured = {}
     events: list[tuple[str, dict]] = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -300,7 +301,7 @@ def test_ws1006_recovery_timeout_is_fail_closed(monkeypatch):
                 now_epoch_fn=lambda: clock["now"],
             )
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -340,7 +341,14 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
 
     assert any(event == "FEED_RECOVERY_BLOCKED" for event, _ in events)
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
+        }
+    ]
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["process_restart_required"] is True
@@ -354,7 +362,7 @@ def test_ws1006_main_loop_terminated_routes_to_process_restart_required(monkeypa
     scheduled = []
     events: list[tuple[str, dict]] = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -387,7 +395,7 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
     captured = {}
     scheduled = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -408,7 +416,14 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_error",
+            "source": "ws1006_recovery",
+        }
+    ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -430,7 +445,7 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
     captured = {}
     scheduled = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -451,7 +466,14 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
 
-    assert scheduled == []
+    assert scheduled == [
+        {
+            "force_full_restart": True,
+            "ignore_cooldown": True,
+            "reason": "ws1006_recovery_full:on_close",
+            "source": "ws1006_recovery",
+        }
+    ]
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -472,7 +494,7 @@ def test_on_ticks_updates_index_quote_cache_from_underlying_depth(monkeypatch):
     captured = {}
     cache_updates = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -528,7 +550,7 @@ def test_on_ticks_updates_symbol_ltp_and_depth_timestamps(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -582,7 +604,7 @@ def test_on_ticks_does_not_update_index_quote_cache_from_non_underlying_tick(mon
     captured = {}
     cache_updates = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -630,7 +652,7 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
     captured = {}
     db_path = tmp_path / "ticks.sqlite"
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -690,7 +712,7 @@ def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
     captured = {}
     events = []
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -732,7 +754,7 @@ def test_on_ticks_newer_same_symbol_option_tick_refreshes_symbol_age(monkeypatch
     _patch_common(monkeypatch)
     captured = {}
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -773,7 +795,7 @@ def test_auth_failure_sets_auth_required_and_blocks_restarts(monkeypatch):
     restarts = {"count": 0}
     stops = {"count": 0}
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -804,7 +826,7 @@ def test_network_error_restarts_without_auth_required(monkeypatch):
     auth_marks = []
     restarts = {"count": 0}
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -830,7 +852,7 @@ def test_network_error_forces_full_restart_when_enabled(monkeypatch):
     scheduled = []
     soft = {"count": 0}
 
-    def _factory(api_key, access_token, debug=True):
+    def _factory(api_key, access_token, debug=True, **kwargs):
         ticker = _DummyTicker(api_key, access_token, debug=debug)
         captured["ticker"] = ticker
         return ticker
@@ -1364,6 +1386,6 @@ def test_option_feed_verification_logs_failed_when_ticks_never_arrive(monkeypatc
         requested_by_symbol={"NIFTY": 2},
         subscribed_by_symbol={"NIFTY": 2},
     )
-    ws._tick_option_feed_verification(now_epoch=1016.5)
+    ws._tick_option_feed_verification(now_epoch=1100.0)
     assert any(event == "FEED_OPTION_VERIFY_FAILED" for event, _ in events)
     assert ws._option_feed_verification_overlay_payload()["state"] == "FAILED"

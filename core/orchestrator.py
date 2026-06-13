@@ -91,6 +91,7 @@ from core.trade_store import (
 )
 from core.depth_store import depth_store
 from core.kite_depth_ws import start_depth_ws, restart_depth_ws
+from core.kite_ws_subprocess import start_depth_ws_subprocess, monitor_depth_ws_subprocess, stop_depth_ws_subprocess
 from core.auto_tune import maybe_auto_tune
 from core import risk_halt
 from core.decision_logger import log_decision, update_execution, update_outcome
@@ -4815,6 +4816,26 @@ class Orchestrator:
             feature_timing: dict[str, float] = {}
             feed_truth_payload: dict = _read_json_dict(logs_dir() / "feed_truth_latest.json")
             feed_runtime_payload, _feed_runtime_path = _read_latest_feed_runtime_payload()
+            try:
+                if getattr(cfg, "FEED_USE_SUBPROCESS", False):
+                    monitor_depth_ws_subprocess()
+            except Exception as exc:
+                logger.error("subprocess_monitor_error err=%s", exc, exc_info=True)
+
+            # Defensive check: if feed is fatally dead, sleep to prevent high CPU spin.
+            rstate = str(feed_runtime_payload.get("runtime_state") or "").upper()
+            is_fatal = (
+                rstate in {"FEED_LIFECYCLE_FATAL", "RECOVERY_BLOCKED", "RECONNECT_BLOCKED"}
+                or bool(feed_runtime_payload.get("recovery_blocked"))
+                or str(feed_runtime_payload.get("ws_lifecycle_state") or "").upper() == "FATAL"
+            )
+            if is_fatal:
+                logger.warning("orchestrator_live_monitoring_feed_fatal_sleep state=%s", rstate)
+                time.sleep(max(2.0, self.poll_interval))
+                if run_once:
+                    break
+                continue
+
             feed_truth_cycle_gate = _feed_truth_cycle_gate(feed_runtime_payload)
             try:
                 # Hot-reload config to pick up FORCE_REGIME changes
@@ -7790,7 +7811,10 @@ class Orchestrator:
         if not tokens:
             raise RuntimeError("kite_depth_ws_init_failed:no_tokens_resolved")
         logger.info("WS: tokens_count=%d", len(tokens))
-        start_depth_ws(tokens, profile_verified=True)
+        if getattr(cfg, "FEED_USE_SUBPROCESS", False):
+            start_depth_ws_subprocess(tokens, profile_verified=True)
+        else:
+            start_depth_ws(tokens, profile_verified=True)
         from core.feed.runtime_store import read_latest_runtime_snapshot
 
         snapshot = read_latest_runtime_snapshot() or {}

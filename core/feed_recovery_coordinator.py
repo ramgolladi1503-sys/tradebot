@@ -133,6 +133,8 @@ class FeedRecoveryCoordinator:
         current_state = self._current_state()
         reason_text = str(reason or "")
         now_epoch = self._now_epoch()
+        if current_state.terminal_failure or current_state.process_restart_required:
+            return self._terminal_decision(source=source, reason=current_state.recovery_reason or reason_text)
         if self._is_terminal_reactor_failure(reason=reason_text):
             return self._terminal_decision(source=source, reason=reason_text)
         if self._is_auth_failure(code=code, reason=reason_text):
@@ -160,7 +162,7 @@ class FeedRecoveryCoordinator:
 
     def _is_terminal_reactor_failure(self, *, reason: str) -> bool:
         reason_lower = reason.lower()
-        return "main loop terminated" in reason_lower or "reactornotrestartable" in reason_lower
+        return "main loop terminated" in reason_lower or "reactornotrestartable" in reason_lower or "ws1006_process_restart" in reason_lower
 
     def _is_auth_failure(self, *, code: int | None, reason: str) -> bool:
         reason_lower = reason.lower()

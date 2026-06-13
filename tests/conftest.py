@@ -17,6 +17,7 @@ os.environ.setdefault("LOGS_ROOT", str(_TEST_RUNTIME_ROOT / "logs"))
 os.environ.setdefault("LOCKS_ROOT", str(_TEST_RUNTIME_ROOT / "locks"))
 os.environ.setdefault("DB_ROOT", str(_TEST_RUNTIME_ROOT / "db"))
 os.environ.setdefault("REPORTS_ROOT", str(_TEST_RUNTIME_ROOT / "reports"))
+os.environ.setdefault("ANALYTICS_RUNTIME_DIR", str(_TEST_RUNTIME_ROOT / "analytics"))
 
 
 @pytest.fixture(autouse=True)
@@ -41,6 +42,7 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCKS_ROOT", str(runtime_root / "locks"))
     monkeypatch.setenv("DB_ROOT", str(runtime_root / "db"))
     monkeypatch.setenv("REPORTS_ROOT", str(runtime_root / "reports"))
+    monkeypatch.setenv("ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"))
 
     try:
         from config import config as cfg
@@ -51,6 +53,7 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
         monkeypatch.setattr(cfg, "LOCKS_ROOT", str(runtime_root / "locks"), raising=False)
         monkeypatch.setattr(cfg, "DB_ROOT", str(runtime_root / "db"), raising=False)
         monkeypatch.setattr(cfg, "REPORTS_ROOT", str(runtime_root / "reports"), raising=False)
+        monkeypatch.setattr(cfg, "ANALYTICS_RUNTIME_DIR", str(runtime_root / "analytics"), raising=False)
     except Exception as exc:
         monkeypatch.setenv("PYTEST_CFG_RUNTIME_ISOLATION_ERROR", type(exc).__name__)
 
@@ -61,6 +64,11 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
         kite_client._historical_auth_cooldown_reason = ""
     except Exception as exc:
         monkeypatch.setenv("PYTEST_KITE_COOLDOWN_RESET_ERROR", type(exc).__name__)
+
+    import json
+    feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
+    feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
 
     yield
 

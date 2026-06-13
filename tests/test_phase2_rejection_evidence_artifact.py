@@ -118,6 +118,9 @@ def test_phase2_rejection_evidence_counts_unknown_quote_source(_runtime_dirs, mo
     monkeypatch.setattr(cfg, "PHASE2_REJECTION_EVIDENCE_ENABLE", True, raising=False)
     monkeypatch.setattr(cfg, "PHASE2_STRICT_REAL_CANDIDATES_ONLY", True, raising=False)
     _runtime_dirs
+    from core.paths import logs_dir
+    logs_dir().mkdir(parents=True, exist_ok=True)
+    (logs_dir() / "feed_runtime_latest.json").write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
 
     out = build_candidates_phase2(
         [
@@ -358,6 +361,9 @@ def test_phase2_evidence_failure_does_not_crash_runtime(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_ROOT", str(tmp_path / "runtime"))
     monkeypatch.setenv("LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("REPO_LOG_DIR", str(tmp_path / "logs"))
+    feed_path = tmp_path / "logs" / "feed_runtime_latest.json"
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
+    feed_path.write_text(json.dumps({"feed_ok": True}), encoding="utf-8")
 
     payload = build_candidates_phase2(
         [

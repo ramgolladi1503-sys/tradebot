@@ -88,6 +88,11 @@ def _feed_payload(candidate: Any) -> dict[str, Any]:
         "option_last_tick_age_by_symbol",
         "symbol_feed_ok_by_symbol",
         "feed_ok_by_symbol",
+        "last_tick_age_sec",
+        "last_depth_age_sec",
+        "subscribed_option_tokens_count",
+        "option_subscribe_count",
+        "subscribed_option_tokens",
     ):
         candidate_value = _candidate_get(candidate, key)
         flag_value = flags.get(key)
