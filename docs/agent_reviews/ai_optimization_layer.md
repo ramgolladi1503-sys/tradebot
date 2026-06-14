@@ -33,6 +33,12 @@ is_order_action=false
 broker_api_called=false
 allowed_for_live_execution=false
 append=false
+mode=SIM
+candidate_id=none
+decision=pass
+reason=setup-ci
+timestamp=2026-06-14
+source=antigravity
 
 # Acceptance Proof
 The verify_registry.py script runs successfully and exits with code 0 on the existing codebase.
