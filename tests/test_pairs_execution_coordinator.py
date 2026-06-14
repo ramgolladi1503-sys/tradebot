@@ -37,10 +37,8 @@ def test_pairs_execution_coordinator_success():
     res = coordinator.route_pair(intent, current_prices)
     
     assert res["status"] == "FILLED"
-    assert len(router.executions) == 2
-    assert router.executions[0]["instrument"] == "BANKNIFTY_INDEX"
+    assert [e["instrument"] for e in router.executions] == ["BANKNIFTY_INDEX", "NIFTY_INDEX"]
     assert router.executions[0]["direction"] == "SELL"
-    assert router.executions[1]["instrument"] == "NIFTY_INDEX"
     assert router.executions[1]["direction"] == "BUY"
 
 def test_pairs_execution_coordinator_unwind():
@@ -67,14 +65,11 @@ def test_pairs_execution_coordinator_unwind():
     res = coordinator.route_pair(intent, current_prices)
     
     assert res["status"] == "UNWOUND"
-    assert len(router.executions) == 3
+    assert [e["instrument"] for e in router.executions] == ["BANKNIFTY_INDEX", "NIFTY_INDEX", "BANKNIFTY_INDEX"]
     # Leg A Sell
-    assert router.executions[0]["instrument"] == "BANKNIFTY_INDEX"
     assert router.executions[0]["direction"] == "SELL"
     # Leg B Buy (fails)
-    assert router.executions[1]["instrument"] == "NIFTY_INDEX"
     assert router.executions[1]["direction"] == "BUY"
     # Unwind Leg A (Buy back)
-    assert router.executions[2]["instrument"] == "BANKNIFTY_INDEX"
     assert router.executions[2]["direction"] == "BUY"
     assert router.executions[2]["order_type"] == "MARKET"

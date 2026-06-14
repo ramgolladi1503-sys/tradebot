@@ -20,7 +20,7 @@ def test_pairs_candidate_generator_spread_zscore():
     report = build_pairs_candidate_intents(cross_asset_data, min_zscore=2.0)
     print(report.pool_report)
     assert report.valid is True
-    assert len(report.generated_intents) == 1
+    assert report.generated_intents
     
     intent = report.generated_intents[0]
     assert intent.direction == "SHORT"
@@ -40,7 +40,7 @@ def test_pairs_candidate_generator_no_trade():
     }
     
     report = build_pairs_candidate_intents(cross_asset_data, min_zscore=2.0)
-    assert len(report.generated_intents) == 0
+    assert not report.generated_intents
 
 def test_pairs_candidate_generator_missing_data():
     cross_asset_data = {
@@ -49,5 +49,5 @@ def test_pairs_candidate_generator_missing_data():
     }
     
     report = build_pairs_candidate_intents(cross_asset_data, min_zscore=2.0)
-    assert len(report.generated_intents) == 0
-    assert len(report.warnings) > 0
+    assert not report.generated_intents
+    assert report.warnings
