@@ -24,7 +24,7 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     monkeypatch.setattr(orch_mod.RunLock, "release", lambda self: None)
 
     monkeypatch.setattr(cfg, "ORCHESTRATOR_FAST_LOOP_ENABLE", False, raising=False)
-    orch = orch_mod.Orchestrator(total_capital=100000, poll_interval=0)
+    orch = orch_mod.Orchestrator(total_capital=100000, poll_interval=1)
 
     with pytest.raises(StopIteration):
         orch.live_monitoring()

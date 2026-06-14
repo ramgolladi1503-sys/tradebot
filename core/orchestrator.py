@@ -4846,14 +4846,7 @@ class Orchestrator:
 
             feed_truth_cycle_gate = _feed_truth_cycle_gate(feed_runtime_payload)
             try:
-                # Hot-reload config to pick up FORCE_REGIME changes
-                try:
-                    import importlib
-                    import sys
-                    if "config.config" in sys.modules:
-                        importlib.reload(sys.modules["config.config"])
-                except Exception:
-                    pass
+                # Hot-reload config logic removed to prevent breaking monkeypatches.
                 try:
                     self._maybe_auto_clear_runtime_slo_failover_halt()
                 except Exception as exc:
