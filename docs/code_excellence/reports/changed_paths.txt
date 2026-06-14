@@ -1,2 +1,13 @@
+core/math/__init__.py
+core/math/fractional_differentiation.py
+core/math/hmm_regime.py
+core/math/kalman_filter.py
+core/math/mean_reversion.py
+core/math/vpin.py
 core/regime_classifier.py
-tests/test_elite_regime_classifier.py
+docs/agent_reviews/quant_research_master_pr.md
+ml/trade_predictor.py
+strategies/pairs_arbitrage.py
+strategies/vwap_orb.py
+tests/test_core_math.py
+tests/test_quant_math.py
