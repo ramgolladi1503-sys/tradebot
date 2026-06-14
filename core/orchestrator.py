@@ -4790,7 +4790,8 @@ class Orchestrator:
             cycle_reason = "cycle_complete"
             cycle_stage = "cycle_start"
             cycle_error = ""
-            cycle_perf_start = time.perf_counter()
+            loop_start_time = time.perf_counter()
+            cycle_perf_start = loop_start_time
             latency_critical_path_end_perf = None
             feature_build_ms = 0.0
             decision_build_ms = 0.0
@@ -4848,8 +4849,9 @@ class Orchestrator:
                 # Hot-reload config to pick up FORCE_REGIME changes
                 try:
                     import importlib
-                    from config import config as cfg
-                    importlib.reload(cfg)
+                    import sys
+                    if "config.config" in sys.modules:
+                        importlib.reload(sys.modules["config.config"])
                 except Exception:
                     pass
                 try:
