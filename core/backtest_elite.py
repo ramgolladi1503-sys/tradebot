@@ -269,7 +269,14 @@ class VectorizedBacktestEngine:
                 "target": trade.target,
                 "stop_loss": trade.stop_loss,
                 "qty": sized_qty,
-                "lot_size": lot_size
+                "lot_size": lot_size,
+                "setup_id": f"hyb_{idx}_{getattr(trade, 'strategy', 'Unknown')}",
+                "strategy_family": getattr(trade, 'strategy', 'Unknown'),
+                "regime": getattr(trade, 'regime', 'base'),
+                "direction": trade.side,
+                "entry": trade.entry_price,
+                "confidence": 0.8,
+                "truth_quality": "TRADE_BUILDER_HYBRID"
             })
             
         signals_df = pd.DataFrame(signals)

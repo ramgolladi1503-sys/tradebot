@@ -88,4 +88,20 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     signals_df['qty'] = 1  # 1 lot by default
     signals_df['lot_size'] = 65  # NIFTY lot size
     
+    # Canonical Setup Identity
+    # For vectorized, we infer strategy_family from which mask triggered
+    signals_df['strategy_family'] = np.where(buy_trend | sell_trend, "TrendVWAP", 
+                                    np.where(buy_mr | sell_mr, "MeanReversion", 
+                                    np.where(buy_orb | sell_orb, "ORB", "Unknown")))
+    
+    signals_df['regime'] = "base" # Can be expanded based on vol_z or trend
+    signals_df['direction'] = signals_df['signal_side']
+    signals_df['entry'] = signals_df['entry_price']
+    
+    # Generate unique setup IDs
+    signals_df['setup_id'] = [f"vec_{str(idx)}_{fam}" for idx, fam in zip(signals_df.index, signals_df['strategy_family'])]
+    
+    signals_df['confidence'] = 0.5 # Default heuristic confidence
+    signals_df['truth_quality'] = "VECTORIZED_HEURISTIC"
+    
     return signals_df
