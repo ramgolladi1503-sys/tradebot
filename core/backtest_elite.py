@@ -130,6 +130,22 @@ class VectorizedBacktestEngine:
             
         return pd.DataFrame(results)
 
+    def generate_signals_vectorized(self) -> pd.DataFrame:
+        """
+        Hyper-fast generation: fully bypasses python iteration by using 
+        pure Pandas operations to map indicators and signal thresholds.
+        """
+        from core.vectorized_signals import build_vectorized_signals
+        
+        # 1. Add indicators
+        self.data = add_indicators(self.data).dropna().reset_index(drop=True)
+        
+        # 2. Vectorized logic mapping
+        signals_df = build_vectorized_signals(self.data, self.config)
+        
+        if not signals_df.empty:
+            return self.run_vectorized_signals(signals_df)
+        return pd.DataFrame()
     def generate_and_run(self) -> pd.DataFrame:
         """
         Hybrid run: Uses the python logic to build trades, then vectorizes execution.
