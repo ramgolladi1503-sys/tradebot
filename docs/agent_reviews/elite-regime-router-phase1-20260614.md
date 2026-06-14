@@ -55,5 +55,8 @@ None. This is offline strategy hardening.
 ## What This PR Does Not Prove
 This PR does not prove live profitability, nor does it wire the strategies into the execution path yet. It prepares them for the Phase 3 Regime Router.
 
+## High-Risk Path Review
+The paths `strategies/vwap_orb.py`, `strategies/volatility_trend.py`, and `strategies/pairs_arbitrage.py` are high risk as they dictate execution logic. However, the changes in this PR are purely mathematically restrictive (vetoing basic configurations and requiring stronger evidence such as Dealer Gamma exposure or ADF Cointegration). They do not bypass or weaken any existing execution blocks, and the system remains safely OFFLINE without LIVE adapter bindings.
+
 ## Human Approval
 Approved.
