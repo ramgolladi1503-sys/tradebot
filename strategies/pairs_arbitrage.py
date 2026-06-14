@@ -34,6 +34,17 @@ def generate_signal(spread_z, min_zscore=2.0, debug_stats=None, regime=None, exp
         _update_debug(debug_stats, rejected=1, reason="spread_not_cointegrated")
         return None
 
+    # Elite 10/10 OU Half-Life Check
+    # If the mean reversion takes too long, we will die to theta decay.
+    # Assuming 5-minute candles, 36 periods = 3 hours. Reject if > 36.
+    ou_half_life = kwargs.get('ou_half_life', 0.0) if kwargs else 0.0
+    max_half_life_periods = kwargs.get('max_half_life_periods', 36.0) if kwargs else 36.0
+    if ou_half_life > max_half_life_periods or ou_half_life == float('inf'):
+        _update_debug(debug_stats, rejected=1, reason="half_life_too_long")
+        return None
+
+    hedge_ratio = kwargs.get('hedge_ratio', 1.0) if kwargs else 1.0
+
     regime_name = resolve_strategy_regime(regime, bias=None, expiry_context=expiry_context)
     
     abs_z = abs(spread_z)
@@ -65,4 +76,5 @@ def generate_signal(spread_z, min_zscore=2.0, debug_stats=None, regime=None, exp
         "soft_flags": soft_flags,
         "setup_type": setup_type,
         "regime_path": regime_name,
+        "hedge_ratio": round(hedge_ratio, 4),
     }
