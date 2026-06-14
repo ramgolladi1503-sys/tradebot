@@ -43,3 +43,22 @@ def test_loader_rejects_missing_required_columns(tmp_path: Path):
             date_to=None,
             timezone="Asia/Kolkata",
         )
+
+def test_loader_handles_missing_bid_ask(tmp_path: Path):
+    data_path = tmp_path / "no_bid_ask.csv"
+    pd.DataFrame(
+        [
+            {"timestamp": "2026-04-01 09:15:00", "symbol": "A", "open": 10, "high": 11, "low": 9, "close": 10.5, "volume": 100, "oi": 200},
+        ]
+    ).to_csv(data_path, index=False)
+
+    df = load_option_symbol_csv(
+        data_path=data_path,
+        symbol="A",
+        date_from="2026-04-01",
+        date_to="2026-04-01",
+        timezone="Asia/Kolkata",
+    )
+
+    assert len(df) == 1
+    assert bool(df.iloc[0]["has_bid_ask"]) is False

@@ -134,12 +134,53 @@ def run_walk_forward(data: pd.DataFrame):
     else:
         print(f"REJECTED. Failed robustness check (OOS PF: {pf_oos:.2f}, Expectancy: {expectancy:.2f}).")
 
+def run_option_backtest(csv_path: str):
+    from core.option_backtest.engine import OptionBacktestEngine
+    from core.option_backtest.models import OptionBacktestConfig, ResearchMode
+    from pathlib import Path
+    
+    print(f"\n--- Running Real Option Data Backtest ---")
+    config = OptionBacktestConfig(
+        symbol="NIFTY",
+        data_path=Path(csv_path),
+        research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+        output_dir=Path("./options_output")
+    )
+    
+    engine = OptionBacktestEngine(config)
+    result = engine.run()
+    
+    metrics = result.summary
+    print("\n--- Option Backtest Tearsheet ---")
+    if "warnings" in metrics:
+        for w in metrics["warnings"]:
+            print(f"\033[91m{w}\033[0m")
+    
+    print(f"Total Signals:      {metrics.get('signals_total', 0)}")
+    print(f"Executable Signals: {metrics.get('executable_signals', 0)}")
+    print(f"Trades Taken:       {metrics.get('trades_taken', 0)}")
+    print(f"Expectancy (Net):   ${metrics.get('after_cost_expectancy', 0):,.2f}")
+    if metrics.get('after_cost_expectancy', 0) > 0:
+        print(f"Win Rate:           {metrics.get('win_rate', 0)*100:.2f}%")
+    else:
+        print(f"Win Rate:           {metrics.get('win_rate', 0)*100:.2f}% (IRRELEVANT)")
+        
+    print(f"Profit Factor:      {metrics.get('profit_factor')}")
+    print(f"Max Drawdown:       ${metrics.get('max_drawdown', 0):,.2f}")
+    print(f"Total PnL:          ${metrics.get('total_pnl_value', 0):,.2f}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Elite Grid Search")
     parser.add_argument("--csv", required=False, help="Path to walk-forward CSV data")
+    parser.add_argument("--use-options", action="store_true", help="Use OptionBacktestEngine instead of simulated futures")
     args = parser.parse_args()
     
-    if args.csv:
+    if args.use_options:
+        if not args.csv:
+            print("Error: --csv is required when using --use-options")
+            sys.exit(1)
+        run_option_backtest(args.csv)
+    elif args.csv:
         print(f"Loading data from {args.csv}...")
         data = pd.read_csv(args.csv)
         if "close" not in data.columns and "close_price" in data.columns:
