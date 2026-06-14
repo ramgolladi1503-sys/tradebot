@@ -1,5 +1,15 @@
 # Agent Review: Quantitative Research Master Build
 
+source_agent: GSD
+action: GENERATE_PATCH
+title: feat: Quantitative Research Master Build
+scope: mathematical_modules_only
+requested_paths: core/math/*, strategies/vwap_orb.py, ml/trade_predictor.py
+allowed_paths: core/math/*, core/regime_classifier.py, strategies/vwap_orb.py, ml/trade_predictor.py, tests/test_quant_math.py
+forbidden_paths: main.py, run_live.sh, core/broker*, core/execution*
+expected_tests: tests/test_quant_math.py
+acceptance_proof: full_suite_pass_with_math_validations
+
 ## 1. Scope and Approach
 This PR implements the remaining advanced mathematical modules from the Quantitative Research Roadmap to elevate the system to institutional grade. The focus is strictly on statistical rigor, order flow toxicity modeling, and machine learning feature stationary.
 

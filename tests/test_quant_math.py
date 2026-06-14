@@ -18,6 +18,13 @@ def test_gaussian_hmm():
     
     preds = hmm.predict(X)
     assert len(preds) == 100
+    # True behavioral proof: HMM should separate the two distinct clusters
+    cluster_0_preds = preds[:50]
+    cluster_1_preds = preds[50:]
+    # Either all 0s and all 1s, or vice versa
+    assert len(set(cluster_0_preds)) == 1
+    assert len(set(cluster_1_preds)) == 1
+    assert cluster_0_preds[0] != cluster_1_preds[0]
 
 def test_calculate_vpin():
     tick_volumes = np.array([100, 200, 150, 50, 300])
@@ -25,7 +32,13 @@ def test_calculate_vpin():
     bucket_volume = 200
     
     vpin = calculate_vpin(tick_volumes, tick_price_changes, bucket_volume)
-    assert 0.0 <= vpin <= 1.0
+    # Proof: 
+    # B1: 200 buy -> 1.0
+    # B2: 100 buy, 100 sell -> 0.0
+    # B3: 25 buy, 175 sell -> 0.75
+    # B4: 200 sell -> 1.0
+    # Total = 2.75 / 4 = 0.6875
+    assert np.isclose(vpin, 0.6875)
 
 def test_fractional_differentiation():
     # Linear series
@@ -38,3 +51,8 @@ def test_fractional_differentiation():
     # The output should have nans at the beginning based on window size
     assert len(diff) == 10
     assert np.isnan(diff[0][0])
+    
+    # Check actual differentiated values
+    # w0 = 1.0, w1 = -0.5, w2 = -0.125, w3 = -0.0625, w4 = -0.0390625
+    expected_val = 9.0 * 1.0 + 8.0 * -0.5 + 7.0 * -0.125 + 6.0 * -0.0625 + 5.0 * -0.0390625
+    assert np.isclose(diff[-1][0], expected_val)
