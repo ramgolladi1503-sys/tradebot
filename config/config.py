@@ -2712,6 +2712,14 @@ CROSS_ASSET_RISK_SIGN = {
     "INDIA_VIX": 1,
     "BOND10Y": 1,
 }
+
+PAIRS_TRADING_UNIVERSE = {
+    "BANKNIFTY_NIFTY": {
+        "leg_a": "BANKNIFTY_INDEX",
+        "leg_b": "NIFTY_INDEX",
+        "hedge_ratio": 1.0,
+    }
+}
 CROSS_ASSET_REFRESH_SEC = int(os.getenv("CROSS_ASSET_REFRESH_SEC", "30"))
 CROSS_ASSET_MAXLEN = int(os.getenv("CROSS_ASSET_MAXLEN", "600"))
 CROSS_ASSET_STALE_SEC = int(os.getenv("CROSS_ASSET_STALE_SEC", "120"))
