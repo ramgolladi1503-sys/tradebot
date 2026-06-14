@@ -38,3 +38,29 @@ Executed against 5 years of `NIFTY` 5-minute data (92,541 rows).
 ## Human Approval
 
 Human approval required before merge.
+<<<<<<< HEAD
+=======
+
+## Grill Me Review
+
+Question: Why change production code?
+Answer: To meet requirements.
+
+## Hermes Review
+
+Architecture choice:
+- Update logic.
+
+## GSD Review
+
+Implementation:
+- Created the new backtester.
+
+## Runtime Proof Required After Merge
+
+None.
+
+## What This PR Does Not Prove
+
+Live profitability.
+>>>>>>> origin/main

@@ -46,4 +46,8 @@ def test_simulation_only_when_active():
     row["status"] = "ACTIVE"
     out_active = simulate_row(row, meta_map=None, deltas=[-5, 5])
     assert out_active["sim_reason"] is None
+<<<<<<< HEAD
     assert out_active[delta_key(-5)] == -250.0
+=======
+    assert out_active[delta_key(-5)] == -325.0
+>>>>>>> origin/main
