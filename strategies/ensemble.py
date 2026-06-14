@@ -144,6 +144,7 @@ def micro_pattern_signal(ltp_change_5m, ltp_change_10m):
     return None
 
 def ensemble_signal(market_data):
+    from core.regime_classifier import get_current_regime
     debug = _strategy_debug(market_data, "ensemble")
     ltp = market_data.get("ltp", 0)
     vwap = market_data.get("vwap", ltp)
@@ -160,7 +161,7 @@ def ensemble_signal(market_data):
     if low_volatility:
         _debug_count(debug, rejected=1, reason="low_volatility_soft")
 
-    regime = _normalize_regime(market_data.get("regime"))
+    regime = get_current_regime(market_data)
     signals = []
 
     def _attempt(name, fn, *args):
@@ -175,14 +176,11 @@ def ensemble_signal(market_data):
         _debug_count(debug, scored=1)
         return sig
 
-    if regime == "EVENT":
+    if regime in ("EVENT_SHOCK", "EVENT"):
         sig = _attempt("event_breakout", event_breakout_signal, ltp, atr, ltp_change_window)
         if sig:
             signals.append(sig)
-        sig = _attempt("orb_breakout", orb_breakout_signal, ltp, orb_high, orb_low, vol_z)
-        if sig:
-            signals.append(sig)
-    elif regime == "MEAN_REVERT":
+    elif regime in ("MEAN_REVERT_SKEW", "MEAN_REVERT", "RANGE"):
         sig = _attempt("mean_reversion", mean_reversion_signal, ltp, vwap, rsi_mom)
         if sig:
             signals.append(sig)
@@ -194,20 +192,14 @@ def ensemble_signal(market_data):
         )
         if sig:
             signals.append(sig)
-    elif regime == "TREND":
+    elif regime in ("HIGH_VOL_TREND", "TREND"):
         sig = _attempt("trend_vwap", trend_vwap_signal, ltp, vwap, vwap_slope, atr)
         if sig:
             signals.append(sig)
         sig = _attempt("orb_breakout", orb_breakout_signal, ltp, orb_high, orb_low, vol_z)
         if sig:
             signals.append(sig)
-    else:
-        sig = _attempt("trend_vwap", trend_vwap_signal, ltp, vwap, vwap_slope, atr)
-        if sig:
-            signals.append(sig)
-        sig = _attempt("orb_breakout", orb_breakout_signal, ltp, orb_high, orb_low, vol_z)
-        if sig:
-            signals.append(sig)
+    elif regime in ("LOW_VOL_CHOP", "CHOP"):
         sig = _attempt("mean_reversion", mean_reversion_signal, ltp, vwap, rsi_mom)
         if sig:
             signals.append(sig)
@@ -219,48 +211,8 @@ def ensemble_signal(market_data):
         )
         if sig:
             signals.append(sig)
-        sig = _attempt("event_breakout", event_breakout_signal, ltp, atr, ltp_change_window)
-        if sig:
-            signals.append(sig)
 
     if not signals:
-        for name, fn, args in [
-            ("trend_vwap_fallback", trend_vwap_signal, (ltp, vwap, vwap_slope, atr)),
-            ("orb_breakout_fallback", orb_breakout_signal, (ltp, orb_high, orb_low, vol_z)),
-            ("mean_reversion_fallback", mean_reversion_signal, (ltp, vwap, rsi_mom)),
-            (
-                "micro_pattern_fallback",
-                micro_pattern_signal,
-                (market_data.get("ltp_change_5m", 0), market_data.get("ltp_change_10m", 0)),
-            ),
-            ("event_breakout_fallback", event_breakout_signal, (ltp, atr, ltp_change_window)),
-        ]:
-            sig = _attempt(name, fn, *args)
-            if sig:
-                sig.reason = f"{sig.reason}; regime fallback"
-                signals.append(sig)
-
-    if not signals:
-        # fallback: short-term momentum when indicators missing
-        try:
-            from config import config as cfg
-            if not getattr(cfg, "ALLOW_BASELINE_SIGNAL", True):
-                return None
-            atr = atr or 0
-            if atr > 0 and abs(ltp_change) > atr * getattr(cfg, "LTP_MOM_ATR_MULT", 0.2):
-                direction = "BUY_CALL" if ltp_change > 0 else "BUY_PUT"
-                score = min(1.0, 0.6 + abs(ltp_change) / max(atr, 1e-6))
-                reason = "LTP momentum fallback"
-                _debug_count(debug, considered=1, scored=1)
-                return StrategySignal(direction, score, reason)
-            if atr > 0 and abs(ltp_change_window) > atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.02):
-                direction = "BUY_CALL" if ltp_change_window > 0 else "BUY_PUT"
-                score = min(1.0, 0.58 + abs(ltp_change_window) / max(atr, 1e-6))
-                reason = "LTP window momentum"
-                _debug_count(debug, considered=1, scored=1)
-                return StrategySignal(direction, score, reason)
-        except Exception:
-            pass
         return None
 
     # Vote by average score, prefer majority direction

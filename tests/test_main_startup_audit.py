@@ -34,6 +34,8 @@ def _patch_common_startup(monkeypatch):
     monkeypatch.setattr(main_module.cfg, "FORCE_FALLBACK_EXECUTION", False, raising=False)
     monkeypatch.setattr(main_module.cfg, "ALLOW_STALE_QUOTES", False, raising=False)
     monkeypatch.setattr(main_module.cfg, "DISABLE_RISK_GATE", False, raising=False)
+    monkeypatch.setattr(main_module.cfg, "LIVE_BROKER_ADAPTER_ACTIVE", True, raising=False)
+    monkeypatch.setattr(main_module.cfg, "MAX_DAILY_LOSS_PCT", 0.02, raising=False)
     monkeypatch.setattr(main_module.cfg, "DISABLE_KILL_SWITCH", False, raising=False)
     monkeypatch.setattr(main_module.cfg, "ALLOW_SYNTHETIC_OPTION_QUOTES", False, raising=False)
     monkeypatch.setattr(main_module.cfg, "ALLOW_SYNTHETIC_CHAIN", False, raising=False)

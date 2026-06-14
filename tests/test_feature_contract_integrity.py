@@ -23,6 +23,7 @@ class StubPredictor:
 
 def _market_data():
     return {
+        "regime": "TREND",
         "symbol": "NIFTY",
         "ltp": 25000.0,
         "vwap": 24950.0,

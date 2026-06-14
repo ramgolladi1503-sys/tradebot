@@ -17,7 +17,7 @@ class _Config:
 
 
 def test_live_clean_env_is_allowed():
-    decision = assess_runtime_boot_safety(mode="LIVE", config=_Config(), env={})
+    decision = assess_runtime_boot_safety(mode="LIVE", config=_Config(), env={"LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.02"})
 
     assert decision.allowed is True
     assert decision.mode == "LIVE"
@@ -32,7 +32,7 @@ def test_live_force_fallback_execution_fails_boot():
     decision = assess_runtime_boot_safety(
         mode="LIVE",
         config=_Config(),
-        env={"FORCE_FALLBACK_EXECUTION": "true"},
+        env={"FORCE_FALLBACK_EXECUTION": "true", "LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.02"},
     )
 
     assert decision.allowed is False
@@ -44,7 +44,7 @@ def test_live_allow_stale_quotes_fails_boot():
     decision = assess_runtime_boot_safety(
         mode="LIVE",
         config=_Config(),
-        env={"ALLOW_STALE_QUOTES": "1"},
+        env={"ALLOW_STALE_QUOTES": "1", "LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.02"},
     )
 
     assert decision.allowed is False
@@ -56,7 +56,7 @@ def test_live_risk_gate_and_kill_switch_overrides_fail_boot():
     decision = assess_runtime_boot_safety(
         mode="LIVE",
         config=_Config(),
-        env={"DISABLE_RISK_GATE": "yes", "DISABLE_KILL_SWITCH": "on"},
+        env={"DISABLE_RISK_GATE": "yes", "DISABLE_KILL_SWITCH": "on", "LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.02"},
     )
 
     assert decision.allowed is False
@@ -71,7 +71,7 @@ def test_live_synthetic_option_alias_fails_boot_from_config():
         EXECUTION_MODE = "LIVE"
         ALLOW_SYNTHETIC_CHAIN = True
 
-    decision = assess_runtime_boot_safety(mode="LIVE", config=Config(), env={})
+    decision = assess_runtime_boot_safety(mode="LIVE", config=Config(), env={"LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.02"})
 
     assert decision.allowed is False
     assert "ALLOW_SYNTHETIC_OPTION_QUOTES" in decision.unsafe_flags
@@ -84,7 +84,7 @@ def test_live_market_closed_execution_alias_fails_boot_from_config():
         EXECUTION_MODE = "LIVE"
         OFFHOURS_FORCE_ENABLE = True
 
-    decision = assess_runtime_boot_safety(mode="LIVE", config=Config(), env={})
+    decision = assess_runtime_boot_safety(mode="LIVE", config=Config(), env={"LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.02"})
 
     assert decision.allowed is False
     assert "ALLOW_MARKET_CLOSED_EXECUTION" in decision.unsafe_flags
@@ -151,7 +151,7 @@ def test_enforce_runtime_boot_safety_raises_and_writes_report_on_live_failure(tm
         enforce_runtime_boot_safety(
             mode="LIVE",
             config=_Config(),
-            env={"DISABLE_RISK_GATE": "true"},
+            env={"DISABLE_RISK_GATE": "true", "LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.02"},
             report_path=path,
         )
 
@@ -160,3 +160,21 @@ def test_enforce_runtime_boot_safety_raises_and_writes_report_on_live_failure(tm
     assert payload["allowed"] is False
     assert payload["mode"] == "LIVE"
     assert payload["fatal_reasons"] == ["LIVE_UNSAFE_FLAG:DISABLE_RISK_GATE"]
+
+def test_live_fails_without_broker_adapter():
+    decision = assess_runtime_boot_safety(
+        mode="LIVE",
+        config=_Config(),
+        env={"MAX_DAILY_LOSS_PCT": "0.02"} # missing LIVE_BROKER_ADAPTER_ACTIVE
+    )
+    assert decision.allowed is False
+    assert "LIVE_BROKER_ADAPTER_NOT_CONFIGURED" in decision.fatal_reasons
+
+def test_live_fails_without_drawdown_limit():
+    decision = assess_runtime_boot_safety(
+        mode="LIVE",
+        config=_Config(),
+        env={"LIVE_BROKER_ADAPTER_ACTIVE": "true", "MAX_DAILY_LOSS_PCT": "0.10"} # 10% is > 5% allowed
+    )
+    assert decision.allowed is False
+    assert "LIVE_GLOBAL_DRAWDOWN_LIMIT_UNSAFE" in decision.fatal_reasons
