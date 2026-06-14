@@ -16,11 +16,14 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     (Path(cfg.DATA_ROOT)).mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(orch_mod.Orchestrator, "_start_depth_ws", lambda self: None)
+    from core.recovery_state_machine import RecoveryState
+    monkeypatch.setattr("core.recovery_state_machine.evaluate_feed_state", lambda _: RecoveryState.HEALTHY, raising=False)
     monkeypatch.setattr(orch_mod, "fetch_live_market_data", lambda: (_ for _ in ()).throw(RuntimeError("forced_cycle_error")))
     monkeypatch.setattr(orch_mod.time, "sleep", lambda _: (_ for _ in ()).throw(StopIteration()))
     monkeypatch.setattr(orch_mod.RunLock, "acquire", lambda self: (True, "ok"))
     monkeypatch.setattr(orch_mod.RunLock, "release", lambda self: None)
 
+    monkeypatch.setattr(cfg, "ORCHESTRATOR_FAST_LOOP_ENABLE", False, raising=False)
     orch = orch_mod.Orchestrator(total_capital=100000, poll_interval=0)
 
     with pytest.raises(StopIteration):

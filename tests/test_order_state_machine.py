@@ -94,11 +94,11 @@ def test_transition_updates_are_thread_safe(monkeypatch, tmp_path):
     for t in threads:
         t.join(timeout=3.0)
 
-    assert len(success) == 5
-    assert len(errors) == 0
+    assert success == [True] * 5
+    assert errors == []
     assert sm.get_order("ORD-THREAD").state == OrderState.SENT
     sent_events = [e for e in sm.list_events("ORD-THREAD") if e.to_state == OrderState.SENT]
-    assert len(sent_events) == 1
+    assert [e.to_state for e in sent_events] == [OrderState.SENT]
 
 
 def test_execution_engine_uses_order_state_machine(monkeypatch, tmp_path):
