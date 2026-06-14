@@ -14,7 +14,7 @@ def evaluate_params(args):
     data, horizon, sl_bps, target_atr, stop_atr, ts_act, ts_trail = args
     
     config = EliteBacktestConfig(
-        research_mode="REAL_EXECUTABLE_RESEARCH",
+        research_mode="PROXY_RESEARCH",
         use_synth_chain=False,
         horizon=horizon,
         slippage_bps=sl_bps,
@@ -40,25 +40,11 @@ def evaluate_params(args):
 
 def run_walk_forward(data: pd.DataFrame):
     """
-    Performs Walk-Forward Optimization (WFO):
-    1. Splits data into In-Sample (IS) and Out-of-Sample (OOS).
-    2. Runs grid search on IS.
-    3. Evaluates best IS params on full data (IS + OOS).
-    4. Applies robust promotion logic.
+    Performs Rolling Walk-Forward Optimization (WFO):
     """
     if len(data) < 100:
         print("Not enough data for walk forward.")
         return
-
-    # Split 70% Train, 30% Test
-    split_idx = int(len(data) * 0.7)
-    train_data = data.iloc[:split_idx]
-    test_data = data.iloc[split_idx:]
-    
-    try:
-        oos_start_date = str(test_data.index[0])
-    except Exception:
-        oos_start_date = None
 
     horizons = [15]
     slippage_bps = [1.5]
@@ -68,50 +54,77 @@ def run_walk_forward(data: pd.DataFrame):
     ts_trail_mults = [0.5, 1.0]
     
     param_grid = list(product(horizons, slippage_bps, target_atrs, stop_atrs, ts_act_mults, ts_trail_mults))
-    tasks_is = [(train_data, hz, sl, tgt, stp, ts_act, ts_trail) for hz, sl, tgt, stp, ts_act, ts_trail in param_grid]
     
-    print(f"Starting Elite IS Grid Search for {len(param_grid)} permutations on {len(train_data)} rows...")
-    start_time = time.time()
-    
-    with mp.Pool(mp.cpu_count()) as pool:
-        results_is = pool.map(evaluate_params, tasks_is)
-        
-    end_time = time.time()
-    print(f"IS Grid search completed in {end_time - start_time:.2f} seconds.")
-    
-    # Find the best Sortino ratio in IS
-    best_params = None
-    best_sortino = -float('inf')
-    
-    for hz, sl, tgt, stp, ts_act, ts_trail, metrics in results_is:
-        if "error" in metrics:
-            continue
-        sortino = metrics.get("sortino_ratio_per_trade", 0)
-        if sortino > best_sortino:
-            best_sortino = sortino
-            best_params = (hz, sl, tgt, stp, ts_act, ts_trail)
-            
-    if not best_params:
-        print("No profitable parameters found in In-Sample data. Strategy Rejected.")
+    fold_size = len(data) // 6
+    if fold_size < 10:
+        print("Data too small for rolling folds")
         return
         
-    print(f"\nBest IS Parameters: Horizon={best_params[0]}, Slippage={best_params[1]} bps, Target ATR={best_params[2]}x, Stop ATR={best_params[3]}x, TS Act={best_params[4]}x, TS Trail={best_params[5]}x")
+    best_params_per_fold = []
     
-    # Run OOS Validation
-    print(f"\nRunning Out-Of-Sample Validation starting from {oos_start_date}...")
+    for fold in range(4):
+        train_start = fold * fold_size
+        train_end = train_start + fold_size * 2
+        
+        train_data = data.iloc[train_start:train_end]
+        
+        tasks_is = [(train_data, hz, sl, tgt, stp, ts_act, ts_trail) for hz, sl, tgt, stp, ts_act, ts_trail in param_grid]
+        
+        print(f"Starting Elite IS Grid Search for Fold {fold+1} ({len(train_data)} rows)...")
+        with mp.Pool(mp.cpu_count()) as pool:
+            results_is = pool.map(evaluate_params, tasks_is)
+            
+        best_is_score = -float('inf')
+        best_is_params = None
+        
+        for hz, sl, tgt, stp, ts_act, ts_trail, metrics in results_is:
+            if "error" in metrics:
+                continue
+            exp = metrics.get("after_cost_expectancy", 0)
+            pf = metrics.get("profit_factor", 0)
+            if pf == float('inf'):
+                pf = 2.0
+            score = exp * pf
+            
+            if score > best_is_score:
+                best_is_score = score
+                best_is_params = (hz, sl, tgt, stp, ts_act, ts_trail)
+                
+        if best_is_params:
+            best_params_per_fold.append(best_is_params)
+            
+    if not best_params_per_fold:
+        print("No profitable params found across folds. Strategy Rejected.")
+        return
+        
+    stability_penalty = len(set(best_params_per_fold))
+    print(f"\nParameter Stability Penalty: {stability_penalty} (unique param sets across {len(best_params_per_fold)} folds)")
+    
+    from collections import Counter
+    final_params = Counter(best_params_per_fold).most_common(1)[0][0]
+    print(f"Final Chosen Parameters: {final_params}")
+    
+    oos_start = 4 * fold_size
+    test_data = data.iloc[oos_start:]
+    try:
+        oos_start_date = str(test_data.index[0])
+    except Exception:
+        oos_start_date = None
+        
+    print(f"\nRunning Final Out-Of-Sample Validation starting from {oos_start_date}...")
     
     config = EliteBacktestConfig(
-        research_mode="REAL_EXECUTABLE_RESEARCH",
+        research_mode="PROXY_RESEARCH",
         use_synth_chain=False,
-        horizon=best_params[0],
-        slippage_bps=best_params[1],
-        spread_bps=best_params[1],
-        target_atr_mult=best_params[2],
-        stop_atr_mult=best_params[3],
+        horizon=final_params[0],
+        slippage_bps=final_params[1],
+        spread_bps=final_params[1],
+        target_atr_mult=final_params[2],
+        stop_atr_mult=final_params[3],
         allowed_time_start="09:15",
         allowed_time_end="15:30",
-        trailing_stop_activation_mult=best_params[4],
-        trailing_stop_trail_mult=best_params[5],
+        trailing_stop_activation_mult=final_params[4],
+        trailing_stop_trail_mult=final_params[5],
         oos_start_date=oos_start_date
     )
     
@@ -129,10 +142,10 @@ def run_walk_forward(data: pd.DataFrame):
     expectancy = metrics.get("after_cost_expectancy", 0)
     
     print("\n--- WALK FORWARD PROMOTION CHECK ---")
-    if pf_oos > 1.2 and expectancy > 0:
-        print(f"PROMOTED! Strategy meets elite robustness criteria (OOS PF: {pf_oos:.2f} > 1.2, Expectancy: {expectancy:.2f} > 0).")
+    if pf_oos > 1.2 and expectancy > 0 and stability_penalty <= 2:
+        print(f"PROMOTED! Strategy meets elite robustness criteria (OOS PF: {pf_oos:.2f} > 1.2, Expectancy: {expectancy:.2f} > 0, Stability Penalty: {stability_penalty} <= 2).")
     else:
-        print(f"REJECTED. Failed robustness check (OOS PF: {pf_oos:.2f}, Expectancy: {expectancy:.2f}).")
+        print(f"REJECTED. Failed robustness check (OOS PF: {pf_oos:.2f}, Expectancy: {expectancy:.2f}, Stability Penalty: {stability_penalty}).")
 
 def run_option_backtest(csv_path: str):
     from core.option_backtest.engine import OptionBacktestEngine

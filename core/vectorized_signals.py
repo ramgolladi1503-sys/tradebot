@@ -84,9 +84,11 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     signals_df['target'] = np.where(is_buy, sig_ltp + sig_atr * tgt_mult, sig_ltp - sig_atr * tgt_mult)
     signals_df['stop_loss'] = np.where(is_buy, sig_ltp - sig_atr * stp_mult, sig_ltp + sig_atr * stp_mult)
     
-    # Qty and Lot Size (Static base mapping for elite backtests)
+    # Qty and Lot Size
+    from config import config as cfg
     signals_df['qty'] = 1  # 1 lot by default
-    signals_df['lot_size'] = 65  # NIFTY lot size
+    nifty_lot = getattr(cfg, 'LOT_SIZE', {}).get('NIFTY', 65)
+    signals_df['lot_size'] = nifty_lot
     
     # Canonical Setup Identity
     # For vectorized, we infer strategy_family from which mask triggered
@@ -94,14 +96,33 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
                                     np.where(buy_mr | sell_mr, "MeanReversion", 
                                     np.where(buy_orb | sell_orb, "ORB", "Unknown")))
     
-    signals_df['regime'] = "base" # Can be expanded based on vol_z or trend
+    # Dynamic Regime Inference
+    signals_df['regime'] = np.where(vol_z.loc[signals_df.index] > 1.0, "high_vol", 
+                           np.where(vol_z.loc[signals_df.index] < -1.0, "low_vol", "base"))
     signals_df['direction'] = signals_df['signal_side']
     signals_df['entry'] = signals_df['entry_price']
     
-    # Generate unique setup IDs
-    signals_df['setup_id'] = [f"vec_{str(idx)}_{fam}" for idx, fam in zip(signals_df.index, signals_df['strategy_family'])]
+    # Dynamic confidence
+    trend_val = trend.loc[signals_df.index]
+    rsi_val = rsi_mom.loc[signals_df.index]
+    signals_df['confidence'] = np.clip(0.5 + abs(trend_val) * 10 + abs(rsi_val) * 0.5, 0.5, 1.0)
     
-    signals_df['confidence'] = 0.5 # Default heuristic confidence
+    # Extract time bucket
+    if 'timestamp' in df.columns:
+        time_bucket = time_strs.loc[signals_df.index].str.slice(0, 2)
+    else:
+        time_bucket = pd.Series("00", index=signals_df.index)
+        
+    vol_bucket = np.where(vol_z.loc[signals_df.index] > 0, "high", "low")
+    
+    # Deterministic fingerprint setup_id
+    signals_df['setup_id'] = (
+        signals_df['strategy_family'] + "_" + 
+        signals_df['regime'] + "_" + 
+        signals_df['direction'] + "_v" + 
+        vol_bucket + "_t" +
+        time_bucket
+    )
     signals_df['truth_quality'] = "VECTORIZED_HEURISTIC"
     
     return signals_df

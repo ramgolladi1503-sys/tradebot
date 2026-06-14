@@ -44,6 +44,9 @@ class VectorizedBacktestEngine:
         self.data = historical_data.copy()
         self.config = config or EliteBacktestConfig()
         
+        if getattr(self.config, "research_mode", "PROXY_RESEARCH") == "REAL_EXECUTABLE_RESEARCH":
+            raise ValueError("VectorizedBacktestEngine does not consume real option quotes and cannot claim REAL_EXECUTABLE_RESEARCH. Use PROXY_RESEARCH instead.")
+        
         # We still keep references to the OOP modules for hybrid generation
         self.trade_builder = TradeBuilder()
         self.risk_engine = RiskEngine()

@@ -45,11 +45,11 @@ def generate_tearsheet(trades_df: pd.DataFrame, initial_capital: float = 100000.
     sortino_ratio = (mean_return / downside_std) if not pd.isna(downside_std) and downside_std != 0 else 0.0
 
     contamination_stats = {
-        "synthetic_chain_used": trades_df["synthetic_chain_used"].sum() if "synthetic_chain_used" in trades_df else 0,
-        "close_only_rows_used": trades_df["close_only_rows_used"].sum() if "close_only_rows_used" in trades_df else 0,
-        "derived_geometry_rows": trades_df["derived_geometry_rows"].sum() if "derived_geometry_rows" in trades_df else 0,
-        "missing_bid_ask_rows": trades_df["missing_bid_ask_rows"].sum() if "missing_bid_ask_rows" in trades_df else 0,
-        "ambiguous_exit_rows": trades_df["ambiguous_exit_rows"].sum() if "ambiguous_exit_rows" in trades_df else 0,
+        "synthetic_chain_used": trades_df["synthetic_chain_used"].sum() if "synthetic_chain_used" in trades_df else "unknown",
+        "close_only_rows_used": trades_df["close_only_rows_used"].sum() if "close_only_rows_used" in trades_df else "unknown",
+        "derived_geometry_rows": trades_df["derived_geometry_rows"].sum() if "derived_geometry_rows" in trades_df else "unknown",
+        "missing_bid_ask_rows": trades_df["missing_bid_ask_rows"].sum() if "missing_bid_ask_rows" in trades_df else "unknown",
+        "ambiguous_exit_rows": trades_df["ambiguous_exit_rows"].sum() if "ambiguous_exit_rows" in trades_df else "unknown",
     }
 
     after_cost_expectancy = trades_df["pl"].mean() if not trades_df.empty else 0.0
