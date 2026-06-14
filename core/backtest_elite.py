@@ -29,6 +29,9 @@ class EliteBacktestConfig:
     allowed_time_end: str = "15:30"
     trailing_stop_activation_mult: float = 0.0
     trailing_stop_trail_mult: float = 0.0
+    train_days: int = 20
+    test_days: int = 5
+    oos_start_date: Optional[str] = None
 
 
 class VectorizedBacktestEngine:
@@ -178,6 +181,16 @@ class VectorizedBacktestEngine:
                 
             pl -= self.config.fee_per_trade * 2
             
+            is_oos = False
+            if self.config.oos_start_date is not None:
+                # Attempt to parse date from index
+                try:
+                    trade_time = self.data.index[idx]
+                    if pd.to_datetime(trade_time) >= pd.to_datetime(self.config.oos_start_date):
+                        is_oos = True
+                except Exception:
+                    pass
+                    
             results.append({
                 "entry_idx": idx,
                 "side": side,
@@ -187,6 +200,7 @@ class VectorizedBacktestEngine:
                 "pl": pl,
                 "outcome": outcome,
                 "ambiguous_exit_rows": 1 if is_ambiguous else 0,
+                "is_oos": is_oos,
                 "rr": abs(target - entry_price) / max(abs(entry_price - stop_loss), 1e-6)
             })
             
