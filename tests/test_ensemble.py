@@ -2,6 +2,7 @@ from strategies.ensemble import ensemble_signal
 
 def test_ensemble_signal_trend_up():
     md = {
+        "regime": "TREND",
         "ltp": 102,
         "vwap": 100,
         "vwap_slope": 0.5,

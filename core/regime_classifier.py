@@ -26,6 +26,11 @@ class RegimeClassifier:
         - ib_volume_ratio (float): First Hour Initial Balance volume ratio vs 30-day average
         - is_event_day (bool): True if macroeconomic event or shock occurred
         """
+        # Allow explicit override from market_data
+        manual_regime = market_data.get("regime")
+        if manual_regime:
+            return manual_regime
+            
         is_event = market_data.get("is_event_day", False)
         if is_event:
             return "EVENT_SHOCK"

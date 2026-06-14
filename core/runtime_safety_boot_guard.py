@@ -157,9 +157,20 @@ def assess_runtime_boot_safety(
 
     unsafe_flags = tuple(sorted(unsafe_sources.keys()))
 
-    if resolved_mode == "LIVE" and unsafe_flags:
-        for flag in unsafe_flags:
-            fatal_reasons.append(f"LIVE_UNSAFE_FLAG:{flag}")
+    if resolved_mode == "LIVE":
+        if unsafe_flags:
+            for flag in unsafe_flags:
+                fatal_reasons.append(f"LIVE_UNSAFE_FLAG:{flag}")
+                
+        # Phase 4: Enforce LIVE mode blocks and global max drawdown stops
+        has_broker = _config_value(config, "LIVE_BROKER_ADAPTER_ACTIVE") or _env_value(env, "LIVE_BROKER_ADAPTER_ACTIVE")
+        if not _flag_enabled(has_broker):
+            fatal_reasons.append("LIVE_BROKER_ADAPTER_NOT_CONFIGURED")
+            
+        max_dd = _config_value(config, "MAX_DAILY_LOSS_PCT") or _env_value(env, "MAX_DAILY_LOSS_PCT")
+        if max_dd is None or float(max_dd) > 0.05:
+            fatal_reasons.append("LIVE_GLOBAL_DRAWDOWN_LIMIT_UNSAFE")
+            
     elif resolved_mode in {"PAPER", "SIM"} and unsafe_flags:
         for flag in unsafe_flags:
             warnings.append(f"NON_LIVE_UNSAFE_FLAG:{flag}")
