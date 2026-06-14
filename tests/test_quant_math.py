@@ -14,16 +14,16 @@ def test_gaussian_hmm():
     hmm.fit(X)
     
     assert hmm.is_fitted
-    assert len(hmm.means_) == 2
+    assert hmm.means_.shape[0] == 2
     
     preds = hmm.predict(X)
-    assert len(preds) == 100
+    assert preds.shape[0] == 100
     # True behavioral proof: HMM should separate the two distinct clusters
     cluster_0_preds = preds[:50]
     cluster_1_preds = preds[50:]
     # Either all 0s and all 1s, or vice versa
-    assert len(set(cluster_0_preds)) == 1
-    assert len(set(cluster_1_preds)) == 1
+    assert np.unique(cluster_0_preds).shape[0] == 1
+    assert np.unique(cluster_1_preds).shape[0] == 1
     assert cluster_0_preds[0] != cluster_1_preds[0]
 
 def test_calculate_vpin():
@@ -45,11 +45,11 @@ def test_fractional_differentiation():
     series = np.arange(10, dtype=float)
     
     weights = get_weights(0.5, 5)
-    assert len(weights) == 5
+    assert weights.shape[0] == 5
     
     diff = frac_diff_ffd(series, d=0.5, thres=1e-3)
     # The output should have nans at the beginning based on window size
-    assert len(diff) == 10
+    assert diff.shape[0] == 10
     assert np.isnan(diff[0][0])
     
     # Check actual differentiated values
