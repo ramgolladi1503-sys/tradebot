@@ -18,6 +18,7 @@ def main():
     print(f"Loaded {len(data)} rows. Initiating Elite Backtester generation...")
     
     config = EliteBacktestConfig(
+        research_mode="REAL_EXECUTABLE_RESEARCH",
         use_synth_chain=False, # Disable synthetic chains for speed over 5 years
         entry_window=3,
         horizon=15,

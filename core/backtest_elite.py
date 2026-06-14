@@ -14,13 +14,14 @@ from config import config as cfg
 
 @dataclass
 class EliteBacktestConfig:
+    research_mode: str = "PROXY_RESEARCH"
     vol_target: float = 0.002
     entry_window: int = 3
     horizon: int = 5
     slippage_bps: float = 1.0
     fee_per_trade: float = 0.0
     spread_bps: float = 1.0
-    use_synth_chain: bool = True
+    use_synth_chain: bool = False
     starting_capital: float = 100000.0
     target_atr_mult: float = 1.5
     stop_atr_mult: float = 1.0
@@ -28,6 +29,9 @@ class EliteBacktestConfig:
     allowed_time_end: str = "15:30"
     trailing_stop_activation_mult: float = 0.0
     trailing_stop_trail_mult: float = 0.0
+    train_days: int = 20
+    test_days: int = 5
+    oos_start_date: Optional[str] = None
 
 
 class VectorizedBacktestEngine:
@@ -101,6 +105,7 @@ class VectorizedBacktestEngine:
             
             outcome = "TIMEOUT"
             exit_price = future_closes[-1]
+            is_ambiguous = False
             
             if ts_act_mult > 0 and ts_trail_mult > 0:
                 # We need ATR to calculate absolute trailing levels
@@ -143,18 +148,29 @@ class VectorizedBacktestEngine:
                             if new_stop < current_stop:
                                 current_stop = new_stop
             else:
-                # Original fast evaluation
-                hit_target = np.any(future_highs >= target) if side == "BUY" else np.any(future_lows <= target)
-                hit_stop = np.any(future_lows <= stop_loss) if side == "BUY" else np.any(future_highs >= stop_loss)
-                if hit_target and not hit_stop:
-                    outcome = "TARGET"
-                    exit_price = target
-                elif hit_stop and not hit_target:
-                    outcome = "STOP"
-                    exit_price = stop_loss
-                elif hit_stop and hit_target:
-                    outcome = "STOP"
-                    exit_price = stop_loss
+                is_ambiguous = False
+                for i in range(len(future_highs)):
+                    h, l = future_highs[i], future_lows[i]
+                    if side == "BUY":
+                        tgt_hit = h >= target
+                        stp_hit = l <= stop_loss
+                    else:
+                        tgt_hit = l <= target
+                        stp_hit = h >= stop_loss
+                        
+                    if tgt_hit and stp_hit:
+                        outcome = "STOP"
+                        exit_price = stop_loss
+                        is_ambiguous = True
+                        break
+                    elif stp_hit:
+                        outcome = "STOP"
+                        exit_price = stop_loss
+                        break
+                    elif tgt_hit:
+                        outcome = "TARGET"
+                        exit_price = target
+                        break
                 
             exit_fill = self._apply_cost(exit_price, "SELL" if side == "BUY" else "BUY")
             
@@ -165,6 +181,16 @@ class VectorizedBacktestEngine:
                 
             pl -= self.config.fee_per_trade * 2
             
+            is_oos = False
+            if self.config.oos_start_date is not None:
+                # Attempt to parse date from index
+                try:
+                    trade_time = self.data.index[idx]
+                    if pd.to_datetime(trade_time) >= pd.to_datetime(self.config.oos_start_date):
+                        is_oos = True
+                except Exception:
+                    pass
+                    
             results.append({
                 "entry_idx": idx,
                 "side": side,
@@ -173,6 +199,8 @@ class VectorizedBacktestEngine:
                 "qty": qty,
                 "pl": pl,
                 "outcome": outcome,
+                "ambiguous_exit_rows": 1 if is_ambiguous else 0,
+                "is_oos": is_oos,
                 "rr": abs(target - entry_price) / max(abs(entry_price - stop_loss), 1e-6)
             })
             
@@ -255,7 +283,14 @@ class VectorizedBacktestEngine:
                 "target": trade.target,
                 "stop_loss": trade.stop_loss,
                 "qty": sized_qty,
-                "lot_size": lot_size
+                "lot_size": lot_size,
+                "setup_id": f"hyb_{idx}_{getattr(trade, 'strategy', 'Unknown')}",
+                "strategy_family": getattr(trade, 'strategy', 'Unknown'),
+                "regime": getattr(trade, 'regime', 'base'),
+                "direction": trade.side,
+                "entry": trade.entry_price,
+                "confidence": 0.8,
+                "truth_quality": "TRADE_BUILDER_HYBRID"
             })
             
         signals_df = pd.DataFrame(signals)

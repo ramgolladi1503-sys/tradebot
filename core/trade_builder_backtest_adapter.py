@@ -25,6 +25,11 @@ class TradeBuilderBacktestAdapter:
                 "stop": float(getattr(trade, "stop_loss", 0.0)),
                 "qty": int(getattr(trade, "qty", 1)),
                 "side": str(getattr(trade, "side", "BUY")),
+                "direction": str(getattr(trade, "side", "BUY")),
+                "strategy_family": str(getattr(trade, "strategy", "Unknown")),
+                "regime": str(getattr(trade, "regime", "base")),
+                "confidence": 0.8,
+                "truth_quality": "TRADE_BUILDER_ADAPTER"
             }
         except Exception:
             return None

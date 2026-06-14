@@ -68,16 +68,21 @@ class OptionBacktestEngine:
             candle = candles.iloc[idx]
             high = float(candle["high"])
             low = float(candle["low"])
+            
             if side == "SELL":
-                if low <= target_price:
-                    return float(target_price), candle["timestamp"], "TARGET_HIT"
-                if high >= stop_price:
-                    return float(stop_price), candle["timestamp"], "STOP_HIT"
+                tgt_hit = low <= target_price
+                stp_hit = high >= stop_price
             else:
-                if high >= target_price:
-                    return float(target_price), candle["timestamp"], "TARGET_HIT"
-                if low <= stop_price:
-                    return float(stop_price), candle["timestamp"], "STOP_HIT"
+                tgt_hit = high >= target_price
+                stp_hit = low <= stop_price
+                
+            if tgt_hit and stp_hit:
+                return float(stop_price), candle["timestamp"], "STOP_HIT"
+            elif stp_hit:
+                return float(stop_price), candle["timestamp"], "STOP_HIT"
+            elif tgt_hit:
+                return float(target_price), candle["timestamp"], "TARGET_HIT"
+                
         last_candle = candles.iloc[max_index]
         return float(last_candle["close"]), last_candle["timestamp"], "TIME_EXIT"
 
@@ -184,6 +189,7 @@ class OptionBacktestEngine:
                 pnl_points = exit_price - entry_fill_price
             hold_minutes = max((exit_ts - row["timestamp"]).total_seconds() / 60.0, 0.0)
             slippage_points = abs(entry_fill_price - entry_ref)
+            fill_qty = int(fill.get("fill_qty", self.cfg.quantity))
             trade = OptionBacktestTrade(
                 symbol=str(candidate["symbol"]),
                 side=side,
@@ -192,12 +198,12 @@ class OptionBacktestEngine:
                 entry_reference_price=entry_ref,
                 entry_fill_price=entry_fill_price,
                 exit_price=float(exit_price),
-                quantity=int(self.cfg.quantity),
+                quantity=fill_qty,
                 target_price=float(target_price),
                 stop_price=float(stop_price),
                 exit_reason=exit_reason,
                 pnl_points=float(pnl_points),
-                pnl_value=float(pnl_points) * float(self.cfg.quantity),
+                pnl_value=float(pnl_points) * float(fill_qty),
                 slippage_points=float(slippage_points),
                 hold_minutes=float(hold_minutes),
                 truth_quality=str(candidate.get("truth_quality") or ""),

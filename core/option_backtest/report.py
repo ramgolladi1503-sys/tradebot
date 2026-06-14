@@ -35,20 +35,29 @@ def summarize_backtest(
         profit_factor = gross_profit / gross_loss
     elif gross_profit > 0:
         profit_factor_unbounded = True
+    after_cost_expectancy = total_pnl / len(trades) if trades else 0.0
+    
+    warnings = []
+    if after_cost_expectancy <= 0:
+        warnings.append("WARNING: Negative or zero after-cost expectancy! Win rate is irrelevant.")
+
     return {
         "signals_total": int(signals_total),
         "executable_signals": int(executable_signals),
         "trades_taken": len(trades),
+        "after_cost_expectancy": after_cost_expectancy,
+        "profit_factor": profit_factor,
+        "profit_factor_oos": None,  # To be implemented if option trades have OOS flag
+        "win_rate": (len(wins) / len(trades)) if trades else 0.0,
         "wins": len(wins),
         "losses": len(losses),
-        "win_rate": (len(wins) / len(trades)) if trades else 0.0,
         "total_pnl_value": total_pnl,
         "average_profit": avg_profit,
         "average_loss": avg_loss,
         "max_drawdown": abs(max_drawdown),
-        "profit_factor": profit_factor,
         "profit_factor_unbounded": profit_factor_unbounded,
         "slippage_impact": slippage_impact,
         "rejected_reasons": dict(rejected_reasons),
         "diagnostics": diagnostics,
+        "warnings": warnings,
     }
