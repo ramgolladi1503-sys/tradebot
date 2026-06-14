@@ -92,9 +92,9 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     
     # Canonical Setup Identity
     # For vectorized, we infer strategy_family from which mask triggered
-    signals_df['strategy_family'] = np.where(buy_trend | sell_trend, "TrendVWAP", 
-                                    np.where(buy_mr | sell_mr, "MeanReversion", 
-                                    np.where(buy_orb | sell_orb, "ORB", "Unknown")))
+    signals_df['strategy_family'] = np.where(buy_trend.loc[signals_df.index] | sell_trend.loc[signals_df.index], "TrendVWAP", 
+                                    np.where(buy_mr.loc[signals_df.index] | sell_mr.loc[signals_df.index], "MeanReversion", 
+                                    np.where(buy_orb.loc[signals_df.index] | sell_orb.loc[signals_df.index], "ORB", "Unknown")))
     
     # Dynamic Regime Inference
     signals_df['regime'] = np.where(vol_z.loc[signals_df.index] > 1.0, "high_vol", 
