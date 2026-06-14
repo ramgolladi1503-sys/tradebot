@@ -25,6 +25,9 @@ def test_feed_freshness_normalizes_ms_epochs(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path))
     monkeypatch.setattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", False, raising=False)
     monkeypatch.setattr(freshness_sla, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(freshness_sla, "_load_token_map", lambda: {})
+    tick_store._LAST_TICK_BY_TOKEN.clear()
+    tick_store._tick_window.clear()
     freshness_sla._reset_cache_for_tests()
 
     payload = freshness_sla.get_freshness_status(force=True)
