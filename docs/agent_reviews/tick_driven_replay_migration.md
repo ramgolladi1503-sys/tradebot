@@ -4,16 +4,16 @@
 - **Allowed**: `core/replay_engine.py`, `scripts/run_paper_replay.py`, `tests/`, `tools/legacy/`
 - **Forbidden**: `main.py`, `run_live.sh`, `credentials.py`, `runtime/live*`
 
-## Grill Me
+## Grill Me Review
 Identified lookahead bias and static slippage in the old backtest engine. Confirmed migration to tick-driven event loop is necessary to prevent fake progress.
 
-## Hermes
+## Hermes Review
 Designed architecture to wire `execution_engine.py` and `slippage_model.py` into the replay loop and track `active_trades`.
 
-## GSD
+## GSD Review
 Implemented the tick-driven simulation in `core/replay_engine.py`, removed legacy test harness.
 
-## QA/Safety
+## QA / Safety Review
 Ensured `test_tick_level_fill_resolution.py` proves lookahead is impossible. No live execution systems touched.
 
 ## Acceptance Proof
