@@ -68,7 +68,6 @@ def generate_signal(price_a, price_b, historical_a=None, historical_b=None, min_
     # Assuming 5-minute candles, 36 periods = 3 hours. Reject if > 36.
     ou_half_life = calculate_ou_half_life(spreads)
     max_half_life_periods = kwargs.get('max_half_life_periods', 36.0)
-    
     if ou_half_life > max_half_life_periods or ou_half_life == float('inf'):
         _update_debug(debug_stats, rejected=1, reason="half_life_too_long")
         return None
