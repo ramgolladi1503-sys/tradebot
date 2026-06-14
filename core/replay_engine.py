@@ -23,6 +23,7 @@ from core.trade_scoring import compute_trade_score
 from core.risk_engine import RiskEngine
 from core.execution_guard import ExecutionGuard
 from strategies.trade_builder import TradeBuilder
+from core.slippage_model import estimate_slippage
 
 
 def _load_instruments_map(path: Path) -> Dict[int, dict]:
@@ -227,6 +228,7 @@ class ReplayEngine:
             "trades_today": 0,
             "equity_high": float(getattr(cfg, "CAPITAL", 100000)),
         }
+        self.active_trades = []
 
     @staticmethod
     def replay_runtime_artifacts(
@@ -603,6 +605,59 @@ class ReplayEngine:
                         continue
                     if price is None:
                         continue
+                        
+                    for t_idx in range(len(self.active_trades) - 1, -1, -1):
+                        active = self.active_trades[t_idx]
+                        if not _match_symbol(active, sym):
+                            continue
+                        
+                        outcome = None
+                        exit_price = price
+                        
+                        if active["side"] == "BUY":
+                            if price >= active["target"]:
+                                outcome = "TARGET"
+                            elif price <= active["stop_loss"]:
+                                outcome = "STOP"
+                        else:
+                            if price <= active["target"]:
+                                outcome = "TARGET"
+                            elif price >= active["stop_loss"]:
+                                outcome = "STOP"
+                                
+                        if outcome:
+                            est = estimate_slippage(
+                                side="SELL" if active["side"] == "BUY" else "BUY",
+                                bid=price,
+                                ask=price,
+                                execution_entry=price,
+                                qty=active["qty"],
+                                volume=volume,
+                                vol_z=0.0
+                            )
+                            exit_fill = est.executable_price_estimate or price
+                            pl = (exit_fill - active["entry_fill"]) * active["qty"] if active["side"] == "BUY" else (active["entry_fill"] - exit_fill) * active["qty"]
+                            
+                            self.portfolio["capital"] += pl
+                            self.portfolio["trades_today"] += 1
+                            if pl < 0:
+                                self.portfolio["daily_loss"] += abs(pl)
+                            else:
+                                self.portfolio["daily_profit"] += pl
+                            
+                            out_outcomes = logs_dir() / "candidate_outcomes.jsonl"
+                            with out_outcomes.open("a") as out_f:
+                                out_f.write(json.dumps({
+                                    "trade_id": active["trade_id"],
+                                    "symbol": active["symbol"],
+                                    "outcome": outcome,
+                                    "pl": pl,
+                                    "exit_fill": exit_fill,
+                                    "ts_epoch": ts_epoch
+                                }) + "\n")
+                                
+                            self.active_trades.pop(t_idx)
+
                     local_ohlc_buffer.update_tick(sym, price, volume or 0, ts=ts_epoch)
                     bars = local_ohlc_buffer.get_bars(sym)
                     indicators_ok = len(bars) >= getattr(cfg, "OHLC_MIN_BARS", 30)
@@ -735,6 +790,27 @@ class ReplayEngine:
                                 ok, guard_reason = self.exec_guard.validate(trade, self.portfolio, trade.regime)
                                 decision["exec_guard_allowed"] = bool(ok)
                                 decision["exec_guard_reason"] = guard_reason
+                                
+                                if ok:
+                                    est = estimate_slippage(
+                                        side=trade.side,
+                                        bid=price,
+                                        ask=price,
+                                        execution_entry=trade.entry_price,
+                                        qty=trade.qty,
+                                        volume=volume,
+                                        vol_z=vol_z
+                                    )
+                                    entry_fill = est.executable_price_estimate or trade.entry_price
+                                    self.active_trades.append({
+                                        "trade_id": trace_id,
+                                        "symbol": sym,
+                                        "side": trade.side,
+                                        "qty": trade.qty,
+                                        "target": trade.target,
+                                        "stop_loss": trade.stop_loss,
+                                        "entry_fill": entry_fill,
+                                    })
                             # compute score explanation
                             try:
                                 opt = market_data.get("option_chain", [{}])[0] if market_data.get("option_chain") else {}

@@ -68,6 +68,10 @@ def volatility_scaled_trend_strategy(symbol, ltp, vwap, atr, base_lot_size=15, t
     stop_loss = round(entry_price * 0.8, 2)
     target = round(entry_price * 1.5, 2)
     
+    # For Phase 1 Alpha Decay migration
+    predicted_edge_bps = min(50.0, max(5.0, abs(trend) * 10000))
+    expected_holding_time_sec = max(300, int(3600 / (atr + 1e-9)))
+    
     trades.append({
         "symbol": symbol,
         "strike": strike,
@@ -77,7 +81,9 @@ def volatility_scaled_trend_strategy(symbol, ltp, vwap, atr, base_lot_size=15, t
         "target": target,
         "lot_size": dynamic_qty,
         "confidence": 75,
-        "reason": "Volatility Scaled Trend"
+        "reason": "Volatility Scaled Trend",
+        "initial_predicted_edge": round(predicted_edge_bps, 2),
+        "expected_holding_period": expected_holding_time_sec,
     })
     
     return trades
