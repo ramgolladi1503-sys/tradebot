@@ -12,22 +12,22 @@
 # Scope Guard
 This PR is tightly scoped to adding AI instructions and verification scaffolding. It does not touch runtime, execution, broker, or strategy code.
 
-# Grill Me
+# Grill Me Review
 CRITIQUE_SCOPE: Does this touch execution? No.
 REVIEW_PR: Adds files for developer tools and CI only.
 AUDIT_RISK: Zero risk to live trading.
 FIND_FAKE_PROGRESS: This prevents future agents from creating fake progress by ignoring heavy files and mandating strategy registration.
 
-# Hermes
+# Hermes Review
 DESIGN_ARCHITECTURE: Adds read-only checks for strategy registration and ignored directories.
 DEFINE_CONTRACT: AI must write strictly asynchronous code and register strategies.
 CREATE_ACCEPTANCE_GATES: GitHub Action runs `verify_registry.py`.
 
-# GSD
+# GSD Review
 PLAN_PR: Write 4 required files.
 GENERATE_PATCH: Implemented.
 
-# QA/Safety
+# QA / Safety Review
 read_only=true
 is_order_action=false
 broker_api_called=false
