@@ -52,10 +52,26 @@ def generate_tearsheet(trades_df: pd.DataFrame, initial_capital: float = 100000.
         "ambiguous_exit_rows": trades_df["ambiguous_exit_rows"].sum() if "ambiguous_exit_rows" in trades_df else 0,
     }
 
+    after_cost_expectancy = trades_df["pl"].mean() if not trades_df.empty else 0.0
+    
+    oos_trades = trades_df[trades_df.get("is_oos", pd.Series([False]*len(trades_df)))]
+    if not oos_trades.empty:
+        oos_winners = oos_trades[oos_trades["pl"] > 0]
+        oos_losers = oos_trades[oos_trades["pl"] <= 0]
+        profit_factor_oos = abs(oos_winners["pl"].sum() / oos_losers["pl"].sum()) if not oos_losers.empty and oos_losers["pl"].sum() != 0 else float("inf")
+    else:
+        profit_factor_oos = None
+
+    warnings = []
+    if after_cost_expectancy <= 0:
+        warnings.append("WARNING: Negative or zero after-cost expectancy! Win rate is irrelevant.")
+
     return {
         "total_trades": total_trades,
-        "win_rate_pct": win_rate * 100.0,
+        "after_cost_expectancy": after_cost_expectancy,
         "profit_factor": profit_factor,
+        "profit_factor_oos": profit_factor_oos,
+        "win_rate_pct": win_rate * 100.0,
         "total_pnl": trades_df["pl"].sum(),
         "final_equity": trades_df["equity_curve"].iloc[-1],
         "avg_win": avg_win,
@@ -65,7 +81,8 @@ def generate_tearsheet(trades_df: pd.DataFrame, initial_capital: float = 100000.
         "sharpe_ratio_per_trade": sharpe_ratio,
         "sortino_ratio_per_trade": sortino_ratio,
         "outcomes": trades_df["outcome"].value_counts().to_dict(),
-        "contamination": contamination_stats
+        "contamination": contamination_stats,
+        "warnings": warnings
     }
 
 def print_tearsheet(metrics: dict):
@@ -76,11 +93,27 @@ def print_tearsheet(metrics: dict):
     print("="*40)
     print("      ELITE BACKTEST TEARSHEET      ")
     print("="*40)
+    
+    if metrics.get("warnings"):
+        for w in metrics["warnings"]:
+            print(f"\033[91m{w}\033[0m")
+        print("="*40)
+
     print(f"Final Equity:       ${metrics['final_equity']:,.2f}")
     print(f"Total PnL:          ${metrics['total_pnl']:,.2f}")
     print(f"Total Trades:       {metrics['total_trades']}")
-    print(f"Win Rate:           {metrics['win_rate_pct']:.2f}%")
+    print(f"Expectancy (Net):   ${metrics['after_cost_expectancy']:,.2f}")
+    
+    # Deprecate win rate if expectancy is bad
+    if metrics['after_cost_expectancy'] > 0:
+        print(f"Win Rate:           {metrics['win_rate_pct']:.2f}%")
+    else:
+        print(f"Win Rate:           {metrics['win_rate_pct']:.2f}% (IRRELEVANT - NEGATIVE EXPECTANCY)")
+        
     print(f"Profit Factor:      {metrics['profit_factor']:.2f}")
+    if metrics.get('profit_factor_oos') is not None:
+        print(f"Profit Factor(OOS): {metrics['profit_factor_oos']:.2f}")
+        
     print(f"Average Win:        ${metrics['avg_win']:,.2f}")
     print(f"Average Loss:       ${metrics['avg_loss']:,.2f}")
     print(f"Max Drawdown:       {metrics['max_drawdown_pct']:.2f}% (${metrics['max_drawdown_abs']:,.2f})")
