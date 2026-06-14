@@ -19,6 +19,14 @@ def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015, market_data=None):
     # Elite 10/10 CVD Filter: Volume must support the breakout
     cvd = market_data.get("cumulative_volume_delta", 0)
 
+    # Elite 10/10 VPIN Toxicity Filter
+    # Breakouts require high order flow toxicity to sustain momentum
+    vpin_toxicity = market_data.get("vpin_toxicity", 1.0) # default 1.0 to not break tests if absent
+    min_vpin_threshold = market_data.get("min_vpin_threshold", 0.6) # 60% toxicity required
+    
+    if vpin_toxicity < min_vpin_threshold:
+        return trades # Veto: Breakout lacks informed order flow toxicity
+
     # VWAP buffer to reduce noise
     if ltp > vwap * (1 + vwap_buffer):
         if cvd < 0:

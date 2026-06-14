@@ -4,7 +4,28 @@ class RegimeClassifier:
     """
     Elite Regime Classifier.
     Calculates current market environment based on quantitative indicators.
+    Now supports probabilistic Gaussian HMM classification.
     """
+    def __init__(self):
+        try:
+            from core.math.hmm_regime import GaussianHMM
+            self.hmm_model = GaussianHMM(n_components=3, n_iter=50)
+        except ImportError:
+            self.hmm_model = None
+        self.is_hmm_fitted = False
+
+    def fit_hmm(self, historical_data):
+        """
+        Fits the HMM model using historical market data.
+        historical_data should be a list of [rv, vrp, ib_vol_ratio] observations.
+        """
+        if not historical_data or self.hmm_model is None:
+            return
+        import numpy as np
+        X = np.array(historical_data)
+        if len(X) > 10:  # Need enough samples
+            self.hmm_model.fit(X)
+            self.is_hmm_fitted = True
 
     def calculate_volatility_risk_premium(self, iv: float, rv: float) -> float:
         """
@@ -41,6 +62,34 @@ class RegimeClassifier:
         
         vrp = self.calculate_volatility_risk_premium(iv, rv)
         
+        # Probabilistic HMM Classification
+        if self.is_hmm_fitted and self.hmm_model is not None:
+            import numpy as np
+            X_new = np.array([[rv, vrp, ib_vol_ratio]])
+            state = self.hmm_model.predict(X_new)[0]
+            
+            # Map HMM states dynamically based on their learned means
+            # Feature 0: RV, Feature 1: VRP
+            state_means = self.hmm_model.means_
+            high_vol_state = np.argmax(state_means[:, 0])
+            skew_state = np.argmax(state_means[:, 1])
+            
+            # If the high vol state is the same as the skew state, differentiate
+            if high_vol_state == skew_state:
+                # The one with the highest VRP relative to its RV is skew
+                skew_state = np.argmax(state_means[:, 1] / (state_means[:, 0] + 1e-5))
+                if skew_state == high_vol_state:
+                    # Fallback to secondary high vol
+                    high_vol_state = np.argsort(state_means[:, 0])[-2]
+            
+            if state == high_vol_state:
+                return "HIGH_VOL_TREND"
+            elif state == skew_state:
+                return "MEAN_REVERT_SKEW"
+            else:
+                return "LOW_VOL_CHOP"
+        
+        # Fallback to static heuristics if HMM is not fitted
         # High volatility and high volume pushing through IB usually signals a strong trend
         if rv > 20.0 and ib_vol_ratio > 1.2:
             return "HIGH_VOL_TREND"
