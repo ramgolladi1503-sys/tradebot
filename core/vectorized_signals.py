@@ -61,11 +61,14 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     
     signals_df['entry_price'] = sig_ltp
     
-    # Risk parameters: 1.5 ATR for Target, 1.0 ATR for Stop Loss
+    # Risk parameters: Configurable ATR multipliers
     is_buy = signals_df['signal_side'] == 'BUY'
     
-    signals_df['target'] = np.where(is_buy, sig_ltp + sig_atr * 1.5, sig_ltp - sig_atr * 1.5)
-    signals_df['stop_loss'] = np.where(is_buy, sig_ltp - sig_atr * 1.0, sig_ltp + sig_atr * 1.0)
+    tgt_mult = getattr(config, 'target_atr_mult', 1.5)
+    stp_mult = getattr(config, 'stop_atr_mult', 1.0)
+    
+    signals_df['target'] = np.where(is_buy, sig_ltp + sig_atr * tgt_mult, sig_ltp - sig_atr * tgt_mult)
+    signals_df['stop_loss'] = np.where(is_buy, sig_ltp - sig_atr * stp_mult, sig_ltp + sig_atr * stp_mult)
     
     # Qty and Lot Size (Static base mapping for elite backtests)
     signals_df['qty'] = 1  # 1 lot by default
