@@ -1,3 +1,11 @@
+
+def _pace_loop(poll_interval: float, loop_start_time: float) -> None:
+    import time
+    elapsed = time.perf_counter() - loop_start_time
+    sleep_time = max(0.0, poll_interval - elapsed)
+    if sleep_time > 0:
+        time.sleep(sleep_time)
+
 import time
 import json
 import argparse
@@ -4805,8 +4813,8 @@ class Orchestrator:
             cycle_real_trade_symbols: set[str] = set()
             cycle_market_mode = str(getattr(globals().get("cfg"), "EXECUTION_MODE", "SIM")).upper()
             cycle_market_open = False
-            suggestion_rows_before = _count_jsonl_rows(canonical_suggestions_log_path())
-            visible_counts_before = _scan_visible_suggestions(canonical_suggestions_log_path())
+            suggestion_rows_before = 0
+            visible_counts_before = {}
             self._decision_traces = []
             self._decision_summary_cycle_seen = set()
             self._gate_status_cycle_seen = set()
@@ -4823,15 +4831,14 @@ class Orchestrator:
                 logger.error("subprocess_monitor_error err=%s", exc, exc_info=True)
 
             # Defensive check: if feed is fatally dead, sleep to prevent high CPU spin.
-            rstate = str(feed_runtime_payload.get("runtime_state") or "").upper()
-            is_fatal = (
-                rstate in {"FEED_LIFECYCLE_FATAL", "RECOVERY_BLOCKED", "RECONNECT_BLOCKED"}
-                or bool(feed_runtime_payload.get("recovery_blocked"))
-                or str(feed_runtime_payload.get("ws_lifecycle_state") or "").upper() == "FATAL"
-            )
+            from core.recovery_state_machine import evaluate_feed_state, is_fatal_state
+            
+            recovery_state = evaluate_feed_state(feed_runtime_payload)
+            is_fatal = is_fatal_state(recovery_state)
+            
             if is_fatal:
-                logger.warning("orchestrator_live_monitoring_feed_fatal_sleep state=%s", rstate)
-                time.sleep(max(2.0, self.poll_interval))
+                logger.warning("orchestrator_live_monitoring_feed_fatal_sleep state=%s", recovery_state.name)
+                _pace_loop(max(2.0, self.poll_interval), loop_start_time)
                 if run_once:
                     break
                 continue
@@ -4855,7 +4862,7 @@ class Orchestrator:
                     cycle_stage = "global_halt"
                     cycle_blockers[str(global_halt_reason)] += 1
                     self._emit_global_halt_events(global_halt_reason)
-                    time.sleep(self.poll_interval)
+                    _pace_loop(self.poll_interval, loop_start_time)
                     continue
                 self._last_global_halt_reason = None
                 slo_guard = evaluate_slo_status(enforce_failover=True)
@@ -4871,7 +4878,7 @@ class Orchestrator:
                             "slo_guard_live_cycle_blocked reasons=%s",
                             ",".join(list(slo_guard.get("reasons") or []) or ["unknown"]),
                         )
-                    time.sleep(self.poll_interval)
+                    _pace_loop(self.poll_interval, loop_start_time)
                     continue
                 # Feed freshness is now evaluated only in the Decision DAG from the
                 # immutable market snapshot. Do not recompute readiness here.
@@ -7221,8 +7228,8 @@ class Orchestrator:
                         cycle_market_open = False
                 if not cycle_market_open:
                     cycle_market_mode = "OFFHOURS"
-                suggestion_rows_after = _count_jsonl_rows(canonical_suggestions_log_path())
-                visible_counts_after = _scan_visible_suggestions(canonical_suggestions_log_path())
+                suggestion_rows_after = 0
+                visible_counts_after = {}
                 row_delta = max(0, int(suggestion_rows_after) - int(suggestion_rows_before))
                 visible_delta = max(
                     0,
@@ -7482,7 +7489,7 @@ class Orchestrator:
                     logger.warning("runtime_health_snapshot_error err=%s", health_exc)
                 if run_once:
                     break
-                time.sleep(self.poll_interval)
+                _pace_loop(self.poll_interval, loop_start_time)
 
     def _sync_trades(self):
         mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM")) or "SIM").upper()
@@ -8031,6 +8038,62 @@ class Orchestrator:
                     meta["mae_15m"] = meta.get("mae")
             except Exception:
                 pass
+
+            # Phase 3: Route live market quotes to AlphaDecayState in ExecutionEngine
+            decay_state_dict = getattr(tr, "source_flags", {}).get("alpha_decay_state")
+            if decay_state_dict:
+                try:
+                    from core.execution.alpha_decay import AlphaDecayState, monitor_alpha_decay
+                    import time
+                    decay_state = AlphaDecayState(**decay_state_dict)
+                    l2_support_ratio = float(market_data.get("depth_imbalance", 0.5))
+                    current_momentum_bps = float(market_data.get("momentum", 0.0))
+                    
+                    should_force_exit = monitor_alpha_decay(
+                        state=decay_state,
+                        l2_support_ratio=l2_support_ratio,
+                        current_momentum_bps=current_momentum_bps
+                    )
+                    
+                    if should_force_exit:
+                        intent = {
+                            "action": "FULL_EXIT",
+                            "trade_id": str(tr.trade_id),
+                            "reason_code": "decay_exhausted",
+                            "exit_qty_units": qty_total_units,
+                            "ts_epoch": time.time(),
+                        }
+                        self.execution_engine.apply_exit_intent(intent)
+                    
+                    # Update state in trade source flags
+                    tr.source_flags["alpha_decay_state"] = decay_state.__dict__
+                    
+                    if should_force_exit:
+                        codes = list(meta.get("reason_codes") or [])
+                        codes.append("decay_exhausted")
+                        meta["reason_codes"] = sorted(set(codes))
+                        meta["exit_intel_action"] = "FULL_EXIT"
+                        self.trade_meta[tr.trade_id] = meta
+                        
+                        # Apply local full exit state updates since ExecutionEngine already generated the intent
+                        try:
+                            from core.exit_intelligence_evaluator import ExitDecision, ExitAction
+                            decision = ExitDecision(
+                                action=ExitAction.FULL_EXIT,
+                                reason_codes=["decay_exhausted"],
+                                state_patch={}
+                            )
+                            ack = {"accepted": True, "intent_id": f"exit_decay_{tr.trade_id}"}
+                            position_state = self._load_position_state(tr.trade_id)
+                            self._record_full_exit(tr, meta, position_state, decision, market_data, ack, now_ts=time.time())
+                        except Exception:
+                            pass
+                            
+                        # Drop from open_trades as it is fully exited
+                        continue
+                except Exception as e:
+                    pass
+
             feed_state = (
                 market_data.get("feed_state")
                 or (market_data.get("feed_health") or {}).get("state")

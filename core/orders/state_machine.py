@@ -26,7 +26,14 @@ class OrderState(str, Enum):
     REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
-
+    SIM_NEW = "SIM_NEW"
+    SIM_SENT = "SIM_SENT"
+    SIM_ACKNOWLEDGED = "SIM_ACKNOWLEDGED"
+    SIM_PARTIAL = "SIM_PARTIAL"
+    SIM_FILLED = "SIM_FILLED"
+    SIM_REJECTED = "SIM_REJECTED"
+    SIM_CANCELLED = "SIM_CANCELLED"
+    SIM_EXPIRED = "SIM_EXPIRED"
 
 class OrderStateTransitionError(RuntimeError):
     def __init__(self, current_state: OrderState, next_state: OrderState):
@@ -36,10 +43,8 @@ class OrderStateTransitionError(RuntimeError):
             f"illegal_order_state_transition:{current_state.value}->{next_state.value}"
         )
 
-
 class OrderStateNotFoundError(RuntimeError):
     pass
-
 
 _VALID_TRANSITIONS: dict[OrderState, set[OrderState]] = {
     OrderState.NEW: {
@@ -74,6 +79,40 @@ _VALID_TRANSITIONS: dict[OrderState, set[OrderState]] = {
     OrderState.REJECTED: set(),
     OrderState.CANCELLED: set(),
     OrderState.EXPIRED: set(),
+    
+    # Simulated States Valid Transitions
+    OrderState.SIM_NEW: {
+        OrderState.SIM_SENT,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_SENT: {
+        OrderState.SIM_ACKNOWLEDGED,
+        OrderState.SIM_PARTIAL,
+        OrderState.SIM_FILLED,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_ACKNOWLEDGED: {
+        OrderState.SIM_PARTIAL,
+        OrderState.SIM_FILLED,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_PARTIAL: {
+        OrderState.SIM_PARTIAL,
+        OrderState.SIM_FILLED,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_FILLED: set(),
+    OrderState.SIM_REJECTED: set(),
+    OrderState.SIM_CANCELLED: set(),
+    OrderState.SIM_EXPIRED: set(),
 }
 
 
@@ -673,6 +712,19 @@ class OrderStateMachine:
                     current = self._row_to_record(row)
                     if current is None:
                         raise OrderStateNotFoundError(f"order_not_found:{oid}")
+
+                    # Idempotency guard for duplicate callbacks
+                    if current.state == nxt:
+                        return current
+                        
+                    # Idempotency guard for stale callbacks arriving after terminal state
+                    terminal_states = {
+                        OrderState.FILLED, OrderState.REJECTED, OrderState.CANCELLED, OrderState.EXPIRED,
+                        OrderState.SIM_FILLED, OrderState.SIM_REJECTED, OrderState.SIM_CANCELLED, OrderState.SIM_EXPIRED
+                    }
+                    if current.state in terminal_states:
+                        # Log or safely ignore
+                        return current
 
                     self.validate_transition(current.state, nxt)
 

@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot`
 - config_path: `/Users/madhuram/tradebot/.gsd-forensics.yaml`
-- changed_paths: `6`
-- total_findings: `9`
+- changed_paths: `10`
+- total_findings: `14`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,39 +20,48 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `2` | `0` |  |
-| `cerberus` | `PASS` | `0` | `6` | `0` |  |
+| `minerva` | `PASS` | `0` | `3` | `0` |  |
+| `cerberus` | `PASS` | `0` | `10` | `0` |  |
 | `evidence` | `PASS` | `0` | `1` | `0` |  |
 
 ## Changed Paths
 
-- `core/execution/alpha_decay.py`
-- `docs/agent_reviews/continuous_architecture_phase1.md`
+- `core/orchestrator.py`
+- `core/orchestrator_parts/cycle.py`
+- `core/orchestrator_parts/data.py`
+- `core/orders/state_machine.py`
+- `core/recovery_state_machine.py`
+- `docs/agent_reviews/phase3_continuous_architecture_evidence.md`
 - `docs/code_excellence/reports/unified_ce_gate_latest.md`
-- `ml/continuous_regime.py`
-- `tests/test_alpha_decay.py`
-- `tests/test_continuous_regime.py`
+- `tests/core/test_phase3_alpha_decay_streaming.py`
+- `tests/test_orchestrator_latency.py`
+- `tests/test_recovery_state_machine.py`
 
 ## Minerva Findings
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `tests/test_alpha_decay.py` | `PASS` | `test_reality_accepted` |
-| `tests/test_continuous_regime.py` | `PASS` | `test_reality_accepted` |
+| `tests/core/test_phase3_alpha_decay_streaming.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_orchestrator_latency.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_recovery_state_machine.py` | `PASS` | `test_reality_accepted` |
 
 ## Cerberus Findings
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `core/execution/alpha_decay.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/agent_reviews/continuous_architecture_phase1.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/orchestrator.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/orchestrator_parts/cycle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/orchestrator_parts/data.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/orders/state_machine.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/recovery_state_machine.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/agent_reviews/phase3_continuous_architecture_evidence.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/code_excellence/reports/unified_ce_gate_latest.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `ml/continuous_regime.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `tests/test_alpha_decay.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `tests/test_continuous_regime.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/core/test_phase3_alpha_decay_streaming.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_orchestrator_latency.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_recovery_state_machine.py` | `PASS` | `no_restricted_boundary_marker_found` |
 
 ## Evidence Findings
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `docs/agent_reviews/continuous_architecture_phase1.md` | `PASS` | `evidence_contract_satisfied` |
+| `docs/agent_reviews/phase3_continuous_architecture_evidence.md` | `PASS` | `evidence_contract_satisfied` |
