@@ -44,6 +44,14 @@ def generate_tearsheet(trades_df: pd.DataFrame, initial_capital: float = 100000.
     sharpe_ratio = (mean_return / std_return) if std_return != 0 else 0.0
     sortino_ratio = (mean_return / downside_std) if not pd.isna(downside_std) and downside_std != 0 else 0.0
 
+    contamination_stats = {
+        "synthetic_chain_used": trades_df["synthetic_chain_used"].sum() if "synthetic_chain_used" in trades_df else 0,
+        "close_only_rows_used": trades_df["close_only_rows_used"].sum() if "close_only_rows_used" in trades_df else 0,
+        "derived_geometry_rows": trades_df["derived_geometry_rows"].sum() if "derived_geometry_rows" in trades_df else 0,
+        "missing_bid_ask_rows": trades_df["missing_bid_ask_rows"].sum() if "missing_bid_ask_rows" in trades_df else 0,
+        "ambiguous_exit_rows": trades_df["ambiguous_exit_rows"].sum() if "ambiguous_exit_rows" in trades_df else 0,
+    }
+
     return {
         "total_trades": total_trades,
         "win_rate_pct": win_rate * 100.0,
@@ -56,7 +64,8 @@ def generate_tearsheet(trades_df: pd.DataFrame, initial_capital: float = 100000.
         "max_drawdown_abs": max_drawdown_abs,
         "sharpe_ratio_per_trade": sharpe_ratio,
         "sortino_ratio_per_trade": sortino_ratio,
-        "outcomes": trades_df["outcome"].value_counts().to_dict()
+        "outcomes": trades_df["outcome"].value_counts().to_dict(),
+        "contamination": contamination_stats
     }
 
 def print_tearsheet(metrics: dict):
@@ -82,3 +91,8 @@ def print_tearsheet(metrics: dict):
     for outcome, count in metrics["outcomes"].items():
         print(f"  {outcome}: {count}")
     print("="*40)
+    if "contamination" in metrics:
+        print("Contamination / Proxy Evidence:")
+        for k, v in metrics["contamination"].items():
+            print(f"  {k}: {v}")
+        print("="*40)

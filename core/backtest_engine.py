@@ -11,10 +11,11 @@ from datetime import datetime
 from config import config as cfg
 
 class BacktestEngine:
-    def __init__(self, historical_data: pd.DataFrame, starting_capital=100000, train_stats=None):
+    def __init__(self, historical_data: pd.DataFrame, starting_capital=100000, train_stats=None, research_mode="PROXY_RESEARCH"):
         self.data = historical_data
         self.capital = starting_capital
         self.train_stats = train_stats or {}
+        self.research_mode = research_mode
         self.portfolio = {
             "capital": starting_capital,
             "trades": [],
@@ -44,7 +45,7 @@ class BacktestEngine:
             ltp = row["close"]
             vwap = row.get("vwap", ltp)
             atr = row.get("atr_14", max(1.0, ltp * 0.002))
-            option_chain = fetch_option_chain("NIFTY", ltp, force_synthetic=getattr(cfg, "BACKTEST_USE_SYNTH_CHAIN", True))
+            option_chain = fetch_option_chain("NIFTY", ltp, force_synthetic=getattr(cfg, "BACKTEST_USE_SYNTH_CHAIN", False))
 
             market_data = {
                 "symbol": "NIFTY",

@@ -14,13 +14,14 @@ from config import config as cfg
 
 @dataclass
 class EliteBacktestConfig:
+    research_mode: str = "PROXY_RESEARCH"
     vol_target: float = 0.002
     entry_window: int = 3
     horizon: int = 5
     slippage_bps: float = 1.0
     fee_per_trade: float = 0.0
     spread_bps: float = 1.0
-    use_synth_chain: bool = True
+    use_synth_chain: bool = False
     starting_capital: float = 100000.0
     target_atr_mult: float = 1.5
     stop_atr_mult: float = 1.0

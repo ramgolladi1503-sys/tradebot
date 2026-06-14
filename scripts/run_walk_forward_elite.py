@@ -14,6 +14,7 @@ def evaluate_params(args):
     data, horizon, sl_bps, target_atr, stop_atr, ts_act, ts_trail = args
     
     config = EliteBacktestConfig(
+        research_mode="REAL_EXECUTABLE_RESEARCH",
         use_synth_chain=False,
         horizon=horizon,
         slippage_bps=sl_bps,

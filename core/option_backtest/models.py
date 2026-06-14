@@ -3,12 +3,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from enum import Enum
+
+
+class ResearchMode(str, Enum):
+    SYNTHETIC_RESEARCH = "SYNTHETIC_RESEARCH"
+    PROXY_RESEARCH = "PROXY_RESEARCH"
+    REAL_EXECUTABLE_RESEARCH = "REAL_EXECUTABLE_RESEARCH"
 
 
 @dataclass(frozen=True)
 class OptionBacktestConfig:
     symbol: str
     data_path: Path
+    research_mode: ResearchMode = ResearchMode.PROXY_RESEARCH
     date_from: str | None = None
     date_to: str | None = None
     timezone: str = "Asia/Kolkata"
