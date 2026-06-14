@@ -57,7 +57,7 @@ class BacktestEngine:
                 "volume": row["volume"],
                 "bias": get_bias(ltp, vwap),
                 "option_chain": option_chain,
-                "timestamp": datetime.now().timestamp()
+                "timestamp": row.get("timestamp_epoch", idx)
             }
             trade = self.trade_builder.build(market_data)
             if not trade:
@@ -110,8 +110,32 @@ class BacktestEngine:
             if eval_slice.empty:
                 continue
 
-            hit_target = (eval_slice["high"] >= trade.target).any()
-            hit_stop = (eval_slice["low"] <= trade.stop_loss).any()
+            outcome = "TIMEOUT"
+            is_ambiguous = False
+            exit_price = eval_slice["close"].iloc[-1] if not eval_slice.empty else trade.entry_price
+
+            for _, eval_row in eval_slice.iterrows():
+                h, l = eval_row["high"], eval_row["low"]
+                if trade.side == "BUY":
+                    tgt_hit = h >= trade.target
+                    stp_hit = l <= trade.stop_loss
+                else:
+                    tgt_hit = l <= trade.target
+                    stp_hit = h >= trade.stop_loss
+
+                if tgt_hit and stp_hit:
+                    outcome = "STOP"
+                    exit_price = trade.stop_loss
+                    is_ambiguous = True
+                    break
+                elif stp_hit:
+                    outcome = "STOP"
+                    exit_price = trade.stop_loss
+                    break
+                elif tgt_hit:
+                    outcome = "TARGET"
+                    exit_price = trade.target
+                    break
 
             # Apply costs/slippage to fills
             def _apply_cost(price, side):
@@ -120,19 +144,13 @@ class BacktestEngine:
                     return price * (1 + bps / 10000.0)
                 return price * (1 - bps / 10000.0)
 
-            entry_fill = _apply_cost(trade.entry_price, "BUY")
-            if hit_target and not hit_stop:
-                exit_fill = _apply_cost(trade.target, "SELL")
+            entry_fill = _apply_cost(trade.entry_price, "BUY" if trade.side == "BUY" else "SELL")
+            exit_fill = _apply_cost(exit_price, "SELL" if trade.side == "BUY" else "BUY")
+
+            if trade.side == "BUY":
                 pl = (exit_fill - entry_fill) * trade.qty * lot_size
-                outcome = "TARGET"
-            elif hit_stop and not hit_target:
-                exit_fill = _apply_cost(trade.stop_loss, "SELL")
-                pl = (exit_fill - entry_fill) * trade.qty * lot_size
-                outcome = "STOP"
             else:
-                exit_fill = _apply_cost(eval_slice["close"].iloc[-1], "SELL")
-                pl = (exit_fill - entry_fill) * trade.qty * lot_size
-                outcome = "TIMEOUT"
+                pl = (entry_fill - exit_fill) * trade.qty * lot_size
 
             # Fees (entry + exit)
             pl -= self.fee_per_trade * 2
@@ -153,6 +171,7 @@ class BacktestEngine:
                 "qty": trade.qty,
                 "pl": pl,
                 "outcome": outcome,
+                "ambiguous_exit_rows": 1 if is_ambiguous else 0,
                 "capital": self.portfolio["capital"],
                 "strategy": getattr(trade, "strategy", None),
                 "regime": getattr(trade, "regime", None),

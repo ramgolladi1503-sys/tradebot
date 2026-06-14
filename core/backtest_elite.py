@@ -102,6 +102,7 @@ class VectorizedBacktestEngine:
             
             outcome = "TIMEOUT"
             exit_price = future_closes[-1]
+            is_ambiguous = False
             
             if ts_act_mult > 0 and ts_trail_mult > 0:
                 # We need ATR to calculate absolute trailing levels
@@ -144,18 +145,29 @@ class VectorizedBacktestEngine:
                             if new_stop < current_stop:
                                 current_stop = new_stop
             else:
-                # Original fast evaluation
-                hit_target = np.any(future_highs >= target) if side == "BUY" else np.any(future_lows <= target)
-                hit_stop = np.any(future_lows <= stop_loss) if side == "BUY" else np.any(future_highs >= stop_loss)
-                if hit_target and not hit_stop:
-                    outcome = "TARGET"
-                    exit_price = target
-                elif hit_stop and not hit_target:
-                    outcome = "STOP"
-                    exit_price = stop_loss
-                elif hit_stop and hit_target:
-                    outcome = "STOP"
-                    exit_price = stop_loss
+                is_ambiguous = False
+                for i in range(len(future_highs)):
+                    h, l = future_highs[i], future_lows[i]
+                    if side == "BUY":
+                        tgt_hit = h >= target
+                        stp_hit = l <= stop_loss
+                    else:
+                        tgt_hit = l <= target
+                        stp_hit = h >= stop_loss
+                        
+                    if tgt_hit and stp_hit:
+                        outcome = "STOP"
+                        exit_price = stop_loss
+                        is_ambiguous = True
+                        break
+                    elif stp_hit:
+                        outcome = "STOP"
+                        exit_price = stop_loss
+                        break
+                    elif tgt_hit:
+                        outcome = "TARGET"
+                        exit_price = target
+                        break
                 
             exit_fill = self._apply_cost(exit_price, "SELL" if side == "BUY" else "BUY")
             
@@ -174,6 +186,7 @@ class VectorizedBacktestEngine:
                 "qty": qty,
                 "pl": pl,
                 "outcome": outcome,
+                "ambiguous_exit_rows": 1 if is_ambiguous else 0,
                 "rr": abs(target - entry_price) / max(abs(entry_price - stop_loss), 1e-6)
             })
             
