@@ -12,7 +12,8 @@ def test_pairs_candidate_generator_spread_zscore():
             "x_nifty_index_z": 0.1,
             "x_banknifty_nifty_spread_z": 2.6,
             "x_banknifty_nifty_beta": 1.2,
-            "x_banknifty_nifty_cointegrated": True
+            "x_banknifty_nifty_cointegrated": True,
+            "x_banknifty_nifty_adf_pvalue": 0.01
         }
     }
     
