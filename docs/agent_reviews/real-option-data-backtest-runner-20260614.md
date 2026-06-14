@@ -14,20 +14,26 @@
 ## Scope Guard
 Verified that changes only affect the backtest engine paths and scripts, preserving production live trading invariants. No live orders are possible.
 
-## Grill Me
+## Grill Me Review
 The PR implements 6 phases of the Profitability System Hardening Roadmap, focusing strictly on offline edge viability testing using rigorous backtests and walk-forward evaluations. No mock logic affects real execution paths.
 
-## Hermes
+## Hermes Review
 The architecture of `VectorizedBacktestEngine` and `OptionBacktestEngine` correctly implements robust out-of-sample promotion criteria. Expectancy takes precedence over win-rate.
 
-## GSD
+## GSD Review
 Executed the transition to an expectancy-first module, enforced walk-forward data splitting, and routed backtest evaluations to `OptionBacktestEngine` when `--use-options` is specified.
 
-## QA/Safety
-- **is_order_action**: false
-- **broker_api_called**: false
-- **allowed_for_live_execution**: false
-- **read_only**: true
+## QA / Safety Review
+is_order_action: false
+broker_api_called: false
+allowed_for_live_execution: false
+read_only: true
+mode: OFFLINE
+candidate_id: N/A
+decision: N/A
+reason: N/A
+timestamp: 2026-06-14
+source: GSD
 
 ## Acceptance Proof
 All 4,484 tests in the suite pass. The unit tests actively test `OptionBacktestEngine`'s loader logic against missing `bid`/`ask` conditions to fail closed.
