@@ -1,19 +1,32 @@
 # strategies/vwap_orb.py
 
-def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015):
+def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015, market_data=None):
     """
-    VWAP + ORB confirmation strategy
-    Only manual intervention
+    VWAP + ORB confirmation strategy with Elite GEX and CVD Filtering
     """
     trades = []
+    market_data = market_data or {}
 
     if not ltp or not vwap or vwap <= 0:
         return trades
 
+    # Elite 10/10 GEX Filter: Hard-lock if Positive Gamma
+    dealer_gamma = market_data.get("dealer_gamma_exposure", 0)
+    if dealer_gamma > 0:
+        # Veto the trade: Positive gamma suppresses volatility and destroys ORBs
+        return trades
+
+    # Elite 10/10 CVD Filter: Volume must support the breakout
+    cvd = market_data.get("cumulative_volume_delta", 0)
+
     # VWAP buffer to reduce noise
     if ltp > vwap * (1 + vwap_buffer):
+        if cvd < 0:
+            return trades  # Veto: Fake breakout without volume backing
         option_type = "CE"
     elif ltp < vwap * (1 - vwap_buffer):
+        if cvd > 0:
+            return trades  # Veto: Fake breakdown without volume backing
         option_type = "PE"
     else:
         return trades  # no signal

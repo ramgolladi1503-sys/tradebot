@@ -13,6 +13,11 @@ from typing import Dict, Optional
 from config import config as cfg
 from core.kite_client import kite_client
 
+try:
+    from statsmodels.tsa.stattools import adfuller
+except ImportError:
+    adfuller = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +80,23 @@ def _zscore(x, series):
     if s == 0:
         return 0.0
     return (x - m) / s
+
+
+def _beta(a, b):
+    if not a or not b:
+        return None
+    n = min(len(a), len(b))
+    if n < 3:
+        return None
+    a = a[-n:]
+    b = b[-n:]
+    ma = sum(a) / n
+    mb = sum(b) / n
+    cov = sum((a[i] - ma) * (b[i] - mb) for i in range(n))
+    var_b = sum((b[i] - mb) ** 2 for i in range(n))
+    if var_b == 0:
+        return None
+    return cov / var_b
 
 
 class CrossAsset:
@@ -331,10 +353,12 @@ class CrossAsset:
                 idx_std = math.sqrt(var)
 
             volspill_vals = []
+            logging.getLogger("cross_asset_debug").info(f"Loop keys: {list(getattr(cfg, 'CROSS_ASSET_SYMBOLS', {}).keys())}")
             for key in getattr(cfg, "CROSS_ASSET_SYMBOLS", {}).keys():
                 if key in disabled_feeds:
                     continue
                 hist = self._hist(key)
+                logging.getLogger("cross_asset_debug").info(f"Looping {key}, hist len {len(hist)}")
                 ret1 = self._returns_from_hist(hist, 60)
                 ret5 = self._returns_from_hist(hist, 300)
                 ret15 = self._returns_from_hist(hist, 900)
@@ -368,6 +392,48 @@ class CrossAsset:
             features["x_regime_align"] = 0.0
             features["x_lead_lag"] = 0.0
 
+            pairs_cfg = getattr(cfg, "PAIRS_TRADING_UNIVERSE", {})
+            for pair_name, pair_info in pairs_cfg.items():
+                leg_a = pair_info.get("leg_a")
+                leg_b = pair_info.get("leg_b")
+                if not leg_a or not leg_b or leg_a in disabled_feeds or leg_b in disabled_feeds:
+                    continue
+
+                hist_a = [p[1] for p in self._hist(leg_a)]
+                hist_b = [p[1] for p in self._hist(leg_b)]
+
+                n = min(len(hist_a), len(hist_b))
+                if n < 3:
+                    continue
+
+                a_series = hist_a[-n:]
+                b_series = hist_b[-n:]
+
+                ret_a = self._return_series(self._hist(leg_a))
+                ret_b = self._return_series(self._hist(leg_b))
+
+                beta = _beta(ret_a, ret_b)
+                if beta is None:
+                    beta = pair_info.get("hedge_ratio", 1.0)
+
+                spread_series = [a_series[i] - (beta * b_series[i]) for i in range(n)]
+
+                features[f"x_{pair_name.lower()}_beta"] = beta
+                features[f"x_{pair_name.lower()}_spread_z"] = _zscore(spread_series[-1], spread_series)
+                
+                cointegrated = False
+                adf_pvalue = 1.0
+                if adfuller and len(spread_series) >= 30:
+                    try:
+                        adf_result = adfuller(spread_series)
+                        adf_pvalue = float(adf_result[1])
+                        if adf_pvalue < 0.05:
+                            cointegrated = True
+                    except Exception:
+                        pass
+                features[f"x_{pair_name.lower()}_cointegrated"] = cointegrated
+                features[f"x_{pair_name.lower()}_adf_pvalue"] = adf_pvalue
+
         payload = {
             "timestamp": now,
             "features": features,
@@ -380,6 +446,7 @@ class CrossAsset:
             },
         }
         self.cache = payload
+        logging.getLogger("cross_asset_debug").info(f"Keys at end of update: {list(features.keys())}")
         try:
             data_root().mkdir(exist_ok=True)
             data_root() / "cross_asset.json".write_text(json.dumps(payload, indent=2))
