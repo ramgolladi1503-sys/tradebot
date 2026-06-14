@@ -40,13 +40,6 @@ def _load_fixture(path: Path) -> dict:
     return payload
 
 
-def _patch_builder_for_replay(builder: TradeBuilder, rng: random.Random) -> None:
-    builder._apply_lifecycle_gate = lambda strategy_name, mode="MAIN": (True, "ok")  # type: ignore[method-assign]
-    builder._apply_decay_gate = lambda strategy_name, base_score=None, size_mult=1.0: (True, base_score, size_mult, None)  # type: ignore[method-assign]
-    builder._validate_ml_features = lambda feats: (True, "ok")  # type: ignore[method-assign]
-    builder._signal_for_symbol = lambda md, force_family=None: md.get("replay_signal")  # type: ignore[method-assign]
-
-
 @contextmanager
 def _temporary_cfg_overrides(overrides: dict[str, object]):
     original = {
@@ -159,42 +152,12 @@ def run_replay(fixture_path: Path, *, seed: int = 7) -> dict:
     }
     with _temporary_cfg_overrides(overrides), _patched_replay_scoring(rng):
         builder = TradeBuilder(predictor=_ReplayPredictor())
-        _patch_builder_for_replay(builder, rng=rng)
         now_epoch = now_utc_epoch()
         for idx, raw in enumerate(snapshots):
             md = _normalize_snapshot(raw if isinstance(raw, dict) else {}, fixture_name=fixture_name, idx=idx, now_epoch=now_epoch)
             trade = builder.build(md, quick_mode=False, debug_reasons=False, allow_fallbacks=False, allow_baseline=False)
             if trade is None:
-                replay_signal = md.get("replay_signal")
-                if isinstance(replay_signal, dict):
-                    direction = str(replay_signal.get("direction") or "")
-                    opt_type = "CE" if direction == "BUY_CALL" else ("PE" if direction == "BUY_PUT" else None)
-                    chain = list(md.get("option_chain", []) or [])
-                    selected_opt = None
-                    if opt_type is not None:
-                        selected_opt = next((opt for opt in chain if str(opt.get("type")).upper() == opt_type), None)
-                    if selected_opt is None and chain:
-                        selected_opt = chain[0]
-                    if isinstance(selected_opt, dict):
-                        intent = builder.trade_intent_flags(md, opt=selected_opt)
-                        candidates.append(
-                            {
-                                "snapshot_index": idx,
-                                "candidate_key": f"{md.get('symbol')}:{idx}:REPLAY_SYNTH",
-                                "symbol": md.get("symbol"),
-                                "strategy": "REPLAY_SYNTH",
-                                "trade_score": float(replay_signal.get("score", 0.0) or 0.0) * 100.0,
-                                "confidence": float(replay_signal.get("score", 0.0) or 0.0),
-                                "planning_only": bool(intent["planning_only"]),
-                                "execution_allowed": bool(intent["execution_allowed"]),
-                                "reason": intent["execution_reason"],
-                                "tradable": bool(intent["tradable"]),
-                                "tradable_reasons_blocking": list(intent["tradable_reasons_blocking"]),
-                                "source": "fixture_fallback",
-                            }
-                        )
-                        fallback_candidate_count += 1
-                        continue
+
                 reject_ctx = dict(getattr(builder, "_reject_ctx", {}) or {})
                 reason = str(reject_ctx.get("reason") or "no_trade_generated")
                 append_reject_reasons(
