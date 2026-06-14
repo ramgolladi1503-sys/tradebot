@@ -1,0 +1,6 @@
+/data/
+/logs/
+/backtests/
+*.pkl
+*.csv
+.env
