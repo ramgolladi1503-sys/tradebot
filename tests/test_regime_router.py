@@ -39,4 +39,9 @@ def test_regime_transition_logging(monkeypatch):
     
     # Third call same regime, no transition
     assert resolve_strategy_regime("RANGE") == "RANGE"
-    assert len(events_logged) == 1
+    assert events_logged == [
+        (
+            "regime_transition",
+            {"previous_regime": "VOLATILE", "new_regime": "RANGE", "raw_input": "RANGE", "bias_input": "None"}
+        )
+    ]
