@@ -19,6 +19,10 @@ def test_feed_health_epoch_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", False, raising=False)
     monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
     monkeypatch.setattr(freshness_sla, "_depth_store_tokens", lambda: [])
+    monkeypatch.setattr(freshness_sla, "_load_token_map", lambda: {})
+    from core import tick_store
+    tick_store._LAST_TICK_BY_TOKEN.clear()
+    tick_store._tick_window.clear()
     freshness_sla._reset_cache_for_tests()
 
     payload = freshness_sla.get_freshness_status(force=True)
@@ -43,6 +47,10 @@ def test_feed_health_sim_does_not_require_depth_for_index(tmp_path, monkeypatch)
     monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 1700000000.2)
     monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
     monkeypatch.setattr(freshness_sla, "_depth_store_tokens", lambda: [])
+    monkeypatch.setattr(freshness_sla, "_load_token_map", lambda: {})
+    from core import tick_store
+    tick_store._LAST_TICK_BY_TOKEN.clear()
+    tick_store._tick_window.clear()
     freshness_sla._reset_cache_for_tests()
 
     payload = freshness_sla.get_freshness_status(force=True)
@@ -67,6 +75,10 @@ def test_feed_health_idle_state_when_no_ticks_in_sim(tmp_path, monkeypatch):
     monkeypatch.setattr(freshness_sla, "now_utc_epoch", lambda: 1700000000.2)
     monkeypatch.setattr(freshness_sla, "_latest_depth_epoch_from_store", lambda: None)
     monkeypatch.setattr(freshness_sla, "_depth_store_tokens", lambda: [])
+    monkeypatch.setattr(freshness_sla, "_load_token_map", lambda: {})
+    from core import tick_store
+    tick_store._LAST_TICK_BY_TOKEN.clear()
+    tick_store._tick_window.clear()
     freshness_sla._reset_cache_for_tests()
 
     payload = freshness_sla.get_freshness_status(force=True)

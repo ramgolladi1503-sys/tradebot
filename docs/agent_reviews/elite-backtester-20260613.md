@@ -57,7 +57,6 @@ Local focused tests passed:
 Human approval required before merge.
 Recommended approval condition:
 - Agent Review Evidence Gate passes.
-
 ## GSD Review
 
 Implementation:

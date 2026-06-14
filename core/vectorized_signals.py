@@ -41,11 +41,25 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     buy_orb = (ltp > orb_high) & (vol_z > 0.2)
     sell_orb = (ltp < orb_low) & (vol_z > 0.2)
     
-    # 4. Final Aggregated Signals
-    buy_mask = (buy_trend | buy_mr | buy_orb) & valid_vol
-    sell_mask = (sell_trend | sell_mr | sell_orb) & valid_vol
+    # 4. Time of Day Filter
+    if 'timestamp' in df.columns:
+        dt = pd.to_datetime(df['timestamp'])
+        if dt.dt.tz is None:
+            dt = dt.dt.tz_localize('UTC')
+        dt_ist = dt.dt.tz_convert('Asia/Kolkata')
+        time_strs = dt_ist.dt.strftime('%H:%M')
+        
+        start_time = getattr(config, 'allowed_time_start', "09:15")
+        end_time = getattr(config, 'allowed_time_end', "15:30")
+        time_mask = (time_strs >= start_time) & (time_strs <= end_time)
+    else:
+        time_mask = pd.Series(True, index=df.index)
+
+    # 5. Final Aggregated Signals
+    buy_mask = (buy_trend | buy_mr | buy_orb) & valid_vol & time_mask
+    sell_mask = (sell_trend | sell_mr | sell_orb) & valid_vol & time_mask
     
-    # 5. Build Signals DataFrame
+    # 6. Build Signals DataFrame
     signals_df = pd.DataFrame(index=df.index)
     signals_df['signal_side'] = np.where(buy_mask, 'BUY', np.where(sell_mask, 'SELL', None))
     
