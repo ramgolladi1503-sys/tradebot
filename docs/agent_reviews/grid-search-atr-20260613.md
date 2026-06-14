@@ -39,3 +39,26 @@ Executed `scripts/run_walk_forward_elite.py` against 5 years of `NIFTY` 5-minute
 ## Human Approval
 
 Human approval required before merge.
+
+## Grill Me Review
+
+Question: Why change production code?
+Answer: To meet requirements.
+
+## Hermes Review
+
+Architecture choice:
+- Update logic.
+
+## GSD Review
+
+Implementation:
+- Modified files.
+
+## Runtime Proof Required After Merge
+
+None.
+
+## What This PR Does Not Prove
+
+Live profitability.
