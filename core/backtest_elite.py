@@ -146,7 +146,6 @@ class VectorizedBacktestEngine:
         if not signals_df.empty:
             return self.run_vectorized_signals(signals_df)
         return pd.DataFrame()
-
     def generate_and_run(self) -> pd.DataFrame:
         """
         Hybrid run: Uses the python logic to build trades, then vectorizes execution.
