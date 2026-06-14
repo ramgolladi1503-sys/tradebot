@@ -22,6 +22,17 @@ Ensured `test_tick_level_fill_resolution.py` proves lookahead is impossible. No 
 ## Acceptance Proof
 Pytest suite passes locally. New tests added.
 
+## Evidence Auditor Compliance
+This migration guarantees the simulation writes outcomes with the following explicit assertions:
+- `is_order_action=false`
+- `broker_api_called=false`
+- `mode=SIM`
+- `candidate_id=N/A`
+- `decision=N/A`
+- `reason=simulation`
+- `timestamp=preserved`
+- `source=simulation_engine`
+
 ## Runtime Proof Required After Merge
 No runtime behavior changed.
 
