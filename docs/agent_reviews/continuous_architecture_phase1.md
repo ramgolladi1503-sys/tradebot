@@ -9,18 +9,18 @@ We are strictly adding `core/execution/alpha_decay.py` and `ml/continuous_regime
 ## High-Risk Path Review
 Because we touched `core/execution/alpha_decay.py` and `strategies/volatility_trend.py` (which are high-risk execution and strategy paths), we carefully ensured that `alpha_decay` fails open (returns False if exceptions occur) and `volatility_trend` only adds dictionary keys without modifying existing entry/stop logic.
 
-## Grill Me
+## Grill Me Review
 - **Did we touch Broker APIs?** No.
 - **Did we modify live wire logic?** No.
 - **Is this fake progress?** No. This establishes the necessary mathematical edge decay foundations required for Phase 2.
 
-## Hermes
+## Hermes Review
 The architecture adds continuous state evaluation decoupled from the monolithic trade builder.
 
-## GSD
+## GSD Review
 Tests were written for both new modules. 4 passed for Alpha Decay, 4 passed for Continuous Regime. 
 
-## QA/Safety
+## QA / Safety Review
 `pytest -v` was run and passed across 4,525+ tests.
 `run_unified_ce_gates.py` was run and returned 0 blocks.
 
@@ -35,3 +35,14 @@ This PR does not prove that Alpha Decay improves profitability yet. It simply pr
 
 ## Human Approval
 Approved by Madhuram.
+
+```text
+mode=read_only
+candidate_id=none
+decision=none
+reason=architectural_update
+timestamp=none
+is_order_action=false
+broker_api_called=false
+source=agent_review
+```
