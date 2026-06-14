@@ -10,8 +10,11 @@ from core.filters import get_bias
 from datetime import datetime
 from config import config as cfg
 
+import warnings
+
 class BacktestEngine:
     def __init__(self, historical_data: pd.DataFrame, starting_capital=100000, train_stats=None, research_mode="PROXY_RESEARCH"):
+        warnings.warn("BacktestEngine is deprecated. Use OptionBacktestEngine or VectorizedBacktestEngine.", DeprecationWarning, stacklevel=2)
         self.data = historical_data
         self.capital = starting_capital
         self.train_stats = train_stats or {}

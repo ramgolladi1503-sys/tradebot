@@ -38,3 +38,30 @@ def test_generate_tearsheet_oos_profit_factor():
     metrics = generate_tearsheet(trades)
     
     assert metrics["profit_factor_oos"] == 2.0  # (200 / 100)
+
+def test_contamination_defaults_to_unknown():
+    trades = pd.DataFrame([
+        {"entry_idx": 1, "pl": 200, "outcome": "TARGET"},
+    ])
+    metrics = generate_tearsheet(trades)
+    assert metrics["contamination"]["synthetic_chain_used"] == "unknown"
+    assert metrics["contamination"]["close_only_rows_used"] == "unknown"
+
+def test_real_executable_research_blocked_in_vectorized():
+    import pytest
+    from core.backtest_elite import VectorizedBacktestEngine, EliteBacktestConfig
+    
+    config = EliteBacktestConfig(research_mode="REAL_EXECUTABLE_RESEARCH")
+    with pytest.raises(ValueError, match="cannot claim REAL_EXECUTABLE_RESEARCH"):
+        VectorizedBacktestEngine(pd.DataFrame(), config)
+
+def test_allow_derived_levels_default():
+    from core.option_backtest.models import OptionBacktestConfig, ResearchMode
+    from pathlib import Path
+    
+    cfg = OptionBacktestConfig(
+        symbol="NIFTY",
+        data_path=Path("dummy.csv"),
+        research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH
+    )
+    assert cfg.allow_derived_levels is False

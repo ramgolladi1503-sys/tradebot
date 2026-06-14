@@ -29,6 +29,10 @@ class OptionBacktestConfig:
     quantity: int = 1
     fill_model_run_id: str = "option_backtest"
 
+    def __post_init__(self):
+        if self.research_mode == ResearchMode.REAL_EXECUTABLE_RESEARCH:
+            object.__setattr__(self, 'allow_derived_levels', False)
+
 
 @dataclass(frozen=True)
 class OptionBacktestTrade:
@@ -52,6 +56,9 @@ class OptionBacktestTrade:
     confidence_raw: float | None
     confidence_final: float | None
     decision_reason: str
+    setup_id: str = "unknown"
+    regime: str = "unknown"
+    is_oos: bool = False
 
 
 @dataclass(frozen=True)
