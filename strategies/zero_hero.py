@@ -4,7 +4,8 @@ from datetime import date
 
 from config import config as cfg
 from core.market_calendar import next_expiry
-from core.regime_router import get_strategy_regime_profile, record_strategy_regime_path, resolve_strategy_regime
+from core.regime_router import resolve_strategy_regime, record_strategy_regime_path
+
 
 
 def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=None):
@@ -20,6 +21,14 @@ def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=Non
     if reason:
         debug_stats["zero_hero_rejected_reason"] = str(reason)
         counts[str(reason)] = int(counts.get(str(reason), 0)) + 1
+
+_PROFILES = {
+    "TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bias': 0.05, 'range_reversion': False, 'trend_conflict_mult': 1.4, 'variant': 'non_expiry_context', 'entry_price_mult': 0.0035, 'premium_floor': 15.0, 'target_mult': 1.6, 'stop_loss_mult': 0.85, 'confidence': 46, 'confidence_reason': 'non_expiry_manual_advisory'},
+    "TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bias': 0.05, 'range_reversion': False, 'trend_conflict_mult': 1.4, 'variant': 'non_expiry_context', 'entry_price_mult': 0.0035, 'premium_floor': 15.0, 'target_mult': 1.6, 'stop_loss_mult': 0.85, 'confidence': 46, 'confidence_reason': 'non_expiry_manual_advisory'},
+    "RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_bias': -0.01, 'range_reversion': True, 'range_extension_mult': 1.2},
+    "VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score_bias': -0.04, 'range_reversion': False, 'strict_move_mult': 1.15, 'variant': 'non_expiry_context', 'entry_price_mult': 0.003, 'premium_floor': 18.0, 'target_mult': 1.5, 'stop_loss_mult': 0.88, 'confidence': 42, 'confidence_reason': 'non_expiry_volatile_manual_advisory'},
+    "EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'score_bias': 0.02, 'range_reversion': False, 'variant': 'expiry_context', 'entry_price_mult': 0.005, 'premium_floor': 25.0, 'target_mult': 2.0, 'stop_loss_mult': 0.8, 'confidence': 60, 'confidence_reason': 'expiry_window_manual_advisory'},
+}
 
 def _normalize_bias(bias):
     if not isinstance(bias, str):
@@ -64,10 +73,12 @@ def zero_hero_strategy(symbol, ltp, premarket_bias, current_date=None, expiry_wi
         _update_debug(debug_stats, rejected=1, reason="outside_expiry_window")
         return trades
     regime_name = resolve_strategy_regime(regime, bias=bias_norm, expiry_context=expiry_context)
-    profile = get_strategy_regime_profile("zero_hero", regime_name)
+    profile = dict(_PROFILES.get(regime_name, _PROFILES["TRENDING_UP"]))
+    profile["regime"] = regime_name
     if not expiry_context and regime_name not in {"TRENDING_UP", "TRENDING_DOWN", "VOLATILE"}:
         regime_name = "TRENDING_DOWN" if bias_norm == "bearish" else "TRENDING_UP"
-        profile = get_strategy_regime_profile("zero_hero", regime_name)
+        profile = dict(_PROFILES.get(regime_name, _PROFILES["TRENDING_UP"]))
+    profile["regime"] = regime_name
     if not expiry_context:
         profile = dict(profile)
         profile["premium_floor"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_PREMIUM_FLOOR", profile.get("premium_floor", 15.0)))

@@ -129,25 +129,23 @@ def _broker_pending_qty(order_row: dict[str, Any]) -> float:
     return 0.0
 
 
-def _target_state_from_broker(order_row: dict[str, Any], mode: str = "LIVE") -> OrderState | None:
+def _target_state_from_broker(order_row: dict[str, Any]) -> OrderState | None:
     status = _status_text(order_row.get("status"))
     filled_qty = _broker_filled_qty(order_row)
     pending_qty = _broker_pending_qty(order_row)
-    
-    is_sim = mode.upper() in {"SIM", "PAPER"}
 
     if filled_qty > 0 and pending_qty > 0:
-        return OrderState.SIM_PARTIAL if is_sim else OrderState.PARTIAL
+        return OrderState.PARTIAL
     if status in {"COMPLETE", "FILLED"}:
-        return OrderState.SIM_FILLED if is_sim else OrderState.FILLED
+        return OrderState.FILLED
     if status == "REJECTED":
-        return OrderState.SIM_REJECTED if is_sim else OrderState.REJECTED
+        return OrderState.REJECTED
     if status in {"CANCELLED", "CANCELED"}:
-        return OrderState.SIM_CANCELLED if is_sim else OrderState.CANCELLED
+        return OrderState.CANCELLED
     if status in {"LAPSED", "EXPIRED"}:
-        return OrderState.SIM_EXPIRED if is_sim else OrderState.EXPIRED
+        return OrderState.EXPIRED
     if status in _OPEN_STATUSES:
-        return OrderState.SIM_ACKNOWLEDGED if is_sim else OrderState.ACKNOWLEDGED
+        return OrderState.ACKNOWLEDGED
     return None
 
 
@@ -525,8 +523,7 @@ class OrderReconciliationDaemon:
                     corrections += 1
                     continue
 
-                mode = getattr(cfg, "EXECUTION_MODE", "SIM")
-                target_state = _target_state_from_broker(broker_row, mode=str(mode))
+                target_state = _target_state_from_broker(broker_row)
                 broker_fill_qty = _broker_filled_qty(broker_row)
                 broker_order_id = _broker_order_id(broker_row) or internal.broker_order_id
 
