@@ -13,6 +13,9 @@ Designed architecture to wire `execution_engine.py` and `slippage_model.py` into
 ## GSD Review
 Implemented the tick-driven simulation in `core/replay_engine.py`, removed legacy test harness.
 
+## High-Risk Path Review
+The changes to `core/replay_engine.py` and historic backtest architecture have been isolated entirely from production execution paths. No changes were made to live broker adapters, execution engines, or risk gates.
+
 ## QA / Safety Review
 Ensured `test_tick_level_fill_resolution.py` proves lookahead is impossible. No live execution systems touched.
 
