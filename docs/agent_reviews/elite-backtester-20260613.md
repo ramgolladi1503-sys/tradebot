@@ -57,9 +57,6 @@ Local focused tests passed:
 Human approval required before merge.
 Recommended approval condition:
 - Agent Review Evidence Gate passes.
-<<<<<<< HEAD
-=======
-
 ## GSD Review
 
 Implementation:
@@ -72,4 +69,3 @@ None.
 ## What This PR Does Not Prove
 
 Live profitability.
->>>>>>> origin/main

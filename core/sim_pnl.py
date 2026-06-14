@@ -60,15 +60,9 @@ def resolve_lot_size(row: dict, meta_map: dict | None = None) -> tuple[int | Non
         pass
     sym = str(row.get("symbol") or "").upper()
     fallback_map = {
-<<<<<<< HEAD
-        "NIFTY": 50,
-        "BANKNIFTY": 15,
-        "SENSEX": 10,
-=======
         "NIFTY": 65,
         "BANKNIFTY": 30,
         "SENSEX": 20,
->>>>>>> origin/main
     }
     if sym in fallback_map:
         return fallback_map[sym], "fallback", True

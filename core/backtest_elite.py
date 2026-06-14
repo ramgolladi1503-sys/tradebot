@@ -24,13 +24,10 @@ class EliteBacktestConfig:
     starting_capital: float = 100000.0
     target_atr_mult: float = 1.5
     stop_atr_mult: float = 1.0
-<<<<<<< HEAD
     allowed_time_start: str = "09:15"
     allowed_time_end: str = "15:30"
     trailing_stop_activation_mult: float = 0.0
     trailing_stop_trail_mult: float = 0.0
-=======
->>>>>>> origin/main
 
 
 class VectorizedBacktestEngine:
@@ -99,19 +96,12 @@ class VectorizedBacktestEngine:
 
             entry_fill = self._apply_cost(entry_price, side)
             
-<<<<<<< HEAD
             ts_act_mult = self.config.trailing_stop_activation_mult
             ts_trail_mult = self.config.trailing_stop_trail_mult
-=======
-            # Simple threshold checks on arrays
-            hit_target = np.any(future_highs >= target) if side == "BUY" else np.any(future_lows <= target)
-            hit_stop = np.any(future_lows <= stop_loss) if side == "BUY" else np.any(future_highs >= stop_loss)
->>>>>>> origin/main
             
             outcome = "TIMEOUT"
             exit_price = future_closes[-1]
             
-<<<<<<< HEAD
             if ts_act_mult > 0 and ts_trail_mult > 0:
                 # We need ATR to calculate absolute trailing levels
                 # We can approximate ATR from the distance of original stop to entry

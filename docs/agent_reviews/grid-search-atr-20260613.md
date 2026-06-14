@@ -39,8 +39,6 @@ Executed `scripts/run_walk_forward_elite.py` against 5 years of `NIFTY` 5-minute
 ## Human Approval
 
 Human approval required before merge.
-<<<<<<< HEAD
-=======
 
 ## Grill Me Review
 
@@ -64,4 +62,3 @@ None.
 ## What This PR Does Not Prove
 
 Live profitability.
->>>>>>> origin/main
