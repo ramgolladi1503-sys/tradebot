@@ -34,3 +34,4 @@ RUN_ID="feed_stab_09_canonical_proof_live_probe_$(date +%Y%m%d_%H%M%S)"
 export TRADEBOT_RUN_ID="$RUN_ID"
 
 bash run_live.sh 2>&1 | tee "runtime/live_observation/${RUN_ID}.log"
+export KITE_NEXT_AVAILABLE_EXPIRY_CACHE_SEC=28800
