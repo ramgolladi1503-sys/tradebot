@@ -1504,6 +1504,8 @@ def _is_selected_executable_opportunity(candidate: Any) -> bool:
     """
     if _is_executable_opportunity(candidate):
         return True
+    if _candidate_class(candidate) in {"fallback", "planning_only", "synthetic", "softened", "advisory"}:
+        return False
     if not bool(_get_value(candidate, "selected_for_execution", False)):
         return False
     return bool(_execution_truth(candidate).get("truth_allows_execution"))
