@@ -3,57 +3,23 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from core.events import append_event
+from core.regime_canonical import ROUTER_CANONICAL_REGIMES, resolve_strategy_regime_label
 
 logger = logging.getLogger(__name__)
 
-
-_CANONICAL_REGIMES = {"TRENDING_UP", "TRENDING_DOWN", "RANGE", "VOLATILE", "EXPIRY_CONTEXT"}
+_CANONICAL_REGIMES = set(ROUTER_CANONICAL_REGIMES) - {"UNKNOWN"}
 
 # Strategy thresholds moved to strategies / core.strategy_profiles
 
-
-def _normalize_bias(bias: Any) -> str | None:
-    if not isinstance(bias, str):
-        return None
-    text = bias.strip().lower()
-    if text in {"bullish", "bull", "long", "up"}:
-        return "bullish"
-    if text in {"bearish", "bear", "short", "down"}:
-        return "bearish"
-    return None
-
-
-from core.events import append_event
-
 _last_regime_emitted = None
+
 
 def resolve_strategy_regime(raw_regime: Any, *, bias: Any = None, expiry_context: bool = False) -> str:
     global _last_regime_emitted
-    
-    def _resolve() -> str:
-        if expiry_context:
-            return "EXPIRY_CONTEXT"
-        text = str(raw_regime or "").strip().upper()
-        if text in _CANONICAL_REGIMES:
-            return text
-        if text in {"EXPIRY_DAY", "EXPIRY_CONTEXT"}:
-            return "EXPIRY_CONTEXT"
-        if text in {"VOLATILE", "RANGE_VOLATILE", "EVENT", "PANIC", "UNSTABLE"}:
-            return "VOLATILE"
-        if text in {"RANGE", "RANGE_DAY"}:
-            return "RANGE"
-        bias_norm = _normalize_bias(bias)
-        if text in {"TREND", "TREND_DAY", "TREND_RANGE_DAY", "RANGE_TREND_DAY", "TRENDING_DOWN", "TRENDING_UP"}:
-            if bias_norm == "bearish":
-                return "TRENDING_DOWN"
-            if bias_norm == "bullish":
-                return "TRENDING_UP"
-            return "UNKNOWN"
-            
-        return "UNKNOWN"
-        
-    regime = _resolve()
-    
+
+    regime = resolve_strategy_regime_label(raw_regime, bias=bias, expiry_context=expiry_context)
+
     if _last_regime_emitted is not None and _last_regime_emitted != regime:
         append_event("regime_transition", {
             "previous_regime": _last_regime_emitted,
@@ -62,7 +28,7 @@ def resolve_strategy_regime(raw_regime: Any, *, bias: Any = None, expiry_context
             "bias_input": str(bias),
         })
         logger.info("regime_transition previous=%s new=%s", _last_regime_emitted, regime)
-        
+
     _last_regime_emitted = regime
     return regime
 
