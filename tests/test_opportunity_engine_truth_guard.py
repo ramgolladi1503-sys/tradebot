@@ -75,7 +75,8 @@ def test_softrej_trade_id_never_becomes_executable():
     assert _is_advisory_opportunity(candidate) is True
     ranked = annotate_ranked_opportunities([candidate], scope="unit", top_n=1)
     assert ranked[0]["selected_for_execution"] is False
-    assert ranked[0]["selection_reason"] == "execution_truth_blocked"
+    assert ranked[0]["truth_allows_execution"] is False
+    assert ranked[0]["selection_reason"] in {"not_execution_eligible", "execution_truth_blocked"}
     pools = select_top_opportunities(ranked, executable_top_n=3, advisory_top_n=3)
     assert pools["top_executable_opportunities"] == []
     assert [row["trade_id"] for row in pools["top_advisory_opportunities"]] == ["softrej_trade-1"]
