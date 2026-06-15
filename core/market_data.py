@@ -1359,6 +1359,8 @@ def _apply_nonlive_feature_fallback(
     return row, fallback_fields
 
 
+_LAST_BACKFILL_ATTEMPT: dict[str, float] = {}
+
 def _warm_seed_ohlc_from_history(
     symbol: str,
     bars: list,
@@ -1374,6 +1376,13 @@ def _warm_seed_ohlc_from_history(
     Warm-seed minute OHLC bars when current buffer is insufficient.
     Returns (bars, seeded_ok, reason_code).
     """
+    if not startup_phase:
+        import time
+        last_attempt = _LAST_BACKFILL_ATTEMPT.get("GLOBAL", 0.0)
+        if time.time() - last_attempt < 10.0:
+            return bars, False, "THROTTLED_BACKFILL"
+        _LAST_BACKFILL_ATTEMPT["GLOBAL"] = time.time()
+
     seed_interval = str(interval or getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute")).strip() or "minute"
     required_bars = int(required_seed_bars if required_seed_bars is not None else min_bars)
     attempts_used = 0
@@ -1423,7 +1432,7 @@ def _warm_seed_ohlc_from_history(
             return bars, False, reason_code
         last_reason = "historical_empty"
         window_list = windows_minutes or _warm_seed_windows_minutes()
-        retry_attempts = max(1, int(getattr(cfg, "STARTUP_WARMUP_FETCH_RETRIES", 3)))
+        retry_attempts = max(1, int(getattr(cfg, "STARTUP_WARMUP_FETCH_RETRIES", 3))) if startup_phase else 1
         retry_backoff = max(0.0, float(getattr(cfg, "STARTUP_WARMUP_RETRY_BACKOFF_SEC", 0.4)))
         max_backoff = max(retry_backoff, float(getattr(cfg, "STARTUP_WARMUP_MAX_BACKOFF_SEC", 2.5)))
         for window_min in window_list:
@@ -1446,6 +1455,7 @@ def _warm_seed_ohlc_from_history(
                     if kite_client._is_historical_auth_error(exc) or is_auth_error(exc=exc):
                         logger.error("FATAL: Kite authentication failed — stopping system")
                         raise RuntimeError("Kite auth failed") from exc
+                    logger.warning("fetch_history_error symbol=%s err=%s", symbol, type(exc).__name__)
                     hist = []
                     last_reason = f"historical_error:{type(exc).__name__}"
                 else:

@@ -29,9 +29,12 @@ export FEED_RECOVERY_OBSERVATION=1
 export STORAGE_SNAPSHOT_N_AFTER=0
 export LIVE_BROKER_ADAPTER_ACTIVE=1
 export MAX_DAILY_LOSS_PCT=0.05
-
+export FEED_STAB_PROBE_NO_BROKER=1
+export KITE_NEXT_AVAILABLE_EXPIRY_CACHE_SEC=28800
+export REGIME_ENTROPY_MAX=1.50
+export REGIME_TREND_TARGET_MULT=4.0
+export REGIME_TREND_STOP_MULT=1.5
 RUN_ID="feed_stab_09_canonical_proof_live_probe_$(date +%Y%m%d_%H%M%S)"
 export TRADEBOT_RUN_ID="$RUN_ID"
 
-bash run_live.sh 2>&1 | tee "runtime/live_observation/${RUN_ID}.log"
-export KITE_NEXT_AVAILABLE_EXPIRY_CACHE_SEC=28800
+bash ./run_live.sh 2>&1 | tee "runtime/live_observation/${RUN_ID}.log"

@@ -248,7 +248,7 @@ def get_kite_ticker(
             resolved_api_key,
             resolved_access_token,
             debug=debug,
-            reconnect=False,
+            reconnect=True, reconnect_max_tries=300, reconnect_max_delay=60,
         )
     except Exception as exc:
         record_feed_startup_event(

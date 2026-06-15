@@ -21,6 +21,7 @@ TOKEN_SCAN_EXCLUDED_DIRS: frozenset[str] = frozenset(
         ".ruff_cache",
         ".runtime",
         "__pycache__",
+        "data",
         "htmlcov",
         "logs",
         "node_modules",
