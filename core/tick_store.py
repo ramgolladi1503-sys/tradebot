@@ -168,6 +168,7 @@ def init_ticks() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_ticks_epoch ON ticks (timestamp_epoch);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_ticks_token_epoch ON ticks (instrument_token, timestamp_epoch);")
             _migrate_ticks_epoch_column(conn)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ticks_token_epoch ON ticks(instrument_token, timestamp_epoch)")
             try:
                 conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_iso TEXT")
             except Exception:
