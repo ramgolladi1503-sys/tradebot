@@ -108,10 +108,12 @@ def build_option_registry(
     seg = option_segment(ex)
     
     today_str = date.today().isoformat()
+    # Use id(instruments) but store a strong reference to `instruments` in the cache 
+    # to prevent garbage collection and id() reuse across tests.
     cache_key = f"{today_str}:{sym}:{ex}:{id(instruments)}"
     cached = _OPTION_REGISTRY_CACHE.get(cache_key)
     if cached is not None:
-        return cached
+        return cached[1]
         
     registry: dict[tuple[str, str, float, str, date], dict] = {}
     filtered_instruments: list[dict] = []
@@ -152,7 +154,8 @@ def build_option_registry(
         "instruments": filtered_instruments,
         "available_expiries": sorted(expiries),
     }
-    _OPTION_REGISTRY_CACHE[cache_key] = result
+    # Keep `instruments` alive by storing it in the tuple.
+    _OPTION_REGISTRY_CACHE[cache_key] = (instruments, result)
     return result
 
 
