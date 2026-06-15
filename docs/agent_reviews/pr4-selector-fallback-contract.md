@@ -141,7 +141,7 @@ Observed result before merge:
 
 Acceptance expectations:
 
-- runtime selector no longer treats fallback-derived rows as executable because of missing fallback markers in `candidate_class` inference
+- runtime selector no longer treats fallback-derived rows as executable because the prior `candidate_class` inference omitted those fallback markers
 - advisory visibility remains intact for fallback rows
 - clean rows are unaffected
 

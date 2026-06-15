@@ -47,7 +47,7 @@ def test_fallback_candidate_never_becomes_executable():
     assert _is_advisory_opportunity(candidate) is True
     pools = select_top_opportunities([candidate], executable_top_n=3, advisory_top_n=3)
     assert pools["top_executable_opportunities"] == []
-    assert len(pools["top_advisory_opportunities"]) == 1
+    assert [row["trade_id"] for row in pools["top_advisory_opportunities"]] == ["fallback-row"]
 
 
 def test_rest_fallback_quote_source_never_becomes_executable():
@@ -61,7 +61,7 @@ def test_rest_fallback_quote_source_never_becomes_executable():
     assert _is_advisory_opportunity(candidate) is True
     pools = select_top_opportunities([candidate], executable_top_n=3, advisory_top_n=3)
     assert pools["top_executable_opportunities"] == []
-    assert len(pools["top_advisory_opportunities"]) == 1
+    assert [row["trade_id"] for row in pools["top_advisory_opportunities"]] == ["fallback-quote-source"]
 
 
 def test_softrej_trade_id_never_becomes_executable():
@@ -75,7 +75,7 @@ def test_softrej_trade_id_never_becomes_executable():
     assert _is_advisory_opportunity(candidate) is True
     pools = select_top_opportunities([candidate], executable_top_n=3, advisory_top_n=3)
     assert pools["top_executable_opportunities"] == []
-    assert len(pools["top_advisory_opportunities"]) == 1
+    assert [row["trade_id"] for row in pools["top_advisory_opportunities"]] == ["softrej_trade-1"]
 
 
 def test_subscription_failed_quote_source_never_becomes_executable():
