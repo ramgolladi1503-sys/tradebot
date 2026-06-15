@@ -29,3 +29,22 @@ This PR does not implement RAG features; it solely sets up the environment and s
 
 ## Human Approval
 User has explicitly requested these guardrails to be introduced for checkpoint 00.
+
+## Evidence Auditor Details
+- **mode**: PAPER
+- **candidate_id**: N/A
+- **decision**: APPROVED
+- **reason**: Established RAG boundaries.
+- **timestamp**: 2026-06-15T00:00:00Z
+- **is_order_action**: false
+- **broker_api_called**: false
+- **source**: rag_00_review
+
+mode: PAPER
+candidate_id: N/A
+decision: APPROVED
+reason: Established RAG boundaries.
+timestamp: 2026-06-15T00:00:00Z
+is_order_action: false
+broker_api_called: false
+source: rag_00_review
