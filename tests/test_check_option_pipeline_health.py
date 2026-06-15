@@ -21,6 +21,11 @@ def test_strict_fails_when_resolution_fails_even_with_runtime_tokens(monkeypatch
         ),
     )
     monkeypatch.setattr(
+        health_script.kite_client,
+        "instruments_cached",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
         health_script,
         "get_feed_debug",
         lambda: {
@@ -42,3 +47,4 @@ def test_strict_fails_when_resolution_fails_even_with_runtime_tokens(monkeypatch
     monkeypatch.setattr(health_script.cfg, "MIN_OPTION_TOKENS", 12, raising=False)
     monkeypatch.setattr("sys.argv", ["check_option_pipeline_health.py", "--strict"])
     assert health_script.main() == 1
+
