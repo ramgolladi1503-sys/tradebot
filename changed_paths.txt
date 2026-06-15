@@ -7,7 +7,7 @@ core/orchestrator.py
 core/security_guard.py
 core/telegram_alerts.py
 core/tick_store.py
-docs/agent_reviews/PR_583_feed_latency_bottlenecks.md
+docs/agent_reviews/PR_584_feed_latency_bottlenecks.md
 start_soak.sh
 strategies/trade_builder.py
 unified_ce_gate_latest.md

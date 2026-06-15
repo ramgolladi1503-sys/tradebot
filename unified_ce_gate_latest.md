@@ -35,7 +35,7 @@
 - `core/security_guard.py`
 - `core/telegram_alerts.py`
 - `core/tick_store.py`
-- `docs/agent_reviews/PR_583_feed_latency_bottlenecks.md`
+- `docs/agent_reviews/PR_584_feed_latency_bottlenecks.md`
 - `start_soak.sh`
 - `strategies/trade_builder.py`
 - `unified_ce_gate_latest.md`
@@ -57,7 +57,7 @@
 | `core/security_guard.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `core/telegram_alerts.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `core/tick_store.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/agent_reviews/PR_583_feed_latency_bottlenecks.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/agent_reviews/PR_584_feed_latency_bottlenecks.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `start_soak.sh` | `PASS` | `no_restricted_boundary_marker_found` |
 | `strategies/trade_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `unified_ce_gate_latest.md` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -66,4 +66,4 @@
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `docs/agent_reviews/PR_583_feed_latency_bottlenecks.md` | `PASS` | `evidence_contract_satisfied` |
+| `docs/agent_reviews/PR_584_feed_latency_bottlenecks.md` | `PASS` | `evidence_contract_satisfied` |
