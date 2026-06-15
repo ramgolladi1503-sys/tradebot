@@ -2,6 +2,7 @@ import time
 import pytest
 from strategies.banknifty_intraday import generate_signal as banknifty_signal
 from strategies.zero_hero import zero_hero_strategy as zero_hero_signal
+from core.market_calendar import next_expiry
 
 def test_banknifty_pure_signal():
     start_time = time.perf_counter()
@@ -16,7 +17,13 @@ def test_banknifty_pure_signal():
 
 def test_zero_hero_pure_signal():
     start_time = time.perf_counter()
-    signal = zero_hero_signal(symbol="BANKNIFTY", ltp=20, premarket_bias="bullish", regime="EXPIRY_CONTEXT")
+    signal = zero_hero_signal(
+        symbol="BANKNIFTY",
+        ltp=20,
+        premarket_bias="bullish",
+        current_date=next_expiry("BANKNIFTY"),
+        regime="EXPIRY_CONTEXT",
+    )
     end_time = time.perf_counter()
     
     # Assert it explicitly returns a list of dictionaries with correct targets for a multi-leg strategy
