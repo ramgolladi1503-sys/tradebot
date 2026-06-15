@@ -415,6 +415,61 @@ def test_trend_regime_prefers_breakout_over_range_candidate():
     assert "trend_regime_range_mismatch" in range_style["regime_profile"]["reasons"]
 
 
+def test_canonical_trending_up_regime_prefers_breakout_over_range_candidate():
+    breakout = score_candidate(
+        {
+            "trade_id": "T-CANONICAL-TREND-UP-BREAKOUT",
+            "strategy_family": "breakout",
+            "direction": "BUY_CALL",
+            "trade_score": 78.0,
+            "trade_alignment": 0.77,
+            "builder_confidence": 0.80,
+            "regime_alignment_score": 0.91,
+            "family_consensus_score": 0.86,
+            "pattern_flags": ["breakout", "trend"],
+            "entry_condition": "vwap_reclaim",
+            "instrument_token": 99123,
+            "entry_price": 100.0,
+            "stop_loss": 96.0,
+            "target": 110.0,
+            "volume": 120000,
+            "oi": 160000,
+            "spread_pct": 0.004,
+            "quote_ok": True,
+        },
+        {"regime": "TRENDING_UP", "market_open": True, "quote_age_sec": 1.0, "quote_source": "tick_store", "current_ltp": 100.5},
+        {"mode": "LIVE", "market_open": True, "blockers": [], "hard_blockers": [], "soft_penalties": [], "warnings": []},
+    )
+    range_style = score_candidate(
+        {
+            "trade_id": "T-CANONICAL-TREND-UP-RANGE",
+            "strategy_family": "mean_reversion",
+            "direction": "BUY_CALL",
+            "trade_score": 78.0,
+            "trade_alignment": 0.77,
+            "builder_confidence": 0.80,
+            "regime_alignment_score": 0.31,
+            "family_consensus_score": 0.34,
+            "pattern_flags": ["range", "mean_reversion"],
+            "entry_condition": "upper_extension_reversion",
+            "instrument_token": 99124,
+            "entry_price": 100.0,
+            "stop_loss": 99.2,
+            "target": 100.6,
+            "volume": 120000,
+            "oi": 160000,
+            "spread_pct": 0.004,
+            "quote_ok": True,
+        },
+        {"regime": "TRENDING_UP", "market_open": True, "quote_age_sec": 1.0, "quote_source": "tick_store", "current_ltp": 100.5},
+        {"mode": "LIVE", "market_open": True, "blockers": [], "hard_blockers": [], "soft_penalties": [], "warnings": []},
+    )
+
+    assert breakout["rank_score"] > range_style["rank_score"]
+    assert breakout["regime_profile"]["regime_bucket"] == "TREND"
+    assert breakout["score_inputs_used"]["regime"] == "TRENDING_UP"
+
+
 def test_range_regime_prefers_range_candidate_over_breakout_candidate():
     range_candidate = score_candidate(
         {
@@ -592,6 +647,56 @@ def test_high_vol_regime_punishes_wide_spread_more_than_normal():
 
     assert high_vol["rank_score"] < normal["rank_score"]
     assert high_vol["score_breakdown"]["components"]["spread_score"] <= normal["score_breakdown"]["components"]["spread_score"]
+
+
+def test_canonical_volatile_regime_maps_to_high_vol_profile():
+    volatile = score_candidate(
+        {
+            "trade_id": "T-CANONICAL-VOLATILE",
+            "strategy_family": "volatility_expansion",
+            "trade_score": 72.0,
+            "trade_alignment": 0.72,
+            "builder_confidence": 0.74,
+            "regime_alignment_score": 0.84,
+            "family_consensus_score": 0.79,
+            "entry_condition": "volatility_expansion",
+            "instrument_token": 99123,
+            "entry_price": 100.0,
+            "stop_loss": 96.5,
+            "target": 108.5,
+            "volume": 90000,
+            "oi": 120000,
+            "spread_pct": 0.032,
+            "quote_ok": False,
+        },
+        {"regime": "VOLATILE", "market_open": True, "quote_age_sec": 2.5, "quote_source": "tick_store", "current_ltp": 100.3},
+        {"mode": "LIVE", "market_open": True, "blockers": [], "hard_blockers": [], "soft_penalties": [], "warnings": []},
+    )
+    normal = score_candidate(
+        {
+            "trade_id": "T-CANONICAL-VOLATILE-NORMAL",
+            "strategy_family": "volatility_expansion",
+            "trade_score": 72.0,
+            "trade_alignment": 0.72,
+            "builder_confidence": 0.74,
+            "regime_alignment_score": 0.84,
+            "family_consensus_score": 0.79,
+            "entry_condition": "volatility_expansion",
+            "instrument_token": 99123,
+            "entry_price": 100.0,
+            "stop_loss": 96.5,
+            "target": 108.5,
+            "volume": 90000,
+            "oi": 120000,
+            "spread_pct": 0.032,
+            "quote_ok": False,
+        },
+        {"regime": "TREND", "market_open": True, "quote_age_sec": 2.5, "quote_source": "tick_store", "current_ltp": 100.3},
+        {"mode": "LIVE", "market_open": True, "blockers": [], "hard_blockers": [], "soft_penalties": [], "warnings": []},
+    )
+
+    assert volatile["regime_profile"]["regime_bucket"] == "HIGH_VOL"
+    assert volatile["rank_score"] < normal["rank_score"]
 
 
 def test_low_vol_regime_penalizes_weak_breakout_without_confirmation():

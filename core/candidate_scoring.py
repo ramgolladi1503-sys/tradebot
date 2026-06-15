@@ -4,6 +4,7 @@ from typing import Any
 from math import log1p
 
 from core.quote_truth import quote_consistency_score as canonical_quote_consistency_score
+from core.regime_canonical import resolve_strategy_regime_label
 
 try:
     from config import config as cfg
@@ -115,6 +116,100 @@ def _first_float(*values: Any) -> float | None:
     return None
 
 
+def _regime_text(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _regime_bias_hint(candidate: dict[str, Any]) -> str | None:
+    text = " ".join(
+        str(candidate.get(field) or "").strip().lower()
+        for field in (
+            "direction",
+            "side",
+            "signal_direction",
+            "movement_bias",
+            "bias",
+            "option_type",
+        )
+    )
+    if any(token in text for token in ("buy_put", "sell_call", "bearish", "short", "down", "pe")):
+        return "bearish"
+    if any(token in text for token in ("buy_call", "sell_put", "bullish", "long", "up", "ce")):
+        return "bullish"
+    return None
+
+
+def _canonical_regime_label(candidate: dict[str, Any], market_data: dict[str, Any]) -> str:
+    raw_regime = (
+        market_data.get("regime")
+        or candidate.get("regime")
+        or market_data.get("day_type")
+        or candidate.get("day_type")
+        or market_data.get("primary_regime")
+    )
+    text = _regime_text(raw_regime)
+    if text in {
+        "CHOP",
+        "NOISE",
+        "UNCLEAR",
+        "COMPRESSION",
+        "LOW_VOL",
+        "LOW_VOLATILITY",
+        "VOLATILITY_EXPANSION",
+        "TRAP_RISK",
+        "EXHAUSTION_RISK",
+        "HIGH_VOL",
+        "HIGH_VOLATILITY",
+        "EVENT",
+        "EVENT_DAY",
+        "PANIC",
+        "PANIC_DAY",
+    }:
+        return text
+
+    canonical = resolve_strategy_regime_label(
+        raw_regime,
+        bias=_regime_bias_hint(candidate),
+        expiry_context=bool(candidate.get("expiry_context") or market_data.get("expiry_context")),
+    )
+    if canonical != "UNKNOWN":
+        return canonical
+
+    if text in {
+        "TREND",
+        "TREND_UP",
+        "TREND_DOWN",
+        "UPTREND",
+        "DOWNTREND",
+        "BREAKOUT",
+        "MOMENTUM",
+        "RANGE",
+        "RANGE_VOLATILE",
+        "MEAN_REVERSION",
+        "SIDEWAYS",
+        "CHOP",
+        "NOISE",
+        "UNCLEAR",
+        "INCONCLUSIVE",
+        "EXPIRY",
+        "EXPIRY_DAY",
+        "HIGH_VOL",
+        "HIGH_VOLATILITY",
+        "LOW_VOL",
+        "LOW_VOLATILITY",
+        "EVENT",
+        "EVENT_DAY",
+        "PANIC",
+        "PANIC_DAY",
+        "BEARISH",
+        "BULLISH",
+        "VOLATILITY_EXPANSION",
+        "COMPRESSION",
+    }:
+        return text
+    return canonical
+
+
 def _setup_strength(candidate: dict[str, Any], score_inputs_used: dict[str, Any]) -> float:
     detail = _as_dict(candidate.get("trade_score_detail"))
     source_flags = _as_dict(candidate.get("source_flags"))
@@ -173,13 +268,7 @@ def _setup_strength(candidate: dict[str, Any], score_inputs_used: dict[str, Any]
 
 
 def _regime_fit(candidate: dict[str, Any], market_data: dict[str, Any], score_inputs_used: dict[str, Any]) -> float:
-    regime = str(
-        market_data.get("regime")
-        or candidate.get("regime")
-        or market_data.get("day_type")
-        or candidate.get("day_type")
-        or ""
-    ).strip().upper()
+    regime = _canonical_regime_label(candidate, market_data)
     market_open = bool(market_data.get("market_open", candidate.get("market_open", True)))
     countertrend = bool(candidate.get("countertrend"))
     score_inputs_used["regime"] = regime or "UNKNOWN"
@@ -187,13 +276,13 @@ def _regime_fit(candidate: dict[str, Any], market_data: dict[str, Any], score_in
     if countertrend:
         score_inputs_used["countertrend"] = True
 
-    if regime in {"TREND", "UPTREND", "DOWNTREND"}:
+    if regime in {"TREND", "UPTREND", "DOWNTREND", "TRENDING_UP", "TRENDING_DOWN"}:
         fit = 0.82
     elif regime in {"RANGE", "RANGE_VOLATILE"}:
         fit = 0.64
-    elif regime in {"EXPIRY", "EXPIRY_DAY"}:
+    elif regime in {"EXPIRY", "EXPIRY_DAY", "EXPIRY_CONTEXT"}:
         fit = 0.48
-    elif regime in {"EVENT", "EVENT_DAY", "PANIC", "PANIC_DAY"}:
+    elif regime in {"EVENT", "EVENT_DAY", "PANIC", "PANIC_DAY", "VOLATILE"}:
         fit = 0.34
     else:
         fit = 0.56
@@ -210,16 +299,18 @@ def _regime_fit(candidate: dict[str, Any], market_data: dict[str, Any], score_in
 
 
 def _regime_bucket(value: Any) -> str:
-    regime = str(value or "").strip().upper()
+    regime = _regime_text(value)
     if regime in {"TREND", "TREND_UP", "TREND_DOWN", "UPTREND", "DOWNTREND", "BREAKOUT", "MOMENTUM"}:
+        return "TREND"
+    if regime in {"TRENDING_UP", "TRENDING_DOWN"}:
         return "TREND"
     if regime in {"RANGE", "RANGE_VOLATILE", "MEAN_REVERSION", "SIDEWAYS"}:
         return "RANGE"
     if regime in {"CHOP", "NOISE", "UNCLEAR", "INCONCLUSIVE"}:
         return "CHOP"
-    if regime in {"EXPIRY", "EXPIRY_DAY", "ZERO_HERO", "ZERO_HERO_EXPIRY"}:
+    if regime in {"EXPIRY", "EXPIRY_DAY", "EXPIRY_CONTEXT", "ZERO_HERO", "ZERO_HERO_EXPIRY"}:
         return "EXPIRY"
-    if regime in {"HIGH_VOL", "HIGH_VOLATILITY", "VOLATILITY_EXPANSION", "EVENT", "PANIC"}:
+    if regime in {"HIGH_VOL", "HIGH_VOLATILITY", "VOLATILITY_EXPANSION", "VOLATILE", "EVENT", "PANIC"}:
         return "HIGH_VOL"
     if regime in {"LOW_VOL", "LOW_VOLATILITY", "COMPRESSION"}:
         return "LOW_VOL"
@@ -254,13 +345,7 @@ def _regime_weight_profile(
     market_data: dict[str, Any],
     score_inputs_used: dict[str, Any],
 ) -> tuple[dict[str, float], list[str], float]:
-    regime_bucket = _regime_bucket(
-        market_data.get("regime")
-        or candidate.get("regime")
-        or market_data.get("day_type")
-        or candidate.get("day_type")
-        or market_data.get("primary_regime")
-    )
+    regime_bucket = _regime_bucket(_canonical_regime_label(candidate, market_data))
     archetype = _candidate_regime_archetype(candidate)
     score_inputs_used["regime_bucket"] = regime_bucket
     score_inputs_used["candidate_archetype"] = archetype
