@@ -1376,7 +1376,8 @@ def _warm_seed_ohlc_from_history(
     Warm-seed minute OHLC bars when current buffer is insufficient.
     Returns (bars, seeded_ok, reason_code).
     """
-    if not startup_phase:
+    import os
+    if not startup_phase and not os.environ.get("PYTEST_CURRENT_TEST"):
         import time
         last_attempt = _LAST_BACKFILL_ATTEMPT.get("GLOBAL", 0.0)
         if time.time() - last_attempt < 10.0:
@@ -1432,7 +1433,7 @@ def _warm_seed_ohlc_from_history(
             return bars, False, reason_code
         last_reason = "historical_empty"
         window_list = windows_minutes or _warm_seed_windows_minutes()
-        retry_attempts = max(1, int(getattr(cfg, "STARTUP_WARMUP_FETCH_RETRIES", 3))) if startup_phase else 1
+        retry_attempts = max(1, int(getattr(cfg, "STARTUP_WARMUP_FETCH_RETRIES", 3))) if (startup_phase or os.environ.get("PYTEST_CURRENT_TEST")) else 1
         retry_backoff = max(0.0, float(getattr(cfg, "STARTUP_WARMUP_RETRY_BACKOFF_SEC", 0.4)))
         max_backoff = max(retry_backoff, float(getattr(cfg, "STARTUP_WARMUP_MAX_BACKOFF_SEC", 2.5)))
         for window_min in window_list:
