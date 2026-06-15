@@ -831,6 +831,12 @@ def test_select_top_opportunities_separates_executable_and_advisory_lists():
         top_n=1,
     )
 
+    assert {trade.trade_id: trade.candidate_class for trade in ranked} == {
+        "T-EXEC-TOP": "EXECUTABLE",
+        "T-ADV-TOP": "ADVISORY_ONLY",
+        "T-ADV-LOWER": "ADVISORY_ONLY",
+    }
+
     selected = select_top_opportunities(ranked, executable_top_n=1, advisory_top_n=1)
 
     assert [trade.trade_id for trade in selected["top_executable_opportunities"]] == ["T-EXEC-TOP"]
