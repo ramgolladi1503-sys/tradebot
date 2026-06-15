@@ -18,8 +18,8 @@ def evaluate_feed_state(payload: Dict[str, Any]) -> RecoveryState:
     if not isinstance(payload, dict):
         return RecoveryState.FATAL
         
-    rstate = str(payload.get("runtime_state") or "").upper()
-    ws_state = str(payload.get("ws_lifecycle_state") or "").upper()
+    rstate = str(payload.get("feed_runtime_state") or payload.get("runtime_state") or "").upper()
+    ws_state = str(payload.get("ws_lifecycle_state") or ("CONNECTED" if payload.get("ws_connected") else "")).upper()
     auth_state = str(payload.get("auth_state") or "").upper()
     recovery_blocked = bool(payload.get("recovery_blocked"))
     
@@ -39,7 +39,7 @@ def evaluate_feed_state(payload: Dict[str, Any]) -> RecoveryState:
     if rstate == "RECONNECTING" or ws_state in {"CONNECTING", "RECONNECTING"}:
         return RecoveryState.RECONNECTING
         
-    if rstate == "HEALTHY" or (rstate == "" and ws_state in {"OPEN", "SUBSCRIBED", "CONNECTED"}):
+    if rstate in {"HEALTHY", "RUNNING"} or (rstate == "" and ws_state in {"OPEN", "SUBSCRIBED", "CONNECTED"}):
         return RecoveryState.HEALTHY
         
     # Ambiguous

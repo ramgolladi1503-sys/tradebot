@@ -643,7 +643,7 @@ class KiteClient:
 
         cache_key = (exch, sym)
         today = date.today().isoformat()
-        cache_ttl_sec = max(0, int(getattr(cfg, "KITE_NEXT_AVAILABLE_EXPIRY_CACHE_SEC", 300) or 0))
+        cache_ttl_sec = max(0, int(getattr(cfg, "KITE_NEXT_AVAILABLE_EXPIRY_CACHE_SEC", 28800) or 0))
         if cache_ttl_sec > 0:
             cached = self._next_expiry_cache.get(cache_key)
             now_ts = float(time.time())
@@ -664,6 +664,9 @@ class KiteClient:
 
         for r in data:
             try:
+                if not self._instrument_row_belongs_to_symbol(sym, r):
+                    continue
+
                 inst_type = (r.get("instrument_type") or "").strip().upper()
                 seg = (r.get("segment") or "").strip().upper()
                 tradingsymbol = str(r.get("tradingsymbol") or "").strip().upper()
@@ -680,8 +683,7 @@ class KiteClient:
                 if not exp:
                     continue
                 total_option_candidates_scanned += 1
-                if not self._instrument_row_belongs_to_symbol(sym, r):
-                    continue
+
                 expiries.append(exp)
                 if tradingsymbol and len(matched_tradingsymbols) < 5:
                     matched_tradingsymbols.append(tradingsymbol)

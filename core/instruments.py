@@ -95,6 +95,8 @@ def select_next_expiry(
     return later[0] if later else None
 
 
+_OPTION_REGISTRY_CACHE: dict[str, dict] = {}
+
 def build_option_registry(
     *,
     symbol: str,
@@ -104,6 +106,13 @@ def build_option_registry(
     sym = str(symbol or "").upper()
     ex = str(exchange or option_exchange(sym)).upper()
     seg = option_segment(ex)
+    
+    today_str = date.today().isoformat()
+    cache_key = f"{today_str}:{sym}:{ex}:{id(instruments)}"
+    cached = _OPTION_REGISTRY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+        
     registry: dict[tuple[str, str, float, str, date], dict] = {}
     filtered_instruments: list[dict] = []
     expiries: set[date] = set()
@@ -134,7 +143,8 @@ def build_option_registry(
             registry[key] = entry
         filtered_instruments.append(inst)
         expiries.add(exp)
-    return {
+        
+    result = {
         "symbol": sym,
         "exchange": ex,
         "segment": seg,
@@ -142,6 +152,8 @@ def build_option_registry(
         "instruments": filtered_instruments,
         "available_expiries": sorted(expiries),
     }
+    _OPTION_REGISTRY_CACHE[cache_key] = result
+    return result
 
 
 def resolve_registry_contract(

@@ -351,7 +351,7 @@ class SnapshotStore:
         event_id = str(event.get("event_id") or "")
         event_ts_epoch = _coerce_epoch(event.get("ts_utc")) or time.time()
         n_before = int(getattr(cfg, "STORAGE_SNAPSHOT_N_BEFORE", 2))
-        n_after = int(getattr(cfg, "STORAGE_SNAPSHOT_N_AFTER", 2))
+        n_after = int(getattr(cfg, "STORAGE_SNAPSHOT_N_AFTER", 0))  # Default 0 to prevent synchronous thread blocking
         interval_ms = int(getattr(cfg, "STORAGE_SNAPSHOT_INTERVAL_MS", 500))
         captured = 0
 
