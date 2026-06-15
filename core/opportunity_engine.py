@@ -1564,9 +1564,27 @@ def _candidate_class(candidate: Any) -> str:
         or source_flags.get("origin")
         or ""
     ).strip().lower()
+    candidate_type = str(
+        _get_value(candidate, "candidate_type")
+        or source_flags.get("candidate_type")
+        or source_flags.get("opportunity_candidate_type")
+        or ""
+    ).strip().lower()
     status = str(
         _get_value(candidate, "trade_status")
         or source_flags.get("trade_status")
+        or ""
+    ).strip().lower()
+    trade_id = str(
+        _get_value(candidate, "trade_id")
+        or _get_value(candidate, "trade_key")
+        or ""
+    ).strip().lower()
+    quote_source = str(
+        _get_value(candidate, "quote_source")
+        or _get_value(candidate, "option_ltp_source")
+        or source_flags.get("quote_source")
+        or source_flags.get("option_ltp_source")
         or ""
     ).strip().lower()
     reasons = _string_set(
@@ -1583,6 +1601,14 @@ def _candidate_class(candidate: Any) -> str:
     )
 
     if row_kind in {"fallback", "recovered_fallback"}:
+        return "fallback"
+    if quote_source in {"rest_fallback", "synthetic_offhours", "subscription_failed"}:
+        return "fallback"
+    if trade_id.startswith("softrej_"):
+        return "fallback"
+    if "fallback" in candidate_type:
+        return "fallback"
+    if "fallback" in origin:
         return "fallback"
     if "recovered_fallback" in reasons or "fallback" in tags or "fallback" in reasons:
         return "fallback"

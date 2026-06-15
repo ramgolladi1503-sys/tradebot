@@ -50,6 +50,46 @@ def test_fallback_candidate_never_becomes_executable():
     assert len(pools["top_advisory_opportunities"]) == 1
 
 
+def test_rest_fallback_quote_source_never_becomes_executable():
+    candidate = _candidate(
+        trade_id="fallback-quote-source",
+        quote_source="REST_FALLBACK",
+        option_ltp_source="REST_FALLBACK",
+    )
+    assert _candidate_class(candidate) == "fallback"
+    assert _is_executable_opportunity(candidate) is False
+    assert _is_advisory_opportunity(candidate) is True
+    pools = select_top_opportunities([candidate], executable_top_n=3, advisory_top_n=3)
+    assert pools["top_executable_opportunities"] == []
+    assert len(pools["top_advisory_opportunities"]) == 1
+
+
+def test_softrej_trade_id_never_becomes_executable():
+    candidate = _candidate(
+        trade_id="softrej_trade-1",
+        quote_source="live",
+        option_ltp_source="live",
+    )
+    assert _candidate_class(candidate) == "fallback"
+    assert _is_executable_opportunity(candidate) is False
+    assert _is_advisory_opportunity(candidate) is True
+    pools = select_top_opportunities([candidate], executable_top_n=3, advisory_top_n=3)
+    assert pools["top_executable_opportunities"] == []
+    assert len(pools["top_advisory_opportunities"]) == 1
+
+
+def test_subscription_failed_quote_source_never_becomes_executable():
+    candidate = _candidate(
+        trade_id="subscription-failed",
+        quote_source="SUBSCRIPTION_FAILED",
+        option_ltp_source="SUBSCRIPTION_FAILED",
+    )
+    assert _candidate_class(candidate) == "fallback"
+    assert _is_executable_opportunity(candidate) is False
+    pools = select_top_opportunities([candidate], executable_top_n=3, advisory_top_n=3)
+    assert pools["top_executable_opportunities"] == []
+
+
 def test_planning_only_candidate_is_blocked_even_with_execution_fields():
     candidate = _candidate(
         trade_id="planning-only",
