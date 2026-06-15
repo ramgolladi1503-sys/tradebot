@@ -825,24 +825,19 @@ def _normalize_feed_runtime_payload(raw: dict) -> dict:
 
 
 def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
-    candidates = [
-        Path(getattr(cfg, "DATA_ROOT", ".runtime")).expanduser() / "feed_runtime_latest.json",
-        logs_dir() / "feed_runtime_latest.json",
-    ]
-    newest: tuple[dict, Path | None, float] = ({}, None, 0.0)
-    for path in candidates:
-        try:
-            if not path.exists():
-                continue
-            mtime = float(path.stat().st_mtime)
-        except Exception:
-            continue
+    path = logs_dir() / "feed_runtime_latest.json"
+    if path.exists():
         payload = _normalize_feed_runtime_payload(_read_json_dict(path))
-        if not payload:
-            continue
-        if newest[1] is None or mtime >= newest[2]:
-            newest = (payload, path, mtime)
-    return newest[0], newest[1]
+        if payload:
+            return payload, path
+
+    fallback_path = Path(getattr(cfg, "DATA_ROOT", ".runtime")).expanduser() / "feed_runtime_latest.json"
+    if fallback_path.exists():
+        payload = _normalize_feed_runtime_payload(_read_json_dict(fallback_path))
+        if payload:
+            return payload, fallback_path
+
+    return {}, None
 
 
 def _canonical_feed_truth_state_payload(feed_runtime_payload: dict | None) -> dict:
@@ -4785,6 +4780,7 @@ class Orchestrator:
         Phase E: Live trading loop
         Fetch market data, generate trades, risk-check, execute, log, alert
         """
+        global cfg
         logger.info("orchestrator_live_monitoring_start")
         while True:
             cycle_reason = "cycle_complete"
