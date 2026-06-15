@@ -1,0 +1,13 @@
+diff --git a/strategies/trade_builder.py b/strategies/trade_builder.py
+index 3035c77..9196216 100644
+--- a/strategies/trade_builder.py
++++ b/strategies/trade_builder.py
+@@ -66,6 +66,8 @@ from core.threshold_audit import (
+ from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
+ from core.time_utils import compute_age_sec, is_market_open_ist, now_ist, now_utc_epoch
+ from core.regime import RegimeClassifier, normalize_regime
++from ml.continuous_regime import extract_continuous_regime, calculate_dynamic_multiplier
++from core.execution.alpha_decay import monitor_alpha_decay, AlphaDecayState
+ from core.kite_client import kite_client
+ from core.events import write_json_atomic
+ import time as _time

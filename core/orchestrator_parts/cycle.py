@@ -114,7 +114,17 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
         except Exception as exc:
             logger.warning("pro_shadow_pipeline_cycle_error err=%s", exc)
 
-        core.last_cycle_mono = float(clock.monotonic())
+        cycle_end_mono = float(clock.monotonic())
+        cycle_latency_ms = (cycle_end_mono - now_mono) * 1000.0
+        
+        if cycle_latency_ms > getattr(cfg, "ORCHESTRATOR_DEGRADED_LATENCY_MS", 500.0):
+            _record_runtime_boundary(
+                "ORCHESTRATOR_CYCLE_DEGRADED",
+                details={"latency_ms": cycle_latency_ms, "feed_epoch": feed_epoch}
+            )
+            logger.warning("orchestrator_cycle_degraded latency_ms=%.1f", cycle_latency_ms)
+
+        core.last_cycle_mono = cycle_end_mono
         if feed_epoch > 0.0:
             core.last_feed_epoch = float(feed_epoch)
 
