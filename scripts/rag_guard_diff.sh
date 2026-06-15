@@ -43,10 +43,15 @@ FORBIDDEN_REGEXES=(
     "^core/feed_execution_truth\.py"
     "^strategies/"
     "^core/strategies/"
+    "^core/backtest_elite\.py"
+    "^core/backtesting/"
+    "^core/vectorized_signals\.py"
+    "^scripts/run_wfa_intraday\.py"
 )
 
 # Check for forbidden and allowed files
 for FILE in $CHANGED_FILES; do
+
     # 1. Check if the file matches any forbidden regex
     for REGEX in "${FORBIDDEN_REGEXES[@]}"; do
         if echo "$FILE" | grep -Eq "$REGEX"; then
@@ -63,6 +68,11 @@ for FILE in $CHANGED_FILES; do
             break
         fi
     done
+
+    # explicit pass for agent review docs required by CE
+    if [[ "$FILE" == "docs/agent_reviews/"* ]]; then
+        IS_ALLOWED=true
+    fi
 
     if [ "$IS_ALLOWED" = false ]; then
         echo "FAIL: Changed file is outside allowed RAG paths: $FILE"

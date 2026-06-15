@@ -3,7 +3,7 @@
 This checklist must be followed to ensure the safety and progression of the RAG roadmap.
 
 ## 1. One-Branch Roadmap Model
-- [ ] All RAG work is contained on the single `rag/roadmap-prod-rag` branch.
+- [ ] All RAG work is contained on the single `rag/roadmap-prod-rag-v2` branch.
 - [ ] No direct commits to `main` for RAG features until the final PR.
 
 ## 2. Checkpoint Commit Model
@@ -27,6 +27,10 @@ This checklist must be followed to ensure the safety and progression of the RAG 
   - `core/feed_execution_truth.py`
   - `strategies/`
   - `core/strategies/`
+  - `core/backtest_elite.py`
+  - `core/backtesting/`
+  - `core/vectorized_signals.py`
+  - `scripts/run_wfa_intraday.py`
 
 ## 4. Allowed Files Validation
 - [ ] Ensure modifications are strictly within allowed paths (for checkpoint 00, this is `scripts/rag_*` and `docs/rag/`).
