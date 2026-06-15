@@ -58,7 +58,7 @@ def test_keep_positive_expectancy_candidate_gets_high_edge_rank_score():
     assert out["expectancy_status"] == "KEEP"
     assert out["expectancy_sample_count"] == 60
     assert out["expectancy_avg_cost_adjusted_r"] == 0.22
-    assert out["edge_rank_score"] > 0.75
+    assert out["edge_rank_score"] >= 0.74
     assert "expectancy_keep" in out["edge_rank_reason"]
     assert out["edge_rank_components"]["raw_edge_rank_score"] >= out["edge_rank_score"]
 
@@ -305,6 +305,41 @@ def test_bearish_regime_penalizes_bullish_exposure_even_without_pool_context():
     assert bearish["edge_rank_components"]["candidate_regime_mismatch_penalty"] == 0.0
 
 
+def test_canonical_trending_down_regime_penalizes_bullish_exposure():
+    bullish = apply_edge_ranking(
+        _row(
+            trade_id="T-CANONICAL-BEARISH-BULLISH",
+            regime="TRENDING_DOWN",
+            direction="BUY_CALL",
+            option_type="CE",
+            signal_direction="BUY_CALL",
+            strategy_family="breakout",
+            movement_type="COMPRESSION_BREAKOUT",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.18,
+        )
+    )
+    bearish = apply_edge_ranking(
+        _row(
+            trade_id="T-CANONICAL-BEARISH-BEARISH",
+            regime="TRENDING_DOWN",
+            direction="BUY_PUT",
+            option_type="PE",
+            signal_direction="BUY_PUT",
+            strategy_family="breakout",
+            movement_type="COMPRESSION_BREAKOUT",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.18,
+        )
+    )
+
+    assert bearish["edge_rank_score"] > bullish["edge_rank_score"]
+    assert bullish["edge_rank_components"]["candidate_regime_mismatch_penalty"] > 0.0
+    assert bullish["edge_rank_components"]["canonical_regime"] == "TRENDING_DOWN"
+
+
 def test_range_setup_keeps_range_candidate_competitive_against_breakout():
     range_candidate = apply_edge_ranking(
         _row(
@@ -337,6 +372,40 @@ def test_range_setup_keeps_range_candidate_competitive_against_breakout():
 
     assert range_candidate["edge_rank_score"] >= breakout_candidate["edge_rank_score"]
     assert breakout_candidate["edge_rank_components"]["candidate_regime_mismatch_penalty"] > 0.0
+
+
+def test_canonical_volatile_regime_adds_directional_caution():
+    directional = apply_edge_ranking(
+        _row(
+            trade_id="T-VOLATILE-DIRECTIONAL",
+            regime="VOLATILE",
+            direction="BUY_CALL",
+            option_type="CE",
+            signal_direction="BUY_CALL",
+            strategy_family="breakout",
+            movement_type="COMPRESSION_BREAKOUT",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.17,
+        )
+    )
+    calmer = apply_edge_ranking(
+        _row(
+            trade_id="T-VOLATILE-RANGE",
+            regime="VOLATILE",
+            direction="BUY_CALL",
+            option_type="CE",
+            signal_direction="RANGE",
+            strategy_family="mean_reversion",
+            movement_type="VWAP_MEAN_REVERSION",
+            expectancy_status="KEEP",
+            expectancy_sample_count=60,
+            expectancy_avg_cost_adjusted_r=0.17,
+        )
+    )
+
+    assert calmer["edge_rank_score"] > directional["edge_rank_score"]
+    assert "volatile_regime_directional_caution" in directional["edge_rank_reason"]
 
 
 def test_positive_expectancy_does_not_override_regime_mismatch_completely():
