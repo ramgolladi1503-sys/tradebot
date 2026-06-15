@@ -1604,7 +1604,7 @@ def _candidate_class(candidate: Any) -> str:
         return "fallback"
     if quote_source in {"rest_fallback", "synthetic_offhours", "subscription_failed"}:
         return "fallback"
-    if trade_id.startswith("softrej_"):
+    if trade_id.startswith("softrej"):
         return "fallback"
     if "fallback" in candidate_type:
         return "fallback"
