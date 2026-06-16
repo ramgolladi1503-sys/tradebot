@@ -35,6 +35,12 @@ def _quote_ts_epoch(snapshot: dict[str, Any] | None) -> float | None:
     return None
 
 
+def _quote_age_sec(*, now_epoch: float, quote_ts: float | None) -> float | None:
+    if quote_ts is None:
+        return None
+    return now_epoch - quote_ts
+
+
 @dataclass(frozen=True)
 class ExecutionEntryDecision:
     execution_entry: float | None
@@ -66,7 +72,7 @@ def resolve_execution_entry(
     bid_px = _positive_price(bid)
     ask_px = _positive_price(ask)
     quote_ts = _quote_ts_epoch(snapshot)
-    quote_age_sec = None if quote_ts is None else max(0.0, now_epoch - quote_ts)
+    quote_age_sec = _quote_age_sec(now_epoch=now_epoch, quote_ts=quote_ts)
     threshold_sec = None if max_quote_age_sec is None else max(0.0, float(max_quote_age_sec))
 
     if threshold_sec is not None:
@@ -77,6 +83,19 @@ def resolve_execution_entry(
                 executable=False,
                 reason="quote_timestamp_missing",
                 quote_age_sec=None,
+                threshold_sec=threshold_sec,
+                bid=bid_px,
+                ask=ask_px,
+                quote_ts_epoch=quote_ts,
+                evaluated_at_epoch=now_epoch,
+            )
+        if quote_age_sec is not None and quote_age_sec < 0:
+            return ExecutionEntryDecision(
+                execution_entry=None,
+                source="none",
+                executable=False,
+                reason="future_quote_timestamp",
+                quote_age_sec=quote_age_sec,
                 threshold_sec=threshold_sec,
                 bid=bid_px,
                 ask=ask_px,
