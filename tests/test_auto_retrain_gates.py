@@ -44,6 +44,7 @@ def test_update_model_missing_trade_log_does_not_crash(monkeypatch, tmp_path):
         lambda **_kwargs: run_calls.__setitem__("count", run_calls["count"] + 1),
     )
     monkeypatch.setattr("core.auto_retrain.compute_decay", lambda *args, **kwargs: {})
+    retrain._last_research_run_time = 0.0
 
     retrain.update_model()
 

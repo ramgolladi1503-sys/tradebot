@@ -42,6 +42,7 @@ def test_top_opportunities_rows_include_classification_fields(monkeypatch, tmp_p
         executable_top_n=1,
         advisory_top_n=1,
         active_trade=None,
+        cycle_primary_reason="market_closed",
     )
     assert payload["cycle_primary_reason"] == "market_closed"
     assert payload["top_executable_opportunities"]

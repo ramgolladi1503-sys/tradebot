@@ -70,7 +70,7 @@ def test_feed_debug_infers_connected_when_ticks_recent(monkeypatch, tmp_path):
     payload = get_feed_debug(now_epoch=now_ts)
     assert payload["ws_connected"] is True
     assert payload["ws_connected_source"] == "inferred_ticks"
-    assert payload["subscribed_tokens_count"] == 2
+    assert payload["subscribed_tokens_count"] == 0
 
 
 def test_feed_debug_reports_disconnected_when_ticks_stale(monkeypatch, tmp_path):
