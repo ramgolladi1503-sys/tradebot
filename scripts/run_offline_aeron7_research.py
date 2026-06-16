@@ -73,6 +73,7 @@ def run_offline_aeron7_research(
     test_window_days: int,
     step_days: int,
     model_family: str,
+    use_ml_overlay: bool = False,
 ) -> dict[str, Any]:
     src_root = Path(source_root).expanduser()
     if not src_root.exists():
@@ -93,7 +94,16 @@ def run_offline_aeron7_research(
 
     label_reports: list[dict[str, Any]] = []
     ev_reports: list[dict[str, Any]] = []
-    for symbol_path in sorted(raw_dir.glob("*_intraday.csv")):
+    
+    written_files = convert_report.get("written_files", [])
+    if not written_files:
+        # Fallback to glob but filter by requested symbols if convert_report didn't return written_files
+        for p in raw_dir.glob("*_intraday.csv"):
+            if any(s.replace(" ", "_") in p.name for s in symbols):
+                written_files.append(str(p))
+
+    for symbol_path_str in sorted(list(set(written_files))):
+        symbol_path = Path(symbol_path_str)
         symbol = symbol_path.stem.replace("_intraday", "")
         if len(horizons_bars) > 1:
             out_path = label_dir / f"{symbol}_multi_horizon.csv"
@@ -138,6 +148,7 @@ def run_offline_aeron7_research(
             train_window_days=train_window_days,
             test_window_days=test_window_days,
             step_days=step_days,
+            use_ml_overlay=use_ml_overlay,
         )
     if ev_reports:
         regime_report = build_regime_model_comparison(
@@ -175,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--test-window-days", type=int, default=0)
     parser.add_argument("--step-days", type=int, default=0)
     parser.add_argument("--model-family", default="", choices=["", "logistic", "random_forest"])
+    parser.add_argument("--use-ml-overlay", action="store_true", help="Apply ML acceptance gate during backtesting")
     args = parser.parse_args(argv)
 
     config = load_offline_research_config(args.config) if str(args.config).strip() else {}
@@ -192,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         test_window_days=args.test_window_days or int(config.get("test_window_days", 10)),
         step_days=args.step_days or int(config.get("step_days", 10)),
         model_family=model_family,
+        use_ml_overlay=getattr(args, 'use_ml_overlay', False),
     )
     print(f"summary={report['summary_path']}")
     print(f"converted_files={len(report['convert_report']['written_files'])}")

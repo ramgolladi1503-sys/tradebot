@@ -45,27 +45,37 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     orb_high = df.groupby(df.index.date)['high'].transform(lambda x: x.iloc[:3].max() if len(x) >= 3 else x.max())
     orb_low = df.groupby(df.index.date)['low'].transform(lambda x: x.iloc[:3].min() if len(x) >= 3 else x.min())
     
-    trend = (ltp - vwap) / vwap
-    
     # 2. Volatility Filter (Recalibrated for intraday)
     # ATR needs to be at least 0.05% of price for decent 5-min volatility
     valid_vol = (atr / ltp) >= 0.0005
+    trend = (ltp - vwap) / vwap
+    
+    # VWAP ATR Bands
+    vwap_upper = vwap + (atr * 1.5)
+    vwap_lower = vwap - (atr * 1.5)
+    vwap_mr_upper = vwap + (atr * 2.5)
+    vwap_mr_lower = vwap - (atr * 2.5)
+    
+    rsi_14 = df.get('rsi_14', pd.Series(50, index=df.index))
     
     # 3. Strategy Masks
-    # Trend VWAP (10 bps threshold, strict slope, strong ADX)
-    buy_trend = (trend > 0.001) & (trend.shift(1) <= 0.001) & (vwap_slope >= 0) & (adx > 20)
-    sell_trend = (trend < -0.001) & (trend.shift(1) >= -0.001) & (vwap_slope <= 0) & (adx > 20)
+    # Trend VWAP (Breakout of ATR band, strict slope, strong ADX)
+    buy_trend = (ltp > vwap_upper) & (ltp.shift(1) <= vwap_upper) & (vwap_slope >= 0) & (adx > 25)
+    sell_trend = (ltp < vwap_lower) & (ltp.shift(1) >= vwap_lower) & (vwap_slope <= 0) & (adx > 25)
     
-    # Mean Reversion (20 bps stretch, strict RSI Mom, weak ADX)
-    buy_mr = (trend < -0.002) & (trend.shift(1) >= -0.002) & (rsi_mom >= 0) & (adx < 25)
-    sell_mr = (trend > 0.002) & (trend.shift(1) <= 0.002) & (rsi_mom <= 0) & (adx < 25)
+    # Mean Reversion (Statistical extreme ATR stretch, RSI oversold/overbought)
+    buy_mr = (ltp < vwap_mr_lower) & (rsi_14 < 30) & (rsi_mom >= 0)
+    sell_mr = (ltp > vwap_mr_upper) & (rsi_14 > 70) & (rsi_mom <= 0)
     
-    # ORB Breakout (Price crossing the 15-min range, strong ADX, valid after 09:30)
+    # ORB Breakout (Price crossing the 15-min range + buffer, strong ADX, valid after 09:30)
     time_strs = df.index.strftime('%H:%M')
     after_orb = time_strs >= "09:30"
     
-    buy_orb = (ltp > orb_high) & (ltp.shift(1) <= orb_high) & after_orb & (adx > 20)
-    sell_orb = (ltp < orb_low) & (ltp.shift(1) >= orb_low) & after_orb & (adx > 20)
+    orb_upper_buf = orb_high + (atr * 0.2)
+    orb_lower_buf = orb_low - (atr * 0.2)
+    
+    buy_orb = (ltp > orb_upper_buf) & (ltp.shift(1) <= orb_upper_buf) & after_orb & (adx > 25)
+    sell_orb = (ltp < orb_lower_buf) & (ltp.shift(1) >= orb_lower_buf) & after_orb & (adx > 25)
     
     # 4. Time of Day Filter
     start_time = getattr(config, 'allowed_time_start', "09:30")

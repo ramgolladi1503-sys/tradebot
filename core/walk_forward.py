@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
-import json
-import math
+
 import pandas as pd
 
 from core.backtest_engine import BacktestEngine
-from core.feature_builder import add_indicators
 from core.backtest_report import compute_window_metrics
+from core.feature_builder import add_indicators
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,9 @@ def _normalize_timestamp_column(df: pd.DataFrame) -> pd.DataFrame:
         )
     out["_wf_ts"] = pd.to_datetime(out[ts_col], errors="coerce")
     if out["_wf_ts"].isna().all():
-        raise ValueError("walk_forward could not parse timestamp column to datetime")
+        raise ValueError(
+            "walk_forward could not parse timestamp column to datetime"
+        )
     out = out.dropna(subset=["_wf_ts"]).reset_index(drop=True)
     out["_wf_day"] = out["_wf_ts"].dt.floor("D")
     return out
@@ -59,7 +61,9 @@ def _build_windows(
     cfg: WalkForwardConfig,
 ) -> List[Tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp, pd.Timestamp]]:
     unique_days = sorted(df["_wf_day"].dropna().unique())
-    windows: List[Tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp, pd.Timestamp]] = []
+    windows: List[
+        Tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp, pd.Timestamp]
+    ] = []
     total_days = len(unique_days)
     if total_days < (cfg.train_window_days + cfg.test_window_days):
         return windows
@@ -82,8 +86,11 @@ def run_walk_forward(
     step_days: int = 10,
     starting_capital: float = 100000.0,
     output_dir: str = "reports/walk_forward",
-    backtest_factory: Optional[Callable[[pd.DataFrame, float, Dict[str, Optional[float]]], object]] = None,
+    backtest_factory: Optional[
+        Callable[[pd.DataFrame, float, Dict[str, Optional[float]]], object]
+    ] = None,
     write_outputs: bool = True,
+    use_ml_overlay: bool = False,
 ) -> Dict[str, object]:
     cfg = WalkForwardConfig(
         train_window_days=train_window_days,
@@ -101,37 +108,69 @@ def run_walk_forward(
         )
 
     if backtest_factory is None:
-        def _factory(test_df: pd.DataFrame, capital: float, train_stats: Dict[str, Optional[float]]):
-            from core.backtest_elite import VectorizedBacktestEngine, EliteBacktestConfig
-            cfg = EliteBacktestConfig(starting_capital=capital, vol_target=train_stats.get("vol_target", 0.002))
+
+        def _factory(
+            test_df: pd.DataFrame,
+            capital: float,
+            train_stats: Dict[str, Optional[float]],
+        ):
+            from core.backtest_elite import (
+                EliteBacktestConfig,
+                VectorizedBacktestEngine,
+            )
+
+            cfg = EliteBacktestConfig(
+                starting_capital=capital,
+                vol_target=train_stats.get("vol_target", 0.002),
+                use_ml_overlay=use_ml_overlay,
+            )
+
             class _Wrapper:
                 def __init__(self, df, c):
                     self.engine = VectorizedBacktestEngine(df, c)
+
                 def run(self):
                     return self.engine.generate_signals_vectorized()
+
             return _Wrapper(test_df, cfg)
+
         backtest_factory = _factory
 
     window_rows: List[Dict[str, object]] = []
     all_trades: List[pd.DataFrame] = []
-    for window_idx, (train_start, train_end, test_start, test_end) in enumerate(windows, start=1):
-        train_df = df[(df["_wf_day"] >= train_start) & (df["_wf_day"] <= train_end)].copy()
-        test_df = df[(df["_wf_day"] >= test_start) & (df["_wf_day"] <= test_end)].copy()
+    for window_idx, (
+        train_start,
+        train_end,
+        test_start,
+        test_end,
+    ) in enumerate(windows, start=1):
+        train_df = df[
+            (df["_wf_day"] >= train_start) & (df["_wf_day"] <= train_end)
+        ].copy()
+        test_df = df[
+            (df["_wf_day"] >= test_start) & (df["_wf_day"] <= test_end)
+        ].copy()
 
         # Drop helper columns before entering strategy/backtest logic.
-        train_stats = _train_stats(train_df.drop(columns=["_wf_ts", "_wf_day"], errors="ignore"))
+        train_stats = _train_stats(
+            train_df.drop(columns=["_wf_ts", "_wf_day"], errors="ignore")
+        )
         engine = backtest_factory(
             test_df.drop(columns=["_wf_ts", "_wf_day"], errors="ignore"),
             cfg.starting_capital,
             train_stats,
         )
         if not hasattr(engine, "run"):
-            raise TypeError("backtest_factory must return an object with .run()")
+            raise TypeError(
+                "backtest_factory must return an object with .run()"
+            )
         results_df = engine.run()
         if results_df is None:
             results_df = pd.DataFrame()
 
-        metrics = compute_window_metrics(results_df, starting_capital=cfg.starting_capital)
+        metrics = compute_window_metrics(
+            results_df, starting_capital=cfg.starting_capital
+        )
         row = {
             "window_id": window_idx,
             "train_start": str(pd.Timestamp(train_start).date()),
@@ -152,7 +191,11 @@ def run_walk_forward(
             all_trades.append(tagged)
 
     window_df = pd.DataFrame(window_rows)
-    trades_df = pd.concat(all_trades, ignore_index=True) if all_trades else pd.DataFrame()
+    trades_df = (
+        pd.concat(all_trades, ignore_index=True)
+        if all_trades
+        else pd.DataFrame()
+    )
 
     summary = {
         "config": {
@@ -163,12 +206,36 @@ def run_walk_forward(
             "window_count": int(len(window_df)),
         },
         "aggregate": {
-            "avg_return": float(window_df["return"].mean()) if not window_df.empty else 0.0,
-            "avg_max_drawdown": float(window_df["max_drawdown"].mean()) if not window_df.empty else 0.0,
-            "avg_win_rate": float(window_df["win_rate"].mean()) if not window_df.empty else 0.0,
-            "avg_r": float(window_df["avg_r"].mean()) if not window_df.empty else 0.0,
-            "avg_sharpe_proxy": float(window_df["sharpe_proxy"].mean()) if not window_df.empty else 0.0,
-            "total_trades": int(window_df["trade_count"].sum()) if not window_df.empty else 0,
+            "avg_return": (
+                float(window_df["return"].mean())
+                if not window_df.empty
+                else 0.0
+            ),
+            "avg_max_drawdown": (
+                float(window_df["max_drawdown"].mean())
+                if not window_df.empty
+                else 0.0
+            ),
+            "avg_win_rate": (
+                float(window_df["win_rate"].mean())
+                if not window_df.empty
+                else 0.0
+            ),
+            "avg_r": (
+                float(window_df["avg_r"].mean())
+                if not window_df.empty
+                else 0.0
+            ),
+            "avg_sharpe_proxy": (
+                float(window_df["sharpe_proxy"].mean())
+                if not window_df.empty
+                else 0.0
+            ),
+            "total_trades": (
+                int(window_df["trade_count"].sum())
+                if not window_df.empty
+                else 0
+            ),
         },
         "windows": window_rows,
     }
@@ -197,7 +264,9 @@ def run_walk_forward(
     return summary
 
 
-def walk_forward(historical_data: pd.DataFrame, train_size: float = 0.6, step: int = 200):
+def walk_forward(
+    historical_data: pd.DataFrame, train_size: float = 0.6, step: int = 200
+):
     """
     Backward-compatible walk-forward API used by existing run_backtest.
     Returns concatenated trade rows.
@@ -207,7 +276,7 @@ def walk_forward(historical_data: pd.DataFrame, train_size: float = 0.6, step: i
     start_train = int(n * train_size)
     for start in range(start_train, n - step, step):
         train_df = historical_data.iloc[:start]
-        test_df = historical_data.iloc[start:start + step]
+        test_df = historical_data.iloc[start : start + step]
         stats = _train_stats(train_df)
         engine = BacktestEngine(test_df, train_stats=stats)
         results = engine.run()
@@ -217,7 +286,9 @@ def walk_forward(historical_data: pd.DataFrame, train_size: float = 0.6, step: i
     return pd.concat(all_results, ignore_index=True)
 
 
-def load_latest_walk_forward_summary(path: str = "reports/walk_forward/walk_forward_latest.json") -> tuple[dict, str | None]:
+def load_latest_walk_forward_summary(
+    path: str = "reports/walk_forward/walk_forward_latest.json",
+) -> tuple[dict, str | None]:
     report_path = Path(path)
     if not report_path.exists():
         return {}, "walk_forward_report_missing"
@@ -239,6 +310,8 @@ def promotion_metrics_from_summary(summary: dict) -> tuple[dict, str | None]:
         # Fallback: only one model present, use aggregate as challenger proxy.
         return {
             "challenger_return": float(aggregate.get("avg_return") or 0.0),
-            "challenger_max_drawdown": float(aggregate.get("avg_max_drawdown") or 0.0),
+            "challenger_max_drawdown": float(
+                aggregate.get("avg_max_drawdown") or 0.0
+            ),
         }, None
     return {}, "walk_forward_metrics_missing"
