@@ -50,9 +50,9 @@ def test_feedtruth_degrades_when_ticks_or_depth_are_stale():
         "subscribed_option_tokens_count": 12,
         "verified_option_symbols": ["NIFTY"],
         "missing_option_symbols": ["BANKNIFTY"],
-        "latest_ltp_age_sec": 9.5,
+        "latest_ltp_age_sec": 19.5,
         "latest_depth_age_sec": 18.0,
-        "latest_option_tick_age_sec": 14.0,
+        "latest_option_tick_age_sec": 16.0,
     })
 
     assert degraded.state == "DEGRADED"

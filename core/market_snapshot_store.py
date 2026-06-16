@@ -43,8 +43,6 @@ def write_market_snapshot_atomic(
     try:
         with tmp.open("w", encoding="utf-8") as handle:
             json.dump(snapshot, handle, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False)
-            handle.flush()
-            os.fsync(handle.fileno())
         os.replace(tmp, target)
         return target
     finally:

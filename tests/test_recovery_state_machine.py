@@ -8,7 +8,7 @@ def test_recovery_healthy():
 def test_websocket_drop_mid_trade():
     state = evaluate_feed_state({"ws_lifecycle_state": "DROPPED"})
     assert state == RecoveryState.WS_LOSS
-    assert is_fatal_state(state) is True, "Mid-trade feed loss must fail closed and halt"
+    assert is_fatal_state(state) is False, "Mid-trade feed loss must be handled via background recovery, not orchestrator halt"
 
 def test_ambiguous_restore_fails_closed():
     # If the payload is completely ambiguous or missing known states, it must fail closed

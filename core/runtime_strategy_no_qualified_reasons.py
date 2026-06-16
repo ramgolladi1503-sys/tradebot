@@ -226,6 +226,12 @@ def _has_predicate_facts(tele: Mapping[str, Any]) -> bool:
 
 
 def _normalize_predicate_facts(tele: Mapping[str, Any]) -> dict[str, Any]:
+    def _strip_md(c: Mapping[str, Any]) -> dict[str, Any]:
+        d = dict(c)
+        if "market_data" in d:
+            d.pop("market_data", None)
+        return d
+
     picked = tele.get("picked_candidate") if isinstance(tele.get("picked_candidate"), Mapping) else {}
     all_candidates = tele.get("all_candidates") if isinstance(tele.get("all_candidates"), list) else []
     return {
@@ -247,8 +253,8 @@ def _normalize_predicate_facts(tele: Mapping[str, Any]) -> dict[str, Any]:
         "strategy_skipped_due_to_preconditions": _safe_bool(
             tele.get("strategy_skipped_due_to_preconditions")
         ),
-        "picked_candidate": dict(picked) if isinstance(picked, Mapping) else {},
-        "all_candidates": [dict(item) for item in all_candidates if isinstance(item, Mapping)],
+        "picked_candidate": _strip_md(picked),
+        "all_candidates": [_strip_md(item) for item in all_candidates if isinstance(item, Mapping)],
         "precondition_failures": _string_list(tele.get("precondition_failures")),
         "precondition_reasons": _string_list(tele.get("precondition_reasons")),
         "strategy_reasons": _string_list(tele.get("strategy_reasons")),

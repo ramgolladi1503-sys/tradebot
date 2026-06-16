@@ -63,6 +63,7 @@ def build_runtime_candidate_handoff_payload(
     top_executable_count = _non_negative_int(top_payload.get("top_executable_count"))
     ranked_exec_count = _non_negative_int(ranked_executable_count)
     top_exec = _safe_mapping(top_reportable_executable)
+    top_exec.pop("market_data", None)
     top_exec_trade_id = _text(
         top_exec.get("trade_id")
         or top_exec.get("candidate_id")

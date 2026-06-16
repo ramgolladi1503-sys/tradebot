@@ -296,8 +296,8 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
                 }
         )
     )
-    underlying_tick_fresh = _truthy(source.get("underlying_tick_fresh"), _as_float(source.get("latest_ltp_age_sec")) is not None and _as_float(source.get("latest_ltp_age_sec")) <= float(source.get("max_ltp_age_sec") or 2.5))
-    depth_fresh = _truthy(source.get("depth_fresh"), _as_float(source.get("latest_depth_age_sec")) is not None and _as_float(source.get("latest_depth_age_sec")) <= float(source.get("max_depth_age_sec") or 6.0))
+    underlying_tick_fresh = _truthy(source.get("underlying_tick_fresh"), _as_float(source.get("latest_ltp_age_sec")) is not None and _as_float(source.get("latest_ltp_age_sec")) <= float(source.get("max_ltp_age_sec") or 15.0))
+    depth_fresh = _truthy(source.get("depth_fresh"), _as_float(source.get("latest_depth_age_sec")) is not None and _as_float(source.get("latest_depth_age_sec")) <= float(source.get("max_depth_age_sec") or 15.0))
     feed_truth_state = _upper(source.get("feed_truth_state"))
     feed_truth_reason_code = _upper(source.get("feed_truth_reason_code"))
     option_feed_block_reason = _upper(source.get("option_feed_block_reason"))

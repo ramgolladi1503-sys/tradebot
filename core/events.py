@@ -57,8 +57,6 @@ def append_event(
     }
     with target.open("a", encoding="utf-8", buffering=1) as handle:
         handle.write(json.dumps(event, ensure_ascii=True, sort_keys=True) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
     try:
         append_execution_stream_event(
             {
@@ -109,7 +107,5 @@ def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
     with tmp.open("w", encoding="utf-8") as handle:
         handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
     os.replace(tmp, path)
     return path

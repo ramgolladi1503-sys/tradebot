@@ -193,8 +193,8 @@ def build_canonical_feed_truth_state(
     if not process_restart_required and ws_connected is False and ws_error_code == 1006 and runtime_state not in _RECOVERING_STATES:
         process_restart_required = True
     recovery_blocked = _truthy_any(source.get("recovery_blocked"), source.get("feed_recovery_blocked"), runtime_state in _RECOVERY_BLOCKED_STATES, process_restart_required)
-    underlying_tick_fresh = _truthy_any(source.get("underlying_tick_fresh"), latest_ltp_age_sec is not None and latest_ltp_age_sec <= float(source.get("max_ltp_age_sec") or 2.5))
-    depth_fresh = _truthy_any(source.get("depth_fresh"), latest_depth_age_sec is not None and latest_depth_age_sec <= float(source.get("max_depth_age_sec") or 6.0))
+    underlying_tick_fresh = _truthy_any(source.get("underlying_tick_fresh"), latest_ltp_age_sec is not None and latest_ltp_age_sec <= float(source.get("max_ltp_age_sec") or 15.0))
+    depth_fresh = _truthy_any(source.get("depth_fresh"), latest_depth_age_sec is not None and latest_depth_age_sec <= float(source.get("max_depth_age_sec") or 15.0))
     option_ticks_verified = _truthy_any(source.get("option_ticks_verified"), bool(verified_option_symbols) and not missing_option_symbols)
 
     blockers: list[str] = []
@@ -208,11 +208,11 @@ def build_canonical_feed_truth_state(
         blockers.append("RECOVERY_BLOCKED")
     if not ws_connected and runtime_state not in _BOOTING_STATES:
         blockers.append("WS_DISCONNECTED")
-    if latest_ltp_age_sec is not None and latest_ltp_age_sec > float(source.get("max_ltp_age_sec") or 2.5):
+    if latest_ltp_age_sec is not None and latest_ltp_age_sec > float(source.get("max_ltp_age_sec") or 15.0):
         blockers.append("LTP_STALE")
-    if latest_depth_age_sec is not None and latest_depth_age_sec > float(source.get("max_depth_age_sec") or 6.0):
+    if latest_depth_age_sec is not None and latest_depth_age_sec > float(source.get("max_depth_age_sec") or 15.0):
         blockers.append("DEPTH_STALE")
-    if latest_option_tick_age_sec is not None and latest_option_tick_age_sec > float(source.get("max_option_tick_age_sec") or 3.0):
+    if latest_option_tick_age_sec is not None and latest_option_tick_age_sec > float(source.get("max_option_tick_age_sec") or 15.0):
         blockers.append("OPTION_TICK_STALE")
     if missing_option_symbols:
         blockers.append("MISSING_OPTION_SYMBOLS")

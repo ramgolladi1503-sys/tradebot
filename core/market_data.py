@@ -1359,8 +1359,6 @@ def _apply_nonlive_feature_fallback(
     return row, fallback_fields
 
 
-_LAST_BACKFILL_ATTEMPT: dict[str, float] = {}
-
 def _warm_seed_ohlc_from_history(
     symbol: str,
     bars: list,
@@ -1377,13 +1375,6 @@ def _warm_seed_ohlc_from_history(
     Returns (bars, seeded_ok, reason_code).
     """
     import os
-    if not startup_phase and not os.environ.get("PYTEST_CURRENT_TEST"):
-        import time
-        last_attempt = _LAST_BACKFILL_ATTEMPT.get("GLOBAL", 0.0)
-        if time.time() - last_attempt < 10.0:
-            return bars, False, "THROTTLED_BACKFILL"
-        _LAST_BACKFILL_ATTEMPT["GLOBAL"] = time.time()
-
     seed_interval = str(interval or getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute")).strip() or "minute"
     required_bars = int(required_seed_bars if required_seed_bars is not None else min_bars)
     attempts_used = 0

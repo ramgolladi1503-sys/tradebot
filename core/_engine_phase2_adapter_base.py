@@ -93,9 +93,10 @@ def safe_get(c: dict[str, Any], key: str, default: float = 0.0) -> float:
 
 def _candidate_to_dict(candidate: Any) -> dict[str, Any]:
     if isinstance(candidate, dict):
-        return dict(candidate)
+        return {k: v for k, v in candidate.items() if k not in ("market_data", "ohlc_bars", "options", "candles")}
     if is_dataclass(candidate):
-        out = asdict(candidate)
+        from dataclasses import fields
+        out = {f.name: getattr(candidate, f.name) for f in fields(candidate) if f.name not in ("market_data", "ohlc_bars", "options", "candles")}
         # Propagate real quote-truth fields into the top-level Phase2 candidate dict when they
         # exist upstream in source_flags / quote_truth_snapshot. This does not invent data; it
         # only surfaces already-computed quote truth so LIVE strict contracts can evaluate it.
