@@ -82,8 +82,14 @@ class VectorizedBacktestEngine:
         horizon = self.config.horizon
         entry_window = self.config.entry_window
         
+        has_time = isinstance(self.data.index, pd.DatetimeIndex)
+        if has_time:
+            days = self.data.index.date
+        else:
+            days = None
+            
         for idx, row in signals_df.iterrows():
-            if idx + horizon >= len(self.data):
+            if idx + 1 >= len(self.data):
                 break
                 
             side = row.get("signal_side", "BUY")
@@ -94,9 +100,16 @@ class VectorizedBacktestEngine:
             lot_size = row["lot_size"]
             
             # Fast forward-looking slice
-            future_highs = highs[idx + 1: idx + 1 + horizon]
-            future_lows = lows[idx + 1: idx + 1 + horizon]
-            future_closes = closes[idx + 1: idx + 1 + horizon]
+            if has_time:
+                # Find the horizon within the same day
+                same_day_mask = days[idx + 1: idx + 1 + horizon] == days[idx]
+                future_highs = highs[idx + 1: idx + 1 + horizon][same_day_mask]
+                future_lows = lows[idx + 1: idx + 1 + horizon][same_day_mask]
+                future_closes = closes[idx + 1: idx + 1 + horizon][same_day_mask]
+            else:
+                future_highs = highs[idx + 1: idx + 1 + horizon]
+                future_lows = lows[idx + 1: idx + 1 + horizon]
+                future_closes = closes[idx + 1: idx + 1 + horizon]
             
             if len(future_highs) == 0:
                 continue
@@ -216,14 +229,21 @@ class VectorizedBacktestEngine:
         """
         from core.vectorized_signals import build_vectorized_signals
         
-        # 1. Add indicators
-        self.data = add_indicators(self.data).dropna().reset_index(drop=True)
+        # 1. Add indicators without dropping DatetimeIndex
+        self.data = add_indicators(self.data).dropna()
         
         # 2. Vectorized logic mapping
         signals_df = build_vectorized_signals(self.data, self.config)
         
         if not signals_df.empty:
-            return self.run_vectorized_signals(signals_df)
+            print(f"[DEBUG] build_vectorized_signals generated {len(signals_df)} signals.")
+            # Map DatetimeIndex to positional integer index for the execution engine
+            pos_indices = self.data.index.get_indexer(signals_df.index)
+            signals_df.index = pos_indices
+            res = self.run_vectorized_signals(signals_df)
+            print(f"[DEBUG] run_vectorized_signals returned {len(res)} trades.")
+            return res
+        print("[DEBUG] build_vectorized_signals generated 0 signals.")
         return pd.DataFrame()
 
     def generate_and_run(self) -> pd.DataFrame:
