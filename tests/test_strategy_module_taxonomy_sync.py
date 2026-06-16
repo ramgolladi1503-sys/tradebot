@@ -3,8 +3,9 @@ from pathlib import Path
 from core.strategy_spec import build_strategy_spec_registry
 
 
-DOC_PATH = Path("/Users/madhuram/tradebot/docs/strategy_module_taxonomy.md")
-STRATEGIES_ROOT = Path("/Users/madhuram/tradebot/strategies")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DOC_PATH = REPO_ROOT / "docs" / "strategy_module_taxonomy.md"
+STRATEGIES_ROOT = REPO_ROOT / "strategies"
 
 
 def test_strategy_module_taxonomy_mentions_registry_owned_families():
@@ -42,7 +43,7 @@ def test_strategy_module_taxonomy_marks_support_modules_as_non_strategy_utilitie
 def test_strategy_module_taxonomy_covers_all_strategy_python_modules():
     doc = DOC_PATH.read_text(encoding="utf-8")
     files = sorted(
-        path.relative_to(Path("/Users/madhuram/tradebot")).as_posix()
+        path.relative_to(REPO_ROOT).as_posix()
         for path in STRATEGIES_ROOT.rglob("*.py")
         if path.name != "__init__.py"
     )
