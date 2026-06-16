@@ -1,35 +1,43 @@
-# Agent Work Contract
-Add offline Aeron7 ML research pipeline and regime evaluation.
+# Agent Review: Offline Aeron7 Research
 
-# Scope Guard
+## Agent Work Contract
+- **source_agent**: Antigravity
+- **action**: added offline ML scripts
+- **title**: Offline Aeron7 ML research pipeline
+- **scope**: Add python scripts and tests for offline ML pipeline.
+- **requested_paths**: scripts/run_offline_aeron7_research.py, tests/test_run_offline_aeron7_research.py
+- **allowed_paths**: scripts/*.py, tests/*.py, core/vectorized_signals.py, configs/*.json
+- **forbidden_paths**: core/execution_engine.py, run_live.sh
+- **expected_tests**: tests/test_run_offline_aeron7_research.py
+- **acceptance_proof**: Tests pass and scripts execute offline.
+
+## Scope Guard
 Only offline analytical scripts in `scripts/` and `tests/` are added. Live trading logic remains untouched.
 
-# Grill Me
+## Grill Me Review
 The changes were heavily reviewed for live safety. This only introduces offline logic.
 
-# Hermes
+## Hermes Review
 We structured the pipeline logically: canonicalize -> label -> evaluate models per regime.
 
-# GSD
+## GSD Review
 Files created and integrated efficiently with zero runtime impact.
 
-# QA/Safety
+## QA / Safety Review
 Tests were added and executed for the offline research module. No live feed components were touched.
 
-# Acceptance Proof
-```text
+## Acceptance Proof
 read_only=true
 is_order_action=false
 broker_api_called=false
 allowed_for_live_execution=false
 append=false
-```
 
-# Runtime Proof Required After Merge
+## Runtime Proof Required After Merge
 None, as this only affects offline ML workflows.
 
-# What This PR Does Not Prove
+## What This PR Does Not Prove
 This PR does not prove that the ML model will be profitable in live trading.
 
-# Human Approval
+## Human Approval
 The user requested this PR to be opened manually.
