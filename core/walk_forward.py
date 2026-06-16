@@ -102,7 +102,14 @@ def run_walk_forward(
 
     if backtest_factory is None:
         def _factory(test_df: pd.DataFrame, capital: float, train_stats: Dict[str, Optional[float]]):
-            return BacktestEngine(test_df, starting_capital=capital, train_stats=train_stats)
+            from core.backtest_elite import VectorizedBacktestEngine, EliteBacktestConfig
+            cfg = EliteBacktestConfig(starting_capital=capital, vol_target=train_stats.get("vol_target", 0.002))
+            class _Wrapper:
+                def __init__(self, df, c):
+                    self.engine = VectorizedBacktestEngine(df, c)
+                def run(self):
+                    return self.engine.generate_signals_vectorized()
+            return _Wrapper(test_df, cfg)
         backtest_factory = _factory
 
     window_rows: List[Dict[str, object]] = []

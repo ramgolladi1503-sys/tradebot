@@ -217,7 +217,9 @@ class VectorizedBacktestEngine:
                 "outcome": outcome,
                 "ambiguous_exit_rows": 1 if is_ambiguous else 0,
                 "is_oos": is_oos,
-                "rr": abs(target - entry_price) / max(abs(entry_price - stop_loss), 1e-6)
+                "rr": abs(target - entry_price) / max(abs(entry_price - stop_loss), 1e-6),
+                "strategy": row.get("strategy_family", "Unknown"),
+                "regime": row.get("regime", "base")
             })
             
         return pd.DataFrame(results)
