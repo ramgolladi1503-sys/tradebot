@@ -798,10 +798,22 @@ def _coerce_trade_dict_to_schema(trade, market_data: dict | None = None):
         return trade
 
 
+_JSON_READ_CACHE = {}
+
 def _read_json_dict(path: Path) -> dict:
     try:
+        if not path.exists():
+            return {}
+        mtime = path.stat().st_mtime
+        cache_key = str(path)
+        cached = _JSON_READ_CACHE.get(cache_key)
+        if cached and cached["mtime"] == mtime:
+            return dict(cached["data"])  # Shallow copy to prevent mutation
+
         raw = json.loads(path.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
+        res = raw if isinstance(raw, dict) else {}
+        _JSON_READ_CACHE[cache_key] = {"mtime": mtime, "data": res}
+        return dict(res)
     except Exception:
         return {}
 
@@ -825,19 +837,24 @@ def _normalize_feed_runtime_payload(raw: dict) -> dict:
 
 
 def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
-    path = logs_dir() / "feed_runtime_latest.json"
-    if path.exists():
+    candidates = [
+        Path(getattr(cfg, "DATA_ROOT", ".runtime")).expanduser() / "feed_runtime_latest.json",
+        logs_dir() / "feed_runtime_latest.json",
+    ]
+    newest: tuple[dict, Path | None, float] = ({}, None, 0.0)
+    for path in candidates:
+        try:
+            if not path.exists():
+                continue
+            mtime = float(path.stat().st_mtime)
+        except Exception:
+            continue
         payload = _normalize_feed_runtime_payload(_read_json_dict(path))
-        if payload:
-            return payload, path
-
-    fallback_path = Path(getattr(cfg, "DATA_ROOT", ".runtime")).expanduser() / "feed_runtime_latest.json"
-    if fallback_path.exists():
-        payload = _normalize_feed_runtime_payload(_read_json_dict(fallback_path))
-        if payload:
-            return payload, fallback_path
-
-    return {}, None
+        if not payload:
+            continue
+        if newest[1] is None or mtime >= newest[2]:
+            newest = (payload, path, mtime)
+    return newest[0], newest[1]
 
 
 def _canonical_feed_truth_state_payload(feed_runtime_payload: dict | None) -> dict:
@@ -1199,6 +1216,7 @@ def _build_top_opportunities_payload(
     advisory_top_n: int | None = None,
     active_trade: dict | None = None,
     execution_truth_context: dict | None = None,
+    cycle_primary_reason: str | None = None,
 ) -> dict:
     candidates, _ = _filter_invalid_cycle_candidates(candidates, symbol="GLOBAL")
     exec_limit = max(0, int(executable_top_n if executable_top_n is not None else getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)))
@@ -1218,14 +1236,6 @@ def _build_top_opportunities_payload(
         len(list(phase2_result.get("ranked") or [])),
     )
     notes: list[str] = []
-
-    # Evidence-only: if present, include the cycle-level primary reason without changing Phase2 behavior.
-    cycle_primary_reason = None
-    try:
-        notrade_payload = _read_json_dict(logs_dir() / "notrade_reason_truth_latest.json")
-        cycle_primary_reason = str(notrade_payload.get("primary_reason") or "").strip() or None
-    except Exception:
-        cycle_primary_reason = None
 
     def _project(rows: list, label: str) -> list[dict]:
         projected: list[dict] = []
@@ -3897,9 +3907,7 @@ class Orchestrator:
         """
         Count consecutive fresh-feed cycles for paper pilot unlock.
         """
-        if self._is_live_mode():
-            self._pilot_unlock_clean_cycles = 0
-            return
+        # Allow warmup cycles to increment in all modes, including LIVE.
         today = now_ist().date().isoformat()
         if today != self._pilot_unlock_day:
             self._pilot_unlock_day = today
@@ -3917,8 +3925,11 @@ class Orchestrator:
                         break
                 if all_fresh:
                     self._pilot_unlock_clean_cycles += 1
+                    self._pilot_unlock_stale_tolerance = 0
                 else:
-                    self._pilot_unlock_clean_cycles = 0
+                    self._pilot_unlock_stale_tolerance = getattr(self, "_pilot_unlock_stale_tolerance", 0) + 1
+                    if self._pilot_unlock_stale_tolerance > 3:
+                        self._pilot_unlock_clean_cycles = 0
             else:
                 self._pilot_unlock_clean_cycles = 0
         except Exception:
@@ -4780,7 +4791,7 @@ class Orchestrator:
         Phase E: Live trading loop
         Fetch market data, generate trades, risk-check, execute, log, alert
         """
-        global cfg
+        from config import config as cfg
         logger.info("orchestrator_live_monitoring_start")
         while True:
             cycle_reason = "cycle_complete"
@@ -4875,6 +4886,9 @@ class Orchestrator:
                 # immutable market snapshot. Do not recompute readiness here.
                 feature_stage_start = time.perf_counter()
                 cycle_stage = "fetch_market_data"
+                
+                feature_timing["GAP_top_of_loop_ms"] = (time.perf_counter() - loop_start_time) * 1000.0
+                
                 # Daily decay report / strategy gating
                 t0 = time.perf_counter()
                 self._refresh_decay_report()
@@ -4887,6 +4901,8 @@ class Orchestrator:
                 t0 = time.perf_counter()
                 market_data_list = self._build_cycle_market_data(live_market_data)
                 feature_timing["build_cycle_market_data_ms"] = _perf_ms(t0)
+                
+                t_gap = time.perf_counter()
                 try:
                     indicator_report = build_live_indicator_readiness_report(
                         [row for row in list(market_data_list or []) if isinstance(row, dict)],
@@ -4902,6 +4918,7 @@ class Orchestrator:
                     any(bool((row or {}).get("market_open")) for row in (market_data_list or []))
                 )
                 dashboard_market_snapshot = None
+                feature_timing["GAP_build_indicator_report_ms"] = _perf_ms(t_gap)
                 try:
                     # Engine-owned compute: dashboard reads this compact artifact and must not recompute it.
                     t0 = time.perf_counter()
@@ -4956,6 +4973,7 @@ class Orchestrator:
                     self.risk_state.update_portfolio(self.portfolio)
                 except Exception:
                     pass
+                t_auto_tune = time.perf_counter()
                 try:
                     self._update_risk_pct_fields()
                 except Exception:
@@ -4968,6 +4986,7 @@ class Orchestrator:
                     self._pilot_exec_degradation()
                 except Exception:
                     pass
+                feature_timing["GAP_auto_tune_block_ms"] = _perf_ms(t_auto_tune)
 
                 # Reset daily flags at new day
                 try:
@@ -4997,6 +5016,7 @@ class Orchestrator:
                     max_trades_day = min(max_trades_day, int(getattr(cfg, "LIVE_MAX_TRADES_PER_DAY", 2)))
                 feature_build_ms += (time.perf_counter() - feature_stage_start) * 1000.0
 
+                t_audit = time.perf_counter()
                 try:
                     total_ms = float(feature_build_ms)
                     # Only log when feature_build is unexpectedly slow to avoid noisy logs.
@@ -5011,8 +5031,10 @@ class Orchestrator:
                         )
                 except Exception:
                     pass
+                feature_timing["GAP_audit_append_ms"] = _perf_ms(t_audit)
 
                 cycle_stage = "scan_symbols"
+                t0_sym_loop = time.perf_counter()
                 for market_data in market_data_list:
                     market_snapshot = self._immutable_cycle_snapshot(market_data)
                     snap_ok, halt_cycle = self._validate_market_snapshot(market_data)
@@ -7103,6 +7125,7 @@ class Orchestrator:
                     except Exception:
                         pass
 
+                feature_timing["symbol_loop_ms"] = _perf_ms(t0_sym_loop)
                 latency_critical_path_end_perf = time.perf_counter()
 
                 # Phase F: Check and retrain model if needed
@@ -7254,7 +7277,9 @@ class Orchestrator:
                     )
                 except Exception as report_exc:
                     logger.warning("orchestrator_report_error err=%s", report_exc)
+                t_post_sym = time.perf_counter()
                 try:
+                    t_stat = time.perf_counter()
                     self._write_cycle_status_files(
                         cycle_ok=not bool(cycle_error),
                         cycle_stage=cycle_stage,
@@ -7270,9 +7295,11 @@ class Orchestrator:
                         blocker_counts=cycle_blockers,
                         suggestion_count=cycle_suggestion_count,
                     )
+                    feature_timing["GAP_write_status_ms"] = _perf_ms(t_stat)
                 except Exception as status_exc:
                     logger.warning("cycle_status_write_error err=%s", status_exc)
                 try:
+                    t_fun = time.perf_counter()
                     write_pipeline_funnel(
                         _build_pipeline_funnel_payload(
                             universe=len(cycle_symbols_scanned),
@@ -7283,10 +7310,18 @@ class Orchestrator:
                             returned=int(cycle_candidates_seen),
                         )
                     )
+                    feature_timing["GAP_write_funnel_ms"] = _perf_ms(t_fun)
                 except Exception as funnel_exc:
                     logger.warning("pipeline_funnel_write_failed err=%s", funnel_exc)
                 try:
+                    t_truth = time.perf_counter()
                     feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
+                    if isinstance(feed_truth_payload, dict):
+                        for big_key in ("missing_option_symbols", "option_last_tick_age_by_symbol", "option_tokens_resolved_count_by_symbol", "option_tokens_subscribed_count_by_symbol", "option_ticks_received_count_by_symbol", "last_option_tick_ts_by_symbol", "option_feed_block_reason_by_symbol", "option_active_blockers_by_symbol", "missing_option_tokens_count_by_symbol", "subscribed_tokens_count_by_symbol"):
+                            feed_truth_payload.pop(big_key, None)
+                    feature_timing["GAP_read_truth_ms"] = _perf_ms(t_truth)
+
+                    t_top = time.perf_counter()
                     top_payload = _build_top_opportunities_payload(
                         candidates=list(cycle_ranked_candidates),
                         executable_top_n=int(getattr(cfg, "TOP_EXECUTABLE_OPPORTUNITIES_N", 5)),
@@ -7297,6 +7332,9 @@ class Orchestrator:
                             latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                         ),
                     )
+                    feature_timing["GAP_build_top_ms"] = _perf_ms(t_top)
+                    
+                    t_root = time.perf_counter()
                     try:
                         root_cause_payload = build_candidate_handoff_root_cause_payload(
                             cycle_ts_epoch=float(time.time()),
@@ -7307,7 +7345,10 @@ class Orchestrator:
                         write_candidate_handoff_root_cause_latest(payload=root_cause_payload)
                     except Exception as handoff_exc:
                         logger.warning("candidate_handoff_root_cause_write_failed err=%s", handoff_exc)
+                    feature_timing["GAP_build_root_cause_ms"] = _perf_ms(t_root)
+                    feature_timing["GAP_post_symbol_loop_ms"] = _perf_ms(t_post_sym)
                     try:
+                        t_heavy_io = time.perf_counter()
                         # Evidence-only: summarize why no-trade/no-executable is happening without mutating decisions.
                         phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
                         feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
@@ -7358,8 +7399,10 @@ class Orchestrator:
                             latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                         )
                         write_notrade_reason_truth_latest(payload=notrade_payload)
+                        feature_timing["heavy_io_telemetry_ms"] = _perf_ms(t_heavy_io)
                     except Exception as notrade_exc:
                         logger.warning("notrade_reason_truth_write_failed err=%s", notrade_exc)
+                    t_rq = time.perf_counter()
                     try:
                         rq_payload = build_ranking_quality_evidence_payload(
                             candidates=[cand for cand in list(cycle_ranked_candidates or []) if isinstance(cand, dict)],
@@ -7370,12 +7413,22 @@ class Orchestrator:
                         write_ranking_quality_latest(payload=rq_payload)
                     except Exception as rq_exc:
                         logger.warning("ranking_quality_write_failed err=%s", rq_exc)
+                    feature_timing["GAP_ranking_quality_ms"] = _perf_ms(t_rq)
+                    t_workload = time.perf_counter()
                     try:
+                        pruned_md_list = []
+                        for row in list(market_data_list or []):
+                            if isinstance(row, dict):
+                                p_row = dict(row)
+                                for big_key in ("ohlc_bars", "candidate_tradingsymbols", "matched_tradingsymbols", "options", "chain_data", "call_chain", "put_chain", "candles"):
+                                    p_row.pop(big_key, None)
+                                pruned_md_list.append(p_row)
+
                         feed_runtime_payload = _read_json_dict(repo_logs_dir() / "feed_runtime_latest.json")
                         workload_payload = build_live_workload_payload(
                             execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
                             market_open=bool(cycle_market_open),
-                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            market_data_list=pruned_md_list,
                             feed_runtime=feed_runtime_payload,
                             timing={
                                 **(feature_timing if isinstance(feature_timing, dict) else {}),
@@ -7385,11 +7438,13 @@ class Orchestrator:
                         write_live_workload_latest(payload=workload_payload)
                     except Exception as workload_exc:
                         logger.warning("live_workload_write_failed err=%s", workload_exc)
+                    feature_timing["GAP_workload_payload_ms"] = _perf_ms(t_workload)
+                    t0 = time.perf_counter()
                     try:
                         trace_payload = build_candidate_flow_trace_payload(
                             execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
                             market_open=bool(cycle_market_open),
-                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            market_data_list=pruned_md_list,
                             cycle_blockers=dict(cycle_blockers),
                             indicator_readiness=indicator_payload,
                             regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
@@ -7405,11 +7460,14 @@ class Orchestrator:
                         write_candidate_flow_trace_latest(payload=trace_payload)
                     except Exception as trace_exc:
                         logger.warning("candidate_flow_trace_write_failed err=%s", trace_exc)
+                    feature_timing["GAP_flow_trace_ms"] = _perf_ms(t0)
+
+                    t0 = time.perf_counter()
                     try:
                         strategy_no_qualified_payload = build_strategy_no_qualified_reasons_payload(
                             execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
                             market_open=bool(cycle_market_open),
-                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            market_data_list=pruned_md_list,
                             cycle_blockers=dict(cycle_blockers),
                             indicator_readiness=indicator_payload,
                             regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
@@ -7426,11 +7484,14 @@ class Orchestrator:
                             "strategy_no_qualified_reasons_write_failed err=%s",
                             strategy_no_qualified_exc,
                         )
+                    feature_timing["GAP_strategy_no_qualified_ms"] = _perf_ms(t0)
+
+                    t0 = time.perf_counter()
                     try:
                         starvation_payload = build_candidate_starvation_trace_payload(
                             execution_mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM"),
                             market_open=bool(cycle_market_open),
-                            market_data_list=[row for row in list(market_data_list or []) if isinstance(row, dict)],
+                            market_data_list=pruned_md_list,
                             cycle_blockers=dict(cycle_blockers),
                             feed_runtime=feed_runtime_payload if isinstance(feed_runtime_payload, dict) else {},
                             candidate_starvation_snapshots=[
@@ -7445,7 +7506,9 @@ class Orchestrator:
                         self._candidate_starvation_trace_last_payload = dict(starvation_payload)
                     except Exception as starvation_exc:
                         logger.warning("candidate_starvation_trace_write_failed err=%s", starvation_exc)
+                    feature_timing["GAP_starvation_trace_ms"] = _perf_ms(t0)
                     self._phase2_active_trade = top_payload.pop("_phase2_next_active_trade", None)
+                    t0 = time.perf_counter()
                     if cycle_candidate_handoff_snapshots:
                         for handoff_snapshot in cycle_candidate_handoff_snapshots:
                             try:
@@ -7455,11 +7518,10 @@ class Orchestrator:
                                     top_opportunities_payload=top_payload,
                                 )
                             except Exception as handoff_exc:
-                                logger.warning(
-                                    "runtime_candidate_handoff_evidence_write_failed symbol=%s err=%s",
-                                    handoff_snapshot.get("symbol"),
-                                    handoff_exc,
-                                )
+                                logger.error("runtime_candidate_handoff_snapshot_write_failed symbol=%s err=%s", handoff_snapshot.get("symbol"), handoff_exc)
+                    feature_timing["GAP_write_handoff_ms"] = _perf_ms(t0)
+
+                    t0 = time.perf_counter()
                     try:
                         _write_ranked_pipeline_runtime_evidence(
                             top_payload=top_payload,
@@ -7470,14 +7532,23 @@ class Orchestrator:
                             cycle_blockers=dict(cycle_blockers),
                         )
                     except Exception as ranked_pipeline_exc:
-                        logger.warning("ranked_pipeline_runtime_write_failed err=%s", ranked_pipeline_exc)
+                        logger.error("[RANKED_PIPELINE_RUNTIME_ERROR] error=%s", ranked_pipeline_exc)
+                    feature_timing["GAP_write_ranked_pipeline_ms"] = _perf_ms(t0)
+
+                    t0 = time.perf_counter()
                     write_top_opportunities_snapshots(payload=top_payload, producer="orchestrator")
+                    feature_timing["GAP_write_top_opportunities_ms"] = _perf_ms(t0)
                 except Exception as top_exc:
                     logger.warning("top_opportunities_snapshot_write_failed err=%s", top_exc)
                 try:
+                    t_health = time.perf_counter()
                     write_runtime_health_snapshot(orchestrator=self)
+                    feature_timing["write_runtime_health_ms"] = _perf_ms(t_health)
                 except Exception as health_exc:
                     logger.warning("runtime_health_snapshot_error err=%s", health_exc)
+                t_end_gap = time.perf_counter()
+                if (time.perf_counter() - loop_start_time) > 1.0:
+                    logger.warning("LEGACY_CYCLE_END_TO_END_TIMING total_ms=%.1f timings=%s", (time.perf_counter() - loop_start_time) * 1000.0, feature_timing)
                 if run_once:
                     break
                 _pace_loop(self.poll_interval, loop_start_time)

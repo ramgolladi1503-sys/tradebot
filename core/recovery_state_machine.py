@@ -52,8 +52,5 @@ def is_fatal_state(state: RecoveryState) -> bool:
     """Returns True if the state requires the orchestrator to halt."""
     return state in {
         RecoveryState.FATAL, 
-        RecoveryState.RECOVERY_BLOCKED, 
-        RecoveryState.WS_LOSS,
-        RecoveryState.AUTH_LOSS,
-        RecoveryState.UNKNOWN
+        RecoveryState.RECOVERY_BLOCKED
     }

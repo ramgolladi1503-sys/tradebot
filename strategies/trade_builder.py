@@ -7858,10 +7858,21 @@ class TradeBuilder:
             )
         return {"direction": direction, "reason": reason, "score": score, "regime_day": sig_regime}
 
-    def _opt_risk_levels(self, entry_price, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5):
+    def _opt_risk_levels(self, entry_price, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5, regime=None, day_type=None, timestamp=None):
         """
-        Option-specific risk levels using option premium + spread proxy.
+        Option-specific risk levels using option premium + spread proxy, dynamically adapted to regime.
         """
+        if regime in ("RANGE", "RANGE_VOLATILE"):
+            stop_mult *= 0.6
+            target_mult *= 0.8
+        if day_type == "EXPIRY_DAY" and timestamp:
+            try:
+                dt = datetime.fromtimestamp(float(timestamp))
+                if dt.hour >= 14:
+                    stop_mult *= 0.8
+                    target_mult *= 0.6
+            except Exception:
+                pass
         try:
             opt_atr_pct = getattr(cfg, "OPT_ATR_PCT", 0.2)
             spread_mult = getattr(cfg, "OPT_SPREAD_ATR_MULT", 3.0)
@@ -8947,6 +8958,22 @@ class TradeBuilder:
                 if debug_reasons and opt_row_error not in {"type_mismatch"}:
                     rejected.append(self._reject_record(symbol, {}, opt_type, opt_row_error, atr=atr))
                 continue
+            
+            # Dynamic Strike Selection: Force ITM on Expiry Range Days
+            try:
+                sig_day_type = signal.get("day_type", "UNKNOWN") if isinstance(signal, dict) else getattr(signal, "day_type", "UNKNOWN")
+                if regime_day in ("RANGE", "RANGE_VOLATILE") and sig_day_type == "EXPIRY_DAY":
+                    mny = float(opt.get("moneyness", 0.0))
+                    # For CE, ITM means spot > strike (mny > 0)
+                    # For PE, ITM means strike > spot (mny < 0)
+                    is_itm = (opt_type == "CE" and mny > 0.0) or (opt_type == "PE" and mny < 0.0)
+                    if not is_itm:
+                        _count_option_reject("range_expiry_requires_itm")
+                        if debug_reasons:
+                            rejected.append(self._reject_record(symbol, opt, opt_type, "range_expiry_requires_itm", atr=atr))
+                        continue
+            except Exception:
+                pass
             display_only_candidate_source = _display_only_candidate_source(opt)
             allow_display_only_candidate = bool(display_only_candidate_source)
             allow_missing_bid_ask = bool(
@@ -9785,10 +9812,10 @@ class TradeBuilder:
                     raw_gate_threshold = float(tune.get("min_proba", raw_gate_threshold))
             confidence_before_soft_veto = float(confidence)
             if confidence < raw_gate_threshold and not _relax("confidence"):
-                _count_option_reject("confidence_raw_gate")
+                _count_option_reject("confidence_raw_gate_shadow")
                 if debug_reasons:
                     _log_advisory_debug(
-                        "trade_builder_confidence_reject symbol=%s strike=%s type=%s stage=raw raw_model_conf=%s final_conf=%s threshold=%s regime=%s reason=%s",
+                        "trade_builder_confidence_reject_shadow symbol=%s strike=%s type=%s stage=raw raw_model_conf=%s final_conf=%s threshold=%s regime=%s reason=%s",
                         symbol,
                         opt["strike"],
                         opt_type,
@@ -9798,13 +9825,12 @@ class TradeBuilder:
                         signal.get("regime_day"),
                         signal.get("reason"),
                     )
-                    rec = self._reject_record(symbol, opt, opt_type, "confidence_raw_gate", atr=atr)
+                    rec = self._reject_record(symbol, opt, opt_type, "confidence_raw_gate_shadow", atr=atr)
                     rec["confidence"] = round(confidence, 3)
                     rec["min_proba"] = raw_gate_threshold
                     rec["confidence_stage"] = "raw"
                     debug_candidates.append(rec)
-                    rejected.append(rec)
-                continue
+                # SHADOW MODE: ML simply observes. We do not append to rejected[] and we do not 'continue'.
 
             # Slippage adjustment for limit
             calc_bid = self._coerce_positive_float(opt.get("bid"))
@@ -9874,7 +9900,10 @@ class TradeBuilder:
 
             option_risk = self._option_risk_proxy(entry_price, calc_bid or 0, calc_ask or 0)
             stop_loss, target = self._opt_risk_levels(
-                entry_price, calc_bid or 0, calc_ask or 0, option_risk, stop_mult=stop_mult, target_mult=target_mult
+                entry_price, calc_bid or 0, calc_ask or 0, option_risk, stop_mult=stop_mult, target_mult=target_mult,
+                regime=regime_day,
+                day_type=signal.get("day_type", "UNKNOWN") if isinstance(signal, dict) else getattr(signal, "day_type", "UNKNOWN"),
+                timestamp=opt.get("timestamp")
             )
             if not (target > entry_price > stop_loss):
                 _count_option_reject("invalid_opt_levels")
