@@ -233,6 +233,14 @@ class VectorizedBacktestEngine:
         
         # 1. Add indicators without dropping DatetimeIndex
         self.data = add_indicators(self.data).dropna()
+        if self.data.empty:
+            print("[DEBUG] build_vectorized_signals generated 0 signals.")
+            return pd.DataFrame()
+        if "timestamp" in self.data.columns:
+            ts = pd.to_datetime(self.data["timestamp"], errors="coerce")
+            if not ts.isna().all():
+                self.data = self.data.copy()
+                self.data.index = ts
         
         # 2. Vectorized logic mapping
         signals_df = build_vectorized_signals(self.data, self.config)
