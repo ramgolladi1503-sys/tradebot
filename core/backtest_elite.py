@@ -217,7 +217,9 @@ class VectorizedBacktestEngine:
                 "outcome": outcome,
                 "ambiguous_exit_rows": 1 if is_ambiguous else 0,
                 "is_oos": is_oos,
-                "rr": abs(target - entry_price) / max(abs(entry_price - stop_loss), 1e-6)
+                "rr": abs(target - entry_price) / max(abs(entry_price - stop_loss), 1e-6),
+                "strategy": row.get("strategy_family", "Unknown"),
+                "regime": row.get("regime", "base")
             })
             
         return pd.DataFrame(results)
@@ -231,6 +233,14 @@ class VectorizedBacktestEngine:
         
         # 1. Add indicators without dropping DatetimeIndex
         self.data = add_indicators(self.data).dropna()
+        if self.data.empty:
+            print("[DEBUG] build_vectorized_signals generated 0 signals.")
+            return pd.DataFrame()
+        if "timestamp" in self.data.columns:
+            ts = pd.to_datetime(self.data["timestamp"], errors="coerce")
+            if not ts.isna().all():
+                self.data = self.data.copy()
+                self.data.index = ts
         
         # 2. Vectorized logic mapping
         signals_df = build_vectorized_signals(self.data, self.config)

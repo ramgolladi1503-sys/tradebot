@@ -45,6 +45,7 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
 
     bias_norm = _normalize_bias(bias)
     regime_name = resolve_strategy_regime(regime, bias=bias_norm, expiry_context=expiry_context)
+    unknown_regime = regime_name == "UNKNOWN"
     profile = dict(_PROFILES.get(regime_name, _PROFILES["TRENDING_UP"]))
     profile["regime"] = regime_name
     record_strategy_regime_path("nifty_intraday", regime_name, profile, debug_stats=debug_stats)
@@ -77,6 +78,8 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
     direction = "BUY_CALL" if diff > 0 else "BUY_PUT"
     soft_flags = []
     reason = "VWAP directional setup"
+    if unknown_regime:
+        soft_flags.append("unknown_regime_fallback")
     if regime_name == "RANGE":
         if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.15))):
             _update_debug(debug_stats, rejected=1, reason="range_extension_too_small")
@@ -122,6 +125,10 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
     else:
         soft_flags.append("bias_aligned")
         score += 0.04
+
+    if unknown_regime:
+        soft_flags.append("regime_confidence_degraded")
+        score -= 0.08
 
     score += float(profile.get("score_bias", 0.0))
     score = max(0.05, min(0.95, score))

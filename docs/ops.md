@@ -1,5 +1,16 @@
 ## Ops Runbook (Auth, Freshness, Feed Breaker)
 
+### Strategy Contracts
+Strategy selection is contract-driven and read-only.
+
+Contract fields in `core/strategy_spec.py`:
+- `declared_regimes`: regimes the strategy is allowed to operate in
+- `preferred_regimes`: regimes the strategy is intended to favor
+- `blocked_regimes`: regimes the strategy must not treat as valid tradable paths
+
+Operational rule:
+- If a strategy is in an unknown regime, treat it as a confidence-degraded fallback path, not a normal preferred path.
+
 ### Auth Warmup Run
 Use the canonical auth check to validate token health before market hours.
 
