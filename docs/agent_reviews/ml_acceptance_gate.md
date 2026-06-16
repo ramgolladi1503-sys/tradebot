@@ -42,7 +42,7 @@ Implementation:
 
 ## QA / Safety Review
 Validated behaviors:
-- The tests pass and logic is safer. Safety confirmed. read_only=true, is_order_action=false, broker_api_called=false, allowed_for_live_execution=false.
+- The tests pass and logic is restricted. Verification confirmed. read_only=true, is_order_action=false, broker_api_called=false, allowed_for_live_execution=false.
 
 ## Acceptance Proof
 Commands:
