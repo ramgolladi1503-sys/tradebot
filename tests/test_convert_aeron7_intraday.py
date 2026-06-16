@@ -43,3 +43,24 @@ def test_convert_aeron7_intraday_skips_unwanted_symbols(tmp_path):
 
     assert report["rows_written"] == 0
     assert not list(output_dir.glob("*.csv"))
+
+def test_convert_aeron7_intraday_reads_csv_pass_through(tmp_path):
+    source_root = tmp_path / "aeron7"
+    input_dir = source_root / "2023" / "JAN"
+    input_dir.mkdir(parents=True)
+    
+    csv_content = (
+        "timestamp,symbol,open,high,low,close,volume\n"
+        "2023-01-01 10:00:00+00:00,NIFTY 50,100,105,95,102,1000\n"
+    )
+    (input_dir / "NIFTY 50_intraday.csv").write_text(csv_content)
+
+    output_dir = tmp_path / "historical" / "index"
+    report = convert_aeron7_intraday(source_root=source_root, output_dir=output_dir, symbols=["NIFTY 50"])
+
+    out_path = output_dir / "NIFTY_50_intraday.csv"
+    assert out_path.exists()
+    assert report["rows_written"] == 1
+    frame = pd.read_csv(out_path)
+    assert list(frame.columns) == ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+    assert frame["symbol"].iloc[0] == "NIFTY 50"

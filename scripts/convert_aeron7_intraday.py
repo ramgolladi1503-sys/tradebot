@@ -17,7 +17,32 @@ RAW_COLUMNS_9 = ["symbol", "date", "time", "open", "high", "low", "close", "volu
 CANONICAL_COLUMNS = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
 
 
+def _normalize_csv_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    needed = ["timestamp", "open", "high", "low", "close", "volume"]
+    for col in needed:
+        if col not in frame.columns:
+            frame[col] = None
+    if "symbol" not in frame.columns:
+        frame["symbol"] = "UNKNOWN"
+        
+    frame["symbol"] = frame["symbol"].astype(str).str.strip().str.upper()
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="coerce", utc=True)
+    frame = frame.dropna(subset=["timestamp"])
+    for col in ["open", "high", "low", "close", "volume"]:
+        frame[col] = pd.to_numeric(frame[col], errors="coerce")
+    frame = frame.dropna(subset=["open", "high", "low", "close", "volume"])
+    frame = frame[CANONICAL_COLUMNS].copy()
+    frame = frame.sort_values("timestamp").reset_index(drop=True)
+    return frame
+
+
 def _read_intraday_file(path: Path) -> pd.DataFrame:
+    if path.suffix.lower() == ".csv":
+        raw = pd.read_csv(path)
+        if raw.empty:
+            return pd.DataFrame(columns=CANONICAL_COLUMNS)
+        return _normalize_csv_frame(raw)
+
     raw = pd.read_csv(path, header=None)
     if raw.empty:
         return pd.DataFrame(columns=CANONICAL_COLUMNS)
@@ -53,13 +78,13 @@ def convert_aeron7_intraday(*, source_root: str | Path, output_dir: str | Path, 
     out_root.mkdir(parents=True, exist_ok=True)
 
     wanted = {s.strip().upper() for s in (symbols or []) if str(s).strip()}
-    files = sorted(src_root.rglob("*.txt"))
+    files = sorted(src_root.rglob("*.txt")) + sorted(src_root.rglob("*.csv"))
     written: list[str] = []
     skipped: list[str] = []
 
     grouped: dict[str, list[pd.DataFrame]] = {}
     for path in files:
-        symbol = path.stem.strip().upper()
+        symbol = path.stem.replace("_intraday", "").strip().upper()
         if wanted and symbol not in wanted:
             continue
         try:
@@ -77,7 +102,8 @@ def convert_aeron7_intraday(*, source_root: str | Path, output_dir: str | Path, 
         merged = pd.concat(frames, ignore_index=True)
         merged = merged.drop_duplicates(subset=["timestamp", "symbol"], keep="last")
         merged = merged.sort_values("timestamp").reset_index(drop=True)
-        out_path = out_root / f"{symbol}_intraday.csv"
+        clean_symbol = symbol.replace(" ", "_")
+        out_path = out_root / f"{clean_symbol}_intraday.csv"
         merged.to_csv(out_path, index=False)
         written.append(str(out_path))
         total_rows += len(merged)
