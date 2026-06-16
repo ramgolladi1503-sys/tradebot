@@ -10,7 +10,6 @@ Agents must never:
 
 1. Place, modify, cancel, or exit orders.
 2. Call broker APIs.
-3. Enable LIVE mode.
 4. Change credentials, tokens, secrets, or environment files.
 5. Disable or weaken risk gates.
 6. Disable or weaken kill switches.
