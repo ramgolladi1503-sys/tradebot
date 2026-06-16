@@ -11,17 +11,17 @@ Agents must never:
 1. Place, modify, cancel, or exit orders.
 2. Call broker APIs.
 3. Change credentials, tokens, secrets, or environment files.
-5. Disable or weaken risk gates.
-6. Disable or weaken kill switches.
-7. Disable or weaken feed freshness gates.
-8. Add silent fallbacks that hide broken data.
-9. Create fake happy-path-only mocks.
-10. Weaken tests to make CI pass.
-11. Touch unrelated files.
-12. Add dashboard/UI work unless the PR explicitly requires it.
-13. Change strategy thresholds unless the PR explicitly requires it and proves the behavior.
-14. Introduce LIVE behavior in tests.
-15. Blur SIM, PAPER, and LIVE boundaries.
+4. Disable or weaken risk gates.
+5. Disable or weaken kill switches.
+6. Disable or weaken feed freshness gates.
+7. Add silent fallbacks that hide broken data.
+8. Create fake happy-path-only mocks.
+9. Weaken tests to make CI pass.
+10. Touch unrelated files.
+11. Add dashboard/UI work unless the PR explicitly requires it.
+12. Change strategy thresholds unless the PR explicitly requires it and proves the behavior.
+13. Introduce LIVE behavior in tests.
+14. Blur SIM, PAPER, and LIVE boundaries.
 
 Every safety-sensitive output must preserve or explicitly prove:
 
