@@ -41,3 +41,6 @@ Does not prove profitability of the shadow candidates, only that they successful
 
 ## Human Approval
 User explicitly requested this merge and approved the PR via chat.
+
+## High-Risk Path Review
+Modified the orchestrator and strategy paths to safely bypass the ML gate into shadow mode and relax the downstream latency limit to 15.0s. All changes were explicitly isolated and passed local verification.
