@@ -14,7 +14,8 @@ def load_aeron7_nifty_f1():
     print(f"Found {len(files)} files to process.")
     for f in files:
         try:
-            df = pd.read_csv(f, names=['ticker', 'date', 'time', 'open', 'high', 'low', 'close', 'volume'])
+            # 2019+ data has an extra open_interest column, so we explicitly select 0-7
+            df = pd.read_csv(f, names=['ticker', 'date', 'time', 'open', 'high', 'low', 'close', 'volume'], usecols=[0,1,2,3,4,5,6,7])
             dfs.append(df)
         except Exception as e:
             print(f"Error reading {f}: {e}")
@@ -70,7 +71,9 @@ def run_intraday_wfa():
         spread_bps=0.0
     )
     
+    # Add horizon=75 so the backtest engine doesn't exit after 25 minutes
     param_grid = {
+        "horizon": [75],
         "vol_target": [0.002, 0.005],
         "target_atr_mult": [1.5, 2.0, 3.0],
         "stop_atr_mult": [1.0, 1.5]
