@@ -15,7 +15,7 @@ from core.feature_builder import add_indicators
 from core.walk_forward import run_walk_forward
 
 
-def run_engineered_walk_forward(*, input_csv: str | Path, output_dir: str | Path, train_window_days: int, test_window_days: int, step_days: int) -> dict:
+def run_engineered_walk_forward(*, input_csv: str | Path, output_dir: str | Path, train_window_days: int, test_window_days: int, step_days: int, use_ml_overlay: bool = False) -> dict:
     source = Path(input_csv).expanduser()
     if not source.exists():
         raise FileNotFoundError(f"input_csv_not_found:{source}")
@@ -32,6 +32,7 @@ def run_engineered_walk_forward(*, input_csv: str | Path, output_dir: str | Path
         step_days=step_days,
         output_dir=str(Path(output_dir).expanduser()),
         write_outputs=True,
+        use_ml_overlay=use_ml_overlay,
     )
 
 
