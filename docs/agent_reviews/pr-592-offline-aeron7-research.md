@@ -27,11 +27,17 @@ Files created and integrated efficiently with zero runtime impact.
 Tests were added and executed for the offline research module. No live feed components were touched.
 
 ## Acceptance Proof
-read_only=true
-is_order_action=false
-broker_api_called=false
-allowed_for_live_execution=false
-append=false
+read_only: true
+is_order_action: false
+broker_api_called: false
+allowed_for_live_execution: false
+append: false
+mode: offline
+candidate_id: N/A
+decision: N/A
+reason: offline_script
+timestamp: 2026-06-16T00:00:00Z
+source: offline_research
 
 ## Runtime Proof Required After Merge
 None, as this only affects offline ML workflows.
