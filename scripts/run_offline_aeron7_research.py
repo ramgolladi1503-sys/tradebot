@@ -52,7 +52,7 @@ def load_offline_research_config(path: str | Path) -> dict[str, Any]:
         raise FileNotFoundError(f"config_not_found:{config_path}")
     payload = json.loads(config_path.read_text(encoding="utf-8"))
     return {
-        "source_root": payload.get("source_root", "data/aeron7_data"),
+        "source_root": payload.get("source_root", ""),
         "work_dir": payload.get("work_dir", ".runtime/aeron7_research"),
         "symbols": list(payload.get("symbols") or ["NIFTY_F1"]),
         "horizons_bars": [int(v) for v in list(payload.get("horizons_bars") or [1])],
@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = load_offline_research_config(args.config) if str(args.config).strip() else {}
-    source_root = args.source_root or config.get("source_root", "data/aeron7_data")
+    source_root = args.source_root or config.get("source_root", "")
     work_dir = args.work_dir or config.get("work_dir", ".runtime/aeron7_research")
     symbols = [item.strip() for item in str(args.symbols or ",".join(config.get("symbols", []))).split(",") if item.strip()]
     horizons = [int(item.strip()) for item in str(args.horizons or ",".join(str(v) for v in config.get("horizons_bars", [1]))).split(",") if item.strip()]
