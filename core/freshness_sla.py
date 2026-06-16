@@ -597,3 +597,6 @@ def get_freshness_status(
 
 def _reset_cache_for_tests() -> None:
     _CACHE.clear()
+    from core import tick_store
+    tick_store._LAST_TICK_BY_TOKEN.clear()
+    tick_store._tick_window.clear()

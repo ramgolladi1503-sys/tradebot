@@ -870,6 +870,15 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
         regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
         regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
 
+    # Dynamic Entropy Override for Breakout Trends
+    depth_imb = float(snapshot.raw_data.get("depth_imbalance") or 0.0)
+    if primary_regime == "TREND" and (
+        snapshot.raw_data.get("volume_delta_override")
+        or depth_imb > 0.35
+        or (snapshot.regime_prob_max and float(snapshot.regime_prob_max) > 0.60)
+    ):
+        regime_entropy_max *= 1.30
+
     if snapshot.regime_prob_max is not None and float(snapshot.regime_prob_max) < regime_prob_min:
         unstable_reasons.append("prob_too_low")
     if snapshot.regime_entropy is not None and float(snapshot.regime_entropy) > regime_entropy_max:

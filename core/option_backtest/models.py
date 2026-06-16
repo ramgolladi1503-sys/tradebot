@@ -3,12 +3,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from enum import Enum
+
+
+class ResearchMode(str, Enum):
+    SYNTHETIC_RESEARCH = "SYNTHETIC_RESEARCH"
+    PROXY_RESEARCH = "PROXY_RESEARCH"
+    REAL_EXECUTABLE_RESEARCH = "REAL_EXECUTABLE_RESEARCH"
 
 
 @dataclass(frozen=True)
 class OptionBacktestConfig:
     symbol: str
     data_path: Path
+    research_mode: ResearchMode = ResearchMode.PROXY_RESEARCH
     date_from: str | None = None
     date_to: str | None = None
     timezone: str = "Asia/Kolkata"
@@ -20,6 +28,10 @@ class OptionBacktestConfig:
     max_hold_minutes: int = 30
     quantity: int = 1
     fill_model_run_id: str = "option_backtest"
+
+    def __post_init__(self):
+        if self.research_mode == ResearchMode.REAL_EXECUTABLE_RESEARCH:
+            object.__setattr__(self, 'allow_derived_levels', False)
 
 
 @dataclass(frozen=True)
@@ -44,6 +56,9 @@ class OptionBacktestTrade:
     confidence_raw: float | None
     confidence_final: float | None
     decision_reason: str
+    setup_id: str = "unknown"
+    regime: str = "unknown"
+    is_oos: bool = False
 
 
 @dataclass(frozen=True)

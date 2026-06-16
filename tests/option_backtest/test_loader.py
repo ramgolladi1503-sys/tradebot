@@ -26,9 +26,9 @@ def test_loader_filters_symbol_and_date_range(tmp_path: Path):
         timezone="Asia/Kolkata",
     )
 
-    assert len(df) == 1
-    assert str(df.iloc[0]["symbol"]) == "A"
-    assert bool(df.iloc[0]["has_bid_ask"]) is True
+    assert df.shape[0] == 1
+    assert df.iloc[0]["symbol"] == "A"
+    assert df.iloc[0]["has_bid_ask"]
 
 
 def test_loader_rejects_missing_required_columns(tmp_path: Path):
@@ -43,3 +43,5 @@ def test_loader_rejects_missing_required_columns(tmp_path: Path):
             date_to=None,
             timezone="Asia/Kolkata",
         )
+
+

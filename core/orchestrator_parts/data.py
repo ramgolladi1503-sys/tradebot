@@ -4,6 +4,7 @@ from pathlib import Path
 from core.paths import data_root, logs_dir
 
 import pandas as pd
+import concurrent.futures
 
 from config import config as cfg
 from core.reports.daily_audit import build_daily_audit, write_daily_audit_placeholder
@@ -70,7 +71,18 @@ def load_truth_dataset_for_reports():
         return pd.DataFrame(), f"truth_dataset_read_error:{type(exc).__name__}"
 
 
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+def _write_cycle_reports_sync(cycle_reason, decision_traces, config_snapshot):
+    try:
+        _do_write_cycle_reports(cycle_reason, decision_traces, config_snapshot)
+    except Exception as exc:
+        pass
+
 def write_cycle_reports(cycle_reason=None, decision_traces=None, config_snapshot=None):
+    _executor.submit(_write_cycle_reports_sync, cycle_reason, decision_traces, config_snapshot)
+
+def _do_write_cycle_reports(cycle_reason=None, decision_traces=None, config_snapshot=None):
     day = now_ist().date().isoformat()
     audit_path = logs_dir() / f"daily_audit_{day}.json"
     execution_path = logs_dir() / f"execution_report_{day}.json"

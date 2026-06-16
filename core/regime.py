@@ -5,6 +5,7 @@ from typing import Any, Mapping
 
 from config import config as cfg
 from core.market_data import get_current_regime
+from core.regime_canonical import normalize_legacy_regime_bucket
 
 
 REGIME_TREND = "TREND"
@@ -14,14 +15,7 @@ REGIME_NEUTRAL = "NEUTRAL"
 
 
 def normalize_regime(value: Any) -> str:
-    raw = str(value or "").upper().strip()
-    if raw in {REGIME_TREND, REGIME_RANGE, REGIME_EVENT, REGIME_NEUTRAL}:
-        return raw
-    if raw in {"RANGE_VOLATILE"}:
-        return REGIME_RANGE
-    if raw in {"PANIC"}:
-        return REGIME_EVENT
-    return REGIME_NEUTRAL
+    return normalize_legacy_regime_bucket(value)
 
 
 @dataclass(frozen=True)

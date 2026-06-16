@@ -45,30 +45,43 @@ def send_trade_ticket(ticket: TradeTicket) -> bool:
             _log_blocked("missing_contract", {"detail": reason, "trace_id": ticket.trace_id})
             return False
         message = ticket.format_message()
+    if not getattr(cfg, "TELEGRAM_BOT_TOKEN", None) or not getattr(cfg, "TELEGRAM_CHAT_ID", None):
+        _log_blocked("missing_telegram_credentials")
+        return False
+        
+    import threading
+
+    def _fire_and_forget(url: str, payload: dict):
+        try:
+            requests.post(url, data=payload, timeout=5.0)
+        except Exception as e:
+            _log_blocked("send_error_async", {"detail": str(e), "trace_id": ticket.trace_id})
+
     url = f"https://api.telegram.org/bot{cfg.TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": cfg.TELEGRAM_CHAT_ID, "text": message}
-    try:
-        requests.post(url, data=payload)
-        return True
-    except Exception as e:
-        _log_blocked("send_error", {"detail": str(e), "trace_id": ticket.trace_id})
-        return False
+    threading.Thread(target=_fire_and_forget, args=(url, payload), daemon=True).start()
+    return True
 
 
 def send_telegram_message(message: str) -> bool:
     if not cfg.ENABLE_TELEGRAM:
         return False
-    if not cfg.TELEGRAM_BOT_TOKEN or not cfg.TELEGRAM_CHAT_ID:
+    if not getattr(cfg, "TELEGRAM_BOT_TOKEN", None) or not getattr(cfg, "TELEGRAM_CHAT_ID", None):
         _log_blocked("missing_telegram_credentials")
         return False
     if not getattr(cfg, "TELEGRAM_ALLOW_NON_TRADE_ALERTS", False):
         _log_blocked("non_trade_blocked", {"message": message[:200]})
         return False
+
+    import threading
+
+    def _fire_and_forget(url: str, payload: dict):
+        try:
+            requests.post(url, data=payload, timeout=5.0)
+        except Exception as e:
+            _log_blocked("send_error_async", {"detail": str(e)})
+
     url = f"https://api.telegram.org/bot{cfg.TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": cfg.TELEGRAM_CHAT_ID, "text": message}
-    try:
-        requests.post(url, data=payload)
-        return True
-    except Exception as e:
-        _log_blocked("send_error", {"detail": str(e)})
-        return False
+    threading.Thread(target=_fire_and_forget, args=(url, payload), daemon=True).start()
+    return True

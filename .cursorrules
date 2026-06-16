@@ -1,0 +1,3 @@
+- All code must be strictly asynchronous (no time.sleep).
+- All new strategies must inherit from the `StrategySpec` base class and implement `async def on_tick(self, event)` and `async def on_order_update(self, event)`.
+- New strategies must be added to the central registry upon creation.

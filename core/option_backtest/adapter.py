@@ -186,7 +186,9 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
         "data_state": "DATA_OK" if has_bid_ask else "DATA_MISSING",
     }
 
-    if not has_bid_ask and cfg.require_bid_ask:
+    # Fail closed if REAL_EXECUTABLE_RESEARCH and real bid/ask option data is absent
+    require_real_quotes = cfg.require_bid_ask or getattr(cfg, "research_mode", None) == "REAL_EXECUTABLE_RESEARCH"
+    if not has_bid_ask and require_real_quotes:
         candidate["planning_only"] = True
         candidate["execution_blocked"] = True
         candidate["execution_block_reason"] = "missing_bid_ask"

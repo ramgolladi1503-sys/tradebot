@@ -13,6 +13,7 @@ from core.candidate_exposure import (
     SETUP_RANGE_COMPATIBLE,
     normalize_directional_exposure,
 )
+from core.regime_canonical import resolve_strategy_regime_label
 from .expectancy_gate import (
     EXPECTANCY_INSUFFICIENT_DATA,
     EXPECTANCY_KEEP,
@@ -132,6 +133,52 @@ def _mapping(value: Any) -> Mapping[str, Any]:
         if isinstance(candidate, Mapping):
             return candidate
     return {}
+
+
+def _regime_bias_hint(row: Mapping[str, Any]) -> str | None:
+    text = " ".join(
+        _lower(row.get(field))
+        for field in ("direction", "side", "signal_direction", "movement_bias", "bias", "option_type")
+    )
+    if any(token in text for token in ("buy_put", "sell_call", "bearish", "short", "down", "pe")):
+        return "bearish"
+    if any(token in text for token in ("buy_call", "sell_put", "bullish", "long", "up", "ce")):
+        return "bullish"
+    return None
+
+
+def _canonical_regime_label(row: Mapping[str, Any]) -> str:
+    raw_regime = (
+        row.get("regime")
+        or row.get("primary_regime")
+        or row.get("day_type")
+        or row.get("market_regime")
+    )
+    canonical = resolve_strategy_regime_label(
+        raw_regime,
+        bias=_regime_bias_hint(row),
+        expiry_context=bool(row.get("expiry_context")),
+    )
+    if canonical != "UNKNOWN":
+        return canonical
+
+    text = _upper(raw_regime)
+    if text in {
+        "BEARISH",
+        "BULLISH",
+        "TREND",
+        "TREND_UP",
+        "TREND_DOWN",
+        "RANGE",
+        "SIDEWAYS",
+        "CHOP",
+        "NOISE",
+        "UNCLEAR",
+        "VOLATILE",
+        "UNKNOWN",
+    }:
+        return text
+    return canonical
 
 
 def _stable_setup_id(row: Mapping[str, Any]) -> str:
@@ -463,13 +510,13 @@ def _risk_reward_score(row: Mapping[str, Any]) -> float:
 
 def candidate_regime_mismatch_penalty(row: Mapping[str, Any]) -> tuple[float, list[str], dict[str, Any]]:
     exposure = normalize_directional_exposure(row)
-    regime = _upper(row.get("regime"))
+    regime = _canonical_regime_label(row)
     strategy_family = _lower(row.get("strategy_family"))
     movement_type = _upper(row.get("movement_type"))
     penalty = 0.0
     reasons: list[str] = []
 
-    if regime in {"BEARISH", "TREND_DOWN"} and exposure.exposure == EXPOSURE_BULLISH:
+    if regime in {"TRENDING_DOWN", "BEARISH", "TREND_DOWN"} and exposure.exposure == EXPOSURE_BULLISH:
         penalty += 0.12
         reasons.append("bearish_regime_bullish_exposure")
     if regime in {"RANGE", "SIDEWAYS"} and (
@@ -479,12 +526,13 @@ def candidate_regime_mismatch_penalty(row: Mapping[str, Any]) -> tuple[float, li
     ):
         penalty += 0.12
         reasons.append("range_regime_directional_setup")
-    if regime in {"CHOP", "NOISE", "UNCLEAR"} and exposure.setup_kind == SETUP_DIRECTIONAL and exposure.exposure in {EXPOSURE_BULLISH, EXPOSURE_BEARISH, EXPOSURE_UNKNOWN}:
+    if regime in {"VOLATILE", "CHOP", "NOISE", "UNCLEAR", "UNKNOWN"} and exposure.setup_kind == SETUP_DIRECTIONAL and exposure.exposure in {EXPOSURE_BULLISH, EXPOSURE_BEARISH, EXPOSURE_UNKNOWN}:
         penalty += 0.08
-        reasons.append("chop_regime_directional_setup")
+        reasons.append("chop_regime_directional_setup" if regime != "VOLATILE" else "volatile_regime_directional_caution")
 
     penalty = _clamp(penalty, 0.0, 0.20)
     components = {
+        "canonical_regime": regime,
         "candidate_exposure": exposure.exposure,
         "candidate_setup_kind": exposure.setup_kind,
         "candidate_exposure_confidence": _round(exposure.confidence),

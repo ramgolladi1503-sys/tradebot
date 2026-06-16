@@ -1274,6 +1274,7 @@ def annotate_relative_opportunity_ranks(
                 candidate,
                 {
                     **metrics,
+                    "candidate_class_for_rank": candidate_class_for_rank,
                     "ranking_score": float(rank_score),
                     "raw_rank_score": telemetry_raw_rank_score,
                     "terminal_rank_score": (
@@ -1315,7 +1316,7 @@ def annotate_relative_opportunity_ranks(
                 "rank_global": int(index),
                 "rank_within_symbol": int(per_symbol_rank[symbol]),
                 "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
-                "candidate_class": candidate_class_for_rank,
+                "candidate_class": metrics.get("candidate_class_for_rank"),
                 "final_score": round(float(metrics.get("final_score") or 0.0), 6),
                 "rank_score": round(float(metrics.get("ranking_score") or 0.0), 6),
                 "raw_rank_score": _safe_float(metrics.get("raw_rank_score")),
@@ -1361,7 +1362,7 @@ def annotate_relative_opportunity_ranks(
                     "rank_global": int(index),
                     "rank_within_symbol": int(per_symbol_rank[symbol]),
                     "opportunity_bucket": _opportunity_bucket(metrics.get("opportunity_score")),
-                    "candidate_class": metrics.get("candidate_class"),
+                    "candidate_class": metrics.get("candidate_class_for_rank"),
                     "primary_blocker": metrics.get("primary_blocker"),
                     "data_confidence": round(float(metrics.get("data_confidence") or 0.0), 6),
                     "priority_weight_signal": round(float(metrics.get("priority_weight_signal") or 0.0), 6),
@@ -1392,7 +1393,7 @@ def annotate_relative_opportunity_ranks(
                 rank_global=int(index),
                 rank_within_symbol=int(per_symbol_rank[symbol]),
                 opportunity_bucket=_opportunity_bucket(metrics.get("opportunity_score")),
-                candidate_class=candidate_class_for_rank,
+                candidate_class=metrics.get("candidate_class_for_rank"),
                 primary_blocker=metrics.get("primary_blocker"),
                 data_confidence=round(float(metrics.get("data_confidence") or 0.0), 6),
                 priority_weight_signal=round(float(metrics.get("priority_weight_signal") or 0.0), 6),
@@ -1504,6 +1505,8 @@ def _is_selected_executable_opportunity(candidate: Any) -> bool:
     """
     if _is_executable_opportunity(candidate):
         return True
+    if _candidate_class(candidate) in {"fallback", "planning_only", "synthetic", "softened", "advisory", "advisory_only"}:
+        return False
     if not bool(_get_value(candidate, "selected_for_execution", False)):
         return False
     return bool(_execution_truth(candidate).get("truth_allows_execution"))
@@ -1564,9 +1567,27 @@ def _candidate_class(candidate: Any) -> str:
         or source_flags.get("origin")
         or ""
     ).strip().lower()
+    candidate_type = str(
+        _get_value(candidate, "candidate_type")
+        or source_flags.get("candidate_type")
+        or source_flags.get("opportunity_candidate_type")
+        or ""
+    ).strip().lower()
     status = str(
         _get_value(candidate, "trade_status")
         or source_flags.get("trade_status")
+        or ""
+    ).strip().lower()
+    trade_id = str(
+        _get_value(candidate, "trade_id")
+        or _get_value(candidate, "trade_key")
+        or ""
+    ).strip().lower()
+    quote_source = str(
+        _get_value(candidate, "quote_source")
+        or _get_value(candidate, "option_ltp_source")
+        or source_flags.get("quote_source")
+        or source_flags.get("option_ltp_source")
         or ""
     ).strip().lower()
     reasons = _string_set(
@@ -1583,6 +1604,14 @@ def _candidate_class(candidate: Any) -> str:
     )
 
     if row_kind in {"fallback", "recovered_fallback"}:
+        return "fallback"
+    if quote_source in {"rest_fallback", "synthetic_offhours", "subscription_failed"}:
+        return "fallback"
+    if trade_id.startswith("softrej"):
+        return "fallback"
+    if "fallback" in candidate_type:
+        return "fallback"
+    if "fallback" in origin:
         return "fallback"
     if "recovered_fallback" in reasons or "fallback" in tags or "fallback" in reasons:
         return "fallback"
@@ -1616,6 +1645,7 @@ def _execution_truth(candidate: Any) -> dict[str, Any]:
         "synthetic",
         "softened",
         "advisory",
+        "advisory_only",
     }
     debug_block = bool(
         _get_value(candidate, "planning_only", False)
@@ -1806,6 +1836,11 @@ def annotate_ranked_opportunities(
             or _derive_candidate_class(candidate, metrics=metrics)
             or truth["candidate_class"]
         ).strip().upper()
+        truth_candidate_class = str(truth["candidate_class"] or "").strip().upper()
+        if truth_candidate_class == "EXECUTABLE":
+            candidate_class = truth_candidate_class
+        elif truth_candidate_class and not truth["truth_allows_execution"]:
+            candidate_class = truth_candidate_class
         if _is_unit_scope(scope) and _is_executable_opportunity(candidate):
             candidate_class = "EXECUTABLE"
         execution_eligible = bool(

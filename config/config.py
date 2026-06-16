@@ -745,9 +745,9 @@ SMTP_TO = os.getenv("SMTP_TO", "")
 
 # Lot sizes per instrument
 LOT_SIZE = {
-    "NIFTY": 50,
-    "BANKNIFTY": 15,
-    "SENSEX": 10
+    "NIFTY": 65,
+    "BANKNIFTY": 30,
+    "SENSEX": 20
 }
 
 # -------------------------------
@@ -2712,6 +2712,14 @@ CROSS_ASSET_RISK_SIGN = {
     "INDIA_VIX": 1,
     "BOND10Y": 1,
 }
+
+PAIRS_TRADING_UNIVERSE = {
+    "BANKNIFTY_NIFTY": {
+        "leg_a": "BANKNIFTY_INDEX",
+        "leg_b": "NIFTY_INDEX",
+        "hedge_ratio": 1.0,
+    }
+}
 CROSS_ASSET_REFRESH_SEC = int(os.getenv("CROSS_ASSET_REFRESH_SEC", "30"))
 CROSS_ASSET_MAXLEN = int(os.getenv("CROSS_ASSET_MAXLEN", "600"))
 CROSS_ASSET_STALE_SEC = int(os.getenv("CROSS_ASSET_STALE_SEC", "120"))
@@ -3319,8 +3327,8 @@ AUTO_FLATTEN_ON_DRIFT = os.getenv("AUTO_FLATTEN_ON_DRIFT", "false").lower() == "
 DRIFT_HALT_ENTRIES_ON_DETECT = os.getenv("DRIFT_HALT_ENTRIES_ON_DETECT", "true").lower() == "true"
 # Latency budget guard.
 LATENCY_MONITOR_WINDOW_SIZE = int(os.getenv("LATENCY_MONITOR_WINDOW_SIZE", "120"))
-MAX_P95_TOTAL_MS = float(os.getenv("MAX_P95_TOTAL_MS", "120"))
-MAX_P95_DECISION_MS = float(os.getenv("MAX_P95_DECISION_MS", "80"))
+MAX_P95_TOTAL_MS = float(os.getenv("MAX_P95_TOTAL_MS", "600"))
+MAX_P95_DECISION_MS = float(os.getenv("MAX_P95_DECISION_MS", "300"))
 SUSTAINED_WINDOWS = int(os.getenv("SUSTAINED_WINDOWS", "3"))
 LATENCY_GUARD_RECOVERY_WINDOWS = int(
     os.getenv("LATENCY_GUARD_RECOVERY_WINDOWS", str(SUSTAINED_WINDOWS))

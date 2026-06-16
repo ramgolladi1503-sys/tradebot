@@ -1,0 +1,11 @@
+core/replay_engine.py
+docs/agent_reviews/tick_driven_replay_migration.md
+docs/code_excellence/reports/unified_ce_gate_latest.md
+scripts/run_paper_replay.py
+strategies/volatility_trend.py
+tests/test_replay_backtest.py
+tests/test_tick_level_fill_resolution.py
+tools/legacy/multi_strategy_backtest.py
+tools/legacy/replay_backtest.py
+tools/legacy/replay_backtest_v2.py
+tools/legacy/replay_backtest_v3.py

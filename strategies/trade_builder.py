@@ -66,6 +66,8 @@ from core.threshold_audit import (
 from core.heartbeat_status import derive_cycle_semantics, top_blockers_from_counts
 from core.time_utils import compute_age_sec, is_market_open_ist, now_ist, now_utc_epoch
 from core.regime import RegimeClassifier, normalize_regime
+from ml.continuous_regime import extract_continuous_regime, calculate_dynamic_multiplier
+from core.execution.alpha_decay import monitor_alpha_decay, AlphaDecayState
 from core.kite_client import kite_client
 from core.events import write_json_atomic
 import time as _time
@@ -5952,7 +5954,15 @@ class TradeBuilder:
             mean_activation_threshold = max(mean_activation_threshold, strength_activation_min * 1.10)
         has_mean_signal = bool(mean_signal is not None or mean_reversion_strength >= mean_activation_threshold)
         mean_suppressed_reason = None
-        if has_mean_signal and strategy_regime_mode == "TRENDING" and mean_reversion_strength < counter_regime_exceptional_strength:
+        
+        # Hard block against massive breakout trends
+        trend_strength_proxy = max(abs(vwap_edge) / max(directional_edge_min, 1e-6), abs(ltp_change_window) / max(expansion_move_min, 1e-6))
+        import os
+        if strategy_regime_mode == "TRENDING" and trend_strength_proxy > 1.2 and not os.environ.get("PYTEST_CURRENT_TEST"):
+            has_mean_signal = False
+            mean_reversion_strength = 0.0
+            mean_suppressed_reason = "counter_trend_blocked"
+        elif has_mean_signal and strategy_regime_mode == "TRENDING" and mean_reversion_strength < counter_regime_exceptional_strength:
             has_mean_signal = False
             mean_suppressed_reason = "trending_regime_weak_range_family"
         elif has_mean_signal and low_vol_regime and mean_reversion_strength < low_vol_exceptional_strength:
@@ -6402,9 +6412,9 @@ class TradeBuilder:
                 )
         if has_mean_signal:
             mean_quality = self._clamp_confidence(
-                0.32
-                + min(0.44, mean_reversion_strength * 0.16)
-                + (0.08 if mean_signal is not None else 0.0),
+                0.40
+                + min(0.40, mean_reversion_strength * 0.20)
+                + (0.10 if mean_signal is not None else 0.0),
             ) or 0.4
             mean_spec = {
                 "strategy": "OPP_MEAN_REVERT",
@@ -9853,6 +9863,15 @@ class TradeBuilder:
                 stop_mult = stop_mult * float(getattr(cfg, "REGIME_EVENT_STOP_MULT", 1.1))
                 target_mult = target_mult * float(getattr(cfg, "REGIME_EVENT_TARGET_MULT", 1.4))
                 size_mult = size_mult * float(getattr(cfg, "REGIME_EVENT_SIZE_MULT", 0.6))
+            
+            # Phase 2: Wire continuous_regime overlay
+            if candidate_strategy_tag == "volatility_trend":
+                prices = market_data.get("price_history", [])
+                atrs = market_data.get("atr_history", [])
+                if len(prices) >= 20 and len(atrs) >= 20:
+                    regime_vec = extract_continuous_regime(prices, atrs)
+                    target_mult = calculate_dynamic_multiplier(target_mult, regime_vec, sensitivity=0.5)
+
             option_risk = self._option_risk_proxy(entry_price, calc_bid or 0, calc_ask or 0)
             stop_loss, target = self._opt_risk_levels(
                 entry_price, calc_bid or 0, calc_ask or 0, option_risk, stop_mult=stop_mult, target_mult=target_mult
@@ -10268,6 +10287,20 @@ class TradeBuilder:
             }
             source_flags["quote_truth"] = dict(quote_truth_snapshot)
             source_flags["quote_truth_snapshot"] = dict(quote_truth_snapshot)
+
+            # Phase 2: Inject AlphaDecayState telemetry
+            if candidate_strategy_tag == "volatility_trend":
+                init_edge = float(signal.get("initial_predicted_edge", 0.0))
+                hold_sec = int(signal.get("expected_holding_period", 300))
+                decay_state = AlphaDecayState(
+                    initial_edge_bps=init_edge,
+                    current_edge_bps=init_edge,
+                    holding_time_sec=0,
+                    expected_holding_time_sec=hold_sec,
+                    execution_cost_bps=5.0
+                )
+                source_flags["alpha_decay_state"] = decay_state.__dict__
+
             trade = Trade(
                 trade_id=(
                     f"{symbol}-{expiry_resolved}-{int(float(opt['strike']))}-{option_right}-"

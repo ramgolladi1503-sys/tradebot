@@ -21,6 +21,7 @@ from core.candidate_pool_orchestrator import (
     CandidatePoolReport,
     build_candidate_pool_report,
 )
+from core.candidate_flow_summary import build_candidate_flow_summary
 from core.candidate_ranking import CandidateRankingReport, rank_candidates
 from core.directional_balance import DirectionalBalanceReport, analyze_directional_balance
 from core.feed_health_truth import FeedHealthTruthDecision
@@ -165,6 +166,7 @@ def build_ranked_opportunity_report(
     scoring = score_opportunities(normalization.candidates, hard_downgrade)
     directional_balance = analyze_directional_balance(scoring)
     ranking = _rank_with_feed_hold(scoring, directional_balance, feed_health)
+    flow_summary = build_candidate_flow_summary(candidate_pool, classification, scoring, ranking)
 
     top_rank = ranking.ranks[0] if ranking.ranks else None
     blockers = tuple(
@@ -237,6 +239,7 @@ def build_ranked_opportunity_report(
             "feed_health_input_present": feed_health is not None,
             "feed_hold_active": bool(ranking.metadata.get("feed_hold_active")),
             "include_strategy_id_in_normalization_key": bool(include_strategy_id_in_normalization_key),
+            "candidate_flow_summary": flow_summary.to_dict(),
         },
     )
 

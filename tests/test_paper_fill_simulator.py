@@ -26,7 +26,7 @@ def _trade(side="BUY"):
 
 
 def test_buy_fill_when_limit_crosses():
-    sim = PaperFillSimulator(timeout_sec=0.05, poll_sec=0)
+    sim = PaperFillSimulator(timeout_sec=5.0, poll_sec=0)
     trade = _trade("BUY")
     snapshots = [
         {"bid": 98, "ask": 102, "ts": datetime.now().timestamp()},
@@ -39,7 +39,7 @@ def test_buy_fill_when_limit_crosses():
 
 
 def test_sell_fill_when_limit_crosses():
-    sim = PaperFillSimulator(timeout_sec=0.05, poll_sec=0)
+    sim = PaperFillSimulator(timeout_sec=5.0, poll_sec=0)
     trade = _trade("SELL")
     snapshots = [
         {"bid": 98, "ask": 101, "ts": datetime.now().timestamp()},

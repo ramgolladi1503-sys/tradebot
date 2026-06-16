@@ -27,6 +27,15 @@ class OrderState(str, Enum):
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
 
+    SIM_NEW = "SIM_NEW"
+    SIM_SENT = "SIM_SENT"
+    SIM_ACKNOWLEDGED = "SIM_ACKNOWLEDGED"
+    SIM_PARTIAL = "SIM_PARTIAL"
+    SIM_FILLED = "SIM_FILLED"
+    SIM_REJECTED = "SIM_REJECTED"
+    SIM_CANCELLED = "SIM_CANCELLED"
+    SIM_EXPIRED = "SIM_EXPIRED"
+
 
 class OrderStateTransitionError(RuntimeError):
     def __init__(self, current_state: OrderState, next_state: OrderState):
@@ -74,6 +83,39 @@ _VALID_TRANSITIONS: dict[OrderState, set[OrderState]] = {
     OrderState.REJECTED: set(),
     OrderState.CANCELLED: set(),
     OrderState.EXPIRED: set(),
+
+    OrderState.SIM_NEW: {
+        OrderState.SIM_SENT,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_SENT: {
+        OrderState.SIM_ACKNOWLEDGED,
+        OrderState.SIM_PARTIAL,
+        OrderState.SIM_FILLED,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_ACKNOWLEDGED: {
+        OrderState.SIM_PARTIAL,
+        OrderState.SIM_FILLED,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_PARTIAL: {
+        OrderState.SIM_PARTIAL,
+        OrderState.SIM_FILLED,
+        OrderState.SIM_REJECTED,
+        OrderState.SIM_CANCELLED,
+        OrderState.SIM_EXPIRED,
+    },
+    OrderState.SIM_FILLED: set(),
+    OrderState.SIM_REJECTED: set(),
+    OrderState.SIM_CANCELLED: set(),
+    OrderState.SIM_EXPIRED: set(),
 }
 
 
@@ -673,6 +715,15 @@ class OrderStateMachine:
                     current = self._row_to_record(row)
                     if current is None:
                         raise OrderStateNotFoundError(f"order_not_found:{oid}")
+
+                    if current.state == nxt:
+                        conn.execute("COMMIT")
+                        return current
+
+                    if current.state in (OrderState.FILLED, OrderState.REJECTED, OrderState.CANCELLED, OrderState.SIM_FILLED, OrderState.SIM_REJECTED, OrderState.SIM_CANCELLED):
+                        if nxt not in (OrderState.FILLED, OrderState.REJECTED, OrderState.CANCELLED, OrderState.SIM_FILLED, OrderState.SIM_REJECTED, OrderState.SIM_CANCELLED):
+                            conn.execute("COMMIT")
+                            return current
 
                     self.validate_transition(current.state, nxt)
 

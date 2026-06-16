@@ -1,4 +1,5 @@
-from core.regime_router import get_strategy_regime_profile, record_strategy_regime_path, resolve_strategy_regime
+from core.regime_router import resolve_strategy_regime, record_strategy_regime_path
+
 from strategies.soft_signal import soft_signal
 
 
@@ -14,6 +15,14 @@ def _update_debug(debug_stats, *, considered=0, rejected=0, scored=0, reason=Non
     if reason:
         counts[str(reason)] = int(counts.get(str(reason), 0)) + 1
 
+
+_PROFILES = {
+    "TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bias': 0.05, 'range_reversion': False, 'trend_conflict_mult': 1.4},
+    "TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bias': 0.05, 'range_reversion': False, 'trend_conflict_mult': 1.4},
+    "RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_bias': -0.01, 'range_reversion': True, 'range_extension_mult': 1.2},
+    "VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score_bias': -0.04, 'range_reversion': False, 'strict_move_mult': 1.15},
+    "EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'score_bias': 0.02, 'range_reversion': False},
+}
 
 def _normalize_bias(bias):
     if not isinstance(bias, str):
@@ -36,7 +45,8 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
 
     bias_norm = _normalize_bias(bias)
     regime_name = resolve_strategy_regime(regime, bias=bias_norm, expiry_context=expiry_context)
-    profile = get_strategy_regime_profile("sensex_intraday", regime_name)
+    profile = dict(_PROFILES.get(regime_name, _PROFILES["TRENDING_UP"]))
+    profile["regime"] = regime_name
     record_strategy_regime_path("sensex_intraday", regime_name, profile, debug_stats=debug_stats)
     vwap_buffer = float(vwap_buffer) * float(profile.get("vwap_buffer_mult", 1.0))
     min_move = float(min_move) * float(profile.get("min_move_mult", 1.0))

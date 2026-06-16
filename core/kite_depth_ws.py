@@ -4457,7 +4457,7 @@ def _ensure_depth_ws_lock() -> bool:
 def _close_ticker_instance(instance):
     if instance is None:
         return
-    for method_name in ("close", "stop", "disconnect"):
+    for method_name in ("close", "disconnect"):
         method = getattr(instance, method_name, None)
         if callable(method):
             try:
@@ -5297,7 +5297,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         if _WATCHDOG_STOP is not None:
             _WATCHDOG_STOP.set()
         _WATCHDOG_STOP = threading.Event()
-        kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=True)
+        kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
         if hasattr(kws, "auto_reconnect"):
             try:
                 kws.auto_reconnect = _use_internal_reconnect()
@@ -6259,7 +6259,10 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         from twisted.internet import reactor
         if getattr(reactor, "_started", False) and not getattr(reactor, "running", False):
             raise RuntimeError("ReactorNotRestartable: Twisted reactor was started and stopped")
-        kws.connect(threaded=True)
+        if getattr(reactor, "running", False):
+            reactor.callFromThread(kws.connect, threaded=True)
+        else:
+            kws.connect(threaded=True)
     except Exception as exc:
         reconnect_blocked_reason = None
         if _is_reactor_not_restartable_error(exc):
