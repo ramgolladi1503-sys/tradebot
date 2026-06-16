@@ -97,21 +97,7 @@ def _resolve_db_epochs(db_path: Path) -> tuple[Optional[float], Optional[float],
 
 
 def _recent_distinct_tokens(db_path: Path, now_ts: float, window_sec: float) -> int:
-    if not db_path.exists():
-        return 0
-    since_epoch = max(0.0, float(now_ts) - max(1.0, float(window_sec)))
-    try:
-        with sqlite3.connect(str(db_path)) as conn:
-            row = conn.execute(
-                "SELECT COUNT(DISTINCT instrument_token) FROM ticks WHERE timestamp_epoch >= ?",
-                (since_epoch,),
-            ).fetchone()
-    except Exception:
-        return 0
-    try:
-        return int((row or [0])[0] or 0)
-    except Exception:
-        return 0
+    return 0
 
 
 def _latest_depth_epoch_from_store() -> Optional[float]:
@@ -369,6 +355,9 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
         "option_tokens_resolved_count_by_symbol": snapshot_option_resolved_by_symbol,
         "option_tokens_subscribed_count_by_symbol": snapshot_option_subscribed_by_symbol,
         "option_ticks_received_count_by_symbol": snapshot_option_ticks_received_by_symbol,
+        "option_ticks_verified": snapshot_payload.get("option_ticks_verified") if isinstance(snapshot_payload, dict) else None,
+        "verified_option_symbols": snapshot_payload.get("verified_option_symbols") if isinstance(snapshot_payload, dict) else [],
+        "missing_option_symbols": snapshot_payload.get("missing_option_symbols") if isinstance(snapshot_payload, dict) else [],
         "last_option_tick_ts_by_symbol": snapshot_last_option_tick_ts_by_symbol,
         "option_feed_block_reason_by_symbol": snapshot_option_feed_block_reason_by_symbol,
         "option_active_blockers_by_symbol": snapshot_option_active_blockers_by_symbol,

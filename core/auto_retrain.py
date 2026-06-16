@@ -33,16 +33,13 @@ class AutoRetrain:
         self.research = ResearchPipeline()
         self.segment_cols = ["seg_regime", "seg_bucket", "seg_expiry", "seg_vol_q"]
         self.retrain_manager = RetrainManager()
+        self._last_research_run_time = time.time()
 
-    def update_model(self, trade_log_path=None):
-        resolved_log_path = (
-            ensure_trade_log_file(trade_log_path, create_if_missing=True)
-            if trade_log_path is not None
-            else ensure_trade_log_exists()
-        )
-        live_df = self._load_trade_log(resolved_log_path)
-        if live_df is None or live_df.empty:
-            print(f"[AutoRetrain] Trade log not found/unreadable/empty: {resolved_log_path}")
+    def _run_research_safe(self):
+        now = time.time()
+        cooldown = float(getattr(cfg, "RESEARCH_COOLDOWN_SEC", 600.0))
+        if now - getattr(self, "_last_research_run_time", 0.0) >= cooldown:
+            self._last_research_run_time = now
             try:
                 self.research.run(tracker=self.strategy_tracker, retrainer=self, risk_state=self.risk_state)
             except Exception:
@@ -56,6 +53,17 @@ class AutoRetrain:
                             self.risk_state.quarantine_strategy(strat, reason="strategy_decay")
             except Exception:
                 pass
+
+    def update_model(self, trade_log_path=None):
+        resolved_log_path = (
+            ensure_trade_log_file(trade_log_path, create_if_missing=True)
+            if trade_log_path is not None
+            else ensure_trade_log_exists()
+        )
+        live_df = self._load_trade_log(resolved_log_path)
+        if live_df is None or live_df.empty:
+            print(f"[AutoRetrain] Trade log not found/unreadable/empty: {resolved_log_path}")
+            self._run_research_safe()
             return {"status": "skipped", "reason": "trade_log_missing_or_empty", "path": str(resolved_log_path)}
 
         drift = self._compute_drift(live_df)
@@ -121,19 +129,7 @@ class AutoRetrain:
                 "expectancy": expect_detail,
                 "segments": seg_detail,
             })
-            try:
-                self.research.run(tracker=self.strategy_tracker, retrainer=self, risk_state=self.risk_state)
-            except Exception:
-                pass
-            try:
-                decay = compute_decay(self.strategy_tracker, self.risk_state, window=getattr(cfg, "DECAY_WINDOW_TRADES", 50))
-                self.strategy_tracker.set_decay(decay)
-                if self.risk_state:
-                    for strat, info in decay.items():
-                        if info.get("decay_probability", 0) >= float(getattr(cfg, "DECAY_PROB_THRESHOLD", 0.7)):
-                            self.risk_state.quarantine_strategy(strat, reason="strategy_decay")
-            except Exception:
-                pass
+            self._run_research_safe()
             return {"status": "skipped", "reason": "gates_not_met"}
 
         # Split holdout
@@ -288,19 +284,7 @@ class AutoRetrain:
             self._log_decision("shadow", decision)
             print("[AutoRetrain] Challenger did not beat champion; kept as shadow model.")
 
-        try:
-            self.research.run(tracker=self.strategy_tracker, retrainer=self, risk_state=self.risk_state)
-        except Exception:
-            pass
-        try:
-            decay = compute_decay(self.strategy_tracker, self.risk_state, window=getattr(cfg, "DECAY_WINDOW_TRADES", 50))
-            self.strategy_tracker.set_decay(decay)
-            if self.risk_state:
-                for strat, info in decay.items():
-                    if info.get("decay_probability", 0) >= float(getattr(cfg, "DECAY_PROB_THRESHOLD", 0.7)):
-                        self.risk_state.quarantine_strategy(strat, reason="strategy_decay")
-        except Exception:
-            pass
+        self._run_research_safe()
         return {"status": "ok", "reason": "completed"}
 
     def _split_holdout(self, df, frac):

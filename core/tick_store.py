@@ -165,9 +165,7 @@ def init_ticks() -> None:
         """
             )
             _migrate_ticks_epoch_column(conn)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_ticks_token ON ticks (instrument_token);")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_ticks_epoch ON ticks (timestamp_epoch);")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_ticks_token_epoch ON ticks (instrument_token, timestamp_epoch);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ticks_token_epoch ON ticks(instrument_token, timestamp_epoch)")
             try:
                 conn.execute("ALTER TABLE ticks ADD COLUMN timestamp_iso TEXT")
             except Exception:
@@ -435,18 +433,16 @@ def get_latest_tick_rows_db_no_flush(tokens: list[int]) -> dict[int, dict]:
             last_price_expr = "last_price" if "last_price" in cols else "NULL"
             volume_expr = "volume" if "volume" in cols else "NULL"
             oi_expr = "oi" if "oi" in cols else "NULL"
-            chunk_size = 900
-            for idx in range(0, len(token_list), chunk_size):
-                chunk = token_list[idx : idx + chunk_size]
-                q_marks = ",".join(["?"] * len(chunk))
+            for token in token_list:
                 rows = conn.execute(
                     f"""
-                    SELECT instrument_token, {last_price_expr} AS last_price, MAX(timestamp_epoch) AS timestamp_epoch, {volume_expr} AS volume, {oi_expr} AS oi
+                    SELECT instrument_token, {last_price_expr} AS last_price, timestamp_epoch, {volume_expr} AS volume, {oi_expr} AS oi
                     FROM ticks
-                    WHERE instrument_token IN ({q_marks})
-                    GROUP BY instrument_token
+                    WHERE instrument_token = ?
+                    ORDER BY timestamp_epoch DESC
+                    LIMIT 1
                     """,
-                    tuple(chunk),
+                    (token,),
                 ).fetchall()
                 for row in rows:
                     token_int = _normalize_token(row[0])

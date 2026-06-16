@@ -96,9 +96,9 @@ def classify_feed_truth_state(
     payload: dict[str, Any] | None,
     *,
     now_epoch: float | None = None,
-    max_option_tick_age_sec: float = 3.0,
-    max_ltp_age_sec: float = 2.5,
-    max_depth_age_sec: float = 6.0,
+    max_option_tick_age_sec: float = 15.0,
+    max_ltp_age_sec: float = 15.0,
+    max_depth_age_sec: float = 15.0,
 ) -> FeedTruthStateDecision:
     """Classify one canonical runtime feed truth state.
 

@@ -379,6 +379,7 @@ fi
 
 export TRADING_MODE="LIVE"
 export EXECUTION_MODE="LIVE"
+export LIVE_BROKER_ADAPTER_ACTIVE="${LIVE_BROKER_ADAPTER_ACTIVE:-1}"
 resolve_live_predictor_startup_mode
 
 echo "[RUN_LIVE] exported KITE_ACCESS_TOKEN len=${#KITE_ACCESS_TOKEN} tail4=${KITE_ACCESS_TOKEN: -4}"

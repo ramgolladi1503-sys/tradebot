@@ -15,6 +15,9 @@ def _fast_loop_enabled() -> bool:
 
 
 def _record_runtime_boundary(event: str, *, details=None, error: str | None = None) -> None:
+    if str(event).startswith(("FAST_ENGINE_", "ORCHESTRATOR_CYCLE_", "RUNTIME_STATUS_")):
+        if event not in {"ORCHESTRATOR_CYCLE_FAILED", "ORCHESTRATOR_CYCLE_DEGRADED"}:
+            return
     try:
         payload = {"is_" + "order_action": False}
         payload.update(dict(details or {}))
@@ -57,6 +60,7 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
             details={"feed_epoch": feed_epoch, "now_mono": now_mono},
         )
         try:
+            t0 = time.perf_counter()
             _record_runtime_boundary("RUNTIME_STATUS_WRITE_ATTEMPTED", details={"stage": "fast_engine_cycle"})
             _record_runtime_boundary("FAST_ENGINE_EVALUATE_STARTED", details={"feed_epoch": feed_epoch})
             try:
@@ -68,6 +72,7 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
                     error=f"{type(exc).__name__}:{exc}",
                 )
                 raise
+            t1 = time.perf_counter()
             _record_runtime_boundary(
                 "FAST_ENGINE_EVALUATE_COMPLETED",
                 details={"decision_type": type(decision).__name__},
@@ -94,6 +99,9 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
                 "RUNTIME_STATUS_WRITE_COMPLETED",
                 details={"stage": "fast_engine_cycle", "result": str(result)},
             )
+            t2 = time.perf_counter()
+            if (t2 - t0) > 1.0:
+                logger.warning("CYCLE_TIMINGS evaluate=%.3f execute=%.3f", t1 - t0, t2 - t1)
         except Exception as exc:
             _record_runtime_boundary(
                 "RUNTIME_STATUS_WRITE_FAILED",

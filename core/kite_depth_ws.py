@@ -2201,6 +2201,20 @@ def _begin_option_feed_verification(
     }
     required_symbols = sorted({sym for sym, count in {**requested_map, **subscribed_map}.items() if int(count or 0) > 0})
     if not required_symbols:
+        with _RESTART_VERIFY_LOCK:
+            _OPTION_FEED_VERIFY_STATE = "OK"
+            _OPTION_FEED_VERIFY_REASON = f"{reason}:auto_ok_empty"
+            _OPTION_FEED_VERIFY_START_EPOCH = start_epoch_f
+            _OPTION_FEED_VERIFY_DEADLINE_EPOCH = 0.0
+            _OPTION_FEED_VERIFY_REQUIRED_SYMBOLS = []
+            _OPTION_FEED_VERIFY_REQUESTED_BY_SYMBOL = dict(requested_map)
+            _OPTION_FEED_VERIFY_SUBSCRIBED_BY_SYMBOL = dict(subscribed_map)
+            _OPTION_FEED_VERIFY_VERIFIED_SYMBOLS = []
+            _OPTION_FEED_VERIFY_MISSING_SYMBOLS = []
+            _OPTION_FEED_VERIFY_VERIFIED_EPOCH = start_epoch_f
+            _OPTION_FEED_VERIFY_FAILURE_DETAIL = ""
+            _OPTION_FEED_VERIFY_LAST_STAGE_EVENT = "auto_ok_empty"
+        _log_ws("FEED_OPTION_VERIFY_AUTO_OK", {"reason": str(reason or "")})
         return
     deadline = start_epoch_f + float(_option_feed_verification_timeout_sec())
     with _RESTART_VERIFY_LOCK:
@@ -3010,14 +3024,17 @@ def _write_feed_runtime_snapshot(
     option_feed_verification = _option_feed_verification_overlay_payload()
     if option_feed_verification:
         payload["option_feed_verification"] = option_feed_verification
+        payload["option_ticks_verified"] = bool(str(option_feed_verification.get("state") or "").upper() == "OK")
+        payload["verified_option_symbols"] = option_feed_verification.get("verified_symbols") or []
+        payload["missing_option_symbols"] = option_feed_verification.get("missing_symbols") or []
     payload["effective_ws_connected"] = derive_effective_ws_connected(payload)
     payload["feed_ok"] = derive_feed_ok(payload)
     feed_truth = classify_feed_truth_state(
         payload,
         now_epoch=float(now_epoch),
-        max_option_tick_age_sec=float(getattr(cfg, "OPTION_LTP_SLA_SEC", 2.0)),
-        max_ltp_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
-        max_depth_age_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
+        max_option_tick_age_sec=float(getattr(cfg, "OPTION_LTP_SLA_SEC", 15.0)),
+        max_ltp_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 15.0)),
+        max_depth_age_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 15.0)),
     )
     payload["feed_truth_state"] = str(feed_truth.state)
     payload["feed_truth_reason_code"] = str(feed_truth.reason_code)
@@ -5394,6 +5411,19 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             runtime_state="RUNNING",
             last_error="",
         )
+        _reset_option_feed_verification(reason=f"rebalance_applied:{reason}")
+        option_state = _option_runtime_state(
+            now_epoch=float(time.time()),
+            tokens=_LAST_TOKENS,
+            expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
+            min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        )
+        _begin_option_feed_verification(
+            reason=f"rebalance:{reason}",
+            start_epoch=float(now_utc_epoch()),
+            requested_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+            subscribed_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
+        )
         return True
 
     def _resubscribe_full(ws, reason: str):
@@ -5420,11 +5450,18 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         )
         _RUNTIME_STATE = "RUNNING"
         _LAST_RUNTIME_ERROR = ""
+        _reset_option_feed_verification(reason=f"resubscribe_full:{reason}")
         option_state = _option_runtime_state(
             now_epoch=float(time.time()),
             tokens=desired,
             expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
             min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        )
+        _begin_option_feed_verification(
+            reason=f"resubscribe:{reason}",
+            start_epoch=float(now_utc_epoch()),
+            requested_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
+            subscribed_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
         )
         _log_ws(
             "FEED_ON_CONNECT_SUBSCRIBE",
@@ -5753,7 +5790,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
         strikes_to_restart = int(getattr(cfg, "FEED_RESTART_STRIKES", 3))
         watchdog_poll_sec = float(getattr(cfg, "FEED_WATCHDOG_POLL_SEC", 1.0))
-        tick_stale_restart_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 5.0))
+        tick_stale_restart_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 60.0))
         tick_stale_reset_sec = float(getattr(cfg, "FEED_TICK_RECOVER_SEC", 2.0))
         tick_stale_strikes_to_restart = int(getattr(cfg, "FEED_TICK_STALE_STRIKES", 2))
         tick_watchdog_poll_sec = float(getattr(cfg, "FEED_TICK_WATCHDOG_POLL_SEC", 2.0))
@@ -5763,7 +5800,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         silent_backoff_min_sec = float(getattr(cfg, "FEED_SILENT_RECONNECT_BACKOFF_MIN_SEC", 1.0))
         silent_backoff_max_sec = float(getattr(cfg, "FEED_SILENT_RECONNECT_BACKOFF_MAX_SEC", 10.0))
         silent_force_full_restart_sec = float(getattr(cfg, "FEED_SILENT_FORCE_FULL_RESTART_SEC", 12.0))
-        no_ticks_sec = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_SEC", 10.0))
+        no_ticks_sec = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_SEC", 60.0))
         no_ticks_base_backoff = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_BACKOFF_SEC", 15.0))
         last_soft = 0.0
         last_warmup_log = 0.0
@@ -6259,10 +6296,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         from twisted.internet import reactor
         if getattr(reactor, "_started", False) and not getattr(reactor, "running", False):
             raise RuntimeError("ReactorNotRestartable: Twisted reactor was started and stopped")
-        if getattr(reactor, "running", False):
-            reactor.callFromThread(kws.connect, threaded=True)
-        else:
-            kws.connect(threaded=True)
+        kws.connect(threaded=True)
     except Exception as exc:
         reconnect_blocked_reason = None
         if _is_reactor_not_restartable_error(exc):

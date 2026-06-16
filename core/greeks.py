@@ -28,6 +28,7 @@ def implied_vol(price, spot, strike, t, is_call=True):
         price_est = bs_price(spot, strike, t, cfg.RISK_FREE_RATE, vol, is_call)
         diff = price_est - price
         vol -= diff / vega
+        vol = max(1e-4, min(vol, 5.0))
         if abs(diff) < 1e-4:
             break
     return max(vol, 1e-4)
