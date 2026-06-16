@@ -32,7 +32,7 @@ def test_normalize_candles():
         {"date": "2023-01-01T10:05:00+00:00", "open": 102, "high": 110, "low": 101, "close": 108, "volume": 2000},
     ]
     df = _normalize_candles(rows, "NIFTY")
-    assert len(df) == 2
+    assert df.shape[0] == 2
     assert "timestamp" in df.columns
     assert "symbol" in df.columns
     assert df["symbol"].iloc[0] == "NIFTY"
@@ -86,7 +86,16 @@ def test_fetch_kite_candles(monkeypatch):
         chunk_days=60
     )
     
-    assert len(rows) == 1
+    assert rows == [
+        {
+            "date": "2023-01-01T10:00:00+00:00",
+            "open": 100,
+            "high": 105,
+            "low": 95,
+            "close": 102,
+            "volume": 1000,
+        }
+    ]
     assert rows[0]["open"] == 100
     assert calls[0] == ("ensure",)
     assert calls[1][0] == "historical_data"
@@ -134,7 +143,7 @@ def test_build_kite_intraday_history(monkeypatch, tmp_path):
     assert out_file.exists()
     
     df = pd.read_csv(out_file)
-    assert len(df) == 1
+    assert df.shape[0] == 1
     assert "symbol" in df.columns
     assert df["symbol"].iloc[0] == "NIFTY"
 
