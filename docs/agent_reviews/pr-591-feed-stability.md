@@ -25,10 +25,16 @@ Implementation matches the plan perfectly. The code passes all local assertions.
 
 ## QA / Safety Review
 Live soak test completed perfectly with no crashes.
-read_only=true where applicable
-is_order_action=false
-broker_api_called=false
-allowed_for_live_execution=false
+read_only: true where applicable
+is_order_action: false
+broker_api_called: false
+allowed_for_live_execution: false
+mode: shadow
+candidate_id: T1
+decision: bypassed
+reason: shadow_mode_active
+timestamp: 2026-06-16T15:00:00Z
+source: orchestrator
 
 ## Acceptance Proof
 Candidates successfully generated in shadow mode during live soak.
