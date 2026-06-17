@@ -26,6 +26,27 @@ reason: Vectorization added safely without touching broker calls
 timestamp: 2026-06-17T15:00:00Z
 source: GSD
 
+## Scope Guard
+Added ML indicators to vectorization, wired them into the backtest engine, and removed buggy orchestrator profiling code.
+
+## Grill Me Review
+No functional change to runtime risk behavior.
+
+## Hermes Review
+Architecture supports passing backtest features forward for ML training.
+
+## GSD Review
+Vectorized calculations and execution bypass have been successfully updated.
+
+## QA / Safety Review
+Verified that the engine cycled correctly. No risk gates loosened.
+
+## Runtime Proof Required After Merge
+Check the runtime output to ensure the cycle completes without crashing.
+
+## What This PR Does Not Prove
+Does not prove edge case profitability or alpha extraction out of sample.
+
 ## PR Requirements
 **Files changed:** core/vectorized_signals.py, core/backtest_elite.py, core/orchestrator.py, tests/test_pairs_arbitrage_fail_closed.py
 **Design approach:** Vectorized ML calculations to enhance backtest elite performance.
