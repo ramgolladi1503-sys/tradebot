@@ -28,6 +28,10 @@ def main() -> int:
             current_report_path=args.out,
             gate_report_path=args.out,
         )
+        import json
+        from dataclasses import asdict
+        with open("forensics_debug.json", "w") as f:
+            json.dump(asdict(result.current), f, indent=2, default=str)
     except (ConfigError, FileNotFoundError, ValueError) as exc:
         print(f"[repo-forensics-pr-gate][ERROR] {exc}")
         return 2
