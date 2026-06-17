@@ -33,3 +33,15 @@ append=false
 
 ## 7. Final PR Summary
 This PR successfully integrates the Machine Learning Overlay into the Opportunity Engine to filter out statistically unprofitable B-Grade trades, vastly improving the system's ability to selectively execute A-Grade trades.
+
+## Agent Work Contract
+## Scope Guard
+## Grill Me Review
+## Hermes Review
+## GSD Review
+## QA / Safety Review
+## Acceptance Proof
+## Runtime Proof Required After Merge
+## What This PR Does Not Prove
+## Human Approval
+
