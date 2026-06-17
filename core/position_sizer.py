@@ -165,3 +165,58 @@ class PositionSizer:
         if multiplier <= 0:
             return False, 0.0, "SIZING_BLOCK:LOW_CONFIDENCE"
         return True, multiplier, "OK"
+
+class DynamicPositionSizer:
+    def __init__(self, risk_per_trade_pct: float = 0.01, min_lots: int = 1, max_lots: int = 100, live_mode: bool = False, kite_client = None):
+        """
+        risk_per_trade_pct: 0.01 = 1% of account equity risked per trade.
+        """
+        self.risk_pct = risk_per_trade_pct
+        self.min_lots = min_lots
+        self.max_lots = max_lots
+        self.live_mode = live_mode
+        self.kite = kite_client
+        
+    def calculate_lots(self, fallback_paper_equity: float, entry_price: float, stop_loss_price: float, lot_size: int = 15) -> int:
+        """
+        Calculates how many lots to buy. In LIVE mode, it ignores fallback_paper_equity 
+        and hits the actual kite.margins() API to fetch available live cash.
+        """
+        account_equity = fallback_paper_equity
+        
+        # PRODUCTION UPGRADE: Fetch real margin dynamically
+        if self.live_mode and self.kite:
+            try:
+                margins = self.kite.margins("equity")
+                account_equity = margins.get("available", {}).get("live_balance", 0.0)
+                print(f"[LIVE MARGIN CHECK] Available Equity: ₹{account_equity}")
+            except Exception as e:
+                print(f"[CRITICAL ERROR] Failed to fetch Kite margin: {e}")
+                return 0 # Fail closed
+                
+        if account_equity <= 0 or entry_price == stop_loss_price:
+            print("[SIZER] Rejected: Equity is 0 or Stop Loss == Entry Price")
+            return 0
+            
+        risk_amount = account_equity * self.risk_pct
+        loss_per_share = abs(entry_price - stop_loss_price)
+        
+        if loss_per_share == 0:
+            return self.min_lots
+            
+        loss_per_lot = loss_per_share * lot_size
+        
+        calculated_lots = int(risk_amount // loss_per_lot)
+        
+        # PRODUCTION UPGRADE: Validate against actual required margin
+        # Assuming roughly 1.5 Lakhs per lot required for selling options, or appropriate premium for buying
+        # Since we are trading Futures here:
+        approx_margin_per_lot = 120000.0 # Estimated NRML margin for Nifty/BankNifty Futures
+        max_affordable_lots = int(account_equity // approx_margin_per_lot)
+        
+        calculated_lots = min(calculated_lots, max_affordable_lots)
+        
+        # Clamp to min/max
+        calculated_lots = max(self.min_lots, min(calculated_lots, self.max_lots))
+        
+        return calculated_lots
