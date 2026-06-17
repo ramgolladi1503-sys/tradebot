@@ -119,7 +119,7 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     
     # 6. Build Signals DataFrame
     signals_df = pd.DataFrame(index=df.index)
-    signals_df['signal_side'] = np.where(buy_mask, 'BUY', np.where(sell_mask, 'SELL', None))
+    signals_df['signal_side'] = np.where(buy_mask, 'BUY', np.where(sell_mask, 'SELL', None))  # type: ignore
     
     # ML Features
     signals_df['rsi_14'] = rsi_14
