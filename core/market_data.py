@@ -1947,7 +1947,7 @@ def get_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.Da
             
         import pandas as pd
         from pathlib import Path
-        offline_path = Path(f"data/live_intraday/{sym}_intraday.csv")
+        offline_path = Path() / "data" / "live_intraday" / f"{sym}_intraday.csv"
         if offline_path.exists():
             try:
                 df = pd.read_csv(offline_path)

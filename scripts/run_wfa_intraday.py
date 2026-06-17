@@ -103,7 +103,8 @@ def run_intraday_wfa():
     print(f"Win Rate: {win_rate:.2f}%")
     
     # Dump trades to CSV for ML Training
-    csv_path = "data/oos_trades.csv"
+    from pathlib import Path
+    csv_path = str(Path() / "data" / "oos_trades.csv")
     oos_trades.to_csv(csv_path, index=False)
     print(f"\nSaved {len(oos_trades)} trades to {csv_path} for ML Overlay training.")
     

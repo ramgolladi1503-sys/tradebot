@@ -8,7 +8,8 @@ warnings.filterwarnings('ignore')
 
 def train_ml_overlay():
     print("Loading OOS trades dataset...")
-    df = pd.read_csv("data/oos_trades.csv")
+    from pathlib import Path
+    df = pd.read_csv(Path() / "data" / "oos_trades.csv")
     
     # 1. Feature Engineering & Labels
     # We want to predict if a trade will be profitable (pl > 0)
