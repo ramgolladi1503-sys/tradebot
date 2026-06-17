@@ -89,3 +89,4 @@ build/
 
 runtime/live_observation/
 runtime/feed_soak/
+runtime/analytics/
