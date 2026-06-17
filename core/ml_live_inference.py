@@ -1,9 +1,10 @@
 import json
 import pandas as pd
 import numpy as np
+from typing import Any, Dict, List
 
 class MLLiveInference:
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str) -> None:
         import xgboost as xgb
         self.model = xgb.XGBClassifier()
         self.model.load_model(model_path)

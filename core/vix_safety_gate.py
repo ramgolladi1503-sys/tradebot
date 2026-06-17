@@ -3,12 +3,12 @@ from core.feed_freshness import get_feed_freshness
 from core.feed_freshness_gate import assess_feed_freshness_gate
 
 class VixSafetyGate:
-    def __init__(self, warning_threshold: float = 22.0, kill_threshold: float = 25.0):
+    def __init__(self, warning_threshold: float = 22.0, kill_threshold: float = 25.0) -> None:
         self.warning_threshold = warning_threshold
         self.kill_threshold = kill_threshold
         self.current_vix = 15.0 # Default safe value
         
-    def update_vix(self, new_vix_value: float):
+    def update_vix(self, new_vix_value: float) -> None:
         """Called by live tick feed when INDIA VIX updates"""
         self.current_vix = new_vix_value
         

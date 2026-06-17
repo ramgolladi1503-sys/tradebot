@@ -1,14 +1,16 @@
 import pandas as pd
 from datetime import datetime, timedelta
 
+from typing import Any, Dict, List, Optional
+
 class LiveBarBuilder:
-    def __init__(self, interval_minutes=5):
-        self.interval_minutes = interval_minutes
-        self.current_bar_start = None
-        self.current_bar = None
-        self.historical_bars = []
+    def __init__(self, interval_minutes: int = 5) -> None:
+        self.interval_minutes: int = interval_minutes
+        self.current_bar_start: datetime | None = None
+        self.current_bar: Dict[str, Any] | None = None
+        self.historical_bars: List[Dict[str, Any]] = []
         
-    def hydrate_from_broker(self, kite_client, instrument_token: int, days_back: int = 5):
+    def hydrate_from_broker(self, kite_client: Any, instrument_token: int, days_back: int = 5) -> None:
         """
         PRODUCTION UPGRADE: State Hydration
         Fetches historical candles to instantly warm up the ML indicators on startup.
@@ -61,7 +63,7 @@ class LiveBarBuilder:
         except Exception as e:
             print(f"[Hydration] CRITICAL API ERROR: {e}. Bot will run blind until live candles form.")
         
-    def process_tick(self, tick):
+    def process_tick(self, tick: Dict[str, Any]) -> None:
         """
         Ingest a tick dictionary containing {'timestamp': datetime, 'last_price': float, 'volume': int}
         Returns a complete 5-min DataFrame if a new bar just finished, otherwise None.
@@ -100,7 +102,7 @@ class LiveBarBuilder:
         
         return None
         
-    def _init_new_bar(self, start_time, price, volume):
+    def _init_new_bar(self, start_time: datetime, price: float, volume: int) -> None:
         self.current_bar = {
             'date': start_time,
             'open': price,
@@ -110,6 +112,9 @@ class LiveBarBuilder:
             'volume': volume
         }
         
+    def get_latest_bars(self, n: int = 30) -> List[Dict[str, Any]]:
+        return self.historical_bars[-n:]
+
     def get_dataframe(self) -> pd.DataFrame:
         if not self.historical_bars:
             return pd.DataFrame()

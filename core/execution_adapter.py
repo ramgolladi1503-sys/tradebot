@@ -2,8 +2,10 @@ import time
 import threading
 import uuid
 
+from typing import Any
+
 class AdvancedExecutionAdapter:
-    def __init__(self, kite_client=None, max_chase_retries: int = 3, retry_delay_sec: float = 2.0, live_mode: bool = False):
+    def __init__(self, kite_client: Any | None = None, max_chase_retries: int = 3, retry_delay_sec: float = 2.0, live_mode: bool = False) -> None:
         self.kite = kite_client
         self.max_chase_retries = max_chase_retries
         self.retry_delay = retry_delay_sec
@@ -25,7 +27,7 @@ class AdvancedExecutionAdapter:
         self.active_threads.append(t)
         return internal_id
         
-    def _hunt_thread(self, internal_id, symbol, quantity, transaction_type, live_bid_ask_provider):
+    def _hunt_thread(self, internal_id: str, symbol: str, quantity: int, transaction_type: str, live_bid_ask_provider: Any) -> None:
         retries = 0
         order_id = None
         

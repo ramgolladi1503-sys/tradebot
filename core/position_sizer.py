@@ -166,8 +166,10 @@ class PositionSizer:
             return False, 0.0, "SIZING_BLOCK:LOW_CONFIDENCE"
         return True, multiplier, "OK"
 
+from typing import Any
+
 class DynamicPositionSizer:
-    def __init__(self, risk_per_trade_pct: float = 0.01, min_lots: int = 1, max_lots: int = 100, live_mode: bool = False, kite_client = None):
+    def __init__(self, risk_per_trade_pct: float = 0.01, min_lots: int = 1, max_lots: int = 100, live_mode: bool = False, kite_client: Any | None = None) -> None:
         """
         risk_per_trade_pct: 0.01 = 1% of account equity risked per trade.
         """
