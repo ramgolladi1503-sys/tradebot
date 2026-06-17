@@ -69,6 +69,13 @@ def train_ml_overlay():
         if precision >= 70:
             print(f"  *** 70%+ WIN RATE ACHIEVED AT THRESHOLD {thresh}! ***")
         print()
+        
+    print("\nSaving trained model to models/xgb_overlay.json...")
+    models_dir = Path("models")
+    models_dir.mkdir(exist_ok=True)
+    model.save_model(models_dir / "xgb_overlay.json")
+    print("Model saved successfully.")
 
 if __name__ == "__main__":
     train_ml_overlay()
+
