@@ -2,6 +2,10 @@ import os
 import glob
 import pandas as pd
 from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).with_name("bootstrap.py")))
+
 from core.backtesting.wfa import WalkForwardAnalyzer
 
 def load_aeron7_nifty_f1():
@@ -71,12 +75,15 @@ def run_intraday_wfa():
         spread_bps=0.0
     )
     
-    # Add horizon=75 so the backtest engine doesn't exit after 25 minutes
+    # Expanded grid for Scalping Optimization (High Win Rate, Low R:R)
     param_grid = {
         "horizon": [75],
-        "vol_target": [0.002, 0.005],
-        "target_atr_mult": [1.5, 2.0, 3.0],
-        "stop_atr_mult": [1.0, 1.5]
+        "vol_target": [0.002],
+        "target_atr_mult": [0.5, 0.75, 1.0], 
+        "stop_atr_mult": [1.5, 2.0],
+        "allowed_time_end": ["10:30"],
+        "trailing_stop_activation_mult": [0.0],
+        "trailing_stop_trail_mult": [0.0]
     }
     
     print("\nStarting Intraday Walk-Forward Analysis (5-min timeframe)...")
@@ -94,6 +101,12 @@ def run_intraday_wfa():
     print(f"Total OOS PnL (after 5 bps slippage): {total_oos_pnl:.2f}")
     print(f"Total Trades: {total_trades}")
     print(f"Win Rate: {win_rate:.2f}%")
+    
+    # Dump trades to CSV for ML Training
+    from pathlib import Path
+    csv_path = str(Path() / "data" / "oos_trades.csv")
+    oos_trades.to_csv(csv_path, index=False)
+    print(f"\nSaved {len(oos_trades)} trades to {csv_path} for ML Overlay training.")
     
 if __name__ == "__main__":
     run_intraday_wfa()

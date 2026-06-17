@@ -4833,7 +4833,7 @@ class Orchestrator:
             feed_truth_payload: dict = _read_json_dict(logs_dir() / "feed_truth_latest.json")
             feed_runtime_payload, _feed_runtime_path = _read_latest_feed_runtime_payload()
             try:
-                if getattr(cfg, "FEED_USE_SUBPROCESS", False):
+                if getattr(globals().get("cfg"), "FEED_USE_SUBPROCESS", False):
                     monitor_depth_ws_subprocess()
             except Exception as exc:
                 logger.error("subprocess_monitor_error err=%s", exc, exc_info=True)
@@ -5250,7 +5250,6 @@ class Orchestrator:
                         continue
                     # Phase C: Build trade suggestion
                     debug_flag = getattr(cfg, "DEBUG_TRADE_REASONS", False) or getattr(cfg, "DEBUG_TRADE_MODE", False)
-                    trade = None
                     gate = self._strategy_gate_for_symbol(market_snapshot)
                     gate_softened_no_strategy = self._should_soften_nonlive_no_strategy_gate(market_data, gate)
                     if gate_softened_no_strategy:

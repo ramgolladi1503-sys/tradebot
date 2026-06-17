@@ -1,12 +1,10 @@
 from pathlib import Path
 import runpy
-from core.paths import data_root
-
-runpy.run_path(Path(__file__).with_name("bootstrap.py"))
-
-
 import sys
-from pathlib import Path
+
+runpy.run_path(str(Path(__file__).with_name("bootstrap.py")))
+
+from core.paths import data_root
 
 from core.kite_client import kite_client
 
@@ -19,8 +17,9 @@ if __name__ == "__main__":
     if not data:
         print("No instruments fetched. Check Kite credentials/session.")
         raise SystemExit(1)
-    import pandas as pd
-    out = data_root() / "kite_instruments.csv"
+    import json
+    out = data_root() / "kite_instruments.json"
     out.parent.mkdir(exist_ok=True)
-    pd.DataFrame(data).to_csv(out, index=False)
+    with open(out, "w") as f:
+        json.dump({"NFO": data}, f, default=str)
     print(f"Saved {len(data)} instruments to {out}")

@@ -53,7 +53,9 @@ class VectorizedBacktestEngine:
             == "REAL_EXECUTABLE_RESEARCH"
         ):
             raise ValueError(
-                "VectorizedBacktestEngine does not consume real option quotes and cannot claim REAL_EXECUTABLE_RESEARCH. Use PROXY_RESEARCH instead."
+                "VectorizedBacktestEngine does not consume real "
+                "option quotes and cannot claim REAL_EXECUTABLE_RESEARCH. "
+                "Use PROXY_RESEARCH instead."
             )
 
         # We lazy load references to the OOP modules for hybrid generation
@@ -77,8 +79,10 @@ class VectorizedBacktestEngine:
 
     def run_vectorized_signals(self, signals_df: pd.DataFrame) -> pd.DataFrame:
         """
-        Fast execution engine that processes a DataFrame of pre-computed signals.
-        Expects signals_df to have: ['signal_side', 'entry_price', 'target', 'stop_loss', 'qty', 'lot_size']
+        Fast execution engine that processes a DataFrame of signals.
+        Expects signals_df to have: ['signal_side', 'entry_price',
+                                     'target', 'stop_loss', 'qty',
+                                     'lot_size']
         """
         if signals_df.empty:
             return pd.DataFrame()
@@ -89,7 +93,7 @@ class VectorizedBacktestEngine:
         closes = self.data["close"].values
 
         horizon = self.config.horizon
-        
+
         has_time = isinstance(self.data.index, pd.DatetimeIndex)
         if has_time:
             days = self.data.index.date
@@ -110,18 +114,15 @@ class VectorizedBacktestEngine:
             # Fast forward-looking slice
             if has_time:
                 # Find the horizon within the same day
-                same_day_mask = days[idx + 1 : idx + 1 + horizon] == days[idx]
-                future_highs = highs[idx + 1 : idx + 1 + horizon][
-                    same_day_mask
-                ]
-                future_lows = lows[idx + 1 : idx + 1 + horizon][same_day_mask]
-                future_closes = closes[idx + 1 : idx + 1 + horizon][
-                    same_day_mask
-                ]
+                same_day_mask = days[idx + 1: idx + 1 + horizon] == days[idx]
+                future_highs = highs[idx + 1: idx + 1 + horizon][same_day_mask]
+                future_lows = lows[idx + 1: idx + 1 + horizon][same_day_mask]
+                future_closes = closes[idx + 1: idx +
+                                       1 + horizon][same_day_mask]
             else:
-                future_highs = highs[idx + 1 : idx + 1 + horizon]
-                future_lows = lows[idx + 1 : idx + 1 + horizon]
-                future_closes = closes[idx + 1 : idx + 1 + horizon]
+                future_highs = highs[idx + 1: idx + 1 + horizon]
+                future_lows = lows[idx + 1: idx + 1 + horizon]
+                future_closes = closes[idx + 1: idx + 1 + horizon]
 
             if len(future_highs) == 0:
                 continue
@@ -137,7 +138,8 @@ class VectorizedBacktestEngine:
 
             if ts_act_mult > 0 and ts_trail_mult > 0:
                 # We need ATR to calculate absolute trailing levels
-                # We can approximate ATR from the distance of original stop to entry
+                # We can approximate ATR from the distance of original stop to
+                # entry
                 base_atr = abs(entry_price - stop_loss) / max(
                     self.config.stop_atr_mult, 0.0001
                 )
@@ -203,8 +205,7 @@ class VectorizedBacktestEngine:
                         break
 
             exit_fill = self._apply_cost(
-                exit_price, "SELL" if side == "BUY" else "BUY"
-            )
+                exit_price, "SELL" if side == "BUY" else "BUY")
 
             if side == "BUY":
                 pl = (exit_fill - entry_fill) * qty * lot_size
@@ -240,6 +241,13 @@ class VectorizedBacktestEngine:
                     / max(abs(entry_price - stop_loss), 1e-6),
                     "strategy": row.get("strategy_family", "Unknown"),
                     "regime": row.get("regime", "base"),
+                    "rsi_14": row.get("rsi_14", 50),
+                    "adx_14": row.get("adx_14", 25),
+                    "vwap_slope": row.get("vwap_slope", 0),
+                    "trend_dist": row.get("trend_dist", 0),
+                    "atr_pct": row.get("atr_pct", 0),
+                    "hour": row.get("hour", 0),
+                    "minute": row.get("minute", 0),
                 }
             )
 
@@ -268,9 +276,10 @@ class VectorizedBacktestEngine:
 
         if not signals_df.empty:
             print(
-                f"[DEBUG] build_vectorized_signals generated {len(signals_df)} signals."
-            )
-            # Map DatetimeIndex to positional integer index for the execution engine
+                f"[DEBUG] build_vectorized_signals generated {
+                    len(signals_df)} signals.")
+            # Map DatetimeIndex to positional integer index for the execution
+            # engine
             pos_indices = self.data.index.get_indexer(signals_df.index)
             signals_df.index = pos_indices
 
@@ -292,10 +301,8 @@ class VectorizedBacktestEngine:
                         )
                         if os.path.exists(mpath):
                             payload = joblib.load(mpath)
-                            if (
-                                isinstance(payload, dict)
-                                and "model" in payload
-                            ):
+                            if isinstance(
+                                    payload, dict) and "model" in payload:
                                 models[bucket.upper()] = (
                                     payload["model"],
                                     payload.get("feature_columns", []),
@@ -304,7 +311,7 @@ class VectorizedBacktestEngine:
                     if models:
                         keep_indices = []
                         for sig_idx in signals_df.index:
-                            row = self.data.iloc[sig_idx : sig_idx + 1]
+                            row = self.data.iloc[sig_idx: sig_idx + 1]
                             ts = None
                             if isinstance(self.data.index, pd.DatetimeIndex):
                                 ts = self.data.index[sig_idx]
@@ -329,19 +336,18 @@ class VectorizedBacktestEngine:
                                         X[f] = 0.0
                                 X = X[features].fillna(0.0)
                                 proba = model.predict_proba(X)
-                                p = (
-                                    proba[0][1]
-                                    if proba.shape[1] > 1
-                                    else proba[0][0]
-                                )
+                                if proba.shape[1] > 1:
+                                    p = proba[0][1]
+                                else:
+                                    p = proba[0][0]
                                 if p >= 0.50:
                                     keep_indices.append(sig_idx)
                             else:
                                 keep_indices.append(sig_idx)
                         signals_df = signals_df.loc[keep_indices]
                         print(
-                            f"[DEBUG] ML Overlay kept {len(signals_df)} signals."
-                        )
+                            f"[DEBUG] ML Overlay kept {
+                                len(signals_df)} signals.")
                 except Exception as e:
                     print(f"[DEBUG] ML Overlay failed: {e}")
 
@@ -349,15 +355,16 @@ class VectorizedBacktestEngine:
                 return pd.DataFrame()
             res = self.run_vectorized_signals(signals_df)
             print(
-                f"[DEBUG] run_vectorized_signals returned {len(res)} trades."
-            )
+                f"[DEBUG] run_vectorized_signals returned {
+                    len(res)} trades.")
             return res
         print("[DEBUG] build_vectorized_signals generated 0 signals.")
         return pd.DataFrame()
 
     def generate_and_run(self) -> pd.DataFrame:
         """
-        Hybrid run: Uses the python logic to build trades, then vectorizes execution.
+        Hybrid run: Uses the python logic to build trades,
+        then vectorizes execution.
         """
         if self._trade_builder is None:
             self._trade_builder = TradeBuilder()
@@ -367,7 +374,8 @@ class VectorizedBacktestEngine:
         self.data = add_indicators(self.data).dropna().reset_index(drop=True)
         signals = []
 
-        # We can optimize this loop heavily later, but for now we extract valid trades
+        # We can optimize this loop heavily later, but for now we extract valid
+        # trades
         for idx, row in self.data.iterrows():
             if idx + self.config.horizon >= len(self.data):
                 break
@@ -376,7 +384,8 @@ class VectorizedBacktestEngine:
             vwap = row.get("vwap", ltp)
             atr = row.get("atr_14", max(1.0, ltp * 0.002))
 
-            # Skip heavy synthetic chain fetches to speed up base evaluation if disabled
+            # Skip heavy synthetic chain fetches to speed up base evaluation if
+            # disabled
             option_chain = fetch_option_chain(
                 "NIFTY", ltp, force_synthetic=self.config.use_synth_chain
             )
@@ -426,15 +435,24 @@ class VectorizedBacktestEngine:
                     "stop_loss": trade.stop_loss,
                     "qty": sized_qty,
                     "lot_size": lot_size,
-                    "setup_id": f"hyb_{idx}_{getattr(trade, 'strategy', 'Unknown')}",
-                    "strategy_family": getattr(trade, "strategy", "Unknown"),
-                    "regime": getattr(trade, "regime", "base"),
+                    "setup_id": f"hyb_{idx}_{
+                        getattr(
+                            trade,
+                            'strategy',
+                            'Unknown')}",
+                    "strategy_family": getattr(
+                        trade,
+                        "strategy",
+                        "Unknown"),
+                    "regime": getattr(
+                        trade,
+                        "regime",
+                        "base"),
                     "direction": trade.side,
                     "entry": trade.entry_price,
                     "confidence": 0.8,
                     "truth_quality": "TRADE_BUILDER_HYBRID",
-                }
-            )
+                })
 
         signals_df = pd.DataFrame(signals)
         if not signals_df.empty:

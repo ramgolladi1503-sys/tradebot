@@ -351,7 +351,7 @@ def _empty_outcome_row(event: Mapping[str, Any], *, reason: str, series_source: 
 def analyze_event_outcome(
     event: TradeIntentEvent | Mapping[str, Any],
     lookahead_minutes: int | Sequence[Mapping[str, Any]] = 30,
-    candle_interval: str = "1minute",
+    candle_interval: str = "minute",
     *,
     series_loader: SeriesLoader | None = None,
 ) -> dict:
@@ -377,7 +377,7 @@ def analyze_event_outcome(
     window_end_ms = int(window_start_ms + replay_lookahead_min * 60 * 1000)
 
     try:
-        series_rows, series_source = loader(event_row, window_start_ms, window_end_ms, str(candle_interval or "1minute"))
+        series_rows, series_source = loader(event_row, window_start_ms, window_end_ms, str(candle_interval or "minute"))
     except Exception as exc:
         return _empty_outcome_row(
             event_row,
@@ -509,7 +509,7 @@ def build_outcomes_for_date(
     *,
     scope: str = "rejected",
     lookahead_minutes: int = 30,
-    candle_interval: str = "1minute",
+    candle_interval: str = "minute",
     output_path: Path | None = None,
 ) -> dict:
     date_key = _parse_date_key(date)
@@ -527,7 +527,7 @@ def build_outcomes_for_date(
         analyze_event_outcome(
             event,
             lookahead_minutes=int(lookahead_minutes),
-            candle_interval=str(candle_interval or "1minute"),
+            candle_interval=str(candle_interval or "minute"),
         )
         for event in events
     ]
@@ -562,7 +562,7 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Intent scope to replay.",
     )
     parser.add_argument("--lookahead-min", type=int, default=30, help="Replay lookahead in minutes.")
-    parser.add_argument("--candle-interval", default="1minute", help="Candle interval label for replay.")
+    parser.add_argument("--candle-interval", default="minute", help="Candle interval label for replay.")
     return parser
 
 

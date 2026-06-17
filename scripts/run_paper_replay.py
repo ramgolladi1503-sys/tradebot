@@ -3,16 +3,20 @@ Deterministic PAPER replay harness for fixture-driven candidate generation tests
 """
 
 from __future__ import annotations
-from core.paths import logs_dir
-
-import argparse
-from contextlib import contextmanager
-import json
-import random
+import sys
 from pathlib import Path
 import runpy
 
-runpy.run_path(Path(__file__).with_name("bootstrap.py"))
+runpy.run_path(str(Path(__file__).with_name("bootstrap.py")))
+
+from core.paths import logs_dir
+import argparse
+import datetime
+import json
+from dateutil.parser import parse as parse_date
+import logging
+import random
+from contextlib import contextmanager
 
 from config import config as cfg
 import strategies.trade_builder as trade_builder_module

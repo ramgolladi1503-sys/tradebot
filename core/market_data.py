@@ -1944,6 +1944,28 @@ def get_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.Da
         end_epoch_ms = _coerce_epoch_ms(end_ms)
         if not sym or start_epoch_ms is None or end_epoch_ms is None or end_epoch_ms <= start_epoch_ms:
             return empty
+            
+        import pandas as pd
+        from pathlib import Path
+        offline_path = Path() / "data" / "live_intraday" / f"{sym}_intraday.csv"
+        if offline_path.exists():
+            try:
+                df = pd.read_csv(offline_path)
+                if 'timestamp' in df.columns:
+                    df['time_ms'] = pd.to_datetime(df['timestamp'], utc=True).astype('int64') // 10**6
+                    mask = (df['time_ms'] >= start_epoch_ms) & (df['time_ms'] <= end_epoch_ms)
+                    sliced = df[mask].copy()
+                    if not sliced.empty:
+                        return sliced[['time_ms', 'open', 'high', 'low', 'close', 'volume']].reset_index(drop=True)
+                    else:
+                        print(f"[OFFLINE] {sym} slice empty for {start_epoch_ms} to {end_epoch_ms}")
+                        return empty
+                else:
+                    print(f"[OFFLINE] No timestamp column in {sym}")
+            except Exception as e:
+                print(f"[OFFLINE] Exception loading {sym}: {e}")
+        else:
+            print(f"[OFFLINE] File not found: {offline_path.absolute()}")
         token = kite_client.resolve_index_token(sym)
         if token is None:
             return empty
