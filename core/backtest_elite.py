@@ -240,6 +240,13 @@ class VectorizedBacktestEngine:
                     / max(abs(entry_price - stop_loss), 1e-6),
                     "strategy": row.get("strategy_family", "Unknown"),
                     "regime": row.get("regime", "base"),
+                    "rsi_14": row.get("rsi_14", 50),
+                    "adx_14": row.get("adx_14", 25),
+                    "vwap_slope": row.get("vwap_slope", 0),
+                    "trend_dist": row.get("trend_dist", 0),
+                    "atr_pct": row.get("atr_pct", 0),
+                    "hour": row.get("hour", 0),
+                    "minute": row.get("minute", 0),
                 }
             )
 

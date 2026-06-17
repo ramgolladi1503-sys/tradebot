@@ -35,10 +35,40 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     atr = tr.rolling(14).mean().fillna(0)
     
-    vwap_slope = df.get('vwap_slope', vwap.pct_change(periods=3).fillna(0))
-    rsi_mom = df.get('rsi_mom', df['close'].pct_change(periods=3).fillna(0))
-    vol_z = df.get('vol_z', pd.Series(0, index=df.index))
-    adx = df.get('adx_14', pd.Series(25, index=df.index))
+    # VWAP slope (in basis points)
+    vwap_slope = (vwap.diff(3) / vwap.shift(3) * 10000).fillna(0)
+    
+    # RSI 14
+    delta = df['close'].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+    rs = avg_gain / avg_loss
+    rsi_14 = 100 - (100 / (1 + rs))
+    rsi_14 = rsi_14.fillna(50)
+    
+    rsi_mom = rsi_14.diff(3).fillna(0)
+    
+    # ADX 14
+    up_move = df['high'] - df['high'].shift()
+    down_move = df['low'].shift() - df['low']
+    pos_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
+    neg_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
+    pos_dm_series = pd.Series(pos_dm, index=df.index)
+    neg_dm_series = pd.Series(neg_dm, index=df.index)
+    tr_smooth = tr.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+    pos_di = 100 * (pos_dm_series.ewm(alpha=1/14, min_periods=14, adjust=False).mean() / tr_smooth)
+    neg_di = 100 * (neg_dm_series.ewm(alpha=1/14, min_periods=14, adjust=False).mean() / tr_smooth)
+    dx = 100 * (pos_di - neg_di).abs() / (pos_di + neg_di).abs()
+    adx = dx.ewm(alpha=1/14, min_periods=14, adjust=False).mean().fillna(25)
+    
+    # Daily 20-EMA Macro Filter
+    # Resample to daily 'close', compute EMA 20, then forward-fill back to intraday index
+    daily_close = df['close'].resample('D').last()
+    daily_ema_20 = daily_close.ewm(span=20, adjust=False).mean()
+    # Reindex back to intraday and forward fill
+    macro_ema = daily_ema_20.reindex(df.index, method='ffill')
     
     # 15-Minute ORB (Opening Range Breakout)
     # Get high/low of the first 3 bars (09:15, 09:20, 09:25) of each day
@@ -56,12 +86,13 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     vwap_mr_upper = vwap + (atr * 2.5)
     vwap_mr_lower = vwap - (atr * 2.5)
     
-    rsi_14 = df.get('rsi_14', pd.Series(50, index=df.index))
-    
-    # 3. Strategy Masks
-    # Trend VWAP (Breakout of ATR band, strict slope, strong ADX)
-    buy_trend = (ltp > vwap_upper) & (ltp.shift(1) <= vwap_upper) & (vwap_slope >= 0) & (adx > 25)
-    sell_trend = (ltp < vwap_lower) & (ltp.shift(1) >= vwap_lower) & (vwap_slope <= 0) & (adx > 25)
+    # (RSI and ADX already computed above)
+    vol_z = df.get('vol_z', pd.Series(0, index=df.index))
+    # Trend VWAP (Breakout of ATR band, strict slope, strong ADX, aligns with Macro Trend)
+    macro_bull = ltp > macro_ema
+    macro_bear = ltp < macro_ema
+    buy_trend = (ltp > vwap_upper) & (ltp.shift(1) <= vwap_upper) & (vwap_slope >= 0) & (adx > 25) & macro_bull
+    sell_trend = (ltp < vwap_lower) & (ltp.shift(1) >= vwap_lower) & (vwap_slope <= 0) & (adx > 25) & macro_bear
     
     # Mean Reversion (Statistical extreme ATR stretch, RSI oversold/overbought)
     buy_mr = (ltp < vwap_mr_lower) & (rsi_14 < 30) & (rsi_mom >= 0)
@@ -74,8 +105,8 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     orb_upper_buf = orb_high + (atr * 0.2)
     orb_lower_buf = orb_low - (atr * 0.2)
     
-    buy_orb = (ltp > orb_upper_buf) & (ltp.shift(1) <= orb_upper_buf) & after_orb & (adx > 25)
-    sell_orb = (ltp < orb_lower_buf) & (ltp.shift(1) >= orb_lower_buf) & after_orb & (adx > 25)
+    buy_orb = (ltp > orb_upper_buf) & (ltp.shift(1) <= orb_upper_buf) & after_orb & (adx > 25) & macro_bull
+    sell_orb = (ltp < orb_lower_buf) & (ltp.shift(1) >= orb_lower_buf) & after_orb & (adx > 25) & macro_bear
     
     # 4. Time of Day Filter
     start_time = getattr(config, 'allowed_time_start', "09:30")
@@ -89,6 +120,15 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     # 6. Build Signals DataFrame
     signals_df = pd.DataFrame(index=df.index)
     signals_df['signal_side'] = np.where(buy_mask, 'BUY', np.where(sell_mask, 'SELL', None))
+    
+    # ML Features
+    signals_df['rsi_14'] = rsi_14
+    signals_df['adx_14'] = adx
+    signals_df['vwap_slope'] = vwap_slope
+    signals_df['trend_dist'] = trend
+    signals_df['atr_pct'] = (atr / ltp) * 100
+    signals_df['hour'] = df.index.hour
+    signals_df['minute'] = df.index.minute
     
     # Drop rows without signals
     signals_df = signals_df.dropna(subset=['signal_side']).copy()

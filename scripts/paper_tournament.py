@@ -1,10 +1,15 @@
+import runpy
+import sys
+from pathlib import Path
+
+runpy.run_path(str(Path(__file__).with_name("bootstrap.py")))
+
 import argparse
 import json
 import random
 import sqlite3
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from core.paths import data_root, logs_dir
 
 from config import config as cfg

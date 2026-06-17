@@ -95,6 +95,10 @@ def run_live_monitoring(orch, run_once=False, time_module=None):
                 "FAST_ENGINE_EXECUTE_COMPLETED",
                 details={"result": str(result)},
             )
+            core.last_cycle_mono = float(clock.monotonic())
+            if feed_epoch is not None and float(feed_epoch) > 0.0:
+                core.last_feed_epoch = float(feed_epoch)
+            core.last_result = result
             _record_runtime_boundary(
                 "RUNTIME_STATUS_WRITE_COMPLETED",
                 details={"stage": "fast_engine_cycle", "result": str(result)},
