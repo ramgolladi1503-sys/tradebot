@@ -1443,6 +1443,16 @@ class TradeBuilder:
             )
             or ((liquidity_quality * 0.5) + (spread_quality * 0.3) + (freshness_quality * 0.2))
         )
+
+        # Native Score Boost for High-Strength Mean Reversion Candidates
+        candidate_type = str(self._candidate_field(candidate, "candidate_type") or "").strip().lower()
+        if candidate_type == "mean_reversion":
+            quality_detail = self._candidate_field(candidate, "quality_detail") or {}
+            mr_strength = float(quality_detail.get("mean_reversion_strength") or 0.0)
+            if mr_strength > 1.5:
+                setup_quality = max(float(setup_quality or 0.0), 0.65)
+                confluence_score = max(float(confluence_score or 0.0), 0.65)
+
         score_contract = compute_final_score(
             candidate,
             candidate_class=candidate_class,
