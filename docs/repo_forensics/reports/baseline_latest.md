@@ -346,10 +346,10 @@ source: static_analysis
 | `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_runtime_import | forensics_references_runtime_module:core.market_data |  |
 | `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_runtime_import | forensics_references_runtime_module:core.orchestrator |  |
 | `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_runtime_import | forensics_references_runtime_module:strategies.trade_builder |  |
-| `core/execution_engine.py` | HIGH | order_action_call | order_action_call:place_order_fn | 638 |
-| `core/kite_client.py` | HIGH | order_action_call | order_action_call:place_order | 397 |
-| `core/kite_client.py` | HIGH | order_action_call | order_action_call:modify_order | 400 |
-| `core/kite_client.py` | HIGH | order_action_call | order_action_call:cancel_order | 403 |
+| `core/execution_engine.py` | HIGH | order_action_call | order_action_call:place*order_fn | 638 |
+| `core/kite_client.py` | HIGH | order_action_call | order_action_call:place*order | 397 |
+| `core/kite_client.py` | HIGH | order_action_call | order_action_call:modify*order | 400 |
+| `core/kite_client.py` | HIGH | order_action_call | order_action_call:cancel*order | 403 |
 | `core/storage/snapshots.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client | 215 |
 | `core/storage/snapshots.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client.kite_client | 215 |
 | `dashboard/streamlit_app_runtime.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client | 5328 |
@@ -511,10 +511,10 @@ Reviewed files: 387
 - CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_runtime_import evidence=forensics_references_runtime_module:core.market_data
 - CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_runtime_import evidence=forensics_references_runtime_module:core.orchestrator
 - CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_runtime_import evidence=forensics_references_runtime_module:strategies.trade_builder
-- HIGH: safety boundary `core/execution_engine.py:638` boundary=order_action_call evidence=order_action_call:place_order_fn
-- HIGH: safety boundary `core/kite_client.py:397` boundary=order_action_call evidence=order_action_call:place_order
-- HIGH: safety boundary `core/kite_client.py:400` boundary=order_action_call evidence=order_action_call:modify_order
-- HIGH: safety boundary `core/kite_client.py:403` boundary=order_action_call evidence=order_action_call:cancel_order
+- HIGH: safety boundary `core/execution_engine.py:638` boundary=order_action_call evidence=order_action_call:place*order_fn
+- HIGH: safety boundary `core/kite_client.py:397` boundary=order_action_call evidence=order_action_call:place*order
+- HIGH: safety boundary `core/kite_client.py:400` boundary=order_action_call evidence=order_action_call:modify*order
+- HIGH: safety boundary `core/kite_client.py:403` boundary=order_action_call evidence=order_action_call:cancel*order
 - HIGH: safety boundary `core/storage/snapshots.py:215` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client
 - HIGH: safety boundary `core/storage/snapshots.py:215` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client.kite_client
 - HIGH: safety boundary `dashboard/streamlit_app_runtime.py:5328` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client

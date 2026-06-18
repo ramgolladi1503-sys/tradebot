@@ -15,7 +15,7 @@ source: static_analysis
 - Report: `docs/repo_forensics/reports/baseline_latest.md`
 - Hard failures: `119`
 - Unknowns: `167`
-- Warnings: `126`
+- Warnings: `124`
 - Safety critical: `23`
 - Evidence high: `92`
 - Drift high: `0`
