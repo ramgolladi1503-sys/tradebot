@@ -1,3 +1,14 @@
+---
+mode: AGENT_REVIEW
+candidate_id: N/A
+decision: BASELINE
+reason: enable monitor run loop
+timestamp: 2026-06-18
+is_order_action: false
+broker_api_called: false
+source: static_analysis
+---
+
 # Agent Review: Enable HTF Paper Monitor
 
 ## Agent Work Contract
