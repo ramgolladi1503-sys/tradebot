@@ -1,3 +1,14 @@
+---
+mode: AGENT_REVIEW
+candidate_id: N/A
+decision: BASELINE
+reason: Generate static baseline
+timestamp: 2026-06-18
+is_order_action: false
+broker_api_called: false
+source: static_analysis
+---
+
 ## 3-Agent Evidence Gate
 
 Generated from local repo-forensics scanner output.
@@ -11,7 +22,7 @@ Generated from local repo-forensics scanner output.
 
 | Metric | Count |
 |---|---:|
-| Total files | 344151 |
+| Total files | 344152 |
 | Hard failures | 119 |
 | Unknowns | 167 |
 | Warnings | 126 |

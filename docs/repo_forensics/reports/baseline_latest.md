@@ -1,3 +1,14 @@
+---
+mode: AGENT_REVIEW
+candidate_id: N/A
+decision: BASELINE
+reason: Generate static baseline
+timestamp: 2026-06-18
+is_order_action: false
+broker_api_called: false
+source: static_analysis
+---
+
 # Repo Forensics — Repo Map
 
 ## Scope Guard
@@ -12,12 +23,12 @@
 
 | Category | Count |
 |---|---:|
-| Total files | 344151 |
+| Total files | 344152 |
 | Python files | 1976 |
 | Test files | 983 |
 | Shell scripts | 38 |
 | Dashboard files | 33 |
-| Doc/text files | 316708 |
+| Doc/text files | 316709 |
 | Runtime/evidence paths present | 3 |
 
 ## Required Entrypoints
