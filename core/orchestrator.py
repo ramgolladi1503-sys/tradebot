@@ -621,6 +621,12 @@ def _candidate_trace_payload(candidate, *, execution_truth_context: dict | None 
         "execution_allowed": _trade_attr(candidate, "execution_allowed"),
         "eligible_for_execution": _trade_attr(candidate, "eligible_for_execution"),
         "reason": _trade_attr(candidate, "reason"),
+        "entry_price": _trade_attr(candidate, "entry_price"),
+        "stop_loss": _trade_attr(candidate, "stop_loss"),
+        "target_price": _trade_attr(candidate, "target_price"),
+        "visibility_bucket": _trade_attr(candidate, "visibility_bucket"),
+        "reportable_executable": _trade_attr(candidate, "reportable_executable"),
+        "synthetic_candidate": _trade_attr(candidate, "synthetic_candidate"),
         **runtime_truth,
     }
     if execution_truth_context is not None:
