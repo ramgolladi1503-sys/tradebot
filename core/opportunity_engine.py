@@ -542,6 +542,21 @@ def _derive_candidate_class(candidate: Any, *, metrics: dict[str, Any] | None = 
     if is_fallback or planning_only:
         return "ADVISORY_ONLY"
     if execution_allowed and tradable and executable_truth and execution_ok and fresh_quote_ok and liquidity_ok and spread_ok:
+        try:
+            from core.gates.ml_acceptance_gate import validate_ml_acceptance
+            ml_result = validate_ml_acceptance(candidate)
+            if metrics is not None:
+                metrics["ml_probability"] = ml_result.get("ml_probability")
+            if not ml_result.get("pass", True):
+                new_blockers = set(str(code) for code in (_get_value(candidate, "tradable_reasons_blocking", []) or []) if str(code).strip())
+                new_blockers.add("ml_probability_too_low")
+                if isinstance(candidate, dict):
+                    candidate["tradable_reasons_blocking"] = list(new_blockers)
+                else:
+                    setattr(candidate, "tradable_reasons_blocking", list(new_blockers))
+                return "NEAR_EXECUTABLE"
+        except Exception as exc:
+            logger.error("ml_acceptance_gate_execution_failed err=%s", exc)
         return "EXECUTABLE"
     if (not executable_truth) and display_entry is not None and display_entry_status in {"displayable", "non_executable"}:
         return "ADVISORY_ONLY"

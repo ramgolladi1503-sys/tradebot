@@ -1958,10 +1958,9 @@ def get_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.Da
                     if not sliced.empty:
                         return sliced[['time_ms', 'open', 'high', 'low', 'close', 'volume']].reset_index(drop=True)
                     else:
-                        print(f"[OFFLINE] {sym} slice empty for {start_epoch_ms} to {end_epoch_ms}")
-                        return empty
+                        print(f"[OFFLINE] {sym} slice empty for {start_epoch_ms} to {end_epoch_ms}, falling back to live API")
                 else:
-                    print(f"[OFFLINE] No timestamp column in {sym}")
+                    print(f"[OFFLINE] No timestamp column in {sym}, falling back to live API")
             except Exception as e:
                 print(f"[OFFLINE] Exception loading {sym}: {e}")
         else:
