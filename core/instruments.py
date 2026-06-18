@@ -12,6 +12,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+HOT_STRIKE_BANDS = {
+    "NIFTY": {"step": 50, "band": 6},
+    "BANKNIFTY": {"step": 100, "band": 5},
+    "SENSEX": {"step": 100, "band": 7},
+    "FINNIFTY": {"step": 50, "band": 5},
+    "MIDCPNIFTY": {"step": 25, "band": 5},
+}
 
 def coerce_expiry_date(value: Any) -> date | None:
     if value is None:
@@ -102,6 +109,7 @@ def build_option_registry(
     symbol: str,
     instruments: list[dict] | tuple[dict, ...],
     exchange: str | None = None,
+    spot_price: float | None = None,
 ) -> dict:
     sym = str(symbol or "").upper()
     ex = str(exchange or option_exchange(sym)).upper()
@@ -111,6 +119,8 @@ def build_option_registry(
     # Use id(instruments) but store a strong reference to `instruments` in the cache 
     # to prevent garbage collection and id() reuse across tests.
     cache_key = f"{today_str}:{sym}:{ex}:{id(instruments)}"
+    if spot_price is not None:
+        cache_key += f":{round(spot_price / 100) * 100}"
     cached = _OPTION_REGISTRY_CACHE.get(cache_key)
     if cached is not None:
         return cached[1]
@@ -135,6 +145,17 @@ def build_option_registry(
             strike = float(inst.get("strike"))
         except Exception:
             continue
+            
+        if spot_price is not None and sym in HOT_STRIKE_BANDS:
+            band_info = HOT_STRIKE_BANDS[sym]
+            step = band_info["step"]
+            band_mult = band_info["band"]
+            atm_strike = int(round(spot_price / step) * step)
+            lower_bound = atm_strike - (step * band_mult)
+            upper_bound = atm_strike + (step * band_mult)
+            if not (lower_bound <= strike <= upper_bound):
+                continue
+                
         key = (sym, seg, strike, inst_type, exp)
         entry = {
             "instrument_token": inst.get("instrument_token"),
