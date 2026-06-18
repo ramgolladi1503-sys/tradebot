@@ -476,6 +476,7 @@ def resolve_option_token(
         symbol=sym,
         instruments=data,
         exchange=exchange,
+        spot_price=None,
     )
     registry = registry_payload.get("registry") or {}
     _log_registry_stats(

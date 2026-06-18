@@ -61,7 +61,8 @@ def test_pr_body_summary_is_compact_and_pr_friendly():
 
     summary = render_pr_body_agent_summary(result)
 
-    assert summary.startswith("## 3-Agent Evidence Summary")
+    assert summary.startswith("---")
+    assert "## 3-Agent Evidence Summary" in summary
     assert "- Verdict: `UNKNOWN`" in summary
     assert "- Unknowns: `2`" in summary
     assert "- Warnings: `3`" in summary

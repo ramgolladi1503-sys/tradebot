@@ -879,6 +879,10 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
     ):
         regime_entropy_max *= 1.30
 
+    # Dynamic Entropy Override for Ranging Regimes
+    if primary_regime in {"RANGE", "RANGE_VOLATILE", "SIDEWAYS"}:
+        regime_entropy_max *= 2.0
+
     if snapshot.regime_prob_max is not None and float(snapshot.regime_prob_max) < regime_prob_min:
         unstable_reasons.append("prob_too_low")
     if snapshot.regime_entropy is not None and float(snapshot.regime_entropy) > regime_entropy_max:

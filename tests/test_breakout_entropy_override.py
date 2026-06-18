@@ -23,7 +23,7 @@ def test_regime_entropy_max_overrides(monkeypatch):
         indicators_age_sec=0, indicator_last_update_epoch=0, regime_probs={},
         regime_entropy=1.45,  # Too high for 1.3
         regime_prob_max=0.55,
-        primary_regime="RANGE",
+        primary_regime="TREND",
         unstable_reasons=(), risk_ok=True, risk_reasons=(), governance_lock_active=False,
         broker_enabled=False, manual_review_required=False, instrument="OPT",
         bid=0, ask=0, quote_ok_input=True, quote_source_input="live",
