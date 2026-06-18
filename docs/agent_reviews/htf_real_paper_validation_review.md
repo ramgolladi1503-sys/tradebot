@@ -14,17 +14,17 @@ acceptance_proof: CI passing locally, daemon order-isolated.
 ## Scope Guard
 Verified that changes are strictly isolated to creating the real-paper validation runbook and script, logging requirements, locking the HTF strategy spec, and fixing the test suite mock leakage.
 
-## Grill Me
+## Grill Me Review
 CRITIQUE_SCOPE: Does this PR introduce live trading functionality?
 Answer: No. The daemon enforces `order_router` and `execution_engine` isolation. It is strictly paper trading and observation only.
 
-## Hermes
+## Hermes Review
 DESIGN_ARCHITECTURE: Strategy logic remains unchanged. A daemon script `scripts/run_htf_real_paper_monitor.py` was created to observe paper trade logs without importing execution or broker logic. Mock leakage in `test_critical_paths_warnings.py` was remediated using `subprocess`.
 
-## GSD
+## GSD Review
 PLAN_PR: Generate research and operational documents, build the isolated daemon, construct safety and lock tests, verify the test suite, and merge. The test suite mock leakage was fixed.
 
-## QA/Safety
+## QA / Safety Review
 All required tests pass. Order path is unreachable by the daemon.
 
 ## High-Risk Path Review
