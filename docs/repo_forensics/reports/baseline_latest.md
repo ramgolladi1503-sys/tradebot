@@ -362,7 +362,7 @@ Reviewed files: 387
 | Severity | Count |
 |---|---:|
 | HIGH | 92 |
-| MEDIUM | 14 |
+| MEDIUM | 12 |
 | UNKNOWN | 0 |
 
 ### Flagged Evidence Findings
@@ -399,7 +399,7 @@ Reviewed files: 387
 | `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:20 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
 | `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:21 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
 | `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:22 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| truncated | INFO | n/a | remaining=76 | n/a |
+| truncated | INFO | n/a | remaining=74 | n/a |
 
 ## Architecture Drift
 
@@ -454,7 +454,7 @@ Reviewed files: 387
 - Safety high findings: 151
 - Safety unknown findings: 0
 - Evidence high findings: 92
-- Evidence medium findings: 14
+- Evidence medium findings: 12
 - Evidence unknown findings: 0
 - Drift high findings: 0
 - Drift medium findings: 1
@@ -519,37 +519,37 @@ Reviewed files: 387
 - HIGH: safety boundary `core/storage/snapshots.py:215` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client.kite_client
 - HIGH: safety boundary `dashboard/streamlit_app_runtime.py:5328` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client
 - HIGH: safety findings truncated count=144
-- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:3 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:4 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:5 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:6 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:3 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:4 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:5 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:6 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:7 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:8 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:9 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:10 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:11 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:12 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:13 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:14 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:15 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:16 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:17 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:18 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:19 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:20 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:21 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:22 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- MEDIUM: evidence findings truncated count=76
+- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:3 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:4 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:5 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:6 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:3 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:4 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:5 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:6 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:7 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:8 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:9 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:10 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:11 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:12 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:13 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:14 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:15 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:16 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:17 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:18 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:19 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:20 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:21 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:22 absent=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- MEDIUM: evidence findings truncated count=74
 - MEDIUM: architecture drift `core/risk_manager.py, strategies/risk_manager.py` type=duplicate_module_stem evidence=stem=risk_manager count=2
 - UNKNOWN: architecture drift `dashboard/home_freshness_panel.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
 - UNKNOWN: architecture drift `dashboard/utils.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
