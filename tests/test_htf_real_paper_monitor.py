@@ -88,7 +88,8 @@ def test_restart_recovery(tmp_path):
     new_monitor = RealPaperMonitor()
     
     # Verify exact recovery
-    assert len(new_monitor.active_signals) == 1
+    count = len(new_monitor.active_signals)
+    assert count == 1
     assert new_monitor.active_signals[0]['signal_id'] == sig_id
 
 def test_candle_causality():
@@ -102,9 +103,9 @@ def test_candle_causality():
     c_15m = Candle("NIFTY", now, 100, 100, 100, 100, 100, 100)
     
     # Expected close is now + 15m
-    assert monitor.is_candle_closed(c_15m, now, 15) == False
-    assert monitor.is_candle_closed(c_15m, now + timedelta(minutes=14), 15) == False
-    assert monitor.is_candle_closed(c_15m, now + timedelta(minutes=15), 15) == True
+    assert not monitor.is_candle_closed(c_15m, now, 15)
+    assert not monitor.is_candle_closed(c_15m, now + timedelta(minutes=14), 15)
+    assert monitor.is_candle_closed(c_15m, now + timedelta(minutes=15), 15)
 
 def test_stale_feed():
     """
@@ -115,7 +116,7 @@ def test_stale_feed():
     
     # Simulate the check inside the run loop
     is_stale = (time.time() - monitor.last_tick_time) > monitor_module.FEED_STALE_THRESHOLD_SEC
-    assert is_stale == True
+    assert is_stale
 
 def test_missing_quote_rejection(tmp_path):
     """
@@ -142,4 +143,6 @@ def test_missing_quote_rejection(tmp_path):
     monitor.evaluate_signals(c1, c15, 23000, now)
     
     assert monitor.error_count > initial_errors
-    assert len(monitor.active_signals) == 0
+    
+    active_count = len(monitor.active_signals)
+    assert active_count == 0
