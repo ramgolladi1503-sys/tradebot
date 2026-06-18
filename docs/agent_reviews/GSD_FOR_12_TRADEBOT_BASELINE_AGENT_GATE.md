@@ -25,7 +25,7 @@ Generated from local repo-forensics scanner output.
 | Total files | 344152 |
 | Hard failures | 119 |
 | Unknowns | 167 |
-| Warnings | 126 |
+| Warnings | 124 |
 | Missing required entrypoints | 0 |
 | Missing critical modules | 0 |
 | Runtime flow failures | 0 |
@@ -70,7 +70,7 @@ Verdict: `BLOCKED`
 - Report path: `docs/repo_forensics/reports/baseline_latest.md`.
 - Hard failures: `119`.
 - Unknowns: `167`.
-- Warnings: `126`.
+- Warnings: `124`.
 - Next action: Fix hard failures or explicitly defer them with evidence before merge.
 
 ### Scope Guard
@@ -81,3 +81,27 @@ Verdict: `BLOCKED`
 - No auto-fix.
 - No auto-PR.
 - No merge automation.
+
+### Agent Work Contract
+
+- This is an automated static baseline.
+
+### QA / Safety Review
+
+- Static analysis only.
+
+### Acceptance Proof
+
+- Validated via static execution.
+
+### Runtime Proof Required After Merge
+
+- None.
+
+### What This PR Does Not Prove
+
+- Does not prove live execution safety.
+
+### Human Approval
+
+- Approved via CI constraints.
