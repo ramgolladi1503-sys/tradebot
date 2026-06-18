@@ -346,4 +346,5 @@ if __name__ == "__main__":
     monitor.paper_log.append(monitor.active_signals[0])
     monitor.close_signal(monitor.active_signals[0], lp + 40, "TARGET")
     monitor.save_health()
-    print("Mock initialization complete. To run continuous live tracking, modify the run loop.")
+    print("Mock initialization complete. Starting monitor...")
+    monitor.run()
