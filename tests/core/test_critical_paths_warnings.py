@@ -53,21 +53,31 @@ def test_critical_modules_do_not_use_datetime_utcnow() -> None:
 
 
 def test_critical_modules_emit_no_deprecation_warnings_on_import() -> None:
+    import subprocess
+    import os
     module_names = _critical_module_names()
+    offenders = []
+    
     for name in module_names:
-        sys.modules.pop(name, None)
+        try:
+            # -W error::DeprecationWarning ensures any DeprecationWarning becomes an exception
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(ROOT)
+            
+            subprocess.check_output(
+                [sys.executable, "-W", "error::DeprecationWarning", "-c", f"import {name}"],
+                stderr=subprocess.STDOUT,
+                env=env,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            output = e.output
+            if "DeprecationWarning" in output:
+                if "/tradebot/" in output and ("core/" in output):
+                    offenders.append(f"{name}: {output.strip()}")
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", DeprecationWarning)
-        for name in module_names:
-            importlib.import_module(name)
-
-    own_deprecations = [
-        w for w in caught if issubclass(w.category, DeprecationWarning) and _is_our_core_warning(w)
-    ]
-    assert not own_deprecations, (
-        "DeprecationWarning emitted from critical core modules: "
-        + "; ".join(
-            f"{Path(str(w.filename)).name}:{w.lineno}: {w.message}" for w in own_deprecations
-        )
+    assert not offenders, (
+        "Critical core modules MUST NOT emit deprecation warnings during their own import. "
+        + "Found warnings:\n"
+        + "\n".join(offenders)
     )

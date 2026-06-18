@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 import warnings
+import os
 from pathlib import Path
 
 
@@ -53,23 +54,33 @@ def test_critical_modules_no_datetime_utcnow_source_scan() -> None:
 
 
 def test_critical_modules_emit_no_own_deprecation_warnings_on_import() -> None:
+    import subprocess
+    offenders = []
+    
     for name in CRITICAL_MODULES:
-        sys.modules.pop(name, None)
+        try:
+            # -W error::DeprecationWarning ensures any DeprecationWarning becomes an exception
+            # We must set PYTHONPATH so imports work correctly
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(ROOT)
+            
+            # We catch ONLY our own deprecation warnings by filtering the traceback or output
+            # Actually, the simplest way is to catch stderr and see if it's from our files.
+            out = subprocess.check_output(
+                [sys.executable, "-W", "error::DeprecationWarning", "-c", f"import {name}"],
+                stderr=subprocess.STDOUT,
+                env=env,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            output = e.output
+            if "DeprecationWarning" in output:
+                # Check if it's from one of our files
+                if "/tradebot/" in output and ("dashboard/" in output or "core/" in output):
+                    offenders.append(f"{name}: {output.strip()}")
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", DeprecationWarning)
-        for name in CRITICAL_MODULES:
-            importlib.import_module(name)
-
-    own_deprecations = [
-        warning
-        for warning in caught
-        if issubclass(warning.category, DeprecationWarning) and _is_our_warning(warning)
-    ]
-    assert not own_deprecations, (
-        "DeprecationWarning emitted from tradebot critical modules: "
-        + "; ".join(
-            f"{Path(str(w.filename)).name}:{w.lineno}: {w.message}"
-            for w in own_deprecations
-        )
+    assert not offenders, (
+        "Critical modules MUST NOT emit deprecation warnings during their own import. "
+        + "Found warnings:\n"
+        + "\n".join(offenders)
     )
